@@ -81,7 +81,7 @@ describe("planner 声明面(agent-profiles)", () => {
     expect(p).toBeTruthy();
     expect(p!.builtin).toBe(true);
     expect(p!.tools).toEqual(["read", "code_sense", "skill_view", "write_file", "board_upsert", "board_read"]);
-    expect(p!.writeGlobs?.some((g) => g.includes("step.md"))).toBe(true);
+    expect(p!.writeGlobs?.some((g) => g.startsWith("tasks/") && g.endsWith(".md"))).toBe(true);
     // 硬件锁:展开后的白名单结构性不含执行/派发/编辑类
     const granted = expandToolTokens(p!.tools!);
     for (const denied of ["run_cmd", "terminal", "edit_file", "spawn_subagent", "answer_subagent", "task_output", "browser", "web_fetch", "web_search"]) {
@@ -150,7 +150,7 @@ describe("planner 执行面(真实 spawn:chat 收到的工具面)", () => {
     // tool_view 仍保留(其余大 schema 工具按需取)。
  // bridge 三件套恒定追加(tool_view/tool_search/tool_call)
     expect(got.sort()).toEqual([
-      "board_read", "board_upsert", "code_sense", "glob", "grep", "list_dir",
+      "board_read", "board_upsert", "code_sense", "deliverable", "glob", "grep", "list_dir",
       "read_file", "skill_view", "tool_call", "tool_search", "tool_view", "write_file",
     ]);
     // 延迟工具必须能经 tool_view 取到完整说明 —— 这是它「可达」的唯一凭证,不能被静默丢掉

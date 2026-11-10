@@ -244,7 +244,7 @@ export const BUILTIN_AGENT_PROFILES: AgentProfile[] = [
     // 只读认知四组 + 技能查看 + 规划稿写盘 + 白板两件(工具面硬约束,不靠提示词)
     tools: ["read", "code_sense", "skill_view", "write_file", "board_upsert", "board_read"],
     // 写盘围栏(第二道锁):只有规划产物可写,src/ 等业务代码结构性不可写
-    writeGlobs: ["tasks/step-*/step.md", "tasks/designs/*.md", "tasks/step-*/evidence/*"],
+    writeGlobs: ["tasks/**/*.md", "docs/plans/**/*.md", "plans/**/*.md"],
     builtin: true,
   },
   {
