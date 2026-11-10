@@ -2,7 +2,6 @@
 
 > **怎么读这份文档**:第一部分是纯大白话——零基础也能读懂这套系统是什么、怎么转,全部用「装修公司」打比方;第二、三部分是同一套东西的技术细节(带 `文件:行号`),给要改代码、排障的人用。两部分讲的是同一个系统,先读第一部分,第二、三部分就不再是天书。
 > 基于代码实勘整理(2026-11-02 实勘,2026-11-03 补大白话层与部分行号复核)。文中 `文件:行号` 为当日快照,代码演进后会漂移,以 grep 复核为准。
-> 设计稿在 `tasks/designs/`(01/02 为早期规划,与现状有漂移,见附录 B)。
 
 ---
 
@@ -122,12 +121,11 @@ lampgenie-harness 是一个 monorepo(pnpm workspace,根 package.json `lampgenie-
 | `services/` | `model-150m/`:本机自带的一个 150M 参数小模型服务(Python),离线时也能干轻活 |
 | `scripts/` | 仓级运维工具:凭证闸、审计对账、构建守卫、白板迁移、安全重启网关 |
 | `docs/` | 文档(见附录 A) |
-| `tasks/` | 设计稿 `designs/` 与逐步实施留痕 `step-NNN-*/step.md`(施工日志,不是产品入口) |
 | `devlog/` | 开发者日志(压缩产物) |
 | `.genie/` | 全部运行时数据:台账、图纸、索引、经验、密钥……都在这(见 §3.6 图 7) |
 | `vendor/`、`ref/` | 参考项目(只读,不改不提交) |
 
-分层纪律(设计稿 02:`tasks/designs/02-module-and-data-design.md:18-27`):`apps/` 门面只做装配与 IO(把班组们组装起来对外服务);`packages/` 承载真正的领域逻辑;依赖方向 core ← packages ← apps。数据侧 **journal-first**:会话历史永远由 append-only 日志派生(`tasks/designs/14-runtime-core.md:10-40`)。
+分层纪律:`apps/` 门面只做装配与 IO(把班组们组装起来对外服务);`packages/` 承载真正的领域逻辑;依赖方向 core ← packages ← apps。数据侧 **journal-first**:会话历史永远由 append-only 日志派生。
 
 ## 2.2 应用层 `apps/`(四个门面)
 
@@ -734,8 +732,7 @@ flowchart TB
 
 ## 附录 A:文档与设计稿索引
 
-- docs:`codesense-cli.md`、`session-audit.md`、`code-review-trigger-matrix.md`;`docs/code-flow/`(模块/网关/文件图 .mmd/.svg);`docs/review/`(harness-intro deck/pptx);`docs/analysis/`(token/会话审计);`docs/ui-shots/`(UI 截图)。
-- 设计稿(早期规划,读时对照附录 B):`tasks/designs/01-harness-architecture.md`(总体形态)、`02-module-and-data-design.md`(模块与数据)、`11` 实施架构、`12` 协议与数据格式、`14` runtime core、`15` 任务与子代理、`16` code-sense、`17` code review、`19` workflow 引擎。
+- docs:`codesense-cli.md`(CLI 参考);`docs/code-flow/`(模块/网关/文件图);`docs/ui-shots/`(UI 截图)。
 
 ## 附录 B:设计稿 vs 现状漂移(读 01/02 稿前必看)
 

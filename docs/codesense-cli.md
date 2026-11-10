@@ -120,7 +120,7 @@ packages/code-sense-cli/src/mcp-core.ts(工具面+格式化,唯一一份)
 |---|---|
 | `codesense serve [root]` | MCP stdio 服务(JSON-RPC 2.0,MCP 2024-11-05 基线);工具面九件套(step-066 +impact;step-080 +api/state/algo sensing 三件)与 gateway 的 code-index-mcp 完全同源;env `GENIE_SENSE_INDEX_ROOT` 可指定根。异步注:三件 sensing 工具分派是 async(行扫描秒级),stdio 退出前等在飞分派清零(一次性管道不丢响应) |
 
-### 评审(step-075;与 gateway `code_review` 工具同一引擎,见 docs/code-review-trigger-matrix.md)
+### 评审(与 gateway `code_review` 工具同一引擎)
 | 指令 | 作用 |
 |---|---|
 | `codesense review [target]` | 审查代码变更。target 缺省=未提交变更;commit hash=审该提交;分支名=审 `<分支>...HEAD`。确定性四类(凭证/生成物/调试残留/超大)+反模式八类(含孤儿逻辑六维)恒跑;出口引用孤儿闸+行级回写店(`.genie/review-comments.json`,与面板 review store 同一文件) |

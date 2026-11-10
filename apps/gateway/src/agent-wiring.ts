@@ -3102,7 +3102,7 @@ export type ReviewLlmPolicy = "auto" | "always" | "never";
 export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined, journal: import("@lampgenie/core").Journal, sessionId: string, progress?: (note: string) => void, baseSha?: string | null, remote?: RemoteProject): Tool {
   return {
     name: "code_review",
-    description: "审查代码变更(默认=本任务变更集:以任务开工 checkpoint 为基线,只含本任务开工后的改动+新文件,不含共享工作区里其它任务的在途改动;无 checkpoint 回退全仓未提交并标注。可传 commit hash/分支名显式改口径)。返回 findings(severity/file:line/scenario)。同源 CLI 形态:codesense review [target] [--deep](packages/code-sense-cli,人读 markdown/--json;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑;触发路径全景见 docs/code-review-trigger-matrix.md)——当用户想在 harness 之外审查(本地终端/CI/其它 agent 平台)时,推荐该 CLI",
+    description: "审查代码变更(默认=本任务变更集:以任务开工 checkpoint 为基线,只含本任务开工后的改动+新文件,不含共享工作区里其它任务的在途改动;无 checkpoint 回退全仓未提交并标注。可传 commit hash/分支名显式改口径)。返回 findings(severity/file:line/scenario)。同源 CLI 形态:codesense review [target] [--deep](packages/code-sense-cli,人读 markdown/--json;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑)——当用户想在 harness 之外审查(本地终端/CI/其它 agent 平台)时,推荐该 CLI",
     parameters: {
       type: "object",
       properties: {
