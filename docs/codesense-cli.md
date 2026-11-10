@@ -51,19 +51,19 @@ packages/code-sense-cli/src/mcp-core.ts(工具面+格式化,唯一一份)
 | `codesense file <path>` | `code_index_file {path, repo?}` | `action="file"` | `queryFile` |
 | `codesense file <path> --graph` | —(图类移出 MCP 面) | — | `renderFile`(mermaid 文件图) |
 | `codesense branches <path>` | —(refs 命中已联动带决策点标注;全骨架走 CLI) | — | `queryBranchesCmd`→`scanDecisionFile`/`renderDecisionSkeleton`(2026-10-21:if/elif/else/while/do-while/for/for-of/for-in/switch/case+三元,每点带条件/行距/深度/迭代目标/分支直接调用/所属函数;py/ts/js/c/cpp/java/go tree-sitter,不可用行级降级) |
-| `codesense api [--semantics]` | `code_index_api {repo?}`(step-080 起) | `action="api"` | `queryApiSurface`/`renderApiSurface`;`--semantics`=LLM 语义层(批量 ≤12/请求·上限 40·git sha+端点指纹缓存·`--write` 落盘·无凭证显式 off) |
-| `codesense state` | `code_index_state {repo?}`(step-080 起) | —(走 `code_sense` mode=state) | `queryStateMachines`/`renderStateMachines` |
-| `codesense algo [file]` | `code_index_algo {file?, repo?}`(step-080 起) | —(走 `code_sense` mode=algo) | `extractAlgoSurface` |
-| `codesense vars <file> [--locals]` | `code_index_vars {file, repo?}`(step-089 起) | —(file 面带 dataType) | `extractTypedSymbols`/`renderVars`;`--locals`=扩入函数内注解面(带注解 param/local,推断局部不入) |
+| `codesense api [--semantics]` | `code_index_api {repo?}` | `action="api"` | `queryApiSurface`/`renderApiSurface`;`--semantics`=LLM 语义层(批量 ≤12/请求·上限 40·git sha+端点指纹缓存·`--write` 落盘·无凭证显式 off) |
+| `codesense state` | `code_index_state {repo?}` | —(走 `code_sense` mode=state) | `queryStateMachines`/`renderStateMachines` |
+| `codesense algo [file]` | `code_index_algo {file?, repo?}` | —(走 `code_sense` mode=algo) | `extractAlgoSurface` |
+| `codesense vars <file> [--locals]` | `code_index_vars {file, repo?}` | —(file 面带 dataType) | `extractTypedSymbols`/`renderVars`;`--locals`=扩入函数内注解面(带注解 param/local,推断局部不入) |
 | `codesense tokens <file>` | —(数据导出面,CLI/--json 专属) | — | `toSemanticTokens` |
-| `codesense project [root]` | `code_index_project {repo?}`(step-089 起;manifest 缺席按需生成确定性骨架) | `action="project"` | `queryProjectProfile`/`renderProjectProfile`(技术栈/拓扑覆盖 C/C++ 与构建文件) |
+| `codesense project [root]` | `code_index_project {repo?}` | `action="project"` | `queryProjectProfile`/`renderProjectProfile`(技术栈/拓扑覆盖 C/C++ 与构建文件) |
 | `codesense wire [--changed]` | `code_index_wire {root?, repo?, changed?}` | `action="wire"` | `scanWire`/`renderWire`(协议↔handler↔收发三处对账;`--changed` 按 type 字面量集合 diff,分新增/删除/改动) |
 | `codesense branches <path>` | `code_index_branches {path, repo?}`(2026-10-23 起) | `action="branches"`(gateway code_sense) | `scanDecisionFile`/`renderDecisionSkeleton`(分支/循环骨架:if/elif/else/while/for/switch/三元,条件+迭代目标+分支直接调用+所属函数;py/ts/js/c/cpp/java/go) |
 | `codesense cfg <函数名> [--file <path>] [--line N] [--depth N] [--full] [--no-merge] [--max-nodes N] [--out f.mmd\|.md\|.json\|.dot\|.svg\|.png]` | —(函数体级图,CLI 专属;wiki 关键流程图页同源) | — | `buildFileCfgs`/`pickFunction`/`renderCfgMermaid`/`renderCfgText`(2026-10-27:语句级 CFG——真实语句文本+if/elif/else 菱形条件(是/否边)+while/for 回边(循环/退出)+switch/case+try/catch/finally(异常边)+return/throw/break/continue;结构化函数说明=职责首句/输入/输出/关键判断+为真动作/循环/异常/副作用/上下游/位置,图内只放 4 行「函数速览」+模块常量小卡;长函数按 ~22 节点分页,跨页「←/→ 第 N 页」跳转桩,**节点/边不删**;py/ts/js/c/cpp/java/go) |
 | `codesense refs <字面量> [--no-tests] [--no-docs]` | `code_index_refs {literal, root?, repo?, includeTests?, includeDocs?}` | `action="refs"` | `scanLiteralRefs`/`renderLiteralRefs`(字面量引用面:case/eq/z-literal/object-key/cpp-macro/string/build-file/doc 语境 + file:line + 所属符号;2026-10-21 起代码命中带最内层决策点标注(⟂ if/while/for…),结构位点附 ±2 行预览;删除字符串/宏开关时用) |
 
-> api/state/algo(step-077)是**确定性行扫描,不依赖索引、不触发构建**(`--no-build` 语义固定);
-> vars/tokens(step-089)同为逐文件深提取不触发构建;project 读 manifest,缺席时按需生成确定性骨架
+> api/state/algo是**确定性行扫描,不依赖索引、不触发构建**(`--no-build` 语义固定);
+> vars/tokens同为逐文件深提取不触发构建;project 读 manifest,缺席时按需生成确定性骨架
 > (需要缓存/LLM 解读再跑 `codesense project --write`);
 > wire/refs 同样为纯行扫描(索引非前置,refs 的所属符号读现成索引、缺席留空)。
 > 代码档案(2026-10-26):`wiki rebuild` 在既有页面之外生成 **全仓代码流**、**模块 file 级 flow**、
@@ -90,10 +90,10 @@ packages/code-sense-cli/src/mcp-core.ts(工具面+格式化,唯一一份)
 > C/C++ 预处理宏(`#ifdef/#ifndef/#if defined/#define`)与 CMake/Make 构建文件单独成桶。
 > 上表其余指令读静态索引。MCP serve 面的新件与 CLI 输出同源(同一 render* 函数;
 > repo 参数=定向单仓目录扫描,缺省=整个根,与 CLI `--root` 同语义)。gateway 的 in-process
-> `code_index` action 面收在 `api`/`project`(step-089 项目底座画像)——state/algo 属
-> code_sense 认知剖面(mode 路由),不进 gateway 索引查询面(step-078 判定;外部宿主走 MCP)。
+> `code_index` action 面收在 `api`/`project`——state/algo 属
+> code_sense 认知剖面(mode 路由),不进 gateway 索引查询面。
 
-### agent 视角选型指南(五面入口分工,step-078)
+### agent 视角选型指南(五面入口分工,)
 
 | 要回答的问题 | 用哪个入口 | 命令 | 延迟档 |
 |---|---|---|---|
@@ -118,13 +118,13 @@ packages/code-sense-cli/src/mcp-core.ts(工具面+格式化,唯一一份)
 ### 服务
 | 指令 | 作用 |
 |---|---|
-| `codesense serve [root]` | MCP stdio 服务(JSON-RPC 2.0,MCP 2024-11-05 基线);工具面九件套(step-066 +impact;step-080 +api/state/algo sensing 三件)与 gateway 的 code-index-mcp 完全同源;env `GENIE_SENSE_INDEX_ROOT` 可指定根。异步注:三件 sensing 工具分派是 async(行扫描秒级),stdio 退出前等在飞分派清零(一次性管道不丢响应) |
+| `codesense serve [root]` | MCP stdio 服务(JSON-RPC 2.0,MCP 2024-11-05 基线);工具面九件套与 gateway 的 code-index-mcp 完全同源;env `GENIE_SENSE_INDEX_ROOT` 可指定根。异步注:三件 sensing 工具分派是 async(行扫描秒级),stdio 退出前等在飞分派清零(一次性管道不丢响应) |
 
 ### 评审(与 gateway `code_review` 工具同一引擎)
 | 指令 | 作用 |
 |---|---|
 | `codesense review [target]` | 审查代码变更。target 缺省=未提交变更;commit hash=审该提交;分支名=审 `<分支>...HEAD`。确定性四类(凭证/生成物/调试残留/超大)+反模式八类(含孤儿逻辑六维)恒跑;出口引用孤儿闸+行级回写店(`.genie/review-comments.json`,与面板 review store 同一文件) |
-| `codesense review --scan [path]` | **全文件扫描**(step-116,陌生仓审计,不是 diff):枚举继承 `.gitignore`,默认排除 vendored/生成物;`--include/--exclude` 收窄;预算=文件数/单文件字节/总 token(超限截断/跳过如实登记)。scan 跑确定性层与可选深审;diff 语义反模式确定性层与 ocr CLI 层不跑;不写 diff 回写店 |
+| `codesense review --scan [path]` | **全文件扫描**:枚举继承 `.gitignore`,默认排除 vendored/生成物;`--include/--exclude` 收窄;预算=文件数/单文件字节/总 token(超限截断/跳过如实登记)。scan 跑确定性层与可选深审;diff 语义反模式确定性层与 ocr CLI 层不跑;不写 diff 回写店 |
 | `codesense review --sessions` | 列出本仓 review 会话(`.genie/reviews/<id>.json`) |
 | `codesense review --resume <id>` | 以该会话为基线续跑(继承 scan 范围/预算),输出**新增/已修复/未变/复现**四态;新会话记 `resumedFrom` |
 | `codesense review --compare <id>` | 一次性对比(同样继承 scan 范围,但不写血缘) |
@@ -142,7 +142,7 @@ root 解析:`--root` > 注册表就近 > 当前目录(review 只要求 git 仓,*
 每次 review 落会话 `<root>/.genie/reviews/<id>.json`(findings+target+时间+基线),`--resume/--compare`
 的四态对比与 `--sessions` 列表均从该目录读取(目录已 gitignore)。
 
-#### LLM 深审凭证链(step-105;与 §4.x 语义能力同一条链)
+#### LLM 深审凭证链
 
 `--deep` 的 LLM 凭证解析链与语义层(`api --semantics`/`project`)**完全同构**,四档定序
 **flag > env > config > ask-file**(任一档命中即生效;部分凭证形态错=exit 2 如实报错):
@@ -181,7 +181,7 @@ $ codesense review --deep
 - **apps/gateway/src/agent-wiring.ts:1** 换头不换尾:skillViewTool 参数 1→2 个,调用方未同步
   - …
 ```
-(上例=2026-10-16 对本仓真实未提交变更的实测输出截录,全文见 tasks/step-075-review-cli-trigger-matrix/evidence/)
+(下例=2026-10-16 对本仓一次真实未提交变更的实测输出截录)
 
 ### 全局参数
 `--root <dir>`(缺省:注册表就近解析当前目录 → 逐级向上 → `.genie/sense-index` 隐式根)、
@@ -293,14 +293,13 @@ codesense file apps/gateway/src/server.ts --graph   # mermaid 文件图
 - 索引产物同一点(`.genie/sense-index/`):CLI 的 index(--register) 与 gateway 的后台 worker 共享,
   谁先建谁受益;`files.json` 为 CLI 增量专用 sidecar,对 gateway 透明。
 
-### 4.x LLM 语义能力接入(step-089 多平台形态)
+### 4.x LLM 语义能力接入
 
 语义能力三件(vars 之外):`codesense api --semantics`(HTTP 接口职责描述)、
 `codesense project`(项目 purpose/主线能力/偏离提示)、LLM 档位自检(`codesense doctor`)。
 凭证解析链(定稿):**显式 flag > env 三件套(GENIE_LLM_BASE_URL/MODEL/API_KEY)>
 配置文件 `~/.codesense/config.json` > 无 LLM(确定性降级,显式标注不冒充)**。
-同一条链也是 `codesense review --deep` 的深审凭证面(step-105,见 §2 评审节「LLM 深审凭证链」;
-差异仅=review 无 LLM 时是显式 fail-visible exit 2,不降级)。
+同一条链也是 `codesense review --deep` 的深审凭证面。
 
 **形态①:宿主配凭证直连(推荐,一次配置)**
 
@@ -348,7 +347,7 @@ codesense config set llm.askFile.dir /path/ask-dir
   由包内 node_modules 解析;`tree-sitter-wasms/out/*.wasm` 由 engine 内
   `createRequire(import.meta.url).resolve` 定位到本包。doctor 逐语言体检(python/go/java/c/cpp)。
 
-### 5.1 C/C++ 语言支持(step-067,2026-10-16)
+### 5.1 C/C++ 语言支持
 
 - **资产获取=零新增依赖**:`tree-sitter-wasms@0.1.13` 包内自带 `tree-sitter-c.wasm` /
   `tree-sitter-cpp.wasm`,装载复用 `adapters/tree-sitter.ts` 的 `loadTsParser`(与
@@ -360,22 +359,22 @@ codesense config set llm.askFile.dir /path/ask-dir
   struct/union/enum/class、C++ 类内方法与 `Cls::method` 域外定义、模板类
   (`template<...> class X<...>` 名在 template_type 节点)、typedef(type_definition declarator 名);
   析构/运算符重载名不收(gapi operators.hpp 的 `operator+` 系列如实 skipped)。
-- **错误容忍=健康节点档+declarator 容错(step-079)**:文件有 ERROR 时收无 ERROR 子树的
+- **错误容忍=健康节点档+declarator 容错**:文件有 ERROR 时收无 ERROR 子树的
   定义/原型/类型;**整节点含 ERROR 但 function_declarator 子树健康 → 照常提取符号但不产调用边**
-  (体不可信;`void cv::resize(...)` 函数体含 ERROR 的连坐形态由此恢复,step-076 RC-E 根治)。
+  (体不可信;`void cv::resize(...)` 函数体含 ERROR 的连坐形态由此恢复, RC-E 根治)。
   声明体内 declarator 亦坏(参数表解析失败)不猜。
-- **属性宏 strip(step-079)**:解析前把「ALLCAPS 标识符+引入/类型关键字」与「class/struct 与类名
+- **属性宏 strip**:解析前把「ALLCAPS 标识符+引入/类型关键字」与「class/struct 与类名
   之间的属性宏」替换为等长空格(编译器 -D 等价,行号不变);预处理器行不 strip
   (`#define X` 的宏名后跟 enum 会误伤,实测反例)。CV_EXPORTS/FMT_FUNC/EXPORT_VISIBILITY/
   GTEST_API_ 族由此干净入树。
-- **分层覆盖(step-079,designs/25)**:逐文件 outcome 四档——full(结构档有符号)/
+- **分层覆盖**:逐文件 outcome 四档——full(结构档有符号)/
   lexical(词法兜底档)/empty(解析干净确认无声明,纯 include 聚合头/纯 #define)/
   skipped(必须带原因,占比目标 <1%);coverage=(full+lexical+empty)/磁盘源文件数。
   lexical 档符号带 `tier=lexical` 只进覆盖计数与符号查询——零调用边、不进 byName、
   不作 relink 目标、不进 entrypoints(**不参与 callers/callees 精度口径**)。
   触发:结构档 0 符号(含 >512KB 闸命中文件),regex 提取顶层原型/extern|static|const 变量/
   数组/typedef/ObjC @interface(单文件上限 2000,毫秒级)。
-- **扫描上限与内存护栏(step-079 RC-G)**:`GENIE_SENSE_MAX_FILES`(env,≥10,缺省 6000,
+- **扫描上限与内存护栏**:`GENIE_SENSE_MAX_FILES`(env,≥10,缺省 6000,
   4000 硬上限曾把 opencv 4590 截断)+`GENIE_SENSE_MAX_RSS_MB`(env,≥256,缺省 4608,
   merge 循环逐文件检查,超限停止处理剩余结构档文件);截断(达上限/护栏触发/跳过明细超 50 条)
   一律登记进 coverage manifest 的 `truncated` 字段,不许「分母=截断后集合」静默。
@@ -403,7 +402,7 @@ codesense config set llm.askFile.dir /path/ask-dir
   白板的对外传播是独立路线(未来 MCP/Web 形态)。白板等交互能力在 lampgenie-harness 面板中。
 - LLM 类剖面(code_sense debug/plan/explore 的模型环节)不进 CLI——那是 gateway 的 LLM 编排域;
   CLI 只做确定性静态索引面。
-- npm 发布流程(2026-10-16 step-109 已备):保持私有(不发 npmjs.com);npm 包形态已就绪——
+- npm 发布流程(2026-10-16  已备):保持私有(不发 npmjs.com);npm 包形态已就绪——
   `files` 白名单(dist/cli.js+README)、`prepack` 存在性守卫、`publishConfig` 占位私有 registry
   (Verdaccio 默认,`private:true` 下不生效,将来去 private 即推);`@lampgenie/code-sense`
   已移 devDependencies(bundle 已内联其代码,运行时只需 ts-morph/web-tree-sitter/tree-sitter-wasms),
@@ -412,19 +411,17 @@ codesense config set llm.askFile.dir /path/ask-dir
 
 ## 7. 测试与验证锚(2026-10-15 实测)
 
-- 单测 `packages/code-sense-cli/test/`(vitest,41 例全绿,step-079 实测):
+- 单测 `packages/code-sense-cli/test/`(vitest,41 例全绿, 实测):
   `incremental.test.ts`(三连 index 复用断言/parity/recount/变更重扫/force 注册表 +
   sidecar v2 四例:符号链接拼写命中/迁移重映射/v1 拒收/不存在根拒绝,11)、
   `depth.test.ts`(schema 向后兼容/缺省零变化锚/d1 vs d2 差异/graph d 标注/双闸校验/CLI 透传,7)、
   `cli-e2e.test.ts`(进程内 runCli 全指令+退出码+json 可解析,8)、
-  `coverage.test.ts`(step-067:覆盖分列/zero+low 告警/manifest 落盘回读/doctor 零覆盖 WARN/
-  entrypoints 显式状态/旧索引降级 6 + step-079:分层计数与 coveragePct/RC-G 上限截断登记 2,8)、
+  `coverage.test.ts`、
   `mcp-serve.test.ts`(进程内注入 stdio+真子进程 bundle 冒烟;sensing 三工具 stdio 全链+
   错误路径+CLI↔MCP 逐字节同源对照,6)。
   配套回归:gateway `code-index-mcp.test.ts` 11/11、code-sense `c2f.test.ts` 23 通过 1 SKIP、
-  `cpp-adapter.test.ts` 18(step-067 的 10 + step-079 的 8:模板类 template_type/typedef/
-  宏 strip 与反例/declarator 容错/empty 档/lexical 档与防污染/超闸双形态)、
-  `code-sense.test.ts` 25(核心,step-079 实测 444s)。
+  `cpp-adapter.test.ts` 18、
+  `code-sense.test.ts` 25(核心, 实测 444s)。
 - gateway 回归:`apps/gateway/test/code-index-mcp.test.ts` 11 例**不改一行**经薄壳原样通过;
   gateway 产物 `dist/code-index-mcp.mjs` 重建冒烟(initialize/tools/call)通过。
 - 真仓抽查:lampgenie-harness `symbol createGatewayApp`(38 callers 跨 packages/apps)、
