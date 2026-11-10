@@ -24,15 +24,6 @@ LampGenie 不是聊天壳,而是围绕**「任务」**组织的一等公民运�
 - **证据收口**:测试、typecheck、代码评审、截图冒烟等证据回填白板,`done` 状态必须带证据;
 - **全过程可观测**:任务、工具调用、LLM 请求响应、子代理轨迹全部落 journal / llm-trace,面板里可回放、可导出、可复盘。
 
-## 一眼看懂
-
-| 聊天即任务 | 白板规划 | 子代理执行 |
-|---|---|---|
-| ![聊天即任务](docs/ui-shots/ui-all-chat.png) | ![白板规划](docs/ui-shots/03-sense-plan.png) | ![子代理执行](docs/ui-shots/ui-all-running.png) |
-| 提一句需求,`@文件` 引用上下文 | 代码感知打底,白板画出变更契约 | worker/explore 领地化执行,证据回填 |
-
-> 更多面板截图见 [`docs/ui-shots/`](./docs/ui-shots/)。
-
 ## 功能亮点
 
 | 域 | 能力 |
@@ -94,9 +85,6 @@ pnpm --filter @lampgenie/gateway start   # 打开 http://localhost:7700
 | `packages/test-support` | 测试用脚本化 mock LLM 服务 |
 
 依赖链:`core → harness-runtime → protocol → 其余包 → gateway`。
-
-整仓代码流程图(由 `scripts/render-mermaid.mjs` 从 code-sense 生成)见 [`docs/code-flow/`](./docs/code-flow/)。
-
 ## 开发者指南
 
 ```bash
