@@ -12,6 +12,8 @@
   </p>
 </div>
 
+> 🚧 **项目仍在积极开发中**:核心链路已经能完整跑通日常任务,但 bug 还不少,体验也还有毛糙的地方。项目在持续迭代优化中——遇到问题欢迎提 [Issue](https://github.com/Z-yq/lampgenie-harness/issues)。
+
 ---
 
 ## 一句话说清楚
