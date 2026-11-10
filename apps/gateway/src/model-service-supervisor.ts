@@ -1,13 +1,11 @@
 /**
- * 内置 150M 模型服务监管(2026-10-25 用户口径「7700 要自己能启动这个服务,这是内置模型」)。
- *
+ * 内置 150M 模型服务监管。
  * 生命周期:
  *   gateway boot → 探活(已有健康服务=接管,不重复拉起)
  *                → 本地 URL + autoStart + 路径齐全 → spawn uvicorn(services/model-150m)
  *                → /health 轮询至 ready → running
  *                → 子进程异常退出 → backoff 重启(最多 10 次)
  *   gateway SIGINT/SIGTERM → 停本进程拉起的子进程组(外部服务不动)
- *
  * 边界:
  * - 只接管 loopback providerUrl;外部 provider 不启动本地服务。
  * - 模型仓库/checkpoint 缺失=missing + 明示跑 setup.sh,不静默假装 ready。

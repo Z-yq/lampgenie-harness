@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { parseOffice, readOfficePart, OFFICE_MAX_BYTES } from "../src/office-ooxml.js";
 import { servePanel } from "../src/panel.js";
 
-/** Office(PPTX/DOCX)只读预览服务端半边(2026-10-29,板 ide-o1):
+/** Office(PPTX/DOCX)只读预览服务端半边(板 ide-o1):
  *  - 解析:jszip 现场造最小 OOXML fixture(不依赖仓内二进制),断言 AST 契约(slides/blocks/runs/表格);
  *  - 路由:临时项目根 + 真面板实例,断言 /ide/office 与 /ide/office/media 的沙箱/白名单/错误码;
  *  - 负例:非 zip 字节 → 「不是有效的 OOXML 文件」;.exe → 403「仅 .pptx/.docx」;part 穿越 → 400。
@@ -189,7 +189,7 @@ describe("parseOffice:负例与守卫", () => {
   });
 });
 
-// ═════════════════ AST v2(2026-10-29):主题/表格/渐变阴影描边/组合/图表/SmartArt/Word 修订批注 ═════════════════
+// ═════════════════ AST v2:主题/表格/渐变阴影描边/组合/图表/SmartArt/Word 修订批注 ═════════════════
 const A_NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
   'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
   'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';

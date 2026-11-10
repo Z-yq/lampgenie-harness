@@ -1,5 +1,5 @@
 /**
- * sequence/state(designs/16 §6.6/6.7):静态时序(语句序+异步边界)、
+ * sequence/state( §6.6/6.7):静态时序(语句序+异步边界)、
  * 状态机提取(TRANSITIONS 金标准)、journal 动态序。
  */
 import { Project, SyntaxKind, type CallExpression, type SourceFile } from "ts-morph";
@@ -11,7 +11,7 @@ export interface SeqStep {
   callee: string;
   order: number;          // 语句序(函数体内出现顺序)
   asyncBoundary: "sync" | "await" | "callback" | "timer";
-  /** 源行号(证据纪律:R5-C20 接入 debug 剖面时补)。 */
+ /** 源行号(证据纪律: 接入 debug 剖面时补)。 */
   line?: number;
 }
 export interface StaticSequence {
@@ -91,7 +91,7 @@ export function extractStateMachineFromTransitions(sourceText: string): StateMac
   return { states: [...states], transitions, mermaid: lines.join("\n") };
 }
 
-// ---- journal 动态序(harness 独有,designs/16 §22.3) ----
+// ---- journal 动态序(harness 独有, §22.3) ----
 export interface RuntimeSequence {
   mermaid: string;
   events: { kind: string; time: number }[];

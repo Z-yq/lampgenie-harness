@@ -1,10 +1,8 @@
-/** step-111 白板语义级布局引擎(页面结构板 docKind=page 专用):
+/** 白板语义级布局引擎(页面结构板 docKind=page 专用):
  * 「白板的定位是面向给人看的,让人能理解 coding agent 的计划,并且是语义级的流程」。
- *
  * 纯函数零 IO 零随机(幂等,确定性排序带 id tie-breaker);零 DOM 依赖——浏览器挂
  * BoardPageLayout(panel.ts 画布渲染层调用),vitest 走 module.exports 单测。
- * 设计与角色判定规则全量登记在 tasks/step-111-whiteboard-semantic-layout/step.md。
- *
+ * 设计与角色判定规则全量登记在。
  * 产出:
  * - 容器化:page=浏览器窗容器(分区底色),contains 的 section/component 收进容器内 UI 线框布局;
  * - 层次流向:page 间按 nav 边 Kahn 最长入链分层(入口最左,同层对齐);
@@ -49,9 +47,9 @@
    * 搜索/提醒/凭证头=顶栏族;覆盖不到的落 main 堆叠(诚实)。 */
   function uiRole(kind, label, boardType) {
     if (kind === "component") return "component";
-    // 2026-10-26 docs 两层 PPT:章容器(kind=section)内的子项是「页」——全部进 main 竖排槽
+ // docs 两层 PPT:章容器(kind=section)内的子项是「页」——全部进 main 竖排槽
     // (页卡尺寸由 layoutInside 按 boardType=docs 放大);不走 UI 线框 role 词表,
-    // 实测「密码/登录」等页名词被 side/overlay 词表误判,页卡被塞进 46px 侧栏槽摘要全裁。
+ // 经验证「密码/登录」等页名词被 side/overlay 词表误判,页卡被塞进 46px 侧栏槽摘要全裁。
     if (boardType === "docs" && kind === "page") return "main";
     var s = String(label || "").toLowerCase();
     if (/(顶栏|顶部|头部|导航栏|标题栏|页签|横幅|提醒|搜索|步骤条|面包屑|凭证头|页头|菜单栏|菜单条|工具栏|工具条|命令栏|tab|header|navbar|banner)/.test(s)) return "top";
@@ -99,7 +97,7 @@
       childrenOf.get(par.id).push(kid);
     }
     // page = 有孩子的 contains 源,或显式 kind=page
-    // docs deck(2026-10-26):boardType=docs 且存在「section contains→page」时,章(section)也是容器
+ // docs deck:boardType=docs 且存在「section contains→page」时,章(section)也是容器
     // ——「章→页」两层与「页→区块」一层在布局上同构(容器=contains 源),nav 分层把章当页间节点排。
     var docDeck = boardType === "docs" && edges.some(function (e) {
       if ((e.kind || "") !== "contains") return false;
@@ -114,8 +112,8 @@
     }
     var isPage = new Set(pageIds);
 
-    // ---- 1.5) 单页板 contains 补齐(2026-10-25 可读性)----
-    // planner 常只给 page 画少量 contains(实测 17 节点页面板只连了 2 个),其余 section/component
+ // ---- 1.5) 单页板 contains 补齐( 可读性)----
+ // planner 常只给 page 画少量 contains(经验证 17 节点页面板只连了 2 个),其余 section/component
     // 被当成「未归属」排到页外,弹窗子节点甚至落 (0,0)。单页板里 page 是唯一根,未声明归属的
     // 顶层节点按页内节点布局(只影响渲染,不写盘/不改边);多页板保留「未归属」语义,避免乱认父。
     if (doc && doc.docKind === "page" && pageIds.length === 1) {
@@ -139,7 +137,7 @@
     var selfLoops = [];       // edges 下标
     var crossEdges = [];      // 非 page↔page 的 nav(容器内/跨容器子节点,渲染层自定)
     // 语义回边候选:触发器文本含「返回/上一步/取消/退回」=产品语义上的回流,先剥离再分层
-    // (电子签实证:看板入度 4 全来自回边,不剥离则无入度 0 入口,Kahn 整体不推进=全 0 层)。
+ // (电子签验证:看板入度 4 全来自回边,不剥离则无入度 0 入口,Kahn 整体不推进=全 0 层)。
     var BACK_RE = /(返回|回到|上一步|下一步前|取消|退回|返回工作台)/;
     for (var ei2 = 0; ei2 < edges.length; ei2++) {
       var e2 = edges[ei2];
@@ -277,7 +275,7 @@
 
     // ---- 4) 容器内 UI 线框布局(角色分区;返回容器尺寸) ----
     function layoutInside(pageId, kids) {
-      // 单页大板(桌面设置页形态)加宽:实测 17 节点单页板 319px 宽导致状态卡 label 全被截断、
+ // 单页大板(桌面设置页形态)加宽:经验证 17 节点单页板 319px 宽导致状态卡 label 全被截断、
       // 页右大片空白。宽页给 side/main/component 更多横向预算,字与卡的比例回到可读区间。
       var widePage = pageIds.length === 1 && nodes.length >= 8;
       var sideW = widePage ? 180 : SIDE_W;
@@ -295,7 +293,7 @@
         roles.set(kids[k].id, r);
         (groups[r] || groups.main).push(kids[k]);
       }
-      // ---- 嵌套收编(2026-10-18 体验官B P1):section 的 contains 子孙(传递闭包)收进其槽位——
+ // ---- 嵌套收编:section 的 contains 子孙(传递闭包)收进其槽位——
       // 此前孙节点进 childrenOf 却无人给位,渲染落 (0,0) 且不随容器拖动(拖拽闭包已在渲染层修,布局侧在此补齐)。
       // main/side 槽内撑高排布;top/bottom/overlay 父项的子孙降级并入 page 级组件行(保证人人有位)。
       var nestedOf = new Map(); // kidId -> [子孙节点...]
@@ -347,7 +345,7 @@
       // 主体:左 side 竖列 + 右 main 竖列
       var bodyTop = y;
       var sideH = 0;
-      var sideItemH = []; // 嵌套撑高后的每项高度(2026-10-18)
+      var sideItemH = []; // 嵌套撑高后的每项高度
       for (var s = 0; s < groups.side.length; s++) {
         var sh1 = nestedSlotH(groups.side[s].id, SIDE_H, sideW, 4);
         sideItemH.push(sh1);
@@ -376,7 +374,7 @@
         compH = Math.ceil(groups.component.length / perRow) * (COMP_H + COMP_GAP);
       }
       // 组件行是整行宽,必须落在左右两列的**较高者**之下;旧实现按 mainH 放,
-      // 侧栏比主列高时会与侧栏底部嵌套卡片重叠(UI 板「五态/连接测试探活」实测叠卡)。
+ // 侧栏比主列高时会与侧栏底部嵌套卡片重叠(UI 板「五态/连接测试探活」经验证叠卡)。
       var compTop = Math.max(sideH, mainH);
       var bodyH = compTop + (groups.component.length ? MAIN_GAP + compH : 0);
       // 局部坐标(相对容器左上;绝对化在总装步做)
@@ -459,7 +457,7 @@
     }
 
     // ---- 5) 层内排布(主线居中,分支按 barycenter 上下外扩)+ 蛇形换行 + 总装 ----
-    // 蛇形:层×层宽超过单行预算(PAGE_ROW_W)自动折行(书页动线)——7 层电子签实测单行排
+ // 蛇形:层×层宽超过单行预算(PAGE_ROW_W)自动折行(书页动线)——7 层电子签经验证单行排
     // 世界宽 2300+,1440 视口 fit 后容器缩到 ~90px 完全不可读;折行使世界宽≈行预算,全览可读
     var byLevel = new Map();
     for (var p6 = 0; p6 < pageIds.length; p6++) {
@@ -535,7 +533,7 @@
         chapX.set(cid, MARGIN + ci * (maxPageW + LAYER_GAP * 2));
       });
     }
-    // docs deck(2026-10-26 两层 PPT):每章一列——章头卡在列顶,页卡在章头下纵向堆叠;
+ // docs deck( 两层 PPT):每章一列——章头卡在列顶,页卡在章头下纵向堆叠;
     // 章×章沿 data 主线横排(章序=章在 data 链上的层)。结论根/其它非容器节点横排在章行上方。
     if (docDeck && chapIds.length) {
       var pagesOfChap = new Map(); // chapId -> [page...]
@@ -549,7 +547,7 @@
         }
       }
       var chapColX = new Map();
-      // 章序(2026-10-27):优先沿章间 data 边拓扑推进(=planner 的汇报顺序),
+ // 章序:优先沿章间 data 边拓扑推进(=planner 的汇报顺序),
       // 其次 label 数字前缀(01/02/…),最后 id——不能用 nav 分层(page 板语义,docs 章无 nav)。
       var chapOrder = (function () {
         var chapSet = new Set(chapIds);
@@ -667,8 +665,8 @@
         maxLayerBottom = Math.max(maxLayerBottom, ct.y + ct.h);
         maxWorldX = Math.max(maxWorldX, ct.x + ct.w);
       }
-      // 2026-10-29 修复(note 类小卡整片压在页卡上):旧口径只扫 pageIds 的容器 rect。docs deck 的页卡
-      // (pg1..pgN)不是容器、堆在章头容器**下方**,其底沿远低于章底(实测章底 239 vs 页底 467)
+ // 修复(note 类小卡整片压在页卡上):旧口径只扫 pageIds 的容器 rect。docs deck 的页卡
+ // (pg1..pgN)不是容器、堆在章头容器**下方**,其底沿远低于章底(经验证章底 239 vs 页底 467)
       // → 未归属带 y 落到 289,正好横插进页卡带,note 小卡把 P1/P2 的标题+摘要盖住(docs 三主题各 10 对重叠)。
       // 改为「所有已定位节点(pos+size)的外接框」:未归属带恒在最深内容之下,任何板型都不再压卡。
       pos.forEach(function (p, id) {
@@ -680,7 +678,7 @@
       var oy2 = maxLayerBottom + ORPHAN_TAG_H + 20;
       // 槽宽按「实际会渲染出来的卡宽」给(.cv-node 基础宽 216px;旧值 COMP_W*2=168 比卡窄 48px,
       // 相邻两槽间距 COMP_GAP=8 → 每对邻卡水平互压 40px,落地 manifest 又被算进重叠)。
-      // 槽高按内容给:带 summary 的 note 实测 119px(标题+摘要),无 summary 的 ~54px。
+ // 槽高按内容给:带 summary 的 note 经验证 119px(标题+摘要),无 summary 的 ~54px。
       var ORPH_W = 216, ORPH_H_SUM = 119, ORPH_H_MIN = 54;
       var orphH = function (nn) { return nn && String(nn.summary || "").trim() ? ORPH_H_SUM : ORPH_H_MIN; };
       var maxOrphH = ORPH_H_MIN;

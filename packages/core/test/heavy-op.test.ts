@@ -7,7 +7,7 @@ import {
   DEFAULT_HEAVY_OP_EXEMPTS,
 } from "../src/permission/heavy-op";
 
-describe("heavy-op 判定表(step-071 D1)", () => {
+describe("heavy-op 判定表( D1)", () => {
   it("build 类:pnpm/npm/yarn build、tsc -b、next/vite build、go/cargo build 命中", () => {
     for (const cmd of [
       "pnpm build",
@@ -92,7 +92,7 @@ describe("heavy-op 判定表(step-071 D1)", () => {
   });
 });
 
-describe("env 可配置扩展(step-071)", () => {
+describe("env 可配置扩展", () => {
   it("GENIE_HEAVY_OP_EXTRA_RULES 追加(只增不删);GENIE_HEAVY_OP_EXEMPT 追加豁免", () => {
     const cfg = loadHeavyOpConfig({
       GENIE_HEAVY_OP_EXTRA_RULES: JSON.stringify([{ category: "render", patterns: ["\\bblender\\s+-b\\b"], note: "渲染" }]),

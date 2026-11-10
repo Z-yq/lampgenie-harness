@@ -218,8 +218,7 @@ describe("defect-lineage-store", () => {
     expect(clarifyDefect(root, "def-1", { by: " ", note: "x" }).code).toBe("DEFECT_INVALID_INPUT");
     expect(clarifyDefect(root, "def-1", { by: "lead", note: "" }).code).toBe("DEFECT_INVALID_INPUT");
     expect(
-      clarifyDefect(root, "def-1", { by: "lead", note: "x", missedLink: "bogus" as unknown as "none" }).code,
-    ).toBe("DEFECT_INVALID_INPUT");
+      clarifyDefect(root, "def-1", { by: "lead", note: "x", missedLink: "bogus" as unknown as "none" }).code).toBe("DEFECT_INVALID_INPUT");
     expect(clarifyDefect(root, "nope", { by: "lead", note: "x" }).code).toBe("DEFECT_NOT_FOUND");
     expect((await readLedger(root)).length).toBe(1);
   });

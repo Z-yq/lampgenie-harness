@@ -10,7 +10,7 @@ import { redactEventPayload } from "./redact.js";
 
 /** 热窗默认容量(g2 journal 热窗冷卸,2026-11):最近使用/最近追加的 N 个会话整会话常驻。 */
 const DEFAULT_HOT_SESSIONS = 20;
-/** 热窗默认字节预算(g2 字节配额,2026-11):产线热窗里 2 个巨型会话文件(23.5MB+41MB)解析成
+/** 热窗默认字节预算(g2 字节配额,2026-11):生产环境热窗里 2 个巨型会话文件(23.5MB+41MB)解析成
  *  事件对象后 ≈138MB 堆,单靠「条数」约束(N=20)挡不住单会话巨型文件。默认 64MB,0=不限(旧行为)。 */
 const DEFAULT_HOT_BYTES = 64 * 1_048_576;
 /** readAll 冷会话 hydration 小缓存容量:防同一批 readAll 反复解同一冷文件。 */
@@ -40,7 +40,7 @@ function resolveHotBytes(override?: number): number {
   return Math.floor(n);
 }
 
-/** 恒常驻事件:跨会话 kind(global.jsonl,产线实测约 2.5% 字节)与无 sessionId 事件——永不淘汰。 */
+/** 恒常驻事件:跨会话 kind(global.jsonl,生产环境经验证约 2.5% 字节)与无 sessionId 事件——永不淘汰。 */
 function isAlwaysResident(event: JournalEvent): boolean {
   return !event.sessionId || CROSS_SESSION_KINDS.has(event.kind);
 }
@@ -108,7 +108,7 @@ function addTally(into: ScanTally, part: ScanTally | null): void {
   into.lines += part.lines;
 }
 
-/** 写前持久化屏障(M24)的严格清队失败:消息带 target/bytes,cause 保留底层错误。
+/** 写前持久化屏障的严格清队失败:消息带 target/bytes,cause 保留底层错误。
  *  与 flush() 的 best-effort 语义互不影响(停机路径仍走 flush,不抛)。 */
 export class JournalFlushError extends Error {
   readonly target: string;
@@ -131,12 +131,12 @@ export interface Journal {
   /** 按顺序读出全部事件(可选从某个 seq 之后)。 */
   readAll(sinceSeq?: number): JournalEvent[];
   /** 读出某会话的事件(per-session 增量索引,不扫全量;可选从某个 seq 之后)。
-   * fixF1(2026-10-19 面板卡+重连风暴):session.status 等高频读路径此前走 readAll 全量
-   * (产线 30MB/28k 行 × 每次两遍 map),事件循环被同步全扫占死→ws 心跳排队超时→面板判死重连。 */
+ * fixF1(面板卡+重连风暴):session.status 等高频读路径此前走 readAll 全量
+ * (生产环境 30MB/28k 行 × 每次两遍 map),事件循环被同步全扫占死→ws 心跳排队超时→面板判死重连。 */
   readSession(sessionId: string, sinceSeq?: number): JournalEvent[];
   /** 订阅新事件(只在同一进程内有效)。 */
   subscribe(listener: EventListener): () => void;
-  /** 写前持久化屏障(M24,fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
+ /** 写前持久化屏障(,fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
    *  可选——旧实现/测试假 journal 没有它,调用方按 no-op 处理(零回归);flush() 仍是 best-effort。 */
   flushStrict?(): void | Promise<void>;
   /** 当前水位(= 下一个 seq)。消费面把 length 当水位用(server.ts seqBefore、search.ts 增量判定),
@@ -157,9 +157,9 @@ abstract class BaseJournal implements Journal {
   // g2 热窗:冷会话的槽只留元数据(firstSeq/lastSeq/files)+ 恒常驻子集,不再持有会话域事件对象。
   protected sessionIndex = new Map<string, SessionSlot>();
   protected sessionIndexStrict = true;
-  /** 历史最大 seq(2026-10-21 修复):events.length 在存在重复 seq/断档时 ≠ 下一个合法 seq。
+ /** 历史最大 seq(修复):events.length 在存在重复 seq/断档时 ≠ 下一个合法 seq。
    *  旧实现用 events.length 分配 → 与历史 seq 相撞 → 重启按 seq 去重时把新事件当重复丢掉
-   *  (实锤:丢失 assistant 消息 → 只剩 tool 结果 → LLM 400 tool_calls 配对错)。 */
+ * (注意:丢失 assistant 消息 → 只剩 tool 结果 → LLM 400 tool_calls 配对错)。 */
   protected seqHigh = -1;
   /** 热窗容量(0=关闭):最近使用/最近追加的 N 个会话常驻,其余会话整会话冷卸。 */
   protected readonly hotSessions: number;
@@ -540,7 +540,7 @@ abstract class BaseJournal implements Journal {
 
   /** 构造完整事件并登记(seq 递增 + 幂等键入账);append 与 appendMany 共用此逻辑。 */
   private buildEvent<T>(event: NewEvent<T>): JournalEvent<T> {
-    // 轨迹追踪 P1-B 脱敏切面(2026-10-29):唯一入账点做一次 payload 脱敏,append/appendMany/
+ // 轨迹追踪 P1-B 脱敏切面:唯一入账点做一次 payload 脱敏,append/appendMany/
     // write-behind/sharded/内存版全部经由本函数 → 一处覆盖全部落盘与派发路径(读旧数据不重写)。
     // 只处理有限键(tool.call.arguments / tool.result.content 等),**idempotencyKey 不碰**;
     // 开关 GENIE_JOURNAL_REDACT=0 全关;失败静默(脱敏绝不能挡住事件落盘)。
@@ -569,7 +569,7 @@ abstract class BaseJournal implements Journal {
 
 /** 内存版:测试用,不落盘。 */
 export class MemoryJournal extends BaseJournal {
-  // 2026-11-05 g2 收尾:基类构造器改 protected 后,MemoryJournal(被 app.ts/llm-loop-backend 直接
+ // g2 收尾:基类构造器改 protected 后,MemoryJournal(被 app.ts/llm-loop-backend 直接
   // new)必须显式声明 public 构造器(否则继承 protected 无法实例化——TS2674)。
   constructor(opts?: { hotSessions?: number; hotBytes?: number }) {
     super(opts);
@@ -577,22 +577,22 @@ export class MemoryJournal extends BaseJournal {
   protected persist(): void {
     // 故意为空。
   }
-  /** 写前屏障(M24)内存版:无落盘面,no-op(接口要求在场,语义等价「永远成功」)。 */
+ /** 写前屏障内存版:无落盘面,no-op(接口要求在场,语义等价「永远成功」)。 */
   flushStrict(): void {
     // 故意为空。
   }
 }
 
 /** 文件版 JSONL:默认单文件追加;可选 writeBehind(异步批量落盘)+ sharded(按会话分文件)。
- *  2026-10-21 卡顿修复:write-behind——逐事件 appendFileSync 同步写 9p 阻塞事件循环(三会话并发
- *  实测消息刷新卡顿)。开启后内存为权威源(readAll/readSession 立即可见),文件只作崩溃恢复:
+ * 卡顿修复:write-behind——逐事件 appendFileSync 同步写 9p 阻塞事件循环(三会话并发
+ * 经验证消息刷新卡顿)。开启后内存为权威源(readAll/readSession 立即可见),文件只作崩溃恢复:
  *  微任务批合并 + fs.promises.appendFile 异步写;失败回退同步写保数据;进程退出时同步清队列。
- *  2026-10-21 抄 ZCode session-store:sharded——跨会话小 kind 写 global.jsonl,会话肥 kind 写
+ * 设计参考 ZCode(致谢) session-store:sharded——跨会话小 kind 写 global.jsonl,会话肥 kind 写
  *  sessions/<sid>.jsonl;旧 gateway.jsonl 冻结只读。load 端无论模式,只要 global/sessions 在场
  *  就并入归并(seq 全局排序),关掉 sharded 后回写 gateway.jsonl 的新事件同样可读(双向可退)。
  *  内存模型/readAll/readSession/subscribe 语义与单文件完全一致——上层零改动。 */
 
-/** 跨会话 kind(写 global.jsonl):体积画像实测仅 ~2.5% 字节,但被 track/dashboard/subagents/
+/** 跨会话 kind(写 global.jsonl):体积画像经验证仅 ~2.5% 字节,但被 track/dashboard/subagents/
  *  checkpoint/goal 等跨会话消费点读取;其余(会话肥 kind,~84%)只被单会话读路径消费。 */
 const CROSS_SESSION_KINDS = new Set([
   "task.enqueue", "task.start", "task.progress", "task.done", "task.fail", "task.deleted", "task.project.clear",
@@ -601,7 +601,7 @@ const CROSS_SESSION_KINDS = new Set([
   "goal.set", "board.update", "workflow.run.start", "workflow.run.done", "workflow.ask",
   "companion.notice", "companion.relay", "super.notice", "super.relay", "review.findings", "automation.run", "custom",
   "model.switch",
-  // 板质量遥测(2026-11-05):基线表/看板跨会话读 → global.jsonl。
+ // 板质量遥测:基线表/看板跨会话读 → global.jsonl。
   "board.audit", "board.skeleton",
 ]);
 
@@ -616,10 +616,10 @@ export class FileJournal extends BaseJournal {
   private sharded = false;
   private globalFile: string;
   private sessionDir: string;
-  /** M123(2026-11-08)归档目录:已归档的 sessions/<sid>.jsonl 冷读兜底(load 不扫它)。 */
+ /** 归档目录:已归档的 sessions/<sid>.jsonl 冷读兜底(load 不扫它)。 */
   private archiveDir: string | undefined;
-  /** M123 归档冷读开关:缺省 false = boot 期零额外 IO(行为逐字等于未配置 archiveDir);
-   *  宿主装配完成后显式开启,只有用户读会话这类显式路径才回读归档副本(实测归档 422MB 后
+ /** 归档冷读开关:缺省 false = boot 期零额外 IO(行为逐字等于未配置 archiveDir);
+ * 宿主装配完成后显式开启,只有用户读会话这类显式路径才回读归档副本(经验证归档 422MB 后
    *  boot 期内部 readSession 把 29 个归档文件全 parse,6 分钟仍在装配)。 */
   private archiveReadsEnabled = false;
 
@@ -643,7 +643,7 @@ export class FileJournal extends BaseJournal {
     filePath: string,
     opts?: {
       writeBehind?: boolean; sharded?: boolean; deferLoad?: boolean; hotSessions?: number; hotBytes?: number;
-      /** M123:归档目录(缺省 undefined = 行为逐字同旧版)。冷启动 load 不扫它,只有冷读兜底会看。 */
+ /** :归档目录(缺省 undefined = 行为逐字同旧版)。冷启动 load 不扫它,只有冷读兜底会看。 */
       archiveDir?: string;
     },
   ) {
@@ -705,9 +705,9 @@ export class FileJournal extends BaseJournal {
     if (this.sharded) {
       const sessionPath = join(this.sessionDir, sessionFileName(sid));
       paths.add(sessionPath);
-      // M123(2026-11-08)归档兜底:sessions 下同名文件已被移入 archiveDir 时回读归档副本;
+ // 归档兜底:sessions 下同名文件已被移入 archiveDir 时回读归档副本;
       // 命中顺序 sessions 优先(文件还在 sessions 就不看归档)。
-      // M123 冷读门控:未显式开启归档读时,等同未配置 archiveDir(boot 期内部回读零额外 IO)。
+ // 冷读门控:未显式开启归档读时,等同未配置 archiveDir(boot 期内部回读零额外 IO)。
       if (this.archiveDir && this.archiveReadsEnabled && !existsSync(sessionPath)) {
         const archivedPath = join(this.archiveDir, sessionFileName(sid));
         if (existsSync(archivedPath)) paths.add(archivedPath);
@@ -727,13 +727,13 @@ export class FileJournal extends BaseJournal {
   }
 
   /**
-   * 归档冷读(M123,2026-11-08):会话文件已移入 archiveDir 时,boot 不再入账其会话域事件,
+ * 归档冷读:会话文件已移入 archiveDir 时,boot 不再入账其会话域事件,
    * 读取路径按需从归档补一份(仅当 archiveDir 配置且归档副本存在;不配置 = 逐字旧行为)。
    * 常驻/内存副本优先(同 seq 不重复),结果按 seq 升序。
    */
   override readSession(sessionId: string, sinceSeq = 0): JournalEvent[] {
     const out = super.readSession(sessionId, sinceSeq);
-    // M123 冷读门控:未显式开启归档读时,等同未配置 archiveDir。
+ // 冷读门控:未显式开启归档读时,等同未配置 archiveDir。
     if (!this.archiveDir || !this.archiveReadsEnabled) return out;
     const archivedPath = join(this.archiveDir, sessionFileName(String(sessionId)));
     if (!existsSync(archivedPath)) return out;
@@ -760,7 +760,7 @@ export class FileJournal extends BaseJournal {
   }
 
   /** readAll 批量冷回读期:共享文件(legacy 单文件)只解析一次。
-   *  产线实测 272 个冷会话里有大量历史会话的事件都在 80MB legacy 里,逐会话重解析 = 21GB IO(239s);
+ * 生产环境经验证 272 个冷会话里有大量历史会话的事件都在 80MB legacy 里,逐会话重解析 = 21GB IO(239s);
    *  这里只缓存**共享文件**,会话自己的分文件正常一次一解析(缓存全部会等于把整库再钉回堆里)。 */
   protected override beginColdBulkRead(): void {
     this.bulkSharedParse = new Map<string, JournalEvent[]>();
@@ -786,13 +786,13 @@ export class FileJournal extends BaseJournal {
   }
 
   /** write-behind:进程退出路径(逐文件同步清队列,尽力保最后一批)。 */
-  /** 显式同步清队(2026-10-27 优雅停机/测试关闭):close() 后马上重启的场景不能等 exit 钩子——
-   *  队列里的事件在下一个进程 load 时还不存在(实锤:任务提交后关闭 → 重启丢任务)。 */
+ /** 显式同步清队(优雅停机/测试关闭):close 后马上重启的场景不能等 exit 钩子——
+ * 队列里的事件在下一个进程 load 时还不存在(注意:任务提交后关闭 → 重启丢任务)。 */
   flush(): void {
     this.wbFlushAllSync();
   }
 
-  /** 写前持久化屏障(M24,fail-closed):逐 target 同步落盘。
+ /** 写前持久化屏障(,fail-closed):逐 target 同步落盘。
    *  与 flush() 的差别只有两点:①失败**抛 JournalFlushError**(不吞、不 console.error);
    *  ②**成功才清队**——失败批原样留在队列里,下次 flushStrict/flush 还能把它写出去(不丢事件)。
    *  已落盘或非 write-behind(每 append 已同步写)时无队列,等价 no-op。 */
@@ -840,7 +840,7 @@ export class FileJournal extends BaseJournal {
       const fsp = await import("node:fs/promises");
       for (const [target, queue] of this.wbQueues) {
         if (queue.length === 0) continue;
-        // M24:先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
+ // :先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
         // (旧实现先清队再写:失败即永久丢这一批,屏障的「队列保留」语义会被这里的抢占抹掉)。
         const n = queue.length;
         const batch = queue.join("");
@@ -866,7 +866,7 @@ export class FileJournal extends BaseJournal {
   }
 
   /** 单文件解析:逐行 Buffer 切片解码(fixE1),坏行跳过、后续有效行保留(分文件下单会话损坏不污染全局)。
-   *  2026-10-21 修复:旧逻辑遇坏行即 break——双写交错时代单个坏行会丢掉该会话文件后半段(数百条
+ * 修复:旧逻辑遇坏行即 break——双写交错时代单个坏行会丢掉该会话文件后半段(数百条
    *  消息),恢复出的历史缺 assistant 只剩 tool 结果 → LLM 400。交错坏行只影响自身,跳过即可。
    *  只解析不 ingest——归并与入账在 load() 统一做。 */
   private parseFile(path: string): JournalEvent[] | null {
@@ -899,9 +899,9 @@ export class FileJournal extends BaseJournal {
     return out;
   }
 
-  // fixE1(2026-10-19 产线 P1 启动卡死排查):加载性能+可观测三改——
+ // fixE1(生产环境 P1 启动卡死排查):加载性能+可观测三改——
   // ①逐行 Buffer 切片解码替代「整文件 utf-8 大字符串 + split 行数组」;②seq 断档告警折叠;
-  // ③加载耗时/规模打点。2026-10-21 分文件:legacy+global+sessions/* 各自解析后按全局 seq 稳定
+ // ③加载耗时/规模打点。 分文件:legacy+global+sessions/* 各自解析后按全局 seq 稳定
   // 归并再入账——全局 seq=数组下标不变量、断档降级、幂等键跨全文件重建,全部沿用既有机制。
   // g2 热窗(2026-11):归并后逐条 ingest,启动期按 EVICT_EVERY 周期性整会话冷卸(稳态只驻 N 个会话);
   // 会话域事件的磁盘定位靠「目标文件确定性 + legacy 单文件侧会话集」,不额外存每事件来源(省内存)。
@@ -926,11 +926,11 @@ export class FileJournal extends BaseJournal {
     } catch { /* sessions 目录不存在=无会话分文件,正常 */ }
     const { merged, dupSeqs, bytes } = this.mergeSources(sources);
     // 归并:各文件内部 seq 升序(单进程全局计数器保证),跨文件按 seq 交错 → 全量稳定排序。
-    // 2026-10-21 修复(双写历史):同一 seq 可能在不同文件/不同时刻各出现一次(两个网关进程的
+ // 修复(双写历史):同一 seq 可能在不同文件/不同时刻各出现一次(两个网关进程的
     // 独立计数器)。旧逻辑「先到先得」保留旧事件、丢掉新事件 → 会话历史缺 assistant 消息,
     // 只剩 tool 结果 → LLM 400。现按 seq 去重并**保留 time 较大者**(新事件赢),同刻保留后合并者。
     const total = merged.length;
-    // 2026-10-21 修复:去重/分文件后 seq 稀疏是正常态(两个独立计数器各有空档、4455 条重复被折叠),
+ // 修复:去重/分文件后 seq 稀疏是正常态(两个独立计数器各有空档、4455 条重复被折叠),
     // 不能拿 `seq === events.length` 当断档判据——否则几乎每条都误报,还把 readSession 的二分
     // 索引整个降级成线性。readSession 的二分只依赖「同一会话列表内 seq 升序」,与全局下标无关;
     // 只有真非单调(外部改文件)才需要降级。
@@ -1217,8 +1217,7 @@ export class FileJournal extends BaseJournal {
   /** 流式加载收尾打点(与 afterLoad 同口径的规模/告警,但断档统计对冷会话不再逐 seq 可见)。 */
   private reportStreamLoad(
     label: string, started: number, tally: ScanTally, total: number,
-    residentCount: number, minSeq: number, maxSeq: number, dupSeqs: number, nonMonotonic: number,
-  ): void {
+    residentCount: number, minSeq: number, maxSeq: number, dupSeqs: number, nonMonotonic: number): void {
     if (dupSeqs > 0) {
       console.warn(`[journal] seq 重复 ${dupSeqs} 条已按「保留较新事件」去重(双写历史残留;新事件 seq 从 ${this.seqHigh + 1} 续)`);
     }
@@ -1238,7 +1237,7 @@ export class FileJournal extends BaseJournal {
   }
 
   /** 逐行扫描(流式:不建数组,事件交给 visit 后即无长期引用;坏行跳过,与 parseFile 同口径)。
-   *  注:曾试过分块读(8MB/块)想压 malloc arena,实测 RSS 314MB→314MB 不变而 loadChunked 25s→41s、
+ * 注:曾试过分块读(8MB/块)想压 malloc arena,经验证 RSS 314MB→314MB 不变而 loadChunked 25s→41s、
    *  readAll 10s→21s(豆文件读+手动切行),故保留整文件读:稳态 RSS 的大头不在文件缓冲。 */
   private scanFileSync(path: string, visit: (event: JournalEvent) => void): ScanTally | null {
     if (!existsSync(path)) return null;
@@ -1328,8 +1327,7 @@ export class FileJournal extends BaseJournal {
   /** 加载收尾:告警(重复 seq/稀疏/非单调)+ 规模打点(含热窗驻留画像)。 */
   private afterLoad(
     started: number, total: number, bytes: number, dupSeqs: number,
-    gapCount: number, gapMissing: number, nonMonotonic: number, cap: number, label: string,
-  ): void {
+    gapCount: number, gapMissing: number, nonMonotonic: number, cap: number, label: string): void {
     if (dupSeqs > 0) {
       console.warn(`[journal] seq 重复 ${dupSeqs} 条已按「保留较新事件」去重(双写历史残留;新事件 seq 从 ${this.seqHigh + 1} 续)`);
     }

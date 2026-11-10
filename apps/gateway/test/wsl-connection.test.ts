@@ -1,7 +1,7 @@
 /**
- * 连接向导服务端面(2026-10-27,用户口径「先连接 WSL/SSH,连接过程中装 server,确认无误后由 server
+ * 连接向导服务端面(「先连接 WSL/SSH,连接过程中装 server,确认无误后由 server
  * 返回文件路径,再选项目目录」):wsl.list / wsl.test / wsl.browse / ssh.browse 的形态与平台门控。
- * Windows 实机全链(部署+ping+浏览)由 tasks/step-1007-wsl-connection/evidence 覆盖。
+ * Windows 实机全链(部署+ping+浏览)由 覆盖。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import WebSocket from "ws";

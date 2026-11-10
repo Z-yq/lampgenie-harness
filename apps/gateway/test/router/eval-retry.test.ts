@@ -6,7 +6,7 @@ import { DEFAULT_POLICY_CONFIG, type PolicyConfig } from "../../src/router/polic
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("step-0145 P3 Eval 重试熔断(DSH evals deadline×2+unavailable 等价)", () => {
+describe(" P3 Eval 重试熔断(DSH evals deadline×2+unavailable 等价)", () => {
   it("assess 永挂 → 重排 3 次(deadline)后 unavailable:不派发、不 throw", async () => {
     const tm = new TaskSupervisor();
     const submitSpy = vi.spyOn(tm, "submit");

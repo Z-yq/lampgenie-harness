@@ -1,12 +1,10 @@
 // Public surface of @lampgenie/memory.
-//
 // The package previously had no entry point ("exports" pointed at this file
 // before it existed), which made the whole port un-importable. Everything a
 // gateway caller needs is here: the two-document memory context renderer, the
 // session-end learning pipeline (extractor + profile observer + preference
 // pool/promoter), the provider contracts, and the gateway-facing integration
 // glue from ./wiring (createMemoryWiring).
-//
 // Note: ProfileWatcher is re-exported from ./wiring, not from
 // ./learning/profile-observer — the original module cannot be imported at all
 // (its `@lampgenie/runtime/src/core/sensitive-content` specifier resolves

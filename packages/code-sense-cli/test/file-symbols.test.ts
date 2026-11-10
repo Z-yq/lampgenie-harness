@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import { buildC2fIndex, queryFile } from "@lampgenie/code-sense";
 import { formatFileNodes, type RepoState } from "../src/mcp-core.js";
 
-/** 2026-10-21 file 动作输出面:类型声明/箭头/嵌套符号如实标注(symKind + parent 限定名)。 */
+/** file 动作输出面:类型声明/箭头/嵌套符号如实标注(symKind + parent 限定名)。 */
 describe("file 文本面:符号表补全", () => {
   it("formatFileNodes 标出 {interface}/{type}/{enum}/{variable}/{arrow}/{class},嵌套符号带父限定名", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-cli-filesym-"));

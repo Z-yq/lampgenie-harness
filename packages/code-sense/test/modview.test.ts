@@ -1,5 +1,5 @@
 /**
- * 模块视图(2026-10-22 P1):分组规则 + 跨模块交互矩阵 + 枢纽/测试面分离 + mermaid。
+ * 模块视图( P1):分组规则 + 跨模块交互矩阵 + 枢纽/测试面分离 + mermaid。
  * 分组规则在 agent_alpha 上经 grep 逐边验证(根文件自成组;modules/ 摊二级)。
  */
 import { describe, it, expect } from "vitest";

@@ -1,20 +1,18 @@
 /**
- * Git 服务(step-037 批C,ZCode GitPane 移植):在激活项目根跑 git 命令。
- * status/branches/checkout/commit/diff 五面;非 git 目录按 2026-10-21 用户口径
- * 「没有 git 就不要进行对应操作」——isGitRepo 先验,读类由调用方降级空结果,不再显式报错。
+ * Git 服务(批C,ZCode GitPane 移植):在激活项目根跑 git 命令。
+ * status/branches/checkout/commit/diff 五面;非 git 目录按  * 「没有 git 就不要进行对应操作」——isGitRepo 先验,读类由调用方降级空结果,不再显式报错。
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseWslPath, wslErrorHint, wslGitInvocation } from "./wsl.js"; // 2026-10-27:WSL 项目 git 回发行版内执行
+import { parseWslPath, wslErrorHint, wslGitInvocation } from "./wsl.js"; // :WSL 项目 git 回发行版内执行
 
 const execFileP = promisify(execFile);
 
 /**
- * 超时预算(2026-10-28 修「偶发 git-failed」)。
- *
- * 原预算统一 15s。实测本仓(490 个变更、大量未跟踪,9p/网络盘更慢)单次
+ * 超时预算(修「偶发 git-failed」)。
+ * 原预算统一 15s。经验证本仓(490 个变更、大量未跟踪,9p/网络盘更慢)单次
  * `git status --porcelain -b` 已经 5.7~11.8s,面板 gitLoad + IDE SCM 角标 + 多会话
  * 各自触发 status 时并发叠加,**单个调用就会越过 15s → execFile SIGTERM**,
  * 而 Node 抛出的 `Error: Command failed: git status --porcelain -b` 里 stderr 为空,
@@ -81,7 +79,7 @@ export function isTransientGitError(err: unknown): boolean {
 
 /**
  * 纯函数:把 git 失败归一成**可判读**的一句话(面板 toast 直接展示)。
- * 原样透传 Node 的 `Command failed: <cmd>` 等于让用户/助手猜(实测 stderr 常为空)。
+ * 原样透传 Node 的 `Command failed: <cmd>` 等于让用户/助手猜(经验证 stderr 常为空)。
  */
 export function gitErrorText(args: string[], err: unknown, timeoutMs: number): string {
   const sub = gitSubcommand(args) || "git";
@@ -110,8 +108,7 @@ async function runGitOnce(
   args: string[],
   cwd: string,
   timeoutMs: number,
-  maxBuffer: number,
-): Promise<string> {
+  maxBuffer: number): Promise<string> {
   const inv = gitInvocationFor(cwd, args);
   if (inv.mode === "wsl") {
     const wsl = parseWslPath(cwd)!;
@@ -197,7 +194,6 @@ export function parseGitStatusPorcelain(out: string): { branch: string; changes:
 
 /**
  * 单飞(single-flight):同一 cwd 上并发的 status 合并成一次 git 执行。
- *
  * 面板 gitLoad、IDE SCM 角标刷新、多会话/子代理的 checkpoint 都会各自要 status;
  * 本仓单次 status 已 5~12s,并发 N 份只会互相拖慢,再叠加超时就变成偶发 git-failed。
  * 只合并**同时进行中**的请求(做完即删),不做时间缓存——状态新鲜度不变。
@@ -306,7 +302,7 @@ export async function gitLog(cwd: string, limit = 50): Promise<GitCommit[]> {
   return parseGitLog(await git(["log", "-n", String(limit), "--format=%h%x09%an%x09%ar%x09%s"], cwd));
 }
 
-// ---- 项目团队绑定(designs/23:有 git 就有 team) ----
+// ---- 项目团队绑定(有 git 就有 team) ----
 
 /** 激活项目的 origin remote(绑定键);无 remote/非 git 目录 → null(调用方回退 label 匹配)。 */
 export async function gitRemoteUrl(cwd: string): Promise<string | null> {
@@ -325,7 +321,7 @@ export interface GitContributor {
   commits: number;
 }
 
-/** 项目贡献者候选名单(designs/23:git 贡献者=团队候选,invite 目标建议;非成员资格)。 */
+/** 项目贡献者候选名单(git 贡献者=团队候选,invite 目标建议;非成员资格)。 */
 export async function gitContributors(cwd: string, limit = 20): Promise<GitContributor[]> {
   const out = await git(["log", "--format=%an%x09%ae", "--all"], cwd);
   const byEmail = new Map<string, GitContributor>();
@@ -342,7 +338,7 @@ export async function gitContributors(cwd: string, limit = 20): Promise<GitContr
   return [...byEmail.values()].sort((a, b) => b.commits - a.commits).slice(0, limit);
 }
 
-// ---- checkpoint 回滚(designs/21) ----
+// ---- checkpoint 回滚 ----
 
 /** 任务前快照:git stash create(悬空 commit,不动工作区);无变更→null。 */
 export async function checkpointCreate(cwd: string): Promise<string | null> {
@@ -358,7 +354,7 @@ export async function checkpointPreview(cwd: string, sha: string): Promise<strin
 }
 
 /** 回滚:被跟踪文件恢复到快照态(只覆盖;快照后新增的未跟踪文件保留——登记边界)。 */
-/** 任意快照恢复(designs/21 多快照浏览;同 rewind 语义,sha 由调用方给)。 */
+/** 任意快照恢复(多快照浏览;同 rewind 语义,sha 由调用方给)。 */
 export async function checkpointRestoreSha(cwd: string, sha: string): Promise<number> {
   return checkpointRewind(cwd, sha);
 }
@@ -369,11 +365,10 @@ export async function checkpointRewind(cwd: string, sha: string): Promise<number
   return files.length;
 }
 
-/** 变更统计(step-046,内联变更条「N 个文件已更改 +A -D」):git diff --numstat 快照→当前。 */
+/** 变更统计(内联变更条「N 个文件已更改 +A -D」):git diff --numstat 快照→当前。 */
 export async function diffstat(
   cwd: string,
-  sha: string,
-): Promise<{ files: { path: string; add: number; del: number }[]; total: { files: number; add: number; del: number } }> {
+  sha: string): Promise<{ files: { path: string; add: number; del: number }[]; total: { files: number; add: number; del: number } }> {
   const out = await git(["diff", "--numstat", sha], cwd).catch(() => "");
   const files: { path: string; add: number; del: number }[] = [];
   for (const line of out.split("\n")) {
@@ -389,7 +384,7 @@ export async function diffstat(
   };
 }
 
-/** 单文件补丁(step-052 F1):任务快照 sha → 该文件 diff 全文;截断上限 120KB。 */
+/** 单文件补丁( F1):任务快照 sha → 该文件 diff 全文;截断上限 120KB。 */
 export async function fileDiff(cwd: string, sha: string, file: string): Promise<{ diff: string; truncated: boolean }> {
   const full = await git(["diff", "--find-renames", sha, "--", file], cwd).catch(() => "");
   const LIMIT = 120 * 1024;

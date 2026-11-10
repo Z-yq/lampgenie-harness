@@ -1,14 +1,11 @@
-/* step-124 网页版输入交互策略(右键/左键/中键/浏览器快捷键/滚轮/拖放/触屏)
- *
+/* 网页版输入交互策略(右键/左键/中键/浏览器快捷键/滚轮/拖放/触屏)
  * 设计原则(分区,不一刀切):
  *  - 画布/白板/图表/侧栏/工具栏:接管浏览器默认(右键菜单/文本选择/原生拖拽/中键自动滚动/Ctrl+滚轮缩放/Ctrl+S/P/F);
  *  - 终端输出/代码块/markdown 正文/输入框/文本域:永远例外——保留原生选择、复制、右键菜单与中键;
  *  - 空白/装饰区:抑制右键,不碰 Ctrl+C(不设全局 user-select:none)。
- *
  * 可配开关:localStorage["zh:web-input-policy"] = "strict"(默认) | "relaxed";
  * 运行时:window.__webInputPolicy.setMode("strict"|"relaxed")。
  * 轻量右键菜单(非文本区、且该处没有应用菜单时):复制页面地址 + 严格交互开关。
- *
  * 零依赖、自包含;不依赖 panel 内联变量,不使用 toast()(自带 #ip-toast)。
  */
 (function () {
@@ -29,8 +26,8 @@
     ".tc-body", ".tr-full", ".tool-card summary", ".tool-group .tg-item",
     ".term-body", ".term-input-row",
     ".fv-body", ".git-diff", ".git-changes", "#ddBody",
-    "#ideEdit", ".ide-edit", /* step-141:IDE 编辑区容器豁免(严格交互下可选中/输入;树/标签条仍属 chrome) */
-    ".ide-monaco", /* step-141 C:Monaco 挂载面同属文本区(严格交互下代码可选中/复制) */
+    "#ideEdit", ".ide-edit", /* IDE 编辑区容器豁免(严格交互下可选中/输入;树/标签条仍属 chrome) */
+    ".ide-monaco", /* C:Monaco 挂载面同属文本区(严格交互下代码可选中/复制) */
     ".wiki-md", ".wiki-page-title",
     ".board-detail", ".bd-flow", ".pp-detail", ".pp-ch",
     ".uid-msg", ".perm-sum", ".perm-meta",
@@ -43,7 +40,7 @@
     "#wbWrap", "#wbCanvas",
     "#ppGraph", "#ppfMermaid", "#ppfGraphWrap",
     "#arcCv", ".md-mermaid",
-    "#g", // 项目档案独立窗口页(step-049)的图容器
+    "#g", // 项目档案独立窗口页的图容器
   ].join(",");
 
   // 侧栏/工具栏/头部/文件树/任务卡等 chrome 面:禁原生选择/拖拽;右键交给轻量菜单或既有应用菜单。
@@ -51,7 +48,7 @@
     "#sidebar", "header", ".vw-head", ".chatTopbar",
     ".pp-head", ".pp-tabs", ".pp-tab",
     ".files-tree", "#sbFt", ".sbft-head",
-    "#ideTree", ".ide-tabs", /* step-141:IDE 左树/顶部标签条=chrome 面(禁选中,不放开整视图) */
+    "#ideTree", ".ide-tabs", /* IDE 左树/顶部标签条=chrome 面(禁选中,不放开整视图) */
     ".t-row", ".t-more", ".ft-row",
     ".board-nodes", ".board-sketch > summary", ".wb-tools",
     ".bf-head", ".bf-list", ".bf-item",
@@ -249,7 +246,7 @@
     if (!mod || e.altKey) return;
     var k = String(e.key || "").toLowerCase();
     if (k === "s") {
-      // step-141 C:#view-ide 编辑区内 Ctrl+S=应用内保存(panel 侧 capture 接管发 file.write),此处放行不拦
+ // C:#view-ide 编辑区内 Ctrl+S=应用内保存(panel 侧 capture 接管发 file.write),此处放行不拦
       if (document.body && document.body.dataset.view === "ide" && e.target && e.target.closest && e.target.closest("#ideBody")) return;
       e.preventDefault();
       toast("已阻止浏览器保存网页(Ctrl+S)");

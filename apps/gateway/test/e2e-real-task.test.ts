@@ -1,8 +1,7 @@
 /**
- * 真实 LLM 端到端任务(2026-10-30 token 轮):装配骨架照抄 phase-tracking.test.ts
+ * 真实 LLM 端到端任务( token 轮):装配骨架照抄 phase-tracking.test.ts
  * (createGatewayApp + buildExecutorFromConfig + GENIE_PERMISSION_RULES),但 llm 换真实模型
  * (buildLlmFromConfig;凭证由 resolveTrackApiKey 从 env/.genie/secrets.json 读,测试内不写 key)。
- *
  * 产出=数字不是断言:缓存命中率/上下文规模/工具面翻转/注入位置/机制事件计数,全部 console 打印
  * 并落一份 JSON 摘要到 os.tmpdir()(不污染仓库文档树)。任务成功或失败都出数(失败本身是数据)。
  */
@@ -24,9 +23,9 @@ afterEach(async () => {
 
 const root = process.cwd().includes("apps/gateway") ? join(process.cwd(), "..", "..") : process.cwd();
 
-/** 唯一化的工作文件名(2026-10-30 修「验收环境未隔离」)。
+/** 唯一化的工作文件名(修「验收环境未隔离」)。
  *  旧版固定写 src/calc.ts + verify.mjs 到仓库根:第一次跑留下文件后,**后续每一次**都会
- *  被 glob 直接命中(实测第二轮 write_file=0、mtime 仍是上一轮的),等于永远不再验证
+ * 被 glob 直接命中(经验证第二轮 write_file=0、mtime 仍是上一轮的),等于永远不再验证
  *  「创建文件」这条核心能力。现在文件名带时间戳,并断言 write_file ≥1。
  *  任务结束由 afterEach 清理,仓库不残留。 */
 const STAMP = Date.now();
@@ -71,9 +70,9 @@ function p50(nums: number[]): number {
 
 const MARKERS = ["[系统提示更新]", "[系统提醒]", "<system-reminder>"];
 
-/** 真实模型调用有成本(实测单次 ~130s、17 万 input token):默认跳过,只有显式开门才跑。
+/** 真实模型调用有成本(经验证单次 ~130s、17 万 input token):默认跳过,只有显式开门才跑。
  *  开门:`GENIE_E2E_REAL=1 npx vitest run test/e2e-real-task.test.ts`
- *  日常 `npx vitest run` 不会烧钱(2026-10-30 用户口径:验收要用真实任务,但不能让全量测试付费)。 */
+ * 日常 `npx vitest run` 不会烧钱(验收要用真实任务,但不能让全量测试付费)。 */
 const REAL_E2E = process.env.GENIE_E2E_REAL === "1";
 
 it.skipIf(!REAL_E2E)("真实 LLM 端到端:src/calc.ts + verify.mjs + 跑通,量缓存/步数/机制事件", async () => {

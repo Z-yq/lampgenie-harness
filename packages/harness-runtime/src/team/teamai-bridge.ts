@@ -1,5 +1,5 @@
 /**
- * teamai 桥接层(designs/24):兼容 teamai-cli 的团队仓数据模型——
+ * teamai 桥接层:兼容 teamai-cli 的团队仓数据模型——
  * 已在用的团队仓(teamai.yaml/skills/rules/docs/env/hooks/manifest/culture)由 relay 克隆同步,
  * 本模块把克隆目录读成受控投影(digest)供 gateway 分发到自己的面(系统提示/面板/命令)。
  * 红线:secrets.yaml 只出 key 不出值;所有解析 fail-soft(外部手编 yaml 超集不抛错,能读多少读多少);
@@ -73,11 +73,11 @@ export interface TeamaiDigest {
   modelsRaw: string;
   agentsRaw: string[];
   pulledAt: number;
-  /** 角色定义(designs/30 §2.6:roster/roles.yaml;缺失=[]) */
+ /** 角色定义( §2.6:roster/roles.yaml;缺失=[]) */
   roles: TeamaiRole[];
-  /** 资源计数面(designs/30 §2.6:teamai list 的数据源) */
+ /** 资源计数面( §2.6:teamai list 的数据源) */
   counts: { members: number; skills: number; rules: number; docs: number; learnings: number };
-  /** 成员→roleId 映射(designs/30 §2.6:面板角色徽标数据源;成员 yaml 未写 roleId=不出现在表里) */
+ /** 成员→roleId 映射( §2.6:面板角色徽标数据源;成员 yaml 未写 roleId=不出现在表里) */
   memberRoles: Record<string, string>;
 }
 
@@ -245,8 +245,8 @@ export function readTeamaiAssets(cloneDir: string, pulledAt = Date.now()): Teama
   const rules: TeamaiRule[] = [];
   const rulesDir = join(cloneDir, "rules");
   if (existsSync(rulesDir)) {
-    // 2026-11-05:两层形态都吃——扁平 rules/<name>.md(teamai 原生)与命名空间 rules/<ns>/<name>.md
-    // (本仓 relay.teamai.push kind=rule 的落点,契约 designs/30 §2.2)。此前只扫扁平层,
+ // 两层形态都吃——扁平 rules/<name>.md(teamai 原生)与命名空间 rules/<ns>/<name>.md
+ // (本仓 relay.teamai.push kind=rule 的落点,契约 §2.2)。此前只扫扁平层,
     // 导致 pushed 规则在 digest.counts.rules 里恒为 0(规则进得去团队仓、出不来投影)。
     const walk = (dir: string, prefix: string) => {
       for (const f of readdirSync(dir).sort()) {
@@ -330,7 +330,7 @@ export function readTeamaiAssets(cloneDir: string, pulledAt = Date.now()): Teama
 }
 
 /**
- * roster/members/*.yaml → username→roleId(designs/30 §2.6)。
+ * roster/members/*.yaml → username→roleId( §2.6)。
  * 只取 roleId(角色命名空间),不取 role(权限位 owner/reviewer/member)——两者同名不同义。
  */
 function readMemberRoles(cloneDir: string): Record<string, string> {
@@ -379,7 +379,7 @@ function sha1(text: string): string {
 function cloneResourcePaths(cloneDir: string): Map<string, string> {
   const known = new Map<string, string>();
   // rules:扁平 rules/<name>.md 与命名空间 rules/<ns>/<name>.md 都收(两处口径必须同源,
-  // 否则 status 会把已进 digest 的嵌套规则误报为 removed)。2026-11-05。
+ // 否则 status 会把已进 digest 的嵌套规则误报为 removed)。。
   const rulesDir = join(cloneDir, "rules");
   if (existsSync(rulesDir)) {
     const walkRules = (dir: string, keyPrefix: string) => {

@@ -1,7 +1,6 @@
 /**
  * 决策质量(Decision Quality):把 agent 的「一次决策」记录成可聚类样本,
  * 再把样本压成 anti-pattern / efficient-pattern 两类结论,供知识库与迁移验证消费。
- *
  * 为什么要单独一层,而不是直接从日志里数失败次数:
  * - 失败次数多不代表可沉淀规律:failure 里混着环境抖动(environment-noise)与需求变更
  *   (requirement-change),这两类再怎么复现也推不出「下次别这么选」。所以先做归因过滤,
@@ -10,7 +9,6 @@
  *   `edit src/a.ts` 当成两条,所以统一走 choiceSignature(type + token 集 + 是否失败类)做聚类键。
  * - 「值不值得写成库」不是看单次,而是看跨实体(项目 ∪ 模型)复现 + 回放验证 + 迁移验证,
  *   三级门槛各管一件事,promote 每次只升一级,避免一次跳级把噪声写进库。
- *
  * 纯逻辑:零 IO(不读文件 / 网络 / 环境 / 真实时钟)。时间一律 epoch ms 数字,
  * 任何需要"现在"的地方都可注入 opts.now / opts.at(仅 aggregate 缺省回落到 Date.now())。
  * 所有导出函数不抛异常:非法输入返回安全空值并带稳定码(DECISION_QUALITY_CODES),调用方据此降级。
@@ -498,8 +496,7 @@ function buildPattern(
   signature: string,
   type: DecisionType,
   members: DecisionRecord[],
-  now: number,
-): Pattern {
+  now: number): Pattern {
   const instances: PatternInstance[] = members.map((record) => {
     const instance: PatternInstance = { decisionId: record.id };
     if (record.context.projectId !== undefined) instance.projectId = record.context.projectId;

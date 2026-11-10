@@ -1,4 +1,4 @@
-/** UI 实测:斜杠指令面板(step-036,ZCode SlashCommandPlugin 移植)——真实 chromium 无头。 */
+/** UI 经验证:斜杠指令面板(ZCode SlashCommandPlugin 移植)——真实 chromium 无头。 */
 const { chromium } = require("playwright-core");
 const { servePanel } = require("../../src/panel.ts");
 
@@ -76,8 +76,8 @@ const { servePanel } = require("../../src/panel.ts");
   await page.waitForTimeout(200);
   check("D2 /dark 主题切换", !(await page.evaluate(() => document.body.classList.contains("light"))));
 
-  // D3: /review 发送类 → 输入框 chip 占位(step-095:回车后渲染指令 chip+参数占位,允许续输,发送才执行;
-  // 旧「展开填回」行为被本步改造取代——判定依据=用户口径「/唤起的指令回车后在输入框渲染占位符 chip」)
+ // D3: /review 发送类 → 输入框 chip 占位(回车后渲染指令 chip+参数占位,允许续输,发送才执行;
+ // 旧「展开填回」行为被本步改造取代——判定依据=)
   await page.fill("#instruction", "/review");
   await page.waitForTimeout(150);
   await page.keyboard.press("Enter");
@@ -89,7 +89,7 @@ const { servePanel } = require("../../src/panel.ts");
   check("D3 /review 进 chip 态", inChipOn.on && inChipOn.txt.indexOf("/review") === 0, JSON.stringify(inChipOn));
   check("D3 chip 态输入框清空待参数", (await page.inputValue("#instruction")) === "");
   check("D3 面板关闭", !(await page.locator("#slashMenu").isVisible()));
-  // 参数续输 + Esc 取消(step-095)
+ // 参数续输 + Esc 取消
   await page.keyboard.type("重点看auth");
   await page.waitForTimeout(120);
   check("D3 chip 态参数续输", (await page.inputValue("#instruction")) === "重点看auth");

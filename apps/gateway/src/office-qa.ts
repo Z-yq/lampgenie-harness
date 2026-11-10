@@ -1,14 +1,11 @@
 /**
- * 产物 QA 合约(M101):把「质量门只写在提示词里」变成可执行 checker。
- *
+ * 产物 QA 合约:把「质量门只写在提示词里」变成可执行 checker。
  * 为什么要有这一层:提示词里的「请检查页数/禁用占位符/别导出空文件」对模型没有约束力,
  * 产物到底合不合格只有拿到二进制才能判断。这里对 .pptx/.docx/.xlsx 做只读体检,
  * 每类问题给稳定 code + severity + remediation,并保证 **checker 自身崩溃绝不算通过**
  * (内部异常转成 error finding `checker-crash`)。
- *
  * 对外契约(scripts/office-qa.mts 依赖):
  *   checkOfficeArtifact(absPath) -> { ok, findings[] },ok = 没有 error 级失败项。
- *
  * 检查项(每项一条 finding,passed 表示该项是否满足):
  *   - unsupported-ext  扩展名不是 .pptx/.docx/.xlsx
  *   - io-error         文件读不出来
@@ -81,7 +78,7 @@ const TEXT_PART_RES: Record<string, RegExp[]> = {
   ".xlsx": [/^xl\/sharedStrings\.xml$/, /^xl\/worksheets\/[^/]+\.xml$/],
 };
 
-/** 占位文本模式(用户口径:至少覆盖 TODO / {{…}} / [待填] / lorem ipsum)。 */
+/** 占位文本模式(至少覆盖 TODO / {{…}} / [待填] / lorem ipsum)。 */
 const PLACEHOLDER_RES: Array<{ re: RegExp; label: string }> = [
   { re: /\bTODO\b/i, label: "TODO" },
   { re: /\bTBD\b/i, label: "TBD" },
@@ -107,8 +104,7 @@ export async function checkOfficeArtifact(
     passed: boolean,
     severity: QaSeverity,
     message: string,
-    remediation: string,
-  ): void => {
+    remediation: string): void => {
     findings.push({ code, name, passed, severity, message, remediation: passed ? "" : remediation });
   };
 
@@ -249,7 +245,7 @@ export async function checkOfficeArtifact(
       "把 TODO/{{…}}/[待填]/lorem ipsum 等替换成真实文案",
     );
 
-    // ---- xlsx 计算真值链(M103):错误值 / 公式漂移 / 空图表 / 重算真值 ----
+ // ---- xlsx 计算真值链:错误值 / 公式漂移 / 空图表 / 重算真值 ----
     if (ext === ".xlsx") {
       const { sheets, charts } = await collectXlsxParts(zip);
       const formulaCells = Object.entries(sheets).flatMap(([name, xml]) =>
@@ -374,8 +370,7 @@ export async function checkOfficeArtifact(
 
 /** 取 xlsx 包里的 worksheet 与 chart XML(部件路径 → 文本);不做 file→sheet 名映射以免猜错。 */
 async function collectXlsxParts(
-  zip: JSZip,
-): Promise<{ sheets: Record<string, string>; charts: Record<string, string> }> {
+  zip: JSZip): Promise<{ sheets: Record<string, string>; charts: Record<string, string> }> {
   const sheets: Record<string, string> = {};
   const charts: Record<string, string> = {};
   for (const name of Object.keys(zip.files)) {

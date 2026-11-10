@@ -1,5 +1,5 @@
 /**
- * Rust structural adapter(2026-10-25):tree-sitter wasm 主路径 + 文本回退。
+ * Rust structural adapter:tree-sitter wasm 主路径 + 文本回退。
  * 覆盖:类/函数/方法/内嵌调用/跨文件候选/签名/语法盲区/引擎集成。
  */
 import { describe, it, expect } from "vitest";

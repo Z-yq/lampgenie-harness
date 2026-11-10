@@ -1,5 +1,5 @@
 /**
- * step-116 全文件扫描 + 会话续跑/比较(引擎层)。
+ * 全文件扫描 + 会话续跑/比较(引擎层)。
  * 全部临时夹具仓/目录,无网络;深审走桩 LLM。
  */
 import { describe, it, expect, afterEach } from "vitest";

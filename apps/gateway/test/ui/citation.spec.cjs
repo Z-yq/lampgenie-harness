@@ -1,4 +1,4 @@
-/** UI 实测:F4 file:line citation(回复渲染引用/点击开查看器/定位行高亮/越界拒绝)。 */
+/** UI 经验证:F4 file:line citation(回复渲染引用/点击开查看器/定位行高亮/越界拒绝)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

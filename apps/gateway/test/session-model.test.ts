@@ -372,7 +372,7 @@ describe("WS:session.model.set 广播 / 非法不落盘 / fork 继承覆盖", ()
   });
 
   it("合法 set → 两个连接都收到 session.model.result(ok/revision/effective);非法 set 不落盘", async () => {
-    process.env.GENIE_REPO_ROOT = root; // session 门面的 root=repoRoot()(凭证预检读该目录 secrets)
+    process.env.GENIE_REPO_ROOT = root; // session 门面的 root=repoRoot(凭证预检读该目录 secrets)
     const port = (server as unknown as { __port: number }).__port;
     const a = await connect(port);
     const b = await connect(port);

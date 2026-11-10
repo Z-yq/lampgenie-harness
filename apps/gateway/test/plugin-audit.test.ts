@@ -1,5 +1,5 @@
 /**
- * 插件清单 ABI / 能力 / consent 指纹 / 审计表 / kill list 纯函数测试(M135 A 段)。
+ * 插件清单 ABI / 能力 / consent 指纹 / 审计表 / kill list 纯函数测试( A 段)。
  * 另含「ABI 拒装时零落盘」的接线断言(plugin-audit 是唯一实现,plugins.ts 只接线)。
  */
 import { describe, it, expect } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * sanitizeLoneSurrogates 单测(2026-10-29):孤立 UTF-16 代理码元清洗。
+ * sanitizeLoneSurrogates 单测:孤立 UTF-16 代理码元清洗。
  * 事故链:grep content 行截断 .slice(0,200) 切在 🎙(U+1F399=D83C DF99)中间 →
  * 消息 content 带孤立高位 D83C → JSON.stringify 输出 \ud83c → DeepSeek(serde_json)
  * 高位代理后找 \uXXXX 低位代理落空 → 400 "unexpected end of hex escape"。

@@ -1,21 +1,17 @@
 /**
  * Tool Foundry 持久层(gateway 侧):把 tool-foundry 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:观察、挖掘、影子评估、注册、下线都是审计事实,后来的判断不能抹掉
  * 「当初为什么这么定」;单行追加也让状态演进可逐行重放。纯逻辑模块本身零 IO、确定性,
  * 持久层只负责「读全量 → 重放成投影 → 基于投影推进一段 → 追加一行」这个闭环。
- *
  * 数据面:`<root>/.genie/rsi/foundry.jsonl`,每行一条
  * - `{v:1, type:"observation", at, observation}` —— 一次模式观察(按 id 去重)。
  * - `{v:1, type:"candidate", at, candidate}` —— 候选整对象快照(同 id 后写覆盖前写,保留插入序)。
  * - `{v:1, type:"shadow", at, op:"start"|"evaluate", id, runs?, successes?, status?}` —— 影子段状态。
  * - `{v:1, type:"registered", at, id, dataToolSpec}` —— 注册成功后的 data 层工具规格。
  * - `{v:1, type:"retired", at, id, reason}` —— 下线留痕(签名不删,再次挖掘走 duplicate-retired)。
- *
  * 投影语义:observation 收进观测列表(按 id 去重);candidate 以 id 建底(后写覆盖);
  * shadow/registered/retired 按行序套用到对应 candidate,目标不存在只计 badLines 跳过;
  * 坏行(JSON 坏 / 缺 v / 未知 type / 缺必需字段)一律计 badLines,绝不让整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
  * runtime 模块按 experiment-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出的 src 入口;

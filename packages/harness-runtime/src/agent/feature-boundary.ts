@@ -1,7 +1,6 @@
 /**
  * 功能边界影响简报(feature boundary impact brief):把「一个语义功能点 + 它的 UI 面 + depth1/2 代码引用」
  * 合成一份可供 gateway 侧直接消费的「改动影响面清单」。
- *
  * 为什么需要它:
  * - 只读语义图/只读代码索引都会漏:语义图说「这里有入口」,代码索引说「这里有符号」,
  *   但没人把它们对齐,于是「这个功能改了会影响什么」永远靠人肉回忆。
@@ -10,7 +9,6 @@
  * - E2E 用例不能凭感觉写:语义未验收(semanticsAccepted 缺失)或 must 项证据不全时,
  *   允许写 E2E 就是把「猜」固化进测试。因此 canWriteE2E 是一道闸,且与 codes 里的
  *   FB_E2E_ALLOWED / FB_E2E_BLOCKED 严格一致。
- *
  * 判定口径(canonical,改动需同步本注释):
  * - 入参非法(feature 缺失 / feature.id 空 / entries 非数组 / 重复 codeRef id / depth 不属于 {1,2}):
  *   不抛异常,直接返回空简报并只带 FB_INVALID(此时不追加任何 E2E 码)。
@@ -32,7 +30,6 @@
  *   或该 surface 对应 feature.entries[0])才为 true。
  * - canWriteE2E:语义已验收 且 不存在「level=must 而三层证据任一缺失」的项;
  *   与 codes 中 FB_E2E_ALLOWED 的出现严格等价。
- *
  * 纯逻辑:零 IO(不读文件/网络/环境/时间),所有函数不抛异常。
  */
 
@@ -121,8 +118,7 @@ function stepValues(surface: UISurface): string[] {
   const steps = surface?.steps;
   if (!steps || typeof steps !== "object") return [];
   return [steps.draft, steps.validate, steps.submit].filter(
-    (v): v is string => typeof v === "string" && v.length > 0,
-  );
+    (v): v is string => typeof v === "string" && v.length > 0);
 }
 
 /**
@@ -249,8 +245,7 @@ export function buildImpactBrief(input: {
       evidence: makeEvidence(
         `feature:${featureId}#entry:${entry}`,
         surface?.id,
-        ref ? `codeRef:${ref.id}` : undefined,
-      ),
+        ref ? `codeRef:${ref.id}` : undefined),
     });
   }
 
@@ -271,8 +266,7 @@ export function buildImpactBrief(input: {
       evidence: makeEvidence(
         `feature:${featureId}#dataFlow:${from}->${to}`,
         surface?.id,
-        ref ? `codeRef:${ref.id}` : undefined,
-      ),
+        ref ? `codeRef:${ref.id}` : undefined),
     });
   }
 

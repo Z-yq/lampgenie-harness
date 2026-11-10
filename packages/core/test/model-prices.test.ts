@@ -1,5 +1,5 @@
 /**
- * 模型单价表 + 成本核算单测(2026-10-28)。
+ * 模型单价表 + 成本核算单测。
  * 守护三件事:①内置表每条都带官方来源与抓取日期(数据同源红线);
  * ②最长前缀匹配;③单价缺失不按 0 元算(total/missing 语义)。
  */
@@ -56,7 +56,7 @@ describe("内置价目表", () => {
   });
 });
 
-describe("计费门(2026-10-28 用户口径:只有 API 调用显示元,token 套餐不显示)", () => {
+describe("计费门(2026-10-28 只有 API 调用显示元,token 套餐不显示)", () => {
   const cfgOf = (authMode?: "api" | "token-plan"): Config =>
     ({ providers: [{ id: "p", name: "p", baseUrl: "https://x", ...(authMode ? { authMode } : {}), models: ["glm-5.3-flash"] }] }) as unknown as Config;
   const usage = { input: 1_000_000, cached: 0, cacheWrite: 0, output: 0 };
@@ -79,8 +79,7 @@ describe("计费门(2026-10-28 用户口径:只有 API 调用显示元,token 套
   it("api 但模型无单价:price/cost null(前端显示未配单价,不写 0 元)", () => {
     const b = billingForModel(
       { providers: [{ id: "p", name: "p", baseUrl: "https://x", models: ["no-price-model"] }] } as unknown as Config,
-      "no-price-model", usage,
-    );
+      "no-price-model", usage);
     expect(b.billed).toBe(true);
     expect(b.price).toBeNull();
     expect(b.cost).toBeNull();

@@ -36,8 +36,8 @@ export class NodeRegistry {
     return this.list().filter((n) => now - n.lastHeartbeat <= this.staleMs);
   }
 
-  /** 可达性分派(designs/09 §4):requirements 全满足的在线节点,负载最低优先。
-   *  step-1042:requirements.nodeId 给定时精确钉选该节点(仍须在线)——node.exec「对指定节点下发」用。 */
+ /** 可达性分派( §4):requirements 全满足的在线节点,负载最低优先。
+ * requirements.nodeId 给定时精确钉选该节点(仍须在线)——node.exec「对指定节点下发」用。 */
   dispatch(requirements: { capabilities?: string[]; reachability?: string[]; nodeId?: string }): NodeInfo | null {
     const candidates = this.online().filter((n) => {
       if (requirements.nodeId !== undefined && n.nodeId !== requirements.nodeId) return false;
@@ -52,7 +52,7 @@ export class NodeRegistry {
 }
 
 /**
- * 分派守卫(R5-C11 修复:把 dispatch 从死代码接进两条执行路径):
+ * 分派守卫(修复:把 dispatch 从死代码接进两条执行路径):
  * 带 reachability/capabilities 要求的任务必须命中在线节点,否则显式失败;
  * 无要求直通(单机默认);命中时返回解释(调用方落 journal)。
  * 一期单机形态:本机注册为 local 节点(app.ts),跨节点真执行在 node-agent 二期。
@@ -80,7 +80,7 @@ export function dispatchGuard(
   };
 }
 
-// ---- step-033:委派通道与失联重派(designs/09 §4) ----
+// ---- 委派通道与失联重派( §4) ----
 
 /** nodeId → ws 连接表(node.register 时登记,断开即除名)。 */
 export class NodeConnections {
@@ -113,7 +113,7 @@ export class NodeConnections {
 export interface DelegateSpec {
   taskId: string;
   instruction: string;
-  /** 凭证引用名——值永不在 gateway 侧出现(红线,designs/09 §4)。 */
+ /** 凭证引用名——值永不在 gateway 侧出现(红线, §4)。 */
   credentialRef?: string;
   /** 任务已累积的委派深度:网关原生任务=0;已是节点回流的委派任务=1(再委派即机制拒绝)。 */
   delegatedDepth?: number;
@@ -137,18 +137,17 @@ export class NodeDispatch {
   constructor(
     private readonly nodes: NodeRegistry,
     private readonly connections: NodeConnections,
-    private readonly timeoutMs = 120_000,
-  ) {}
+    private readonly timeoutMs = 120_000) {}
 
   /** 委派(已在委派链上的任务再委派=机制拒绝;按硬门要求选节点;发送失败=显式失败,不假装已派)。
-   *  step-1042:requirements.nodeId 支持精确钉选(node.exec「对指定节点下发」);仍拒绝 local(本机走任务链)。 */
+ * requirements.nodeId 支持精确钉选(node.exec「对指定节点下发」);仍拒绝 local(本机走任务链)。 */
   delegate(
     spec: DelegateSpec,
     sessionId: string,
     requirements: { capabilities?: string[]; reachability?: string[]; nodeId?: string } = {},
   ): Promise<DelegateResult> {
     if ((spec.delegatedDepth ?? 0) >= 1) {
-      return Promise.resolve({ ok: false, error: "委派深度>1 被拒(机制拒绝,designs/09 §4:节点不可再委派)" });
+      return Promise.resolve({ ok: false, error: "委派深度>1 被拒(机制拒绝, §4:节点不可再委派)" });
     }
     const picked = this.nodes.dispatch(requirements);
     const node = picked && picked.nodeId !== "local" && this.connections.has(picked.nodeId) ? picked : null;

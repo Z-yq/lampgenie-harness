@@ -1,6 +1,5 @@
 /**
- * 终态通知投递器回归(2026-10-30,task_output 免独立往返):deliverFinalNotice 的**去重**语义。
- *
+ * 终态通知投递器回归(task_output 免独立往返):deliverFinalNotice 的**去重**语义。
  * 为什么要单测:主 result 路径(wiring 后台 result 回调)与 watchdog 死讯现在共用同一个 delivered
  * 集合——去重一旦失效,主 agent 会收到两条同一子代理的 message.system(重复正文=白烧 input)。
  * 本测试用假 journal(只收 append),行为级验证：

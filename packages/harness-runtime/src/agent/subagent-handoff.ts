@@ -1,6 +1,5 @@
 /**
  * 子代理进程交接与委派分桶:纯逻辑、零 IO。
- *
  * 为什么:子代理起的 watcher / CI 进程原先有四个结构性病灶——
  * ① 子代理一结束,它起的进程被一起杀掉(长跑进程没有「换主人」的合法动作);
  * ② 两个子代理并发时互相抢对方起的进程(没有归属校验,谁都能翻别人的 owner);
@@ -15,7 +14,6 @@
  *   分桶只改 join 边界,**不改并发计费**——总并发仍是 concurrency,不因为多分了一个桶就多拿 slot;
  * - stripGroupField:实验开关 default-off 时把 group 字段从工具 schema 里整个删掉,
  *   而不是留着字段让模型继续填(字段存在即被使用)。
- *
  * 纪律:不抛异常(非法输入折叠成 HANDOFF_INVALID)、不做 IO、不改入参(返回新 registry)、
  * 不依赖其它 runtime 模块。稳定码由调用方分流,文案不是契约。
  */
@@ -38,7 +36,7 @@ export const HANDOFF_CODES = [
 
 export type HandoffCode = (typeof HANDOFF_CODES)[number];
 
-/** 缺省每代理交接上限(超过说明进程在代理之间来回踢皮球,该收口了)。 */
+/** 缺省每代理交接上限(超过说明进程在代理之间来回踢皮球,该了)。 */
 export const DEFAULT_MAX_HANDOFFS = 3;
 
 /** 委派任务缺 group 时落进的桶名(仍然一条聚合消息,不会每任务一条)。 */
@@ -241,13 +239,11 @@ export function registerProcess(
 
 /**
  * 交接:把 processId 的 owner 从 fromAgent 翻到 toAgent。
- *
  * 校验顺序(每一步对应一个稳定码,互斥):
  * 1. 结构/存在性非法 → HANDOFF_INVALID(进程不存在、from/to 空白、自己交给自己);
  * 2. purpose 空白 → HANDOFF_PURPOSE_REQUIRED(交接必须写清为什么接管);
  * 3. fromAgent 不是当前 owner → HANDOFF_NOT_OWNER(抢别人进程的入口在这里焊死);
- * 4. 该 fromAgent 已交接 >= 上限 → HANDOFF_LIMIT(来回踢皮球收口)。
- *
+ * 4. 该 fromAgent 已交接 >= 上限 → HANDOFF_LIMIT(来回踢皮球)。
  * 成功:handoffs+1、handedOffFrom 追加 fromAgent(去重)、purpose 更新为本次说明。
  * 「锁内」在本模块体现为纯函数:先复制 registry 再翻转,调用方拿到的新 registry 是唯一可见结果,
  * 不会出现半个 owner 的中间态;校验失败时原 registry 原样返回。

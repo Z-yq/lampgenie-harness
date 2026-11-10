@@ -1,5 +1,5 @@
 /**
- * PHP structural adapter(2026-10-25):tree-sitter wasm 主路径 + 文本回退。
+ * PHP structural adapter:tree-sitter wasm 主路径 + 文本回退。
  * 覆盖:class/interface/trait/属性/构造器/方法/函数/内嵌调用/跨文件候选。
  */
 import { describe, it, expect } from "vitest";

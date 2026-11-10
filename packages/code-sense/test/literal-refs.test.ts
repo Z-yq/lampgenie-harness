@@ -46,7 +46,7 @@ describe("classifyLiteralOccurrences(纯分类)", () => {
     expect(classifyLiteralOccurrences('  const map = { "graph": 1 };', "graph")).toContain("object-key");
     expect(classifyLiteralOccurrences('  const map = { graph: 1 };', "graph")).toContain("object-key");
     expect(classifyLiteralOccurrences('  graph: 1,', "graph", "const map = {")).toContain("object-key");
-    // 参数表 / TS 类型注解不是对象字面量键(值 PascalCase + , ; } ) 收尾 = 类型形态)
+ // 参数表 / TS 类型注解不是对象字面量键(值 PascalCase +,; }) 收尾 = 类型形态)
     expect(classifyLiteralOccurrences('  function f(a: string, graph: CallGraph) {', "graph")).not.toContain("object-key");
     expect(classifyLiteralOccurrences('  return { graph: CallGraph };', "graph")).not.toContain("object-key");
     expect(classifyLiteralOccurrences('  return { graph: cached.graph };', "graph")).toContain("object-key");

@@ -1,5 +1,5 @@
 /**
- * relay.teamai.contribute(designs/30 §2.4):经验写 teamai-learnings 分支,
+ * relay.teamai.contribute( §2.4):经验写 teamai-learnings 分支,
  * 以及 relay 读侧 learningsFromGit(无 upstreamUrl → origin/<learningsBranch>)能读回。
  * 纯函数面(learningPath/renderLearningDoc)单独断言形态,保证读侧 parseLearningMeta 可解析。
  */

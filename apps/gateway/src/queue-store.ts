@@ -1,13 +1,10 @@
 /**
  * 会话消息队列持久化(fixI 续作,「重启即丢」根治)。
- *
  * 背景:队列此前是 startGatewayServer 里的内存 Map,gateway 重启后 per-session 排队消息
  * 全部丢失(面板 hello.queue 也随之为空)。本模块把「队列变更落 journal」与「启动回放」
  * 从 server.ts 抽出成纯函数,便于单测;server.ts 只负责在变更出口调用。
- *
  * 事件:kind="queue.sync",payload={sessionId, items}。items=该会话当期**全量**队列快照
  * (不是增量 delta)——回放按「每会话最后一条快照为准」,天然自愈重复/乱序/中间态丢失。
- *
  * 已发送项识别:队列项出队提交时,任务带 idempotencyKey=`queue.<sessionId>.<itemId>`(见
  * queueItemKey)。回放时若 journal 里存在该键的 task.* 事件,说明这条消息已经变成任务
  * (无论当前是终态还是被重启收编),队列里不该再排它,否则重启会二次执行用户消息。

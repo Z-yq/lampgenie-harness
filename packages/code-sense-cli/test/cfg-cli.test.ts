@@ -1,5 +1,5 @@
 /**
- * cfg CLI e2e(2026-10-27):函数级控制流图——索引定位/--file 定位/--depth 被调函数/--out 落盘/
+ * cfg CLI e2e:函数级控制流图——索引定位/--file 定位/--depth 被调函数/--out 落盘/
  * --json 契约/未命中退出码。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

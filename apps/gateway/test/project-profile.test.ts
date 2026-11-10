@@ -1,5 +1,5 @@
 /**
- * step-049 单测:项目档案管线(模块聚类/import 边/进度状态机/演进记录/新模块检测/mermaid)。
+ * 单测:项目档案管线(模块聚类/import 边/进度状态机/演进记录/新模块检测/mermaid)。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
@@ -134,7 +134,7 @@ describe("ProjectProfileIndex(管线端到端)", () => {
   });
 });
 
-describe("规划态+git 历史+LLM 导读(step-049 全量开发)", () => {
+describe("规划态+git 历史+LLM 导读(全量开发)", () => {
   it("planToInstruction:三类规划→结构化任务书", () => {
     const instr = planToInstruction([
       { id: "a", kind: "add-module", name: "payments", note: "支付域:下单/退款", createdAt: 1 },

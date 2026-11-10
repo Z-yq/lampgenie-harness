@@ -142,8 +142,8 @@
   }
  },
  "shots": [
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/ofk-before.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/ofk-after.png"
+  "apps/gateway/test/ui/shots/ofk-before.png",
+  "apps/gateway/test/ui/shots/ofk-after.png"
  ],
  "delta": {
   "nodeTextOverflow": "7 → 5",

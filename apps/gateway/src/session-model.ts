@@ -1,7 +1,6 @@
 /**
  * per-session 主模型覆盖(白板「per-session 主模型」服务端半边)。
- *
- * 语义(按 ZCode 的完整模型切换逻辑收口):
+ * 语义(按 ZCode 的完整模型切换逻辑):
  *  - 每个 session 独立主模型;未设置 session 沿用全局 coding.llm(现状零变化);
  *  - 选择 = (model, providerId?, effort?) 对;端点/协议/凭证由**拥有该模型的 Provider** 派生
  *    (跨端点切换绝不带旧 baseUrl/apiKeyEnv;见 resolveSessionModelRef);
@@ -12,11 +11,9 @@
  *    expectedRevision(CAS):并发写不交错、过期写入被拒;
  *  - 写入后失效派生 provider 缓存(store.onChange → face 缓存逐出)。
  * 本文件只做合并/路由派生/存取与装配面,凭证解析细节在 model-switch.ts / factory.ts。
- *
- * 2026-10-22 重写要点(相对旧版):① 预检在写盘前(api 层);② 合并时重解析路由;
+ * 重写要点(相对旧版):① 预检在写盘前(api 层);② 合并时重解析路由;
  * ③ revision/CAS + 串行临界区;④ 派生缓存失效(不再按 sid 永驻)。
- *
- * 2026-10-22 补齐(ZCode 模型切换链路后端遗漏 m1/m2/m3/m5/m7/m8/m10):
+ * 补齐(ZCode 模型切换链路后端遗漏 m1/m2/m3/m5/m7/m8/m10):
  *  - m2 多进程写不丢:每次写入前按 mtime/size 比对重新读盘(读-合并-写),读取路径读前比对
  *    (worker 子进程与主进程交替写不再互相覆盖条目);
  *  - m3 contextWindow 随会话模型重算(face.contextWindowFor → 调用方覆盖启动时定值);
@@ -62,7 +59,6 @@ function pickOverride(e: SessionModelOverride): SessionModelOverride {
 
 /**
  * 覆盖 → coding.llm 引用的纯合并(不带 config 时只做字段级合并,旧语义;测试与轻量调用面用)。
- *
  * 带 config 时走 Registry 语义(resolveSessionModelRef):合并后重新解析路由,不留半切换。
  */
 export function resolveSessionModel<T extends object>(globalRef: T, override?: SessionModelOverride, config?: Config): T {
@@ -78,8 +74,7 @@ export function resolveSessionModel<T extends object>(globalRef: T, override?: S
  */
 export function sanitizeSessionOverride(
   config: Config,
-  override: SessionModelOverride,
-): { override: SessionModelOverride; warning?: string; cleaned?: boolean; danglingProviderId?: string } {
+  override: SessionModelOverride): { override: SessionModelOverride; warning?: string; cleaned?: boolean; danglingProviderId?: string } {
   if (!override.providerId) return { override };
   const known = new Set(config.providers.map((p) => p.id));
   if (known.has(override.providerId)) return { override };
@@ -95,13 +90,11 @@ export function sanitizeSessionOverride(
 /**
  * 覆盖 → coding.llm 引用(Registry 语义:选择即 (model, providerId) 对,路由永远由拥有该模型的
  * Provider 派生,参照 packages/core/src/config/model-route.ts)。
- *
  * 重置口径(修「跨端点切换带旧 baseUrl/apiKeyEnv」):
  *  - providerId 变了(跨 Provider 切换)→ 旧端点/旧凭证键一律不继承;
  *  - 全局 baseUrl 不是任何 Provider 端点(用户自定义代理/旧 env 压顶)→ 同样不继承
  *    (否则新模型会被打到旧代理端点上,形成「模型来自 A 家、端点/钥匙还是 B 家」)。
  * 其余情况(同 Provider 换模型)保留全局 route 字段,只换 model。
- *
  * m10:override.providerId 指向已删除的 Provider → 先 sanitize(保留 model、清 providerId),warn 一次。
  */
 export function resolveSessionModelRef(config: Config, override: SessionModelOverride): ModelRouteRef & Record<string, unknown> {
@@ -253,18 +246,15 @@ export function createMutationQueue(): <T>(op: () => T | Promise<T>) => Promise<
     const current = tail.then(() => op());
     tail = current.then(
       () => undefined,
-      () => undefined,
-    );
+      () => undefined);
     return current;
   };
 }
 
 /** 进程内 store:首次读盘缓存,后续 set 内存+落盘同走 saveSessionModels。
- *
  * revision 语义:该会话覆盖的写入版本,每次成功写入(含 null 清除)+1;0=从未写/无覆盖。
  * 有覆盖时 revision 随条目落盘(重启后仍在);清除覆盖后条目消失 → 同进程内保留计数
  * (CAS 仍能识别「刚才那版已被我清掉」),重启后归 0(无条目=无版本,语义自洽)。
- *
  * 多进程一致性(m2:worker 子进程与主进程交替写):不要求跨进程文件锁——用
  * 「tmp+rename 原子写 + **写前 stat 比对读盘合并**」即可:
  *  - 每次写入前 refresh():盘上 mtime/size 变过 → 重载(别进程写的新条目进内存);
@@ -673,8 +663,7 @@ export function resolveSessionModelSwitch(
   config: Config,
   override: SessionModelOverride,
   root: string,
-  env: NodeJS.ProcessEnv = process.env,
-): { effective?: EffectiveModel; warning?: string; routeError?: string } {
+  env: NodeJS.ProcessEnv = process.env): { effective?: EffectiveModel; warning?: string; routeError?: string } {
   const sane = sanitizeSessionOverride(config, override);
   const r = resolveModelSwitch(mergedConfig(config, sane.override), root, env);
   const warning = [sane.warning, r.warning].filter(Boolean).join(";");

@@ -1,11 +1,11 @@
-/** 子代理目录 spec 装配(step-060):主 LLM 脚本派两个不同 title 的后台子代理(A 快 4s/B 慢 12s),
+/** 子代理目录 spec 装配:主 LLM 脚本派两个不同 title 的后台子代理(A 快 4s/B 慢 12s),
  * 再对 A 连续两次 task_output 轮询(轮询聚合断言素材);从消息历史里抽真实 agentId 回填轮询参数。
  * _ui_selfhost.cjs 的 --opts 形态:导出工厂,返回 createGatewayApp 附加选项。 */
 const seen = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 module.exports = function () {
   // UI spec 不需要 code_sense 开工意识:orient 的 ts-morph 全量索引在慢盘上会同步阻塞 selfhost
-  // node 事件 loop 数分钟(spec 整轮假死的元凶,栈取证 getLineNumberAtPos/forEachChild 实锤)。
+ // node 事件 loop 数分钟(spec 整轮假死的元凶,栈取证 getLineNumberAtPos/forEachChild 注意)。
   process.env.GENIE_SENSE_ORIENT = "off";
   // 仓库根隔离(第二步):档案构建(profile.get→buildC2fIndex)在主进程跑分钟级全仓 callgraph,
   // setImmediate 批间让步压不住单文件秒级同步块——把 GENIE_REPO_ROOT 指到 3 文件临时仓,

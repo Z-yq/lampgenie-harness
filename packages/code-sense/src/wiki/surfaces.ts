@@ -1,12 +1,11 @@
 /**
- * 仓库交互面与管线簇(2026-10-27,通用机制):「人人能看懂这个仓」的确定性信号层。
- *
+ * 仓库交互面与管线簇(通用机制):「人人能看懂这个仓」的确定性信号层。
  * 设计原则(与具体仓无关):
  * 1) 交互面 = 数据/控制从哪里进来、到哪里出去。信号族:HTTP 写/读端点(12 框架)、
  *    WS、进程入口(py __main__ / js bin / c·go·java main / package.json bin = CLI+文件输入)。
  *    哪类信号存在就呈现哪类;全缺席=纯库形态,如实标注,不硬造。
  * 2) 管线簇 = 从「入界面文件」出发的 file 级下游子图,按**下游重叠度**聚类
- *    (实锚:genie-memory 5 个 speakerlab 训练脚本共享同一套 utils → 1 个训练管线族,
+ * (依据:5 个共享同一套 utils 的训练脚本 → 1 个训练管线族,
  *    不再拆成 5 条重复功能线)。每簇:多源 BFS 分层(d0=接入 → d1=处理 → d2+=核心/存储)、
  *    存储枢纽(簇内高入边文件)、独立 mermaid。
  * 3) 全部带 file:line 证据,可被 guide/features/LLM 三方共同消费;LLM 只许在骨架上写人话。
@@ -108,7 +107,7 @@ export async function collectSurfaces(
 }
 
 /** 下游闭包:多源 BFS ≤maxDepth 跳。cap 只作护栏(防异常环爆炸),正常仓远达不到;
- * 2026-10-27 用户口径「诚实画出所有」:不再用小 cap 截断聚类集合(旧 14 会把高重叠入口拆散)。 */
+ * 不再用小 cap 截断聚类集合(旧 14 会把高重叠入口拆散)。 */
 function downstreamOf(flow: CodeFlow, starts: string[], maxDepth = 3, cap = 4096): Map<string, number> {
   const adj = new Map<string, string[]>();
   for (const e of flow.edges) (adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
@@ -146,8 +145,7 @@ const LAYER_ROLE = (d: number): string => (d === 0 ? "接入层(数据/触发进
 export function clusterPipelines(
   fileFlow: CodeFlow | null,
   inSurfaces: RepoSurface[],
-  maxPipelines = 8,
-): RepoPipeline[] {
+  maxPipelines = 8): RepoPipeline[] {
   if (!fileFlow || inSurfaces.length === 0) return [];
   const nodeById = new Map(fileFlow.nodes.map((n) => [n.id, n]));
   // 触发文件=入界面文件中在 file 图里有节点的(图外触发文件无下游可画,不建簇)

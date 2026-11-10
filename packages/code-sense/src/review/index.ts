@@ -1,5 +1,5 @@
 /**
- * code_review 引擎(designs/17):diff 收集(确定性)→确定性检查+反模式→LLM 深审
+ * code_review 引擎:diff 收集(确定性)→确定性检查+反模式→LLM 深审
  * (多轮编排 rounds+防幻觉 filter+定位降级 resolver+规则引擎 rules)+ocr CLI 层(opt-in)
  * +行级回写(sticky 店)。五件引擎在主链的装配点=codeReview()。
  */
@@ -24,7 +24,7 @@ import { decideDeepReview, type LlmPolicy } from "./policy";
 
 const execFileP = promisify(execFile);
 
-// ---- diff 收集(designs/17 §2.1) ----
+// ---- diff 收集( §2.1) ----
 export interface ReviewFile { path: string; status: string; diffText: string; /** scan 模式:原文件内容(深审上下文直接用)。 */ content?: string }
 export interface ReviewTarget {
   kind: "uncommitted" | "commit" | "branch" | "scan";
@@ -69,7 +69,7 @@ export async function collectReviewTarget(root: string, target?: string, baseSha
       ]);
       diff = unstaged + staged;
     }
-    // 未跟踪文件(designs/17 §2.1):新生文件根本不进 git diff,必须从 status 收集,
+ // 未跟踪文件( §2.1):新生文件根本不进 git diff,必须从 status 收集,
     // 否则「新写的文件零审查」。伪 diff 形态(全部 + 行)让下游确定性/LLM/定位层无感。
     try {
       const st = await git(root, ["status", "--porcelain", "-uall"]);
@@ -127,7 +127,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
   }
 }
 
-// ---- 确定性检查层(designs/17 §2.2,零 LLM) ----
+// ---- 确定性检查层( §2.2,零 LLM) ----
 export interface Finding {
   file: string;
   line: number;
@@ -137,19 +137,18 @@ export interface Finding {
   scenario?: string;
   /** LLM 逐字摘录的 diff 代码行(resolver 定位三级降级的锚点)。 */
   anchorText?: string;
-  /** 来源层(缺省=确定性/LLM 混合的旧语义;cli=外部评审 CLI 子进程,designs/16 二期)。 */
+ /** 来源层(缺省=确定性/LLM 混合的旧语义;cli=外部评审 CLI 子进程, 二期)。 */
   source?: "deterministic" | "antipattern" | "cli" | "llm";
 }
 
-/** 凭证形态表(2026-10-20 修:原 CRED_RE 的 sk- 分支字符类不含连字符,OpenAI
- * sk-proj-、sk-live-、Anthropic sk-ant- 主流形态全漏检——实测 sk-live-<20 位尾段> /
+/** 凭证形态表(修:原 CRED_RE 的 sk- 分支字符类不含连字符,OpenAI
+ * sk-proj-、sk-live-、Anthropic sk-ant- 主流形态全漏检——经验证 sk-live-<20 位尾段> /
  * sk-proj-<20 位尾段> 均 MISS)。
- *
  * 取舍:**保守不误报**优先。sk- 家族拆三条:
  *   R1 已知前缀形态(sk-proj-/sk-live-/sk-ant-…):头段白名单 + 尾段容忍连字符/下划线;
  *   R2 旧 OpenAI 纯字母数字形态(20+ 位);
  *   R3 通用「一段前缀 + 长尾」形态(尾段纯字母数字 ≥16,不含连字符);
- * 这样覆盖三个实测 MISS 样例,同时 `sk-learn-tutorial-slides-2024` 这类普通词串(多段连字符、
+ * 这样覆盖三个经验证 MISS 样例,同时 `sk-learn-tutorial-slides-2024` 这类普通词串(多段连字符、
  * 尾段不够长)不命中——把 [A-Za-z0-9_-]{20,} 无差别放宽会误报。
  * 注:注释与测试里一律不写完整可命中的样例字面量(review-cred.test.ts 运行时拼接),否则本仓
  * 自己的 review 会把本文件报成凭证入库。 */
@@ -182,7 +181,7 @@ export function credentialHit(text: string): string | null {
 export function deterministicFindings(t: ReviewTarget): Finding[] {
   const out: Finding[] = [];
   for (const f of t.files) {
-    // 凭证红线(2026-10-20 CRED_RE→CRED_PATTERNS:多形态逐条匹配,命中即 blocker)
+ // 凭证红线( CRED_RE→CRED_PATTERNS:多形态逐条匹配,命中即 blocker)
     for (const cred of CRED_PATTERNS) {
       if (cred.re.test(f.diffText)) {
         out.push({
@@ -230,7 +229,7 @@ export function deterministicFindings(t: ReviewTarget): Finding[] {
   return out;
 }
 
-// ---- LLM 深审层(designs/17 §2.3 + step-023 五件引擎装配) ----
+// ---- LLM 深审层( §2.3 + 五件引擎装配) ----
 export interface ReviewLlm {
   chat(prompt: string): Promise<{ content: string }>;
 }
@@ -310,7 +309,7 @@ ${files.map((f) => `### ${f.path}\n\`\`\`\n${f.snippet}\n\`\`\``).join("\n")}
   };
 }
 
-// ---- 全文件扫描深审(step-116):分批 + 总 token 预算扣减 ----
+// ---- 全文件扫描深审:分批 + 总 token 预算扣减 ----
 export interface ScanDeepReport {
   /** 实际派发的批次数。 */
   batches: number;
@@ -360,7 +359,7 @@ export function buildScanContext(files: ReviewFile[], batchIndex: number, batchT
   return { context: ctx, chars, truncated };
 }
 
-// ---- 行级回写(step-023 二期,sticky 店:<root>/.genie/review-comments.json) ----
+// ---- 行级回写(二期,sticky 店:<root>/.genie/review-comments.json) ----
 export interface ReviewWritebackReport { posted: number; resolved: number; reopened: number; unchanged: number; storePath: string }
 
 function syncWriteback(root: string, findings: Finding[]): ReviewWritebackReport | undefined {
@@ -386,15 +385,15 @@ export interface CodeReviewResult {
   writeback?: ReviewWritebackReport;
   rounds?: RoundResult[];
   graceRoundRan?: boolean;
-  /** 引用孤儿检查(step-058):拒收的幻影引用+行号夹紧计数;有脏才带此字段。 */
+ /** 引用孤儿检查:拒收的幻影引用+行号夹紧计数;有脏才带此字段。 */
   orphanCheck?: OrphanCheckResult;
-  /** 回写店孤儿对账(step-058):文件已删/改名的 sticky 条目,只报不删。 */
+ /** 回写店孤儿对账:文件已删/改名的 sticky 条目,只报不删。 */
   storeOrphans?: StoreSweepResult;
-  /** scan 模式统计(step-116)。 */
+ /** scan 模式统计。 */
   scan?: ScanStats;
   /** scan 深审分批/预算统计(仅 scan + LLM 深审时)。 */
   scanDeep?: ScanDeepReport;
-  /** 本次 review 落盘的会话(step-116)。 */
+ /** 本次 review 落盘的会话。 */
   session?: { id: string; path: string; baseline?: string; resumedFrom?: string };
   /** --resume/--compare 的四态对比(基线会话存在时)。 */
   compare?: SessionCompare;
@@ -414,7 +413,7 @@ function scanSkipTotal(s: ScanStats): number {
 }
 
 /** 总入口:确定性层+反模式层必跑+行级回写;LLM 深审=多轮编排+防幻觉+定位降级;CLI 层 opt-in(env GENIE_REVIEW_CLI / opts.reviewCli,cli:false 显式关)。
- *  step-116:opts.scan 走全文件扫描(kind=scan);每次 review 落会话,opts.session.baseline 出四态对比。 */
+ * opts.scan 走全文件扫描(kind=scan);每次 review 落会话,opts.session.baseline 出四态对比。 */
 export async function codeReview(
   root: string,
   opts: {
@@ -432,7 +431,7 @@ export async function codeReview(
     scan?: ScanOptions;
     /** 会话落盘/续跑/比较。 */
     session?: ReviewSessionOptions;
-    /** 深审策略(step-139 O1):always=恒深审(缺省,旧行为);never=只跑免费层;auto=免费层 0 blocker
+ /** 深审策略( O1):always=恒深审(缺省,旧行为);never=只跑免费层;auto=免费层 0 blocker
      * 且变更集小则跳过并显式写进 summary。缺席=旧行为(llm 在场即深审)。 */
     llmPolicy?: LlmPolicy;
   } = {},
@@ -489,8 +488,8 @@ export async function codeReview(
     }
   }
   const baseRaw = [...det, ...anti, ...cli];
-  // step-139 O1:深审策略闸——免费层(确定性+反模式+CLI)已跑完才决定是否烧 LLM。
-  // step-137 实测:干净小变更上深审跑满 8 分钟时间盒且零新增,纯烧钱;auto 档据此跳过并显式写进 summary。
+ // O1:深审策略闸——免费层(确定性+反模式+CLI)已跑完才决定是否烧 LLM。
+ // 经验证:干净小变更上深审跑满 8 分钟时间盒且零新增,纯烧钱;auto 档据此跳过并显式写进 summary。
   // scan 模式不做 auto 跳过(小变更门针对 diff 变更集;scan 自带分批+token 预算闸)。
   const policy: LlmPolicy = opts.llmPolicy ?? "always";
   const decision = decideDeepReview(isScan && policy === "auto" ? "always" : policy, {
@@ -546,7 +545,7 @@ export async function codeReview(
     ? `全文件扫描 ${t.files.length} 文件/${t.totalLines} 行(候选 ${t.scan.candidateFiles},合格 ${t.scan.eligibleFiles},过滤/跳过 ${scanSkipTotal(t.scan)},截断 ${t.scan.truncatedCount}${t.scan.budgetExceeded ? ",估算超预算" : ""})`
     : "";
 
-  // 引用孤儿检查(step-058,board-store 边引用完整性同律):四源合一后统一过闸,
+ // 引用孤儿检查(board-store 边引用完整性同律):四源合一后统一过闸,
   // 幻觉路径/越界路径拒收(fail-visible 计数),越界行号夹紧,deleted 文件按 diff 独引收录。
   // 闸在回写店之前——幻影路径不进店,各模块不再各玩各的数据。
   // 无 LLM:闸确定性三源即出口;深审:闸合并后全集(一次覆盖四源,计数不重不漏)。
@@ -688,7 +687,7 @@ export async function codeReview(
   };
 }
 
-// ---- 引用孤儿检查接线(step-058) ----
+// ---- 引用孤儿检查接线 ----
 function sweepStoreAfterSync(root: string, scope?: Set<string>): StoreSweepResult | undefined {
   try {
     // syncWriteback 命中=店文件在;读同一份做孤儿对账(只报不删,sticky 语义保留)
@@ -702,6 +701,6 @@ function storeSweepNote(s: StoreSweepResult | undefined): string {
   return s && s.missingFile.length ? `;回写店孤儿条目 ${s.missingFile.length} 条(文件已删/改名,sticky 保留待议)` : "";
 }
 
-// step-116:scan/session 能力从同一入口导出(CLI/外部调用方只依赖 `@lampgenie/code-sense/review`)。
+// scan/session 能力从同一入口导出(CLI/外部调用方只依赖 `@lampgenie/code-sense/review`)。
 export * from "./scan";
 export * from "./session";

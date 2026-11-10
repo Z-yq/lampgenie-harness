@@ -114,7 +114,7 @@ describe("createRealtimeProvider(api-ws beta 方言)", () => {
   });
 });
 
-describe("createRealtimeProvider 流式旁路(step-050)", () => {
+describe("createRealtimeProvider 流式旁路", () => {
   it("response.text.delta 经 onDelta 透出;聚合结果以 response.done 为准", async () => {
     const srv = mockRealtimeServer({ items: [], output: [{ type: "message", content: [{ type: "text", text: "部分完成" }] }] });
     const p = createRealtimeProvider({ baseUrl: srv.url(), model: "m", apiKey: "k", timeoutMs: 5000 });
@@ -167,7 +167,7 @@ describe("createRealtimeProvider text+audio 直出(2026-10-21 realtime-plus 形�
     );
     // session:text+audio + voice + 百炼字符串音频格式(输入 pcm16 在场声明,输出 pcm)
     expect(srv.got.session).toMatchObject({ modalities: ["text", "audio"], voice: "longanlingxin", input_audio_format: "pcm16", output_audio_format: "pcm", turn_detection: null });
-    // response.create 不带 modalities(继承 session;genie-voice 父类同款)
+ // response.create 不带 modalities(继承 session;参考实现同款)
     expect(srv.got.responseCreate[0]!.response).toBeUndefined();
     // 语音直入:input_audio 内容件(voice.speak 转写会话同款形态),占位文本不掺和
     expect(srv.got.items).toEqual([{ type: "message", role: "user", content: [{ type: "input_audio", audio: "cGNtMTZpbnB1dA==" }] }]);

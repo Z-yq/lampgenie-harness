@@ -1,10 +1,9 @@
 /**
- * 评审数据引用孤儿检查(step-058,board-store 边引用完整性同律):
+ * 评审数据引用孤儿检查(board-store 边引用完整性同律):
  * ocr/open-code-review 链的四源发现(确定性/反模式/CLI/LLM)在 codeReview() 出口汇合,
  * 每条 finding 的 file 引用必须在「工作树或本次审查目标」内可解析,行号必须落在文件实际
  * 行数内——引用落空的发现是脏数据(面板卡片点击即「文件不可读」,回写店记到幻影路径),
  * 拒收并 fail-visible 计数,不让模块各玩各的数据。
- *
  * 三态判定(board-store 同律:拒脏不丢真):
  * - 文件在工作树存在 → 收录;行号越界夹到文件末行(clamped 计数,引用目标在、定位不准而已);
  * - 文件不在工作树但在审查目标 diff 里(deleted 文件)→ 收录(diff 本身就是引用目标);
@@ -26,7 +25,7 @@ export interface OrphanCheckResult {
   clamped: number;
   /** 仅存在于目标 diff 的引用(deleted 文件):收录且单独计数。 */
   diffOnly: number;
-  /** 2026-10-20 用户口径「只审本 session 修改内容」:文件不在变更集而被剔除的条数(可见计数)。 */
+ /** 文件不在变更集而被剔除的条数(可见计数)。 */
   outOfScope: number;
 }
 
@@ -63,7 +62,7 @@ export function checkFindingRefs(root: string, target: ReviewTarget, findings: F
       continue;
     }
     if (existsSync(abs) && statSync(abs).isFile()) {
-      // 2026-10-20 用户口径:code review 只审本 session 修改的内容——文件存在但不在本次变更集=
+ // code review 只审本 session 修改的内容——文件存在但不在本次变更集=
       // 范围外,不计 finding(此前照收 → 全仓 lint/回写店对账等外来 finding 混进本任务结论)。
       // 顺序放在存在性之后:幻觉路径(不存在)仍按孤儿拒收,fail-visible 不丢。
       if (!diffPaths.has(norm(f.file))) {

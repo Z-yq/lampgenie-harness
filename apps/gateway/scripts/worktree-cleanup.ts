@@ -1,11 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * 统一 worktree 清理命令(step-123):
- *
+ * 统一 worktree 清理命令:
  *   tsx apps/gateway/scripts/worktree-cleanup.ts list    --repo <repo>
  *   tsx apps/gateway/scripts/worktree-cleanup.ts remove  --repo <repo> --id <agentId> [--delete-branch]
  *   tsx apps/gateway/scripts/worktree-cleanup.ts cleanup --repo <repo> [--ttl-hours 168] [--dry-run]
- *
  * 默认保留分支(任务书:分支供人工合并);--delete-branch 才删本服务创建的 genie/ 分支。
  */
 import { WorktreeService } from "../src/worktree-service.js";

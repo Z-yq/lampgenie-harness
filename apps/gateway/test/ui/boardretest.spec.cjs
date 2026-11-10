@@ -1,11 +1,11 @@
-/** 白板渲染真实浏览器复测(60 节点真实板 DOM 实测 + 评论改/删 UI 手测)。
+/** 白板渲染真实浏览器复测(60 节点真实板 DOM 经验证 + 评论改/删 UI 手测)。
  * 数据源:真实板 .genie/boards/web-1792774467576/dec3a2d2-b812-4fe1-899b-c2a91365ea26.json
  *   **复制**到测试 SID 目录(原文件一字不动);副本仅两处必要改造并在报告里如实说明:
  *   ① sessionId 换成测试 SID —— 服务端 saveBoard 按 doc.sessionId 定位目录,不改就会写回原板目录;
  *   ② 节点 ta-tl 预置 1 条评论(真实板 comments 全空),用于改/删手测。
  * 断言的形态:① 默认画布形态(canvas-shell)量与结构 + 交互可达性事实;② 经典形态(classic)完整指标
  *   + 评论改/删真实点击(该形态下 #cvHost 唯一、明细区未被画布覆盖)。
- * 跑法:cd apps/gateway && npx tsx test/ui/boardretest.spec.cjs(自起临时实例 7797,不碰产线 7700)
+ * 跑法:cd apps/gateway && npx tsx test/ui/boardretest.spec.cjs(自起临时实例 7797,不碰生产环境 7700)
  * 无 chrome/无 playwright-core 时整文件 skip 并打印 skipped: <reason>(退出码 0,不谎报通过)。 */
 process.env.GENIE_CHECKPOINT = "off";
 const fs = require("node:fs");
@@ -308,8 +308,8 @@ const NEW_TXT = "改后评论:UI 实改";
     metric("适配后(k=" + (vis ? vis.k : "?") + ")完整落在 host 视口内的 .cv-node 数", vis ? vis.full : null);
     metric("部分可见(有交集但不完整)的 .cv-node 数", vis ? vis.part : null);
     metric("完全在 host 视口外的 .cv-node 数", vis ? vis.out : null);
-    // w2/A:计数块(.cv-fold)可见性是「适配视野是否把计数块装进去」的验收口径
-    // (修复前实测 k=0.7 下 0/20 可见——计数块摆在主干右缘之外 x≈2034..2194,可见世界只到 x≈1592)。
+ // w2/A:计数块(.cv-fold)可见性是「适配视野是否把计数块装进去」的验径
+ // (修复前经验证 k=0.7 下 0/20 可见——计数块摆在主干右缘之外 x≈2034..2194,可见世界只到 x≈1592)。
     const foldVis = await page.evaluate((sel) => {
       const h = document.querySelector(sel);
       if (!h) return null;
@@ -330,8 +330,8 @@ const NEW_TXT = "改后评论:UI 实改";
     check("⑥ 适配后(k≈0.7)计数块 .cv-fold 完全可见数 > 0(修复前 0/20)", !!foldVis && foldVis.total > 0 && foldVis.full > 0,
       ".cv-fold 完全可见=" + (foldVis && foldVis.full) + "/" + (foldVis && foldVis.total) + " k=" + (foldVis && foldVis.k));
 
-    // 主干完整可见数(任务书验收口径:主干 7/7 完整落在 #cvHost 视口内)。
-    // 修复前实测 5/7(1 部分 + 1 完全在视野外)——根因:主干 7 卡一字排开 x 跨 1351px,k 被
+ // 主干完整可见数(任务书验径:主干 7/7 完整落在 #cvHost 视口内)。
+ // 修复前经验证 5/7(1 部分 + 1 完全在视野外)——根因:主干 7 卡一字排开 x 跨 1351px,k 被
     // CV_FIT_READABLE_MIN=0.7 钳住,可见世界只到 x≈1592。主干换行后 k 不再撞下限。
     const span = await page.evaluate((sel) => {
       const h = document.querySelector(sel);
@@ -390,7 +390,7 @@ const NEW_TXT = "改后评论:UI 实改";
     metric("k=" + ell.k + " 时 .cv-title 被 ellipsis 截断个数/总数(修复前 5/7)", ell.cut + "/" + ell.total);
     metric("k=1 时标题槽宽度 min/max(px;修复前 71–73)", ell.minSlot + " / " + ell.maxSlot);
     metric("截断样本(可见宽/内容宽)", ell.sample.join(" ; ") || "无");
-    // 修复前实测:k=1 时主干 7 张卡里 5 张标题被截断(样本「时间线还原台 71/72」「止血开关与分批限速 73/108」
+ // 修复前经验证:k=1 时主干 7 张卡里 5 张标题被截断(样本「时间线还原台 71/72」「止血开关与分批限速 73/108」
     // 「幂等键与执行台账 73/96」)。头信息分层后目标 ≤2/7。
     check("⑩ k=1 标题截断数 ≤2(修复前 5;头信息分层把徽标折到第二行)",
       !!ell && ell.cut <= 2, "截断=" + (ell && ell.cut) + "/" + (ell && ell.total) + " 标题槽 min=" + (ell && ell.minSlot) + "px");

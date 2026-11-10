@@ -1,20 +1,17 @@
 /**
- * 轨迹收割(生产消费端,M201,2026-11-09):把 journal 的原始事件按会话切成批次,脱敏后落盘,
+ * 轨迹收割(生产消费端,:把 journal 的原始事件按会话切成批次,脱敏后落盘,
  * 并用**账本 ledger** 保证重跑幂等。契约与映射逻辑在
  * `packages/harness-runtime/src/agent/trace-contract.ts`(纯逻辑),本文件只做 IO 与水位管理。
- *
  * 数据面:
  * - `<outDir>/batches/<batchKey>.jsonl` —— 一行一条轨迹事件(已脱敏)。
  * - `<outDir>/ledger.json` —— {version, ruleVersion, batches:{[batchKey]:{sessionId,seqStart,
  *   seqEnd,at,events,dropped,ruleVersion}}};原子写(tmp + rename)。
- *
  * 幂等语义:
  * - 账本已有该 batchKey → `skippedBatches++` 且**不重写批次文件**(文件内容由 key 决定)。
  * - 会话水位 = 该会话所有账本批次的 max(seqEnd);`readSession(sid, sinceSeq)` 的 sinceSeq 是
  *   **inclusive**(core: `e.seq >= sinceSeq`),故续读传 `seqEnd + 1`。
  * - 为使「重跑」能被账本命中(而不是读到空窗口),每会话从**最后一个已入账批次的 seqStart**
  *   起读:窗口未变则 batchKey 相同 → 跳过;有新事件则本轮窗口变大 → 产新批,再前进。
- *
  * 旁路纪律:单会话读取/落盘失败只进 `failedSessions`(不 throw 到调用方);参数级错误才抛。
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -49,8 +46,7 @@ async function loadContract(): Promise<TraceContractModule> {
     } catch {
       const srcUrl = new URL(
         "../../../packages/harness-runtime/src/agent/trace-contract.ts",
-        import.meta.url,
-      ).href;
+        import.meta.url).href;
       return (await import(srcUrl)) as TraceContractModule;
     }
   })();

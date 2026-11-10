@@ -1,4 +1,4 @@
-/** 协议改造三面验收(step-1036 索引化 + session.status 增量化)的 selfhost 装配。
+/** 协议改造三面验收(索引化 + session.status 增量化)的 selfhost 装配。
  * 形态照抄 _subdir.opts.cjs:_ui_selfhost.cjs 的 --opts 工厂,返回 createGatewayApp 附加选项。
  * 要点:①关 code_sense orient(慢盘 ts-morph 全量索引会阻塞 selfhost 事件循环数分钟)
  *      ②GENIE_REPO_ROOT 指临时 3 文件小仓(档案/索引全落 tmp,不碰真仓)

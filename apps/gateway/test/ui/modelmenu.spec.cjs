@@ -1,5 +1,5 @@
-/** step-051 UI 实测:主模型/chat audio 就地下拉(ZCode 参考形态)——分组列表/筛选/当前勾选/外点·Esc 关闭/零弹窗。
- * 选定动作点「当前项」(同值 no-op cfg.set),不改变产线配置。 */
+/** UI 经验证:主模型/chat audio 就地下拉(ZCode 参考形态)——分组列表/筛选/当前勾选/外点·Esc 关闭/零弹窗。
+ * 选定动作点「当前项」(同值 no-op cfg.set),不改变生产环境配置。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
 

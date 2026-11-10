@@ -1,5 +1,5 @@
 /**
- * models.list 错误分类(step-1002E):未装配/无 Provider/端点未配置/缺凭证/上游失败
+ * models.list 错误分类:未装配/无 Provider/端点未配置/缺凭证/上游失败
  * 各自有可编程错误码 + 可操作 message;成功路径与未分类异常(旧 models-list-failed)不变。
  */
 import { describe, it, expect, afterEach } from "vitest";

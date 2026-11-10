@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runOfficeDoctor, type DoctorProbe, type EnvCheckItem } from "../src/office-doctor.js";
 
-/** M104 办公环境 doctor:probe 桩注入,覆盖
+/** 办公环境 doctor:probe 桩注入,覆盖
  *  - 全 ok;
  *  - 缺 optional(中文字体)→ needs-install 且 installAttempted=false(不许标 ok / 静默跳过);
  *  - attemptInstall 成功后复验版本;

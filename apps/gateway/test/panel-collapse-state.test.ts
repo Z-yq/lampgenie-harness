@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** 折叠态被重渲染打回(2026-11-09 用户实报「点了折叠按钮,它自己会打开或关闭」)。
+/** 折叠态被重渲染打回(用户用户反馈「点了折叠按钮,它自己会打开或关闭」)。
  * 面板 UI 全在 panel.ts 模板字符串内,这里直接读源码文本断言契约(同 annotate-panel-anchors 风格)。
  * 锁三件事:
  *  ① <details> 类折叠:总账 detOpen(按稳定 key 存用户意图)+ 重渲染后按 key 回填 open,

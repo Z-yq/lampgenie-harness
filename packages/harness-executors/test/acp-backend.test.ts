@@ -1,7 +1,6 @@
 /**
- * ACP 子代理后端协议级验证(step-117):
+ * ACP 子代理后端协议级验证:
  * mock ACP adapter 顶替真实外部 agent(不装 SDK/不依赖本机 CLI),真跑 stdio 全链路。
- *
  * 覆盖:initialize→session/new→prompt→流式 update→result;permission 往返;cancel 链;
  * 超时;协议版本不兼容;进程崩溃;未知 stopReason;adapter 缺失;env scrub。
  */
@@ -61,7 +60,7 @@ async function waitFor<T>(fn: () => T | undefined, budgetMs = 4000): Promise<T> 
   throw new Error("waitFor 超时");
 }
 
-describe("ACP backend(step-117)", () => {
+describe("ACP backend()", () => {
   it("happy path:initialize→session/new→prompt→流式 update→result", async () => {
     const { handle, events, result } = await spawnAcp(backend("happy"));
     expect(events.some((e) => e.type === "ready")).toBe(true);

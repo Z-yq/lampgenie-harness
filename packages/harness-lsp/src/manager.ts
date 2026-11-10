@@ -1,5 +1,5 @@
 /**
- * LSP 客户端实例缓存 + 空闲回收(step-114)。
+ * LSP 客户端实例缓存 + 空闲回收。
  * 与 code-sense 索引单飞同族:同 (server,root) 只拉起一个进程;并发首次检查共享同一 spawn Promise;
  * 失败标记 broken(本进程内不再重试,避免每次编辑都等一次启动超时)。
  */
@@ -16,7 +16,7 @@ interface Entry {
 
 const IDLE_MS = 60_000;
 /**
- * 冷启动容忍:server 首次 spawn+initialize(pylsp 实测 ~2.5s)不占用单次诊断预算。
+ * 冷启动容忍:server 首次 spawn+initialize(pylsp 经验证 ~2.5s)不占用单次诊断预算。
  * 诊断收集仍严格受 settings.timeoutMs 约束;这里只避免「首条编辑因冷启动被误判超时」。
  */
 const MIN_START_TIMEOUT_MS = 3000;

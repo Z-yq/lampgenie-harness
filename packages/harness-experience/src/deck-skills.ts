@@ -1,6 +1,5 @@
 /**
- * 演示文稿(PPT)技能族(2026-11-05):把 ppt-master 的方法论按本仓底座重写后内置。
- *
+ * 演示文稿(PPT)技能族:把 ppt-master 的方法论按本仓底座重写后内置。
  * 出处:ppt-master/skills/ppt-master(MIT,Copyright (c) 2025-2026 Hugo He)。
  * 只取方法论与结构,不携带其 Python 脚本、SVG 原型、图标/音效素材。
  * 迁移映射(它的概念 → 我们的实现):
@@ -14,7 +13,7 @@
  */
 import type { BuiltinSkill } from "./builtin-skills.js";
 
-const PPT_MASTER = `# PPT 产线:从素材到可编辑 .pptx
+const PPT_MASTER = `# PPT 生产环境:从素材到可编辑 .pptx
 出处:ppt-master skills/ppt-master(MIT)方法论改写,底座换成本仓 deck.md + pptxgenjs。
 
 配套:写作内核看 builtin/office-writing(受众/主张/论据/去 agent 腔);本技能只管演示结构、版式与交付门。
@@ -110,7 +109,7 @@ claim: 本章要读者相信的一句话
 | 导出 | board_export_pptx({mode:"export", source}) |
 | 只看方法论 | skill_view("builtin","office-writing") / 本技能 |
 
-子智能体形态:spawn_subagent(agentType="ppt-master") 派这个角色做整条产线;
+子智能体形态:spawn_subagent(agentType="ppt-master") 派这个角色做整条生产环境;
 主 agent 自己在写办公材料时,读本技能即可,不必派。
 `;
 
@@ -118,7 +117,7 @@ export const DECK_SKILLS: BuiltinSkill[] = [
   {
     category: "builtin",
     name: "ppt-master",
-    description: "PPT 产线:判型→立项→结构→页级正文→质量门导出,含版式容量表与风格库(无 HEX)",
+    description: "PPT 生产环境:判型→立项→结构→页级正文→质量门导出,含版式容量表与风格库(无 HEX)",
     body: PPT_MASTER,
   },
 ];

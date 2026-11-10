@@ -1,4 +1,4 @@
-/** 子代理工作区 spec 装配(2026-10-16):executor 用默认 echo 配置(kind=echo-child)→ 网关自动替换为
+/** 子代理工作区 spec 装配:executor 用默认 echo 配置(kind=echo-child)→ 网关自动替换为
  * 进程内 LlmLoopBackend(真子 loop),脚本 LLM 分流主/子两轨——子轨真实产生 loop 事件(经 subagent.event
  * 入主 journal),供「工作区 tab 实时增量/重放/主流零污染」断言。子轨两步各带延时:给「tab 打开先于事件
  * 到达」的实时断言留观测窗。_ui_selfhost.cjs 的 --opts 形态。 */
@@ -21,7 +21,7 @@ module.exports = function () {
     { permission: "task_output", pattern: "*", action: "allow" },
   ]);
   // 子代理工具 ask 一律放行(审批链第一级 env):否则子轨 grep 会弹面板权限对话框,
-  // 60s 自动拒——spec 的点击断言被 permDialog 遮罩拦截(首轮实测)。
+ // 60s 自动拒——spec 的点击断言被 permDialog 遮罩拦截(首轮经验证)。
   process.env.GENIE_SUBAGENT_ASK = "allow-once";
   let childCalls = 0;
   let mainCalls = 0;

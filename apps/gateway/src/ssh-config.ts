@@ -1,5 +1,5 @@
 /**
- * SSH config 解析(2026-10-26,对齐 ZCode 新建连接「从 SSH config 导入」):
+ * SSH config 解析(对齐 ZCode 新建连接「从 SSH config 导入」):
  * 读 ~/.ssh/config,取具体 Host 条目(通配 * ? 条目为默认段属性,一期跳过),
  * 字段:HostName(缺省=别名)/User/Port(缺省 22)/IdentityFile(取首个)。
  * 只读解析,不执行任何 ssh;返回供「新建连接」表单填充。

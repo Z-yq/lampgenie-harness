@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
  * Stage un unpacked Windows Electron distribution for electron-builder's `electronDist`.
- *
  * Why: @electron/get 在本机网络下偶发 ECONNRESET,而 electron-builder 的缓存命中不稳定;
  * electronDist 指向本地解包目录可完全离线打包。来源优先级:
  *   1) ~/.cache/electron/<hash>/electron-v<ver>-win32-x64.zip(历史上已下载的缓存)

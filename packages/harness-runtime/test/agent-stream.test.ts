@@ -29,7 +29,7 @@ const getTime: Tool = {
   async execute() { return "2026-10-10 20:00"; },
 };
 
-describe("AgentLoop 流式旁路(step-050)", () => {
+describe("AgentLoop 流式旁路", () => {
   it("onStream 事件序:llm-begin→delta→llm-end→tool-begin/end;不落 journal", async () => {
     const journal = new MemoryJournal();
     const events: AgentStreamEvent[] = [];

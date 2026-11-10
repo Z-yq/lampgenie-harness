@@ -1,5 +1,5 @@
 /**
- * 入站 Webhook 认证(M133,防降级):
+ * 入站 Webhook 认证(防降级):
  * - auth-before-body:先按原始字节验签(1MB cap),通过后才解析 JSON;
  * - 多方案按最强声明选择:任一 V2 头(x-genie-signature-v2 / x-genie-timestamp)出现即 commit V2,
  *   缺 timestamp / 缺 signature / 签名错 / 时间窗外一律 403,**绝不回落 body-only(V1)**;
@@ -40,7 +40,7 @@ export type InboundHeaders = Record<string, string | string[] | undefined>;
 export interface InboundAuthInput {
   headers: InboundHeaders;
   rawBody: string | Buffer;
-  /** req.socket.remoteAddress ;用于 loopback 判定。 */
+ /** req.socket.remoteAddress;用于 loopback 判定。 */
   remoteAddress?: string;
   /** 路由标识(如 /webhook/feishu),参与幂等键。 */
   route: string;

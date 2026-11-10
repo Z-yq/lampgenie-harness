@@ -1,5 +1,5 @@
 /**
- * 工具执行 deadline(2026-10-29 冻结治理)单测:
+ * 工具执行 deadline(冻结治理)单测:
  * execOne 对 Tool.timeoutMs/opts.toolTimeoutMs 的赛跑语义——超时≠取消(底层 Promise 继续),
  * 返回诚实错误让模型换路;timeoutMs=0/帽关=旧行为零变化。
  * 背景:WSL 9p 停顿把同步文件 IO 冻住事件循环,四个 agent loop 一起停摆 35 分钟。

@@ -7,7 +7,7 @@ import { join, relative, resolve } from "node:path";
 
 const REPO = resolve(__dirname, "../../..");
 
-describe("archLlm 适配器(step-034 D1)", () => {
+describe("archLlm 适配器( D1)", () => {
   it("两段式 prompt→两次 chat,narrative/graphJson 各归位", async () => {
     const calls: string[] = [];
     const llm: LlmProvider = {
@@ -25,7 +25,7 @@ describe("archLlm 适配器(step-034 D1)", () => {
   });
 });
 
-describe("任务书符号提取与上下文注入(step-034 D3)", () => {
+describe("任务书符号提取与上下文注入( D3)", () => {
   it("firstSymbolLike:驼峰/下划线命中,中文与停用词排除", () => {
     expect(firstSymbolLike("修复 createGatewayApp 的调用问题")).toBe("createGatewayApp");
     expect(firstSymbolLike("看看 start_gateway_server")).toBe("start_gateway_server");
@@ -48,8 +48,8 @@ describe("任务书符号提取与上下文注入(step-034 D3)", () => {
   }, 90_000);
 });
 
-// (2026-10-23)「任务开工全局意识注入」describe 已删:orientWithSense/symbolsInText 随开工匹配式
-// 注入整体移除(用户口径:code_sense 内容拉取式,call 工具才返回;见 buildLoopTips 注释)。
+// 「任务开工全局意识注入」describe 已删:orientWithSense/symbolsInText 随开工匹配式
+// 注入整体移除(code_sense 内容拉取式,call 工具才返回;见 buildLoopTips 注释)。
 
 describe("code_sense action=surface:概念足迹(2026-10-29)", () => {
   it("surface + target → structural,概念词原样透传", () => {

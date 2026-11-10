@@ -1,5 +1,5 @@
 /**
- * Router 模型(step-0143 super-agent 关系升级 P1):
+ * Router 模型( super-agent 关系升级 P1):
  * Trigger(入口事件)/ Ticket(任务登记)/ phase(阶段)/ disposition(处置落账)。
  * P1 零 LLM:Trigger 只做确定性判定;Ticket 承接既有 TaskSupervisor 的 task.id。
  */
@@ -39,7 +39,7 @@ export interface Ticket {
   threadKey: string;
   /** 派发承接的 TaskSupervisor task id(open 起)。 */
   taskId?: string;
-  /** step-0145 P3 Mandate 授权凭证(explicit/auto-accept 派发时产出;重启恢复后按当前 policy revalidate)。 */
+ /** P3 Mandate 授权凭证(explicit/auto-accept 派发时产出;重启恢复后按当前 policy revalidate)。 */
   mandate?: Mandate;
   /** 创建时刻(epoch ms)。 */
   createdAt: number;
@@ -57,11 +57,11 @@ export interface Disposition {
   would_accept?: boolean;
   /** policy 版本哈希(派发/观察决策时的 policy 快照)。 */
   policyVersion?: string;
-  /** step-0144 P2 研判:ignore 降级原因(missing-intent-evidence / decision-ignore)。 */
+ /** P2 研判:ignore 降级原因(missing-intent-evidence / decision-ignore)。 */
   reason?: string;
-  /** step-0144 P2 研判:accept 派发时引用的触发原文证据(sr8 闸必备)。 */
+ /** P2 研判:accept 派发时引用的触发原文证据(sr8 闸必备)。 */
   intent_evidence?: string;
-  /** step-0145 P3 派发随行的 Mandate 摘要(无凭证字段,assertNoCredential 守门)。 */
+ /** P3 派发随行的 Mandate 摘要(无凭证字段,assertNoCredential 守门)。 */
   mandate?: Mandate;
   at: number;
 }

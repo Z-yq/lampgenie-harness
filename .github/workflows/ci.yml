@@ -1,4 +1,4 @@
-# 门禁 CI(step-015 D3 收口):凭证红线→审计对账→构建→测试→类型检查。
+# 门禁 CI( D3):凭证红线→审计对账→构建→测试→类型检查。
 # 本地等价跑法:pnpm gate(build 含在 test/typecheck 前,见 steps)。
 name: ci
 on:

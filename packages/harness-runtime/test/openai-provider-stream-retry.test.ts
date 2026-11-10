@@ -1,5 +1,5 @@
 /**
- * M29 openai-provider 流式重试:半截 attempt 作废(attemptId + partialChars)+ 累加器清空。
+ *  openai-provider 流式重试:半截 attempt 作废(attemptId + partialChars)+ 累加器清空。
  * 手法同 stream-midflight-retry.test.ts:stub 全局 fetch 驱动真实 chatStreamed。
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -29,7 +29,7 @@ function sseStream(chunks: (string | Error)[]) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("M29 openai-provider 流式重试", () => {
+describe(" openai-provider 流式重试", () => {
   it("半截后 500 断流 → 第二次成功:content 只含第二段,作废回调 1 次(reason 含 500)", async () => {
     const { createOpenAiCompatProvider } = await import("../src/agent/openai-provider.js");
     let call = 0;
@@ -102,6 +102,6 @@ describe("M29 openai-provider 流式重试", () => {
       p.chat([{ role: "user", content: "hi" }], [], undefined, () => {}, { attemptId: "b", onAttemptDiscarded: (i) => discards.push(i) }),
     ).rejects.toThrow(/Inference engine abort[\s\S]*流式尝试 3 次/);
     expect(fake).toHaveBeenCalledTimes(3); // 1 原始 + 2 重试
-    expect(discards.map((d) => d.attemptId)).toEqual(["b", "b#1"]); // 最后一次 attempt 不在 provider 内重试,由 loop 层收口
+    expect(discards.map((d) => d.attemptId)).toEqual(["b", "b#1"]); // 最后一次 attempt 不在 provider 内重试,由 loop 层
   }, 20_000);
 });

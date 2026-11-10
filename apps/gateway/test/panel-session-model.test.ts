@@ -35,11 +35,11 @@ describe("per-session 主模型 pill", () => {
     // 已进入会话→只改本会话(session.model.set + staged 态:回包确认才落 sessionModelOverride)
     expect(src).toContain("const targetSid = currentSid || draftSidOf();");
     expect(src).toContain('type: "session.model.set"');
-    // n8(2026-10-22):乐观直写缓存改为 staged——sessionModelOverride 只在 session.model.result 确认后写,
+ // n8:乐观直写缓存改为 staged——sessionModelOverride 只在 session.model.result 确认后写,
     // 选择瞬间只落 sessionModelStaged(pill 显新值+转轮,失败回滚)。原断言「乐观直写」由此条替代(非放宽)。
     expect(src).toContain("sessionModelStaged.set(targetSid,");
     expect(src).not.toContain("sessionModelOverride.set(targetSid,");
-    // 2026-10-29 用户口径「模型切换只跟 session 走」:草稿态绑定预设会话 id 走同一 per-session 通道,
+ // 草稿态绑定预设会话 id 走同一 per-session 通道,
     // cfg.set(改全局 coding.llm)从快切路径整体退役——其余会话不再被一个草稿态切换殃及。
     expect(src).not.toContain('type: "cfg.set"');
     // 草稿预设 sid 帮手真实在场(按项目隔离键 zh:draft-sid:<pid>)
@@ -50,7 +50,7 @@ describe("per-session 主模型 pill", () => {
   it("renderModelPill:先读 sessionModelOverride 覆盖,未命中回退 coding.llm.model", async () => {
     const html = await fetchHtml(7912);
     const src = sliceTopFn(html, "function renderModelPill(cfgView_) {");
-    // 2026-10-29:覆盖读取键认会话与草稿预设 sid(currentSid || draftSid)
+ // 覆盖读取键认会话与草稿预设 sid(currentSid || draftSid)
     expect(src).toContain("sessionModelOverride.get(currentSid || draftSid)");
     expect(src).toContain("cfg.coding.llm.model");
     // 覆盖命中分支带「·会话」尾标,且在全局回退分支之前
@@ -63,7 +63,7 @@ describe("per-session 主模型 pill", () => {
     expect(html).toContain('m.type === "session.model.result"');
     // null=服务端确认无覆盖;undefined=未初始化——回包统一落到 Map 与该语义区分
     expect(html).toContain("sessionModelOverride.set(m.sessionId, m.modelOverride || null)");
-    // 刷新判定认会话与草稿预设 sid(2026-10-29)
+ // 刷新判定认会话与草稿预设 sid
     expect(html).toContain("if (m.sessionId === currentSid || (draftSidStored() && m.sessionId === draftSidStored())) { renderModelPill(cfgView); renderModelSwitch(); }");
   });
 
@@ -78,7 +78,7 @@ describe("per-session 主模型 pill", () => {
     expect(html).toContain("sessionModelOverride.delete(t.sessionId)");
   });
 
-  /** n8/n9(2026-10-22):失败可见 + 清除覆盖 + 草稿首发补发。以下三条是白板 per-session 主模型闭环的
+ /** n8/n9:失败可见 + 清除覆盖 + 草稿首发补发。以下三条是白板 per-session 主模型闭环的
    * 仲裁条件:routeError 不能停在新模型上、model:null 必须能回到全局、草稿态所选模型必须真的用上。 */
   it("n8 routeError / ok:false → toast 报错 + pill 回滚到 effective(不停在新模型上);warning → 轻提示", async () => {
     const html = await fetchHtml(7915);
@@ -137,7 +137,7 @@ describe("per-session 主模型 pill", () => {
   it("n9 草稿提交消费预设 sid:模型覆盖已在 pillPickModel 绑定,staged 在飞才暂存等回包(2026-10-29)", async () => {
     const html = await fetchHtml(7917);
     const src = sliceTopFn(html, "function submit(overrideText, projectOverride) {");
-    // 2026-10-29:草稿不再新建一次性 sid,直接消费当前项目预设会话 id(与模型覆盖绑定同一 sid)
+ // 草稿不再新建一次性 sid,直接消费当前项目预设会话 id(与模型覆盖绑定同一 sid)
     expect(src).toContain("const sid = currentSid || draftSidOf();");
     // pending 判定=该预设会话的 staged 还在等回包(覆盖已确认则直发 task.submit,不再补发 set)
     const atPending = src.indexOf("if (wasDraftPending) {");
@@ -151,14 +151,14 @@ describe("per-session 主模型 pill", () => {
     expect(patch).not.toContain('type: "session.model.set"'); // set 已在 pillPickModel 发过,submit 不再补发
   });
 
-  /** m4/m9/m7-front(2026-10-22)本轮补齐的三面:草稿首发等回包(pending 链)、跨会话 toast 隔离 + staged 防连点、
+ /** m4/m9/m7-front本轮补齐的三面:草稿首发等回包(pending 链)、跨会话 toast 隔离 + staged 防连点、
    *  effort 字段透传。断言一律走「源码位置关系 + 字面片段」,不跑真 UI(浏览器侧不可 import)。 */
   it("m4 草稿首发 pending:任务体暂存等回包;task.submit 只在 result ok 后才发(两条路径唯一)", async () => {
     const html = await fetchHtml(7921);
     // ① pending 容器与超时兜底存在(8s)
     expect(html).toContain("let draftSubmitPending = null;");
     expect(html).toContain("const DRAFT_MODEL_ACK_TIMEOUT = 8000;");
-    // ② submit 草稿分支(2026-10-29):staged 在飞(wasDraftPending)→ 挂 pending(暂存任务体+定时器)
+ // ② submit 草稿分支:staged 在飞(wasDraftPending)→ 挂 pending(暂存任务体+定时器)
     //    → return,不再往下直发 submit;session.model.set 已在 pillPickModel 发过,submit 不再补发
     const sub = sliceTopFn(html, "function submit(overrideText, projectOverride) {");
     const atPending = sub.indexOf("draftSubmitPending = { sid, text, atts, projectId: submitProjectId");
@@ -198,7 +198,7 @@ describe("per-session 主模型 pill", () => {
     const abort = sliceTopFn(html, "function draftModelAbort(why, effModel) {");
     // 绝不派单:abort 内没有任何 task.submit
     expect(abort).not.toContain('type: "task.submit"');
-    // 回滚 + 保留重试料 + 解除 3s 同文本防重复(2026-10-29:重试料从 staged 在飞值捞取)
+ // 回滚 + 保留重试料 + 解除 3s 同文本防重复(重试料从 staged 在飞值捞取)
     expect(abort).toContain("const pickInFlight = sessionModelStaged.get(p.sid)");
     expect(abort).toContain("sessionModelStaged.delete(p.sid)");
     expect(abort).toContain("modelPillRollback(p.sid, effModel ? String(effModel) : null)");
@@ -221,7 +221,7 @@ describe("per-session 主模型 pill", () => {
     const html = await fetchHtml(7923);
     const i = html.indexOf('if (m.type === "session.model.result") {');
     const resSrc = html.slice(i, html.indexOf('if (m.type === "session.owner.result")', i));
-    // 门槛值:本标签当前会话 or 命中本标签 pending or 本标签草稿预设会话(2026-10-29)
+ // 门槛值:本标签当前会话 or 命中本标签 pending or 本标签草稿预设会话
     expect(resSrc).toContain("const pend = draftSubmitPending && draftSubmitPending.sid === m.sessionId ? draftSubmitPending : null;");
     expect(resSrc).toContain("const loud = m.sessionId === currentSid || !!pend || (draftSidStored() === m.sessionId && !!m.sessionId);");
     // 失败 toast 与 warn toast 都被 loud 约束(不再裸 toast)
@@ -231,7 +231,7 @@ describe("per-session 主模型 pill", () => {
     // 缓存更新不受 loud 约束(别会话回包仍然静默对齐,避免切过去看到旧值)
     expect(resSrc).toContain("sessionModelOverride.set(m.sessionId, m.modelOverride || null)");
     expect(resSrc).toContain("sessionModelRev.set(m.sessionId, Number(m.revision))");
-    // 广播回包只在当前会话或草稿预设会话才重画 pill(2026-10-29)
+ // 广播回包只在当前会话或草稿预设会话才重画 pill
     expect(resSrc).toContain("if (m.sessionId === currentSid || (draftSidStored() && m.sessionId === draftSidStored())) { renderModelPill(cfgView); renderModelSwitch(); }");
   });
 
@@ -261,7 +261,7 @@ describe("per-session 主模型 pill", () => {
     const pick = sliceTopFn(html, "function pillPickModel(v, providerId) {");
     expect(pick).toContain("const eff = sessionModelEffort();");
     expect(pick).toContain("effort: eff,"); // 与会话 set 一起透传(会话态与草稿态同一通道)
-    // 2026-10-29:草稿态同一 set 带 effort;不再有「草稿 draftModelPick 补发」的第二条 set
+ // 草稿态同一 set 带 effort;不再有「草稿 draftModelPick 补发」的第二条 set
     expect(pick).toContain('type: "session.model.set", sessionId: targetSid');
     expect(pick).toContain("effort: eff, ...(rev !== undefined");
     // pill 读取缓存 effort:staged 与已确认覆盖都显示「model · effort」

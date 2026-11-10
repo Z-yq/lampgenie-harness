@@ -114,8 +114,7 @@ describe("六件套:六类 surface 全覆盖", () => {
 
   it("code surface 只给 impact.scanRef → 通过;impact.files 为空数组时仍按缺省算", () => {
     expect(
-      evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { scanRef: "code-sense:x" } })).codes,
-    ).toEqual([]);
+      evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { scanRef: "code-sense:x" } })).codes).toEqual([]);
     expect(evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { files: [] } })).codes).toEqual([
       "MOD_IMPACT_MISSING",
     ]);
@@ -435,8 +434,7 @@ describe("冻结 canonical hash", () => {
       riskFlags: [] as string[],
     };
     expect(freezeSelfModification(swapped as ModificationRequest).hash).not.toBe(
-      freezeSelfModification(swapped2 as ModificationRequest).hash,
-    );
+      freezeSelfModification(swapped2 as ModificationRequest).hash);
   });
 
   it.each([

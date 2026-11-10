@@ -1,9 +1,8 @@
 /**
- * C/C++ structural adapter(step-067,承 step-065 B1 缺口:两 C 仓索引「形式成功实为空」)。
+ * C/C++ structural adapter(承 B1 缺口:两 C 仓索引「形式成功实为空」)。
  * grammar:tree-sitter-c(.c)/ tree-sitter-cpp(.cc/.cpp/.cxx/.hpp/.hh/.hxx;.h 双语法兜底取错误少者)。
  * wasm 资产:tree-sitter-wasms 0.1.13 自带 tree-sitter-c.wasm / tree-sitter-cpp.wasm(零新增依赖);
  * 装载复用 adapters/tree-sitter.ts 的 loadTsParser(与 py/go/java 同机制、同进程缓存)。
- *
  * 提取诚实子集(边界如实,不硬凑):
  * - 函数定义 + 原型(declaration 内含 function_declarator 且无函数体)——原型如实登记为 API 面;
  *   同文件原型与定义并存时定义优先(符号 id 同形,原型让位);跨文件同名由查询侧并列呈现。
@@ -15,24 +14,22 @@
  *   无定义则唯一原型也可解析);Cls::m() 限定调用带 receiverType 发跨文件候选;其余未解析调用
  *   发 crossFileCandidates——跨文件解析消费 engine mergeStructAdapters 既有闸(同语言+全图唯一名
  *   (+receiverType/moduleHint)),本 adapter 不自建第二套跨文件解析。
- *
  * 错误容忍(单一策略,无分支:subtree 无 ERROR/missing 的节点才提取):
  * - 文件干净 → 全部节点健康,行为=全量提取。
- * - 文件有 ERROR(真实 C 仓预处理器/GNU 扩展实测高频,严格拒收会重演 0 覆盖)→ 自然降级为
+ * - 文件有 ERROR(真实 C 仓预处理器/GNU 扩展经验证高频,严格拒收会重演 0 覆盖)→ 自然降级为
  *   「健康节点」档:顶层/类内健康 function_definition/原型/类型照收,调用只从健康函数定义体内提取。
- *   实测依据(2026-10-16 PoC,~/sense-eval/saadk_c):错误文件 memwatch.c 顶层 63 个定义 62 个
- *   子树健康——容忍档近乎无损;而「整文件拒收」策略(step-065 实测形态)是本轮要消灭的静默空索引。
- *
- * step-079(覆盖率 99%,口径与根因对照=tasks/designs/25-coverage-99.md):
+ * 经验证依据( PoC,~/sense-eval/saadk_c):错误文件 memwatch.c 顶层 63 个定义 62 个
+ * 子树健康——容忍档近乎无损;而「整文件拒收」策略(经验证形态)是本轮要消灭的静默空索引。
+ * (覆盖率 99%,口径与根因对照=):
  * - 属性宏 strip:ALLCAPS 标识符紧跟引入/类型关键字 → 等长空格替换(编译器 -D 等价,行号不变)。
- *   实测根因:`CV_EXPORTS_W void inpaint(...)` 解析为 type_identifier(CV_EXPORTS_W)+ERROR(void)+健康
+ * 经验证根因:`CV_EXPORTS_W void inpaint(...)` 解析为 type_identifier(CV_EXPORTS_W)+ERROR(void)+健康
  *   declarator(photo.hpp 6 连),FMT_FUNC/EXPORT_VISIBILITY 同族。
  * - declarator 容错:ERROR 节点的 function_declarator 子树健康 → 照常提取符号但**不进 funcBodies
- *   (不产调用边)**。实测根因:`void cv::resize(...)`(opencv resize.cpp:3580)declarator 健康、
- *   函数体 compound_statement 含 ERROR → 整函数连坐丢弃(step-076 RC-E)。
+ * (不产调用边)**。经验证根因:`void cv::resize(...)`(opencv resize.cpp:3580)declarator 健康、
+ * 函数体 compound_statement 含 ERROR → 整函数连坐丢弃( RC-E)。
  * - 模板类名:template<...> class DataType<...> 的类名节点是 template_type(非 type_identifier)。
  * - typedef:type_definition 提取declarator 名(普通 typedef 与 typedef struct{...} name)。
- * - lexical 档(designs/16 承诺):结构档 0 符号(含 >512KB 闸命中文件)→ regex 顶层声明
+ * - lexical 档(承诺):结构档 0 符号(含 >512KB 闸命中文件)→ regex 顶层声明
  *   (函数原型/定义、extern|static|const 变量、数组、typedef),全部 tier=lexical、零边、
  *   不进 byName(engine merge 层)、不作 relink 目标、不进 entrypoints——**只进覆盖计数与符号查询,
  *   不参与 callers/callees 精度口径**。
@@ -56,13 +53,13 @@ export interface CppParseResult {
   /** 本文件解析不到的调用候选(to="" + toName)——mergeStructAdapters 全图合并后按
    * 同语言+唯一名(+receiverType)解析,解析不了=移除(与「不发射」等价,不猜)。 */
   crossFileCandidates?: FlowEdge[];
-  /** step-079 分档 outcome(分层覆盖口径,designs/25 §1):本文件落入 full/lexical/empty/skipped
+ /** 分档 outcome(分层覆盖口径, §1):本文件落入 full/lexical/empty/skipped
    * 哪一档;mergeStructAdapters 聚合进 CallGraph.structOutcomes,最终落 coverage manifest。
    * 缺省(旧 adapter 无此字段)由 engine 按 symbols/failures 推断(python/go/java 同享)。 */
   outcome?: CppFileOutcome;
 }
 export type CppFileOutcome = { tier: "full" | "lexical" | "empty" | "skipped"; reason?: string;
-  /** 2026-10-22 P0:本文件解析树含语法错误(即使分档=full)。索引落盘后 impact 据此提示
+ /** P0:本文件解析树含语法错误(即使分档=full)。索引落盘后 impact 据此提示
    *  「调用面可能不完整」,避免把缺边呈现成 0 调用方。 */
   errors?: boolean };
 
@@ -70,7 +67,7 @@ export type CppFileOutcome = { tier: "full" | "lexical" | "empty" | "skipped"; r
 export const CPP_EXTS = [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"];
 
 /** web-tree-sitter 节点(本文件自有视图:带 parent,供类内方法祖先归属)。
- * step-089 P1 导出:typed/ 逐文件档复用同一节点视图。 */
+ * P1 导出:typed/ 逐文件档复用同一节点视图。 */
 export interface CppNode {
   type: string;
   text: string;
@@ -81,7 +78,7 @@ export interface CppNode {
   child(i: number): CppNode | null;
   children: CppNode[] | (() => CppNode[]);
   parent: CppNode | null;
-  /** 0.25 API:本节点或任意后代含错(单测实证:`return q +;` 的错误是属性形态,
+ /** 0.25 API:本节点或任意后代含错(单测验证:`return q +;` 的错误是属性形态,
    * 树里没有显式 ERROR 节点——健康判定必须两者都查)。 */
   hasError?: boolean;
   descendantsOfType(type: string): CppNode[];
@@ -93,14 +90,14 @@ export function childrenOf(n: CppNode): CppNode[] {
 }
 
 /** 节点子树内是否含错(hasError 属性档 + ERROR/missing 节点档;healthy 节点才提取)。
- * step-089 P1 导出:typed/ 逐文件档复用。 */
+ * P1 导出:typed/ 逐文件档复用。 */
 export function containsError(node: CppNode): boolean {
   if (node.hasError === true) return true;
   if (node.type === "ERROR" || node.type.startsWith("missing")) return true;
   return childrenOf(node).some(containsError);
 }
 
-/** 2026-10-22 P0:错误区间(只收 ERROR;missing 是零宽标记不算区间)。
+/** P0:错误区间(只收 ERROR;missing 是零宽标记不算区间)。
  *  旧策略「函数体含一个 ERROR 就整段不产调用边」在真实 C 仓上代价过高:
  *  sa_algo_solution.c 的 1000+ 行 SA_ADK_Infer_Sync 仅签名处 3 字符 ERROR,却让整段调用面
  *  消失,impact 把 Solution_SA_MD_OT_Run 的真实调用方报成 0。现改为只剔除落在 ERROR 区间内的
@@ -125,14 +122,14 @@ export function inErrorRange(node: CppNode, ranges: CppErrorRange[] | undefined)
   return false;
 }
 
-/** P0(2026-10-16 step-068 性能回归修复):超过此字节数的源文件跳过解析,进 failures 如实登记。
- * 阈值依据:agent_alpha 实测 cat-565.h 919KB / trust_blob.h 837KB 是 ESP32 嵌入式资源的
+/** P0(性能回归修复):超过此字节数的源文件跳过解析,进 failures 如实登记。
+ * 阈值依据:agent_alpha 经验证 cat-565.h 919KB / trust_blob.h 837KB 是 ESP32 嵌入式资源的
  * 裸像素/JIT blob 数组(19200 行十六进制字面量、零声明),tree-sitter 逐字节解析成 initializer
  * 节点,单文件 >120s; mbedtls ssl.h 265KB/ssl_tls.c 319KB 是真实可解析代码(114-519ms),
  * 取 512KB 为界——只拦 blob 形态(>500KB),真实代码全部放行。 */
 export const CPP_MAX_FILE_BYTES = 512 * 1024;
 
-/** step-079 G4(designs/25 §3):属性宏 strip——ALLCAPS 标识符紧跟引入/类型关键字 → 等长空格。
+/** G4( §3):属性宏 strip——ALLCAPS 标识符紧跟引入/类型关键字 → 等长空格。
  * 语义=编译器 -D(如 opencv `#define CV_EXPORTS` / windows `#define CONST const`),行号与字节
  * 偏移不变。假阳性面:全大写常量后跟引入关键字的合法 C/C++ 形态基本不存在(`MAX_SIZE =`、
  * `MODE_A,`、`INT_MAX)`、`arr[MAX]` 均不命中规则);首字符大写其余含小写的类型名(如 `MyType`)
@@ -144,14 +141,14 @@ const MACRO_STRIP_KEYWORDS = new Set([
   "wchar_t", "char16_t", "char32_t", "__inline", "__forceinline", "__cdecl", "__stdcall",
 ]);
 const MACRO_STRIP_RE = /\b([A-Z][A-Z0-9_]{1,})(\s+)([A-Za-z_]\w*)\b/g;
-/** 规则 2:类型关键字与类名之间的属性宏(`class CV_EXPORTS_API Tonemap : ...`,opencv 实测形态)。
+/** 规则 2:类型关键字与类名之间的属性宏(`class CV_EXPORTS_API Tonemap : ...`,opencv 经验证形态)。
  * 上下文受限(仅在 class/struct 之后)——泛化的「ALLCAPS+任意标识符」会误杀 ALLCAPS typedef
  * 类型名(`MY_TYPE table[]` 是合法 C),不采纳。 */
 const MACRO_STRIP_CLASS_RE = /\b(class|struct)(\s+)([A-Z][A-Z0-9_]{1,})(\s+)(?=[A-Za-z_]\w*)/g;
 
 export function stripAttributeMacros(text: string): string {
-  // 预处理器行(#define/#ifndef 头)不 strip——实测反例:`#define OPENCV_PHOTO_LEGACY_CONSTANTS_H`
-  // 的宏名后跟空行+`enum` 会命中规则 1,宏名被抹成 `#define <spaces>` → 整文件 ERROR(step-079 实测)
+ // 预处理器行(#define/#ifndef 头)不 strip——经验证反例:`#define OPENCV_PHOTO_LEGACY_CONSTANTS_H`
+ // 的宏名后跟空行+`enum` 会命中规则 1,宏名被抹成 `#define <spaces>` → 整文件 ERROR(经验证)
   const pass1 = text.replace(MACRO_STRIP_RE, (whole, macro: string, ws: string, next: string, offset: number) => {
     if (!MACRO_STRIP_KEYWORDS.has(next)) return whole;
     if (onPreprocLine(text, offset)) return whole;
@@ -172,13 +169,13 @@ function onPreprocLine(text: string, offset: number): boolean {
   return false;
 }
 
-/** step-079 lexical 档(designs/25 §5):regex 顶层声明提取。先单遍剥离注释/字符串字面量
+/** lexical 档( §5):regex 顶层声明提取。先单遍剥离注释/字符串字面量
  * (等长空格替换保行号),再按列 0 顶层形态匹配。只进覆盖计数与符号查询(tier=lexical),
  * 零边——不参与 callers/callees 精度口径。 */
 export const LEXICAL_MAX_SYMBOLS = 2000;
 
 /** 单遍状态机:注释/字符串内容替换为空格(保留换行),其余原样。块拼接实现(逐字符数组在
- * 1MB 上实测 221ms,超 lexical <100ms 红线;切片拼接 O(片段数) 实测 ~5ms)。 */
+ * 1MB 上经验证 221ms,超 lexical <100ms 红线;切片拼接 O(片段数) 经验证 ~5ms)。 */
 function blankCommentsAndStrings(text: string): string {
   const parts: string[] = [];
   const n = text.length;
@@ -242,11 +239,11 @@ function lineOf(starts: number[], offset: number): number {
 }
 
 /** 顶层声明 regex 组(在 blankCommentsAndStrings 产物上跑;^ 锚=列 0 顶层)。
- * step-079 实测形态:opencl 原型尾带调用约定宏(`... clXxx(...) CL_API_SUFFIX__VERSION_1_0;`)、
+ * 经验证形态:opencl 原型尾带调用约定宏(`... clXxx(...) CL_API_SUFFIX__VERSION_1_0;`)、
  * extern 函数指针(`extern CL_RUNTIME_EXPORT cl_int (CL_API_CALL*clBuildProgram)(...)`)、
- * ObjC 接口(`CV_EXPORTS @interface CvAbstractCamera : NSObject`,cap_ios.h 实测)。 */
+ * ObjC 接口(`CV_EXPORTS @interface CvAbstractCamera : NSObject`,cap_ios.h 经验证)。 */
 const LEX_FUNC_RE = /^[ \t]*[\w][^\n;{}=#]*?\b([A-Za-z_]\w*)[ \t]*\(([^;{()]*?)\)[ \t]*(?:const[ \t]*|noexcept[ \t]*)*(?:[^;\n{]*?)?(?:;|\{|$)/gm;
-/** step-089 P1:变量/数组/函数指针 regex 增类型捕获——group1=声明前缀(类型文本),group2=名字。 */
+/** P1:变量/数组/函数指针 regex 增类型捕获——group1=声明前缀(类型文本),group2=名字。 */
 const LEX_VAR_RE = /^((?:export[ \t]+)?(?:extern|static|const)[ \t]+[^\n;={}]*?)\b([A-Za-z_]\w*)[ \t]*(\[[^\]\n]*\][ \t]*)*(?:=[^\n;]*)?;/gm;
 const LEX_ARRAY_RE = /^((?:static[ \t]+|const[ \t]+|extern[ \t]+|unsigned[ \t]+|signed[ \t]+)*[\w:]+[ \t*]+)([A-Za-z_]\w*)[ \t]*(\[[^\]\n]*\])[ \t]*(?:=[^\n;]*)?;/gm;
 const LEX_TYPEDEF_RE = /^typedef\b[^\n;{}()]*?\b([A-Za-z_]\w*)[ \t]*;/gm;
@@ -265,7 +262,7 @@ const LEX_NAME_DENY = new Set([
 ]);
 
 /** 词法兜底提取:返回带 tier=lexical 的符号(kind=function/typedef/variable),零边。
- * step-089 P1:变量/数组/函数指针符号带 dataType(声明类型文本;存储类 extern/static 剥除)。 */
+ * P1:变量/数组/函数指针符号带 dataType(声明类型文本;存储类 extern/static 剥除)。 */
 export function lexicalScan(relFile: string, text: string): CppSymbol[] {
   const blanked = blankCommentsAndStrings(text);
   const starts = lineStarts(blanked);
@@ -307,7 +304,7 @@ export function lexicalScan(relFile: string, text: string): CppSymbol[] {
 
 /**
  * 从 function_definition/declaration 取最外层 function_declarator:
- * 直接子级,或经 pointer/reference/parenthesized 包装一层(如 `int *foo(...)` 实测形态)。
+ * 直接子级,或经 pointer/reference/parenthesized 包装一层(如 `int *foo(...)` 经验证形态)。
  * 探测深度 ≤2:参数列表里的函数指针形参 function_declarator 在 ≥4 层,天然不会误中。
  */
 function findFunctionDeclarator(node: CppNode): CppNode | undefined {
@@ -360,7 +357,7 @@ function ancestorClassOf(node: CppNode): string | undefined {
 }
 
 /** 具名且有 body 的类型 specifier → 类型符号名(前向声明/匿名不收)。
- * step-079 G2:`template<...> class DataType<...>` 的类名节点是 template_type(模板实参列表
+ * G2:`template<...> class DataType<...>` 的类名节点是 template_type(模板实参列表
  * 附着在名字节点上),取 `<` 前标识符;普通类仍是 type_identifier。 */
 function typeNameOf(node: CppNode): string | undefined {
   const kids = childrenOf(node);
@@ -372,7 +369,7 @@ function typeNameOf(node: CppNode): string | undefined {
   return hasBody ? name : undefined;
 }
 
-/** step-079 G3:type_definition 的 declarator 名——`typedef unsigned char U8;` 与
+/** G3:type_definition 的 declarator 名——`typedef unsigned char U8;` 与
  * `typedef struct {...} sa_algo_audio_event;` 的名字都在末位 type_identifier。
  * 函数指针形态(`typedef void (*cb)(int)`)名字在括号内,标识符契约外不猜(登记边界)。 */
 export function typedefName(node: CppNode): string | undefined {
@@ -381,7 +378,7 @@ export function typedefName(node: CppNode): string | undefined {
   return name && /^[A-Za-z_]\w*$/.test(name) ? name : undefined;
 }
 
-/** step-089 P1(designs/26 §2.2):typedef 的底层类型文本(名字与 typedef 关键字之间)。
+/** P1( §2.2):typedef 的底层类型文本(名字与 typedef 关键字之间)。
  * 带 body 的 struct/union/enum 体折叠为 `{…}`(防大结构体文本进索引);截 120。 */
 export function typedefUnderlying(node: CppNode): string | undefined {
   const raw = node.text.trim();
@@ -392,7 +389,7 @@ export function typedefUnderlying(node: CppNode): string | undefined {
   return t.slice(0, 120);
 }
 
-// ---- step-089 P1:结构档文件级变量提取(翻译单元顶层;零边、不进 byName——engine merge 层纪律) ----
+// ---- P1:结构档文件级变量提取(翻译单元顶层;零边、不进 byName——engine merge 层纪律) ----
 
 /** 文件级变量单文件上限(防病态文件节点爆炸;截断=如实少收,不冒充全量)。 */
 export const MAX_FILE_SCOPE_VARS = 500;
@@ -408,7 +405,7 @@ export const TYPE_TEXT_TYPES = new Set([
 
 export interface DeclaratorInfo {
   name?: string;
-  /** 名字标识符 span(character=0-based 列;step-089 typed/ semantic-token 供位)。 */
+ /** 名字标识符 span(character=0-based 列; typed/ semantic-token 供位)。 */
   nameSpan?: { character: number; length: number };
   pointers: number;
   arrays: string[];
@@ -417,7 +414,7 @@ export interface DeclaratorInfo {
 }
 
 /** declarator 递归分析:名字+名字 span+指针深度+数组维度+函数指针形态(声明时类型重构的原料)。
- * step-089 P1 导出:typed/ 逐文件档复用同一分析(单一真相,防双胞胎实现漂移)。
+ * P1 导出:typed/ 逐文件档复用同一分析(单一真相,防双胞胎实现漂移)。
  * 判发在「节点自身类型」(首版只查子节点:裸 identifier declarator 取不到名、
  * function_declarator 自身永不触发——handler 形态 dataType 丢函数指针尾缀,测试抓出)。 */
 export function analyzeDeclarator(node: CppNode, info: DeclaratorInfo): void {
@@ -432,7 +429,7 @@ export function analyzeDeclarator(node: CppNode, info: DeclaratorInfo): void {
   if (node.type === "pointer_declarator" || node.type === "reference_declarator") {
     info.pointers++;
   } else if (node.type === "array_declarator") {
-    // 维度=「[」之后的形态(首个 identifier 是名字,不算 size——`int primes[10]` 实测)
+ // 维度=「[」之后的形态(首个 identifier 是名字,不算 size——`int primes[10]` 经验证)
     let afterBracket = false;
     let size: string | undefined;
     for (const c of childrenOf(node)) {
@@ -459,7 +456,7 @@ export function analyzeDeclarator(node: CppNode, info: DeclaratorInfo): void {
 }
 
 /** 声明时类型文本重构:typeText + declarator 形态(指针/数组/函数指针;函数指针的星在括号内——
- * `void (*handler)(int)` → `void (*)(int)`)。step-089 P1 导出:索引档与 typed/ 档共用。 */
+ * `void (*handler)(int)` → `void (*)(int)`)。 P1 导出:索引档与 typed/ 档共用。 */
 export function declaratorDataType(typeText: string, info: DeclaratorInfo): string {
   if (info.isFnPtr) {
     const stars = "*".repeat(Math.max(0, info.pointers - 1));
@@ -472,7 +469,7 @@ export function declaratorDataType(typeText: string, info: DeclaratorInfo): stri
 }
 
 /** 顶层声明头部的类型文本(type 节点文本拼接;attribute_specifier 噪声剥除;struct 体折叠)。
- * step-089 P1 导出:typed/ 逐文件档复用。 */
+ * P1 导出:typed/ 逐文件档复用。 */
 export function declarationTypeText(decl: CppNode): string {
   const parts: string[] = [];
   for (const c of childrenOf(decl)) {
@@ -486,7 +483,7 @@ export function declarationTypeText(decl: CppNode): string {
 
 /** 文件级(translation_unit 直属)declaration 的变量提取——plain/指针/数组/初始化/函数指针。
  * 函数原型(function_declarator 且 identifier 直名)让位既有原型登记,此处跳过。
- * step-089 P1 导出:typed/ 逐文件档复用。 */
+ * P1 导出:typed/ 逐文件档复用。 */
 export function fileScopeVars(unit: CppNode, relFile: string): CppSymbol[] {
   const out: CppSymbol[] = [];
   const seen = new Set<string>();
@@ -541,7 +538,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
   const fail = (reason: string, tier: "skipped" = "skipped"): CppParseResult =>
     ({ symbols: [], edges: [], failures: [{ file: relFile, reason }], outcome: { tier, reason } });
   // P0:文件大小闸——巨型数据数组头(嵌入式资源/blob)tree-sitter 逐字节解析成 initializer 节点
-  // 单文件 >120s;step-079 G6:闸命中文件不再直接跳过,改走 lexical 档(regex 顶层声明,毫秒级)
+ // 单文件 >120s; G6:闸命中文件不再直接跳过,改走 lexical 档(regex 顶层声明,毫秒级)
   let text: string;
   let gatedBySize = false;
   try {
@@ -561,21 +558,21 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
     return fail(`文件超 ${CPP_MAX_FILE_BYTES / 1024}KB 阈值(数据数组/blob 形态)且词法扫描未发现顶层声明`);
   }
 
-  // step-079 G4:属性宏 strip(等长空格,-D 等价,行号不变)——解析前统一做,
+ // G4:属性宏 strip(等长空格,-D 等价,行号不变)——解析前统一做,
   // 让 `CV_EXPORTS_W void inpaint(...)`/`class CV_EXPORTS_W Tonemap : public Algorithm{}` 干净入树
   let stripped = stripAttributeMacros(text);
   // 无尾换行的文件:tree-sitter 给末节点标 missing(hasError=true)——纯 #define 头会因此
-  // 误入 skipped 档(实测 version.hpp 三行 define);补一个换行属语义中性归一化
+ // 误入 skipped 档(经验证 version.hpp 三行 define);补一个换行属语义中性归一化
   if (stripped.length > 0 && !stripped.endsWith("\n")) stripped += "\n";
   const ext = relFile.slice(relFile.lastIndexOf(".")).toLowerCase();
-  // 2026-10-22 P0:.c 也加 cpp 语法兜底——真实仓里 .c 常混 C++ 语法(实测 saadk_6920
+ // P0:.c 也加 cpp 语法兜底——真实仓里 .c 常混 C++ 语法(经验证 saadk_6920
   // yolox.c 的 `auto dims = ...`/`bool`):C grammar 报 ERROR 后该函数整段丢边;C++ grammar
   // 零错解析可完整恢复。.h 保持 cpp→c(头文件同理,只是方向相反)。
   const grammars: TsLang[] = ext === ".c" ? ["c", "cpp"] : ext === ".h" ? ["cpp", "c"] : ["cpp"];
   // .h 双语法兜底:C 头在 cpp 语法下的误报由 c 语法救。
-  // P1(2026-10-16 step-068 性能回归修复):first-grammar 结果 childCount>0 且无根级 ERROR
+ // P1(性能回归修复):first-grammar 结果 childCount>0 且无根级 ERROR
   // (hasError=false)即采纳,不再兜底——ERROR 文件跑满两趟 parse 是 agent_alpha .h 桶
-  // >590s 的放大器;errCount 递归全树遍历(ssl.h 实测 92ms ≈ parse 的 80%)换成 hasError O(1) 属性。
+ // >590s 的放大器;errCount 递归全树遍历(ssl.h 经验证 92ms ≈ parse 的 80%)换成 hasError O(1) 属性。
   let unit: CppNode | undefined;
   for (const g of grammars) {
     const parser = await loadTsParser(g);
@@ -620,8 +617,8 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
   for (const fd of unit.descendantsOfType("function_definition")) {
     const inner = findFunctionDeclarator(fd);
     if (!inner) continue;
-    // 2026-10-22 P0:不再因函数体含 ERROR 整段丢边——declarator 健康就进 funcBodies,
-    // 只记录 ERROR 区间,Pass 2 逐调用剔除区间内的坏点(实锚:SA_ADK_Infer_Sync 仅签名 3 字符
+ // P0:不再因函数体含 ERROR 整段丢边——declarator 健康就进 funcBodies,
+ // 只记录 ERROR 区间,Pass 2 逐调用剔除区间内的坏点(依据:SA_ADK_Infer_Sync 仅签名 3 字符
     // ERROR,千行函数体里的 10 个真实调用全在区间外)。
     if (containsError(fd) && containsError(inner)) continue; // declarator 亦有错(参数表坏):不猜
     const { name, container: qContainer } = declaratorName(inner);
@@ -645,7 +642,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
     }
   }
   // 原型登记(定义到场时让位;原型无函数体不进 funcBodies)。容错语义同上。
-  // 类体内成员原型是 field_declaration 节点(C++ grammar,step-079 G4 实测:CV_WRAP 方法),
+ // 类体内成员原型是 field_declaration 节点(C++ grammar, G4 经验证:CV_WRAP 方法),
   // 顶层原型是 declaration——两个节点型都收。
   for (const declType of ["declaration", "field_declaration"] as const) {
     for (const decl of unit.descendantsOfType(declType)) {
@@ -674,8 +671,8 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
       register({ name, id: mkId(name), kind: "class", file: relFile, line: ts.startPosition.row + 1 }, false);
     }
   }
-  // step-079 G3:typedef(type_definition declarator 名;函数指针形态不猜)
-  // step-089 P1:typedef 符号带 dataType(底层类型文本)
+ // G3:typedef(type_definition declarator 名;函数指针形态不猜)
+ // P1:typedef 符号带 dataType(底层类型文本)
   for (const td of unit.descendantsOfType("type_definition")) {
     if (containsError(td)) continue;
     const name = typedefName(td);
@@ -683,7 +680,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
     const underlying = typedefUnderlying(td);
     register({ name, id: mkId(name), kind: "typedef", file: relFile, line: td.startPosition.row + 1, ...(underlying ? { dataType: underlying } : {}) }, false);
   }
-  // step-089 P1:文件级变量(plain/指针/数组/初始化/函数指针;零边,variable 不进 byName)
+ // P1:文件级变量(plain/指针/数组/初始化/函数指针;零边,variable 不进 byName)
   for (const v of fileScopeVars(unit, relFile)) {
     register(v, false);
   }
@@ -728,7 +725,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
     if (!body) continue; // 原型无函数体:不产调用边
     const errRanges = bodyErrorRanges.get(callerId);
     for (const call of body.descendantsOfType("call_expression")) {
-      if (inErrorRange(call, errRanges)) continue; // 错误点内的调用不猜(2026-10-22 P0)
+      if (inErrorRange(call, errRanges)) continue; // 错误点内的调用不猜( P0)
       const head = childrenOf(call)[0];
       if (!head) continue;
       const line = call.startPosition.row + 1;
@@ -736,7 +733,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
         // 裸名调用 malloc()/foo():同文件唯一→连边;本地无→发候选交全图唯一名闸
         const name = head.text.trim();
         if (!/^[A-Za-z_]\w*$/.test(name)) continue;
-        // 2026-10-22 P1(spawn 边):pthread_create(&t, attr, fn, arg) 第 3 参 / xTaskCreate(fn, …)
+ // P1(spawn 边):pthread_create(&t, attr, fn, arg) 第 3 参 / xTaskCreate(fn, …)
         // 第 1 参——线程/任务入口的函数引用不是调用点,旧图看不见(嵌入式 launcher 链沉底同因)。
         if (name === "pthread_create" || name === "xTaskCreate") {
           const argList = childrenOf(call).find((c) => c.type === "argument_list");
@@ -785,7 +782,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
       }
     }
     for (const ne of body.descendantsOfType("new_expression")) {
-      if (inErrorRange(ne, errRanges)) continue; // 错误点内的 new 不猜(2026-10-22 P0)
+      if (inErrorRange(ne, errRanges)) continue; // 错误点内的 new 不猜( P0)
       // new Cls<T>(...):取模板实参前的类型名,按类名调用(类符号在 byName)
       const tNode = childrenOf(ne)[0];
       if (!tNode) continue;
@@ -798,8 +795,8 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
         pushEdge({ from: callerId, to, toName: name, file: relFile, line: ne.startPosition.row + 1, tier: "structural", evidenceKind: "ast" });
       }
     }
-    // 2026-10-22 P1(缺口②):函数指针/回调注册赋值——`ops.fn = handler` / `p->cb = &handler`。
-    // 不是 call_expression,旧提取完全看不见;策略表/回调改签名是最危险的盲区(实测
+ // P1(缺口②):函数指针/回调注册赋值——`ops.fn = handler` / `p->cb = &handler`。
+ // 不是 call_expression,旧提取完全看不见;策略表/回调改签名是最危险的盲区(经验证
     // saadk_c `.criteria_func = face_selection_criteria` 三面全盲)。RHS 限裸名/取址裸名,
     // 且必须解析到本文件函数符号——其余形态(变量中转/条件)不猜。
     for (const asgn of body.descendantsOfType("assignment_expression")) {
@@ -822,7 +819,7 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
     }
   }
 
-  // 2026-10-22 P1(缺口②续):顶层策略表初始化器——`static const ops_s g_ops = {`
+ // P1(缺口②续):顶层策略表初始化器——`static const ops_s g_ops = {`
   // ` .criteria_func = face_selection_criteria, };`。三种形态:initializer_pair(.field = fn)
   // / 位置式直接 identifier({ fn })/ 标量 RHS(int (*fn)(int) = handler)。RHS 认裸名与
   // &裸名,必须解析到本文件函数符号。归属=被初始化的表变量(callers 面显示「表 g_ops
@@ -873,11 +870,11 @@ export async function parseCppFile(root: string, relFile: string): Promise<CppPa
   }
 
   const symbolsArr = [...symbols.values()].map((s) => s.sym);
-  // step-079 分档结算:结构档有符号=full;0 符号 → lexical 兜底(regex 顶层声明,零边);
+ // 分档结算:结构档有符号=full;0 符号 → lexical 兜底(regex 顶层声明,零边);
   // 兜底仍 0 → root 干净=empty(确认无声明,纯 include 聚合头/纯 #define)/root 有错=skipped 带 reason
   if (symbolsArr.length > 0) {
-    // step-089 P1:ERROR 文件的词法补集合并——ERROR 子树会吞相邻健康声明(实测 ObjC 错误段
-    // 吞掉紧随的 extern 变量,step-079 召回回退);结构档在场时词法档只补 id 缺集(tier=lexical
+ // P1:ERROR 文件的词法补集合并——ERROR 子树会吞相邻健康声明(经验证 ObjC 错误段
+ // 吞掉紧随的 extern 变量, 召回回退);结构档在场时词法档只补 id 缺集(tier=lexical
     // 如实,零边、不进 byName 纪律不变),干净文件不跑词法(零开销)。
     if (unit.hasError === true) {
       const have = new Set(symbolsArr.map((x) => x.id));

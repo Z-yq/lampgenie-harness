@@ -1,9 +1,8 @@
 /**
- * step-123 worktree 隔离验收:
+ * worktree 隔离验收:
  * ① 服务层:创建/列表/并行/删除保留分支/TTL 清理/非 git/上限/围栏;
  * ② 接线层:spawn_subagent({worktree:true}) 真跑子代理,验证独立工作树、主仓无改动、
  *    并行两个子代理同名文件互不干扰、结果与 journal 带 path/branch、清理命令语义。
- *
  * 不使用真实 LLM:mock LlmProvider 按任务书标记路由(主 agent 派发 / 子代理执行 run_cmd)。
  * git 操作只在本测试 mkdtemp 出来的临时仓内执行(不在 harness 仓建 worktree)。
  */
@@ -16,7 +15,7 @@ import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
 import { WorktreeError, WorktreeService } from "../src/worktree-service.js";
 
-// plan-gate 豁免(2026-10-21):本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
+// plan-gate 豁免:本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
 process.env.GENIE_PLAN_GATE = "off";
 // 任务终态档案会写主仓 .genie/task-archive.jsonl(污染「主仓干净」断言)——用例后清理
 import { rmSync } from "node:fs";
@@ -45,7 +44,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("WorktreeService(step-123 服务层)", () => {
+describe("WorktreeService(服务层)", () => {
   it("创建=独立工作树(路径/分支/.git 文件),主仓干净;并行两个互不干扰", async () => {
     const repo = makeRepo();
     const svc = new WorktreeService({ maxWorktrees: 8 });
@@ -115,7 +114,7 @@ describe("WorktreeService(step-123 服务层)", () => {
   }, 30_000);
 });
 
-describe("spawn_subagent worktree 接线(step-123)", () => {
+describe("spawn_subagent worktree 接线", () => {
   const envBackup = {
     rules: process.env.GENIE_PERMISSION_RULES,
     ask: process.env.GENIE_PERM_ASK_MODE,

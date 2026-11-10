@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-describe("python 符号接入 debug 剖面(step-034 F4:adapter 此前为孤儿)", () => {
+describe("python 符号接入 debug 剖面( F4:adapter 此前为孤儿)", () => {
   it("py 仓 debug 查询:符号可定位、不再是『未找到符号』", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-"));
     try {

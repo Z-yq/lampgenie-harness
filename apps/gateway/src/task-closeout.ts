@@ -1,16 +1,13 @@
 /**
- * 公共任务收尾聚合(M5/M16/M23/M107/M169/M170 唯一实现,2026-11-07)。
- *
+ * 公共任务收尾聚合(///// 唯一实现。
  * 背景:主 agent 收尾段已实现六条机制,但子代理(LlmLoopBackend)与 super agent 的收尾
  * 完全没接(机制接线审计 partial)。本模块把六条机制的「聚合 + 落事件 + 提示渲染」收成
  * 一处,三条链(main/subagent/super)复用同一实现,避免三份口径分叉。
- *
  * 模式差异:
  * - main:保留既有语义——hard 模式可经 `retryTurn` 补跑一轮,仍不满足则返回 hardFail
  *   (由调用方 setState failed);warn 模式把警告追加进 finalText。
  * - subagent / super:warn-only,绝不 hardFail、绝不补跑;终稿追加紧凑「## 收尾审计」段
  *   (仅非 na 项,≤1200 字;全 na 不追加)。
- *
  * 幂等:同一 journal + session + task + 事件 type 只落一次(模块级 WeakMap);主 agent 的
  * 收尾分两段调用(终态路径 + finally)也不会重复落事件。补跑后的二次记录用 keySuffix 区分。
  */
@@ -100,13 +97,13 @@ export interface TaskCloseoutInput {
   finalText: string;
   taskClass?: string;
   instruction?: string;
-  /** M16 基线;无基线(git 失败/未采集)时该段跳过。 */
+ /**  基线;无基线(git 失败/未采集)时该段跳过。 */
   baseline?: ChangeBaseline | null;
-  /** 主 agent 已采集的白板事实(M5 board 行)。 */
+ /** 主 agent 已采集的白板事实( board 行)。 */
   boardFacts?: CompletionFacts["board"];
-  /** 主 agent 已采集的全链路审计事实(M5 change 行)。 */
+ /** 主 agent 已采集的全链路审计事实( change 行)。 */
   changeFacts?: CompletionFacts["change"];
-  /** 主 agent 已采集的变更账本事实(M5 change-ledger 行;sub/super 由 M16 段自算)。 */
+ /** 主 agent 已采集的变更账本事实( change-ledger 行;sub/super 由  段自算)。 */
   ledgerFacts?: CompletionFacts["ledger"];
   mode: CloseoutMode;
   /** 仅 main 生效:hard 机制开关(modes 优先于 hardFlags)。 */
@@ -201,7 +198,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
   };
   const events = () => journal.readSession(sessionId, taskStartSeq);
 
-  // ── M16 轮末变更账本 ────────────────────────────────────────────────
+ // ──  轮末变更账本 ────────────────────────────────────────────────
   if (has("m16") && input.baseline) {
     try {
       const led = await computeChangeLedger({
@@ -224,7 +221,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
     }
   }
 
-  // ── M23 指导可度量 ──────────────────────────────────────────────────
+ // ──  指导可度量 ──────────────────────────────────────────────────
   if (has("m23")) {
     try {
       const gm = computeGuidanceMetrics(events() as unknown as GuidanceMetricsEvent[]);
@@ -240,7 +237,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
     }
   }
 
-  // ── M107 任务级验证账本 ─────────────────────────────────────────────
+ // ── 任务级验证账本 ─────────────────────────────────────────────
   if (has("m107") && verifyMode !== "off") {
     try {
       let ledger = computeVerifyLedger(events() as unknown as VerifyLedgerEvent[], root);
@@ -294,7 +291,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
     }
   }
 
-  // ── M169 研究引用账本 ───────────────────────────────────────────────
+ // ── 研究引用账本 ───────────────────────────────────────────────
   if (has("m169") && citationMode !== "off") {
     try {
       const records = readCitations(journal as unknown as CitationJournal, sessionId, taskId);
@@ -355,7 +352,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
     }
   }
 
-  // ── M170 交付物核对 ─────────────────────────────────────────────────
+ // ── 交付物核对 ─────────────────────────────────────────────────
   if (has("m170")) {
     try {
       const declared = readDeliverables(journal as unknown as DeliverableJournal, sessionId, taskId);
@@ -371,7 +368,7 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
     }
   }
 
-  // ── M5 完成审计 ─────────────────────────────────────────────────────
+ // ──  完成审计 ─────────────────────────────────────────────────────
   if (has("m5") && completionMode !== "off") {
     try {
       const collect = (): CompletionFacts => {

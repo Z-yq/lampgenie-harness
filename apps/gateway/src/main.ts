@@ -27,12 +27,12 @@ import { loadEnvFile } from "./env-file.js";
 import { resolveTeamMode, seedRegistryProjects } from "./team-embedded.js";
 
 const root = repoRoot();
-// .env 加载(2026-10-27):repoRoot/.env 此前对 gateway 是死文件(RELAY_URL 写了从未生效,
-// 团队页恒空实锤)。只填进程 env 未占用的键——外部显式 env 优先,行为面不回退。
+// .env 加载:repoRoot/.env 此前对 gateway 是死文件(RELAY_URL 写了从未生效,
+// 团队页恒空注意)。只填进程 env 未占用的键——外部显式 env 优先,行为面不回退。
 loadEnvFile(join(root, ".env"));
-// fixE1(2026-10-19 产线 P1 启动卡死):启动阶段耗时打点——下次「端口在听但不响应」一眼可见卡在哪段。
+// fixE1(生产环境 P1 启动卡死):启动阶段耗时打点——下次「端口在听但不响应」一眼可见卡在哪段。
 const bootT0 = Date.now();
-// 2026-10-25 稳定性批:pid 文件写点收归网关自己(此前只有外部重启脚本写,重启不经过脚本就永远旧 pid);
+// 稳定性批:pid 文件写点收归网关自己(此前只有外部重启脚本写,重启不经过脚本就永远旧 pid);
 // 退出日志记录来源(signal/exit)、pid/ppid/uptime/活跃任务——外部 SIGINT 反复杀网关时一眼定位。
 const gatewayPidFile = gatewayPidPath(root);
 const startedBy = process.env.GENIE_STARTED_BY || undefined;
@@ -62,9 +62,9 @@ function logLifecycleExit(reason: "signal" | "exit", extra: { signal?: string; c
     ...(startedBy ? { startedBy } : {}),
   }));
 }
-// B1 进程级兜底(2026-10-13):ws 消息分发已逐连接兜底,这里是最后防线——本地面板服务可用性优先,
+// B1 进程级兜底:ws 消息分发已逐连接兜底,这里是最后防线——本地面板服务可用性优先,
 // 响亮记录(stderr→日志文件)后保活,不静默、不吞业务错误(业务层错误仍在各自连接内回 error 帧)。
-// 2026-10-25:异常日志也带进程指纹(pid/ppid/uptime/活跃任务),与退出日志同一组字段,排障可直接对表。
+// 异常日志也带进程指纹(pid/ppid/uptime/活跃任务),与退出日志同一组字段,排障可直接对表。
 function anomalyTag(): string {
   const s = activeTaskStats();
   return `pid=${process.pid} ppid=${process.ppid} uptimeMs=${Date.now() - bootT0} activeTasks=${s.active < 0 ? "?" : s.active}`;
@@ -78,7 +78,7 @@ process.on("unhandledRejection", (reason) => {
 const loaded = loadConfig({ repoRoot: root });
 const bootConfigMs = Date.now() - bootT0; // fixE1:config 装配耗时(多层合并+预设解析)
 const config = loaded.config;
-// 2026-10-20 根因可见化:进程 env 里的 GENIE_LLM_* 会在 loadConfig 的 env 层压顶(且旧凭证回退会把
+// 根因可见化:进程 env 里的 GENIE_LLM_* 会在 loadConfig 的 env 层压顶(且旧凭证回退会把
 // GENIE_LLM_API_KEY 当成任何 Provider 的钥匙)。模型切换失效时这是第一嫌疑,启动即响亮点名。
 const legacyEnv = legacyEnvContamination(process.env);
 if (legacyEnv.length) {
@@ -96,7 +96,7 @@ function handleCfgSet(patch: Record<string, unknown>): {
   applied: string[];
   needsRestart: string[];
   envOccupied: string[];
-  /** 跨端点热切补丁(2026-10-19 用户实报「切阿里云还是 GLM」):provider.update 本身支持
+ /** 跨端点热切补丁(用户用户反馈「切阿里云还是 GLM」):provider.update 本身支持
    *  baseUrl/apiKey/apiType,但面板只发 providerId/apiKeyEnv(引用名)——这里在 config 已合并后
    *  把新端点/凭证/协议解析成 update 可吃的具体值,让跨 Provider 切换也立即生效。 */
   hotLlm?: Record<string, unknown>;
@@ -113,7 +113,7 @@ function handleCfgSet(patch: Record<string, unknown>): {
   const roleWarnings: string[] = [];
   const roleErrors: string[] = [];
 
-  // 2026-10-20:选择即 Provider Registry——先把 coding.llm 的陈旧路由校正到「拥有该模型的 Provider」,
+ // 选择即 Provider Registry——先把 coding.llm 的陈旧路由校正到「拥有该模型的 Provider」,
   // 再解析热切参数。模型名单独变更(面板只发 model)也不会再落到旧端点/旧凭证上。
   let switchRes: ReturnType<typeof resolveModelSwitch> | undefined;
   const codingTouched = touched.some((p) => p.startsWith("coding.llm."));
@@ -122,7 +122,7 @@ function handleCfgSet(patch: Record<string, unknown>): {
     // 角色补丁也要先把主轨 route 校正到 Registry 真值——否则「role 继承主轨」会继承一份陈旧路由。
     const reconciled = reconcileCodingRoute(next).changed;
     if (codingTouched) {
-      // 2026-10-21 轨级 maxTokens 残留钳制:模型切换(pill 只发 model)不清轨级 maxTokens,
+ // 轨级 maxTokens 残留钳制:模型切换(pill 只发 model)不清轨级 maxTokens,
       // 旧模型的大值(如 deepseek 384000)会打进新端点触发 400 [1210] max_tokens 参数非法。
       // 切换未显式带 maxTokens 且轨级值超过新模型 meta 上限时,顺手把配置修回上限——显式
       // 带了则尊重用户输入(运行时由 resolveRequestMaxTokens 规则④兜底钳制)。
@@ -151,8 +151,8 @@ function handleCfgSet(patch: Record<string, unknown>): {
       }
     }
   }
-  // 角色模型同源收口:role 只配 model 时也按模型拥有者解析端点/协议/凭证,不再继承旧主轨端点。
-  // voice(语音任务书,2026-11-08)同进本循环:reconcile 归属路由;其 roleHot 无 provider 实例可 update,
+ // 角色模型同源:role 只配 model 时也按模型拥有者解析端点/协议/凭证,不再继承旧主轨端点。
+ // voice(语音任务书同进本循环:reconcile 归属路由;其 roleHot 无 provider 实例可 update,
   // app.ts 不消费——服务端每次 voice.draft 现读 live config,这里只负责把归属写对+报 routeError。
   for (const role of ["compact", "review", "subagent", "digest", "voice"] as const) {
     if (!touched.some((p) => p.startsWith(`coding.models.${role}.`))) continue;
@@ -171,9 +171,9 @@ function handleCfgSet(patch: Record<string, unknown>): {
     if (rr?.warning) roleWarnings.push(rr.warning);
     if (rr?.routeError) roleErrors.push(rr.routeError);
   }
-  // env 占用甄别(2026-10-19 模型切换失效实锤):这些键被进程 env 层压住,重启也不生效——
+ // env 占用甄别(模型切换失效注意):这些键被进程 env 层压住,重启也不生效——
   // 面板徽标必须说实话,否则「已写入 · 重启生效」是永远兑现不了的假话。
-  // 2026-10-20:冷项(providerId/baseUrl/apiKeyEnv)也要查——此前只看 applied,env 压住路由时完全不可见。
+ // 冷项(providerId/baseUrl/apiKeyEnv)也要查——此前只看 applied,env 压住路由时完全不可见。
   const envOccupied = envOccupiedOf([...applied, ...needsRestart], loaded.sources);
   // 凭证真的走了旧直传兜底(+ 环境里还有 GENIE_LLM_API_KEY)才算被劫持;专属密钥已解析到就不误报。
   const cred = switchRes?.effective?.credentialSource;
@@ -184,7 +184,7 @@ function handleCfgSet(patch: Record<string, unknown>): {
   try {
     writeProjectConfig(loaded.projectPath, next);
   } catch (err) {
-    // 2026-10-19 用户实报(权限模式选了不生效):写盘失败静默吞=「热应用成功但重启回弹」的元凶
+ // 用户用户反馈(权限模式选了不生效):写盘失败静默吞=「热应用成功但重启回弹」的元凶
     // ——降级可用,但必须可见(audit 明细),不许无痕。
     auditLog.append(
       { actor: { kind: "user", device: "panel" }, action: "config.change", target: { type: "config-key", id: applied.join(",") || "(no-op)" }, result: "error", source_ip_scope: "lan" },
@@ -192,7 +192,7 @@ function handleCfgSet(patch: Record<string, unknown>): {
     );
   }
   Object.assign(config, next);
-  // 审计:config.change(designs/10 §6;明细只入 hash)。
+ // 审计:config.change( §6;明细只入 hash)。
   auditLog.append(
     { actor: { kind: "user", device: "panel" }, action: "config.change", target: { type: "config-key", id: applied.join(",") || "(no-op)" }, result: applied.length ? "ok" : "error", source_ip_scope: "lan" },
     {
@@ -215,8 +215,8 @@ function handleCfgSet(patch: Record<string, unknown>): {
 }
 
 const executor = buildExecutorFromConfig(config);
-// 权限模式启动装载(step-046):ask 缺省;面板下拉 cfg.set permissions.mode 热改。
-// M180:预设解析 fail-closed——permissions.preset/defaultPreset 引用非法的预设名时**拒绝启动**并点名,
+// 权限模式启动装载:ask 缺省;面板下拉 cfg.set permissions.mode 热改。
+// 预设解析 fail-closed——permissions.preset/defaultPreset 引用非法的预设名时**拒绝启动**并点名,
 // 绝不静默降级成 ask(权限放宽/收窄必须是用户的显式动作);启动口径 defaultPreset ?? preset ?? workspace-write。
 // mode 与 preset 的 mode 冲突由 resolveStartupPreset 给 warnings(preset 优先),这里逐条打印,不许静默。
 const startupPreset = (() => {
@@ -225,17 +225,17 @@ const startupPreset = (() => {
   } catch (err) {
     console.error(`[gateway] ✗ 权限预设非法,拒绝启动:${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
-    throw err; // 不可达(process.exit 已终止);仅为类型收口
+    throw err; // 不可达(process.exit 已终止);仅为类型
   }
 })();
 setPermissionMode(startupPreset.mode);
 setCurrentPresetName(startupPreset.preset);
 for (const w of startupPreset.warnings) console.warn(`[gateway] ⚠ ${w}`);
 const modelProviders = buildModelProviders(config, root, loaded.sources); // coding 轨(vibe coding/工具/压缩)
-// 主 agent 大脑 = audio 轨 chat(designs/01「主管理进程」/07 链路);未配置显式回退 coding 轨并打标
+// 主 agent 大脑 = audio 轨 chat(「主管理进程」/07 链路);未配置显式回退 coding 轨并打标
 // (audio.chat 未配置时回退 coding=显式降级,journal/sysMeta 可观测;配置即走语音轨,不是凭证混轨——key 仍各轨各解析)
 const audioChat = buildAudioChatFromConfig(config, root, loaded.sources);
-// 轨道分工(step-1033 super agent 指挥台):对话大脑 = coding 主模型(modelProviders.main);
+// 轨道分工( super agent 指挥台):对话大脑 = coding 主模型(modelProviders.main);
 // audio.chat 只保留两个用途:①coding 未配置时的 llm 回退 ②ASR(voice.transcribe 语音转写,
 // app.ts 用同一 provider 一次 chat 调用)。不再有「语音直入大脑」/语音回播链路。
 const llm = modelProviders.main ?? audioChat;
@@ -243,7 +243,7 @@ const llmTrack = modelProviders.main ? "coding" : (audioChat ? "audio.chat(codin
 
 // 端点模型列表(设置页模型选择器;qwen/ZCode 模型下拉同语义):GET {baseUrl}/v1/models
 // providerId 指定时按该 provider 的端点/凭证拉(测试连接=验证 URL+key 是否可用)
-/** step-125:baseUrl 末尾已带版本段(/v1)时不再重复拼;兼容预设(含 /v1)与旧配置(不含 /v1)两种形态。 */
+/** baseUrl 末尾已带版本段(/v1)时不再重复拼;兼容预设(含 /v1)与旧配置(不含 /v1)两种形态。 */
 function endpointPath(baseUrl: string, suffix: string): string {
   const b = baseUrl.replace(/\/+$/, "");
   return /\/v\d+$/.test(b) ? `${b}${suffix}` : `${b}/v1${suffix}`;
@@ -263,10 +263,10 @@ function briefBody(text: string, max = 120): string {
 }
 async function listModels(providerId?: string): Promise<string[]> {
   const provider = providerId ? config.providers.find((p) => p.id === providerId) : undefined;
-  // step-1002E:失败面拆成可操作错误码(models-no-provider / not-configured / no-credential /
+ // 失败面拆成可操作错误码(models-no-provider / not-configured / no-credential /
   // upstream-failed),server.ts 用 modelsErrorOf 原样映射;成功路径回包不变。
   if (providerId && !provider) throw modelsUnknownProvider(providerId);
-  // 2026-10-20:设置页是「Coding 模型管理」——无 providerId 时必须按 coding 轨拉取,
+ // 设置页是「Coding 模型管理」——无 providerId 时必须按 coding 轨拉取,
   // 不能因为 audio.chat(语音输入/回退轨)已配置就去拉语音端点(旧实现会把 qwen 模型混进 coding 目录)。
   const codingRoute = resolveCodingModelRoute(config, config.coding.llm);
   const baseUrl = provider ? provider.baseUrl : codingRoute.baseUrl;
@@ -275,7 +275,7 @@ async function listModels(providerId?: string): Promise<string[]> {
   const apiKeyEnv = provider ? (provider.apiKeyEnv || "GENIE_LLM_API_KEY") : codingRoute.apiKeyEnv;
   const key = resolveTrackApiKey("coding", apiKeyEnv, { repoRoot: root });
   if (!key) throw modelsCredentialMissing(apiKeyEnv);
-  // anthropic 兼容端点两种凭证头都认(智谱实测 Bearer 可用,x-api-key 亦兼容),同时带上最稳。
+ // anthropic 兼容端点两种凭证头都认(智谱经验证 Bearer 可用,x-api-key 亦兼容),同时带上最稳。
   const headers: Record<string, string> = { authorization: `Bearer ${key}` };
   if (apiType === "anthropic") headers["x-api-key"] = key;
   const url = endpointPath(baseUrl, "/models");
@@ -308,7 +308,7 @@ async function listModels(providerId?: string): Promise<string[]> {
   return (data.data ?? []).map((m) => m.id ?? "").filter(Boolean).sort();
 }
 
-/** 单模型探活(step-052 F4):设置页模型列表逐项「测」——解析端点/凭证后发一次最小 chat(max_tokens=1)。
+/** 单模型探活( F4):设置页模型列表逐项「测」——解析端点/凭证后发一次最小 chat(max_tokens=1)。
  * 判定口径:HTTP 2xx 且 choices 存在=可用;401/404/余额类错误=不可用(错误短文案带回面板)。 */
 async function probeModel(model: string, providerId?: string): Promise<{ ok: boolean; ms: number; error?: string }> {
   const t0 = Date.now();
@@ -324,7 +324,7 @@ async function probeModel(model: string, providerId?: string): Promise<{ ok: boo
     if (!baseUrl) throw new Error("端点未配置");
     const key = resolveTrackApiKey("coding", route.apiKeyEnv, { repoRoot: root });
     if (!key) throw new Error("凭证不可解析");
-    // step-127 协议分派:anthropic/responses 端点不能用 chat/completions 探活(会假阴性 404)。
+ // 协议分派:anthropic/responses 端点不能用 chat/completions 探活(会假阴性 404)。
     let url: string, headers: Record<string, string>, body: unknown;
     if (apiType === "anthropic") {
       url = endpointPath(baseUrl, "/messages");
@@ -361,12 +361,12 @@ async function probeModel(model: string, providerId?: string): Promise<{ ok: boo
 
 const port = config.gateway.port;
 const journalDir = config.journal.dir ?? undefined;
-// step-048:journal 是持久数据,相对路径必须锚定仓根——否则不同 cwd 启动的实例各写各的文件,
-// 历史数据「消失」(实测:apps/gateway cwd 启动 → apps/gateway/.genie/journals 小文件,token 追踪全空)。
+// journal 是持久数据,相对路径必须锚定仓根——否则不同 cwd 启动的实例各写各的文件,
+// 历史数据「消失」(经验证:apps/gateway cwd 启动 → apps/gateway/.genie/journals 小文件,token 追踪全空)。
 const journalDirAbs = journalDir && !isAbsolute(journalDir) ? join(root, journalDir) : journalDir;
 const panelEnabled = config.gateway.panel;
 
-// fixE1(2026-10-19 产线 P1「重启后端口在听但 HTTP 长时间 000」):先发起 listen 再做启动重活。
+// fixE1(生产环境 P1「重启后端口在听但 HTTP 长时间 000」):先发起 listen 再做启动重活。
 // 原顺序 createGatewayApp(内含 journal 全量同步加载/任务回放/收编等)整体先于 servePanel——
 // journal 慢(慢盘/杀软扫描/规模增长)时端口迟迟不 bind,curl 只见 000;且期间事件循环被
 // 同步加载占死,bind 后也无法应答。现把端口绑定提前到 app 构建之前:端口先就绪,重活期间
@@ -378,7 +378,7 @@ if (panelEnabled) {
     bootServer = httpServer;
     if (appReady) appReady.attachWs(httpServer); // listening 回调晚于 app 就绪的理论路径
   }, {
-    // 会话完整导出(2026-10-19「日志下载就应该下载完全的内容」):journal 全事件+LLM 全量轨迹+子代理轨迹。
+ // 会话完整导出(「日志下载就应该下载完全的内容」):journal 全事件+LLM 全量轨迹+子代理轨迹。
     // app 在 servePanel 之后创建,journal 经闭包延迟取(请求时才求值)。
     sessionExport: (sid) => {
       if (!appReady) throw new Error("网关装配中,journal 未就绪");
@@ -392,7 +392,7 @@ if (panelEnabled) {
     ideProjectRoot: (pid) => {
       if (!appReady) return undefined;
       try {
-        // 2026-10-27:远程项目(SSH/WSL)的根 = identity(resolveWorkdir 对 remote: 回退 harness,
+ // 远程项目(SSH/WSL)的根 = identity(resolveWorkdir 对 remote: 回退 harness,
         // 会让图片预览 404);本地项目 path 本身就是 realpath。
         const projects = appReady.projects;
         const id = pid || projects.activeId();
@@ -403,7 +403,7 @@ if (panelEnabled) {
   });
   console.log(`[gateway] panel: http://127.0.0.1:${port}(端口先就绪,装配中)`);
 }
-// 单实例锁(2026-10-21):同一 journal 目录被两个进程同写 → seq 重复 → 重启去重丢事件 →
+// 单实例锁:同一 journal 目录被两个进程同写 → seq 重复 → 重启去重丢事件 →
 // 历史缺 assistant 消息只剩 tool 结果 → LLM 400。第二个实例直接拒绝启动(陈旧锁自动回收)。
 const lockPath = journalDirAbs ? join(journalDirAbs, "gateway.lock") : undefined;
 if (lockPath) {
@@ -424,7 +424,7 @@ if (lockPath) {
   }
   process.on("exit", () => releaseInstanceLock(lockPath));
 }
-// fault 冷启动修复(2026-10-25):journal 全量同步重放(实测 28k+ 行/59s boot)移到 createGatewayApp 之前,
+// fault 冷启动修复:journal 全量同步重放(经验证 28k+ 行/59s boot)移到 createGatewayApp 之前,
 // 用 loadChunked 分片读/解析/入账并让出事件循环;任务/会话数据在 app 装配前已就绪,恢复语义不变。
 let bootJournal: FileJournal | undefined;
 let bootJournalMs = 0;
@@ -434,8 +434,8 @@ if (journalDirAbs) {
     writeBehind: true,
     sharded: true,
     deferLoad: true,
-    // M123(2026-11-08)存储维护:归档会话放在 journalDir 之外,冷启动只扫 sessions/,
-    // 归档文件只在 readSession 冷读兜底时按需解析(实测 178 文件/813MB → boot 逐文件 load 近 6min)。
+ // 存储维护:归档会话放在 journalDir 之外,冷启动只扫 sessions/,
+ // 归档文件只在 readSession 冷读兜底时按需解析(经验证 178 文件/813MB → boot 逐文件 load 近 6min)。
     archiveDir: journalArchiveDirOf(journalDirAbs),
   });
   await bootJournal.loadChunked();
@@ -457,15 +457,15 @@ const app: GatewayApp = createGatewayApp({
   configSources: loaded.sources,
   configProjectPath: loaded.projectPath,
   onConfigSet: handleCfgSet,
-  // step-125:预设一键接入——Key 只写 .genie/secrets.json(0600),不进配置/日志/回包。
+ // 预设一键接入——Key 只写 .genie/secrets.json(0600),不进配置/日志/回包。
   onSecretSet: (name: string, value: string) => setSecretValue(root, name, value),
   listSecrets: () => listSecretKeys(root),
-  // step-1033:super agent 对话模型 = coding 主任务模型(companionLlm/companionTrack 已删除,
+ // super agent 对话模型 = coding 主任务模型(companionLlm/companionTrack 已删除,
   // config.companion.track 被忽略并打日志);audio.chat 只服务 ASR(voice.transcribe)与 coding 未配置回退。
   // per-session 覆盖(session-models.json)按既有机制自然跟随主轨。
   llmTrack,
-  // step-048:主模型上下文窗口(轨对齐:audio.chat 优先,回退 coding.llm)
-  // step-048 ZCode 模型管理语义:上下文窗口优先取选中模型的条目元数据,轨级字段回退
+ // 主模型上下文窗口(轨对齐:audio.chat 优先,回退 coding.llm)
+ // ZCode 模型管理语义:上下文窗口优先取选中模型的条目元数据,轨级字段回退
   contextWindow: modelMetaOf(config, config.audio.chat.model || config.coding.llm.model)?.contextWindow
     ?? (config.audio.chat as { contextWindow?: number }).contextWindow
     ?? (config.coding as { llm?: { contextWindow?: number } }).llm?.contextWindow,
@@ -478,7 +478,7 @@ const app: GatewayApp = createGatewayApp({
       }
     : undefined,
   listModels,
-  // step-052:aux 轨=coding 主provider(archLlm/压缩/记忆 llmCall 不再占 realtime 会话);探活注入。
+ // aux 轨=coding 主provider(archLlm/压缩/记忆 llmCall 不再占 realtime 会话);探活注入。
   ...(modelProviders.main ? { auxLlm: modelProviders.main } : {}),
   probeModel,
   // per-session 主模型覆盖(白板「per-session 主模型」):load-once store 注入。
@@ -486,8 +486,8 @@ const app: GatewayApp = createGatewayApp({
 });
 appReady = app;
 lifecycleApp = app;
-// M123(2026-11-08)归档冷读开关:装配完成(journal 已加载/任务恢复/漂移修复等内部回读已结束)→ listen 之前
-// 显式开启。此后只有显式用户读会话才回读 sessions-archive,boot 期归档零额外 IO(实测归档 422MB 时
+// 归档冷读开关:装配完成(journal 已加载/任务恢复/漂移修复等内部回读已结束)→ listen 之前
+// 显式开启。此后只有显式用户读会话才回读 sessions-archive,boot 期归档零额外 IO(经验证归档 422MB 时
 // 内部 readSession 逐个 sid 回读把 29 个归档文件全 parse,进程 6 分钟仍在装配)。
 (app.journal as { enableArchiveReads?: () => void }).enableArchiveReads?.();
 const bootAppMs = Date.now() - bootApp0;
@@ -497,7 +497,7 @@ if (panelEnabled) {
 } else {
   app.listenStandalone();
 }
-// pid 文件(2026-10-25):listen 之后、装配完成时写——外部守护/安全重启器/排障读到的永远是
+// pid 文件:listen 之后、装配完成时写——外部守护/安全重启器/排障读到的永远是
 // 「当前真正在服务的进程」。写失败只告警不阻断(只读数据根仍可服务)。
 if (writeGatewayPid(gatewayPidFile)) {
   console.log(`[gateway] pid 文件已写入: ${gatewayPidFile}(pid=${process.pid}${startedBy ? `,startedBy=${startedBy}` : ""})`);
@@ -505,10 +505,10 @@ if (writeGatewayPid(gatewayPidFile)) {
   console.warn(`[gateway] pid 文件写入失败(只读数据根?): ${gatewayPidFile}`);
 }
 
-// watchdog 生命周期闭环(2026-10-29 冻结治理):①启动即清 stop 标记——网关已在跑,不存在
+// watchdog 生命周期闭环(冻结治理):①启动即清 stop 标记——网关已在跑,不存在
 // 还需要压住 watchdog 的受控重启(残留标记只会让守护失明);②watchdog 缺席时自动武装
 // (detached setsid 子进程,脚本自身 flock 单实例,重复武装零成本;GENIE_WATCHDOG_AUTOARM=0 关)。
-// 修的洞:重启流程死在半路(2026-10-29 实锤:「重建后重启 gateway」的任务 SIGINT 停掉网关时
+// 修的洞:重启流程死在半路(注意:「重建后重启 gateway」的任务 SIGINT 停掉网关时
 // 把自己的宿主 worker 也带走,重建孤儿完成后再无人拉起;watchdog 自 10-28 起就没在跑)→
 // 不变量变成「网关活着 ⇒ watchdog 在岗」,网关下次被杀必有人救。
 {
@@ -541,7 +541,7 @@ const modelService = new Model150mSupervisor({
 (globalThis as { __model150m?: unknown }).__model150m = modelService;
 void modelService.start();
 
-// 团队面三态(2026-10-27 团队页空态修复):外部 relay(env 指向非本机)/内嵌自举(缺省:
+// 团队面三态(团队页空态修复):外部 relay(env 指向非本机)/内嵌自举(缺省:
 // 本机 .genie/team 起单 org relay+bare 团队仓+owner 种子,gateway 自连)/off(GENIE_TEAM_RELAY=off)。
 // 红线不变:relay 不可达=静默降级——本地任务/Git 全不受影响。
 const teamMode = resolveTeamMode(process.env);
@@ -558,7 +558,7 @@ if (teamMode.kind !== "off") {
       (globalThis as { __teamRelayEmbedded?: unknown }).__teamRelayEmbedded = handle;
       teamUrls = [`ws://127.0.0.1:${handle.port}`];
       console.log(`[gateway] team relay: 内嵌自举 :${handle.port}(owner=${handle.boot.member},团队仓=${handle.teamRepoUrl})`);
-      // 全项目绑定种子(2026-10-27「团队页只有 lampgenie-harness」):注册表每个有 origin 的本地项目都进 roster。
+ // 全项目绑定种子(「团队页只有 lampgenie-harness」):注册表每个有 origin 的本地项目都进 roster。
       void seedRegistryProjects(handle, app.projects.list())
         .then((wrote) => { if (wrote.length > 0) console.log(`[gateway] team relay: 项目绑定种子 ${wrote.length} 项(${wrote.slice(0, 6).join(", ")})`); })
         .catch((err) => console.log(`[gateway] team relay: 项目绑定种子失败(团队页其余面不受影响):${String(err).slice(0, 140)}`));
@@ -594,7 +594,7 @@ const shutdown = async (signal: string) => {
     return;
   }
   shuttingDown = true;
-  // 来源可见化(2026-10-25):外部 SIGINT/SIGTERM 反复杀网关时,日志要能直接回答
+ // 来源可见化:外部 SIGINT/SIGTERM 反复杀网关时,日志要能直接回答
   // 「谁在什么时候杀的」——信号名+pid/ppid+运行时长+活跃任务(有在跑任务时杀=会丢任务)。
   logExitOnce("signal", { signal });
   console.log("\n[gateway] shutting down...");

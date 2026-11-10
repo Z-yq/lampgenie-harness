@@ -1,5 +1,5 @@
 /**
- * step-032 单元面:presence 状态机(DoD D6)+yaml-lite+邀请码+签名挑战。
+ * 单元面:presence 状态机(DoD D6)+yaml-lite+邀请码+签名挑战。
  */
 import { describe, expect, it } from "vitest";
 import { derivePresence, PRESENCE_AWAY_MS } from "../src/team/presence.js";
@@ -16,7 +16,7 @@ const facts = (over: Partial<Parameters<typeof derivePresence>[0]>) => ({
   lastInputAt: NOW, runningSessions: 0, pendingAsks: 0, dnd: false, ...over,
 });
 
-describe("presence 状态机(designs/04 §2,DoD D6)", () => {
+describe("presence 状态机( §2,DoD D6)", () => {
   it("基态=online(连接活着+近期有输入)", () => {
     expect(derivePresence(facts({}), NOW)).toBe("online");
   });
@@ -88,7 +88,7 @@ describe("邀请码存储", () => {
   });
 });
 
-describe("relay 签名挑战(designs/05 §5.5)", () => {
+describe("relay 签名挑战( §5.5)", () => {
   it("私钥签名+公钥验签;错钥拒绝", () => {
     const a = newDeviceKey();
     const sig = signChallenge(a.privateKeyPem, "nonce-1");

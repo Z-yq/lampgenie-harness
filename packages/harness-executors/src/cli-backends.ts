@@ -1,18 +1,15 @@
 /**
- * 二期 CLI 后端(designs/09 §2.2 zcode-headless / opencode-run):
+ * 二期 CLI 后端( §2.2 zcode-headless / opencode-run):
  * 把外部编码 CLI(`zcode` / `opencode`)作为非交互一次性子进程驱动,实现 SubagentBackend 契约。
- *
  * 形态:不是 NDJSON-RPC 会话(NdjsonChildBackend 那种),而是一次性进程——
  * spawn → 收集 stdout/stderr → 退出码裁决 → result(stdout trim 后即 finalText)。
- *
  * 调用策略(诚实登记:两 CLI 的非交互 flag 均按各自文档 best-effort,可能随装机版本调整,
  * 真机标定待办;buildCommand 注入点可完全接管,测试即用它顶替真 CLI):
  * - opencode:`opencode run <instruction>`(官方文档化 headless 模式;--format json 等经 opts.args 携带)。
  * - zcode:无公开文档化的一次性 flag——缺省把指令经 stdin 喂入(等价交互管道单轮),flags 走 opts.args。
- *
  * 错误映射(fail-visible,不静默降级):spawn ENOENT 等 → spawn-failed;
  * 非零退出 → backend-crash(stderr 尾巴进 detail);超时 → kill + timeout;cancel → kill + cancelled。
- * steering 一次性 CLI 不支持恒回 false(designs/09 §2.2:二期待核实);permission 三档/permissionRules
+ * steering 一次性 CLI 不支持恒回 false( §2.2:二期待核实);permission 三档/permissionRules
  * 的 CLI flag 采纳待真机标定(现只透传 env,不伪装已生效)。
  */
 import { spawn, type ChildProcess } from "node:child_process";

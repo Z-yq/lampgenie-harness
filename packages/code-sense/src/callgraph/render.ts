@@ -1,6 +1,6 @@
 /**
- * 调用链→mermaid 关系图(designs/16 §6.1 code2flow 形态,面向人)。
- * 分工(designs/16 §9):图给人看,结构化数据给 LLM——本模块只产图,不承担信息完整性
+ * 调用链→mermaid 关系图( §6.1 code2flow 形态,面向人)。
+ * 分工( §9):图给人看,结构化数据给 LLM——本模块只产图,不承担信息完整性
  * (完整性在 callchain.edges 与 evidence,裁剪只影响图不影响数据)。
  * 节点 id 用 nd0..(与面板下钻 map 对齐);上限 34 节点/48 边(§10 mermaid 可读上限,
  * 超限按离圆心近者优先——edges 本身是 BFS 序,nearest-first)。
@@ -53,7 +53,7 @@ export function callchainMermaid(cc: {
   let truncated = false;
   let edgeCount = 0;
 
-  // File 分组收集(code2flow 形态对齐:质量审计 2026-10-13)——节点行登记在组里,组装时统一展开
+ // File 分组收集(code2flow 形态对齐:质量审计)——节点行登记在组里,组装时统一展开
   const fileGroups = new Map<string, string[]>(); // 目录 → 节点行
   const looseNodes: string[] = [];                // 无 file 的节点行(未解析目标等)
   const registeredNodeLines = new Set<string>();  // 已入组的行(防 lines 混入)

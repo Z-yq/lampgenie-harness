@@ -1,11 +1,9 @@
 /**
- * 路径围栏判定(2026-10-27,Windows 桌面端口径统一)。
- *
+ * 路径围栏判定(Windows 桌面端口径统一)。
  * 背景:面板/IDE 的沙箱检查原先写成 `abs.startsWith(absRoot + "/")` —— POSIX 下成立,
  * Windows 下 realpath 返回反斜杠(`E:\proj\a.ts`),前缀恒不匹配 → 文件读/图片取数/嵌套写
- * 全部被误判「路径越界」(0.0.4 安装包实测:file.read 全 missing、/ide/asset 全 403、
+ * 全部被误判「路径越界」(0.0.4 安装包经验证:file.read 全 missing、/ide/asset 全 403、
  * file.write 仅项目根一层可写)。
- *
  * 改为 path.relative 判定:按平台分隔符/盘符/UNC 语义比较,Windows 大小写不敏感由
  * node:path 的 win32 实现负责;**不解析符号链接**(调用方先 realpath,本函数只做归属判断)。
  */

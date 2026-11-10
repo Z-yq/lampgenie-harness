@@ -1,5 +1,5 @@
 /**
- * auto-compact(designs/14 §4.2 三段式)+ 压缩即 DevLog 落盘。
+ * auto-compact( §4.2 三段式)+ 压缩即 DevLog 落盘。
  * tail 保留 + 摘要 agent + compact boundary 落 journal + DevLog 双格式。
  */
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -77,7 +77,6 @@ export interface CompactOptions {
 }
 
 /** 消息 tokens 快估(autoCompact 的二次闸:microcompact 剪完是否还要摘要)。
- *
  *  历史:原口径 `len/4`(opencode Token.estimate)对中文会话系统性低估约 2 倍(近 5 天 6,975 个
  *  采样点比对上游 usage.inputTokens:usage/est 中位 1.99);后来改用 microcompact 的 CJK 系数。
  *  2026-11 token 轮:token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio),
@@ -112,12 +111,12 @@ function toTailMessage(m: Message): CompactTailMessage | null {
 
 /**
  * surface 事件 = 真正的会话真相(deriveMessages 读的那批)。
- * M49 提交前重验:摘要期间这类事件任一新增,说明 head 已被抛在后面,不能用旧 head 提交边界。
+ *  提交前重验:摘要期间这类事件任一新增,说明 head 已被抛在后面,不能用旧 head 提交边界。
  * compact.* / turn.* / step.* / task.* 等过程事件不算(它们不改变会话内容)。
  */
 const SURFACE_EVENT_KINDS = new Set<string>(["message.user", "message.agent", "message.system", "tool.call", "tool.result"]);
 
-/** 会话级压缩锁(M49 压缩事务):同一会话同一时刻只允许一次摘要事务。
+/** 会话级压缩锁(压缩事务):同一会话同一时刻只允许一次摘要事务。
  *  进程内 Map——进程崩溃锁随进程消失,留下的悬空 compact.start 由入口 abandoned 检测收尾。 */
 interface CompactLock {
   startedAt: number;
@@ -133,7 +132,7 @@ export function compactionInFlight(sessionId: string): { startedAt: number; gene
 }
 
 /**
- * 入口 abandoned 检测(M49):本会话最后一条 compact.start 之后既无 compact.done 也无
+ * 入口 abandoned 检测:本会话最后一条 compact.start 之后既无 compact.done 也无
  * compact.failed = 那次事务没走完(进程崩溃/被杀/异常逃逸)。
  * - 幂等键绑定 startSeq:同一条悬空 start 只落一条,重复调用不重复落;
  * - 本次压缩的 start 在本检测之后才写,不会把自己判成 abandoned;
@@ -164,9 +163,8 @@ function detectAbandonedCompaction(journal: Journal, sessionId: string, trigger:
 export async function autoCompact(
   journal: Journal,
   sessionId: string,
-  opts: CompactOptions,
-): Promise<{ compacted: boolean; devlogPath?: string; summary?: string; reason?: string }> {
-  // M49 abandoned 检测放在最入口:即使本次因阈值/守卫被跳过,也能收尾上一次没走完的事务
+  opts: CompactOptions): Promise<{ compacted: boolean; devlogPath?: string; summary?: string; reason?: string }> {
+ //  abandoned 检测放在最入口:即使本次因阈值/守卫被跳过,也能收尾上一次没走完的事务
   // (进程崩溃/被杀/异常逃逸留下的悬空 compact.start)。本进程有锁在跑时不检测(在途不是悬空);
   // 本次 compact.start 在本检测之后才写,不会把自己判成 abandoned。
   detectAbandonedCompaction(journal, sessionId, opts.trigger ?? "auto");
@@ -184,14 +182,14 @@ export async function autoCompact(
       reason: prePruned.compacted > 0 ? "微压缩后低于阈值" : "低于阈值且未强制",
     };
   }
-  // 2026-11-04 强压守卫(压缩死亡螺旋根治):自动路径的 force(gate hardOver)在「对话史估算
+ // 强压守卫(压缩死亡螺旋根治):自动路径的 force(gate hardOver)在「对话史估算
   // 已低于阈值」时必须放弃——used 超阈但对话史很小,说明超出部分在不可压缩基线(system/注入块
   // /摘要台账)或共享 journal 的子代理用量里,压缩只能把已经缩小的对话史再压一遍(摘要套摘要、
-  // 原始用户消息丢失)。实锤:web-1793696471953 连环 60 次强压,每次仅 12 条消息、est 6~17K,
+ // 原始用户消息丢失)。注意:web-1793696471953 连环 60 次强压,每次仅 12 条消息、est 6~17K,
   // 原始提问全部丢失。手动 /compact(trigger=manual)不受此限。
-  // 2026-11-05 骑线修复:守卫目标是「对话史相对阈值极小(基线在阈上)」的螺旋形态(实锤 6~17K vs 300K=2~6%)。
+ // 骑线修复:守卫目标是「对话史相对阈值极小(基线在阈上)」的螺旋形态(注意 6~17K vs 300K=2~6%)。
   // 但闸门按真实 input 测(含系统/工具面 ~12K),消息估算常停在阈值线下的 90%+ —— 两把尺骑线打架:
-  // 闸门每步喊压、这里每步拒,面板连续渲染「无需压缩」分隔线(web-1793790405127 实锤 15 连)。
+ // 闸门每步喊压、这里每步拒,面板连续渲染「无需压缩」分隔线(web-1793790405127 注意 15 连)。
   // 阈值附近的对话史(≥ FORCE_EST_MIN_RATIO)是真实可压体量,照压(压一次即回落到小体积,空转自然停)。
   const FORCE_EST_MIN_RATIO = 0.5; // 死螺旋案例 est 仅为阈值的 2~6%,0.5 安全分界
   if (opts.force && trigger === "auto" && tokens < opts.thresholdTokens * FORCE_EST_MIN_RATIO) {
@@ -205,7 +203,7 @@ export async function autoCompact(
   const tail = messages.slice(-opts.keepRecentMessages);
   const head = messages.slice(0, Math.max(0, messages.length - opts.keepRecentMessages));
 
-  // 2026-10-22 修「主动 /compact 感觉没运行」:head 为空=只把 system 提示喂给模型 → 摘要空串 →
+ // 修「主动 /compact 感觉没运行」:head 为空=只把 system 提示喂给模型 → 摘要空串 →
   // 仍写 compact.done(summary="")被 loop.ts 的边界判定(summary 非空才截断)忽略 → 上下文一条没减,
   // 前端却报「已压缩(摘要 0 字)」。这里直接诚实返回,且**不写 compact.start/不落 devlog**(不留假压缩痕迹)。
   if (head.length === 0) {
@@ -215,7 +213,7 @@ export async function autoCompact(
     return { compacted: false, reason };
   }
 
-  // M49 压缩事务:会话级锁——在既有守卫(阈值/强压/空 head)之后、写 compact.start 之前获取。
+ //  压缩事务:会话级锁——在既有守卫(阈值/强压/空 head)之后、写 compact.start 之前获取。
   // 同一会话同一时刻只允许一次摘要事务:auto 钩子与手动 /compact 并发时,后来者直接跳过且**不调摘要模型**。
   const heldLock = compactionLocks.get(sessionId);
   if (heldLock) {
@@ -233,9 +231,9 @@ export async function autoCompact(
     // 台账扫「剪枝前的全量消息」:head/tail 剪掉的中段、tail 的 8000 字截断都可能藏
     // path:line/错误/测试锚点;从剪枝后内容抽会漏掉这些——台账必须覆盖原始事实源。
     const facts = buildFactsLedger(rawMessages);
-    /** head 的 token 估算(M49 缩小校验的被减数):与 loop/microcompact 同一把尺子。 */
+ /** head 的 token 估算(缩小校验的被减数):与 loop/microcompact 同一把尺子。 */
     const headTokens = estimateTokens(head);
-    /** 压缩模型名 t0 快照(2026-11-03):provider.modelName 是 getter(热切换后读出新值),
+ /** 压缩模型名 t0 快照:provider.modelName 是 getter(热切换后读出新值),
      *  必须在 compactLlm.chat() 之前固定,否则记的是「切换后的模型」而非本次压缩实际用的模型。 */
     const compactVendor = opts.compactLlm as { model?: string; modelName?: string };
     const compactModelName = compactVendor.modelName ?? compactVendor.model;
@@ -245,7 +243,7 @@ export async function autoCompact(
       sessionId,
       payload: {
         tokens: tokensBefore,
-        // 2026-11-04 观测性:每次压缩自证判定阈值——死亡螺旋复盘时不再需要反推
+ // 观测性:每次压缩自证判定阈值——死亡螺旋复盘时不再需要反推
         // (web-1793696471953 的 60 次连环强压当时无从知道阈值是多少)。
         threshold: opts.thresholdTokens,
         tokensAfterMicrocompact: tokens,
@@ -257,10 +255,10 @@ export async function autoCompact(
         ...(opts.instructions ? { instructions: opts.instructions.slice(0, 200) } : {}),
       },
     });
-    // M49 generation 水位 = compact.start 落账后**本会话事件计数**(2026-11-07 修复)。
+ //  generation 水位 = compact.start 落账后**本会话事件计数**(修复)。
     // 不能用 seq:session-worker 的 ProxyJournal 本地 append 的 seq=replica.length(≈3.6k),
     // 而种子/网关推送事件保留全局 seq(≈67 万),混用 seq 时 readSession(seq+1) 会把整段
-    // 历史都算成「新增」→ 每次 surface-changed,压缩永不成功(实锤 5d7461f1 toGeneration=674500)。
+ // 历史都算成「新增」→ 每次 surface-changed,压缩永不成功(注意 5d7461f1 toGeneration=674500)。
     lock.generation = journal.readSession(sessionId).length;
 
     // 压缩 agent 摘要 head(ZCode compact/prompt.ts 提示词逐字:禁工具前导 + 九段式主体 + 禁工具尾注;
@@ -288,12 +286,12 @@ export async function autoCompact(
       return { compacted: false, reason };
     }
 
-    // ── M49 提交前重验 ①:surface generation ──────────────────────────────────────
+ // ──  提交前重验 ①:surface generation ──────────────────────────────────────
     // 摘要 LLM 调用期间可能新到达消息/工具结果——那份摘要基于的 head 已经落后于 journal。
     // 用旧 head 提交边界会把新到达的内容一并抹掉,故重读 compact.start 之后**新增的事件**:
     // 出现任一 surface 事件(user/agent/system/tool.call/tool.result)→ 放弃提交,历史不变。
     // 只尝试一次,不自动重试(避免连环压缩)。
-    // 水位口径(2026-11-07 修复):按**本会话事件计数**切片,不按 seq 过滤——session-worker 下
+ // 水位口径(修复):按**本会话事件计数**切片,不按 seq 过滤——session-worker 下
     // ProxyJournal 本地 append 的 seq=replica.length、推送事件是全局 seq,两者不可比。
     const now = journal.readSession(sessionId);
     const added = now.length > lock.generation ? now.slice(lock.generation) : [];
@@ -317,7 +315,7 @@ export async function autoCompact(
       return { compacted: false, reason };
     }
 
-    // ── M49 提交前重验 ②:摘要必须严格小于被遮蔽范围 ──────────────────────────────
+ // ──  提交前重验 ②:摘要必须严格小于被遮蔽范围 ──────────────────────────────
     // 摘要比分母还大 = 压缩后上下文反而变长,却把原文丢了。facts 是附加台账(另算),不参与比较。
     // 口径:token-estimate 的同一把尺子(head 走消息估算,summary 走字符近似,CJK 感知)。
     const summaryTokens = approxTokensOfChars(summary.length);
@@ -347,7 +345,7 @@ export async function autoCompact(
         // 消费方(trace-stats.ts compact.done 分支)按 summary+facts+tail 字符数 /4 自估,这里不另立口径。
         trigger,
         summaryChars: summary.length,
-        // M49 事务观测:缩小校验的两个口径值(复盘时不必再反推)
+ //  事务观测:缩小校验的两个口径值(复盘时不必再反推)
         headTokens,
         summaryTokens,
         // 压缩指示随边界一起落(panel 的「压缩指示」chip 读 compact.done payload;
@@ -406,7 +404,7 @@ export async function autoCompact(
 
     return { compacted: true, devlogPath: mdPath, summary };
   } finally {
-    // M49 出口唯一释放点:成功/空摘要/surface-changed/not-smaller/摘要模型抛异常,
+ //  出口唯一释放点:成功/空摘要/surface-changed/not-smaller/摘要模型抛异常,
     // 全部经 finally 解锁——否则一次失败会让该会话永久卡在「进行中」,后续压缩全被 skipped 吞掉。
     compactionLocks.delete(sessionId);
   }

@@ -1,4 +1,4 @@
-// 本地虚拟组织自举 e2e(2026-10-29 团队移植第三段):
+// 本地虚拟组织自举 e2e(团队移植第三段):
 // seed 一次成型(4 成员/3 角色/3 规则/3 技能/demo git 项目)→ 二次 seed 硬幂等(零写入零提交)→
 // cleanup 只删 demo 数据并提交推送 → 二次 cleanup 空 removed 不报错。
 // 全部在 mkdtemp 临时根里跑,git 身份走 -c(不依赖也不写入全局 config)。
@@ -162,8 +162,7 @@ describe("seedVirtualTeam:本地虚拟组织 + demo git 项目", () => {
     expect(Number(await gitOut(["rev-list", "--count", "HEAD"], cloneOf(root)))).toBe(teamCommitsBefore);
     expect(await gitOut(["log", "--oneline"], cloneOf(root))).toBe(teamLogBefore);
     expect(Number(await gitOut(["rev-list", "--count", "HEAD"], join(root, "demo-projects", "demo-app")))).toBe(
-      demoCommitsBefore,
-    );
+      demoCommitsBefore);
     expect(await gitOut(["status", "--porcelain"], cloneOf(root))).toBe("");
     // 成员 yaml 逐字节未变(registeredAt 固定常量,不会因重跑漂移)
     expect(readFileSync(join(cloneOf(root), "roster", "members", "demo-lin.yaml"), "utf-8")).toContain(

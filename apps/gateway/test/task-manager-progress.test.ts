@@ -1,9 +1,7 @@
 /**
  * TaskSupervisor.touch(2026-11 token 轮)· 任务进展旁注契约测试。
- *
  * 为什么要单独一文件:进展是**正交元数据**(不改状态机、不改时间戳、不复活已删任务),
  * 与 task-manager.test.ts 里的调度/恢复语义互不影响,分开放便于「改 touch 只跑这一份」。
- *
  * 零反斜杠纪律:断言全用字面串/数值。
  */
 import { describe, it, expect } from "vitest";
@@ -18,7 +16,7 @@ describe("TaskSupervisor.touch(prog)", () => {
     const merged = tm.touch(t.id, { step: 2, note: "改完 A 文件" });
     expect(merged!.progress).toMatchObject({ phase: "implement", step: 2, note: "改完 A 文件" });
     expect(tm.get(t.id)!.progress!.phase).toBe("implement"); // 第一次的 phase 未被后一次清掉
-    expect(typeof tm.get(t.id)!.progress!.at).toBe("number"); // 缺省 at=Date.now()
+    expect(typeof tm.get(t.id)!.progress!.at).toBe("number"); // 缺省 at=Date.now
   });
 
   it("不改 state / updatedAt / startedAt(进展只是旁注)", () => {

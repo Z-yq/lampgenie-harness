@@ -1,4 +1,4 @@
-/** 标准化 workflow 模板(designs/19 §2.4):模型/面板可直接按名调用。 */
+/** 标准化 workflow 模板( §2.4):模型/面板可直接按名调用。 */
 export const TEMPLATES: Record<string, string> = {
   /** 单元测试:按包循环跑 vitest,失败包派 agent 分析。 */
   "unit-tests": `

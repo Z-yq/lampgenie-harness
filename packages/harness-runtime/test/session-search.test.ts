@@ -1,5 +1,5 @@
 /**
- * step-115 会话全文检索:倒排/三形态/增量/自动化降权/缓存回填。
+ * 会话全文检索:倒排/三形态/增量/自动化降权/缓存回填。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -20,17 +20,17 @@ function seed(): MemoryJournal {
   return j;
 }
 
-describe("session search(step-115)", () => {
+describe("session search()", () => {
   let dir: string | null = null;
   afterEach(() => {
     if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; }
   });
 
   it("分词:中文 unigram+bigram,英文复合词+子词", () => {
-    const tokens = tokenizeForIndex("白板 permission step-111");
+    const tokens = tokenizeForIndex("白板 permission ");
     expect(tokens.has("白") && tokens.has("板") && tokens.has("白板")).toBe(true);
     expect(tokens.has("permission")).toBe(true);
-    expect(tokens.has("step-111") && tokens.has("step") && tokens.has("111")).toBe(true);
+    expect(tokens.has("") && tokens.has("step") && tokens.has("111")).toBe(true);
     const plan = planQuery("会话检索");
     expect(plan.terms.map((t) => t.token)).toEqual(expect.arrayContaining(["会话", "检索"]));
     expect(plan.terms.some((t) => t.token === "会")).toBe(false);

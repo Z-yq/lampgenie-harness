@@ -1,10 +1,8 @@
 /**
  * 出站文本密钥擦除(best-effort)。
- *
  * 用途:通知/webhook 等内容离开本机前的最后一道闸。设计是**纵深防御而非保证**——
  * 常见密钥形态 + 本机环境变量值两层,兜不住的形态依旧可能漏;调用方对高敏通道仍应
  * 做显式 opt-in。
- *
  * 两遍擦除(顺序固定):
  *   1. **已知值**:调用方给进的环境变量密钥值(如 ANTHROPIC_API_KEY 的值)按字面量
  *      整段替换——对已经过环境的东西是 100% 精确的;长值先替换,避免短值先命中把长值
@@ -12,7 +10,6 @@
  *   2. **形态兜底**:常见凭证形状的正则——PEM 私钥块、各家 token 前缀、JWT、
  *      `key=value` 对、`Authorization: Bearer`、连接串密码段。覆盖粘贴进对话、
  *      从未经过环境变量的密钥。
- *
  * 设计参考 teamai-cli 的出站脱敏器思路(致谢,MIT);本文件为独立实现,
  * 规则表、分层结构与命名均为本仓自有。
  */
@@ -109,8 +106,7 @@ export function scrubSecrets(text: string, options: SecretScrubOptions = {}): st
     out = out.replace(BEARER_RULE, (_m, scheme: string) => scheme + token("authz"));
     out = out.replace(
       URL_PASSWORD_RULE,
-      (_m, prefix: string, _pw: string, at: string) => prefix + token("conn") + at,
-    );
+      (_m, prefix: string, _pw: string, at: string) => prefix + token("conn") + at);
   }
 
   return out;

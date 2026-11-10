@@ -1,6 +1,6 @@
 /**
- * relink 作用域闸(2026-10-26):属性调用/局部绑定不得按「全仓唯一同名」跨文件兜底。
- * 实锚:全量索引 relink 把 400+ 个字符串 .trim() 连到 RingBuffer.trim,整仓 flow 出现
+ * relink 作用域闸:属性调用/局部绑定不得按「全仓唯一同名」跨文件兜底。
+ * 依据:全量索引 relink 把 400+ 个字符串 .trim 连到 RingBuffer.trim,整仓 flow 出现
  * code-sense→harness-terminal ×422 的假主干。
  */
 import { describe, it, expect } from "vitest";

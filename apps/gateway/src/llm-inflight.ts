@@ -1,11 +1,9 @@
 /**
- * LLM 请求在飞上限(2026-10-20 派发失败根因配套)。
- *
- * 实锤:10 路子代理同时首调智谱 anthropic 端点 → 8 路 `TypeError: fetch failed`
+ * LLM 请求在飞上限(派发失败根因配套)。
+ * 注意:10 路子代理同时首调智谱 anthropic 端点 → 8 路 `TypeError: fetch failed`
  * (cause=ConnectTimeoutError, connect timeout 10s);同 Key 低并发(3/6)全部 200。
  * 端点/链路吃不住瞬间建连洪峰,而既有 workflow governor 的 observer 是「立即放行、
  * 只记 inFlight」——不排队,起不到限制作用。
- *
  * 这里按端点(baseUrl)做进程级信号量:每个 providerKey 最多 cap 个真实在飞请求,
  * 其余排队(取消信号可出队)。原始 governor admission 仍被保留用于 AIMD 观测。
  */
@@ -18,7 +16,7 @@ const DEFAULT_CAP = 2;
 const MAX_CAP = 64;
 
 /** 解析在飞上限:GENIE_LLM_MAX_INFLIGHT,缺省 2;`0`/`off`=不限(回退 governor observer)。
- * 缺省取 2 的实测依据:该端点对**新建 TCP 连接**的突发很敏感——顺序请求 8/8 成功,
+ * 缺省取 2 的经验证依据:该端点对**新建 TCP 连接**的突发很敏感——顺序请求 8/8 成功,
  * 并发 4 已出现 UND_ERR_CONNECT_TIMEOUT,并发 8 时 4 路超时;连接建成后 keep-alive
  * 复用则稳定。信号量把小规模建连摊开,后续请求复用连接池。 */
 export function resolveInflightCap(raw: string | undefined = process.env.GENIE_LLM_MAX_INFLIGHT): number {
@@ -98,8 +96,7 @@ function abortReason(signal: AbortSignal): unknown {
  */
 export function composeInflightAdmission(
   limiter: InflightSemaphore | undefined,
-  observer: RequestAdmission | undefined,
-): RequestAdmission | undefined {
+  observer: RequestAdmission | undefined): RequestAdmission | undefined {
   if (!limiter) return observer;
   if (!observer) return { async take(input) { return limiter.take(input.signal); } };
   return {

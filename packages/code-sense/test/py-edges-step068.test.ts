@@ -1,5 +1,5 @@
 /**
- * step-068:Python 边形态深化两形态锚定。
+ * Python 边形态深化两形态锚定。
  * ① 工厂赋值类型线索:`x/self.attr = [await] mod.fn(Class, …)`(类作裸实参传给非类调用)→
  *    标识符→类 类型线索,后续 var.method()/self.attr.method() 经既有 receiverType 管线挂边;
  * ② 构造调用边(A3):`Foo(` → `Foo.__init__` 实例化关联(同文件 ast;跨文件候选经
@@ -28,7 +28,7 @@ async function callerIdsOf(dir: string, targetName: string): Promise<Map<string,
 
 const KNOWN_EDGE_KEYS = new Set(["from", "to", "toName", "file", "line", "tier", "evidenceKind", "receiverType", "moduleHint"]);
 
-describe("step-068 ①工厂赋值类型线索", () => {
+describe(" ①工厂赋值类型线索", () => {
   it("self.attr = await asyncio.to_thread(\\n Class,…) 多行形态 → self.attr.method( 挂边(agent_alpha 生产形态)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-fac1-"));
     writeFileSync(join(dir, "chat.py"), [
@@ -157,7 +157,7 @@ describe("step-068 ①工厂赋值类型线索", () => {
   }, 60_000);
 });
 
-describe("step-068 ②构造调用边(A3)", () => {
+describe(" ②构造调用边(A3)", () => {
   it("同文件 Foo(:直接 ast 边到 Foo.__init__,类节点既有边不动;__init__ 不再是 trunk", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-ctor1-"));
     writeFileSync(join(dir, "dog.py"), [
@@ -180,7 +180,7 @@ describe("step-068 ②构造调用边(A3)", () => {
     expect(initEdge!.to).toBe("dog.py#Dog.__init__");
     expect(initEdge!.from).toContain("make_dog");
     expect(initEdge!.evidenceKind).toBe("ast");
-    // entrypoints 纯度:classify 后 __init__ 有具名调用方,不再是 trunk(step-065 §2.2 症状)
+ // entrypoints 纯度:classify 后 __init__ 有具名调用方,不再是 trunk( §2.2 症状)
     const graph = await buildCallGraph(dir);
     const { nodes } = classify(graph, dir);
     const initNode = nodes.find((n) => n.id === "dog.py#Dog.__init__");

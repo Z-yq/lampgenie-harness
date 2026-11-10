@@ -1,7 +1,6 @@
 /**
  * 会话消息队列持久化(「重启即丢」根治,P3 登记)。
- *
- * 验收口径(用户任务书):
+ * 验径(用户任务书):
  *  - 队列变更(入队/出队/删除/发送)往 journal 写 kind="queue.sync"(payload 含 sessionId 与当期快照);
  *  - 启动回放恢复各 session 队列,以最后一条 queue.sync 为准,对应任务已在终态的项丢弃;
  *  - 端到端:入队 → 重启 gateway → hello.queue 快照仍在。

@@ -1,11 +1,9 @@
-/* 截图标注坐标换算层(2026-10-29 抽出,纯函数、无 DOM 依赖:浏览器挂 window.GenieAnnotateCoords,node 可 require 单测)。
- *
+/* 截图标注坐标换算层( 抽出,纯函数、无 DOM 依赖:浏览器挂 window.GenieAnnotateCoords,node 可 require 单测)。
  * 唯一职责:把「屏幕上的一次指针事件坐标」精确换成「图像原生像素」,并在下列真实病灶下仍逐像素对齐:
  *   - DOM 盒子尺寸 ≠ 位图布局尺寸(flex 压缩 / #capOverlay inset:0 取 clientWidth 而位图按 innerWidth 建,含滚动条差)
  *   - DPR 位图放大(位图 device px 放大,字符面仍按 CSS px 显示)
  *   - 图像在盒子里居中留边(offsetX/offsetY 非 0)+ 滚轮缩放(scale ≠ 1)
  * 两轴各自归一(scaleX/scaleY 分别算),不假设等比 —— 横向与纵向误差不应互相污染。
- *
  * box 模型(全部 CSS px,除 imgWidth/imgHeight 为图像原生像素):
  *   left/top                 盒子在客户端坐标里的左上角(getBoundingClientRect)
  *   width/height             盒子实际 CSS 尺寸(可能被压扁,≠ 布局尺寸)

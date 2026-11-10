@@ -1,10 +1,9 @@
 /**
- * 插件体系 + 市场(step-048,ZCode 插件市场对齐;架构=资产包安装器):
+ * 插件体系 + 市场(ZCode 插件市场对齐;架构=资产包安装器):
  * 插件 = 命令/技能/子智能体/MCP 服务器的资产包;安装=把资产写进真实落点
  * (commands→.genie/commands/*.md;agents→.genie/agents/*.md;mcp→.genie/mcp.json;
  * skills→experience store plugin-* category),卸载=按安装台账精确回收。
- * 目录=内置精选 + 官方市场快照(ZCode 官方插件市场,2026-10-25 集成)+ .genie/plugins-catalog.json 用户扩展。
- *
+ * 目录=内置精选 + 官方市场快照(ZCode 官方插件市场, 集成)+ .genie/plugins-catalog.json 用户扩展。
  * 官方市场源:src/assets/official-market/(marketplace.json + zips/<name>-<ver>.zip,
  * scripts/fetch-official-market.ts 生成刷新,sha256 校验)。官方包安装=校验+解压到
  * .genie/plugins/<name>/(包结构完整保留,skills/commands/agents/.mcp.json 分发到
@@ -163,7 +162,7 @@ export const BUILTIN_PLUGIN_CATALOG: PluginManifest[] = [
   },
 ];
 
-// ── 官方市场源(ZCode 官方插件市场快照;2026-10-25 集成)──
+// ── 官方市场源(ZCode 官方插件市场快照; 集成)──
 
 interface OfficialMarketEntry {
   name?: string;
@@ -178,7 +177,7 @@ interface OfficialMarketEntry {
   source?: { url?: string; sha256?: string };
 }
 
-/** 快照目录:开发态 src/assets/official-market,产线态 dist/assets(随 gateway build 拷贝)。 */
+/** 快照目录:开发态 src/assets/official-market,生产环境态 dist/assets(随 gateway build 拷贝)。 */
 export function officialMarketDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "assets", "official-market");
 }
@@ -288,8 +287,7 @@ export class PluginSystem {
   constructor(
     private readonly root: string,
     private readonly mcpAdd: (i: { name: string; command: string; args?: string[] }) => unknown,
-    private readonly mcpRemove: (id: string) => boolean,
-  ) {
+    private readonly mcpRemove: (id: string) => boolean) {
     const f = join(root, ".genie", "plugins.json");
     if (existsSync(f)) {
       try {
@@ -677,7 +675,7 @@ export class PluginSystem {
       const p = join(this.root, ".genie", "experiences", rel);
       if (existsSync(p)) rmSync(p, { recursive: true, force: true });
       // 空分类目录顺手清理(fs.rm 删目录必须 recursive;裸 rmSync 对目录抛 EISDIR
-      // 且被 catch 吞掉——多技能插件的分类目录曾长期静默残留,2026-10-25 修复)
+ // 且被 catch 吞掉——多技能插件的分类目录曾长期静默残留, 修复)
       const cat = dirname(p);
       try {
         if (existsSync(cat) && readdirSync(cat).length === 0) rmSync(cat, { recursive: true, force: true });

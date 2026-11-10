@@ -1,5 +1,5 @@
 /**
- * 桌面 → 远端工具路由(2026-10-27):code_sense / code_review 对 remote 项目
+ * 桌面 → 远端工具路由:code_sense / code_review 对 remote 项目
  * 经工作区服务通道调用(不 spawn wsl.exe / ssh 拼命令)。通道用 mock 隔离。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";

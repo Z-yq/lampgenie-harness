@@ -1,5 +1,5 @@
 /**
- * 会议导入流水线(designs/08 §3):录音/纪要→抽取→确认→批量 task。
+ * 会议导入流水线( §3):录音/纪要→抽取→确认→批量 task。
  * ASR 一期用「文字纪要直读」+「音频留接口」;抽取用 coding LLM。
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
@@ -32,8 +32,7 @@ export function meetingHash(inputPath: string): string {
 export async function importMeeting(
   inputPath: string,
   workDir: string,
-  llm: LlmProvider,
-): Promise<{ extraction: MeetingExtraction; draftPath: string }> {
+  llm: LlmProvider): Promise<{ extraction: MeetingExtraction; draftPath: string }> {
   const hash = meetingHash(inputPath);
   const dir = join(workDir, hash);
   mkdirSync(dir, { recursive: true });

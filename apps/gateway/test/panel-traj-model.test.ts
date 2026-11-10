@@ -342,7 +342,7 @@ describe("⑪ 真实 journal 样本回放", () => {
   });
 });
 
-describe("⑫ 公共前缀切分(step-1026:已命中前缀只给一行)", () => {
+describe("⑫ 公共前缀切分(已命中前缀只给一行)", () => {
   const SYS = { role: "system", content: "sys prompt" };
   const U1 = { role: "user", content: "第一问" };
   const A1 = { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read_file", arguments: "{}" }] };

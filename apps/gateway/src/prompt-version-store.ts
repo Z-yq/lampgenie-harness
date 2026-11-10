@@ -1,19 +1,14 @@
 /**
  * RSI #209 提示词版本与覆盖治理的持久层(IO)。
- *
  * 数据面:
  * - `<root>/.genie/rsi/prompts/book.json`  完整 book(不可变版本序列 + builtin + status),原子写
  * - `<root>/.genie/rsi/prompts/pins.json`  会话钉扎 `{schema, sessions: {sessionId: SessionPromptPins}}`
- *
  * 为什么不 append-only:book 的真相是「当前版本序列 + 谁覆盖了谁」,每次保存都要整体一致
  * (predecessor 链、current 指针、status 三者同源);原子写 + 写后重读比追加行更不容易半态。
- *
  * 语义全部在 packages/harness-runtime/src/agent/prompt-version.ts(纯逻辑零 IO),本层只做:
  * 读盘 → 调纯函数 → 写盘。root 参数非法才 throw,IO/坏文件一律折叠成稳定码。
- *
  * #196 集成:origin=rsi 的保存先构造 surface="prompt" 的 ModificationRequest 过
  * evaluateSelfModification;decision !== allow → 拒写,原样透传 MOD_* 码。
- *
  * 依赖纪律:node:fs/node:path + runtime 两个纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 cohort-metrics-store 的既有套路惰性双跳解析(vitest 走包导出 src;
  * 裸 node/tsx 缺文件时回退仓内源文件 URL)。
@@ -339,8 +334,7 @@ export async function pinSession(
 export async function resolveForSession(
   root: string,
   sessionId: string,
-  key: string,
-): Promise<{ ok: boolean; text?: string; revision?: number; codes: string[] }> {
+  key: string): Promise<{ ok: boolean; text?: string; revision?: number; codes: string[] }> {
   const rt = await runtime();
   const loaded = await readBook(root);
   const pins = readPins(root).pins.sessions[sessionId.trim()];
@@ -365,8 +359,7 @@ export async function updateBuiltin(
 /** 当前覆盖 vs 新默认的行 diff。 */
 export async function diffWithDefault(
   root: string,
-  key: string,
-): Promise<{ ok: boolean; same: boolean; lines: PromptDiffLine[]; codes: string[] }> {
+  key: string): Promise<{ ok: boolean; same: boolean; lines: PromptDiffLine[]; codes: string[] }> {
   const rt = await runtime();
   const loaded = await readBook(root);
   const res = rt.diffWithDefault(loaded.book, key);

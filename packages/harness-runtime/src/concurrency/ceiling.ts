@@ -19,8 +19,7 @@ const WORKFLOW_CONCURRENCY_FLOOR = 1;
  * CPU 推导的并发天花板。`availableParallelism` 可注入，供测试固定核数（地板/硬顶两条用例）。
  */
 export function deriveWorkflowConcurrencyCeiling(
-  availableParallelism: () => number = osAvailableParallelism,
-): number {
+  availableParallelism: () => number = osAvailableParallelism): number {
   return Math.max(
     WORKFLOW_CONCURRENCY_FLOOR,
     Math.min(WORKFLOW_CONCURRENCY_CEILING_MAX, availableParallelism() - RESERVED_PARALLELISM),
@@ -29,11 +28,9 @@ export function deriveWorkflowConcurrencyCeiling(
 
 /**
  * 请求的并发上界 → 本 run 实际生效的上界。
- *
  * **钳制而不是拒绝**：这个旋钮只为压低并发，一个过大的值表达的意愿是「别限制我」，把它变成
  * 一次工具失败只会让模型去猜机器有几个核。缺席 / 非有限数同样读作「不限制」= 天花板，非整数
  * 向下取整（要「3.7 个在飞的 ask」没有意义，而向上取整会偷偷越过用户说的数）。
- *
  * 与天花板同住一个文件：提交时定上界与中途 retune 走的**必须**是同一条钳制（否则同一个
  * `max_concurrency` 经两条路会落成两个数），而那两条路分居 run service 与 retune 两个模块。
  */

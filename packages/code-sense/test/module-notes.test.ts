@@ -1,5 +1,5 @@
 /**
- * 模块作用注记(2026-10-27):flow 模块图节点旁的一句话——package.json > README >
+ * 模块作用注记:flow 模块图节点旁的一句话——package.json > README >
  * __init__.py docstring/顶部注释 > 名称线索 > 拓扑角色;推断来源加 ≈,不冒充文档。
  */
 import { describe, it, expect } from "vitest";
@@ -33,7 +33,7 @@ describe("module-notes", () => {
     try {
       write(root, "pkg-desc/package.json", JSON.stringify({ name: "pkg-desc", description: "描述型包:负责 A" }));
       write(root, "pkg-readme/README.md", "# pkg-readme — README 里的作用\n\n正文");
-      write(root, "pkg-py/__init__.py", '"""独立记忆抽取服务（FastAPI 装配层）\n\n设计依据：tasks/designs/01.md\n"""\n');
+      write(root, "pkg-py/__init__.py", '"""独立记忆抽取服务（FastAPI 装配层）\n\n设计依据：tasks/.md\n"""\n');
       write(root, "pkg-py2/__init__.py", '"""\n自动记忆机制模块\n提供记忆提取、缓存和管理功能\n"""\n');
       write(root, "pkg-readme2/README.md", "# pkg-readme2\n\nA tiny two-package demo for code flow wiki.\n");
 

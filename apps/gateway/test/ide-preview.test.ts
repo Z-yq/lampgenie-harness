@@ -1,4 +1,4 @@
-/** step-1024(板 5a7bb5d2)节点 01/05:/ide/preview 静态预览沙箱路由 —— 白名单 MIME + no-store + 字节一致,
+/** (板 5a7bb5d2)节点 01/05:/ide/preview 静态预览沙箱路由 —— 白名单 MIME + no-store + 字节一致,
  *  以及负面守卫组(越界 404 / 白名单外 415 / >2MB 413 / 非 GET 404,均不返回文件内容)。
  *  路径形 URL(/ide/preview/<rel>?pid=…)是特性而非偶然:iframe 文档内 style.css/app.js 相对引用
  *  按文档 URL 解析天然回到本路由(query 形会解析成 /style.css——板风险 4)。风格照抄 office-ooxml.test.ts。

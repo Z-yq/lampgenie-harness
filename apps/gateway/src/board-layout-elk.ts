@@ -1,8 +1,7 @@
 /**
  * 白板布局:自实现的「分层 + 折行(wrapping layered)」布局,契约与 flowkit 的
  * `headlessElkLayout` 完全一致 —— `{ run(graph, signal) } → { positions, sizes }`。
- *
- * 为什么自己写(2026-11 实测):
+ * 为什么自己写(2026-11 经验证):
  * - `@openflowkit/openflowkit-mcp` 的 `headlessElkLayout` 是个**对象** `{ run }`,内部把 ELK 选项写死
  *   (`elk.algorithm=layered` / `elk.edgeRouting=ORTHOGONAL` / `hierarchyHandling=INCLUDE_CHILDREN` /
  *   `spacing.nodeNode=48` / `nodeNodeBetweenLayers=64` / `considerModelOrder=NODES_AND_EDGES` /
@@ -12,7 +11,6 @@
  *   工程里也没有独立 elkjs 依赖,因此拿不到可注入 layoutOptions 的实例。
  *   本模块按同一套语义自实现,等价参数见 `ELK_EQ_OPTIONS`:
  *   layered + SEPARATE_CHILDREN + wrapping MULTI_EDGE + aspectRatio。
- *
  * 与 ELK 对齐的三个关键点:
  * 1. **回边反转**:有环图先用 DFS 找出回边,反转后再算层(等价 ELK 内部 cycle breaking),
  *    否则最长路径分层不收敛。
@@ -20,10 +18,8 @@
  *    否则带 label 的板节点会挤在一起。
  * 3. **跨组边提升 + 每作用域独立排布**(等价 hierarchyHandling=SEPARATE_CHILDREN):
  *    组的孙节点之间的边提升到「组」这一级决定组的相对次序,组内部再各自折行。
- *
  * 目标宽高比是**全局**约束:组本身的折行会把组撑成不同长宽比,只按局部 1.6 折行会得到粗粒度结果,
  * 所以外层对「内层折行目标」做一次小候选搜索(见 INNER_ASPECT_CANDIDATES),取整体宽高比最贴近的一张。
- *
  * 坐标约定与 flowkit 消费者一致:**位置相对父容器**,容器尺寸含 padding。
  */
 
@@ -153,8 +149,7 @@ function layoutGraph(
   graph: BoardLayoutGraphIn,
   aspectRatio: number,
   forcedDirection: "right" | "down" | undefined,
-  signal?: AbortSignal,
-): BoardLayoutResult {
+  signal?: AbortSignal): BoardLayoutResult {
   const nodes = Array.isArray(graph.nodes) ? graph.nodes.filter((n) => n && typeof n.id === "string") : [];
   if (nodes.length === 0) return { positions: {}, sizes: {} };
   const rootId = typeof graph.rootId === "string" && graph.rootId ? graph.rootId : "__root__";

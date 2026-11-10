@@ -1,5 +1,5 @@
 /**
- * wiki 输入扫描(step-118):文件清单/指纹/git sha/模块归属/import 边/manifest 入口线索。
+ * wiki 输入扫描:文件清单/指纹/git sha/模块归属/import 边/manifest 入口线索。
  * 全部确定性;不构建 c2f 全量索引(分钟级),只做行级词法扫描(页面明确标注词法级)。
  */
 import { createHash } from "node:crypto";
@@ -144,8 +144,7 @@ export function anchorable(line: string): boolean {
 export async function validateCitation(
   root: string,
   cache: SourceCache,
-  c: WikiCitation,
-): Promise<{ ok: boolean; reason?: string; lineText?: string }> {
+  c: WikiCitation): Promise<{ ok: boolean; reason?: string; lineText?: string }> {
   if (!c.file || !c.file.trim()) return { ok: false, reason: "file 为空" };
   if (!Number.isInteger(c.startLine) || !Number.isInteger(c.endLine)) return { ok: false, reason: "行号非整数" };
   if (c.startLine < 1 || c.endLine < c.startLine) return { ok: false, reason: `行号范围非法 ${c.startLine}-${c.endLine}` };
@@ -398,8 +397,7 @@ export function resolveImport(
   spec: string,
   all: Set<string>,
   workspace: Map<string, string>,
-  goModule: string,
-): string | undefined {
+  goModule: string): string | undefined {
   const ext = extname(fromFile).toLowerCase();
   if (spec.startsWith(".") || spec.startsWith("/")) {
     if (ext === ".py") {
@@ -414,7 +412,7 @@ export function resolveImport(
     if (!goModule) return undefined;
     // spec===module path 指向模块根包(dir="."),不是 fromFile 所在子目录——
     // 旧实现取同目录首文件,doc/*.go 的 "github.com/spf13/cobra" 被解析成 doc 内文件,
-    // 跨模块边整类丢失(step-118 go-cobra 实锤)。
+ // 跨模块边整类丢失( go-cobra 注意)。
     const dir = spec === goModule ? "." : spec.startsWith(goModule + "/") ? spec.slice(goModule.length + 1) : "";
     if (!dir && spec !== goModule) return undefined;
     const cands = [...all].filter((f) => f.endsWith(".go") && !f.endsWith("_test.go") && posix.dirname(f) === dir);

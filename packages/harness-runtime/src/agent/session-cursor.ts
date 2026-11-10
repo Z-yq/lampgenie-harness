@@ -1,22 +1,17 @@
 /**
  * 会话查询游标的纯逻辑(零 IO):游标绑定「语料 generation + 查询指纹」。
- *
  * 为什么需要 generation:翻页游标记的是「在第 N 版语料里翻到哪」,而索引重刷 / 语料增删 / reconcile
  * 之后同一偏移指向的已是不同的行集合。若继续按旧偏移翻页,会把「语料已经变了」这件事静默表现成
  * 「后面几页是空的」——损坏的会话被当成空结果,是最难排查的一类错。所以游标里嵌 generation,
  * 语料一变旧游标必须显式判 STALE(否定结论),而不是给出错页数据。
- *
  * 判定顺序固定为 generation → 查询指纹(见 validateCursor):语料重建与查询条件同时变化时,
  * 根因是语料,若先比指纹就会把「该重建语料」误报成「你改了查询」,调用方再怎么重签发也拿不到正确页。
- *
  * 签名:sha256(规范化 payload JSON) 前 16 位。规范化规则见 canonicalJson:对象键排序、数组保序、
  * undefined 与缺键等价,因此同一查询条件不管对象字面量怎么写都得到同一指纹;而签名让手改 payload
  * (比如偷偷把 generation 改大)必然落到 CURSOR_INVALID,不会被当成有效游标放行。
- *
  * cursorStats 口径(与测试一致):issued = 参与统计的条目总数;invalid = parse 失败(含坏签名)的条数,
  * 这类条目单独计数、**不计入 mismatch**;stale / mismatch 只在 parse 通过后按 generation → 指纹顺序归类,
  * 因此恒有 invalid + stale + mismatch + ok === issued。
- *
  * 纪律:除 Node 内建 crypto 外无依赖;脏输入一律返回稳定码,不 throw。
  */
 import { createHash } from "node:crypto";
@@ -127,7 +122,6 @@ function causeOf(value: unknown): GenerationCause | undefined {
 
 /**
  * 规范化 JSON:对象键排序、数组保序、undefined/函数/symbol 记为 null。
- *
  * 为什么要自己写而不是 JSON.stringify:JSON.stringify 保留插入顺序,`{a:1,b:2}` 与 `{b:2,a:1}`
  * 会得到不同字符串,查询指纹就会因为调用方换个字面量写法而失效。环引用用 seen 路径集兜住,
  * 保证脏输入也不会抛栈。
@@ -208,7 +202,6 @@ export function issueCursor(options: IssueCursorOptions): CursorEnvelope {
 
 /**
  * 解析游标:字段缺失、类型错、签名重算不符都折叠成 CURSOR_INVALID。
- *
  * 为什么解析阶段就验签:伪造或手改过的游标必须在「能不能用它翻页」这个问题上直接否掉;
  * 若只依赖 issued 表登记,未登记的合法结构就会被当成可疑,而改过 generation 的伪造游标反而
  * 能靠「结构看着对」通过。
@@ -297,7 +290,6 @@ export function nextGeneration(current: unknown, cause: GenerationCause): number
 /**
  * 批量应用语料变更事件(单事务语义):同一 cause 只推进一次,applied 去重且保持首次出现顺序,
  * generation = cursorGen + applied.length。
- *
  * 为什么去重:一次 reconcile 常常对「同一原因」上报多条事件(每张表一条),不去重会让 generation
  * 跳好几格,把纯粹内部的实现细节泄漏成对外可观测的版本号抖动。
  */

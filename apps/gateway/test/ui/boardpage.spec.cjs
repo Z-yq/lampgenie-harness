@@ -1,6 +1,6 @@
-/** step-111 UI 实测:页面结构板(docKind=page)语义级布局——存量电子签板(45 节点,43/45 pos=None)
+/** UI 经验证:页面结构板(docKind=page)语义级布局——存量电子签板(45 节点,43/45 pos=None)
  * 渲染层兜底验证:容器化/主线/回边/nav 标签/UI 线框分区/图例/多尺寸截图/盘上数据不被改。
- * 跑法(不碰产线):cd apps/gateway && SELF_SPEC=./boardpage.spec.cjs npx tsx test/ui/_board_selfhost.cjs
+ * 跑法(不碰生产环境):cd apps/gateway && SELF_SPEC=./boardpage.spec.cjs npx tsx test/ui/_board_selfhost.cjs
  * (自起临时端口实例;板 fixture 由本脚本自己造自己清)。 */
 const { chromium } = require("playwright-core");
 const fs = require("node:fs");
@@ -15,7 +15,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
 
 (async () => {
   // fixture:真实电子签板拷贝(改 sessionId/taskId 避撞)——**强制剥 pos 造全 pos=None 现场感**:
-  // 源板会被真实使用/保存污染(rev13 时实测 45/45 全有 pos,原"43/45 None"前提失效→板走
+ // 源板会被真实使用/保存污染(rev13 时经验证 45/45 全有 pos,原"43/45 None"前提失效→板走
   // "尊重现状"分支→容器/主线/图例全 FAIL 的假回归);fixture 必须自造状态,不依赖运行时可变数据
   const raw = JSON.parse(fs.readFileSync(SRC_BOARD, "utf-8"));
   const TASK = raw.taskId + "-s111";
@@ -27,7 +27,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
   const fpath = path.join(dir, TASK + ".json");
   fs.writeFileSync(fpath, JSON.stringify(raw));
   const posBefore = raw.nodes.filter((n) => n.pos).length; // 期望 0(强制剥除)
-  // drvfs 写后可见窗:读回校验(跨进程可见性)+短延迟——目录删后重建的场景实测 readdir 会滞后
+ // drvfs 写后可见窗:读回校验(跨进程可见性)+短延迟——目录删后重建的场景经验证 readdir 会滞后
   let ready = false;
   for (let i = 0; i < 30; i++) {
     try { ready = JSON.parse(fs.readFileSync(fpath, "utf-8")).taskId === TASK; } catch (e) { ready = false; }
@@ -45,7 +45,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
     page.setDefaultTimeout(20000);
     page.on("pageerror", (e) => errors.push("PAGEERROR: " + String(e).slice(0, 200)));
     page.on("console", (m) => { if (m.type() === "error") errors.push("CONSOLE: " + m.text().slice(0, 200)); });
-    // 目检形态=画布拿满视口宽(step-1033:数字人列与 zh:avatar 设置已退役,画布不再有右侧预留)
+ // 目检形态=画布拿满视口宽(数字人列与 zh:avatar 设置已退役,画布不再有右侧预留)
     await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
     await page.evaluate((sid) => { sessionStorage.setItem("zh:sid", sid); sessionStorage.setItem("zh:view", "board"); }, SID);
     await page.reload({ waitUntil: "domcontentloaded" });

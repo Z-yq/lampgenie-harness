@@ -1,7 +1,6 @@
 /**
  * 运行看板趋势(参考项目 session-trends 的 journal 原生重写,功能面 1:1 + C 阶段扩展):
  * 会话日快照 → 日桶 → 7 天 vs 前 7 天窗口摘要。
- *
  * 机制适配(诚实登记):
  *  - ref 的 reported-delta 机器(跨重启幂等上报)不移植:本地看板每次全量重算,无上报态;
  *  - ref 的请求成本体系(priceVersion/costMicros/cacheReadShare)不移植:journal 无价格数据,

@@ -1,9 +1,8 @@
 /**
- * cfg.set 的 env 占用甄别(2026-10-19 用户实报「面板切了 glm-5.3-flash,轨迹还是 deepseek」根因配套):
+ * cfg.set 的 env 占用甄别(用户用户反馈「面板切了 glm-5.3-flash,轨迹还是 deepseek」根因配套):
  * loadConfig 的合并序=user→project→**env 最后压顶**——进程环境里残留的 GENIE_LLM_MODEL/BASE_URL
  * 会把项目配置的 coding.llm.* 永久盖住:不重启=跨端点热路径冷项不切;重启=env 层又赢。「重启生效」
  * 徽标在此场景是假话,必须升格为「env 占用,重启也不生效」。
- *
  * sources=loadConfig 的逐键来源表("user"|"project"|"env"|"default");applied=本次补丁落定的键。
  * 只报 env 层占用的键(其它层语义不受影响)。
  */
@@ -13,7 +12,7 @@ export function envOccupiedOf(applied: string[], sources: Record<string, string>
 }
 
 /**
- * 遗留 GENIE_LLM_* 污染甄别(2026-10-20)。两类伤害:
+ * 遗留 GENIE_LLM_* 污染甄别。两类伤害:
  *  - MODEL/BASE_URL 在 loadConfig 的 env 层直接压顶;
  *  - API_KEY 是旧直传兜底:当路由使用 Provider 专属 keyEnv 且该专属变量不在 env 时,
  *    旧实现会把它当成该 Provider 的钥匙(智谱端点 + 阿里云 Key → 401「令牌已过期或验证不正确」)。

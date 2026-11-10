@@ -20,7 +20,7 @@ export function buildExecutorFromConfig(config: Config): SubagentBackend | undef
     case "echo":
       return new EchoChildBackend();
     case "dsh": {
-      // dsh 已构建(2026-10-12,~/dsh-build);CLI 产物解析不到仍 fail-visible(凭证/路由由 env 注入)。
+ // dsh 已构建(~/dsh-build);CLI 产物解析不到仍 fail-visible(凭证/路由由 env 注入)。
       const cli = resolveDshCliCommand(process.env.GENIE_REPO_ROOT ?? process.cwd());
       if (!cli) throw new Error("executor.kind=dsh:未找到 dsh CLI 产物(设 DSH_SDK_CLI 为 JSON 启动命令,如 {\"cmd\":\"node\",\"args\":[\"/path/bin.mjs\"]})");
       const provider = process.env.DSH_SDK_PROVIDER ?? "deepseek-official";
@@ -33,7 +33,7 @@ export function buildExecutorFromConfig(config: Config): SubagentBackend | undef
     }
     case "zcode":
     case "opencode": {
-      // 外部 CLI 一次性后端(step-007 收口):bin 从 env 覆盖(GENIE_ZCODE_BIN/GENIE_OPENCODE_BIN),
+ // 外部 CLI 一次性后端:bin 从 env 覆盖(GENIE_ZCODE_BIN/GENIE_OPENCODE_BIN),
       // 缺省 PATH 解析;缺二进制=spawn-failed fail-visible(不静默降级)。
       return createCliBackend(config.executor.kind, {
         bin: process.env[config.executor.kind === "zcode" ? "GENIE_ZCODE_BIN" : "GENIE_OPENCODE_BIN"] ?? undefined,
@@ -44,9 +44,9 @@ export function buildExecutorFromConfig(config: Config): SubagentBackend | undef
   }
 }
 
-/** reasoningEffort 显式性判定(step-069 安全修法):仅显式配置进请求体。schema default "high"
- * 是 UI 缺省显示口径(2026-10-13 用户拍板),不代表用户显式选择——直接透传会让全量请求都携带
- * reasoning_effort(step-064 搁置原因)。装配面按 loadConfig 的 sources 层标记判显式:
+/** reasoningEffort 显式性判定(安全修法):仅显式配置进请求体。schema default "high"
+ * 是 UI 缺省显示口径(用户拍板),不代表用户显式选择——直接透传会让全量请求都携带
+ * reasoning_effort(搁置原因)。装配面按 loadConfig 的 sources 层标记判显式:
  * user/project/env 层=显式(携带),"default" 层或来源未知=未配置(不携带);"" 恒不携带(显式关)。 */
 export function explicitReasoningEffort(sources: Record<string, string> | undefined, key: string, value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -56,27 +56,26 @@ export function explicitReasoningEffort(sources: Record<string, string> | undefi
 
 /** 按(轨,引用)构建 provider:providerId 继承端点+按轨凭证解析。
  * reasoningEffort=调用方已判定的显式值(见 explicitReasoningEffort);undefined=请求不带该参数。
- * apiType(step-127 运行时适配):从 providers[id] 继承(resolveTrackEndpoint),非 chat 时
+ * apiType(运行时适配):从 providers[id] 继承(resolveTrackEndpoint),非 chat 时
  * 透传给 provider→anthropic(/v1/messages)/responses(/v1/responses)协议分支;chat/未声明=现状。 */
 function providerFromRef(
   config: Config, repoRoot: string,
   track: "coding" | "audio.chat" | "audio.asr" | "audio.tts",
   ref: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number },
-  reasoningEffort?: string,
-): ReturnType<typeof createOpenAiCompatProvider> | undefined {
+  reasoningEffort?: string): ReturnType<typeof createOpenAiCompatProvider> | undefined {
   const { baseUrl, apiKeyEnv, apiType } = resolveTrackEndpoint(config, track, ref);
   if (!baseUrl || !ref.model) return undefined;
   const apiKey = resolveTrackApiKey(track, apiKeyEnv, { repoRoot });
   if (!apiKey) throw new Error(`${track} 端点/模型已配置但凭证不可解析(env ${apiKeyEnv} 或 .genie/secrets.json)`);
-  // 429 重试+governor 准入(step-008 收口):coding 轨(进程级 provider 桶 AIMD 自适应,
+ // 429 重试+governor 准入:coding 轨(进程级 provider 桶 AIMD 自适应,
   // 429→model_retry_scheduled→cap 减半;GENIE_LLM_ADMISSION=off 显式关闭)。
-  // 2026-10-20:passthrough 只观测不排队,10 路并发首调实测 8 路建连超时——叠加按端点的
+ // passthrough 只观测不排队,10 路并发首调经验证 8 路建连超时——叠加按端点的
   // 在飞信号量(GENIE_LLM_MAX_INFLIGHT,缺省 4),同 baseUrl 的主/角色/子代理共享配额。
   const admission = track === "coding" && process.env.GENIE_LLM_ADMISSION !== "off"
     ? inflightAdmissionFor(baseUrl, getWorkflowConcurrencyCoordinator().passthrough())
     : undefined;
-  // step-048 ZCode 模型管理语义:per-model maxTokens 优先(条目元数据),轨级回退。
-  // step-139 O4:meta 只作上限(默认收敛 32000),config 显式值才覆盖;超默认值打可见 warning。
+ // ZCode 模型管理语义:per-model maxTokens 优先(条目元数据),轨级回退。
+ // O4:meta 只作上限(默认收敛 32000),config 显式值才覆盖;超默认值打可见 warning。
   const meta = modelMetaOf(config, ref.model);
   const budget = resolveRequestMaxTokens(ref.maxTokens, meta?.maxTokens);
   if (budget.warning) console.warn("[gateway] " + budget.warning);
@@ -84,8 +83,8 @@ function providerFromRef(
 }
 
 export function buildLlmFromConfig(config: Config, repoRoot: string, _sources?: Record<string, string>): LlmProvider | undefined {
-  // coding 轨(vibe coding);step-139 O2:主实施轨 effort=implementationEffort(缺省 high,唯一权威)。
-  // 2026-10-20:选择即 (providerId, model) 对——路由由拥有该模型的 Provider 派生,不信 config 里可能陈旧的
+ // coding 轨(vibe coding); O2:主实施轨 effort=implementationEffort(缺省 high,唯一权威)。
+ // 选择即 (providerId, model) 对——路由由拥有该模型的 Provider 派生,不信 config 里可能陈旧的
   // baseUrl/apiKeyEnv(「模型新、路由旧」是 401/404 的结构性来源)。
   // 部分配置(无 coding 段,如测试只给 { agent: { planGate } })→ undefined,不抛:
   // 与 buildVlmFromConfig「未配置=undefined」同语义,调用方按无 LLM 降级。
@@ -97,7 +96,7 @@ export function buildLlmFromConfig(config: Config, repoRoot: string, _sources?: 
 }
 
 /**
- * 视觉兜底模型(2026-10-25;二次定稿=同 provider 语义,coding.vlm 只填 model):
+ * 视觉兜底模型(二次定稿=同 provider 语义,coding.vlm 只填 model):
  * 继承 coding.llm 的 baseUrl/providerId/apiKeyEnv/apiType(roleFrom 同款合并+模型路由派生,
  * 防跨 Provider 错配),主模型无视觉时 view_image 用它把图转文字描述;未配置=undefined。
  */
@@ -109,8 +108,8 @@ export function buildVlmFromConfig(config: Config, repoRoot: string): LlmProvide
   return providerFromRef(config, repoRoot, "coding", { ...merged, ...route });
 }
 
-/** TTS 客户端(designs/07):audio.tts 轨→音频 bytes。凭证各轨各解析;未配置=undefined(调用方诚实降级为无播报)。
- * 2026-10-13:路径/形态按 dashscope SDK 1.27 http_tts 实证收敛——POST {base}/api/v1/services/audio/tts/SpeechSynthesizer,
+/** TTS 客户端:audio.tts 轨→音频 bytes。凭证各轨各解析;未配置=undefined(调用方诚实降级为无播报)。
+ * 路径/形态按 dashscope SDK 1.27 http_tts 验证收敛——POST {base}/api/v1/services/audio/tts/SpeechSynthesizer,
  * body {model, input:{text, voice, format}}(旧 /services/audio/tts 无后缀路径在 MAAS workspace 返回 url error,
  * 且 config.voice 此前从未被传入请求体=音色恒默认,一并修复);返回假 RIFF 头就地修复(声明长度=真实数据长度)。 */
 export interface TtsClient {
@@ -169,7 +168,7 @@ export function buildTtsFromConfig(config: Config, repoRoot: string): TtsClient 
   };
 }
 
-/** audio.chat 语音链路形态(2026-10-21 音频链路优化,genie-voice 两口径):
+/** audio.chat 语音链路形态(两接口口径,协议参考 qwen-audio-agent,致谢):
  * - omni-query:一次 query 调用(qwen3.8-omni* 口径)——音/视频作为输入内容直接进一次
  *   OpenAI 兼容 chat(多模态 content:input_audio/image_url),文本出,再走既有 audio.tts 外接转语音;
  * - realtime-plus:realtime 会话(qwen-audio-3.1-realtime* 口径,语音输入)——语音直接进 api-ws 会话,
@@ -186,11 +185,11 @@ export function resolveAudioChatMode(chat: { model?: string; protocol?: string; 
 }
 
 /** audio 轨(主 agent):chat 大脑;未配置返回 undefined(调用方显式回退 coding 并打标,不静默混轨)。
- * 形态分派(2026-10-21,resolveAudioChatMode):
+ * 形态分派(resolveAudioChatMode):
  * - realtime-plus → DashScope api-ws WS provider,text+audio 直出(audioOut)+chat.voice 音色
  *   ——回复自带模型语音,上游消费点(companion 广播)不再外挂 tts;
  * - omni-query(缺省)→ OpenAI 兼容 HTTP,音频经 input_audio 内容件直接进一次 query,文本出,再走既有 tts。
- * sources(step-069):OpenAI 兼容路径 reasoningEffort 仅显式配置进请求体(与 coding 轨同语义);
+ * sources:OpenAI 兼容路径 reasoningEffort 仅显式配置进请求体(与 coding 轨同语义);
  * realtime WS 路径无该参数(协议面无此字段,不携带)。 */
 export function buildAudioChatFromConfig(config: Config, repoRoot: string, sources?: Record<string, string>): LlmProvider | undefined {
   const chat = config.audio.chat;
@@ -213,7 +212,7 @@ export interface ModelProviders {
   compact?: ReturnType<typeof createOpenAiCompatProvider>;
   /** code_review 深审模型(未配置也按角色 effort 建:继承主模型,effort 缺省 xhigh)。 */
   review?: ReturnType<typeof createOpenAiCompatProvider>;
-  /** 子代理模型(2026-10-20 用户口径:子代理默认与主 agent 用相同模型)。
+ /** 子代理模型(子代理默认与主 agent 用相同模型)。
    * 未显式配 models.subagent.model=undefined——调用方回退主 provider(agent-wiring `models?.subagent ?? llm`),
    * 模型/端点/effort 全跟随主轨,主模型热切换天然同步;显式配置才建独立实例(高级用法)。 */
   subagent?: ReturnType<typeof createOpenAiCompatProvider>;
@@ -222,12 +221,12 @@ export interface ModelProviders {
 }
 
 /**
- * 按角色构建模型 provider(step-139 O2 改造):
+ * 按角色构建模型 provider( O2 改造):
  * - 主实施轨 effort = implementationEffort(缺省 high);旧 coding.llm.reasoningEffort 对主轨不再生效
- *   (2026-10-20 用户拍板:implementationEffort 是主轨唯一权威)。
+ * (用户拍板:implementationEffort 是主轨唯一权威)。
  * - review 恒建(不必显式配 models.*:模型/端点/凭证/超时仍继承 coding.llm,只有 effort 按角色),
  *   effort = 显式 coding.models.<role>.reasoningEffort > 缺省 xhigh。
- * - subagent(2026-10-20 用户口径)未显式配 model=undefined 回退主 provider(与主 agent 完全同模型
+ * - subagent未显式配 model=undefined 回退主 provider(与主 agent 完全同模型
  *   同档位,主模型热切天然跟随);显式配 model 才按 review 同语义建独立实例。
  * - compact 仍只在显式配置时构建(不配=调用方回退主 provider,消费点在 compact-hook);
  *   配了则 effort 缺省 xhigh,可用 coding.models.compact.reasoningEffort 显式降档。
@@ -243,8 +242,7 @@ export function buildModelProviders(config: Config, repoRoot: string, _sources?:
     role: "compact" | "review" | "subagent" | "digest",
     ref: { model?: string; baseUrl?: string; providerId?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number; reasoningEffort?: string } | undefined,
     /** true=未配置时回退 undefined(compact 旧语义);false=未配置也继承主模型建实例(review/subagent)。 */
-    skipWhenUnconfigured: boolean,
-  ) => {
+    skipWhenUnconfigured: boolean) => {
     if ((!ref || !ref.model) && skipWhenUnconfigured) return undefined;
     const merged = { ...config.coding.llm, ...(ref ?? {}), model: ref?.model ?? config.coding.llm.model };
     const route = resolveCodingModelRoute(config, merged);
@@ -255,7 +253,7 @@ export function buildModelProviders(config: Config, repoRoot: string, _sources?:
     main,
     compact: roleFrom("compact", config.coding.models.compact, true),
     review: roleFrom("review", config.coding.models.review, false),
-    // 2026-10-20 用户口径「子 agent 要用和主 agent 相同的模型」:未显式配 model 不再恒建独立实例
+ // 未显式配 model 不再恒建独立实例
     // (旧:继承主模型名但 effort 独立 xhigh——主模型热切后角色实例与主轨漂移,且档位不一致);
     // 直接 undefined 回退主 provider,同实例同模型同 effort。显式配置才独立(高级用法)。
     subagent: config.coding.models.subagent?.model ? roleFrom("subagent", config.coding.models.subagent, true) : undefined,
@@ -266,14 +264,12 @@ export function buildModelProviders(config: Config, repoRoot: string, _sources?:
 
 /**
  * m1(会话覆盖 → 角色轨):把会话选择(已解析出 model/providerId)应用到 `coding.models.<role>`。
- *
  * 优先级判定(**显式优先**;与 ZCode 的 subagent_model 语义对齐):
  *  1. 全局 `coding.models.<role>.model` **显式非空** → 保留该角色自己的模型端点/凭证(用户明确
  *     指定了「这个角色用别的模型」,会话主模型切换不得静默覆盖它)——**但**若该角色显式配置的
  *     providerId 与会话选中的 providerId 相同,视为「同一端点上的角色档位」,把 model 换成会话模型
  *     (用户意图=端点和主会话一致,只是显式声明了 role 槽位);
  *  2. 该角色未显式配置 model → 跟随会话选择(model/providerId 都换成会话值),即 override > 全局。
- *
  * 返回新 config(不就地改传入对象)+ 判定说明(notes,给 journal/日志用)。
  * 注意:compact 的语义是「未配置=回退主 provider」,故这里只补 model/providerId 字段,
  * 具体实例是否构建仍由 buildModelProviders 的 skipWhenUnconfigured 口径决定。
@@ -319,7 +315,7 @@ export function buildLlmFromEnv(): LlmProvider | undefined {
   const apiKey = process.env.GENIE_LLM_API_KEY;
   if (!baseUrl || !model) return undefined;
   if (!apiKey) throw new Error("GENIE_LLM_BASE_URL/MODEL 已设置但缺 GENIE_LLM_API_KEY");
-  // apiType(step-127):env 通道同享协议分派(GENIE_LLM_API_TYPE=anthropic|responses);
+ // apiType:env 通道同享协议分派(GENIE_LLM_API_TYPE=anthropic|responses);
   // 未设/非法值=chat 现状。
   const apiType = process.env.GENIE_LLM_API_TYPE;
   return createOpenAiCompatProvider({ baseUrl, model, apiKey, ...(apiType === "anthropic" || apiType === "responses" ? { apiType } : {}) });

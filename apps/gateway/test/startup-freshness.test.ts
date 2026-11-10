@@ -1,6 +1,5 @@
 /**
- * M9 开工前置门:基线新鲜度 + 规则旧措辞(2026-11)。
- *
+ * 开工前置门:基线新鲜度 + 规则旧措辞(2026-11)。
  * 契约:
  * a.readBaselineStatus 绝不抛错:真 git 仓覆盖 fresh/behind/ahead-warn/diverged,无 upstream 与
  *   非 git 目录一律 unknown(前者 reason=no-upstream)——「量不到」不等于「新鲜」,不能静默放行成 fresh;
@@ -8,7 +7,7 @@
  *   失败/超时降级 unknown 且 reason 注明 fetch-failed,fetched 按实际成功置位;
  * c.接线决策是纯函数(planFreshnessSkip/planFreshnessAction):只有 behind 会拦,blockOnBehind=false
  *   或 GENIE_FRESHNESS_BLOCK=off 降级为警告——阻断口径可在无 gateway 时逐条断言;
- * d.旧措辞扫描:docs/**\/*.md + 根 AGENTS.md;tasks/ 与 *archive* 目录不报;同文件同 old 只报首处;
+ * d.旧措辞扫描:docs/**\/*.md + 根 AGENTS.md; 与 *archive* 目录不报;同文件同 old 只报首处;
  *   上限 50;坏表不抛但 ok=false;
  * e.CLI:check-rule-wording 干净 0 / 命中 2 / 坏表 1(真 spawn tsx 跑一次,证明 exit code 口径)。
  * f.接线存在性:源码静态断言(装配面起 loop 需真 provider/executor,成本过高)——把「接线点在

@@ -1,6 +1,6 @@
 /**
- * wiki ask 中文分词修复单测(2026-10-21 批次 A):
- * 四轮实测实锤——
+ * wiki ask 中文分词修复单测(批次 A):
+ * 四轮经验证注意——
  *  - 「怎么给 cobra 添加 flag 校验」→ 关键词含「怎么给」整词(无停用词);
  *  - 「如何添加子命令」→ 关键词「如何, 何添, 添加, 加子」(2-gram 残渣);
  *  - grep 命中含「xxx_test.go:15 — package cobra」零信息行(package 声明行被当命中)。
@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("extractKeywords 中文分词(停用词+残渣)", () => {
-  it("实锤 1:「怎么给 cobra 添加 flag 校验」——无停用词整词、无残渣", () => {
+  it("实测确认 1:「怎么给 cobra 添加 flag 校验」——无停用词整词、无残渣", () => {
     const kw = extractKeywords("怎么给 cobra 添加 flag 校验");
     expect(kw).toContain("cobra");
     expect(kw).toContain("flag");
@@ -30,7 +30,7 @@ describe("extractKeywords 中文分词(停用词+残渣)", () => {
     expect(kw.some((k) => k.includes("怎"))).toBe(false);
   });
 
-  it("实锤 2:「如何添加子命令」——无「如何」、无 何添/加子 残渣", () => {
+  it("实测确认 2:「如何添加子命令」——无「如何」、无 何添/加子 残渣", () => {
     const kw = extractKeywords("如何添加子命令");
     expect(kw).toContain("添加");
     expect(kw).toContain("子命令");
@@ -66,7 +66,7 @@ describe("askWiki grep 命中声明行过滤", () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-wikiask-"));
     created.push(dir);
     const files: Record<string, string> = {
-      // Go 形态:package 声明行 + flag 校验真实使用行(bench go-cobra 实锤形态)
+ // Go 形态:package 声明行 + flag 校验真实使用行(bench go-cobra 注意形态)
       "cobra_check.go": [
         "package cobra",
         "",

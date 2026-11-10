@@ -2,12 +2,10 @@
  * 移植自 ZCode packages/ui/src/components/ai-elements/mermaid-block.tsx 的
  * normalizeCssColorForMermaid / resolveCssColor / createMermaidConfig 色彩链;
  * 上游源自 vercel/ai-elements(Apache-2.0)衍生实现,原文件许可 Apache-2.0,
- * 移植日期 2026-10-29,此处为衍生移植。
- *
+ * 移植日期,此处为衍生移植。
  * 动机(原文件注释):Mermaid 底层 khroma 解析器不支持 Tailwind v4 常见的
  * oklab()/color-mix() 结果;先让浏览器解析主题 token,再经 canvas 采样成传统
  * rgb()/rgba(),避免把现代 CSS 颜色直接传给 Mermaid——深浅主题切换图不褪色的关键。
- *
  * DOM 副作用(document/getComputedStyle/canvas)全部抽为可注入采样器:
  *   - 浏览器端 createCanvasColorSampler() 产出 {resolve, sample};
  *   - 也可注入单函数 sampler(color) → {r,g,b,a}|null | [r,g,b,a]|null(a 取 0..1,

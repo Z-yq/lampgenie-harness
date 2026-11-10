@@ -1,6 +1,5 @@
 /**
- * 阻塞语义实测(2026-11-04 P0 止损证据):同一慢 provider 下 shadow vs active 的 runTurn 墙钟差。
- *
+ * 阻塞语义经验证( P0 止损证据):同一慢 provider 下 shadow vs active 的 runTurn 墙钟差。
  * 用法:cd packages/harness-runtime && npx tsx scripts/model-scoring-blocking-probe.ts
  * 结论口径:shadow 用 void 不 await 评分 → runTurn 耗时与 provider 延迟无关;
  *           active 每 N 步 await 一次 → runTurn 多等一个 provider 延迟。

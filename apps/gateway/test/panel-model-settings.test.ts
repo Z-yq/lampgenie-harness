@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
-/** step-112 设置→Coding 模型:结构回归(真 UI 在 panel.ts 模板内,这里锁关键面不丢)。 */
-describe("step-112 Coding 模型设置结构", () => {
+/** 设置→Coding 模型:结构回归(真 UI 在 panel.ts 模板内,这里锁关键面不丢)。 */
+describe(" Coding 模型设置结构", () => {
   it("四角色下拉/思考力度/Provider 编辑/模型目录/高级折叠均在", async () => {
     const panel = servePanel(7894, () => {});
     try {

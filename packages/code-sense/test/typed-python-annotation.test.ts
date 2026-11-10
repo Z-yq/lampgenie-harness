@@ -1,6 +1,6 @@
 /**
- * typed/python 注解边界修复单测(2026-10-21 批次 D):
- * 四轮实测实锤(py-mmdetection mmdet/apis/inference.py)——多行 def 签名续行与 docstring 行
+ * typed/python 注解边界修复单测(批次 D):
+ * 四轮经验证注意(py-mmdetection mmdet/apis/inference.py)——多行 def 签名续行与 docstring 行
  * 曾被 ANNOT_RE 当注解赋值收进 vars:
  *  - `video_len: int) -> SampleList:`(def 续行)→ dataType="int) -> SampleList:"
  *  - `ConfigType: new test_pipeline`(docstring Returns 段)→ dataType="new test_pipeline"
@@ -24,7 +24,7 @@ afterEach(() => {
   while (created.length) rmSync(created.pop()!, { recursive: true, force: true });
 });
 
-/** py-mmdetection inference.py 的实锤形态(节选,行号语义保真)。 */
+/** py-mmdetection inference.py 的注意形态(节选,行号语义保真)。 */
 const MMDET_LIKE = [
   "from typing import Optional, Union",
   "",

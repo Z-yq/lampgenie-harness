@@ -1,9 +1,8 @@
 /**
- * 单语言服务器实例的 stdio JSON-RPC 客户端(step-114)。
+ * 单语言服务器实例的 stdio JSON-RPC 客户端。
  * 参照:
  * - deepseek-harness/packages/lsp/lsp-stdio/src/connection.ts(id 关联/进程关闭即拒绝)
  * - opencode/packages/opencode/src/lsp/client.ts(诊断新鲜度/版本/去抖)
- *
  * 红线:任何异常只影响本客户端(fail-soft),不允许向工具调用抛错。
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -64,8 +63,7 @@ export class LspClient {
     private readonly proc: ChildProcessWithoutNullStreams,
     readonly serverId: string,
     readonly root: string,
-    readonly defaultTimeoutMs: number,
-  ) {
+    readonly defaultTimeoutMs: number) {
     proc.stdout.on("data", (chunk: Buffer) => this.onStdout(chunk));
     proc.stderr.on("data", (chunk: Buffer) => {
       this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-MAX_STDERR_TAIL);
@@ -125,7 +123,7 @@ export class LspClient {
     const prev = this.docs.get(uri);
     if (!prev) {
       // 新鲜度锚点:通知前清掉旧诊断——此后到达的 publish 一定属于本次同步(避免「发布早于
-      // collect 起始时刻」被误判为陈旧,实测 fake/pylsp 都可能先推后返)。
+ // collect 起始时刻」被误判为陈旧,经验证 fake/pylsp 都可能先推后返)。
       this.diagByUri.delete(uri);
       await this.notify("textDocument/didOpen", {
         textDocument: { uri, languageId, version: 1, text },

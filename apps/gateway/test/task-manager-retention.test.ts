@@ -1,5 +1,5 @@
 /**
- * TaskSupervisor 保留期(step-005 二期能力收口):终态超期清除,pinned/非终态豁免,days<=0 关。
+ * TaskSupervisor 保留期(二期能力):终态超期清除,pinned/非终态豁免,days<=0 关。
  */
 import { describe, it, expect } from "vitest";
 import { TaskSupervisor } from "../src/task-manager.js";
@@ -23,7 +23,7 @@ describe("applyRetention", () => {
       mkTask("old-run", "running", 10),
       mkTask("new-done", "done", 1),
     ]);
-    // 2026-11-05 语义变更(interrupted 态):restore 把 running 收编成 interrupted(非终态,
+ // 语义变更(interrupted 态):restore 把 running 收编成 interrupted(非终态,
     // 可续跑)而非 cancelled——保留期只清终态,old-run 以 interrupted 保留等续跑/人工清理,
     // 清除数=2(old-done/old-fail)。修复前口径(收编=cancelled 终态,清除数=3)随状态机演进作废。
     expect(tm.applyRetention(7)).toBe(2);

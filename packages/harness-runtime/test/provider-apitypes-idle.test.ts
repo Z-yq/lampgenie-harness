@@ -8,7 +8,7 @@ import {
 } from "../src/agent/openai-provider";
 
 /**
- * 流空闲超时(2026-10-18):anthropic/responses 适配器此前只有外层整体墙钟(chat() 里
+ * 流空闲超时:anthropic/responses 适配器此前只有外层整体墙钟(chat 里
  * max(timeoutMs, 30min) 的宽松上限),与 chat 流式分支的「空闲窗」语义不一致——大上下文 prefill
  * 数分钟属健康慢流,墙钟误杀(observe3 AbortError 根因)。本文件锁两件事:
  * ① guard 语义(窗口=max(30s, timeoutMs ?? 600s);chunk 到达重置;dispose 取消;abort 原因);
@@ -112,8 +112,7 @@ describe("anthropic 适配器流空闲超时", () => {
         { at: 40_000, chunk: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "流" } } },
         { at: 60_000, chunk: { type: "message_delta", usage: { output_tokens: 2 } } },
       ],
-      { closeAfterMs: 60_010 }, // 全程无任何单次停顿超过 30s 窗
-    ));
+      { closeAfterMs: 60_010 }, // 全程无任何单次停顿超过 30s 窗));
     const p = createOpenAiCompatProvider({ baseUrl: "https://llm.test", apiKey: "k", model: "m1", apiType: "anthropic", timeoutMs: 30_000 });
     const deltas: { text?: string }[] = [];
     const pending = p.chat([{ role: "user", content: "hi" }], [], undefined, (d) => deltas.push(d));

@@ -1,5 +1,5 @@
 /**
- * path-filter 语言族识别(2026-10-25):Rust/C#/Ruby/PHP 接入 adapter 后补的测试文件命名形态,
+ * path-filter 语言族识别:Rust/C#/Ruby/PHP 接入 adapter 后补的测试文件命名形态,
  * 同时锁定「不得误伤」——小写 latest/contest 之类不判测试。
  */
 import { describe, it, expect } from "vitest";

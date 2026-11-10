@@ -1,6 +1,5 @@
-/* canvas-shell.js —— 无限画布外壳(2026-10-20 用户口径:把 17 个视图改成画布上的卡片,
- * 卡片可自由拖动/缩放;2026-10-21 双导航融合:左侧窄定位栏 cvRail 退役,导航/唤回/状态点归侧栏托盘)。
- *
+/* canvas-shell.js —— 无限画布外壳( 把 17 个视图改成画布上的卡片,
+ * 卡片可自由拖动/缩放; 双导航融合:左侧窄定位栏 cvRail 退役,导航/唤回/状态点归侧栏托盘)。
  * 设计原则(为什么是「外壳」而不是重写视图):
  *  - 全部 17 个 #view-* 保持原 DOM 与原有监听器/渲染函数不动,本文件只把它们**挪**进卡片容器
  *    (DOM 移动不销毁监听器),因此 17k 行面板逻辑零改写;经典单视图布局随时可切回。
@@ -8,7 +7,6 @@
  *  - 「可见即量尺寸」类逻辑(白板 wbResize / 终端 fit / 看板布局)通过 bridge.resized(name) 回调重算;
  *    卡片用 visibility:hidden 离屏剔除(不 display:none,保住 rect 有效,量尺寸不会变 0)。
  *  - 布局持久化 zh:cv-layout;形态开关 zh:cv-mode(canvas|classic);Ctrl+Shift+C 切换。
- *
  * 对外 API(window.CanvasShell):init/focus/fitAll/fitCard/zoomStep/zoomReset/setMode/isCanvas/
  *   inView/liveNames/showCard/hideCard/resetLayout/__geom(纯函数,单测用)
  */
@@ -24,10 +22,10 @@
   var SNAP = 8;                 // 网格吸附(px)
   var HEAD_H = 60;              // 卡片标题栏高度(Dify 风:图标 + 标题/副标题两行;运行时以实测为准,见 headH)
   // 缩放下限:全览需要把整个画布世界装进安全区(CV_CARDS 最远卡片 x=5320+900、y=2280+760 → 6220×3040;
-  // step-1535 增轨迹卡(w=900)后世界宽 6080→6220,step-141 增 IDE 卡后全高 3040;旧注释 5240×1640 是三卡落位之前的旧世界尺寸)。
+ // 增轨迹卡(w=900)后世界宽 6080→6220, 增 IDE 卡后全高 3040;旧注释 5240×1640 是三卡落位之前的旧世界尺寸)。
   // 低倍率可读性由 LOD 负责(见 applyView);世界尺寸本身由 boundsOf(visibleRects()) 现算,此处只记录 0.1 下限的依据。
   var Z_MIN = 0.1;
-  // 概览 LOD 三档滞回(2026-10-21:单阈 0.45 硬切 = 跨阈瞬间同步改全部卡片 DOM,大板卡顿;
+ // 概览 LOD 三档滞回(单阈 0.45 硬切 = 跨阈瞬间同步改全部卡片 DOM,大板卡顿;
   // 且阈值附近轻微缩放会反复穿越 → 抖动)。进入阈值低、退出阈值高 = 滞回死区,防抖。
   //   s < LOD_IN         → 进入 LOD
   //   s > LOD_OUT        → 退出 LOD
@@ -37,7 +35,7 @@
   var LOD_OUT = 0.56;           // 出 LOD:高于此缩放才恢复正文(比旧 0.45 更早恢复)
   var Z_MAX = 2;
   var CULL_PAD = 240;           // 离屏剔除的宽容边(px,屏幕坐标)
-  // 取景可读性下限:整卡入画时若按安全区能装下 ≥ 0.7,就不许取更小的倍率(900×600 实测只到 49%,
+ // 取景可读性下限:整卡入画时若按安全区能装下 ≥ 0.7,就不许取更小的倍率(900×600 经验证只到 49%,
   // 内容小到看不清;按安全区重算是 ~74%)。装不下时仍按装得下的值——不为下限牺牲「全部入画」。
   var FIT_MIN_S = 0.7;
   var HEAVY = { board: 1, browser: 1, project: 1, term: 1 }; // 重件:额外绘制隔离
@@ -50,7 +48,7 @@
     term: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 10l3 2.5L7 15"/><line x1="12.5" y1="15.5" x2="17" y2="15.5"/>',
     git: '<circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><line x1="6" y1="8.2" x2="6" y2="15.8"/><path d="M18 11.2c0 3.4-4.2 4.3-8.4 4.6"/>',
     files: '<path d="M4 6.5A2 2 0 0 1 6 4.5h4l2 2h6a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><line x1="8" y1="12" x2="16" y2="12"/>',
-    /* IDE(step-141):窗口内代码括号对 + 底部基线(vscode 风格编辑器语汇) */
+ /* IDE:窗口内代码括号对 + 底部基线(vscode 风格编辑器语汇) */
     ide: '<path d="M8.5 4.5h-3a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h3"/><path d="M15.5 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3"/><path d="M11 12h2M9 8.5l-2.5 3.5L9 15.5M15 8.5l2.5 3.5L15 15.5"/>',
     board: '<path d="M4 20l4.5-1L20 7.5a2 2 0 0 0 0-3L19.5 4a2 2 0 0 0-3 0L5 15.5z"/><line x1="14.5" y1="6.5" x2="17.5" y2="9.5"/>',
     project: '<rect x="3" y="4" width="7" height="5" rx="1.5"/><rect x="14" y="4" width="7" height="5" rx="1.5"/><rect x="8.5" y="15" width="7" height="5" rx="1.5"/><path d="M6.5 9v3.5h11V9"/><line x1="12" y1="12.5" x2="12" y2="15"/>',
@@ -88,11 +86,11 @@
       h: clamp(Number.isFinite(r.h) ? r.h : 480, MIN_H, 100000),
     };
   }
-  /* ---- 存储布局归一化(2026-10-21 卡头标题压叠修复) ----
-   * 实锤路径:localStorage 旧档两类脏值会把非法坐标写进 style ——
+ /* ---- 存储布局归一化( 卡头标题压叠修复) ----
+ * 注意路径:localStorage 旧档两类脏值会把非法坐标写进 style ——
    *  ① JSON.stringify(NaN) 落盘成 null → 加载端 x:null 进 style.left="nullpx",
    *    非法声明被浏览器整条丢弃 → absolute 卡片退回静态位置,所有脏卡叠在同一静态点,
-   *    卡头(标题行)文字互相压叠(用户截图实锤);
+ * 卡头(标题行)文字互相压叠(用户截图注意);
    *  ② 条目缺字段 → Math.max(MIN_W, undefined)=NaN → width:"NaNpx" 同炸。
    * 归一化:逐字段 Number.isFinite,坏字段回退默认布局 def 的同名字段;w/h 钳 [MIN,1e5];
    * x/y 钳 ±XY_LIMIT —— 世界坐标没有硬边界,上限只拦「坐标写到 1e9 卡片永远拉不回」的脏档
@@ -115,7 +113,7 @@
   }
   /** 升级播种(纯函数):savedNames 里缺席、defLayout 里在册的卡 = 本次升级新增的卡。
    *  落位紧贴 chat 卡右侧竖排(28/24 间距),避免按默认坐标落到用户视口外(x:5320 之远)
-   *  造成「新卡不存在」的错觉(2026-10-21 用户实报:子agent会话流卡找不到)。
+ * 造成「新卡不存在」的错觉( 用户用户反馈:子agent会话流卡找不到)。
    *  无 chat 几何或无缺失卡返回 null(调用方不动任何卡;全新用户无存档也不走此路径)。 */
   function seedMissing(savedNames, defLayout, chatG) {
     if (!chatG || !defLayout) return null;
@@ -245,9 +243,9 @@
       "#cvShellHost:before{content:\"\";position:absolute;inset:0;pointer-events:none;opacity:.5;",
       "  background-image:radial-gradient(circle at 1px 1px, var(--border-soft) 1px, transparent 0);",
       "  background-size:var(--cv-g,24px) var(--cv-g,24px);background-position:var(--cv-ox,0px) var(--cv-oy,0px)}",
-      /* 文字锐利(2026-10-21 画布卡文字模糊根治):世界层**不再常驻 will-change**——
+ /* 文字锐利( 画布卡文字模糊根治):世界层**不再常驻 will-change**——
        * 常驻提升会把整块世界(含所有卡片文字)按缩放瞬间的倍率栅格化成合成层纹理,缩放停止后
-       * 文字仍是那张被拉伸的旧纹理(用户实报「每个看板的字模模糊糊」)。改为只在交互进行中
+ * 文字仍是那张被拉伸的旧纹理(用户用户反馈「每个看板的字模模糊糊」)。改为只在交互进行中
        * (applyView 打 .cv-moving,静止 180ms 后移除)提升层保拖拽/缩放顺滑;静止即解除提升,
        * 浏览器按最终设备像素重绘文字 → 锐利。Windows 缩放(dpr 1.25/1.5)下的分数设备像素同理受益。 */
       "#cvWorldShell{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}",
@@ -264,7 +262,7 @@
        * 不用 transform/zoom 反向补偿(会和世界 scale 打架、且 zoom 在旧内核不支持),
        * 一律用 calc(px / var(--cv-s)) 让世界坐标下的尺寸在屏幕上回到原值。 */
       "body.cv-lod .cv-card{border-radius:calc(12px / var(--cv-s,1))}",
-      /* LOD 软过渡(2026-10-21):正文/工具条/缩放手柄改为 visibility+opacity,不再 display:none,
+ /* LOD 软过渡:正文/工具条/缩放手柄改为 visibility+opacity,不再 display:none,
        * 否则跨阈是硬切(display 不可过渡)。三档滞回(LOD_IN/LOD_OUT)保证不会在阈值附近来回抖。
        * 过渡写在「基础规则」而不是 body:not(.cv-lod) 反向规则上:后者特异性(0,2,1)会压过离屏剔除
        * `.cv-card.off .cv-card-body{visibility:hidden}`(0,2,0) → 离屏卡的正文又变可见,剔除失效。
@@ -273,7 +271,7 @@
       "body.cv-lod .cv-card-body,body.cv-lod .cv-card-tools,body.cv-lod .cv-rs{visibility:hidden;opacity:0}",
       /* LOD 卡片收缩到卡头高:正文藏了以后卡片还留着 g.h(640/720)就是一大片空洞。
        * 目标 = 卡头屏幕高 58px 反算回世界高(58/s),与下面卡头规则同口径。
-       * 不用 min(...,100%) 收口:允许的包含块 #cvWorldShell 是 0×0,百分比高度会解析成 0 → 卡片整张消失。
+ * 不用 min(...,100%) :允许的包含块 #cvWorldShell 是 0×0,百分比高度会解析成 0 → 卡片整张消失。
        * !important 必须有:applyCard() 给 .cv-card 写了内联 height。 */
       "body.cv-lod .cv-card{height:calc(58px / var(--cv-s,1))!important;overflow:hidden;transition:height .22s ease}",
       "body.cv-lod .cv-card-head{height:min(calc(58px / var(--cv-s,1)),100%);padding:0 calc(8px / var(--cv-s,1));",
@@ -284,7 +282,7 @@
       "body.cv-lod .cv-card-txt{gap:calc(1px / var(--cv-s,1))}",
       "body.cv-lod .cv-card-title{font-size:calc(12.5px / var(--cv-s,1));letter-spacing:calc(1.2px / var(--cv-s,1))}",
       "body.cv-lod .cv-card-sub{font-size:max(calc(9.5px / var(--cv-s,1)),10px);color:var(--muted)}",
-      /* 2026-10-21:离屏卡跳过渲染布局(治 LOD 跨阈 87ms 长任务峰),进入视口自动恢复 */
+ /* :离屏卡跳过渲染布局(治 LOD 跨阈 87ms 长任务峰),进入视口自动恢复 */
       ".cv-card-body{content-visibility:auto;contain-intrinsic-size:auto 400px}",
       "body.cv-lod .cv-card-dot{width:calc(7px / var(--cv-s,1));height:calc(7px / var(--cv-s,1))}",
       /* ---- Dify 风卡片头:图标块 + 标题/副标题两行 + 状态点 + 工具 ---- */
@@ -334,7 +332,7 @@
       "body.cv-shell .cv-card[data-name=chat] .chat-col{padding:10px 6px 10px 10px}",
       /* 画布形态下整页让位:旧浮层背景退场,右侧不留 38vw */
       "body.cv-shell .page{padding-right:8px}",
-      /* ---- 屏幕 chrome 不固定(2026-10-20 二期;2026-10-21 双导航融合:cvRail 定位栏退役,
+ /* ---- 屏幕 chrome 不固定( 二期; 双导航融合:cvRail 定位栏退役,
        * 导航/唤回/状态点/托盘收起全部归侧栏托盘,画布左缘留白归还给画布世界)----
        * 以下全部只在 body.cv-shell 下生效,经典布局零影响。 */
       /* ① 顶部 header 整条退场(连接点下沉到托盘品牌点,面板侧 cvConn 维护,信息不丢) */
@@ -392,7 +390,7 @@
       ".cv-guide{position:absolute;z-index:44;background:var(--accent-bright);opacity:.75;pointer-events:none;display:none}",
       ".cv-guide.v{width:1px}",
       ".cv-guide.h{height:1px}",
-      /* 左侧定位栏 #cvRail —— 2026-10-21 双导航融合退役(用户口径:与浮动侧栏托盘功能重叠且并排)。
+ /* 左侧定位栏 #cvRail —— 双导航融合退役(与浮动侧栏托盘功能重叠且并排)。
        * 导航职责归托盘:act-* 按钮画布形态=定位对应卡(switchView 分流);隐藏卡唤回=托盘按钮置灰+点击唤回
        * (面板监听 cv-cards 事件);卡片状态点/连接点迁托盘(面板侧 cvCardStatus/cvConn);
        * 托盘收起=托盘自带最小化钮 + 既有 #sbRail 细轨承接唤回。样式/构建/事件全部移除,左缘留白归还画布。 */
@@ -407,7 +405,7 @@
       /* 小地图(外壳自己的):id 用 #cvMiniShell——面板画布床里也有一个 #cvMini(.bf-minimap,
        * 44×26 常态/148×96 hover,left:10px;bottom:10px)。撞 id 时本条 #cvMini(特异性 1,0,0)
        * 会整套劫持面板小地图的几何(right/top/width/height)→ 面板小地图实际落在画布左上角、
-       * 档在写者 chip 条(top:30px)前面,点 chip 既不生效也不报错(2026-10 实测 3/6 chip 被吃)。
+ * 档在写者 chip 条(top:30px)前面,点 chip 既不生效也不报错(2026-10 经验证 3/6 chip 被吃)。
        * 定位挪到右下角抬高 120px:避开面板自己的 zoombar(right:10px;bottom:10px)与底部 HUD。 */
       "#cvMiniShell{position:absolute;right:10px;bottom:120px;z-index:40;width:172px;height:112px;border:1px solid var(--border);",
       "  border-radius:10px;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);cursor:crosshair}",
@@ -511,11 +509,11 @@
       bindCardEvents(sp.name);
     }
     S.built = true;
-    // 标题栏高度运行时实测(HEAD_H 常量只做首帧预估):字体/主题/缩放下高度会变,
+ // 标题栏高度运行时经验证(HEAD_H 常量只做首帧预估):字体/主题/缩放下高度会变,
     // 折叠/小地图/离屏剔除都依赖它,钉死常量会算错。
     requestAnimationFrame(function () {
       // 用 offsetHeight(不受 transform:scale 影响)。此前读 getBoundingClientRect 会拿到
-      // 「60 × 当前缩放比 × body zoom」——折叠高度/小地图/离屏剔除全都按错值算(实测 0.829 下存成 50)。
+ // 「60 × 当前缩放比 × body zoom」——折叠高度/小地图/离屏剔除全都按错值算(经验证 0.829 下存成 50)。
       var h = S.cards.chat && S.cards.chat.head.offsetHeight;
       if (h > 20) { HEAD_H = Math.round(h); scheduleDraw(); }
     });
@@ -557,7 +555,7 @@
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  /** 卡片可见性广播(2026-10-21 双导航融合:cvRail 退役,隐藏卡唤回入口迁到侧栏托盘)。
+ /** 卡片可见性广播( 双导航融合:cvRail 退役,隐藏卡唤回入口迁到侧栏托盘)。
    *  面板监听 cv-cards 事件,把对应托盘按钮置灰(隐藏卡=act 按钮半透明,点击走 switchView
    *  = showCard 唤回 + focus 取景,通路零新增)。 */
   function notifyCards() {
@@ -574,7 +572,7 @@
     var c = S.cards[name];
     if (!c) return;
     var g = c.g;
-    // 布局守卫(2026-10-21 标题压叠修复):非有限几何钳回合法值再写 style。
+ // 布局守卫( 标题压叠修复):非有限几何钳回合法值再写 style。
     // NaN/null 落进 style.left="NaNpx" 是非法声明,浏览器整条丢弃 → 卡片退回静态位置,
     // 脏卡全叠在同一静态点。守卫后最坏也是「归 0 + 最小尺寸」,不再叠字。
     var gx = Number.isFinite(g.x) ? g.x : 0;
@@ -594,7 +592,7 @@
     for (var i = 0; i < btns.length; i++) if (btns[i].dataset.act === "min") btns[i].textContent = g.min ? "+" : "—";
   }
 
-  /** 交互态提升层管理(2026-10-21 文字模糊根治,配套 CSS #cvWorldShell.cv-moving):
+ /** 交互态提升层管理( 文字模糊根治,配套 CSS #cvWorldShell.cv-moving):
    * 每次 applyView(= 视口在动)打上 .cv-moving 提升合成层;静止 180ms 后移除——
    * 解除提升触发浏览器按最终缩放重栅格化文字。同时把平移量取整、缩放值收规到 4 位小数,
    * 消掉 fit/持久化带来的亚像素与 0.30000000000000004 类脏值(亚像素偏移同样糊字)。 */
@@ -616,7 +614,7 @@
     markMoving();
     // 防「被浏览器滚走」:世界层内容是绝对定位的超大盒子,host 若用 overflow:hidden,
     // 浏览器在「聚焦输入框/元素滚入视口」时仍会程序化设置 host.scrollTop/scrollLeft
-    // (实测滚到 608px → 整个画布上移 608px,首屏对话卡跑到 y=-528 视口外)。
+ // (经验证滚到 608px → 整个画布上移 608px,首屏对话卡跑到 y=-528 视口外)。
     // 两道保险:①CSS 用 overflow:clip(clip 不产生滚动容器);②每帧复位残留滚动量。
     if (S.host && (S.host.scrollTop || S.host.scrollLeft)) { S.host.scrollTop = 0; S.host.scrollLeft = 0; }
     var grid = 24 * v.s;
@@ -647,7 +645,7 @@
 
   // ---------- 视口操作 ----------
   function setView(v) {
-    // 视口守卫(2026-10-21):x/y/s 非有限值会把 NaN 写进 transform → 整条声明非法,
+ // 视口守卫:x/y/s 非有限值会把 NaN 写进 transform → 整条声明非法,
     // 画布停在旧帧不动(平移/缩放全部失灵)。钳回 0/1 保活。
     S.view = {
       x: Number.isFinite(v.x) ? v.x : 0,
@@ -693,7 +691,7 @@
    *  d0≤0 或距离非有限→原 view 原样返回(绝不产生 NaN/Infinity)。 */
   function pinchToView(v0, d0, d1, c0x, c0y, c1x, c1y) {
     // JSDoc 口径:d0≤0 或任一距离非有限 → 原 view 原样返回(手势数据不可信,绝不产生 NaN/Infinity,
-    // 也不掺半套平移)。此前只把 ratio 中和成 1 仍按中心移平移,doc/impl 脱节(2026-10-29 任务B 补全)。
+ // 也不掺半套平移)。此前只把 ratio 中和成 1 仍按中心移平移,doc/impl 脱节( 任务B 补全)。
     if (!Number.isFinite(d0) || !(d0 > 0) || !Number.isFinite(d1)) {
       return { x: v0.x, y: v0.y, s: Number.isFinite(v0.s) ? v0.s : 1 };
     }
@@ -721,9 +719,9 @@
 
   /** 画布「安全区」:扣掉浮层(浮动侧栏托盘/收起细轨、小地图、HUD、「按住说话」浮钮)占的地方,
    *  否则飞行/适配后的卡片会被浮层压住——卡片内容可读性优先于"数学上居中"。
-   *  口径统一:全部按「浮层实测矩形」换算到 host 局部坐标,不再写死常量
-   *  (写死过一次小地图 196px,浮层一改位置就失配;小地图/说话钮位置由 CSS 决定,必须实测)。
-   *  2026-10-21 双导航融合:cvRail 退役后左缘不再常驻预留 58px,留白归还画布世界;
+ * 口径统一:全部按「浮层经验证矩形」换算到 host 局部坐标,不再写死常量
+ * (写死过一次小地图 196px,浮层一改位置就失配;小地图/说话钮位置由 CSS 决定,必须经验证)。
+ * 双导航融合:cvRail 退役后左缘不再常驻预留 58px,留白归还画布世界;
    *  托盘收起态由 #sbRail 细轨(44px)承接,按需让位。 */
   function safeArea(h) {
     var left = 8;    // cvRail 退役:左缘只剩呼吸位
@@ -744,8 +742,8 @@
       if (side === "right") right = Math.max(right, h.w - l + pad);
       else bottom = Math.max(bottom, h.h - t + pad);
     };
-    // 右上小地图按**右侧**扣除(若按底部扣会把整个安全区高度削掉 200px,实测 chat 卡因此被挤到视口外)。
-    // step-1033:右下「按住说话」已撤(语音输入改由 Super Agent 指挥台自带),不再预留。
+ // 右上小地图按**右侧**扣除(若按底部扣会把整个安全区高度削掉 200px,经验证 chat 卡因此被挤到视口外)。
+ // 右下「按住说话」已撤(语音输入改由 Super Agent 指挥台自带),不再预留。
     reserve(S.mini, 10, "right");
     // 浮动侧栏托盘(二期):它现在是拖到哪儿就在哪儿的浮层,固定扣左边距已经不对了。
     // 按托盘实际占位决定往哪一侧让:托盘在左半屏 → 加左边距;在右半屏 → 加右边距;
@@ -788,7 +786,7 @@
    *  - pad:四周呼吸位(px),可用区域不足 80px 时按 80 兜底(避免 0/负值把缩放压成 0);
    *  - maxS:放大上限(单卡取景传 1,避免小卡片整卡入画被放到 1:1 以上糊掉;全览传 Z_MAX 不放大);
    *  - 可读性下限 FIT_MIN_S:按 pad 算出的 s 若被呼吸位压到 0.7 以下,而「不含呼吸位」时安全区
-   *    其实装得下 0.7 → 抬到 0.7(900×600 实测只到 49%、本该 ~74%,根因就是呼吸位 + 旧的 0.5
+ * 其实装得下 0.7 → 抬到 0.7(900×600 经验证只到 49%、本该 ~74%,根因就是呼吸位 + 旧的 0.5
    *    下限把值压小)。**装不下则老实按装得下的值**:绝不为下限牺牲「全部入画」。 */
   function fitInArea(rect, area, pad, maxS) {
     var p = Number.isFinite(pad) ? pad : 0;
@@ -837,7 +835,7 @@
       try { S.bridge.activate(name); } catch (e) { console.warn("[canvas] 卡片激活失败", name, e); }
     }
     // 焦点同步(每次都要,不只是首次激活):面板侧把「当前视图」身份同步到这张卡,
-    // 否则切回经典布局会显示旧视图(实测:焦点在代码档案卡,切经典却回到文件视图)。
+ // 否则切回经典布局会显示旧视图(经验证:焦点在代码档案卡,切经典却回到文件视图)。
     if (S.bridge && typeof S.bridge.onFocus === "function") {
       try { S.bridge.onFocus(name); } catch (e) { console.warn("[canvas] 焦点同步失败", name, e); }
     }
@@ -866,7 +864,7 @@
 
   /** 卡片状态点(忙/告警/失败/就绪)。tone: run|warn|fail|ok|""
    *  面板把真实状态推过来(有未提交变更/待审批/运行中…),画布只负责显示,不猜数据。
-   *  2026-10-21 双导航融合:托盘按钮上的同名状态点由面板侧 cvCardStatus 直接维护(卡→act 按钮映射在面板)。 */
+ * 双导航融合:托盘按钮上的同名状态点由面板侧 cvCardStatus 直接维护(卡→act 按钮映射在面板)。 */
   function setCardStatus(name, tone, text) {
     var c = S.cards[name];
     var t = tone === "run" || tone === "warn" || tone === "fail" || tone === "ok" ? tone : "";
@@ -883,7 +881,7 @@
     var host = S.host;
     host.addEventListener("wheel", function (e) {
       var p = localXY(e);
-      // 2026-10-29 任务B:光标锚点缩放改为引擎口径(diagram-viewport zoomAtPoint 的数学)——
+ // 任务B:光标锚点缩放改为引擎口径(diagram-viewport zoomAtPoint 的数学)——
       // 任何带修饰键的滚轮(Ctrl/⌘=触控板捏合手势在 Chrome 里也派发 ctrlKey wheel)=缩放,
       // 光标下的世界内容点屏幕位移恒为 0。旧实现只有 ctrlKey 才缩放,普通滚轮只能平移。
       if (e.ctrlKey || e.metaKey || e.altKey) {
@@ -904,7 +902,7 @@
       saveSoon();
     }, { passive: false });
 
-    // 2026-10-29 任务B:双指捏合。pointer 多点(触屏/触控板)时跟踪两指间距离与中心:
+ // 任务B:双指捏合。pointer 多点(触屏/触控板)时跟踪两指间距离与中心:
     // 距变→scale(以初始中心下的世界点为锚),心移→pan。两指落下即取消单指平移,任一指抬起结束手势
     //(单指平移逻辑不动,靠 S.panning=false 让旧 move 空转)。
     S.pts = S.pts || {};
@@ -1336,7 +1334,7 @@
       // 钳住视口:低倍率总览时 miniMap 的 b 会被视口撑大,点右下角会飞到空白世界;
       // 高倍率时点边缘又会把视口送出卡片区。按「视口整体留在卡片包围盒内」钳(点右下=视口右缘贴最右卡),
       // 而不是把中心点钳进包围盒(那样中心落在包围盒角落照样是空白)。
-      // 口径统一(2026-10-21 修「小地图最右列偏 ~60px」):落点走 centerInSafe = 把该点摆到**安全区**中心,
+ // 口径统一( 修「小地图最右列偏 ~60px」):落点走 centerInSafe = 把该点摆到**安全区**中心,
       // 所以钳制必须用安全区的世界半宽/半高。此前 halfW 用 host 全宽算(把落点中心当成了 host 中心),
       // 右侧被小地图/说话钮让掉的那一列就变成固定偏移,最右列怎么点都差一截。
       // 一步到位:同一个 safeArea 口径 → 映射(centerInSafe)与钳制(此处的半宽半高)永远一致。
@@ -1575,7 +1573,7 @@
       for (var n in S.cards) {
         if (!Object.prototype.hasOwnProperty.call(S.cards, n)) continue;
         var g = S.cards[n].g;
-        // 脏值不落盘(2026-10-21):任一几何字段非有限 → 跳过该卡(下次载入走默认布局)。
+ // 脏值不落盘:任一几何字段非有限 → 跳过该卡(下次载入走默认布局)。
         // 不拦会把 NaN 写成 null 档;载入端虽已归一化,但脏档长期留在 localStorage 里,
         // 复制/调试/旧版本面板读到的都是病数据(拖拽中 NaN 还会经对齐吸附传染别的卡)。
         if (!Number.isFinite(g.x) || !Number.isFinite(g.y) || !Number.isFinite(g.w) || !Number.isFinite(g.h)) continue;
@@ -1622,7 +1620,7 @@
   }
 
   // ---------- 浮动导航托盘(侧栏不再固定) ----------
-  // 用户口径 2026-10-20 二期:「这些也不要固定,固定的就是快速定位」。侧栏从 fixed 全高栏
+ // 二期:「这些也不要固定,固定的就是快速定位」。侧栏从 fixed 全高栏
   // 变成可拖动/可调宽/可收起的浮动托盘;**画布形态专属**(所有样式带 body.cv-shell 前缀),
   // 经典布局仍是原来的固定侧栏。托盘位置走 CSS 变量,持久化到 zh:cv-tray。
   var LS_TRAY = "zh:cv-tray";
@@ -1734,8 +1732,8 @@
           c.g = { x: r.x, y: r.y, w: r.w, h: r.h, z: Number(sc.z) || 0, hidden: !!sc.hidden, min: !!sc.min };
           S.zTop = Math.max(S.zTop, c.g.z || 0);
         }
-        // 升级播种(2026-10-21):存档里没有的新卡若按默认坐标落位,常在用户视口外(x:5320 之远)
-        // →「新卡不存在」的错觉(用户实报:子agent会话流卡找不到)。改为紧贴 chat 卡右侧竖排,
+ // 升级播种:存档里没有的新卡若按默认坐标落位,常在用户视口外(x:5320 之远)
+ // →「新卡不存在」的错觉(用户用户反馈:子agent会话流卡找不到)。改为紧贴 chat 卡右侧竖排,
         // 用户挪走前始终可见;全新用户(无存档)不走此分支,仍用默认网格。
         var seed = seedMissing(saved.cards, defLayout, S.cards.chat && S.cards.chat.g);
         if (seed) {
@@ -1758,7 +1756,7 @@
     applyAll();
     notifyCards();                  // 托盘按钮灰态按当前隐藏集合刷新(cvRail 退役后的唤回提示)
     if (firstEnter) {
-      // 首屏恒落主对话卡:用户打开面板第一眼必须有输入框(实测过「复用上次焦点卡」→ 落在代码档案区,
+ // 首屏恒落主对话卡:用户打开面板第一眼必须有输入框(经验证过「复用上次焦点卡」→ 落在代码档案区,
       // 对话卡整张在视口外 y=-547,连 composer 都看不见)。上次焦点只作为**后续**回流的残留,
       // 不作为首屏取景依据;想看别的模块走侧栏托盘/小地图/Ctrl+K。
       setTimeout(function () {
@@ -1790,7 +1788,7 @@
     if (m === "classic") exitCanvas();
     else enterCanvas();
     // initial=启动时按存档恢复形态:此时不该跑「切换形态」的收尾(会 toast 一句、并按 mainView
-    // 再取景一次,把首屏刚摆好的对话卡顶掉 —— 实测首屏 chat 卡跑到视口外)。
+ // 再取景一次,把首屏刚摆好的对话卡顶掉 —— 经验证首屏 chat 卡跑到视口外)。
     if (S.bridge && typeof S.bridge.onMode === "function") { try { S.bridge.onMode(m, initial); } catch (e) { console.warn("[canvas] onMode 回调失败", e); } }
     window.dispatchEvent(new CustomEvent("cv-mode", { detail: { mode: m, initial: initial } }));
     return m;

@@ -1,14 +1,11 @@
 /**
- * llm-config(step-089 P2 / designs/26 §3):打包 CLI 的 LLM 凭证解析链。
- *
+ * llm-config( P2 / §3):打包 CLI 的 LLM 凭证解析链。
  * 解析链(定稿):显式 flag > env 三件套(GENIE_LLM_BASE_URL/MODEL/API_KEY,与 gateway
  * factory/review-llm 同名同源)> 配置文件 ~/.codesense/config.json > 无 LLM(确定性降级)。
- *
- * 凭证红线(designs/26 §1):
+ * 凭证红线( §1):
  *  - 配置文件写入即 chmod 600、目录 0700;apiKey 永不出现在任何输出(maskKey=****+尾4);
  *  - env/flag 不落盘(flag 是一次性覆盖,显式传参语义);
  *  - 缺凭证的语义请求=fail-visible(LlmConfigError),不静默降级成无语义结果冒充成功。
- *
  * ask-file 中继(宿主零配置形态):config 配 llm.askFile.dir 后,CLI 语义请求写
  * ask-<id>.json 进目录并轮询 answer-<id>.json(120s 超时),宿主 agent(codex/trae 里
  * 的编码 agent)读题作答;超时/坏答案=抛错走确定性降级,不留陈旧占位。
@@ -28,7 +25,6 @@ export interface LlmConfig {
  * chat 端点归一(fix S137-1):baseUrl 可能自带 /v1(官方预设/面板预设都常见),
  * 无条件拼 `/v1/chat/completions` 会得到 `/v1/v1/chat/completions` → 端点 404。
  * 剥尾斜杠与尾 /v1 后再拼,三形态(带 /v1、不带、带尾斜杠)都命中。
- *
  * 注:与 harness-runtime 的 openai-provider.chatCompletionsUrl 同规则(本包不依赖 runtime,故各自持有)。
  */
 export function chatCompletionsUrl(baseUrl: string): string {
@@ -63,7 +59,7 @@ export interface ConfigFile {
   [key: string]: unknown;
 }
 
-/** 读配置文件:缺失=null;JSON 坏=LlmConfigError(如实报,不静默吞)。 */
+/** 读配置文件:缺失=null;JSON 坏=LlmConfigError(如用户反馈,不静默吞)。 */
 export function readConfigFile(path: string = configPath()): ConfigFile | null {
   if (!existsSync(path)) return null;
   try {
@@ -220,7 +216,7 @@ export function makeSenseLlm(cfg: LlmConfig, opts: { timeoutMs?: number } = {}):
   };
 }
 
-// ---- ask-file 中继(宿主零配置形态;designs/26 §3.2 形态②) ----
+// ---- ask-file 中继(宿主零配置形态; §3.2 形态②) ----
 
 export interface AskFileProtocol {
   /** CLI 写:语义问题。 */

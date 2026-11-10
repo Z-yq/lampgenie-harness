@@ -1,5 +1,5 @@
 /**
- * 格式化(step-114):优先 LSP textDocument/formatting,兜底本机 formatter 命令,
+ * 格式化:优先 LSP textDocument/formatting,兜底本机 formatter 命令,
  * 都不可用=跳过(fail-soft,不写文件)。
  * 本机 formatter 从 stdin 读、stdout 写,不落临时文件。
  */

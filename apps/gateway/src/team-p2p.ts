@@ -368,7 +368,7 @@ export class TeamP2P {
   }
 
   /** 状态应答前探测:未知成员必探;离线成员按冷却窗重探(转在线才能触发离线队列补发)。
-   * 坑(实测):原实现只探「未知」——成员一旦 offline 就永远不再 ping,离线队列永不补发,
+ * 坑(经验证):原实现只探「未知」——成员一旦 offline 就永远不再 ping,离线队列永不补发,
    * 面板承诺的「对端在线自动补发」实际不可能发生。冷却 10s 防 status 反复 3s 等待。 */
   async probeUnknown(): Promise<void> {
     const now = (this.opts.now ?? Date.now)();

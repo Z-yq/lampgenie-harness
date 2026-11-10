@@ -116,7 +116,7 @@ describe("干预与纠正(ref interventions 语义)", () => {
   });
 
   it("B2 阶段门 auto-advanced:plan.gate phase-auto-advanced 计入正常推进桶,不计干预 denied", () => {
-    // B2(2026-11-05):板含内容节点→phase 自动置 plan,journal 落 plan.gate effect=phase-auto-advanced。
+ // B2:板含内容节点→phase 自动置 plan,journal 落 plan.gate effect=phase-auto-advanced。
     // 消费面契约:该事件是正常放行口径——denied(干预)与 phaseAutoAdvanced(自动推进)分桶,
     // 防止「denied 归零」被读作闸门失灵,也防止把自动推进误算成人工干预。
     const events: JournalEvent[] = [

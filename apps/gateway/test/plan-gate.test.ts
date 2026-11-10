@@ -1,5 +1,5 @@
 /**
- * plan-gate 代码级规划强制(2026-10-20 用户口径:planner 委托/先骨架后丰满/防目标丢失
+ * plan-gate 代码级规划强制( planner 委托/先骨架后丰满/防目标丢失
  * 不能只靠上下文,要代码机制记录与追踪):
  * - 写角色子代理派发前置闸:无板拒(journal permission.gate by=plan-gate)并指路 planner;
  * - planner/explore 不受限;
@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "../src/repo-root.js";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("plan-gate"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -88,7 +88,7 @@ it("阶段与板解耦(2026-10-21):task_phase 不建板;无板+已声明仍拒;�
       if (step === 3 && !landed) {
         landed = true;
         const t = app.taskManager.list().find((x) => x.sessionId === sid)!;
-        const board = { version: 1, taskId: t.id, sessionId: sid, title: "设计板", status: "draft", rev: 1, nodes: [{ id: "d1", kind: "module", label: "主模块", summary: "设计节点", targets: ["apps/gateway/src/x.ts"] }], edges: [] }; // 2026-11-04:内容节点(带 targets)才开门
+        const board = { version: 1, taskId: t.id, sessionId: sid, title: "设计板", status: "draft", rev: 1, nodes: [{ id: "d1", kind: "module", label: "主模块", summary: "设计节点", targets: ["apps/gateway/src/x.ts"] }], edges: [] }; // :内容节点(带 targets)才开门
         for (const base of [join(process.cwd(), "..", ".."), process.cwd()]) {
           try { const d = join(base, ".genie", "boards", sid); mkdirSync(d, { recursive: true }); writeFileSync(join(d, `${t.id}.json`), JSON.stringify(board), "utf-8"); } catch { /* 只读跳过 */ }
         }
@@ -114,7 +114,7 @@ it("阶段与板解耦(2026-10-21):task_phase 不建板;无板+已声明仍拒;�
   expect(final).toContain("再干"); // 板落地后派发真实执行(echo 回显进上下文)
 }, 30_000);
 
-// 板根统一(2026-10-21):board_upsert 实际写盘根 = repoRoot()(storeRoot 缺省),闸门也必须读同根。
+// 板根统一:board_upsert 实际写盘根 = repoRoot(storeRoot 缺省),闸门也必须读同根。
 // 任务 projectId 指向非 harness 项目时 taskRoot≠repoRoot——旧实现按 taskRoot 读板恒读不到 → 死循环。
 it("板根统一:任务 projectId 指向非 harness 项目(taskRoot≠repoRoot),板写在 storeRoot 后闸门放行", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }]);
@@ -130,7 +130,7 @@ it("板根统一:任务 projectId 指向非 harness 项目(taskRoot≠repoRoot),
         const t = app.taskManager.list().find((x) => x.sessionId === sid)!;
         const d = join(repoRoot(), ".genie", "boards", sid);
         mkdirSync(d, { recursive: true });
-        const board = { version: 1, taskId: t.id, sessionId: sid, title: "设计板", status: "draft", rev: 1, nodes: [{ id: "d1", kind: "module", label: "主模块", summary: "设计节点", targets: ["apps/gateway/src/y.ts"] }], edges: [] }; // 2026-11-04:内容节点(带 targets)才开门
+        const board = { version: 1, taskId: t.id, sessionId: sid, title: "设计板", status: "draft", rev: 1, nodes: [{ id: "d1", kind: "module", label: "主模块", summary: "设计节点", targets: ["apps/gateway/src/y.ts"] }], edges: [] }; // :内容节点(带 targets)才开门
         writeFileSync(join(d, `${t.id}.json`), JSON.stringify(board), "utf-8");
         seen.push("step0");
         return { content: "", toolCalls: [{ id: "w1", name: "spawn_subagent", arguments: JSON.stringify({ instructions: "干活甲" }) }] };
@@ -157,7 +157,7 @@ it("板根统一:任务 projectId 指向非 harness 项目(taskRoot≠repoRoot),
   rmSync(projDir, { recursive: true, force: true });
 }, 40_000);
 
-// 逃生阀(2026-10-21):同一 task 同因「无板」拒绝累计到第 3 次 → 降级放行 + journal 留痕,
+// 逃生阀:同一 task 同因「无板」拒绝累计到第 3 次 → 降级放行 + journal 留痕,
 // 防「闸门根错位/板真落不了」时 agent 被同一 reason 钉死无限重试。
 it("逃生阀:同任务连续 3 次「无板」拒绝后第 3 次降级放行,journal 记 effect=escalated", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }, { permission: "task_phase", pattern: "*", action: "allow" }]);
@@ -210,7 +210,7 @@ it("规划委托:主 agent 内联 >3 节点板且未派 planner → 写角色被
         const t = app.taskManager.list().find((x) => x.sessionId === sid)!;
         const board = {
           version: 1, taskId: t.id, sessionId: sid, title: "主代理内联大板", status: "draft", rev: 1,
-          nodes: [1, 2, 3, 4].map((n) => ({ id: `d${n}`, kind: "module", label: `模块${n}`, summary: `节点${n}`, targets: [`src/m${n}.ts`] })), edges: [], // 2026-11-04:内容节点才进放行分支
+          nodes: [1, 2, 3, 4].map((n) => ({ id: `d${n}`, kind: "module", label: `模块${n}`, summary: `节点${n}`, targets: [`src/m${n}.ts`] })), edges: [], // :内容节点才进放行分支
         };
         const d = join(repoRoot(), ".genie", "boards", sid);
         mkdirSync(d, { recursive: true });
@@ -231,7 +231,7 @@ it("规划委托:主 agent 内联 >3 节点板且未派 planner → 写角色被
     const final = seen[0] ?? "";
     expect((final.match(/plan-gate\(规划委托\)/g) ?? []).length, "第一次写角色派发被规划委托闸拒绝").toBe(1);
     expect(final).toContain("没有派过 planner"); // 拒绝指路 planner
-    // 差分回执(2026-11-06,B2 P2):只报缺什么+下一步,不复述规则全文
+ // 差分回执(B2 P2):只报缺什么+下一步,不复述规则全文
     expect(final).toContain("缺:planner 派发 0 次");
     expect(final).toContain("下一步一句话:spawn_subagent(agentType=\\\\\\\"planner\\\\\\\""); // final 是 messages JSON 序列化,引号被转义
     expect(final).not.toContain("规范要求非小修任务由 planner 自己落规划契约"); // 规则全文不再进回执
@@ -258,8 +258,8 @@ it("createFileTools planGate 回调:write_file/edit_file 被拦,read 不受影�
   expect(await read.execute({ path: "a.txt" })).toContain("hello"); // 读侧无闸
 });
 
-// 2026-11-04 内容节点判据:纯计划步骤板(「s1 梳理→s2 归因」,零 targets/symbolRef/accept/数据)
-// 不再开门——板是「变更在系统里的内容契约」不是 TODO 清单(用户口径:板偏计划步骤而非实际开发内容逻辑)。
+// 内容节点判据:纯计划步骤板(「s1 梳理→s2 归因」,零 targets/symbolRef/accept/数据)
+// 不再开门——板是「变更在系统里的内容契约」不是 TODO 清单(板偏计划步骤而非实际开发内容逻辑)。
 it("纯步骤板不开门:拒绝话术点名步骤板并教内容要求;补 targets 后放行", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }, { permission: "task_phase", pattern: "*", action: "allow" }]);
   const seen: string[] = [];
@@ -309,14 +309,14 @@ it("纯步骤板不开门:拒绝话术点名步骤板并教内容要求;补 targ
   apps.push(app);
   await drive(app, sid);
   const final = seen.find((x) => x.startsWith("final:"))?.slice(6) ?? "";
-  // 步骤板被拒时的拒绝话术必须点名步骤板并教内容要求(2026-11-04)
+ // 步骤板被拒时的拒绝话术必须点名步骤板并教内容要求
   expect(final).toContain("纯计划步骤板");
   expect(final).toContain("targets");
   // 内容板落地后真正放行(三试的 echo 回显进上下文)
   expect(final).toContain("三试");
 }, 30_000);
 
-// ── 2026-11-05 阶段门自动推进 + 记账收敛 ─────────────────────────────────────────
+// ── 阶段门自动推进 + 记账收敛 ─────────────────────────────────────────
 // 背景:7 天 telemetry(n=108 次 phase 拒绝/33 会话)中 100% 的 by=plan-gate/phase 拒绝发生在
 // 「该会话此前无任何 task_phase 声明」时,69.4% 是同会话重复被拒。板含内容节点=规划事实已发生,
 // 用「阶段声明」这种形式拦写操作过严 → 阶段门改为自动推进到 plan 并首次留痕,不再拒绝。
@@ -367,7 +367,7 @@ it("阶段门自动推进:板在场但从未 task_phase,首个写操作放行且
     const pp = phaseEvs[0]!.payload as { phase?: string; from?: string | null };
     expect(pp.phase).toBe("plan");
     expect(pp.from).toBeNull();
-    // 规划质量结构化留痕(2026-11-06,B2 P2):收尾落 task.quality,面板结算直接读,不重放板。
+ // 规划质量结构化留痕(B2 P2):收尾落 task.quality,面板结算直接读,不重放板。
     const q = app.journal.readAll().filter((e) => e.kind === "custom" && (e.payload as { type?: string }).type === "task.quality");
     expect(q, "板在场任务收尾必落一条 task.quality").toHaveLength(1);
     const qp = q[0]!.payload as { taskId?: string; planQuality?: { boardType: unknown; nodes: number; contentNodes: number; p0: { passed: number; total: number }; anchorDensity: number } };
@@ -386,8 +386,7 @@ it("逃生阀记账收敛:13 次无板拒绝只落 2 条 escalated(attempt=3 与
   const calls = Array.from({ length: 13 }, (_, k) => ({ id: `ec${k}`, name: "spawn_subagent", arguments: JSON.stringify({ instructions: "干活丙" }) }));
   const app = createGatewayApp({ port: 0,
     llm: llmScript([
-      () => ({ content: "", toolCalls: calls }), // 同一步发 13 个写角色派发:全部走无板判据
-      () => ({ content: "终稿" }),
+      () => ({ content: "", toolCalls: calls }), // 同一步发 13 个写角色派发:全部走无板判据 => ({ content: "终稿" }),
     ]),
     executor: buildExecutorFromConfig({ executor: { kind: "echo" } } as never) as never,
     useExternalHttp: true,
@@ -411,7 +410,7 @@ it("逃生阀记账收敛:13 次无板拒绝只落 2 条 escalated(attempt=3 与
 }, 40_000);
 
 it("规划委托闸记账收敛:13 次写角色派发只落 planner-required×2 + escalated×2(attempt=3 与 13)", async () => {
-  // 背景(2026-11-04 N1 基线):旧实现 escalated 后每次写操作都落一条,320 条里 316 条是重复记
+ // 背景( N1 基线):旧实现 escalated 后每次写操作都落一条,320 条里 316 条是重复记
   // (3 个会话贡献 271/320,最长 count=163),把"逃生阀占比 77.5%"这种事件级比例彻底污染。
   // 收敛口径:非 escalated(前 2 次)每条都落;escalated 只在首次(3)与之后每 +10 落一条。
   // 放行语义不变:第 3 次起仍放行(不再返回 rejected)。
@@ -486,7 +485,7 @@ it("无板 permission.gate 结构化:payload.reason=no-board 且 rule/decisionBy
 }, 30_000);
 
 
-// ── 2026-11-05 白板适用面收口(用户口径「白板不要任何内容都进行落板;白板一定是开发内容逻辑,
+// ── 白板适用面(「白板不要任何内容都进行落板;白板一定是开发内容逻辑,
 // 不要是 todo list;办公任务也可以在板上画作业思路(主题/受众/结构/章节/章间关系/顺序)」):
 // office 从「软免板」改硬闸(composition 作业思路板 / exemptReason 留痕二选一);coding 增豁免通道。
 describe("白板适用面收口:office 硬闸 + exemptReason 豁免通道", () => {

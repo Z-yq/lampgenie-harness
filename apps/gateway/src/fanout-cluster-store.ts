@@ -1,20 +1,16 @@
 /**
  * 扇出簇持久层(生产侧,扇出返工簇 2026-11):把 fanout-cluster 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:一个簇「当时是怎么判的」是审计事实——变更、修复、簇结论、门的结论
  * 都是判断的历史,不能被后来的写入覆盖;而且逐条追加让「新修复到达 → 重估簇」可重放。
  * 单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言。
- *
  * 数据面:`<root>/.genie/rsi/fanout.jsonl`,每行 `{v:1,type,at,...}`
  * - change   {change}                          变更节点(实体/原型/时间/可选辐射面清单)
  * - fix      {fix}                             修复事件(实体/时间/踩到的依赖边)
  * - cluster  {cluster}                         detectClusters 产出的簇(同 id 不重复落行 → 幂等)
  * - gate     {archetype,ok,codes,missing}      辐射面门的判定留痕
- *
  * 投影语义(loadFanout):按行序归并,同 id 后写覆盖(change/fix/cluster);
  * gate 直接按序累积。坏行(JSON 坏 / v 不是 1 / type 未知 / 缺载荷)只计入 parseErrors 并跳过:
  * 一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + 同目录 evidence-graph-store(投影写入)+ runtime 的纯逻辑模块;
  * 不引 agent loop、不引 gateway 其余业务模块。runtime 模块按 defect-lineage-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;

@@ -1,20 +1,17 @@
 /**
  * 工具热升级台账持久层(生产侧,工具热升级协议 2026-11):把 tool-upgrade-protocol 的纯逻辑
  * 落到 append-only jsonl,让「哪个工具现在跑哪个版本、为什么升、回滚过几次」成为可复核的事实。
- *
  * 数据面:`<root>/.genie/rsi/tool-upgrades.jsonl`,每行
  *   `{"v":1,"type":"init|shadow|canary|switch|rollback|retire","at":ISO,"name":...,"version":...,"payload":{...}}`
  * - `at` 统一是 ISO 字符串(审计人读),协议纯函数要的毫秒数由 `Date.parse(line.at)` 反推;
  *   调用方传 `at` 时给毫秒数或 ISO 字符串都接受,一律归一成 ISO 落盘。
  * - `init` 是台账层扩展:协议不覆盖「首个版本怎么落盘」,而投影必须有一个起点
  *   (`initState` 把首版直接记成 stage="switch",它早就在线上)。
- *
  * 投影语义(projectLedger):逐行重放,每行交给协议纯函数应用 → Map<name, UpgradeState>。
  * - 坏行(JSON 坏 / v 不匹配 / 未知 type / 缺 name/version / at 不可解析 / 无 init 前置 /
  *   同 name 重复 init / 纯逻辑拒绝)→ 只计 badLines 并跳过:一行坏不整文件失效、不 throw。
  * - `pull 失败不阻塞`:`switch --experiment-root` 落实验台账失败、`rollback --breaker-root`
  *   落熔断失败,都只把 {name, code} 折进 report.warnings(并把码抄在行 payload 上),升级/回滚本身照样落盘。
- *
  * 依赖纪律:node:fs/node:path + runtime 纯逻辑(两跳惰性解析,先包 spec 后回退相对 src URL)
  * + 同目录 experiment-store / rsi-breaker-store(相对路径 import,不重复实现台账)。
  * 不 import agent loop。参数错误是唯一允许 throw 的情形(TypeError,与 experiment-store 同口径);
@@ -504,8 +501,7 @@ export function resolveCall(
 /** 台账列表(name 可选过滤)。 */
 export function listUpgrades(
   root: string,
-  name?: string,
-): {
+  name?: string): {
   ok: boolean;
   upgrades: { name: string; current: string; stage: UpgradeStage | ""; aliasMap: Record<string, string>; versions: ToolVersion[] }[];
   badLines: number;
@@ -529,7 +525,7 @@ export function listUpgrades(
   return { ok: true, upgrades, badLines: projection.badLines, totalLines: projection.totalLines };
 }
 
-/** 报告:每个工具的当前版本/段位/别名映射 + 坏行 + 下游收口 warnings + 台账路径。 */
+/** 报告:每个工具的当前版本/段位/别名映射 + 坏行 + 下游 warnings + 台账路径。 */
 export function reportUpgrades(root: string): {
   ok: boolean;
   names: string[];

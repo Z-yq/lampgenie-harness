@@ -1,5 +1,5 @@
 /**
- * 重启恢复 e2e(2026-11-05 状态机优化):
+ * 重启恢复 e2e(状态机优化):
  * 模拟网关死亡(进程内:journal 快照留在盘上)→ 重启清算 running→interrupted →
  * resumeInterrupted 一键续跑(同 session 重提)→ 幂等(同 key 二次 resume 不双跑)。
  * 不起真网关(生产网关禁止重启);app 层路径(createGatewayApp)由 test/ui/task-resume.spec.cjs 覆盖。
@@ -41,7 +41,7 @@ describe("重启恢复 e2e:死亡→清算 interrupted→一键续跑→幂等",
     expect(nt!.state === "queued" || nt!.state === "running").toBe(true); // 复用队列机制
     expect(nt!.instruction).toContain("【续跑】");
     expect(nt!.instruction).toContain("原任务书");
-    // 原任务收口:被续跑替代
+ // 原任务:被续跑替代
     expect(tm.get("dead-1")!.state).toBe("cancelled");
     expect(tm.get("dead-1")!.result).toContain(nt!.id);
   });

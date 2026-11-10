@@ -1,11 +1,9 @@
 /**
- * heavy-op 判定(step-071 父子 ask-answer 机制):命令级重操作识别。
- *
+ * heavy-op 判定(父子 ask-answer 机制):命令级重操作识别。
  * 定位:纯函数判定表——子代理(run_cmd 等命令执行工具)发起 build/install/全量测试/
  * 递归批处理类大资源操作时,机制层强制走父 agent 审批(即使 allow 规则命中也拦,
  * unless 显式豁免)。判定只看命令字符串,不看调用方——「调用方是子代理」由闸门侧
  * (loop.ts permission.heavyOp.callerIsSubagent)判定,本模块保持单一职责。
- *
  * 设计纪律:
  * - 可配置可扩展:DEFAULT 表打底 + env 追加(GENIE_HEAVY_OP_EXTRA_RULES / GENIE_HEAVY_OP_EXEMPT);
  *   坏 JSON 显式抛错(配置错误不得静默变全放行,与 loadPermissionRules 同纪律)。
@@ -104,8 +102,7 @@ export const DEFAULT_HEAVY_OP_EXEMPTS: string[] = [
 export function classifyHeavyOp(
   command: string,
   rules: HeavyOpRule[] = DEFAULT_HEAVY_OP_RULES,
-  exemptPatterns: string[] = DEFAULT_HEAVY_OP_EXEMPTS,
-): HeavyOpMatch | null {
+  exemptPatterns: string[] = DEFAULT_HEAVY_OP_EXEMPTS): HeavyOpMatch | null {
   const cmd = String(command ?? "").trim();
   if (!cmd) return null;
   for (const src of exemptPatterns) {

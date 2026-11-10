@@ -1,5 +1,4 @@
-/** board→pptx 导出(2026-10-27 第三版,按 ZCode pptx skill 的设计规范重做)。
- *
+/** board→pptx 导出(第三版,按 ZCode pptx skill 的设计规范重做)。
  * 前两版的问题(用户逐条否掉):
  *   ① 白板卡片 1:1 铺成幻灯片,每页 1 行摘要 + 大片空白;
  *   ② 只有文字和表格,没有一张图(用户:「配图呢?流程图呢?说明图呢?」);
@@ -12,7 +11,6 @@
  *   - 删章节页:章名进页眉,章 claim 做本章首屏导语;
  *   - 每页必须有一种视觉版式:图 / 表格 / 对比栏 / 大数字 / 引言 / 步骤;
  *   - 调色板:近黑底 + 灰绿结构色 + 单一琥珀强调(每页最多一处)。
- *
  * 管线:parseDeckMd → validateDeck → planDeck → deckToPptx。
  */
 import pptxgen from "pptxgenjs";
@@ -213,7 +211,7 @@ export function parseDeckMd(md) {
     const fenceOpen = /^\s*```+\s*([a-z-]*)\s*$/i.exec(line);
     if (fenceOpen && !fence) {
       const k = fenceOpen[1].toLowerCase();
-      // fail-closed(2026-11-05,演示产线质量门口径:未知=error,不静默降级):
+ // fail-closed(演示生产环境质量门口径:未知=error,不静默降级):
       // 未登记的版式块以前走 kind="ignore" 被无声吞掉——写错块名的页会「导出成功但没有那张图」。
       // 现在登记到 deck.unknownBlocks,由 validateDeck 拒导并点名(带页与块名)。
       if (k && !FENCE_KINDS.has(k)) {
@@ -221,31 +219,31 @@ export function parseDeckMd(md) {
         fence = { kind: "ignore" };
       } else {
         fence = FENCE_KINDS.has(k) ? { kind: k, items: [] } : { kind: "ignore" };
-      }
-      pushTable();
+  }
+  pushTable();
       continue;
-    }
+  }
     if (/^\s*```+\s*$/.test(line) && fence) {
       if (page && fence.kind === "steps" && fence.items.length >= 2) {
         page.blocks.push({ kind: "steps", items: fence.items });
       } else if (page && fence.kind === "code") {
         if (fence.items.length >= 3) {
           page.blocks.push({ kind: "code", data: { source: fence.items[0], lines: fence.items.slice(1) } });
-        }
+  }
       } else if (page && fence.kind !== "steps" && fence.kind !== "ignore") {
         const d = ["layers", "flow", "matrix", "timeline"].includes(fence.kind)
           ? parseDiagram(fence.kind, fence.items)
           : parseBlock(fence.kind, fence.items);
         if (d) page.blocks.push({ kind: d.type, data: d });
-      }
+  }
       fence = null;
       continue;
-    }
+  }
     if (fence) {
       const t = line.trim();
       if (!t) continue;
       if (fence.kind === "steps") {
-        const [label, ...rest] = t.replace(/^\d+[.、)]\s*/, "").split("|");
+ const [label, ...rest] = t.replace(/^\d+[.]\s*/, "").split("|");
         const detail = rest.join("|").trim();
         if (label.trim()) fence.items.push({ label: clamp(label, 40), detail: clamp(detail, 140) });
       } else if (fence.kind === "code") {
@@ -253,22 +251,22 @@ export function parseDeckMd(md) {
         fence.items.push(line.replace(/\t/g, "    ").replace(/\s+$/, ""));
       } else if (fence.kind !== "ignore") {
         fence.items.push(t);
-      }
+  }
       continue;
-    }
+  }
     if (/^\s*\|/.test(line)) {
       const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
       if (/^[\s|:-]+$/.test(line)) continue;
       if (!table) table = { headers: cells, rows: [] };
       else if (cells.some((c) => c !== "")) table.rows.push(cells);
       continue;
-    }
-    pushTable();
+  }
+  pushTable();
     if (!line.trim()) continue;
     if (/^#\s+/.test(line)) {
       deck.title = line.replace(/^#\s+/, "").trim();
       continue;
-    }
+  }
     if (/^##\s+/.test(line)) {
       chapter = { no: "", title: "", claim: "", pages: [] };
       const t = line.replace(/^##\s+/, "").trim();
@@ -277,13 +275,13 @@ export function parseDeckMd(md) {
       deck.chapters.push(chapter);
       page = null;
       continue;
-    }
+  }
     if (/^###\s+/.test(line)) {
       if (!chapter) continue;
       page = { title: stripNo(line.replace(/^###\s+/, "").trim()), blocks: [], evidence: "", takeaway: "" };
       chapter.pages.push(page);
       continue;
-    }
+  }
     const meta = /^(subtitle|verdict_note|verdict|meta|claim|genre)\s*[:：]\s*(.*)$/i.exec(line);
     if (meta) {
       const key = meta[1].toLowerCase();
@@ -296,14 +294,14 @@ export function parseDeckMd(md) {
       else if (key === "verdict_note") deck.verdictNote = val;
       else if (key === "meta") deck.meta = val;
       continue;
-    }
+  }
     if (/^>\s*/.test(line)) {
       if (!page) continue;
       const t = line.replace(/^>\s*/, "").trim();
       if (/^证据\s*[:：]/.test(t)) page.evidence = t.replace(/^证据\s*[:：]\s*/, "");
       else if (/^结论\s*[:：]/.test(t)) page.takeaway = t.replace(/^结论\s*[:：]\s*/, "");
       continue;
-    }
+  }
     if (/^\s*[-*]\s+/.test(line) && page) {
       const b = parseBullet(line);
       if (!b) continue;
@@ -311,7 +309,7 @@ export function parseDeckMd(md) {
       if (last && last.kind === "bullets") last.items.push(b);
       else page.blocks.push({ kind: "bullets", items: [b] });
       continue;
-    }
+  }
   }
   pushTable();
   deck.chapters.forEach((c, i) => {
@@ -358,7 +356,7 @@ export function validateDeck(deck) {
       if (mains === 0) add(at, "纯文字页:每页至少配图/代码摘录/表格/对比栏/大数字/引言之一");
       if (visuals.length > 1) add(at, "一页最多 1 张图");
       if (mains > 1) add(at, "同页混排多种主版式:一页只留一种");
-      // 每页深度(2026-10-27 用户口径「每一页的内容质量很差」):只有图没有解读的页=看不懂的图。
+ // 每页深度:只有图没有解读的页=看不懂的图。
       // 每页 2–3 条解读(机制为什么/影响谁),引言页 2 条;总字数 ≥60,否则退回"标题+图"的骨架页。
       const minB = quotes.length ? 2 : 2;
       if (bullets.length < minB) add(at, `解读只有 ${bullets.length} 条:每页要 2–3 条「机制/实证/影响」解读,不能只放图`);
@@ -609,7 +607,7 @@ function renderCompare(slide, s, top, h) {
 
 function renderStats(slide, s, top, h) {
   const st = s.stats.stats;
-  // 高度由调用方预算给定(下方还有解读区),不得超出——实测 4 个大数字 + 3 条解读时溢出压字
+ // 高度由调用方预算给定(下方还有解读区),不得超出——经验证 4 个大数字 + 3 条解读时溢出压字
   const blockH = Math.min(h, 2.3);
   const n = st.length;
   const gap = 0.3;
@@ -664,7 +662,7 @@ function renderLayers(slide, d, top, h) {
 function renderFlow(slide, d, top, h) {
   const ids = d.nodes.map((n) => n.id);
   // 先 DFS 标出回边,只在去掉回边的 DAG 上做最长路径分层——
-  // 实测:写入链里 decide→recv 的回边把整张图的 rank 顶到极端值,节点被挤到右侧两列并互相压住。
+ // 经验证:写入链里 decide→recv 的回边把整张图的 rank 顶到极端值,节点被挤到右侧两列并互相压住。
   const adj = new Map(ids.map((id) => [id, []]));
   for (const e of d.edges) (adj.get(e.from) || []).push(e.to);
   const color = new Map(ids.map((id) => [id, 0]));
@@ -699,7 +697,7 @@ function renderFlow(slide, d, top, h) {
     byCol.get(r).push(n);
   }
   const maxRows = Math.max(...[...byCol.values()].map((l) => l.length), 1);
-  // 行数多时压节点高与行距,保证整张图落在给定高度内(实测:固定 0.92 会压到下方要点)
+ // 行数多时压节点高与行距,保证整张图落在给定高度内(经验证:固定 0.92 会压到下方要点)
   const vgap = maxRows >= 3 ? 0.22 : 0.4;
   const nodeH = Math.min(0.92, Math.max(0.6, (h - 0.24 - vgap * (maxRows - 1)) / maxRows));
   const pos = new Map();
@@ -1011,7 +1009,7 @@ export function boardToDeckTemplate(doc) {
   return out.join("\n");
 }
 
-/** composition 板(办公/产出类「作业思路板」)→ 汇报骨架源稿(2026-11-04)。
+/** composition 板(办公/产出类「作业思路板」)→ 汇报骨架源稿。
  *  与 docs 板(boardToDeckTemplate)的区别:板画的是表达结构(主题·受众·章节·章间关系),
  *  没有页节点与代码证据位——每章给一个「开篇」页,证据行换成可选「> 素材:」行;
  *  质量门对 genre: composition 走宽松档(不要求 `> 证据:`),结构门(纯文字页/TODO/解读深度)保留。

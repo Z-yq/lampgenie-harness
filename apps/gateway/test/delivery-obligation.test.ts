@@ -1,6 +1,5 @@
 /**
- * M112 网关终态投递义务 —— 状态机/持久化单测面(内存 fake journal + 可推进时钟)。
- *
+ * 网关终态投递义务 —— 状态机/持久化单测面(内存 fake journal + 可推进时钟)。
  * 覆盖:register 幂等(重复登记只 1 条 journal 事件)、attempts≤3 → failed、首投起 24h → failed、
  * mayBeDuplicate 仅 attempts>1、sweep 超租约 attempting→pending、无连接不 markDelivered
  * (register 后保持 pending;send 返回 false/抛错都 release 回 pending)。
@@ -36,7 +35,7 @@ const obligationEvents = (journal: MemoryJournal) =>
 
 const task = (id: string) => ({ id, sessionId: `s-${id}`, state: "done" });
 
-describe("M112 网关终态投递义务", () => {
+describe(" 网关终态投递义务", () => {
   it("register 幂等:重复登记不新增 journal 事件,obligationId=<taskId>:terminal", () => {
     const { journal, store } = setup();
     const first = store.register(task("t-1"));

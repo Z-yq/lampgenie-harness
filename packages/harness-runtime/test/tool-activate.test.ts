@@ -1,5 +1,5 @@
 /**
- * 工具回执激活标记(2026-10-30 board_read 死锁)单测:
+ * 工具回执激活标记( board_read 死锁)单测:
  * 回执文本携带 [[activate-tool:<name>]] → loop 把该工具点亮进广告面(activatedTools),
  * 标记从模型可见文本剥离并换「下一步直接调用」提示;未知工具名静默忽略。
  * 背景:plan-gate 拒绝指路 board_upsert 而它 deferred 不在 wire 面——受约束的函数名采样

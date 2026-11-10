@@ -1,5 +1,5 @@
 /**
- * 远端 code_sense 映射(2026-10-27):桌面 dispatch → codesense CLI argv。
+ * 远端 code_sense 映射:桌面 dispatch → codesense CLI argv。
  * 运行时本身(自带 Node + CLI)由连接安装到远端 ~/.genie/genie-sense,
  * 由工作区服务在远端执行;此处锚定参数映射与不支持项的诚实提示。
  */

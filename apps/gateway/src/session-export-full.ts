@@ -1,9 +1,7 @@
 /**
- * 会话完整导出(2026-10-19 用户口径:「日志下载就应该下载完全的内容」)。
- *
+ * 会话完整导出( 「日志下载就应该下载完全的内容」)。
  * 此前「↓ 日志」只把 journal 事件(指针+摘要)拼成 jsonl——system 提示词、消息构型、
  * 工具 schema、原始响应全在 .genie/llm-trace 的文件里,下载拿不到。
- *
  * 本模块把三层打包成一个自包含 jsonl:
  *   ①`export.meta` 头行(会话/时间/说明);
  *   ②journal 逐事件(原样,seq 保序);
@@ -11,7 +9,6 @@
  *   ④该会话派发的每个子代理(subagent.spawn.taskId)→ `subagent.trace.full` 逐调用
  *     (subagent-<taskId> 与 -retry 两目录都收;call-*.json 保序)。
  * 缺失文件不静默:`missing:true` + stats.missing 计数(journal 指针指向的文件被清掉时可见)。
- *
  * 读盘可注入(测试用内存桩);HTTP 面由 servePanel 的 sessionExport 钩子挂载。
  */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
@@ -115,7 +112,7 @@ export function buildSessionExport(input: BuildSessionExportInput): SessionExpor
   }
 
   // ④ 子代理轨迹(按 spawn 顺序,目录内 call 文件保序)。
-  // 目录发现用前缀匹配:2026-10-19 起子代理 taskId 每次派发唯一,loop sessionId 为
+ // 目录发现用前缀匹配: 起子代理 taskId 每次派发唯一,loop sessionId 为
   // `subagent-<subTaskId>-sub| -bg`;旧会话是 `subagent-<parentTaskId>-sub`。两者都按
   // `subagent-<taskId>` 或 `subagent-<taskId>-*` 命中(不再依赖固定两条目录名)。
   const allDirs = exists(input.traceRoot) ? (() => { try { return listDir(input.traceRoot); } catch { return []; } })() : [];

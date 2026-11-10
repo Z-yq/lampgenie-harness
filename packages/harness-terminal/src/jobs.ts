@@ -1,11 +1,9 @@
 /**
- * M27 Job registry:后台命令 job(owner fence / 有界输出环 + spill / settlement first-wins / wait·kill·通知一次)。
- *
+ *  Job registry:后台命令 job(owner fence / 有界输出环 + spill / settlement first-wins / wait·kill·通知一次)。
  * 与持久终端会话(service.ts)的分工:
  * - terminal = 交互式保活的 shell 会话(命令混在会话流里);
  * - job = 一次性后台命令的独立句柄:有 jobId/pid/状态/输出偏移/spill 文件,可 wait/kill,
  *   结算只发生一次,通知只投递一次。owner 由工具工厂硬绑定(模型无法伪造)。
- *
  * 关键语义:
  * - 输出:stdout+stderr 合并按到达序写有界字节环(缺省 256KB);超限时把**完整历史**落
  *   `<spillDir>/<jobId>.log` 并继续追加。offset 是「从 job 启动起的绝对字节偏移」,不因淘汰重置。
@@ -98,8 +96,7 @@ export type JobErrorCode =
 export class JobError extends Error {
   constructor(
     message: string,
-    readonly code: JobErrorCode,
-  ) {
+    readonly code: JobErrorCode) {
     super(message);
     this.name = "JobError";
   }
@@ -140,8 +137,7 @@ class BoundedOutput {
 
   constructor(
     private readonly maxBytes: number,
-    private readonly spillPathFor: () => string,
-  ) {}
+    private readonly spillPathFor: () => string) {}
 
   get startOffset(): number {
     return this.head;
@@ -260,8 +256,7 @@ class Job {
     readonly title: string | undefined,
     now: () => number,
     bufferBytes: number,
-    spillPath: string,
-  ) {
+    spillPath: string) {
     this.startedAt = now();
     this.out = new BoundedOutput(bufferBytes, () => spillPath);
   }

@@ -1,5 +1,5 @@
 /**
- * apiType 协议适配层(step-127):anthropic(Anthropic Messages /v1/messages)与
+ * apiType 协议适配层:anthropic(Anthropic Messages /v1/messages)与
  * responses(OpenAI Responses POST /v1/responses)两个运行时分支。
  * chat 分支留在 openai-provider.ts 本体(逐字节不变);本模块只承载两种新协议的
  * 消息格式转换/请求组装/流式 SSE 解析/响应归一——归一出口与 chat 同构(LlmResponse:
@@ -21,7 +21,7 @@ export interface ApiTypeAdapterCur {
   model: string;
   maxTokens?: number;
   reasoningEffort?: string;
-  /** 流空闲窗(与 chat 流式分支同语义:timeoutMs 即空闲窗,下限 30s,缺省 600s;2026-10-18)。 */
+ /** 流空闲窗(与 chat 流式分支同语义:timeoutMs 即空闲窗,下限 30s,缺省 600s。 */
   timeoutMs?: number;
 }
 
@@ -30,7 +30,7 @@ export type ApiTypeRetryCtx = { retry: number; emit: (e: ModelLifecycleEvent) =>
 /** SSE 逐行读取(data: 行 JSON 反序列化;event: 行与 [DONE] 哨兵忽略——anthropic/responses
  * 的 data 载荷自带 type 字段,无需 event: 行;非 JSON 行忽略不断流,与 chat SSE 解析同语义)。
  * 传入 signal/idle 时:任意 chunk 到达即重置空闲计时,空闲窗超窗经 ctrl.abort 打断本读取
- * (2026-10-18——适配器此前只有外层整体墙钟,大上下文 prefill 会被误杀;慢而活着的流不再被杀)。 */
+ * (——适配器此前只有外层整体墙钟,大上下文 prefill 会被误杀;慢而活着的流不再被杀)。 */
 async function* sseJson(res: Response, signal?: AbortSignal, idle?: { arm: () => void; dispose: () => void }): AsyncGenerator<Record<string, unknown>> {
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
@@ -77,7 +77,7 @@ function versionedUrl(baseUrl: string, path: "/v1/messages" | "/v1/responses"): 
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "") + path;
 }
 
-/** 适配器请求级中止链(2026-10-18):外层 signal(任务级,长生命周期)→ 本地 controller。
+/** 适配器请求级中止链:外层 signal(任务级,长生命周期)→ 本地 controller。
  * 空闲超时经本地 controller.abort(Error("MODEL_STREAM_IDLE_TIMEOUT")) 触发——与 chat 流式分支
  * 同语义;本地 signal 同时喂 fetch 与 sseJson 的竞速,保证超窗能真正打断停滞流。dispose 必须摘除外层
  * 监听(防长生命周期 signal 上 listener 逐请求累积,同 openai-provider 的 MaxListenersExceededWarning 修复纪律)。 */
@@ -173,7 +173,7 @@ function toAnthropicBody(cur: ApiTypeAdapterCur, messages: Message[], tools: Too
     // **必须合并**:同一 assistant 的多个 tool_use,其 tool_result 要出现在**紧随其后的一条**
     // user 消息里(可含多个块)。旧的「每条 push 一条 user」会产出一条只含部分结果的 user,
     // 严格端点直接 400:`tool_use ids were found without tool_result blocks immediately after`
-    // (2026-10-31 deepseek-flash 实测;bigmodel GLM 宽容未报,但协议上一直是错的)。
+ // ( deepseek-flash 经验证;bigmodel GLM 宽容未报,但协议上一直是错的)。
     if (m.role === "tool") {
       const lastUser = out[out.length - 1];
       const continuing = lastWasTool && lastUser?.role === "user" && Array.isArray(lastUser.content)
@@ -260,10 +260,10 @@ function anthropicUsageOut(p: AnthropicUsageParts): LlmResponse["usage"] | undef
     inputTokens: inAll,
     outputTokens: p.output,
     totalTokens: inAll + p.output,
-    // 2026-10-31 修计量歧义:原生口径下 provider 明确报了 cache_read_input_tokens(哪怕值是 0)
+ // 修计量歧义:原生口径下 provider 明确报了 cache_read_input_tokens(哪怕值是 0)
     // 就显式下发 cachedTokens=0,让「provider 说这次没命中」与「provider 根本没报这个字段」可区分。
     // 旧实现 `cached > 0 ? {...} : {}` 把两者压成同一个「无字段」,导致命中率分析无法判断
-    // 冷启动首调到底是真未命中,还是计量缺失(实测 cold run 的 step0/step1 都无此字段,歧义两周)。
+ // 冷启动首调到底是真未命中,还是计量缺失(经验证 cold run 的 step0/step1 都无此字段,歧义两周)。
     // 兼容口径(prompt_tokens_details)保持原样:字段缺席时我们确实不知道,不能伪造成 0。
     ...(p.nativeCache ? { cachedTokens: cached } : cached > 0 ? { cachedTokens: cached } : {}),
     ...(p.nativeCache && p.cacheWrite > 0 ? { cacheCreationTokens: p.cacheWrite } : {}),
@@ -274,7 +274,7 @@ function anthropicUsage(u: Record<string, unknown> | undefined): LlmResponse["us
   return anthropicUsageOut(readAnthropicUsage(u));
 }
 
-/** Anthropic stop_reason → LlmResponse.finishReason(M28):max_tokens→length(截断)、
+/** Anthropic stop_reason → LlmResponse.finishReason():max_tokens→length(截断)、
  * end_turn/stop_sequence→stop、tool_use→tool_calls;其它非空值→other;缺省省略(不触发续写)。 */
 function anthropicFinish(stop: unknown): LlmResponse["finishReason"] {
   if (typeof stop !== "string" || !stop) return undefined;
@@ -309,14 +309,13 @@ function fromAnthropicResponse(data: { content?: AnthropicContentBlock[]; stop_r
 /** 流式 SSE 聚合:message_start 种子 usage.input → content_block_start(tool_use 按 index
  * 登记)→ content_block_delta(text_delta/thinking_delta/input_json_delta 累积)→
  * message_delta(usage.output 终值)→ message_stop;error 事件抛错(形态同 chat 流错误)。
- * 超时语义=流空闲超时(2026-10-18,与 chatStreamed 对齐):timeoutMs 即空闲窗,不再有整体墙钟。 */
+ * 超时语义=流空闲超时(与 chatStreamed 对齐):timeoutMs 即空闲窗,不再有整体墙钟。 */
 async function anthropicStreamed(
   cur: ApiTypeAdapterCur,
   body: Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: LlmDeltaChunk) => void,
-  retryCtx: ApiTypeRetryCtx,
-): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
   const link = adapterAbortLink(signal);
   let idle: ReturnType<typeof createStreamIdleGuard> | null = null;
   try {
@@ -400,8 +399,7 @@ export async function anthropicChat(
   tools: ToolSpec[],
   signal: AbortSignal,
   onDelta: ((d: LlmDeltaChunk) => void) | undefined,
-  retryCtx: ApiTypeRetryCtx,
-): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
   const body = toAnthropicBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return anthropicStreamed(cur, body, signal, onDelta, retryCtx);
@@ -469,7 +467,7 @@ function responsesUsage(u: Record<string, unknown> | undefined | null): LlmRespo
   return { inputTokens: input, outputTokens: output, totalTokens: total, ...(cached > 0 ? { cachedTokens: cached } : {}) };
 }
 
-/** Responses 结束原因 → LlmResponse.finishReason(M28):只认 Responses 自己的口径——
+/** Responses 结束原因 → LlmResponse.finishReason():只认 Responses 自己的口径——
  * incomplete_details.reason=max_output_tokens→length(输出截断)、content_filter→content_filter、
  * 其它 incomplete 原因→other;status=completed→stop;拿不到则省略(不触发续写)。 */
 function responsesFinish(data: { status?: unknown; incomplete_details?: unknown }): LlmResponse["finishReason"] {
@@ -524,14 +522,13 @@ function fromResponsesResponse(data: { output?: unknown; status?: unknown; incom
  * 增量;output_item.added(function_call 按 item.id 登记)→function_call_arguments.delta
  * 累积→output_item.done(function_call 终值覆写,容忍无 delta 直发 done 的网关);
  * response.completed/incomplete→usage;response.failed/error→抛错。
- * 超时语义=流空闲超时(2026-10-18,与 chatStreamed 对齐):timeoutMs 即空闲窗,不再有整体墙钟。 */
+ * 超时语义=流空闲超时(与 chatStreamed 对齐):timeoutMs 即空闲窗,不再有整体墙钟。 */
 async function responsesStreamed(
   cur: ApiTypeAdapterCur,
   body: Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: LlmDeltaChunk) => void,
-  retryCtx: ApiTypeRetryCtx,
-): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
   const link = adapterAbortLink(signal);
   let idle: ReturnType<typeof createStreamIdleGuard> | null = null;
   try {
@@ -616,8 +613,7 @@ export async function responsesChat(
   tools: ToolSpec[],
   signal: AbortSignal,
   onDelta: ((d: LlmDeltaChunk) => void) | undefined,
-  retryCtx: ApiTypeRetryCtx,
-): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
   const body = toResponsesBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return responsesStreamed(cur, body, signal, onDelta, retryCtx);

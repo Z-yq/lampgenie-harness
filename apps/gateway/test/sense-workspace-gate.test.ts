@@ -1,5 +1,5 @@
 /**
- * 巨根治理(2026-10-30)单测:预算闸接全自动路径 + 工作区收窄。
+ * 巨根治理单测:预算闸接全自动路径 + 工作区收窄。
  * 背景:结构面 action=impact 曾绕过闸直通 ensureIndex → risk 档采样重建(5160 文件)压垮 9p
  * (收割 ×2 + 网关停顿 90s)。新语义:超预算根自动路径一律不扫不建;工作区根给收窄出路
  * (显式 root 参数 / target 前缀自动收窄 / symbol·impact 已索引子仓扇出)。拒绝必须带路。
@@ -14,9 +14,9 @@ import {
 import { dispatchSenseArgs } from "../src/sense-tool.js";
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 
-// env 互斥(2026-11-02 flake 修复):本文件多处在测压低 GENIE_SENSE_* 阈值;threads pool 共享
+// env 互斥( flake 修复):本文件多处在测压低 GENIE_SENSE_* 阈值;threads pool 共享
 // process.env,与 orient-budget-gate 合跑时其 afterEach 删 env 会把本文件的阈值中途拆掉
-// (实测:阈值失效→工作区根被放行→走直查分支→断言「根已自动收窄」拿到「尚未就绪」)。
+// (经验证:阈值失效→工作区根被放行→走直查分支→断言「根已自动收窄」拿到「尚未就绪」)。
 beforeAll(async () => { await acquireEnvLock("orient-gate"); }, 240_000);
 afterAll(() => { releaseEnvLock("orient-gate"); });
 

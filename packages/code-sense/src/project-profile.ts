@@ -1,14 +1,11 @@
 /**
- * project-profile(step-089 P3 / designs/26 §4):项目底座认知——「这个项目大概是干什么的」。
- *
+ * project-profile( P3 / §4):项目底座认知——「这个项目大概是干什么的」。
  * 确定性骨架(永不依赖 LLM):README 首段+包清单(package.json/pyproject/go.mod/Cargo/
  * CMakeLists)+框架指纹(imports,grep 字面量)+entrypoints(只读 c2f 索引,缺席=显式降级)
  * +目录拓扑,全部带证据行(白名单锚)。
- *
- * LLM purpose 层(走 P2 凭证解析链,step-077 runSemanticBatch 管线复用):purpose 一句话+
+ * LLM purpose 层(走 P2 凭证解析链, runSemanticBatch 管线复用):purpose 一句话+
  * 主线能力清单+「改什么会偏离主线」提示,zod+引用回查+修复环 ≤2;无 LLM=显式 degraded,
  * 确定性骨架不冒充语义产物。
- *
  * 存储:.genie/sense-index/profile.json(--write 显式落盘;LLM 产物按指纹缓存,
  * 指纹同=复用不重花钱)。消费方:codesense project / gateway code_index action=project /
  * agent-wiring「项目主线」注入(≤300 字符)。
@@ -29,7 +26,7 @@ interface FrameworkFingerprint {
   literals: string[];
   domain: string;
   /** true=应用领域框架(web/ml/cv)才参与项目领域判定;工具库(Zod/Cobra/Grafana)
-   * 只作依赖事实——把 Zod 判成项目领域会把 schema 校验库抬成主线(2026-10-20 实锤)。 */
+ * 只作依赖事实——把 Zod 判成项目领域会把 schema 校验库抬成主线(注意)。 */
   appDomain: boolean;
 }
 
@@ -54,12 +51,12 @@ const FRAMEWORKS: FrameworkFingerprint[] = [
  * (此前 glob 含 md,step 文档里一句 `github.com/spf13/cobra` 就把 Cobra 记成能力)。 */
 const FRAMEWORK_GLOB = "*.{ts,tsx,js,jsx,mjs,cjs,py,go,java,rs,html,vue,c,cc,cpp,h,hpp}";
 
-/** 非产品主线路径/证据优先级:2026-10-20 迁至 ./path-filter(六面同源单一真相),
+/** 非产品主线路径/证据优先级: 迁至 ./path-filter(六面同源单一真相),
  * 此处 re-export 保持既有导入面(测试与下游从 project-profile 取的引用不破)。 */
 export { isNonProductPath, evidenceRank, isTestPath } from "./path-filter";
 
 /** 命中行是否真是导入语句(而非指纹表/夹具/文档里的字符串字面量)。
- * 2026-10-20 实锤:project-profile.ts 自己的 FRAMEWORKS 表被 grep 回 12 族框架,
+ * 注意:project-profile.ts 自己的 FRAMEWORKS 表被 grep 回 12 族框架,
  * lampgenie-harness 因此被判成同时具备 FastAPI/Flask/React/PyTorch/OpenCV 的 web-backend。
  * 证据行必须落在 import/from/require/#include 语境,数据表行(以 { 或引号开头)天然排除。 */
 export function isImportContext(file: string, line: string): boolean {
@@ -70,7 +67,7 @@ export function isImportContext(file: string, line: string): boolean {
   if (ext === ".go") return /^import\s+/.test(line.trim()) || /^(?:[\w.]+\s+)?"[^"]+"\s*$/.test(line.trim());
   if (ext === ".c" || ext === ".cc" || ext === ".cpp" || ext === ".h" || ext === ".hpp") return /^#\s*include\b/.test(line.trim());
   // ts/js/vue/html:先剥字符串字面量再判——指纹表里的 'require("express")' 是数据,
-  // 不是调用;不剥会把它当成真实 require(2026-10-20 二次实锤)。
+ // 不是调用;不剥会把它当成真实 require(二次注意)。
   const code = line.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""');
   const t = code.trim();
   return /^(import|export)\b/.test(t) || /(?:^|[^.\w])require\s*\(/.test(t) || /(?:^|[^.\w])import\s*\(/.test(t);
@@ -92,7 +89,7 @@ export function findImportLine(file: string, content: string, literals: string[]
       if (inGoImport && t === ")") { inGoImport = false; continue; }
     }
     if (jsLike) {
-      // 模板字符串里的 Python/JS 片段不是本仓导入(测试夹具 `import torch` 实锤);
+ // 模板字符串里的 Python/JS 片段不是本仓导入(测试夹具 `import torch` 注意);
       // 跨行模板要跟踪状态,单行含反引号的行也不作证据。
       const ticks = (line.match(/(?<!\\)`/g) ?? []).length;
       if (inTemplate) {
@@ -141,14 +138,14 @@ const LANG_NAV = /(简体中文|繁體中文|中文|english|日本語|한국어|
 /** 程序性章节:内容不是「项目是什么/主线能力」。首段扫描与章节锚共用同一口径。 */
 const NOISY_HEADING = /^(install|installation|usage|quick ?start|getting started|license|licence|contribut\w*|changelog|table of contents|resources?|overview|about|features?|support|documentation|docs?|links?|community|requirements?|prerequisites?|build|development|testing|faq|examples?|roadmap|acknowledg\w*|sponsors?|security|benchmarks?|安装|使用|快速开始|许可|贡献|更新日志|目录)$/i;
 
-/** 导航/横幅/标记行:不是项目宗旨。2026-10-20 实测:dify 首段抓到 alt=、ZCode 抓到
+/** 导航/横幅/标记行:不是项目宗旨。 经验证:dify 首段抓到 alt=、ZCode 抓到
  * 语言切换行、opencode 抓到安装代码块——这些都被 LLM 当成 purpose 证据,总结直接跑偏。 */
 function looksLikeNavOrMarkup(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
   if (/<a\s|href=|alt=|src=|<img|!\[/i.test(t)) return true;
   if (/^alt=/i.test(t)) return true;
-  if (/^[|\-•·]\s/.test(t) || /^\*\s/.test(t)) return true; // 列表/资源导航(OpenCV 的 "* Homepage" 实锤;不误伤 **bold**)
+  if (/^[|\-•·]\s/.test(t) || /^\*\s/.test(t)) return true; // 列表/资源导航(OpenCV 的 "* Homepage" 实测确认;不误伤 **bold**)
   if (LANG_NAV.test(t) && /[|·]/.test(t)) return true; // 语言切换行
   if (/^(简体中文|繁體中文|english|日本語|한국어)\s*[|·]/i.test(t)) return true;
   if (/^(\[[^\]]*\]\([^)]*\)\s*[|、]?\s*){2,}/.test(t)) return true; // 纯链接导航行
@@ -234,7 +231,7 @@ export function readmeFirstParagraph(root: string): { text: string; file: string
         if (para.length === 0) startLine = i + 1;
         para.push(l);
         if (para.join(" ").length > 300) { const hit = flush(); if (hit) return hit; }
-      }
+  }
       const hit = flush();
       if (hit) return hit;
     } catch { /* 读取失败试下一个候选 */ }
@@ -242,7 +239,7 @@ export function readmeFirstParagraph(root: string): { text: string; file: string
   return null;
 }
 
-/** README 章节标题(buildSkeleton 只作事实锚,不进 purpose 候选)。
+/** README 章节标题(buildSkeleton 只作事依据,不进 purpose 候选)。
  * 首段只能说明「是什么」,主线能力往往只在章节结构里(白板/子代理/感知…);
  * 跳过程序性章节(安装/许可/贡献),避免把脚手架噪声抬成能力。 */
 export function readmeHeadings(root: string, max = 8): { text: string; file: string; line: number }[] {
@@ -262,7 +259,7 @@ export function readmeHeadings(root: string, max = 8): { text: string; file: str
         const text = m[1]!.trim();
         if (!text || NOISY_HEADING.test(text)) continue;
         out.push({ text, file: name, line: i + 1 });
-      }
+  }
       if (out.length > 0) return out;
     } catch { /* 读取失败试下一个候选 */ }
   }
@@ -284,7 +281,7 @@ function lineOfPattern(text: string, re: RegExp): { value: string; line: number 
       // 无捕获组的形态(如定位 "name": 行)回退整体匹配文本——首版 m[1]! 抛 TypeError
       // 被上游静默 catch 吞成「零事实」,测试抓出
       return { value: (m[1] ?? m[0]).trim(), line: i + 1 };
-    }
+  }
   }
   return null;
 }
@@ -339,26 +336,26 @@ export function scanManifests(root: string): { facts: ManifestFact[]; files: str
 }
 
 /** 框架指纹(grep 字面量 → 导入语境回查;每框架取首个有效文件为证据)。
- * step-098(RC-096-A3):命中偏好非测试路径——证据锚进 LLM 事实表,锚在测试文件会把
+ * (RC-096-A3):命中偏好非测试路径——证据锚进 LLM 事实表,锚在测试文件会把
  * 「X 的测试」放大成主线能力失真;全测试命中才回退首个(如实,不虚构)。
- * 2026-10-20:字面量必须落在真实 import 语境,且排除 tasks/docs/vendor 等非产品路径;
+ * 字面量必须落在真实 import 语境,且排除 等非产品路径;
  * 否则指纹表自身、任务文档示例、第三方依赖都会被算成本项目主线能力。 */
 export async function detectFrameworks(root: string): Promise<{ frameworks: ProjectProfileSkeleton["frameworks"]; domain?: string }> {
-  // 一次全仓行级扫描(旧实现逐框架 grep:14 族 × 多 pattern = 40+ 次全仓扫描,dify 实测 157s)。
+ // 一次全仓行级扫描(旧实现逐框架 grep:14 族 × 多 pattern = 40+ 次全仓扫描,dify 经验证 157s)。
   // 行文本先过导入语境/非产品路径,再按「非测试优先」为每族挑候选;最后读该文件用
   // findImportLine 复核(排除模板字符串/Go import 块等行级盲区)。每族最多 24 个候选,
   // 稀有框架不会因为全局读取配额被挤掉。
   const allLiterals = [...new Set(FRAMEWORKS.flatMap((fw) => fw.literals))];
   const matches = await grepMatchesAny(root, allLiterals, { glob: FRAMEWORK_GLOB, max: 6000, perFile: 20 });
   // fw → file → 最优 rank(同文件多行命中只算一个候选;否则一个脚本文件 20 行命中
-  // 会占满 24 个候选位,把 api/ 里的生产证据挤掉——dify Flask 实锤)。
+ // 会占满 24 个候选位,把 api/ 里的生产证据挤掉——dify Flask 注意)。
   const byFw = new Map<string, Map<string, number>>();
   const domainFiles = new Map<string, Set<string>>();
   for (const m of matches) {
     if (isNonProductPath(m.file)) continue;
     if (!isImportContext(m.file, m.text)) continue;
     const rank = evidenceRank(m.file);
-    for (const fw of FRAMEWORKS) {
+  for (const fw of FRAMEWORKS) {
       if (!fw.literals.some((lit) => m.text.includes(lit))) continue;
       const files = byFw.get(fw.name) ?? new Map<string, number>();
       const prev = files.get(m.file);
@@ -368,8 +365,8 @@ export async function detectFrameworks(root: string): Promise<{ frameworks: Proj
         const set = domainFiles.get(fw.name) ?? new Set<string>();
         set.add(m.file);
         domainFiles.set(fw.name, set);
-      }
-    }
+  }
+  }
   }
   const found = new Map<string, EvidenceRef>();
   const cache = new Map<string, string>();
@@ -387,16 +384,16 @@ export async function detectFrameworks(root: string): Promise<{ frameworks: Proj
           content = readFileSync(join(root, c.file), "utf-8");
         } catch { continue; }
         cache.set(c.file, content);
-      }
+  }
       const line = findImportLine(c.file, content, fw.literals);
       if (line > 0) { found.set(fw.name, { file: c.file, line }); break; } // 只出现在指纹表/文档/夹具里的字面量不是依赖
-    }
+  }
   }
   const frameworks = FRAMEWORKS
     .filter((fw) => found.has(fw.name))
     .map((fw) => ({ name: fw.name, domain: fw.domain, evidence: found.get(fw.name)! }));
   // 领域判定要求应用框架至少有 2 个产品源码文件,且按证据文件数取最多者——
-  // opencv 仓里 PyTorch/TensorFlow 只有少量样例,OpenCV 才是领域主线(2026-10-20 实测)。
+ // opencv 仓里 PyTorch/TensorFlow 只有少量样例,OpenCV 才是领域主线(经验证)。
   const appFw = FRAMEWORKS
     .filter((fw) => fw.appDomain && found.has(fw.name) && (domainFiles.get(fw.name)?.size ?? 0) >= 2)
     .sort((a, b) => (domainFiles.get(b.name)?.size ?? 0) - (domainFiles.get(a.name)?.size ?? 0))[0];
@@ -421,10 +418,10 @@ export async function buildSkeleton(root: string): Promise<{ skeleton: ProjectPr
   if (readme) {
     purposeCandidates.push({ text: readme.text, source: "README 首段", evidence: { file: readme.file, line: readme.line } });
     addAnchor(readme.file, readme.line, readme.text);
-    // 章节标题作事实锚(只给 LLM 判读能力用,不冒充 purpose)——首段讲「是什么」,
+ // 章节标题作事依据(只给 LLM 判读能力用,不冒充 purpose)——首段讲「是什么」,
     // 章节结构才承载「主线能力有哪些」。
     for (const h of readmeHeadings(root, 6)) addAnchor(h.file, h.line, `README 章节 ${h.text}`);
-  } else {
+    } else {
     // 有的 README 没有散文首段(OpenCV 开篇就是 Resources 导航),但 H2 自带一句
     // 产品定义——用它作确定性 purpose 候选,比「无候选」诚实且仍有证据行。
     const heading = readmeHeadings(root, 8).find((h) => isProseParagraph(h.text));
@@ -433,7 +430,7 @@ export async function buildSkeleton(root: string): Promise<{ skeleton: ProjectPr
       addAnchor(heading.file, heading.line, heading.text);
     } else {
       degraded.push({ layer: "readme", reason: "根目录无 README(或首段无可提取文本)——purpose 候选缺 README 面" });
-    }
+  }
   }
 
   const { facts, files: manifestFiles } = scanManifests(root);
@@ -441,14 +438,14 @@ export async function buildSkeleton(root: string): Promise<{ skeleton: ProjectPr
     if (f.key === "description" || f.key === "name" || f.key === "project") {
       purposeCandidates.push({ text: `${f.key}=${f.value}`, source: f.file, evidence: { file: f.file, line: f.line } });
       addAnchor(f.file, f.line, `${f.key}: ${f.value}`);
-    }
+  }
   }
   if (manifestFiles.length === 0) degraded.push({ layer: "manifest", reason: "无包清单(package.json/pyproject/go.mod/Cargo/CMakeLists)——技术栈只按扩展名统计" });
 
   const { frameworks, domain } = await detectFrameworks(root);
   for (const fw of frameworks.slice(0, 8)) {
     // 测试/脚本/示例里才出现的框架仍是事实,但标注「仅测试/示例使用」——避免 LLM 把
-    // 测试夹具或压测 mock 写成项目主线能力(dify 的 Flask 压测 mock 实锤)。
+ // 测试夹具或压测 mock 写成项目主线能力(dify 的 Flask 压测 mock 注意)。
     const weak = evidenceRank(fw.evidence.file) > 0 ? "[仅测试/示例使用]" : "";
     addAnchor(fw.evidence.file, fw.evidence.line, `框架指纹 ${fw.name}(${fw.domain})${weak}`);
   }
@@ -478,14 +475,14 @@ export async function buildSkeleton(root: string): Promise<{ skeleton: ProjectPr
     .map(([dir, n]) => `${dir}/ ×${n}`);
 
   // 入口(只读 c2f 索引;缺席=显式降级不阻塞骨架)
-  // step-098(RC-096-A3):骨架/anchors 只收生产入口——测试入口沿 LLM 事实锚放大成
-  // 「支持 X 及其测试」的主线能力失真(go-cobra profile 实锤)。取宽窗口过滤后截 6。
-  // 2026-10-20:tasks/**/evidence 探针与文档示例不是产品入口(曾把 step-124 probe.cjs 的
+ // (RC-096-A3):骨架/anchors 只收生产入口——测试入口沿 LLM 事依据放大成
+ // 「支持 X 及其测试」的主线能力失真(go-cobra profile 注意)。取宽窗口过滤后截 6。
+ // **/evidence 探针与文档示例不是产品入口(曾把 probe.cjs 的
   // main 抬进前 3,LLM 因此把「任务探针脚本」写成主线能力)。
   let entrypoints: string[] | undefined;
   const index = loadIndex(root);
-  // 2026-10-22 P1:进程入口优先(启动器/进程 main——「这个仓怎么跑起来」的直接答案;
-  // agent_alpha webrtc_multiprocess_server 实锚:扇出榜 top-300 之外)。扇出入口随后补位。
+ // P1:进程入口优先(启动器/进程 main——「这个仓怎么跑起来」的直接答案;
+ // agent_alpha webrtc_multiprocess_server 依据:扇出榜 top-300 之外)。扇出入口随后补位。
   const proc = scanProcessEntriesSync(root, index);
   const procLines = proc.entries
     .filter((e) => !isTestPath(e.file))
@@ -544,11 +541,11 @@ export async function llmPurposeLayer(
     return { status: "failed", reason: "确定性骨架无证据锚(README/manifest 全缺)——语义层无据不输出" };
   }
   // 产品级证据门:只有仓库名时,代码事实(框架/入口/拓扑)能拼出「技术构成」但拼不出
-  // 「这个项目为什么存在」。2026-10-20 实锤:lampgenie-harness 仅 name= 候选,LLM 把指纹表
+ // 「这个项目为什么存在」。 注意:lampgenie-harness 仅 name= 候选,LLM 把指纹表
   // 噪声写成「项目主业=框架指纹识别」。宁可显式 failed,不输出看似合理的猜测。
   const hasProductEvidence = skeleton.purposeCandidates.some(
     (c) => c.source.includes("README") || c.text.startsWith("description="),
-  );
+);
   if (!hasProductEvidence) {
     return {
       status: "failed",
@@ -556,7 +553,7 @@ export async function llmPurposeLayer(
     };
   }
   const refs: string[] = ["purpose", ...Array.from({ length: CAP_SLOTS }, (_, i) => `cap-${i + 1}`), ...Array.from({ length: DRIFT_SLOTS }, (_, i) => `drift-${i + 1}`)];
-  const taskPrompt = `你是代码仓库分析师。根据给定事实锚,为这个项目生成:
+ const taskPrompt = `你是代码仓库分析师。根据给定事依据,为这个项目生成:
 1. purpose:一句话(≤50字)说清「这个项目大概是干什么的」(中文,陈述事实,以锚内容为准,不推测);
 2. 主线能力(cap-1..cap-6):这个项目存在的核心能力清单(每条 ≤40 字;最多 6 条,没有就少写);
 3. 偏离提示(drift-1..drift-4):「什么样的改动会偏离该项目主线」(每条 ≤40 字,给 coding agent 的护栏提示;最多 4 条)。
@@ -580,7 +577,7 @@ export async function llmPurposeLayer(
 
 export interface ProjectProfile {
   version: 1;
-  /** 语义代次(2026-10-20):2=框架指纹/证据面修正后的画像。旧缓存无此字段,
+ /** 语义代次:2=框架指纹/证据面修正后的画像。旧缓存无此字段,
    * 读侧按失效处理,避免「新骨架 + 旧错误语义」混用;保留 version=1 让重启前的
    * 旧网关也能读懂并展示修正后的画像(生成字段向后兼容)。 */
   generation: 2;
@@ -598,8 +595,8 @@ export function profilePath(root: string): string {
   return join(indexDir(root), "profile.json");
 }
 
-/** 指纹键(2026-10-30 冷路径改造):srcFingerprintCached 无缓存(进程冷启动)返回 null——
- * 绝不同步全仓 stat(冻结收割 ×2 实锤),也绝不把占位键写进持久化 manifest(毒化:此后每次
+/** 指纹键(冷路径改造):srcFingerprintCached 无缓存(进程冷启动)返回 null——
+ * 绝不同步全仓 stat(冻结收割 ×2 注意),也绝不把占位键写进持久化 manifest(毒化:此后每次
  * load 都指纹不匹配误报 stale)。null 语义=「未知,假定一致」:查询侧复用盘上 manifest 的
  * 已存键(缓存命中,不重花 LLM);load 侧不误报 stale;几秒后异步指纹入缓存即精确。 */
 function fingerprintOf(root: string): string | null {
@@ -625,7 +622,7 @@ export async function queryProjectProfile(
       const cached = JSON.parse(readFileSync(profilePath(root), "utf-8")) as ProjectProfile;
       if (cached.version === 1 && cached.generation === 2 && cached.fingerprint === fingerprint && cached.llm) {
         cachedLlm = cached.llm;
-      }
+  }
     } catch { /* 无 manifest/坏 JSON=无缓存,如实 */ }
   }
 
@@ -716,14 +713,14 @@ export function renderProjectProfile(profile: ProjectProfile, opts: { stale?: bo
 
 /** 「项目主线」注入块(agent-wiring 用;≤300 字符硬预算;无 manifest=空串零开销)。
  * 只认产品级 purpose(README/description);仅仓库名或纯代码事实=零注入——
- * 错误的主线比没有主线更伤(2026-10-20:旧画像把「框架指纹识别」注入成了项目主线)。 */
+ * 错误的主线比没有主线更伤(旧画像把「框架指纹识别」注入成了项目主线)。 */
 export function projectMainlineBlock(root: string, maxChars = 300): string {
   const loaded = loadProjectProfile(root);
   if (!loaded) return "";
   const { profile } = loaded;
   const productPurpose = profile.skeleton.purposeCandidates.find(
     (c) => c.source.includes("README") || c.text.startsWith("description="),
-  )?.text;
+)?.text;
   if (!productPurpose) return "";
   const rawPurpose = profile.llm?.purpose ?? productPurpose;
   if (!rawPurpose) return "";

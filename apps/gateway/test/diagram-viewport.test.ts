@@ -169,8 +169,7 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box,
-    );
+      (el: El) => el.box);
     // 并集 = (100,80,200x120) ∪ (400,300,80x20) = x:100..480, y:80..320。
     expect(bounds).toEqual({ x: 100, y: 80, width: 380, height: 240 });
   });
@@ -205,8 +204,7 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box,
-    );
+      (el: El) => el.box);
     expect(bounds).toEqual({ x: 200, y: 150, width: 300, height: 100 });
   });
 
@@ -219,8 +217,7 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box,
-    );
+      (el: El) => el.box);
     expect(keep).toEqual({ x: 0, y: 0, width: 1000, height: 800 });
 
     const none: El[] = [
@@ -233,8 +230,7 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       none,
       (el: El) => views2[none.indexOf(el)] as never,
-      (el: El) => el.box,
-    );
+      (el: El) => el.box);
     expect(fallback).toEqual({ height: 800, width: 1000, x: 0, y: 0 });
   });
 
@@ -268,8 +264,7 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box,
-    );
+      (el: El) => el.box);
     expect(bounds).toEqual({ height: 800, width: 1000, x: 0, y: 0 }); // 全排除 → 回退
   });
 });
@@ -280,22 +275,19 @@ describe("diagram-viewport 辅助导出", () => {
       isCanvasBackgroundRect(
         { tagName: "rect", className: "", stroke: "none" } as never,
         { x: 0, y: 1, width: 960, height: 800 },
-        rootBounds,
-      ),
+        rootBounds),
     ).toBe(true);
     expect(
       isCanvasBackgroundRect(
         { tagName: "rect", className: "bg", stroke: "#000" } as never,
         { x: 5, y: 5, width: 100, height: 100 },
-        rootBounds,
-      ),
+        rootBounds),
     ).toBe(false); // 不覆盖根
     expect(
       isCanvasBackgroundRect(
         { tagName: "circle", className: "", stroke: "none" } as never,
         { x: 0, y: 0, width: 1000, height: 800 },
-        rootBounds,
-      ),
+        rootBounds),
     ).toBe(false); // 非 rect
   });
 
@@ -327,9 +319,9 @@ describe("diagram-viewport 辅助导出", () => {
   });
 });
 
-/** 2026-11-05 任务B 回归:getBBox 是元素**局部**坐标,必须经 inverse(rootCTM)×elCTM
+/** 任务B 回归:getBBox 是元素**局部**坐标,必须经 inverse(rootCTM)×elCTM
  * 映射回 root user space 再并集,否则多组 translate 的局部框混坐标系 → 紧凑 fit 的
- * bbox 比 viewBox 还大(实测 minX≈-430、可见卡 9/100 反而少于 viewBox 口径的 12/100)。 */
+ * bbox 比 viewBox 还大(经验证 minX≈-430、可见卡 9/100 反而少于 viewBox 口径的 12/100)。 */
 describe("diagram-viewport 坐标系映射(局部 bbox → root user space)", () => {
   const translate = (x: number, y: number) => ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
 
@@ -361,7 +353,7 @@ describe("diagram-viewport 坐标系映射(局部 bbox → root user space)", ()
   });
 
   it("回归:两组 translate 的局部框不混坐标系(修复前 minX≈-430,修复后落在 root user space 内)", () => {
-    // 实测板:viewBox="136 56 7261 2942";节点组局部 bbox 均为 x=-430(组内 text 的局部坐标)。
+ // 经验证板:viewBox="136 56 7261 2942";节点组局部 bbox 均为 x=-430(组内 text 的局部坐标)。
     const rootInv = invertMatrix(translate(136, 56))!; // root svg 自身 transform
     const groups = [
       { ctm: translate(726, 136), local: { x: -430, y: 0, width: 1200, height: 96 } }, // → root x=160(实测引擎 minX)

@@ -21,7 +21,7 @@ const tool: Tool = {
   async execute() { await new Promise((r) => setTimeout(r, 30)); return "ok"; },
 };
 
-describe("loop 追踪事件(step-031 D1/D2)", () => {
+describe("loop 追踪事件( D1/D2)", () => {
   it("turn/step 边界+llmMs/usage/durationMs 全落盘,投影聚合正确", async () => {
     const journal = new MemoryJournal();
     const loop = new AgentLoop({
@@ -75,7 +75,7 @@ describe("loop 追踪事件(step-031 D1/D2)", () => {
     expect((evs3.filter((e) => e.kind === "step.end").at(-1)?.payload as { reason: string }).reason).toBe("error");
   }, 10_000);
 
-  it("缓存命中聚合(step-048):cachedTokens 进 tokens.cached", async () => {
+  it("缓存命中聚合:cachedTokens 进 tokens.cached", async () => {
     const { extractUsage } = await import("../src/agent/openai-provider");
     // 三形态:OpenAI prompt_tokens_details / DeepSeek prompt_cache_hit_tokens / realtime input_tokens+details
     expect(extractUsage({ prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 80 } })).toMatchObject({ inputTokens: 100, outputTokens: 20, cachedTokens: 80 });
@@ -99,7 +99,7 @@ describe("loop 追踪事件(step-031 D1/D2)", () => {
     expect(s.tokens).toEqual({ input: 0, output: 0, total: 0, cached: 0 });
     expect(s.ttftMs).toBe(0);
     expect(s.decodeTps).toBe(0);
-    // 2026-10-22:无子代理事件时子代理区如实为空(不造数)
+ // 无子代理事件时子代理区如实为空(不造数)
     expect(s.subagents).toEqual({ spawned: 0, agents: [], totals: { calls: 0, input: 0, output: 0, total: 0, cached: 0, llmMs: 0 } });
   });
 
@@ -174,7 +174,7 @@ describe("loop 追踪事件(step-031 D1/D2)", () => {
     expect(s0.subagents.agents[0].lastAt).toBe(0);
   });
 
-  it("TTFT/解码吞吐(step-031 流式收口):流式事件投影均值;非流式(无 ttftMs)=0", () => {
+  it("TTFT/解码吞吐(流式收口):流式事件投影均值;非流式(无 ttftMs)=0", () => {
     // 流式:两次调用 ttft 40/60,解码窗口 80ms 输出 16tok → tps 200;160ms 输出 32tok → tps 200 → 均值 200
     const s = deriveTraceStats([
       { kind: "message.agent", payload: { text: "a", llmMs: 120, ttftMs: 40, usage: { inputTokens: 10, outputTokens: 16 } } },
@@ -193,7 +193,7 @@ describe("loop 追踪事件(step-031 D1/D2)", () => {
 });
 
 describe("压缩后上下文占用重算(2026-10-30 修「/compact 后看板不更新」)", () => {
-  /** 构造一次真实调用(message.agent 带 usage),让 contextTokens 有实测锚点。 */
+ /** 构造一次真实调用(message.agent 带 usage),让 contextTokens 有经验证锚点。 */
   const callEvent = (inputTokens: number) => ({
     kind: "message.agent", time: 1000,
     payload: { text: "回复", model: "m1", usage: { inputTokens, outputTokens: 10, totalTokens: inputTokens + 10, cachedTokens: 0 } },
@@ -304,7 +304,7 @@ describe("LLM 失败统计(txa5)", () => {
   });
 });
 
-describe("统计归一层(step-1027;2026-11 口径:API 实测为主,估算只作旁注)", () => {
+describe("统计归一层(;2026-11 口径:API 实测为主,估算只作旁注)", () => {
   const agentCall = (turn: number, step: number, inputTokens: number, rest: Record<string, unknown> = {}) => ({
     kind: "message.agent", time: 1000,
     payload: { text: "回复", model: "m1", turn, step, llmMs: 100, usage: { inputTokens, outputTokens: 10, totalTokens: inputTokens + 10, cachedTokens: 0 }, ...rest },
@@ -415,7 +415,7 @@ describe("统计归一层(step-1027;2026-11 口径:API 实测为主,估算只作
   });
 });
 
-describe("压缩边界截断(step-048:压缩真正生效)", () => {
+describe("压缩边界截断(压缩真正生效)", () => {
   it("compact.done 之后的派生消息只含边界后内容", async () => {
     const { deriveMessages } = await import("../src/agent/loop");
     const journal = new MemoryJournal();

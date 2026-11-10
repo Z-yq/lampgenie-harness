@@ -1,17 +1,15 @@
 /**
- * 办公产出技能族(2026-10-28):把原先只有 5 行「核心纪律卡(office 版)」的办公类提示词,
+ * 办公产出技能族:把原先只有 5 行「核心纪律卡(office 版)」的办公类提示词,
  * 升级为可按需加载的方法论技能,按产出物拆分,共享一条写作内核。
- *
  * 为什么拆:格式层的排版/API 规则几乎无交集(Excel 的「先判这是不是表格任务」放到 PPT 就错),
  * 但用户报的三个痛点——①流程呆板只画轮廓 ②话术 agent 回报腔 ③通篇表格不画图——是跨格式的
  * 写作与图形化问题,集中落在 office-writing 内核里,避免三份漂移。
- *
  * 出处(数据同源,均本仓可查):
  * - ZCode presentations-plugin/skills/pptx/SKILL.md(设计决策/配色/AI 味避免清单/图表优先/QA)
  * - ZCode documents-plugin/skills/docx/{SKILL.md,references/common-rules.md,routes/create.md}
  * - ZCode spreadsheets-plugin/skills/xlsx/SKILL.md(意图闸/公式与格式硬规则)
  * - ZCode visualize-plugin/skills/visualize/SKILL.md(何时该出图、出什么形态)
- * - deepseek-harness/.agents/notes/implemented/architecture/2026-09-27-progressive-office-skills.zh.md
+ * - deepseek-harness/.agents/notes/implemented/architecture/-progressive-office-skills.zh.md
  *   (按产物格式拆 + 共享确定性规则 + 渲染校验可选)
  * 以上均只取方法论,不含任何上游代码/许可文件。
  */

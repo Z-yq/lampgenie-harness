@@ -1,20 +1,16 @@
 /**
  * 负面知识库持久层(生产侧,RSI #215):把 negative-knowledge 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:死路账本是审计事实——「先记了这条路不通、后来翻案、再后来过期」是判断史,
  * 不能被覆盖写抹掉;翻案必须留谁/何时/为什么,否则账本会固化成迷信。单行追加 + 写后行数校验
  * 让「写成功了吗」成为可复核断言,而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/negkb.jsonl`,每行:
  * - record  {v:1,type:"record",at,record}                        记录完整 DeadEndRecord
  * - revive  {v:1,type:"revive",at,id,by,reason,newEvidence?}       一次翻案(纠正记录)
  * - expire  {v:1,type:"expire",at,id}                             一次过期扫描的结论
- *
  * 投影语义(loadDeadEnds):按行序归并,later wins on 同 id —— record 建底,revive 走 runtime 的
  * reviveDeadEnd 追加纠正并置 revived,expire 直接把 status 钉在 expired(所以「过期后翻案」与
  * 「翻案后过期」在行序上可区分)。坏行(JSON 坏 / v 不是 1 / type 未知 / 缺 id 或 record)只计入
  * parseErrors 并跳过:一行坏不整文件失效、不 throw。无对应 record 的孤儿事件行不算坏行,跳过。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
  * runtime 模块按 defect-lineage-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -243,8 +239,7 @@ export function loadDeadEnds(root: string): NegKbProjection {
 /** 记一条死路:先投影判重(runtime 的 recordDeadEnd + existing),DUPLICATE 不写盘。 */
 export function recordDeadEnd(
   root: string,
-  input: RecordDeadEndInput,
-): { ok: boolean; record?: DeadEndRecord; codes: string[] } {
+  input: RecordDeadEndInput): { ok: boolean; record?: DeadEndRecord; codes: string[] } {
   assertRoot(root);
   if (typeof input !== "object" || input === null) throw new TypeError("recordDeadEnd 需要 input 对象");
   let projection: NegKbProjection;

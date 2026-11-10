@@ -1,5 +1,5 @@
 /**
- * 远程连接向导命令生成(step-048,ZCode 远程连接向导对齐):
+ * 远程连接向导命令生成(ZCode 远程连接向导对齐):
  * 产出可复制执行的真实命令——node-agent 单文件 bundle 从 gateway /downloads/node-agent.mjs 分发。
  * 纯函数(测试可锚定):输入主机参数 → SSH/Docker 两种引导命令文本。
  */
@@ -23,7 +23,7 @@ export interface IfaceAddr {
 }
 
 /**
- * step-1042:gateway 对外地址推导(旧 hardcode 127.0.0.1——远程机拿到 curl 地址在本机外不可达)。
+ * gateway 对外地址推导(旧 hardcode 127.0.0.1——远程机拿到 curl 地址在本机外不可达)。
  * 规则:私网段(10/172.16-31/192.168)优先,取首个非 internal IPv4;env GENIE_PUBLIC_HOST 一票覆盖;
  * 全无命中回退 127.0.0.1(单机形态如实,note 会标明)。
  */

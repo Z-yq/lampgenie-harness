@@ -1,5 +1,5 @@
 /**
- * 语义流程白板存储(designs/22,step-057):
+ * 语义流程白板存储:
  * ① BoardDoc 落盘 .genie/boards/<sessionId>/<taskId>.json(沿用 plans/exports 的 per-session 落地惯例);
  * ② 写入经 BoardDocZ 校验 + 边引用完整性检查,原子写(tmp+rename);
  * ③ symbolRef 三态解析:linked/moved(anchor 文本锚重定位)/broken——
@@ -9,7 +9,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync
 import * as fsp from "node:fs/promises"; // 异步变体专用(board-store-async):9p/drvfs 慢盘上同步 fs 阻塞事件循环
 import { createHash } from "node:crypto";
 import { extname, isAbsolute, join, resolve } from "node:path";
-import { isPathInside } from "./path-safety.js"; // 2026-10-27:内存索引按目录归属判(Windows 分隔符)
+import { isPathInside } from "./path-safety.js"; // :内存索引按目录归属判(Windows 分隔符)
 import { BoardDocZ, BoardNodeZ, type BoardDoc, type BoardEvidence, type BoardEvidenceFile, type BoardLinkState, type BoardSymbolRefZ } from "@lampgenie/protocol";
 import type { z } from "zod";
 import { computeP0Coverage, markDoneFromEvidence, validateP0Accepts } from "./board-accept.js";
@@ -33,7 +33,7 @@ export function boardPath(root: string, sessionId: string, taskId: string): stri
   return join(boardDir(root, sessionId), seg(taskId) + ".json");
 }
 
-// ---- 证据文件指纹(M107,2026-11-06)----
+// ---- 证据文件指纹----
 /** 内容比对上限:超过就不算 sha256(只靠 mtimeMs+size),避免每次写板都读巨型文件。 */
 const FINGERPRINT_MAX_BYTES = 512 * 1024;
 /** 代码/文本扩展名白名单(sha256 只对这些做);其它(图片/二进制)只记 mtime+size。 */
@@ -60,7 +60,7 @@ function fingerprintFile(root: string, target: string): BoardEvidenceFile | null
   if (!isPathInside(root, abs)) return null; // 只认仓内文件,不把外部路径写进板
   let st;
   try {
-    st = lstatSync(abs); // lstat:符号链接 isFile()=false → 不记
+    st = lstatSync(abs); // lstat:符号链接 isFile=false → 不记
   } catch {
     return null;
   }
@@ -88,7 +88,7 @@ export function captureEvidenceFiles(root: string, targets: string[]): BoardEvid
   return out;
 }
 
-/** 落账时给 evidence 绑文件指纹(M107):
+/** 落账时给 evidence 绑文件指纹:
  * - 盘上同 cmd 且 ok/at/output/note **逐字相同** = 不是本次新提交(整板重存/别的字段改动)→ 保留原指纹,
  *   否则每次保存都会刷新指纹,证据永远不会过期;
  * - 其余(新 cmd / 重跑后重新提交)= 按节点 targets + symbolRef.file 现采;客户端传的 files 一律不采信;
@@ -127,7 +127,7 @@ export function stampEvidenceFingerprints(root: string, doc: BoardDoc, prev: Boa
 
 // ---- 板写入互斥(进程内)----
 /**
- * 同一块板文件的 read-modify-write 互斥(f1,2026-10-24)。
+ * 同一块板文件的 read-modify-write 互斥(f1。
  * 缺陷背景:并行派 3 个 planner 时三者都拿到同一 boardWrite.taskId，
  * `load → merge → save` 各自持旧盘内容写回，后写者按 id 整块替换先写者——先落的板静默消失。
  * 语义:按 boardPath 串成一条链,后来的排在前一个之后执行;
@@ -142,8 +142,7 @@ export async function withBoardLock<T>(
   root: string,
   sessionId: string,
   taskId: string,
-  fn: () => Promise<T> | T,
-): Promise<T> {
+  fn: () => Promise<T> | T): Promise<T> {
   const key = boardPath(root, sessionId, taskId);
   const run = (): Promise<T> => Promise.resolve().then(fn);
   const prev = boardWriteChains.get(key);
@@ -214,7 +213,6 @@ export interface BoardMergeResult {
 /**
  * 节点级保真合并:agent 提交整板(next)时,把板上已有(prev)的**人的痕迹**合回来,
  * 避免「人改板被 agent 全量覆盖」(人的 comments/done/pos/人工新增节点一次落板全丢)。
- *
  * 语义:
  * 1. 以 next 为主体与顺序;同 id 节点:
  *    - 保留人的痕迹:comments(next 未给/为空时用 prev)、done(next 未显式给布尔值时保留 prev 的 true;
@@ -343,9 +341,9 @@ export function computeHumanEdits(prevNodes: unknown, nextNodes: unknown, rev: n
 }
 
 /** 校验 + 落盘(原子)。返回 {ok, path} 或 {ok:false, reason}——调用方决定 fail-soft 话术。
- * step-137 代码级落目标两道门(只对 agent 写入面生效):
+ * 代码级落目标两道门(只对 agent 写入面生效):
  * - **落板门**:phase=P0 节点必须带非空 accept,缺则拒收并点名(板上写着 DoD 却没人核对=本次事故根因);
- * - **收口门**:status=done 时 P0 节点必须全部有 ok=true 证据,否则拒收并列出未覆盖节点(禁止无证据宣称完成)。
+ * - **门**:status=done 时 P0 节点必须全部有 ok=true 证据,否则拒收并列出未覆盖节点(禁止无证据宣称完成)。
  * opts.skipGates=true 用于系统侧回填(backfillActualFiles 的 diffstat 对账)与人工改板(board.save):
  * 那不是「agent 宣称完成」,不该被验收门卡住(人工改板也不该因缺 accept 而丢拖动结果)。
  * opts.gateExemptNodeIds=本次**不是 agent 提交**的节点(人改板保真合并保留下来的人工节点):
@@ -354,8 +352,8 @@ export function computeHumanEdits(prevNodes: unknown, nextNodes: unknown, rev: n
  * opts.agentWrite=本次写入来自 **agent 工具面**(board_upsert 传 true):额外启用 label 限长门
  * (q7,见 assertAgentLabels)。人经 board.save 改板不传=不限长——人写长 label 是他的自由,
  * 且盘上存量超长 label 的节点只要不被本次提交触及(exempt/未提交)就不会导致拒收。 */
-/** agent 写入面的常见 kind 笔误 → 最近义合法值(2026-10-31 拒收自愈)。
- *  实测两轮真跑(15 步/14 步)均踩同一个坑:kind 写枚举外值 → **整板拒收**,
+/** agent 写入面的常见 kind 笔误 → 最近义合法值(拒收自愈)。
+ * 经验证两轮真跑(15 步/14 步)均踩同一个坑:kind 写枚举外值 → **整板拒收**,
  *  白付一步 + 一条 400 字符错误回执永驻历史(board_upsert 在 NEVER_COMPACT_TOOLS 里)。
  *  schema 描述里早已写明「只能取本枚举值之一」,模型照踩——文案路线到顶,故改为机制兜底。 */
 const NODE_KIND_ALIASES: Readonly<Record<string, string>> = {
@@ -437,7 +435,7 @@ export interface SaveBoardOpts {
   /** q7 配套:这些 id 的 label 与盘上已有版本逐字相同(=本次提交没改它),
    *  限长门跳过——存量超长 label 不该让 agent 的每次整板提交都被拒。 */
   labelExemptNodeIds?: string[];
-  /** M107 内部参数(saveBoard/saveBoardAsync 自己填,调用方不用传):
+ /** 内部参数(saveBoard/saveBoardAsync 自己填,调用方不用传):
    *  落盘前给新提交的 evidence 捕获目标文件指纹;prev 用于识别「不是本次新提交的证据」并保留原指纹。 */
   fingerprintRoot?: string;
   prevDoc?: BoardDoc | null;
@@ -445,11 +443,10 @@ export interface SaveBoardOpts {
 
 /** 校验门(纯函数,零 fs 操作):saveBoard 与 saveBoardAsync 共用,防两份校验逻辑漂移。
  *  覆盖:agentWrite 自愈(kind 校正/label 截断)→ BoardDocZ.safeParse → 边引用完整性 → id 去重 →
- *  P0 落板门(composition 免)→ done 收口门(P0 覆盖率)→ label 限长门;通过即赋 doc.updatedAt(落盘前)。 */
+ * P0 落板门(composition 免)→ done 门(P0 覆盖率)→ label 限长门;通过即赋 doc.updatedAt(落盘前)。 */
 function validateBoardInput(
   input: unknown,
-  opts: SaveBoardOpts,
-): { ok: true; doc: BoardDoc; corrections: string[] } | { ok: false; reason: string } {
+  opts: SaveBoardOpts): { ok: true; doc: BoardDoc; corrections: string[] } | { ok: false; reason: string } {
   // 自愈(只对 agent 写入面):kind 校正 + label 截断,替代「整板拒收」。
   // 人经 board.save 改板不传 agentWrite=保持严格校验(UI 只会发合法枚举,收紧才能暴露真 bug)。
   const normalized = opts.agentWrite
@@ -459,7 +456,7 @@ function validateBoardInput(
   const parsed = BoardDocZ.safeParse(normalized.value);
   if (!parsed.success) return { ok: false, reason: "白板结构不合法: " + parsed.error.issues.slice(0, 3).map((i) => i.path.join(".") + " " + i.message).join("; ") };
   const doc = parsed.data;
-  // M107:evidence 指纹必须在**门之前**捕获——done 收口门要按过期后的真实状态判(过期=不算通过)。
+ // evidence 指纹必须在**门之前**捕获——done 门要按过期后的真实状态判(过期=不算通过)。
   // 采集不到文件时证据不带 files,与旧行为逐字相同。
   if (opts.fingerprintRoot) stampEvidenceFingerprints(opts.fingerprintRoot, doc, opts.prevDoc ?? null);
   // 边引用完整性:挂在不存在的节点上的边是脏数据,拒收(防 mermaid 渲染炸)。
@@ -473,9 +470,9 @@ function validateBoardInput(
     // 否则人工 P0 节点(人写板不必带 accept)会让 agent 的每次落板都被拒。
     const exempt = new Set(Array.isArray(opts.gateExemptNodeIds) ? opts.gateExemptNodeIds : []);
     const gated = exempt.size > 0 ? doc.nodes.filter((n) => !exempt.has(n.id)) : doc.nodes;
-    // composition(作业思路板,2026-11-05)跳过 P0 accept 门:composition 是表达结构不是代码契约,
+ // composition(作业思路板跳过 P0 accept 门:composition 是表达结构不是代码契约,
     // 不出命令级验收(主题/受众/章节/章间关系),结构完整性由类型门(board-contract)管。
-    // 覆盖率门/收口门不动——status=done 仍要求 P0 证据全绿(思路板本身不该有 P0 节点)。
+ // 覆盖率门/门不动——status=done 仍要求 P0 证据全绿(思路板本身不该有 P0 节点)。
     if (doc.boardType !== "composition") {
       const v = validateP0Accepts(gated);
       if (!v.ok) return { ok: false, reason: "P0 落目标缺可执行验收: " + v.problems.join("; ") };
@@ -510,7 +507,7 @@ function validateBoardInput(
   return { ok: true, doc, corrections };
 }
 
-/** M107 内部:直读盘上旧板(不做存在性等待,读不到=null)。写路径用它拿 prev 指纹,**不要**用 loadBoard/loadBoardAsync
+/** 内部:直读盘上旧板(不做存在性等待,读不到=null)。写路径用它拿 prev 指纹,**不要**用 loadBoard/loadBoardAsync
  *  (那两者在文件不存在时有最长 200ms 的等待,会把等待成本加到每次首次落板)。 */
 function readPrevBoardSync(root: string, sessionId: string, taskId: string): BoardDoc | null {
   try {
@@ -531,7 +528,7 @@ async function readPrevBoardAsync(root: string, sessionId: string, taskId: strin
 
 // sync-legacy:异步变体 saveBoardAsync 已就绪;本同步版供既有测试/tasks 脚本/冷路径使用,勿在新代码调用。
 export function saveBoard(root: string, input: unknown, opts: SaveBoardOpts = {}): { ok: true; path: string; doc: BoardDoc; corrections?: string[] } | { ok: false; reason: string } {
-  // M107:先读盘上旧板(用于识别「非本次新提交的证据」并保留原指纹),再走校验门。
+ // 先读盘上旧板(用于识别「非本次新提交的证据」并保留原指纹),再走校验门。
   const loose = input as { sessionId?: unknown; taskId?: unknown } | null;
   const prevDoc = typeof loose?.sessionId === "string" && typeof loose?.taskId === "string"
     ? readPrevBoardSync(root, loose.sessionId, loose.taskId) : null;
@@ -579,7 +576,7 @@ export function loadBoard(root: string, sessionId: string, taskId: string): Boar
     const parsed = BoardDocZ.safeParse(JSON.parse(readFileSync(p, "utf-8")));
     return parsed.success ? parsed.data : null;
   } catch (err) {
-    // 六期踩坑:drvfs 高载下 readFileSync 间歇 EIO/ETIMEDOUT,fail-soft 吞掉=面板「凭空无板」;
+ // 六期注意:drvfs 高载下 readFileSync 间歇 EIO/ETIMEDOUT,fail-soft 吞掉=面板「凭空无板」;
     // 非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error("[board-store] 读板失败(非缺文件):", p, String(err).slice(0, 120));
     return null;
@@ -592,9 +589,9 @@ export function listBoards(root: string, sessionId: string): { taskId: string; t
   return listBoardsEx(root, sessionId).items;
 }
 
-/** step-072:带 skipped 计数(损坏/不可读文件数)的列板——面板据此区分「真无板」与「板文件损坏」,
+/** 带 skipped 计数(损坏/不可读文件数)的列板——面板据此区分「真无板」与「板文件损坏」,
  * 不再把损坏静默成「该会话还没有设计白板」。
- * 2026-10-22:补 docKind(多板按类型过滤需要);pendingComments 由 server 侧按 board-comments 内存队列合并。 */
+ * 补 docKind(多板按类型过滤需要);pendingComments 由 server 侧按 board-comments 内存队列合并。 */
 // sync-legacy:异步变体 listBoardsExAsync 已就绪;本同步版供既有测试/冷路径使用,勿在新代码调用(drvfs 忙等会停摆事件循环)。
 export function listBoardsEx(root: string, sessionId: string): { items: { taskId: string; title: string; status: string; updatedAt: number; nodeCount: number; docKind?: string }[]; skipped: number } {
   const dir = boardDir(root, sessionId);
@@ -627,7 +624,7 @@ export function listBoardsEx(root: string, sessionId: string): { items: { taskId
       continue;
     }
   }
-  // 内存索引对账(九期实锤:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
+ // 内存索引对账(九期注意:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
   for (const p of memRescue(root, sessionId)) {
     const f = p.split("/").pop()!;
     if (seen.has(f)) continue;
@@ -643,7 +640,7 @@ export function listBoardsEx(root: string, sessionId: string): { items: { taskId
   return { items: out.sort((a, b) => b.updatedAt - a.updatedAt), skipped };
 }
 
-/** 任务完成回填实际触碰文件(计划 vs 实际对账,designs/22 P4 的数据口)。 */
+/** 任务完成回填实际触碰文件(计划 vs 实际对账, P4 的数据口)。 */
 // sync-legacy:异步变体 backfillActualFilesAsync 已就绪;本同步版供既有测试/finalize 冷路径使用,勿在新代码调用。
 export function backfillActualFiles(root: string, sessionId: string, taskId: string, files: string[]): boolean {
   const doc = loadBoard(root, sessionId, taskId);
@@ -653,7 +650,7 @@ export function backfillActualFiles(root: string, sessionId: string, taskId: str
   return saveBoard(root, doc).ok;
 }
 
-// ---- 设计沉淀索引(step-058):done 板的项目级「设计记忆」----
+// ---- 设计沉淀索引:done 板的项目级「设计记忆」----
 // 定位:白板=一次代码改动的临时任务草图;任务收官时最终板承载的设计决策沉淀为项目级知识,
 // 在代码档案里可查可看。索引只存指针与反查键(files),板全文仍以 board 文件为单一真相——
 // 点击条目走既有 board.get 通道拿 doc+links,索引损坏/缺失只影响列表不影响数据。
@@ -800,12 +797,12 @@ export function deleteOverlay(root: string, sessionId: string, taskId: string): 
   }
 }
 
-/** 任务 done 收官(designs/22 §4,step-057):
+/** 任务 done 收官( §4:
  * ① 有 checkpoint sha(开工树脏,快照钉住了任务前基线)→ diffstat 回填 actual_files(计划 vs 实际对账);
  * ② 涉事仓索引后台重建(改完码 code-index 跟着改)。
- * 2026-10-18 F 修复(体验官 A P2,撤销三期 B1 的「基线落 HEAD」):sha=null=开工时树干净(git stash
+ * F 修复(撤销三期 B1 的「基线落 HEAD」):sha=null=开工时树干净(git stash
  * create 无变更)——没有钉住的任务前基线,diff HEAD 会把仓里他人/其他任务的在途未提交改动算成本任务
- * 「计划外」(共享仓实测纯规划板被污染 50 文件)。诚实语义:无可信基线=不对账——不回填 actual_files、
+ * 「计划外」(共享仓经验证纯规划板被污染 50 文件)。诚实语义:无可信基线=不对账——不回填 actual_files、
  * 不翻 status=done;索引重建照走(指纹档判过期不依赖 git)。判据=sha 有无,不看板 kind。
  * diffstat/重建失败均 fail-soft。 */
 export async function finalizeBoardOnTaskDone(opts: {
@@ -849,7 +846,7 @@ export async function finalizeBoardOnTaskDone(opts: {
  * 字符长度与换行位置严格不变(逐字符原位替换),故行号/列位置对齐。
  * 单/双引号串未闭合时在行尾收尾(防御坏文本,C 系单行串本就换行即止);
  * 三引号串与模板串按跨行处理,未闭合则吞到文件尾。
- * 动机(2026-10-29):旧版在整行原文本上匹配,注释/文档字符串里提到同名符号就命中 →
+ * 动机:旧版在整行原文本上匹配,注释/文档字符串里提到同名符号就命中 →
  * 板 symbolRef 的「漂移」全是假阳性。 */
 export function maskNonCode(text: string): string {
   const out = text.split("");
@@ -929,7 +926,7 @@ export function maskNonCode(text: string): string {
 /** 纯函数核心(可测):在工作区文件文本里按 anchor/名字定位符号行号。
  * anchor=签名行文本(首选);退化=符号名出现行(词边界防子串误配;
  * 「ClassName.method」形态在源码里不带类前缀——全名不中再试最后一段)。返回 1-based 行号,未命中 null。
- * 2026-10-29 假阳性修复:先在 maskNonCode 抹掉注释/字符串后的文本上定位,
+ * 假阳性修复:先在 maskNonCode 抹掉注释/字符串后的文本上定位,
  * 注释里或字符串字面量里提到同名串不再算命中(否则板 symbolRef 的「漂移」全是假阳性)。 */
 export function locateSymbolInText(fileText: string, ref: SymbolRef): number | null {
   const lines = maskNonCode(fileText).split("\n");
@@ -969,8 +966,7 @@ export function resolveLinkState(fileText: string | null, ref: SymbolRef, indexH
 export function resolveBoardLinks(
   root: string,
   doc: BoardDoc,
-  indexHas: (name: string) => boolean | null,
-): BoardLinkState[] {
+  indexHas: (name: string) => boolean | null): BoardLinkState[] {
   const links: BoardLinkState[] = [];
   const fileCache = new Map<string, string | null>();
   for (const n of doc.nodes) {
@@ -1006,7 +1002,7 @@ export function resolveBoardLinks(
   return links;
 }
 
-/** targets 真实性核对(2026-11-04):板上 targets 是「本次变更指向的实际文件路径」,
+/** targets 真实性核对:板上 targets 是「本次变更指向的实际文件路径」,
  * 常因写错/文件不存在/写成绝对路径而变成幻影——这里只报不判(audit 的 ok 计算不含本项)。
  * 口径与 resolveBoardLinks 的围栏一致:拒绝以 `/` 开头与含 `..` 段;`#` 之后是行锚/符号锚,
  * 不参与路径核对。目录不算命中(targets 应指向文件)。全程 try/catch,读盘异常归 missing。
@@ -1014,8 +1010,7 @@ export function resolveBoardLinks(
 // sync-legacy:异步变体 resolveTargetPathsAsync 已就绪;本同步版供既有测试/冷路径使用,勿在新代码调用。
 export function resolveTargetPaths(
   root: string,
-  doc: BoardDoc,
-): Array<{ nodeId: string; target: string; state: "missing" | "outside" }> {
+  doc: BoardDoc): Array<{ nodeId: string; target: string; state: "missing" | "outside" }> {
   const out: Array<{ nodeId: string; target: string; state: "missing" | "outside" }> = [];
   const resolveRoot = doc.root ?? root;
   for (const n of doc.nodes) {
@@ -1085,7 +1080,7 @@ export async function loadBoardAsync(root: string, sessionId: string, taskId: st
     const parsed = BoardDocZ.safeParse(JSON.parse(await fsp.readFile(p, "utf-8")));
     return parsed.success ? parsed.data : null;
   } catch (err) {
-    // 六期踩坑同款:非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
+ // 六期注意同款:非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error("[board-store] 读板失败(非缺文件):", p, String(err).slice(0, 120));
     return null;
   }
@@ -1128,7 +1123,7 @@ export async function listBoardsExAsync(root: string, sessionId: string): Promis
       continue;
     }
   }
-  // 内存索引对账(九期实锤同款:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
+ // 内存索引对账(九期注意同款:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
   for (const p of memRescue(root, sessionId)) {
     const f = p.split("/").pop()!;
     if (seen.has(f)) continue;
@@ -1152,7 +1147,7 @@ export async function listBoardsAsync(root: string, sessionId: string): Promise<
 /** saveBoard 的异步同构:校验门走共用 validateBoardInput(单一出处,防两份逻辑漂移);
  *  仅落盘段改 fsp.mkdir+writeFile(tmp)+rename(原子写),成功后 boardMemIndex.set 同款。 */
 export async function saveBoardAsync(root: string, input: unknown, opts: SaveBoardOpts = {}): Promise<{ ok: true; path: string; doc: BoardDoc; corrections?: string[] } | { ok: false; reason: string }> {
-  // M107:落盘前先读盘上旧板,用于保留「非本次新提交证据」的原指纹(直读文件,不走 loadBoardAsync
+ // 落盘前先读盘上旧板,用于保留「非本次新提交证据」的原指纹(直读文件,不走 loadBoardAsync
   // 的存在性等待——首次落板不该在写路径上多等 200ms)。
   const loose = input as { sessionId?: unknown; taskId?: unknown } | null;
   const prevDoc = typeof loose?.sessionId === "string" && typeof loose?.taskId === "string"
@@ -1305,8 +1300,7 @@ export async function deleteOverlayAsync(root: string, sessionId: string, taskId
 export async function resolveBoardLinksAsync(
   root: string,
   doc: BoardDoc,
-  indexHas: (name: string) => boolean | null,
-): Promise<BoardLinkState[]> {
+  indexHas: (name: string) => boolean | null): Promise<BoardLinkState[]> {
   const links: BoardLinkState[] = [];
   const fileCache = new Map<string, string | null>();
   for (const n of doc.nodes) {
@@ -1346,8 +1340,7 @@ export async function resolveBoardLinksAsync(
 /** resolveTargetPaths 的异步同构:outside/missing 判定与 `#` 锚口径不变,fs 换 fsp。 */
 export async function resolveTargetPathsAsync(
   root: string,
-  doc: BoardDoc,
-): Promise<Array<{ nodeId: string; target: string; state: "missing" | "outside" }>> {
+  doc: BoardDoc): Promise<Array<{ nodeId: string; target: string; state: "missing" | "outside" }>> {
   const out: Array<{ nodeId: string; target: string; state: "missing" | "outside" }> = [];
   const resolveRoot = doc.root ?? root;
   for (const n of doc.nodes) {

@@ -1,9 +1,8 @@
 /**
- * 桌面壳的路径解析与首启初始化(step-136)。
+ * 桌面壳的路径解析与首启初始化。
  * 纯函数 + 只依赖 node 内置模块 —— 顶层**不得** require("electron"),
  * 以便 `node --test test/` 脱离 electron 直接跑。
- *
- * 数据根设计(见 tasks/step-136-desktop-exe/step.md K2):
+ * 数据根设计(见 K2):
  * 桌面态不回退 process.cwd(),而是由壳解析出固定数据根,再经 env `GENIE_REPO_ROOT`
  * 注入给 gateway(repo-root.ts:7 已支持该 env 短路,不改其仓内语义)。
  */
@@ -33,7 +32,6 @@ const MINIMAL_CONFIG = { gateway: { port: 7700, panel: true }, journal: { dir: "
  * 2. 便携态:PORTABLE_EXECUTABLE_DIR(electron-builder portable target 注入)→ <exe 目录>/user-data
  * 3. Windows:%APPDATA%\LampGenie(APPDATA 缺失退 homedir)
  * 4. 其他平台:~/.lampgenie-harness
- *
  * 形参只放「决定数据根」的输入;execPath/resourcesPath 不参与本决策(打包态由 extraResources
  * 决定 gateway 位置,数据根与安装位置解耦),故不从签名里接收,避免调用方误以为能改落点。
  */
@@ -79,7 +77,7 @@ function resolveGatewayDir({ env, isPackaged, resourcesPath, devRepoRoot } = {})
 /** 端口候选序列 [start, end] 闭区间。 */
 function listPortCandidates(start = 7701, end = 7720) {
   // 桌面默认从 7701 起:web 网关(WSL/服务器)固定 7700——WSL2 镜像网络下两端共用端口会互抢
-  // (2026-10-27 实锤:桌面占 7700 后 web 网关「端口被占」;7870 同理走 RELAY_PORT=7871)。
+ // (注意:桌面占 7700 后 web 网关「端口被占」;7870 同理走 RELAY_PORT=7871)。
   const out = [];
   for (let p = start; p <= end; p++) out.push(p);
   return out;
@@ -115,7 +113,7 @@ function resourceChecklist(gatewayDir) {
  * 全量运行时自检(资源根 = <install>/resources)。
  * 这些组件让新 PC 零外部依赖:模型服务自带 ONNX 权重,浏览器自带 Chromium,
  * shell/git 自带 PortableGit。缺任一 → 对应**主能力降级**,但不再视为「安装坏了」:
- * 2026-11-08 实测 360 安全卫士会把 onnxruntime.dll / chrome_elf.dll 等当作可疑文件持续隔离,
+ * 经验证 360 安全卫士会把 onnxruntime.dll / chrome_elf.dll 等当作可疑文件持续隔离,
  * 若这里判 required 就会把整个应用拦在启动页(核心对话/工具其实不需要评分 DLL)。
  * 因此全部标记 required=false,由 main.js 记警告 + 标题提示降级;
  * 发布 QA 可用 GENIE_REQUIRE_FULL_RUNTIME=1 恢复严格阻断。
@@ -189,11 +187,9 @@ function readJsonFile(p) {
 
 /**
  * 数据根里是否已具备可用的主轨 LLM 路由(fix S137-2)。
- *
  * 为什么壳要自己判:gateway 的 LLM 装配发生在**进程启动时**——首启没有模型配置就 llm=off,
  * 之后用户在面板里配好模型只落盘,旧进程不会自愈(无 provider 实例可热切,agent loop 也没接线),
  * 表现就是「任务秒完成但只是 echo 回显」。壳据此决定要不要自动重启 gateway。
- *
  * 判定口径与 gateway 装配同源(resolveTrackEndpoint 语义):
  *  1. coding.llm / audio.chat 的 model 非空;
  *  2. baseUrl 能解析:轨内自带 baseUrl,或 providerId 指向 providers[] 里有 baseUrl 的条目;

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Team Relay 生产入口(designs/05 §5):每 org 一个,部署在团队可达的共享服务器。
+ * Team Relay 生产入口( §5):每 org 一个,部署在团队可达的共享服务器。
  * 权威数据在 Git 仓;本进程只做实时面(presence/活动流/邀请兑换)——挂了不丢数据。
  * 环境变量:RELAY_PORT(默认 7870)/TEAM_REPO_URL(必填)/RELAY_WORKDIR(默认 ~/.lampgenie-harness/relay)
  */
@@ -31,7 +31,7 @@ const relay = new TeamRelay({
   server: http,
   teamRepoUrl,
   workdir,
-  // designs/24:上游权威仓(teammate 推送源)+ learnings 分支名——镜像形态时的同步通道。
+ // 上游权威仓(teammate 推送源)+ learnings 分支名——镜像形态时的同步通道。
   ...(process.env.TEAM_UPSTREAM_URL ? { upstreamUrl: process.env.TEAM_UPSTREAM_URL } : {}),
   ...(process.env.TEAM_LEARNINGS_BRANCH ? { learningsBranch: process.env.TEAM_LEARNINGS_BRANCH } : {}),
 });

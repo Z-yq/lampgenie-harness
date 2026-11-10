@@ -1,5 +1,5 @@
 /**
- * TaskState 全迁移边单测(2026-11-05 状态机优化):
+ * TaskState 全迁移边单测(状态机优化):
  * 七态 TRANSITIONS 矩阵逐边校验——表驱动,与实现同源自 TRANSITIONS 语义;
  * interrupted 为本批新增态,全部出边/入边显式断言。
  */

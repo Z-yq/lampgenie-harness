@@ -1,7 +1,6 @@
 /**
- * 轨迹泳道工具错误判定回归(txa10 / step-1535 迁移)。
- *
- * 历史:recordOf 原在 status-widget.js 的 IIFE 里(需 document 才能整体加载)。step-1535 把泳道
+ * 轨迹泳道工具错误判定回归(txa10 / 迁移)。
+ * 历史:recordOf 原在 status-widget.js 的 IIFE 里(需 document 才能整体加载)。 把泳道
  * 渲染核心迁进面板(panel.ts 的 trajLaneRecord),本文件随之把抽取点从 status-widget.js 改到 panel.ts;
  * 判定逻辑(优先 payload.error.origin、缺失回退 /^错误/ 文本)一字未改,仍是「新数据可读 + 旧 journal 可读」
  * 双轨的关键。做法:从 panel.ts 源文件里截取 TRAJ_LANE_ERR_LABEL..trajLaneHtml 之前这一段求值,

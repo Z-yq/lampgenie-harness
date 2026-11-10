@@ -31,7 +31,7 @@ function waitMsg(w: import("ws").WebSocket, type: string, timeoutMs = 15_000): P
 
 const planLlm = { async chat() { return { content: "## 实施计划\n- 步骤一:修登录页\n- 步骤二:补测试" }; } };
 
-describe("plan 审批流 e2e(step-053 闭环)", () => {
+describe("plan 审批流 e2e(闭环)", () => {
   let app: Awaited<ReturnType<typeof createGatewayApp>>;
   let server: Server;
   let port = 0;

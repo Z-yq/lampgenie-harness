@@ -1,5 +1,5 @@
 /**
- * 团队活动周报聚合(designs/30 §1 #23 / §2.7):按成员/类别降序 + 字典序稳定排序。
+ * 团队活动周报聚合( §1 #23 / §2.7):按成员/类别降序 + 字典序稳定排序。
  */
 import { describe, expect, it } from "vitest";
 import { teamActivityDigest } from "../src/team/team-activity-digest.js";

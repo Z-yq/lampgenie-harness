@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";
 import { AgentLoop, deriveMessages, type LlmProvider, type LlmResponse, type Message, type Tool } from "../src/agent/loop";
 
-/** M28 输出截断续写:假 provider 按调用序返回 finishReason,验证续写/合并/剥离/上限。 */
+/**  输出截断续写:假 provider 按调用序返回 finishReason,验证续写/合并/剥离/上限。 */
 
 const PROMPT_HEAD = "继续。从被截断处紧接着写";
 const LIMIT_WARN = "[输出上限] 已续写 3 次仍被截断;请缩小单次输出或分段交付。";
@@ -27,7 +27,7 @@ const getTime: Tool = {
   async execute() { return "2026-11-07 20:00"; },
 };
 
-describe("M28 输出截断续写", () => {
+describe(" 输出截断续写", () => {
   it("length→stop:两段合并、只有一条 assistant 落账、journal 不含续写提示、provider 被调 2 次", async () => {
     const journal = new MemoryJournal();
     const { llm, calls } = scripted([

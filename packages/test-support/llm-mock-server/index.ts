@@ -4,7 +4,6 @@
 /**
  * Scriptable HTTP/SSE mock of a Messages LLM endpoint for transport,
  * protocol, and semantic-empty recovery tests.
- *
  * @module @lampgenie/test-support/llm-mock-server
  */
 
@@ -252,8 +251,7 @@ class SseChannel {
   constructor(
     readonly config: ResolvedOptions,
     readonly record: MockLlmRequestRecord,
-    private readonly response: ServerResponse,
-  ) {}
+    private readonly response: ServerResponse) {}
 
   get closed(): boolean {
     return this.response.destroyed
@@ -434,8 +432,7 @@ async function runTextBody(
   options: ResolvedOptions,
   reason: 'end_turn' | 'max_tokens',
   gapMs: number,
-  index = 0,
-): Promise<void> {
+  index = 0): Promise<void> {
   blockStart(channel, index, { type: 'text', text: '' })
   for (const piece of intoChunks(options.successText, options.chunkSize)) {
     blockDelta(channel, index, { type: 'text_delta', text: piece })
@@ -611,8 +608,7 @@ function makeDeterministicRandom(seed: number): () => number {
 
 function drawWeighted(
   weights: readonly (readonly [ConcreteMockLlmBehavior, number])[],
-  uniform: () => number,
-): ConcreteMockLlmBehavior {
+  uniform: () => number): ConcreteMockLlmBehavior {
   const total = weights.reduce((sum, [, weight]) => sum + weight, 0)
   let dart = uniform() * total
   for (const [behavior, weight] of weights) {

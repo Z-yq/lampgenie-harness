@@ -1,10 +1,10 @@
 /**
- * step-099 RC-B2 测试:Go importers 落盘。
+ * RC-B2 测试:Go importers 落盘。
  * ① adapter 层:parseGoFile 结果带本文件 import 路径清单;
  * ② 展开层:expandGoImports 按 go.mod 模块锚把包路径映射到目录内非测试 .go 文件
  *    (外部路径/无 go.mod=跳过不猜;同包不互列);
  * ③ 索引层:buildC2fIndex 后 importers 含跨包映射,纯 Go 仓字段在场(消灭
- *    「重建后补全」做不到的形态——096 评测 go-cobra fresh 重建字段缺席实锤);
+ * 「重建后补全」做不到的形态——096 评测 go-cobra fresh 重建字段缺席注意);
  * ④ 增量/全量共用同一 expandGoImports(单一真相);
  * ⑤ impact 面:纯 Go 仓 importers 在场 → 不再出现「旧格式索引」降级提示。
  */
@@ -57,7 +57,7 @@ function seedGoWs(dir: string): void {
   ].join("\n"));
 }
 
-describe("step-099 RC-B2:Go importers 落盘", () => {
+describe(" RC-B2:Go importers 落盘", () => {
   it("adapter 层:parseGoFile 带 import 路径清单(块形态+单行形态)", async () => {
     const dir = mkWs();
     seedGoWs(dir);

@@ -1,13 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * 产物 QA CLI(M101 / M103)。
- *
+ * 产物 QA CLI( /)。
  * 用法:tsx scripts/office-qa.mts <file> [--json] [--recalc]
  *   --recalc  对 .xlsx 用 soffice 真重算一次 —— 脚本写出的公式常常没有缓存值,
  *             只有重算后才知道到底算出了什么。没有重算引擎时输出 recalc-skipped
  *             并保持退出码 0,但会明说「未重算」(不把「没检查」说成「干净」)。
  * 退出码:0 = 无 error 级失败;2 = 有 error 级失败或用法错误(脚本异常同样非 0)。
- *
  * 人类可读模式打印每项结果与 remediation;--json 输出机器可读 {file, ok, findings}。
  */
 import { checkOfficeArtifact } from "../apps/gateway/src/office-qa.ts";

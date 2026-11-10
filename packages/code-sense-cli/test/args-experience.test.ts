@@ -1,5 +1,5 @@
 /**
- * CLI 参数体验单测(step-092):
+ * CLI 参数体验单测:
  *  - expandTilde:波浪号自展(~/非 shell 调用形态 shell 不代展开);
  *  - vars/tokens 缺文件预检:完整解析路径 + 仓内同名建议(替代 deep 层 slice(0,80) 截断的半截 ENOENT);
  *  - 显式 --root 不存在 fail-visible(exit 2,不再静默滑向零仓全 miss);
@@ -79,7 +79,7 @@ describe("expandTilde(参数面波浪号自展)", () => {
   });
 });
 
-describe("vars/tokens 参数形态(step-092 DoD 两形态都通)", () => {
+describe("vars/tokens 参数形态( DoD 两形态都通)", () => {
   it("vars --root <波浪号(引号包裹不展开)> → 展开后命中夹具", async () => {
     mkdirSync(join(fakeHome, "tildefix", "modules", "imgproc", "src"), { recursive: true });
     writeFileSync(join(fakeHome, "tildefix", "modules", "imgproc", "src", "color_lab.cpp"), C_SRC);
@@ -105,7 +105,7 @@ describe("vars/tokens 参数形态(step-092 DoD 两形态都通)", () => {
   });
 });
 
-describe("缺文件诊断(step-092:完整路径+同名建议,替代半截 ENOENT)", () => {
+describe("缺文件诊断(完整路径+同名建议,替代半截 ENOENT)", () => {
   it("vars 缺文件:文本面含完整解析路径 + 仓内同名建议,exit 1", async () => {
     const r = capture();
     const code = await runCli(["vars", "--root", repo, "src/color_lab.cpp"], r.io);
@@ -135,7 +135,7 @@ describe("缺文件诊断(step-092:完整路径+同名建议,替代半截 ENOENT
   });
 });
 
-describe("root 预检(step-092 fail-visible)", () => {
+describe("root 预检( fail-visible)", () => {
   it("显式 --root 不存在:exit 2 + 人话(不再静默零仓)", async () => {
     const r = capture();
     const code = await runCli(["vars", "--root", join(tmpdir(), "csargs-nope-xyz"), "x.cpp"], r.io);

@@ -1,5 +1,5 @@
 /**
- * 官方市场源集成测试(2026-10-25,ZCode 官方插件市场接入):
+ * 官方市场源集成测试(ZCode 官方插件市场接入):
  * zip 解压器(手写 store 模式 zip writer 驱动)/清单解析(真实快照)/
  * 官方包安装分发与台账/卸载整包回收/未分发大包提示。
  */
@@ -150,7 +150,7 @@ describe("官方市场源(plugins.ts official market)", () => {
       expect(existsSync(join(tmp, ".genie", "commands", r.artifacts.commandFiles![0]))).toBe(false);
       expect(existsSync(join(tmp, ".genie", "agents", "assess-credit.md"))).toBe(false);
       for (const rel of r.artifacts.skillDirs!) expect(existsSync(join(tmp, ".genie", "experiences", rel))).toBe(false);
-      // 分类父目录也回收(2026-10-25 修复:fs.rm 删目录必须 recursive,裸 rmSync EISDIR 被吞)
+ // 分类父目录也回收(修复:fs.rm 删目录必须 recursive,裸 rmSync EISDIR 被吞)
       expect(existsSync(join(tmp, ".genie", "experiences", "plugin-assess-credit"))).toBe(false);
     } finally {
       rmSync(tmp, { recursive: true, force: true });

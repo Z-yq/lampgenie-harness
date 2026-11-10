@@ -1,4 +1,4 @@
-/** UI 实测:# 会话提及与 $ 技能提及(触发/过滤/插入参考文本)。 */
+/** UI 经验证:# 会话提及与 $ 技能提及(触发/过滤/插入参考文本)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

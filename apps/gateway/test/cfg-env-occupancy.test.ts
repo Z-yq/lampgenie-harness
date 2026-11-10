@@ -1,5 +1,5 @@
 /**
- * env 占用甄别(2026-10-19 模型切换失效根治配套):loadConfig 层级 user→project→env 压顶,
+ * env 占用甄别(模型切换失效根治配套):loadConfig 层级 user→project→env 压顶,
  * GENIE_LLM_* 在场时面板切模型永远不生效(写盘成功但运行时/重启都被 env 盖回)。
  * envOccupiedOf 只挑 sources 标 env 的键;envOccupiedHint 点名对应环境变量。
  */

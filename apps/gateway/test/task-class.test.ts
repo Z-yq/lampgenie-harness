@@ -1,5 +1,5 @@
 /**
- * 任务类别(2026-10-23 用户口径:理解阶段定类,tips/plan-gate 全消费同一结果):
+ * 任务类别(理解阶段定类,tips/plan-gate 全消费同一结果):
  * - classifyTaskClass 纯函数:写代码信号优先(复合指令必须落 coding)→办公/产出 →问答/调研;
  *   保守缺省 coding(错判代价不对称:QA 多看编码纪律只是 token 负担,编码任务丢验收纪律才是损失);
  * - systemForTaskClass:qa 免流程/验收仪式但保留 code_sense 用法;office 只留通用段;
@@ -79,12 +79,12 @@ describe("systemForTaskClass(系统纪律段按类)", () => {
     expect(s).not.toContain("code_sense 用法");
     expect(s).toContain("交付前自查");
     expect(s).toContain('task_phase(taskClass="coding")');
-    // 2026-10-28:办公方法论下沉为技能族,系统段必须点名指路(否则模型不知道有这套规则)
+ // 办公方法论下沉为技能族,系统段必须点名指路(否则模型不知道有这套规则)
     for (const name of ["office-writing", "office-pptx", "office-docx", "office-xlsx", "office-report"]) {
       expect(s).toContain(`builtin/${name}`);
     }
     expect(s).toContain("mermaid");
-    // 2026-10-28 用户口径:系统段要带「开工四问 + 论点四段」
+ // 系统段要带「开工四问 + 论点四段」
     expect(s).toContain("开工四问");
     expect(s).toContain("面向谁报告");
     expect(s).toContain("论据");
@@ -129,7 +129,7 @@ describe("更正闭环(e2e):理解阶段定类,agent 可更正,plan-gate 随类�
 });
 
 describe("plan-gate 按类放行(e2e)", () => {
-  // 2026-11-05 白板适用面收口:office 从「软免板」改硬闸——无板直写现在被拦,出路=board_upsert
+ // 白板适用面:office 从「软免板」改硬闸——无板直写现在被拦,出路=board_upsert
   // boardType="composition"(作业思路板)或 exemptReason 留痕。kickoff 纪律卡口径同步改为「免五阶段 +
   // 先落作业思路板」,仍不含「plan-gate 硬闸」「五阶段流程」字样。
   it("office 指令:无板直写被 plan-gate 拦并指路作业思路板;kickoff 纪律卡为办公版(无 plan-gate 硬闸字样)", async () => {
@@ -161,14 +161,14 @@ describe("plan-gate 按类放行(e2e)", () => {
     expect(first).toContain("办公/产出类任务");
     expect(first).not.toContain("plan-gate 硬闸");
     expect(first).not.toContain("五阶段流程");
-    // 硬闸口径(2026-11-05):动笔前先落作业思路板(composition);确无表达结构才用 exemptReason 豁免
+ // 硬闸口径:动笔前先落作业思路板(composition);确无表达结构才用 exemptReason 豁免
     expect(first).toContain("作业思路板");
     expect(first).toContain("composition");
     expect(first).toContain("exemptReason");
     // 无板直写被拦:回执指路作业思路板(exemptReason 出口同给)
     expect(seen[1] ?? "").toContain("作业思路板");
     expect(seen[1] ?? "").toContain("exemptReason");
-    // 审计锚(2026-10-24):task.context 落账,类别/卡片版/系统提示段标志确定性可查
+ // 审计锚:task.context 落账,类别/卡片版/系统提示段标志确定性可查
     const ctx = app.journal.readAll().find((e) => e.kind === "task.context");
     expect(ctx).toBeTruthy();
     const cp = ctx?.payload as { taskClass?: string; card?: string; flags?: Record<string, boolean> };
@@ -204,7 +204,7 @@ describe("plan-gate 按类放行(e2e)", () => {
     expect(first).not.toContain("五硬阶段流程");
     // kickoff 卡为问答版
     expect(first).toContain("问答/调研类任务");
-    // coding 版纪律卡带降级提示(2026-10-24):误判可由 agent 自纠向下
+ // coding 版纪律卡带降级提示:误判可由 agent 自纠向下
     expect(String(systemForTaskClass("coding"))).toContain("五硬阶段流程"); // coding 全文不受影响
   }, 45_000);
 });
@@ -253,7 +253,7 @@ describe("板规范固化(2026-10-25 变更契约图)", () => {
   it("board_upsert 描述含控制流程图/与仓库的关系/硬规则/四类 accept;SYSTEM 任务书四要素", () => {
     const aw = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf8");
     const docs = readFileSync(resolve(__dirname, "../src/tool-full-docs.ts"), "utf8");
-    // 2026-10-31 工具面瘦身:board_upsert 的完整画法搬到 tool-full-docs.ts(BOARD_UPSERT_FULL_DOC),
+ // 工具面瘦身:board_upsert 的完整画法搬到 tool-full-docs.ts(BOARD_UPSERT_FULL_DOC),
     // agent-wiring 只留 wire description。断言按各自真实去处校验,别让「文本搬家」被当成口径丢失。
     for (const m of ["现状控制流程图", "改动徽标", "与仓库的关系", "禁止臆造", "accept 四类", "over+body"]) {
       expect(docs, `tool-full-docs:${m}`).toContain(m);

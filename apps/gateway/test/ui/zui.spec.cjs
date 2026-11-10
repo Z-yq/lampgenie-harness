@@ -1,4 +1,4 @@
-/** step-047 UI 实测:终端/管理面(命令·钩子·MCP·技能·子智能体)/分组工具卡/办公模式/快捷键/预设。
+/** UI 经验证:终端/管理面(命令·钩子·MCP·技能·子智能体)/分组工具卡/办公模式/快捷键/预设。
  * 真实 chromium 无头;面板默认 7700,PANEL_BASE 覆盖。MCP 用本地 fixture 服务器走真实 stdio 全链路。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
@@ -37,7 +37,7 @@ const { tmpdir } = require("node:os");
   await page.waitForTimeout(1000);
 
   // ---------- 1. 终端 ----------
-  // 2026-10-19:左栏 #act-term 已撤(用户口径:不展示),改走 Ctrl+J 快捷键——同时验证入口未丢
+ // 左栏 #act-term 已撤(不展示),改走 Ctrl+J 快捷键——同时验证入口未丢
   await page.keyboard.press("Control+j");
   await page.waitForTimeout(300);
   check("终端视图打开(Ctrl+J)", await page.locator("#view-term").isVisible());
@@ -70,7 +70,7 @@ const { tmpdir } = require("node:os");
   const presetN = await page.evaluate(() => (typeof PROVIDER_PRESETS !== "undefined" ? PROVIDER_PRESETS.length : -1));
   const cardN = await page.locator("#provPresets .preset-card").count();
   check("供应商预设网格(目录全量渲染)", cardN >= 12 && cardN === presetN, "cards=" + cardN + " catalog=" + presetN);
-  // step-092 断言现代化:空态文案只在 lastModelIds 已被 models.list 应答渲染后出现(有模型=行渲染恒非空;
+ // 断言现代化:空态文案只在 lastModelIds 已被 models.list 应答渲染后出现(有模型=行渲染恒非空;
   // 自host 入口无 listModels 时 renderModelList 根本不触发,空态文案前提双重漂移)——改断言拉取链路行为:
   // 点「拉取模型列表」→ 状态行即时进入拉取中;应答落地后=列表行(prod)或 fail-visible 操作失败 toast(自host)。
   await page.click("#models-fetch");
@@ -135,7 +135,7 @@ const { tmpdir } = require("node:os");
   check("自定义命令进斜杠菜单", (await page.locator("#slashMenu").textContent()).includes("specprobe"));
   await page.keyboard.press("Escape");
   await page.fill("#instruction", "");
-  // step-101:第二条探针 speckeep=「删除不波及他条」的自包含锚——092 版依赖 git-flow 插件种子命令
+ // 第二条探针 speckeep=「删除不波及他条」的自包含锚——092 版依赖 git-flow 插件种子命令
   // (commit-draft/diff-summary)在场,而插件装/卸会精确回收它们(fullstack.spec 净态归位后仓内
   // 不再恒有),跨 spec 共享持久 store 的假设不成立;锚改自带,进出双向归位(收尾删 speckeep)。
   await page.click("#uGear");
@@ -145,12 +145,12 @@ const { tmpdir } = require("node:os");
   await page.fill('#cmdForm input[name=cbody]', "保留锚 $ARG");
   await page.click("#cmdSave");
   await page.locator('#cmdsView .mgr-row', { hasText: "/speckeep" }).first().waitFor({ timeout: 8000 });
-  // 清理(step-090:删除确认=uiConfirm 页内模态,显式确认等价原 page.once("dialog")+accept)
-  await page.locator('#cmdsView button[data-act=del][data-name="specprobe"]').click(); // step-090:锁定本 spec 自建的探针命令(存量用户命令在场时 .first() 会误删真实命令——本轮实测误删 commit-draft 已按 plugins.ts 种子原文恢复)
+ // 清理(删除确认=uiConfirm 页内模态,显式确认等价原 page.once("dialog")+accept)
+  await page.locator('#cmdsView button[data-act=del][data-name="specprobe"]').click(); // 锁定本 spec 自建的探针命令(存量用户命令在场时 .first 会误删真实命令——本轮实测误删 commit-draft 已按 plugins.ts 种子原文恢复)
   await page.locator(".uid-box .uid-msg", { hasText: "删除命令" }).waitFor({ state: "visible", timeout: 3000 });
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(600);
-  // step-101 断言自包含化(承 092 精确回收语义):探针行移除 + 自带保留锚 speckeep 不受波及。
+ // 断言自包含化(承 092 精确回收语义):探针行移除 + 自带保留锚 speckeep 不受波及。
   const cmdsAfter = await page.locator("#cmdsView").textContent();
   check("命令删除(探针移除且保留锚不动)",
     (await page.locator('#cmdsView .mgr-row', { hasText: "/specprobe" }).count()) === 0
@@ -174,7 +174,7 @@ const { tmpdir } = require("node:os");
     check("钩子创建出现在列表(事件徽标)", false, (await page.locator("#hooksView").textContent()).slice(0, 100));
   }
   await page.locator('#hooksView button[data-act=del]').first().click();
-  await page.locator(".uid-box .uid-msg", { hasText: "删除该钩子" }).waitFor({ state: "visible", timeout: 3000 }); // step-090:页内模态确认
+  await page.locator(".uid-box .uid-msg", { hasText: "删除该钩子" }).waitFor({ state: "visible", timeout: 3000 }); // 页内模态确认
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(600);
   check("钩子删除(净状态还原)", (await page.locator("#hooksView .mgr-row").count()) === 0);
@@ -201,7 +201,7 @@ const { tmpdir } = require("node:os");
   }
   check("MCP 状态点变绿", (await page.locator("#mcpView .dot.ok").count()) >= 1);
   await page.locator('#mcpView button[data-act=del]').first().click();
-  await page.locator(".uid-box .uid-msg", { hasText: "删除该 MCP" }).waitFor({ state: "visible", timeout: 3000 }); // step-090:页内模态确认
+  await page.locator(".uid-box .uid-msg", { hasText: "删除该 MCP" }).waitFor({ state: "visible", timeout: 3000 }); // 页内模态确认
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(700);
   check("MCP 删除(净状态还原)", (await page.locator("#mcpView .mgr-row").count()) === 0);
@@ -287,9 +287,9 @@ const { tmpdir } = require("node:os");
   await page.keyboard.press("Control+Comma");
   await page.waitForTimeout(300);
   check("Ctrl+, 打开设置", await page.locator("#view-sys").isVisible());
-  // Ctrl+T 思考力度(step-092 断言现代化:2026-10-14 改版后 Ctrl+T=pill 点击=就地下拉菜单(panel.ts:11047→
+ // Ctrl+T 思考力度(断言现代化: 改版后 Ctrl+T=pill 点击=就地下拉菜单(panel.ts:11047→
   // pillMenuOpen),不再循环翻转——断言改走菜单驱动选档,语义等价「切档生效」+「净状态还原」。
-  // 先回 chat 视图:footer pill 可见=菜单锚点在视口内(设置视图下 pill display:none→rect 归零→菜单位于视口外,不可点——实测踩坑)
+ // 先回 chat 视图:footer pill 可见=菜单锚点在视口内(设置视图下 pill display:none→rect 归零→菜单位于视口外,不可点——经验证注意)
   await page.click("#act-new");
   await page.waitForTimeout(250);
   const e0 = (await page.locator("#effortPill").textContent()).trim();

@@ -1,6 +1,5 @@
 /**
  * Tool Foundry:把会话里反复出现的「同一条命令序列」炼成候选工具(纯逻辑零 IO)。
- *
  * 为什么需要它:RSI 每次挖掘都会看到同一批手工步骤被反复执行(打补丁、查日志、跑迁移),
  * 但「重复劳动」只是观感,不是证据——直接把一次观察升级成工具,等于把偶发行为固化成契约。
  * 本模块把这件事拆成四段可停的流水线,每段都能被否决:
@@ -11,7 +10,6 @@
  *   样本不足记 FOUNDRY_LOW_REUSE(继续攒,不是失败),成功率不足直接 rejected(带 rejectedAt 留痕);
  * - 注册与下线:registerCandidate 硬要求人工 approved === true,产出 DataToolSpec 交给 data 层;
  *   retireCandidate 只写状态,不删历史签名(再次挖掘会得到 duplicate-retired 而不是复活)。
- *
  * 依赖纪律:零 import(仅 `import type` 读 DataToolSpec,编译期擦除);不读写文件/网络/环境,
  * 不 import agent loop / gateway / experiment-store。时间一律由调用方传入数字时间戳,缺省 0,
  * 保证同一输入永远同一输出。全部函数输入非法返回稳定码、绝不 throw,且不改入参(只返回新对象)。
@@ -380,8 +378,7 @@ export interface ShadowEvaluation {
 /** 影子评估:样本不足 → LOW_REUSE(仍 shadow);成功率不足 → rejected;达标 → SHADOW_PASS。 */
 export function evaluateShadow(
   candidate: ToolCandidate,
-  input: ShadowEvaluation,
-): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  input: ShadowEvaluation): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw) || raw.status !== "shadow") {
     return { candidate, codes: ["FOUNDRY_INVALID"] };
@@ -423,8 +420,7 @@ export interface RegisterDecision {
 /** 注册:必须 shadow 且 approved===true;已 registered → DUPLICATE;其余 → NEEDS_APPROVAL。 */
 export function registerCandidate(
   candidate: ToolCandidate,
-  decision: RegisterDecision,
-): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  decision: RegisterDecision): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw)) return { candidate, codes: ["FOUNDRY_INVALID"] };
   if (raw.status === "registered") return { candidate, codes: ["FOUNDRY_DUPLICATE"] };
@@ -447,8 +443,7 @@ export interface RetireDecision {
 /** 下线:reason 必填;已 retired → DUPLICATE;其余 → retired(签名留作历史,不删)。 */
 export function retireCandidate(
   candidate: ToolCandidate,
-  decision: RetireDecision,
-): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  decision: RetireDecision): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw)) return { candidate, codes: ["FOUNDRY_INVALID"] };
   if (raw.status === "retired") return { candidate, codes: ["FOUNDRY_DUPLICATE"] };

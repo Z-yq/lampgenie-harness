@@ -1,8 +1,7 @@
 /**
  * L0 搜索层:grep 包装(ripgrep 优先,系统 grep 兜底)+ 标识符归一化变体。
  * 红线:路径沙箱(realpath 限制项目根)。
- *
- * 2026-10-21 符号优先召回:中文词典/分词/标识符切分迁到 ./search/cjk.ts(纯函数单一真相),
+ * 符号优先召回:中文词典/分词/标识符切分迁到 ./search/cjk.ts(纯函数单一真相),
  * 本文件只保留 grep 通道与 normalizeQuery 变体拼装。
  */
 import { execFile } from "node:child_process";
@@ -62,15 +61,15 @@ export interface GrepMatch {
   pattern?: string;
 }
 
-/** 归一化变体:camelCase ↔ snake_case ↔ kebab-case(designs/16 §5)。 */
-/** 中文功能词 → 英文词根映射(2026-10-18 用户实报:查「总路线」只回 1 条文档命中,agent 被迫
+/** 归一化变体:camelCase ↔ snake_case ↔ kebab-case( §5)。 */
+/** 中文功能词 → 英文词根映射(用户用户反馈:查「总路线」只回 1 条文档命中,agent 被迫
  * 手工 grep 18 次;中文 query 无 camel/snake 变体,explore 对「按功能中文名找实现」场景失效)。
  * 确定性词表(非 LLM):通用功能域词,命中 query 中任一中文词即追加英文词根变体。
  * 词表单一真相在 ./search/cjk.ts(explore 符号召回与 wiki 切词共用,不复制)。 */
 
 /** query 中含中文时:按词表追加英文词根。**主词根优先 + 总量封顶**:
  * grepIn 逐 pattern 起一次 rg(全仓扫描),中文问句若把词典里所有同义词(agent/auth/allow/
- * grant/proxy…)都单列,9p 大仓上实测 pattern 18→grep 14.3s(基线 8 个 pattern≈6s)。
+ * grant/proxy…)都单列,9p 大仓上经验证 pattern 18→grep 14.3s(基线 8 个 pattern≈6s)。
  * 符号优先召回之后 grep 只是补充证据,故取「每个命中中文词的主词根」+ 次词根补足到 6 个;
  * 主词根=词典数组首项(子代理→subagent/审批→approve/权限→permission),特异性最高。 */
 const CJK_GREP_ROOT_MAX = 6;
@@ -100,7 +99,7 @@ export function normalizeQuery(q: string): string[] {
   // snake → camel
   const camel = q.replace(/[-_]([a-z])/g, (_, c: string) => c.toUpperCase());
   variants.add(camel);
-  // 空格多词短语拆分(2026-10-20 用户实报「tts voice audio chat 零命中」):整句短语在代码里
+ // 空格多词短语拆分(用户用户反馈「tts voice audio chat 零命中」):整句短语在代码里
   // 永远 grep 不到字面量;拆成单词后按「单词|单词」逐个承载(ZC-10 逐 pattern 配额语义不变)。
   // 只拆 ≥2 词的英文短语(单词查询无意义);过短词(<3 字符,如 "ai")会洪泛,跳过。
   const words = q.trim().split(/[\s,;、]+/).filter((w) => /^[A-Za-z][A-Za-z0-9_-]{2,}$/.test(w));
@@ -109,7 +108,7 @@ export function normalizeQuery(q: string): string[] {
     for (const w of words) if (w.length >= 4) variants.add(w); // 高特异单词单列(tts/audio/voice/chat)
   }
   // 中文功能词 → 英文词根(词表映射;每个词根单列,保持逐 pattern 配额语义(ZC-10:不合并正则))。
-  // 排序=特异性降序(2026-10-21 符号优先):`子代理 spawn 权限审批` 的变体里 subagent/permission
+ // 排序=特异性降序(符号优先):`子代理 spawn 权限审批` 的变体里 subagent/permission
   // 必须先于 agent/session 跑——grepIn 按到达序截断,通用词先跑会把定义行挤出配额。
   const cjkRoots = cjkExpand(q).sort((a, b) => b.length - a.length || a.localeCompare(b));
   for (const w of cjkRoots) variants.add(w);
@@ -118,7 +117,7 @@ export function normalizeQuery(q: string): string[] {
 
 /** 从命中行提取英文标识符(camelCase/kebab/PascalCase,≥4 字符)——explore 低命中自举二轮用:
  * 首轮「路线|roadmap」类命中里往往埋着真正的 UI 锚点(view-pipeline/act-sense),提取后再聚合一轮,
- * 等价于 agent 手工逐步试探关键词的过程(实测用户 session 里 agent 用 18 次 grep 干的就是这个)。 */
+ * 等价于 agent 手工逐步试探关键词的过程(经验证用户 session 里 agent 用 18 次 grep 干的就是这个)。 */
 export function extractIdentifiers(text: string, limit = 8): string[] {
   const out: string[] = [];
   const re = /[A-Za-z][A-Za-z0-9_-]{3,}/g;
@@ -142,7 +141,7 @@ async function grepCmd(): Promise<"rg" | "grep"> {
 
 /** 文件级命中清单(rg -l / grep -rl):只回「哪些文件含任一模式」,无行级配额截断——
  * 行级 perPattern 配额在高频字面量(如 "new Set([" 165 行)上按 rg 并行序截断,
- * 文件集合逐 run 漂移(step-077 实锤:task.ts 的 TRANSITIONS 金标准被随机挤出候选)。
+ * 文件集合逐 run 漂移(注意:task.ts 的 TRANSITIONS 金标准被随机挤出候选)。
  * 用途=候选文件预筛(sensing 三剖面);要行级命中请用 grepIn。 */
 export async function grepFilesIn(
   root: string,
@@ -184,7 +183,7 @@ export async function grepFilesIn(
 }
 
 /** 多字面量一次扫描(`rg -F -e p1 -e p2 ...`,带行号):框架指纹 14 族 × 多 pattern
- * 场景一次全仓扫描替代 40+ 次 rg(2026-10-20 dify 实测 157s → 秒级)。返回行级命中;
+ * 场景一次全仓扫描替代 40+ 次 rg( dify 经验证 157s → 秒级)。返回行级命中;
  * 调用方按行文本与文件内容回查具体模式/导入语境,避免「先截 6 个文件」漏掉非测试证据。 */
 export interface MultiGrepMatch { file: string; line: number; text: string }
 export async function grepMatchesAny(
@@ -205,7 +204,7 @@ export async function grepMatchesAny(
     let stdout: string;
     if (cmd === "rg") {
       const args = ["-n", "--no-heading", "-F", "-m", String(perFile)];
-      for (const g of globs) args.push("-g", g); // rg 多个 -g 为叠加包含面(2026-10-22:构建文件裸名需要第二 glob)
+      for (const g of globs) args.push("-g", g); // rg 多个 -g 为叠加包含面(:构建文件裸名需要第二 glob)
       for (const p of uniq) args.push("-e", p);
       args.push("--", root);
       ({ stdout } = await execFileP("rg", args, { maxBuffer: 32 * 1024 * 1024 }));
@@ -247,7 +246,7 @@ export async function grepIn(
   const out: GrepMatch[] = [];
   // 曾登记「合并正则优化」——经评估**不可做**:交替|合并后命中分布由文件扫描序决定,
   // 常用词模式会吃满整体配额,特异性模式(定义文件)进不了候选——正是下方按模式均分
-  // 配额要防的 ZC-10 根因。逐 pattern 是承重语义,非偷懒(2026-10-12 收口评估记录)。
+ // 配额要防的 ZC-10 根因。逐 pattern 是承重语义,非偷懒(评估记录)。
   for (const p of patterns) {
     let taken = 0;
     const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -259,7 +258,7 @@ export async function grepIn(
         ], { maxBuffer: 16 * 1024 * 1024 });
         for (const line of stdout.split("\n")) {
           if (!line) continue;
-          // CRLF 仓(step-077 实锤):JS 正则的 `.` 不匹配 \r,行尾 \r 让 `^(.*):(\d+):(.*)$` 整行失配
+ // CRLF 仓(注意):JS 正则的 `.` 不匹配 \r,行尾 \r 让 `^(.*):(\d+):(.*)$` 整行失配
           // →Windows 风格文件的命中被静默丢弃(agent_alpha 的 fastapi 命中 40→25,真路由文件漏出候选)。
           const clean = line.endsWith("\r") ? line.slice(0, -1) : line;
           const m = /^(.*):(\d+):(.*)$/.exec(clean);

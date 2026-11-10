@@ -1,5 +1,5 @@
 /**
- * 非 git 目录降级(2026-10-21 用户口径「没有 git 就不要进行对应操作」):
+ * 非 git 目录降级:
  * isGitRepo 先验;读类(status/branches)回空结果+norepo 标记(面板免报错),写类回 git-norepo 跳过提示。
  */
 import { describe, it, expect } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * 远程项目身份层(2026-10-25,ZCode packages/shared/src/remote-workspace-identity.ts 形态移植):
+ * 远程项目身份层(ZCode packages/shared/src/remote-workspace-identity.ts 形态移植):
  * 项目=workspace,远程目录用 identity 表示——构造与解析必须复用本模块,禁止业务代码手写拼接/拆解。
  * 格式契约(与 ZCode 对齐的子集,一期只做 ssh):
  *   remote:ssh:<host>:<port>:<username>:<posixPath>
@@ -55,7 +55,7 @@ export function buildRemoteSshIdentity(host: string, port: number, username: str
   return `remote:ssh:${host.trim().toLowerCase()}:${port}:${username.trim()}:${normalizeRemotePath(workspacePath)}`;
 }
 
-/** WSL 项目 identity:remote:wsl:<distro>:<posixPath>(2026-10-27,与 SSH 同构的远端工作区)。 */
+/** WSL 项目 identity:remote:wsl:<distro>:<posixPath>(与 SSH 同构的远端工作区)。 */
 export function buildRemoteWslIdentity(distro: string, workspacePath: string): string {
   const d = String(distro ?? "").trim();
   if (!d || /[:/\\]/.test(d)) throw new Error("非法 WSL 发行版名:" + d);
@@ -135,7 +135,7 @@ export interface SshProbeOptions {
  * 凭证红线:密码只进 SSHPASS env(不出现在 argv/输出);无 sshpass/无密码=unverified,不抛错。
  */
 /**
- * SSH 密码解析链(2026-10-25):显式注入(测试)→ env GENIE_SSH_PASSWORD →
+ * SSH 密码解析链:显式注入(测试)→ env GENIE_SSH_PASSWORD →
  * secrets 按服务器精确键 GENIE_SSH_<HOST>_<USER>(点转下划线大写,.genie/secrets.json,
  * 凭证红线:不入库不进 argv)→ secrets 通用键 GENIE_SSH_PASSWORD 兜底(单服务器部署)。
  */

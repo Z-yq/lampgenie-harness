@@ -1,5 +1,5 @@
-/** 富图形交付(step-1024)真浏览器取证:```html 沙箱图卡 + ```svg 净化图卡 + 全屏/1:1 + 安全负向 + demo.md 对照截图。
- * 跑法(不碰产线 7700):cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/richartifact.spec.cjs
+/** 富图形交付真浏览器取证:```html 沙箱图卡 + ```svg 净化图卡 + 全屏/1:1 + 安全负向 + demo.md 对照截图。
+ * 跑法(不碰生产环境 7700):cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/richartifact.spec.cjs
  * PANEL_BASE 缺席或无 chrome 时整文件 skip。 */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,8 +7,8 @@ const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE;
 const CHROME = "/usr/bin/google-chrome";
 const REPO = path.resolve(__dirname, "../../../..");
-const FIX = path.join(REPO, "tasks/step-1024-rich-artifact/fixtures");
-const EVID = path.join(REPO, "tasks/step-1024-rich-artifact/evidence");
+const FIX = path.join(REPO, "tasks/-rich-artifact/fixtures");
+const EVID = path.join(REPO, "tasks/-rich-artifact/evidence");
 
 (async () => {
   if (!BASE) { console.log("SKIP richartifact: PANEL_BASE 未设置(selfhost 形态才跑)"); process.exit(0); }

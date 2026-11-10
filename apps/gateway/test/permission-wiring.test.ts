@@ -9,13 +9,13 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync, renameSync, existsSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("permission-wiring"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
 afterAll(() => { releaseEnvLock("permission-wiring"); });
 
-describe("规则装载(step-033 F2)", () => {
+describe("规则装载( F2)", () => {
   let dir: string | null = null;
   const cleanup = () => { delete process.env.GENIE_PERMISSION_RULES; if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; } };
 
@@ -58,12 +58,12 @@ class FakeAskBackend implements SubagentBackend {
   }
 }
 
-describe("executor 路径 ask 自动应答(step-033 F4)", () => {
+describe("executor 路径 ask 自动应答( F4)", () => {
   // 环境隔离(C9 修复后补):harness 根 .genie/permissions.json 在生产永远可能存在(「总是允许」产物),
   // 「无规则→auto-fail-closed」断言依赖规则缺席。不用搬文件(与并发测试会话互踩),用 env 显式空集
   // 覆盖(loadPermissionRules env 优先;空 JSON 数组=规则面为空但「在场」→ matchPermissionRule 无命中
   // → auto-fail-closed 路径与无文件一致)。
-  // checkpoint 关闭(2026-10-14 全量套件实测):缺省快照在脏工作区+慢盘上跑 git,整测超 5s 超时
+ // checkpoint 关闭(全量套件经验证):缺省快照在脏工作区+慢盘上跑 git,整测超 5s 超时
   // (单跑必绿=负载敏感非逻辑回归);断言面(journal 双事件+respondPermission)不受影响。
   beforeEach(() => {
     process.env.GENIE_PERMISSION_RULES = "[]";

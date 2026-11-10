@@ -1,5 +1,5 @@
 /**
- * sensing/statemachines 测试(step-077 P2):
+ * sensing/statemachines 测试( P2):
  * F1 TRANSITIONS 字面量表(含金标准形态)/ F2 switch+联合类型双条件收敛(单条件进 candidates)/
  * F3 状态模式类族 / F4 XState createMachine / F5 Redux createSlice(弱化产物,不出图)/
  * statusHints 词法提示区 / 反例零误报 / codeSense mode=state e2e / mermaid 形态校验。
@@ -220,7 +220,7 @@ describe("statemachines 五形态", () => {
     expect(extractStateMachinesFromFile("util.ts", PLAIN)).toEqual([]);
   });
 
-  it("F1 名称守卫:非状态机语义的 Set 映射静默跳过(vendor 误报实锤形态)", () => {
+  it("F1 名称守卫:非状态机语义的 Set 映射静默跳过(vendor 误报实测确认形态)", () => {
     const vendorForm = `export const TYPE_MAP = {
   stepEvents: new Set(["assistant/attempt"]),
   typing: new Set(["Protocol"]),
@@ -230,10 +230,10 @@ describe("statemachines 五形态", () => {
   });
 });
 
-// ============================ 非产品路径过滤(P1-1,2026-10-20) ============================
+// ============================ 非产品路径过滤(P1-1 ============================
 
 describe("queryStateMachines 非产品路径过滤(.md 文档示例不是状态机)", () => {
-  // ts-xstate 实锤形态:docs/migration.md 里的 xstate 示例被算成状态机
+ // ts-xstate 注意形态:docs/migration.md 里的 xstate 示例被算成状态机
   // (文档正文用 F4 的 createMachine 形态——提取器按内容认形态,不看扩展名)
   const DOC_MACHINE = `# 迁移指南
 

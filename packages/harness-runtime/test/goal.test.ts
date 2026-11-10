@@ -1,5 +1,5 @@
 /**
- * 会话目标运行时(step-053,ZCode target 子系统移植)单测:
+ * 会话目标运行时(ZCode target 子系统移植)单测:
  * 状态机(upsert/clear/状态保留)/提示词逐字锚/fail-open 解析/校验。
  */
 import { describe, it, expect } from "vitest";

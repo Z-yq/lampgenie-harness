@@ -4,7 +4,6 @@
  * - 右键菜单 → 显示主窗口 / 新建任务 / 设置 / 打开日志目录 / 关于 / 退出;
  * - 图标内联(32×32 PNG data URL):不需要额外打包资源,Windows/Linux 均可用;
  * - 托盘命令先唤醒窗口再执行(与 ZCode 的 executeTrayCommand 语义一致),避免命令发到隐藏页看不见。
- *
  * 纯逻辑:electron 的 Tray/Menu/nativeImage 由调用方注入,可 node --test 单测。
  */
 const TRAY_ICON_DATA_URL =

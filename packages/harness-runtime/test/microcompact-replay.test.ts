@@ -1,16 +1,14 @@
 /**
- * 真实会话回放对比(step-1039 v2 / step-1028 事故样本)。
- *
- * 目的:用 2026-11-06 事故会话的真实消息序列,把 **改造前(legacy 每步增量清)** 与
- * **改造后(cache-aware 冻结区 + 受控重置)** 放在同一批输入上跑,断言用户口径的三条不变量:
+ * 真实会话回放对比( v2 / 事故样本)。
+ * 目的:用 事故会话的真实消息序列,把 **改造前(legacy 每步增量清)** 与
+ * **改造后(cache-aware 冻结区 + 受控重置)** 放在同一批输入上跑,断言的三条不变量:
  *   ① 常态步已发出去的前缀逐字不变(只有重置步可断);
  *   ② 重置次数远少于「每步改写」(≈1~2 次/turn 量级);
  *   ③ 无锯齿:上下文不出现「大降 → 大涨 → 再大降」,单次削幅 ≤ 上下文 20%。
- *
  * 口径说明(诚实标注):
  * - 快照 = journal 里每条 `llm.trace` 发生时刻「已累积的消息」(剔除同 step 的 assistant 响应本身),
  *   system 取 `system.prompt` 全文;未走 `deriveMessages`(它要构造 Journal 对象,成本高且会重放
- *   ephemeral 注入)。故与产线拼装可能有细小出入 —— 断言只针对「策略行为」,绝对值不作真源。
+ * ephemeral 注入)。故与生产环境拼装可能有细小出入 —— 断言只针对「策略行为」,绝对值不作真源。
  * - turn 首步用「每 10 步」近似(journal 里 message.user 只有 1 条,无法按用户消息切 turn)。
  * - 阈值:journal 的 context.prune 不含 threshold 字段 → 用缺省 110_000。
  */
@@ -216,7 +214,7 @@ describe("真实 journal 回放:改造前 vs 改造后(2026-11-06 事故样本)"
       const drop = (aware[i - 1]!.after - aware[i]!.after) / Math.max(1, aware[i - 1]!.after);
       expect(drop).toBeLessThanOrEqual(0.2 + 1e-6);
     }
-    // ④ 每个非重置步,已发部分逐字保持(用户口径核心)
+ // ④ 每个非重置步,已发部分逐字保持(核心)
     aware.forEach((p, i) => {
       if (i === 0 || p.breakPrefix) return;
       expect(p.kept).toBe(true);

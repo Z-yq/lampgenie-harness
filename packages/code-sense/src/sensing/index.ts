@@ -1,6 +1,5 @@
 /**
- * sensing/index(step-077 / designs/24):业务逻辑感知编排面。
- *
+ * sensing/index( /):业务逻辑感知编排面。
  * queryApiSurface:确定性提取(http-api)→ OpenAPI 对账(openapi)→ handler→索引挂载与
  * impact 影响面(只读消费 c2f 产物,索引缺席=显式降级)→ 语义层(注入式,opt-in)。
  * 进程内 TTL 缓存(root+srcFingerprint 键);不落盘(与 c2f 索引格式零耦合)。
@@ -10,9 +9,9 @@ import { readFile } from "node:fs/promises";
 import { grepFilesIn } from "../search";
 import { srcFingerprintCached } from "../callgraph/c2f";
 import { isTestPath } from "../path-filter";
-// 非产品路径过滤(2026-10-20 共享口径,path-filter.ts 单一真相):docs/examples/tutorial/
+// 非产品路径过滤(共享口径,path-filter.ts 单一真相):docs/examples/tutorial/
 // mocks/testdata/fixtures/bench 等段与 .md/.rst/.txt 文档不是「这个项目提供的代码能力」。
-// 实测:py-fastapi 的 docs_src/** 占 api 474 端点的大多数、mmdetection 的 docs/ 被当算法文件、
+// 经验证:py-fastapi 的 docs_src/** 占 api 474 端点的大多数、mmdetection 的 docs/ 被当算法文件、
 // ts-xstate 的 migration.md 被算成 3 个状态机。过滤发生在 sensingKeepFile 之后(叠加而非替代),
 // 且必须诚实呈报(filtered>0 就带 note,过滤后清空也不假装无数据)。
 import {
@@ -24,7 +23,7 @@ import {
 /** sensing 候选文件目录排除(与 project.ts SKIP_DIRS 同纪律:vendor/ref/dist 不是业务代码)。 */
 const SENSING_SKIP_RE = /(^|\/)(node_modules|vendor|dist|build|\.venv|__pycache__|ref|coverage)\//;
 export function sensingKeepFile(rel: string): boolean {
-  // 测试文件不入 sensing(c2f 同纪律;实锤:本仓 sensing-api.test.ts 的 fixture 字符串
+ // 测试文件不入 sensing(c2f 同纪律;注意:本仓 sensing-api.test.ts 的 fixture 字符串
   // 被提取器当成真实端点——「工具扫描自身 fixture」自污染)
   return !SENSING_SKIP_RE.test(rel) && !isTestPath(rel);
 }
@@ -79,7 +78,7 @@ export async function queryApiSurface(
   const fp = srcFingerprintCached(root) ?? { count: -1, maxMtime: -1 }; // 冷启动=未知:占位键不命中任何已存缓存(几秒后异步指纹入缓存即精确)
   const fpKey = `${fp.count}:${fp.maxMtime}`;
   // 缓存键必须含 spec 指纹(openapi.ts specFingerprint = spec 文件清单 + 各文件 mtime)。
-  // 实锤缺陷:源码扩展名指纹(GRAPH_SOURCE_EXT)不含 openapi.yaml/json,长驻进程(MCP serve)
+ // 注意缺陷:源码扩展名指纹(GRAPH_SOURCE_EXT)不含 openapi.yaml/json,长驻进程(MCP serve)
   // 里改了 spec,旧代码在 60s TTL 内继续返回旧对账(或缺对账)——bridge 每轮自行发现 spec
   // 不受影响,于是 api 面与 bridge 面对不上。specKey 的取值代价见 openapi.ts 的档位注释
   // (廉价档 stat 已知 spec;深档 readdir 每 1s 最多一次)。refresh=true 视为调用方明确要求
@@ -91,10 +90,10 @@ export async function queryApiSurface(
 
   // ① 指纹预筛(rg 字面量):含框架指纹的文件才读;Next.js 纯文件约定(零框架 import 的
   // pages/api|app/api 文件)走目录补扫——grep 指纹覆盖不到无 import 的路由文件。
-  // max=3000(step-091 自 1500 上调):字面量清单重排后特异框架 pattern 在前,grafana 类
+ // max=3000(自 1500 上调):字面量清单重排后特异框架 pattern 在前,grafana 类
   // 混语大仓 go 侧候选( RouteRegister/chi/net-http 家族)合计可超 1500——上限过低会把
   // 泛型 "net/http" 命中的既有 net-http 路由文件挤出候选(56 端点回退风险)。
-  // agent_alpha 实测 20 文件含 fastapi 字面量,不受影响。
+ // agent_alpha 经验证 20 文件含 fastapi 字面量,不受影响。
   const { API_FINGERPRINT_LITERALS } = await import("./http-api");
   const candFiles = new Set((await grepFilesIn(root, API_FINGERPRINT_LITERALS, { max: 3000 })).filter(sensingKeepFile));
   const { readdir } = await import("node:fs/promises");
@@ -332,7 +331,7 @@ export async function queryAlgoProfiles(
   const hit = algoCache.get(key);
   if (hit && !opts?.refresh && Date.now() - hit.at < TTL_MS) return hit.result;
 
-  // 2026-10-22 P0:file 参数此前只用于语义导读目标,画像仍全仓扫描(两个不同文件返回同一
+ // P0:file 参数此前只用于语义导读目标,画像仍全仓扫描(两个不同文件返回同一
   // 24/30)。显式给文件时只画像该文件,且绕开 grep 指纹预筛(任意语言/无指纹也能看单文件)。
   let fileFiltered: { filtered: number; samples: string[] } | undefined;
   let candFiles: string[];

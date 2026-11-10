@@ -1,11 +1,9 @@
 /**
- * 代码档案的 flow 数据源(2026-10-26):把整仓 code flow 接到 wiki 管线。
- *
+ * 代码档案的 flow 数据源:把整仓 code flow 接到 wiki 管线。
  * 两条数据路径:
  *  - 有静态索引(优先):buildCodeFlow 出 module/file 两层图 + 入口/功能线;
  *  - 无索引(诚实降级):用 wiki 自己的模块/import 扫描造一个词法级 module 图,
  *    页面与 manifest 明确标 source=lexical(不冒充符号级调用边)。
- *
  * 功能拆解(WikiFeature)是确定性派生:入口(进程/bin/零入度根)→ 下游模块 BFS ≤3 跳 →
  * 关键文件/函数按调用量排序 → 每功能线一张子图 mermaid。LLM 只在这层事实上写语义解读,
  * 不改边、不改文件/符号清单。
@@ -49,7 +47,7 @@ export interface WikiFlowBundle {
   featureFiles: string[];
   /** 给 LLM 的确定性骨架(入口/边/功能线/接口面;禁止它编造图里的边)。 */
   llmContext: string;
-  /** 交互面+管线簇(2026-10-27 通用机制:HTTP/WS/进程入口 → in/out 面 → 聚类管线)。 */
+ /** 交互面+管线簇(通用机制:HTTP/WS/进程入口 → in/out 面 → 聚类管线)。 */
   surfaces: {
     shape: RepoShape;
     httpFrameworks: string[];
@@ -330,13 +328,13 @@ export async function loadWikiFlow(root: string, input: WikiInput, opts: { maxFe
       .slice(0, 6)
       .map((m) => m.name);
     for (const name of candidates) {
-      // 根模块的 name 是 "(root)"/"root":scope 前缀匹配不到任何文件(实测生成 0 节点空页),
+ // 根模块的 name 是 "(root)"/"root":scope 前缀匹配不到任何文件(经验证生成 0 节点空页),
       // 改用「无斜杠的根级文件」正则;其余模块用目录前缀。
       const isRoot = /^\(?root\)?$/i.test(name);
       const mf = buildCodeFlow(idx, {
         level: "file",
         ...(isRoot ? { include: "^[^/]+$" } : { scope: name }),
-        maxNodes: 0, maxEdges: 0, // 诚实全量:模块子图也不设上限(2026-10-27)
+        maxNodes: 0, maxEdges: 0, // 诚实全量:模块子图也不设上限
         processEntries: proc,
       });
       if (mf.nodes.length >= 2) moduleFlows[name] = mf;
@@ -367,7 +365,7 @@ export async function loadWikiFlow(root: string, input: WikiInput, opts: { maxFe
         })),
     ];
     // 组合根(启动装配点)也是控制进入面:模块级跨文件调用=进程从这里把控制交进代码
-    // (lampgenie-harness 实锚:gateway main.ts 无 HTTP 写端点,漏掉它整条网关管线消失)。
+ // (lampgenie-harness 依据:gateway main.ts 无 HTTP 写端点,漏掉它整条网关管线消失)。
     const covered = new Set(inSurfaces.map((e) => e.file));
     const rootSurfaces: RepoSurface[] = (fileFlow?.nodes ?? [])
       .filter((n) => n.entry && n.outCalls > 0 && n.file && !covered.has(n.file))
@@ -381,7 +379,7 @@ export async function loadWikiFlow(root: string, input: WikiInput, opts: { maxFe
     inSurfaces.push(...rootSurfaces);
     const outSurfaces = http?.http?.out ?? [];
     // 聚类用**无预算**专用 file 图:聚合毫秒级,而渲染预算(maxFlowFiles)会把触发文件
-    // 本身裁掉(genie-memory 实锚:service/app.py 不在 60 节点预算内,HTTP 簇整族消失)。
+ // 本身裁掉(依据:service/app.py 不在预算内,HTTP 簇整族消失)。
     let pipelineFlow: CodeFlow | null = null;
     if (source === "index") {
       try {

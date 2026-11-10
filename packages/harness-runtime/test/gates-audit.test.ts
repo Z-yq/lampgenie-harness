@@ -1,5 +1,5 @@
 /**
- * step-034 单元面:审计日志(append/只增/hash)、凭证红线(自测已过,这里测排除面)、
+ * 单元面:审计日志(append/只增/hash)、凭证红线(自测已过,这里测排除面)、
  * 跑批可复现(同 seed 两跑分差=0)、门禁真实拦截(不达标→红清单;override 留审计)。
  */
 import { describe, expect, it } from "vitest";
@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-describe("审计日志(designs/10 §6)", () => {
+describe("审计日志( §6)", () => {
   it("append 只增+明细只入 hash+可读回", () => {
     const dir = mkdtempSync(join(tmpdir(), "audit-"));
     const log = new AuditLog(join(dir, "audit.jsonl"));
@@ -30,12 +30,12 @@ describe("审计日志(designs/10 §6)", () => {
   });
 
   it("live 动作清单与对账脚本一致(枚举漂移即红)", () => {
-    // resource.push(step-069 同步):team-relay doTeamaiPush 技能推送审计产生点(team-relay.ts)。
+ // resource.push(同步):team-relay doTeamaiPush 技能推送审计产生点(team-relay.ts)。
     expect([...AUDIT_ACTIONS]).toEqual(["config.change", "member.invite", "resource.push", "roster.merge", "eval.gate-override"]);
   });
 });
 
-describe("L3 跑批可复现(designs/10 §3,step-015 D2)", () => {
+describe("L3 跑批可复现( §3, D2)", () => {
   const dir = mkdtempSync(join(tmpdir(), "batch-"));
   afterAll2(dir);
 
@@ -72,7 +72,7 @@ describe("L3 跑批可复现(designs/10 §3,step-015 D2)", () => {
   });
 });
 
-describe("门禁真实拦截(designs/10 §4,step-015 D5)", () => {
+describe("门禁真实拦截( §4, D5)", () => {
   const spec: GateSpec = {
     name: "test-gate",
     contractRules: [],

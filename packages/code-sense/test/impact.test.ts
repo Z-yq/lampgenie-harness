@@ -1,5 +1,5 @@
 /**
- * impact 改动影响面查询测试(step-066):
+ * impact 改动影响面查询测试:
  * ① 闭包正确性:链 midB→midA→coreUtil 的逐跳 dN 标注与深度截断;
  * ② 签名分节:新索引带 sig,renderSignature 输出参数与返回类型;
  * ③ 受影响文件:调用通道+import 通道双通道(纯 import 无调用边也入清单);

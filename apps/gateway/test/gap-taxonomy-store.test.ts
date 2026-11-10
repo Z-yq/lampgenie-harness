@@ -68,9 +68,9 @@ function makeEntry(overrides: Partial<PreventionEntry> = {}): PreventionEntry {
 }
 
 describe("gap-taxonomy-store", () => {
-  it("gapLedgerPath 落在 <root>/.genie/rsi/gaps.jsonl", async () => {
+  it("gapLedgerPath 落在 <root>/.genie/rsi/.jsonl", async () => {
     const root = await tempRoot();
-    expect(gapLedgerPath(root)).toBe(join(root, ".genie", "rsi", "gaps.jsonl"));
+    expect(gapLedgerPath(root)).toBe(join(root, ".genie", "rsi", ".jsonl"));
   });
 
   it("seed 幂等:第二次 added=0 + GAP_SEED_DUPLICATE,台账不重复条目", async () => {
@@ -228,8 +228,7 @@ describe("gap-taxonomy-store", () => {
     expect(loadGaps(root).totalLines).toBe(before + 1);
 
     expect(listPreventions(root, { category: "plan-coverage" }).items.some((entry) => entry.id === "custom-overdue")).toBe(
-      false,
-    );
+      false);
     expect(expire(root, 3_000_000).ok).toBe(true);
   });
 

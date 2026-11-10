@@ -1,8 +1,8 @@
 /**
- * 权限传递对拍(2026-10-14 用户口径「session 的 vibe coding agent 的权限传递给 subagent 还有问题」):
+ * 权限传递对拍:
  * ①主 loop 门「写入×评估」形态对拍——面板 always-allow 写入的规则形态被 buildMainLoopPermission/loop 闸门真实命中;
  * ②模式矩阵(auto/ask/readonly/plan × broker 有无)——mode=ask+broker 挂 onAsk 审批链(此前 ask 被静默 deny
- *   且无任何审批入口,产线 journal 实锤 97 次拒);
+ * 且无任何审批入口,生产环境 journal 注意 97 次拒);
  * ③子代理继承——LlmLoopBackend 注入父会话规则快照(此前完全忽略,deny 形同虚设、child 无闸),
  *   deny 拦/ask 审批/无规则不设闸(行为与旧版一致);
  * ④asker 审批链 env>mode>规则>broker>fail-closed(C9 对拍形态:规则文件形态 × matchPermissionRule 读法)。
@@ -36,7 +36,7 @@ function probeTool(name: string, log: string[]): Tool {
   };
 }
 
-/** 单工具一 turn:llm 首步发该工具调用,次步收口。 */
+/** 单工具一 turn:llm 首步发该工具调用,次步。 */
 async function runOneTool(name: string, perm: PermOption, sessionId: string) {
   const journal = new MemoryJournal();
   const executed: string[] = [];
@@ -141,7 +141,7 @@ describe("主 loop 权限模式矩阵", () => {
 });
 
 describe("子代理权限继承(LlmLoopBackend 此前完全忽略规则——收口对拍)", () => {
-  /** 脚本化 LLM:首步写文件,次步收口;instructions 短句避开串台重派守卫。 */
+ /** 脚本化 LLM:首步写文件,次步;instructions 短句避开串台重派守卫。 */
   function scriptLlm(dir: string): LlmProvider {
     let i = 0;
     return {
@@ -228,7 +228,7 @@ describe("子代理工具 ask 审批链(env>mode>规则>broker>fail-closed)", ()
     expect(gateTags(c.j)).toContain("denied/mode-readonly");
   });
 
-  it("规则对拍(C9 形态):归一后的 subagent[*]=allow 被摘要链命中;前缀 deny 仍拦;规则 root 可注入隔离产线", async () => {
+  it("规则对拍(C9 形态):归一后的 subagent[*]=allow 被摘要链命中;前缀 deny 仍拦;规则 root 可注入隔离生产环境", async () => {
     setPermissionMode("ask");
     const root = mk();
     mkdirSync(join(root, ".genie"), { recursive: true });

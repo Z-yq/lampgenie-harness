@@ -1,5 +1,5 @@
 /**
- * 桥边进 c2f 索引 + impact 跨语言段测试(step-106 / designs/27 §7 落地):
+ * 桥边进 c2f 索引 + impact 跨语言段测试( / §7 落地):
  * ① buildC2fIndex 落盘 bridge 段(flask×ts 混语 fixture:3 条 exact 边,stats/state 齐备);
  * ② 落盘-读回往返(saveIndex/loadIndex)字段完整;
  * ③ impact 双向:后端 handler(create_order)→前端调用点(置信度+双端 file:line);
@@ -74,7 +74,7 @@ afterAll(() => {
   rmSync(ws, { recursive: true, force: true });
 }, 60_000);
 
-describe("step-106:桥边进 c2f 索引", () => {
+describe("桥边进 c2f 索引", () => {
   it("①buildC2fIndex 落盘 bridge 段:3 条 exact 边+stats+state", () => {
     expect(index.bridge).toBeTruthy();
     expect(index.bridge!.state).toBe("bridge-connected");

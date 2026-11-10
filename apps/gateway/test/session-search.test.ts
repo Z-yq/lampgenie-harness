@@ -1,5 +1,5 @@
 /**
- * step-115 session_search 工具:三形态/只读声明/当前会话排除/自动化降权。
+ * session_search 工具:三形态/只读声明/当前会话排除/自动化降权。
  */
 import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";
@@ -16,8 +16,8 @@ function seed(): MemoryJournal {
   return j;
 }
 
-describe("session_search tool(step-115)", () => {
-  it("step-166: ProxyJournal(worker 进程)侧走 IPC 代理到 gateway 真索引,历史会话可见", async () => {
+describe("session_search tool()", () => {
+  it("ProxyJournal(worker 进程)侧走 IPC 代理到 gateway 真索引,历史会话可见", async () => {
     const { ProxyJournal, setIpcTransport, handleHostResponse } = await import("../src/session-worker-lib.js");
     setIpcTransport((msg) => {
       const m = msg as { t: string; id: number; kind: string; payload: { op: string; args: unknown; currentSessionId?: string } };

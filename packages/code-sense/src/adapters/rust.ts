@@ -1,9 +1,7 @@
 /**
- * Rust structural adapter(2026-10-25,legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
- *
+ * Rust structural adapter(legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
  * 主路径:tree-sitter-rust wasm(tree-sitter-wasms 自带,零新增依赖),tier=structural、
  * source=tree-sitter;wasm 不可用/解析异常 → 文本回退(source=text,只出符号零边,如实降级)。
- *
  * 提取子集(诚实边界):
  * - 类型符号:struct/enum/union(type alias 记 kind=type,trait 记 kind=interface,mod 记
  *   kind=class);impl 块的目标类型若无本地声明则补一个 class 符号(表示「此处扩展其方法」)。
@@ -16,7 +14,6 @@
  * - 跨文件候选(to=""+toName[+receiverType]):本地解析不到、但有类型/路径证据的调用;
  *   merge 层按同扩展名+唯一名(+receiverType)解析,解析不了=丢弃(宁缺勿错)。
  *   无类型证据的接收者调用**不发射**(Rust 静态类型,猜必假边)。
- *
  * 未覆盖(登记):宏调用(println!/vec!)、trait 对象动态派发、泛型实参推导、
  *   `<T as Trait>::m()` 完全限定形式、闭包/async 块内部的接收者类型推导、宏生成的 impl。
  * 文本回退边界(source=text):单行 impl 块内函数、struct 字段表、调用边不可见(wasm 路径正常)。

@@ -1,17 +1,14 @@
 /**
- * 网关单实例锁(2026-10-21 LLM 400 根因修复;2026-10-25 陈旧锁回收加固)。
- *
+ * 网关单实例锁(2026-10-21 LLM 400 根因修复; 陈旧锁回收加固)。
  * 背景:同一 journal 目录被两个网关进程同时写 = 两个独立的 seq 计数器各写一份 seq,
  * 文件里出现「同 seq 两事件」。重启时按 seq 去重会丢掉较新事件(历史缺 assistant 消息,
  * 只剩 tool 结果 → OpenAI 400「role 'tool' must be a response to a preceding message with
  * 'tool_calls'」)。单实例锁是这条链的结构性防线:第二个实例直接拒绝启动。
- *
  * 语义:O_EXCL 原子创建;已存在→判持有者是否还活着:
  *   - 活着(同一次进程启动)→ 拒绝,带持有者 pid;
  *   - 已死 / 僵尸(Z)/ PID 被复用 → 视为陈旧锁,unlink 后重试一次;
  *   - 锁文件损坏/读不到 pid → 同样按陈旧回收(否则一次断电就永久拒绝启动)。
- *
- * 2026-10-25 加固点(实测「进程已死仍报占用」):
+ * 加固点(经验证「进程已死仍报占用」):
  *   ① /proc/<pid>/stat 的 starttime 指纹:锁里记下创建者的进程启动时刻,
  *      pid 存在但 starttime 不同 = PID 被复用,不是原持有者 → 回收;
  *   ② 僵尸进程 kill(pid,0) 仍成功,但 state=Z 已经死了 → 判死;
@@ -21,7 +18,6 @@
  *      由入口打印可操作提示;
  *   ⑤ 兼容旧格式(纯 pid 文本):没有 starttime 时用 /proc/<pid>/cmdline 识别明显不是网关的
  *      pid 复用(老锁也能自动回收,不必手删)。
- *
  * 进程退出(含 uncaught 保活路径的 exit)释放;kill -9 留下的陈旧锁由下一次启动回收。
  */
 import { spawnSync } from "node:child_process";
@@ -99,7 +95,7 @@ export function parseTasklistCsv(out: string, pid: number): { exists: boolean; i
 
 /**
  * Windows 进程复核。process.kill(pid, 0) 在 Windows 上对「已死但 pid 曾经存在」的进程
- * 可能抛 EPERM 而不是 ESRCH(2026-11-08 新用户模拟实测:陈旧锁 pid=18576 已死仍 EPERM),
+ * 可能抛 EPERM 而不是 ESRCH(新用户模拟经验证:陈旧锁 pid=18576 已死仍 EPERM),
  * 而 Windows 没有 /proc,旧实现会一路保守当成活锁 → 死 pid 的锁永久挡住启动。
  * tasklist 用系统 API 给出「存在/不存在 + 镜像名」;探测失败返回 undefined(仍保守当活)。
  */
@@ -135,7 +131,7 @@ export interface PidAliveDeps {
 /**
  * 进程是否还活着。
  * - kill(pid,0) 成功但 state=Z/X = 僵尸(等父进程回收),业务上已死;
- * - EPERM:Linux=存在但无权限(仍算活着);Windows=可能是死 pid(实测),用 tasklist 复核;
+ * - EPERM:Linux=存在但无权限(仍算活着);Windows=可能是死 pid(经验证),用 tasklist 复核;
  * - ESRCH=不存在;
  * - 其它 errno 用 /proc/<pid> 是否存在兜底,无 /proc 时保守视为活(避免误删活锁)。
  */
@@ -277,7 +273,7 @@ export function acquireInstanceLock(lockPath: string, pid = process.pid): Instan
       // 陈旧/复用/损坏:回收后重试一次。
       if (holder.pid !== undefined) reclaimedPid = holder.pid;
       if (!tryUnlink(lockPath)) {
-        // 删除失败:再读一次,若已被别人换成活锁 → 如实报占用;否则是权限/只读盘。
+ // 删除失败:再读一次,若已被别人换成活锁 → 如用户反馈占用;否则是权限/只读盘。
         const again = readLock(lockPath);
         if (again.pid !== undefined && holderStatus(again.pid, again.start) === "alive") {
           return { ok: false, holderPid: again.pid, reason: "held" };

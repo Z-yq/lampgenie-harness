@@ -1,5 +1,5 @@
 /**
- * 任务B 定向测试(2026-10-29):diagram-viewport 引擎接进画布/图容器 + mermaid 主题归一化接线。
+ * 任务B 定向测试:diagram-viewport 引擎接进画布/图容器 + mermaid 主题归一化接线。
  * 四组:
  *  ① 捏合数学:pointer 距离→scale、中心移→pan(canvas-shell pinchToView 与面板 bindZoomPan 内联兜底同式);
  *  ② 锚点缩放不变式:光标下世界内容点屏幕位移恒为 0(canvas-shell zoomAt / dvZoomAtPoint / 引擎本体);
@@ -312,7 +312,7 @@ describe("任务B ⑥ mermaid 主题归一化接线(B3)", () => {
       const fn = extractFn(html, "mmApplyTheme");
       expect(fn).toContain("window.mermaid.initialize");
       expect(fn).toContain("themeVariables: mmThemeVars()");
-      // ④ 基座名(2026-10-29 取证实测):本仓 mermaid 构建只有 theme:"base" 才吃 themeVariables,
+ // ④ 基座名(取证经验证):本仓 mermaid 构建只有 theme:"base" 才吃 themeVariables,
       //    "dark"/"default" 用自身默认色板 —— 浅主题下节点仍是被写死的 #1f2020 深卡。
       //    故 initialize 的 theme 必须按基座取 mmBaseTheme()(浅="base"),不能继续写死 "dark"。
       const baseFn = extractFn(html, "mmBaseTheme");
@@ -358,6 +358,6 @@ describe("任务B ⑦ transform 卫生(无 NaN/Infinity 路径 + viewBox 双写�
   it("grep viewBox:canvas-shell 仅图标模板一处(无旧 viewBox fit 双写)", () => {
     const code = readFileSync(SHELL, "utf8");
     const hits = code.split("\n").map((l, i) => (l.includes("viewBox") ? i + 1 : 0)).filter(Boolean);
-    expect(hits).toEqual([76]); // 唯一命中=ic() 图标 path 的 viewBox 模板
+    expect(hits).toEqual([76]); // 唯一命中=ic 图标 path 的 viewBox 模板
   });
 });

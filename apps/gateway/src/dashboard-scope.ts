@@ -1,7 +1,6 @@
 /**
  * 运行看板作用域(参考项目 dashboard/workspaces 的本地对应物):
  * 参考项目的 workspace(用户域/项目域/未归属)对应我们的项目注册表。
- *
  * 机制适配:
  *  - ref 用 dataHome/anchor/worktree 推项目归属;我们直接用任务事件携带的 projectId
  *    (sessionProjectOwners,首条带 projectId 的 task.* 事件定主,后续非空才改判);

@@ -1,6 +1,5 @@
 /**
- * sensing/semantic(step-077 / designs/24 §3):LLM 语义层注入式管线。
- *
+ * sensing/semantic( / §3):LLM 语义层注入式管线。
  * 红线(与 archmap/modulemap/review 三先例同源):
  *  ① 语义产物独立字段(不混入确定性字段);
  *  ② 每条语义必须引用白名单锚(确定性层已提取的真实 {file,line} 锚点);
@@ -68,7 +67,7 @@ function parseBatch(raw: string): z.infer<typeof SemanticBatchSchema> | null {
   try {
     let cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/g, "");
     // 模型常带「好的,以下是结果:」或尾注;取首个 { 到末个 } 之间的 JSON 主体,
-    // 不要求整段纯 JSON(2026-10-20 多仓实测:整段严格解析会把可用输出整批拒收)。
+ // 不要求整段纯 JSON(多仓经验证:整段严格解析会把可用输出整批拒收)。
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
     if (start < 0 || end <= start) return null;
@@ -100,23 +99,22 @@ function validateBatch(
 
 export interface BatchOpts {
   maxRepairRounds?: number;
-  /** step-089 P3:输出槽位形态——ref 取具名槽位(purpose/cap-N)而非锚 id;
-   * evidenceRef 仍必须 ∈ 锚白名单(引用回查不放松)。缺省=ref 即锚 id(step-077 行为)。 */
+ /** P3:输出槽位形态——ref 取具名槽位(purpose/cap-N)而非锚 id;
+ * evidenceRef 仍必须 ∈ 锚白名单(引用回查不放松)。缺省=ref 即锚 id(行为)。 */
   refSlots?: string[];
 }
 
 /**
  * 语义批生成管线(zod+白名单+修复环;archmap generateArchitecture 同款纪律)。
  * @param taskPrompt 任务描述(「为以下 HTTP 接口写职责描述」类)
- * @param anchors 白名单事实锚(确定性层产物)
+ * @param anchors 白名单事依据(确定性层产物)
  * @param extraContext 额外上下文(如 handler 代码窗摘录)
  */
 export async function runSemanticBatch(
   taskPrompt: string,
   anchors: EvidenceAnchor[],
   extraContext: string,
-  opts?: BatchOpts,
-): Promise<SemanticOutcome | null> {
+  opts?: BatchOpts): Promise<SemanticOutcome | null> {
   const llm = deps.senseLlm;
   if (!llm || anchors.length === 0) return null;
   const anchorText = anchors

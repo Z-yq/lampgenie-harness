@@ -1,5 +1,5 @@
 /**
- * wait_until(2026-11-08 session 实证落地)单测:
+ * wait_until( session 验证落地)单测:
  * ①file 条件:出现/contains/minLines/minBytes/stableMs(组合须全满足);
  * ②terminalIdle:产出水位静默 idleMs/会话已退出即满足;list 不消费输出;
  * ③超时:ok:false + timedOut + 现场快照;④signal 中止;⑤围栏与参数校验;

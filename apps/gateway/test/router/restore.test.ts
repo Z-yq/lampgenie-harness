@@ -20,7 +20,7 @@ const memIo = () => {
   };
 };
 
-describe("step-0145 P3 重启恢复 + 预览截断", () => {
+describe(" P3 重启恢复 + 预览截断", () => {
   it("tickets.json 落盘 → 新 createRouter 恢复 threadKey 订阅直通可用", async () => {
     const { files, io } = memIo();
     const tm = new TaskSupervisor({ maxConcurrent: 1, maxConcurrentPerOwner: 1 });

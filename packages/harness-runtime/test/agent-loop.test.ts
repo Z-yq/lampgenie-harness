@@ -45,8 +45,7 @@ describe("AgentLoop", () => {
     expect(calls).toHaveLength(1);
     expect(results).toHaveLength(1);
     expect((results[0]!.payload as { toolCallId: string }).toolCallId).toBe(
-      (calls[0]!.payload as { toolCallId: string }).toolCallId,
-    );
+      (calls[0]!.payload as { toolCallId: string }).toolCallId);
     // deriveMessages 重建出完整序列
     const msgs = deriveMessages(journal, "s1");
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
@@ -63,12 +62,12 @@ describe("AgentLoop", () => {
     await loop.runTurn("hi");
     const results = journal.readAll().filter((e) => e.kind === "tool.result");
     expect(String((results[0]!.payload as { content: string }).content)).toContain("未知工具");
-    // M153:错误框带可达候选(tools=[] 时明示「当前无工具」,不让模型瞎猜)
+ // 错误框带可达候选(tools=[] 时明示「当前无工具」,不让模型瞎猜)
     expect(String((results[0]!.payload as { content: string }).content)).toContain("可达");
     expect(String((results[0]!.payload as { content: string }).content)).toContain("(当前无工具)");
   });
 
-  it("未知工具给出可达候选(M153 身份治理建议)", async () => {
+  it("未知工具给出可达候选(身份治理建议)", async () => {
     const journal = new MemoryJournal();
     const llm: LlmProvider = {
       async chat() {
@@ -96,7 +95,7 @@ describe("AgentLoop", () => {
   });
 });
 
-describe("step-046 思考链路", () => {
+describe(" 思考链路", () => {
   it("provider 返回 reasoning → journal message.agent 携带 reasoning+llmMs", async () => {
     const journal = new MemoryJournal();
     const llm: LlmProvider = {

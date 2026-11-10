@@ -1,5 +1,5 @@
 /**
- * Team Relay 协议(designs/05 §8:Gateway Client Protocol 的子集)。
+ * Team Relay 协议( §8:Gateway Client Protocol 的子集)。
  * relay 是每个 org 一个的轻中继:presence 交换/活动流路由/邀请码兑换;
  * 权威数据全部在 Git 仓,relay 是可重建缓存。
  * 连接鉴权:连接即收 challenge(nonce)→ 客户端私钥签名 → relay 对照 roster.keys 校验;
@@ -10,7 +10,7 @@ import { PROTOCOL_VERSION } from "./version.js";
 
 const Envelope = z.object({ v: z.literal(PROTOCOL_VERSION) });
 
-// ---- presence 状态(designs/04 §2 六态;判定规则确定性,不靠模型) ----
+// ---- presence 状态( §2 六态;判定规则确定性,不靠模型) ----
 export const PresenceStateName = z.enum([
   "online", "coding", "reviewing", "away", "dnd", "offline",
 ]);
@@ -25,12 +25,12 @@ export const PresenceFacts = z.object({
 });
 export type PresenceFacts = z.infer<typeof PresenceFacts>;
 
-// ---- 活动流(designs/04 §4:最小事件集;payload 只放摘要+指针,不放正文) ----
+// ---- 活动流( §4:最小事件集;payload 只放摘要+指针,不放正文) ----
 export const ActivityEvent = z.object({
   ts: z.number(),
   userId: z.string(),
   projectId: z.string(),
-  // "teamai" = 团队仓资源动作(push/remove/contribute;designs/30 §2.5)。
+ // "teamai" = 团队仓资源动作(push/remove/contribute; §2.5)。
   category: z.enum(["task", "approval", "doc", "node", "build", "member", "eval", "teamai"]),
   type: z.string(),
   summary: z.string(),
@@ -54,7 +54,7 @@ export const RelayClientMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("relay.activity.push"), event: ActivityEvent }),
   /** 拉活动流(since=ts,隐私过滤按请求者)。 */
   Envelope.extend({ type: z.literal("relay.activity.list"), since: z.number().optional() }),
-  /** owner 生成一次性邀请码(角色校验在 relay:canInvite);projects=邀请入册时绑定的项目(designs/23)。 */
+ /** owner 生成一次性邀请码(角色校验在 relay:canInvite);projects=邀请入册时绑定的项目。 */
   Envelope.extend({
     type: z.literal("relay.invite.create"),
     displayName: z.string().optional(),
@@ -71,7 +71,7 @@ export const RelayClientMessage = z.discriminatedUnion("type", [
   /** 通知 relay 拉取团队仓(reviewer 合并 MR 后主动通知,轮询兜底)。 */
   Envelope.extend({ type: z.literal("relay.roster.changed") }),
   /** teamai push:把一份资源以团队仓形态写分支+MR(teamai/push/<user>/<ts> 约定;需认证)。
-   * kind 缺省 "skill"(向后兼容旧客户端;designs/30 §2.2)。
+ * kind 缺省 "skill"(向后兼容旧客户端; §2.2)。
    * body 不在此处 min(1):空 body 由 relay 回 `push.result{code:"invalid"}`(可诊断的拒绝)。 */
   Envelope.extend({
     type: z.literal("relay.teamai.push"),
@@ -82,7 +82,7 @@ export const RelayClientMessage = z.discriminatedUnion("type", [
     contributors: z.array(z.string()).optional(),
     kind: z.enum(["skill", "rule", "doc"]).optional(),
   }),
-  /** teamai remove:删团队仓 main 上的一个资源并推送(designs/30 §2.3)。
+ /** teamai remove:删团队仓 main 上的一个资源并推送( §2.3)。
    * ns/name 不在此处 min(1):空 name 由 relay 回 `remove.result{code:"invalid"}`(契约要求)。 */
   Envelope.extend({
     type: z.literal("relay.teamai.remove"),
@@ -90,7 +90,7 @@ export const RelayClientMessage = z.discriminatedUnion("type", [
     ns: z.string().default(""),
     name: z.string().default(""),
   }),
-  /** teamai contribute:会话经验写 learnings 分支(designs/30 §2.4);
+ /** teamai contribute:会话经验写 learnings 分支( §2.4);
    * title/body 空由 relay 回 `contribute.result{code:"invalid"}`。 */
   Envelope.extend({
     type: z.literal("relay.teamai.contribute"),
@@ -122,7 +122,7 @@ export const RelayServerMessage = z.discriminatedUnion("type", [
     /** 机器可读拒绝类:client 据此区分「等 MR 合并的重试(not-on-roster)」与「永久拒绝」。 */
     code: z.enum(["not-on-roster", "revoked", "key-mismatch", "bad-sig"]).optional(),
   }),
-  /** presence diff(只发变化项);projects=成员项目归属(designs/23 项目绑定团队,relay 从 roster 附带)。 */
+ /** presence diff(只发变化项);projects=成员项目归属(项目绑定团队,relay 从 roster 附带)。 */
   Envelope.extend({
     type: z.literal("relay.presence.diff"),
     states: z.array(z.object({
@@ -141,7 +141,7 @@ export const RelayServerMessage = z.discriminatedUnion("type", [
       repo: z.string().optional(),
     })),
   }),
-  /** teamai 团队仓资产投影(designs/24:skills/rules/docs/env/hooks/... 的 digest;secrets 只出 key)。 */
+ /** teamai 团队仓资产投影(skills/rules/docs/env/hooks/... 的 digest;secrets 只出 key)。 */
   Envelope.extend({
     type: z.literal("relay.teamai.digest"),
     digest: z.record(z.unknown()),
@@ -153,7 +153,7 @@ export const RelayServerMessage = z.discriminatedUnion("type", [
     reason: z.string().optional(),
     code: z.string().optional(),
   }),
-  /** 删除结果(designs/30 §2.3):code=invalid|not-found|unauthorized。 */
+ /** 删除结果( §2.3):code=invalid|not-found|unauthorized。 */
   Envelope.extend({
     type: z.literal("relay.teamai.remove.result"),
     ok: z.boolean(),
@@ -161,7 +161,7 @@ export const RelayServerMessage = z.discriminatedUnion("type", [
     reason: z.string().optional(),
     code: z.string().optional(),
   }),
-  /** 经验贡献结果(designs/30 §2.4):成功带 branch+path。 */
+ /** 经验贡献结果( §2.4):成功带 branch+path。 */
   Envelope.extend({
     type: z.literal("relay.teamai.contribute.result"),
     ok: z.boolean(),

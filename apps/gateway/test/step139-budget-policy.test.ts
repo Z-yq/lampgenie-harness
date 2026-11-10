@@ -1,5 +1,5 @@
 /**
- * step-139 O2/O3/O4 装配面测试(gateway 侧):
+ * O2/O3/O4 装配面测试(gateway 侧):
  * O2:effort-policy 纯函数(主=high、review/subagent=xhigh、显式覆盖)+ buildModelProviders
  *     按角色建 provider(未配 roles 也建;effort 值进请求体)。
  * O3:autoCompactGate 阈值口径对齐 ZCode(窗口−min(out,21000)−13000;显式阈值仅无窗口兜底)。
@@ -186,7 +186,7 @@ describe("O4 请求 max_tokens 收敛", () => {
     expect(ok.warning).toBeUndefined();
   });
 
-  it("规则④(2026-10-21 400 [1210] 实锤):显式值超过模型 meta 上限 → 钳制到 meta + warning", () => {
+  it("规则④(2026-10-21 400 [1210] 实测确认):显式值超过模型 meta 上限 → 钳制到 meta + warning", () => {
     // 残留形态:deepseek 的 384000 写进轨级,切到 GLM-5.3(meta 128000)
     const clamped = resolveRequestMaxTokens(384_000, 128_000);
     expect(clamped.value).toBe(128_000);

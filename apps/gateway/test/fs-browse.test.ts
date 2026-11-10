@@ -1,5 +1,5 @@
 /**
- * step-056 服务端目录浏览(fs-browse):目录列表/锚点/打开命令选择。
+ * 服务端目录浏览(fs-browse):目录列表/锚点/打开命令选择。
  * 「选目录弹 Windows 对话框」根治的服务端件——浏览器侧 webkitdirectory 只能拿
  * Windows 相对路径,gateway 在 WSL 必须由服务端列目录才能看到 /home 真实路径。
  */

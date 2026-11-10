@@ -1,9 +1,9 @@
 /**
- * step-109:安装态 bin 符号链接主守卫回归。
+ * 安装态 bin 符号链接主守卫回归。
  * npm/pnpm 安装后 .bin/codesense 是指向包内 dist/cli.js 的符号链接;
  * Node 对主入口默认 realpath 化 import.meta.url,而 argv[1] 保留链接路径——
  * isMainEntry 不做 realpath 比对时主守卫静默不触发(进程零输出 exit 0,
- * tarball 安装实测实锤:--help/version/garbage 全部静默 exit 0)。
+ * tarball 安装经验证注意:--help/version/garbage 全部静默 exit 0)。
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { isMainEntry } from "../src/serve.js";
 
-describe("isMainEntry 符号链接形态(step-109)", () => {
+describe("isMainEntry 符号链接形态", () => {
   const dirs: string[] = [];
   afterAll(() => {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });

@@ -3,7 +3,6 @@
  * 语义:paths=项目内相对路径;仅 .ts/.tsx/.js/.jsx/.mts/.cts 参与诊断(其它扩展名静默跳过);
  * severity 只回 error/warning;line/col 1-based;paths 上限 32。
  * 检查器与 agent 编辑链同源(harness-lsp checkEditedFile;format 关闭=不落盘)。
- *
  * 测试基建纪律(与 ide-fs.test.ts 同款):端口 listen(0) 真实绑定;waitType 消费式;
  * server/http 关闭全进 finally。LSP/TS 兜底冷启动秒级 → 用例显式放宽 vitest 超时。
  */

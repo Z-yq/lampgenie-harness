@@ -1,5 +1,5 @@
-/** UI 实测:运行看板=团队「看板」子标签(2026-10-16 收编;每项目一块看板)——真实 chromium 无头。
- * 跑法(不碰产线 7700):cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/dashboard.spec.cjs
+/** UI 经验证:运行看板=团队「看板」子标签(收编;每项目一块看板)——真实 chromium 无头。
+ * 跑法(不碰生产环境 7700):cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/dashboard.spec.cjs
  * 覆盖:侧栏顶级入口已移除/团队子标签切换→顶卡(会话/经验库/干预)→会话表(状态灯/项目/轨道/干预/token/子代理/板角标)
  *      →详情抽屉(活动/干预/token/轮次/末条输出)→趋势区(7天vs前7天指标卡+14天柱)→每项目作用域(进入锁定当前项目/重进重锁/手动切换保持/未归属桶)
  *      →实时推送(journal 追加→dashboard.changed→自动重拉,免手动刷新)→project 残留作用域回退。 */

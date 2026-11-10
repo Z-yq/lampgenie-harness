@@ -1,4 +1,4 @@
-/** step-1025 聊天消息文件路径 → IDE 打开 浏览器实测(临时端口 selfhost,不碰 7700)。
+/** 聊天消息文件路径 → IDE 打开 浏览器经验证(临时端口 selfhost,不碰 7700)。
  * 跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/chatfile.spec.cjs
  * 断言面:①裸相对路径 ②绝对路径 ③带行号 ④markdown 相对链接 ⑤代码块内路径 ⑥子代理工作区路径 ⑦跨项目切根,
  * 逐一点击 → IDE 视图打开 + 正确项目 + 正确文件 + 行号定位;旧 #fileViewer 不再弹出;缺失路径只 toast 不改 IDE;

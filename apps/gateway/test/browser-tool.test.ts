@@ -1,6 +1,6 @@
 /**
  * browser 工具(control-browser 对齐版)测试:
- * ① SPA 渲染等待(step-048 用户实测回归,兼容旧 {action:"text",url} 形态);
+ * ① SPA 渲染等待(用户经验证回归,兼容旧 {action:"text",url} 形态);
  * ② 交互全链:open→snapshot(ref 清单)→act(fill/click/selectOption,ref 定位)→cua 坐标→shot→tabs;
  * ③ 门禁:域名白名单拒绝;ref 随导航过期提示;close 回收。
  * 本地起真 HTTP 服务 + 真 chromium(CHROME_PATH / /usr/bin/google-chrome)。

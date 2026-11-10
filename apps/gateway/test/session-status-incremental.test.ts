@@ -11,7 +11,7 @@ import {
 } from "@lampgenie/runtime/session/projection";
 
 /**
- * step-1036 session.status 增量化(治 2026-11-04 网关 OOM:11k 事件会话 × 3s 全量回拉,
+ * session.status 增量化(治 网关 OOM:11k 事件会话 × 3s 全量回拉,
  * 每次全量投影+序列化 1.4~9.2 秒、载荷 MB 级)。锁五条:
  * ① 全量 vs 多批增量合并逐字段 deepEqual(纯函数层);
  * ② 带 sinceSeq 的请求不重复归约水位那条(负面:seq=N 的 spawn 不被二次计入);
@@ -141,7 +141,7 @@ describe("session.status 增量协议(WS)", () => {
     ws.send(JSON.stringify({ v: 1, type: "session.status", sessionId: sid }));
     const firstRaw = await nextMessage(ws, "session.status.result");
     // 回包必须回显 sessionId:面板按它登记水位表;缺它 → 水位全落 undefined 键 → 后续请求永不带
-    // sinceSeq(增量路径形同虚设)。浏览器实测抓到过,这里锁死。
+ // sinceSeq(增量路径形同虚设)。浏览器经验证抓到过,这里锁死。
     expect(firstRaw.sessionId).toBe(sid);
     const first = statusOf(firstRaw);
     expect(first.subagents.spawnCount).toBe(1);

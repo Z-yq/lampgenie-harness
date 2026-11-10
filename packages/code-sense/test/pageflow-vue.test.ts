@@ -1,5 +1,5 @@
 /**
- * Vue Router pageflow 剖面(step-019 二期收口):createRouter 路由表/router-link 边/
+ * Vue Router pageflow 剖面(二期):createRouter 路由表/router-link 边/
  * router.push 编程式;与 React/HTML 组合同跑不串。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

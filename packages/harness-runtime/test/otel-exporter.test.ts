@@ -1,5 +1,5 @@
 /**
- * OTLP/HTTP JSON 导出器专项(step-031 遗留收口:OTel/远端上报)。
+ * OTLP/HTTP JSON 导出器专项(遗留:OTel/远端上报)。
  * 锚定:opt-in 装配、span 区间闭合、批量外送、fail-soft。
  */
 import { describe, it, expect } from "vitest";

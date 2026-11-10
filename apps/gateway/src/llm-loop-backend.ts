@@ -1,9 +1,9 @@
 /**
- * 进程内 LLM 子代理后端(2026-10-13 用户追问「没拷 ZCode 成熟逻辑」的收口:
+ * 进程内 LLM 子代理后端(用户追问「没拷 ZCode 成熟逻辑」的:
  * ZCode Agent 工具的本质=再起一个带受限只读工具集的子 agent loop——harness 自己就有
  * AgentLoop,包成本后端即可,spawn_subagent 不再依赖外部 CLI/echo 占位)。
  * 只读工具集(read_file/list_dir/grep)+ roots 约束;readonly 语义天然满足。
- * 权限传递收口:装配方注入父会话有效规则(permissionRules)与审批链(onPermissionAsk),
+ * 权限传递:装配方注入父会话有效规则(permissionRules)与审批链(onPermissionAsk),
  * 子 loop 工具调用过与主 agent 同语义的闸门——deny 拦/ask 走审批,无规则=不设闸(行为同旧版)。
  */
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
@@ -16,7 +16,7 @@ import { makeLlmTraceSink } from "./llm-trace.js";
 import { attachToolView } from "./tool-view.js";
 import { shellErrorHint, shellInvocation } from "./shell-invocation.js";
 import { fenceCommand } from "./file-tools.js";
-// 输入边界防御(M136):子代理读/写入口与主 agent 同源(设备/伪文件→stat special→denylist→binary→read;
+// 输入边界防御:子代理读/写入口与主 agent 同源(设备/伪文件→stat special→denylist→binary→read;
 // 单行 clamp;编辑比例守卫)——子代理是同一进程里的第二条 read/write 通道,不能只锁主 agent。
 import { BINARY_PROBE_BYTES, checkEditRatio, clampLine, looksBinaryBytes, readGuardPath, readHeadBytes } from "./input-boundary.js";
 import { guardGitCommand, subagentGitBlockReason } from "./git-guard.js";
@@ -31,10 +31,10 @@ import { runTaskCloseout } from "./task-closeout.js";
 import { DELIVERABLE_TOOL_NAME, makeDeliverableTool } from "./deliverables.js";
 import { CITE_SOURCE_TOOL_NAME, makeCiteSourceTool } from "./citation-ledger.js";
 
-/** code_sense 调用手册(2026-10-21,explore 等只读子代理实报「拿着 code_sense 只会用 grep」后补)。
+/** code_sense 调用手册(explore 等只读子代理用户反馈「拿着 code_sense 只会用 grep」后补)。
  * 注入条件=code_sense 实际在授予工具面(与 skillGranted 同款门控);内容与 sense-tool.ts 的
  * action/mode 双面严格同源——手册列的动作必须全部可用,列了不可用的动作=诱导报错调用。 */
-/** planner 板规范(2026-10-26 分阶段技能化):只注入调度器+通用硬规则+板型索引;
+/** planner 板规范(分阶段技能化):只注入调度器+通用硬规则+板型索引;
  * 13 类画法拆到 board-skills.ts 的 <type>/collect|draw|audit,planner 判定 boardType 后
  * 用 skill_view(category="board") 按需加载——不再把所有类型规则一次性塞进系统提示。 */
 export const PLANNER_BOARD_SPEC = [
@@ -71,7 +71,7 @@ export const SUBAGENT_CODE_SENSE_PLAYBOOK = [
 ].join("\n");
 
 /**
- * 编辑后检查(step-114 / M108):子代理 write/edit 与主 agent 同语义;包不可用=静默跳过。
+ * 编辑后检查( /):子代理 write/edit 与主 agent 同语义;包不可用=静默跳过。
  * baseline/baselineText:写前采集的基线诊断与旧内容(delta 只报新增;不传=旧行为全量报告)。
  */
 async function editCheckSuffixSafe(
@@ -79,8 +79,7 @@ async function editCheckSuffixSafe(
   absPath: string,
   settings?: LspSettings,
   baseline?: DiagnosticItem[] | null,
-  baselineText?: string,
-): Promise<string> {
+  baselineText?: string): Promise<string> {
   if (!settings || settings.enabled === false) return ""; // 低层缺省关闭:零装载开销
   try {
     const mod = await import("@lampgenie/lsp");
@@ -91,7 +90,7 @@ async function editCheckSuffixSafe(
 }
 
 /**
- * 写前 baseline 采集(M108;与主 agent file-tools 同序):必须在 writeFileSync **之前**调用
+ * 写前 baseline 采集(与主 agent file-tools 同序):必须在 writeFileSync **之前**调用
  * —— tsc 兜底按磁盘内容建 program,落盘后采集到的是新内容。
  * @returns undefined=不做 delta(低层关闭 / baseline:false);{baseline:null}=采集失败(库标不可用,不阻塞写)。
  */
@@ -99,8 +98,7 @@ async function editBaselineSafe(
   root: string,
   absPath: string,
   prevText: string | undefined,
-  settings?: LspSettings,
-): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
+  settings?: LspSettings): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
   if (!settings || settings.enabled === false) return undefined;
   if (settings.baseline === false) return undefined;
   if (prevText === "") return { baseline: [], baselineText: "" }; // 新文件:基线为空(不探测)
@@ -114,7 +112,7 @@ async function editBaselineSafe(
 }
 
 
-// ---- 串台守卫(designs/25):结果与任务书的相关度确定性评分;共享模型端点的服务端会话串扰
+// ---- 串台守卫:结果与任务书的相关度确定性评分;共享模型端点的服务端会话串扰
 // 会把「别人的回答」喂给子代理——检测到即自动重派一次并标注,主 agent 不再需要人工判串台。 ----
 
 /** 停用词(任务书脚手架词,不参与特征)。 */
@@ -137,7 +135,7 @@ export function relevanceTokens(text: string): Set<string> {
  * 串台判定:任务书特征在结果中的覆盖率。任务书特征 ≥6 且覆盖率 <0.15 → 判串台。
  * 纯确定性;阈值偏保守(误判一次重派的代价=多等一轮;漏判的代价=父 agent 拿垃圾)。
  */
-/** 协议泄漏(designs/25):模型把内部机制当正文输出——DSML 工具标签/think 推理段/任务书复述。 */
+/** 协议泄漏:模型把内部机制当正文输出——DSML 工具标签/think 推理段/任务书复述。 */
 export function isProtocolLeak(instructions: string, result: string): boolean {
   const r = String(result ?? "");
   if (!r) return false;
@@ -168,7 +166,7 @@ export function isCrosstalk(instructions: string, result: string): boolean {
 
 /** 子代理是否已真实落板(串台守卫豁免判据)。
  * planner 的产出物是白板本身,终稿通常只是「板 id+节点数+分层」的短摘要;任务书长(3000+ 字)时
- * 词面覆盖率天然低于 0.15,会被 isCrosstalk 误杀并触发一次全量重派(实测 planner 被误判后重跑,
+ * 词面覆盖率天然低于 0.15,会被 isCrosstalk 误杀并触发一次全量重派(经验证 planner 被误判后重跑,
  * 重复落板/拖长任务)。判据取子 loop 的**工具回执**(board_upsert 成功),不是模型自述——重派前
  * 已经落板即证明工作与任务书相关。 */
 export function hasBoardWriteEvidence(entries: readonly { kind?: string; payload?: unknown }[]): boolean {
@@ -182,14 +180,14 @@ export function hasBoardWriteEvidence(entries: readonly { kind?: string; payload
   return false;
 }
 
-/** 产出纪律强制提醒节奏(2026-10-29 P1-4):连续 N 步「只调工具、未输出任何文本」即向子 loop 注入
- * 一次硬提醒(与 deadlineWarn 同一 ephemeral 通道)。实锤:两个 explore 子代理分别跑满 140 步 /
+/** 产出纪律强制提醒节奏( P1-4):连续 N 步「只调工具、未输出任何文本」即向子 loop 注入
+ * 一次硬提醒(与 deadlineWarn 同一 ephemeral 通道)。注意:两个 explore 子代理分别跑满 140 步 /
  * 263 次工具调用、45 步 / 50 次工具调用,**零文本产出**被时间盒收割——全部预算花在勘察上。
  * 只提醒节奏可配,判据与通道固定;已产出过文本=永不提醒(不打断正常推进)。 */
 export const PRODUCTIVE_NUDGE_STEPS = 25;
 
-/** 「实质产出」的最小字符数(2026-10-30 修永久锁):一行「我来看看」也算文本,不能当产出。
- *  实测:今日 18 个大 run(≥25 调用)里 16 个的「有文本步」占比 <15%,但旧判据用
+/** 「实质产出」的最小字符数(修永久锁):一行「我来看看」也算文本,不能当产出。
+ * 经验证:今日 18 个大 run(≥25 调用)里 16 个的「有文本步」占比 <15%,但旧判据用
  *  `seenText=true` 永久关闭 → 一行短文就把闸门焊死,一个都不会触发。 */
 export const PRODUCTIVE_SUBSTANTIVE_CHARS = 200;
 
@@ -201,17 +199,15 @@ export function buildProductiveNudge(idleSteps: number): string {
 }
 
 /** 串台守卫兜底:从子 journal 事件流里逐条筛选「可用 agent 文本」。
- *
- *  2026-10-30 修:旧实现先拼接再整体判相关性,而拼接的末条往往就是刚被判串台的那份终稿 →
- *  同一把尺子再量一遍必然还是串台,**结构上不可能救回**(实测真实 GLM 端到端任务仍打印
+ * 修:旧实现先拼接再整体判相关性,而拼接的末条往往就是刚被判串台的那份终稿 →
+ * 同一把尺子再量一遍必然还是串台,**结构上不可能救回**(经验证真实 GLM 端到端任务仍打印
  *  「疑似串台…自动重派」,15 个 -retry 目录 / 230 次调用继续产生)。
  *  改为**逐条筛选**:每条 message.agent 文本单独过 isCrosstalk/isProtocolLeak,只有通过的才进候选;
  *  这样中间那些有实质产出的段落能留下,被污染的终稿被丢掉。 */
 export function pickUsableAgentText(
   instructions: string,
   entries: readonly { kind?: string; payload?: unknown }[],
-  limit = 3,
-): { text: string; kept: number; dropped: number } {
+  limit = 3): { text: string; kept: number; dropped: number } {
   const kept: string[] = [];
   let dropped = 0;
   for (const e of entries) {
@@ -239,12 +235,10 @@ export function collectUsableAgentText(entries: readonly { kind?: string; payloa
 }
 
 /**
- * 串台兜底的"工作证据"判据(2026-10-30 修「兜底永不生效」)。
- *
+ * 串台兜底的"工作证据"判据(修「兜底永不生效」)。
  * 旧出口判据用 `!isCrosstalk(instructions, joined)` —— 但 joined 的末条往往就是刚被判串台的
- * 那份终稿,同一把尺子再量一遍必然还是串台,结构上不可能救回。实测:真实 GLM 端到端任务日志
+ * 那份终稿,同一把尺子再量一遍必然还是串台,结构上不可能救回。经验证:真实 GLM 端到端任务日志
  * 仍打印「疑似串台…自动重派」,15 个 -retry 目录 / 230 次调用继续产生。
- *
  * 新判据改成看**做过多少活**:成功的工具回执数(排掉错误/拒绝/超时)。理由:文本相关性只是词面
  * 覆盖率,任务书长或术语改写时天然偏低;但"这一轮确实跑了 N 个工具且成功"是硬证据。
  * 判据本身不放宽——协议泄漏仍一律重派,工作证据只替代"相关性"这一维。
@@ -268,30 +262,30 @@ export function countToolWorkEvidence(entries: readonly { kind?: string; payload
 export const CROSSTALK_GUARD_MIN_TOOLS = 3;
 
 /** 串台兜底放行的最小可用文本字符数(一段话)。
- *  2026-10-30 修:原为 200,但**逐条筛选后**剩下的往往只有中间那一段(实测测试样例 ~145 字),
+ * 修:原为 200,但**逐条筛选后**剩下的往往只有中间那一段(经验证测试样例 ~145 字),
  *  200 会把「确实有可用产出」判成没有。120 仍是完整段落,足以承载结论。 */
 export const CROSSTALK_GUARD_MIN_CHARS = 120;
 
 export interface LlmLoopBackendOptions {
   llm: LlmProvider;
-  /** 子代理单任务最大步数(缺省 1000,与主 agent 一致——2026-10-13 用户口径:取消强制结束,等自然结束信号)。 */
+ /** 子代理单任务最大步数(缺省 1000,与主 agent 一致—— 取消强制结束,等自然结束信号)。 */
   maxSteps?: number;
   /** 写前持久化屏障(config.agent.writeBarrier 透传):"off"|"hard";缺省=loop 内部 hard(不改变现有行为)。
    *  首跑与串台重派两个 loop 必须同值(否则重派轮屏障口径与首轮不一致)。 */
   writeBarrier?: "off" | "hard";
   /** 工具扫描根约束(harness 根+激活项目根)。 */
   roots: string[];
-  /** 子代理角色(2026-10-13 完整机制移植:ZCode 按类型分工具集)。explore/judge/test-analyst=只读;worker/general=读+写+bash。 */
+ /** 子代理角色(完整机制移植:ZCode 按类型分工具集)。explore/judge/test-analyst=只读;worker/general=读+写+bash。 */
   role?: string;
   /** worker bash/write 的工作目录(=任务 workdir)。 */
   workdir?: string;
-  /** M58 图片 offload 落盘根(provider 报图片预算/尺寸错误时 data URL 落 `<root>/.genie/image-offload/`)。
+ /**  图片 offload 落盘根(provider 报图片预算/尺寸错误时 data URL 落 `<root>/.genie/image-offload/`)。
    *  缺省 = 子代理工作目录(workdir ?? roots[0]),与 bash/write 围栏同根;装配方(agent-wiring)传
    *  {root: repoRoot()} 与主 loop 同根。首跑与串台重派两个 loop 必须同值。 */
   imageOffload?: { root: string };
   /** 防死阈值:journal 零新增持续超过该时长→强制退出+卡点报告(缺省 600s;测试注入小值)。 */
   stallTimeoutMs?: number;
-  /** spawn deadline(机制1,2026-10-15「子代理容易卡住不返回」根治):到点强制收割——
+ /** spawn deadline(机制1,「子代理容易卡住不返回」根治):到点强制收割——
    * 子 loop 收中止信号,已有产出打包为部分结果交付(ok=true,finalText 显式标注「deadline 收割」),
    * 与用户取消(丢弃,ok=false cancelled)语义分离。0/缺省=不限时。 */
   deadlineMs?: number;
@@ -305,44 +299,44 @@ export interface LlmLoopBackendOptions {
   staleWarnMs?: number;
   /** 心跳节流间隔(机制2):每个 step/tool 节点的进度行至多该间隔一条(慢盘防写放大)。缺省 2s。 */
   heartbeatMs?: number;
-  /** 子代理权限闸门规则(权限传递收口):父会话有效规则快照——已允许的传递下去;
+ /** 子代理权限闸门规则(权限传递):父会话有效规则快照——已允许的传递下去;
    * 缺省=不设闸(父无规则时行为与旧版一致)。此前本后端完全忽略 TaskSpec.permissionRules,
    * deny 规则对进程内子代理形同虚设(「derived」journal 事件只是仪式)。 */
   permissionRules?: import("@lampgenie/core").PermissionRule[];
   /** 子工具 ask 命中的审批回调(true=放行;拒绝/异常=按拒绝 fail-closed)。
    * 缺省=ask 按 deny 兜底(进程内子代理无自带审批面,链路由装配方注入)。 */
   onPermissionAsk?: (tool: string, summary: string) => Promise<boolean>;
-  /** step-071 父子 ask-answer:重操作(build/install/全量测试/递归批处理)命中时向父 agent 申请。
+ /** 父子 ask-answer:重操作(build/install/全量测试/递归批处理)命中时向父 agent 申请。
    * 提供时子 loop 闸门配 heavyOp{callerIsSubagent:true,onHeavyAsk→本回调}——绕过 allow 规则强制审批,
    * 超时/拒绝=按拒绝(fail-closed,由 broker 侧裁决);缺席=无重操作闸(行为同旧版)。 */
   parentAsk?: (input: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) =>
     Promise<{ approved: boolean; reason?: string; by: string }>;
-  /** 读传递(2026-11-05 D3 跨 agent 读重叠治理):父会话已读清单键。提供时子 read_file ①登记改
+ /** 读传递( D3 跨 agent 读重叠治理):父会话已读清单键。提供时子 read_file ①登记改
    * 相对 roots[0] 路径并双写父键(父与兄弟子代理共享已读事实);②读前查父清单行段交叠,命中→
    * 结果尾注「勿再整读」。缺席=旧行为(绝对路径单写子键)。 */
   parentReadSession?: string;
-  /** 子 loop 事件回调(2026-10-16 子代理工作区):每个子 journal 事件在既有心跳拦截器同一挂点上
+ /** 子 loop 事件回调(子代理工作区):每个子 journal 事件在既有心跳拦截器同一挂点上
    * 裁剪后回调给装配方(装配方以 subagent.event append 进主 journal);本后端不持主 journal 引用,
    * 保持后端与主会话解耦。缺省=不回调(行为同旧版)。 */
   onLoopEvent?: (e: { kind: string; payload: Record<string, unknown> }) => void;
-  /** 流式旁路(2026-10-20 对齐 coding agent):子 loop 的 llm-begin/delta/end + tool-begin/end
+ /** 流式旁路(对齐 coding agent):子 loop 的 llm-begin/delta/end + tool-begin/end
    * 走与主 agent 相同的 streamSink(会话 id=subagent-<taskId>),面板子代理工作区实时打字;
    * 不落 journal(终态仍由 message.agent/tool.result 持久)。 */
   onStream?: (e: import("@lampgenie/runtime/agent/loop").AgentStreamEvent) => void;
-  /** 上下文治理(2026-10-20 对齐 coding agent):与主 loop 共用同一 compactHook / microcompact
+ /** 上下文治理(对齐 coding agent):与主 loop 共用同一 compactHook / microcompact
    * 配置——长子代理不再无界增长上下文(此前子 loop 永不压缩,主轨有压缩)。 */
   compactHook?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["compactHook"];
   microcompact?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["microcompact"];
   /** 写时定形 spill(2026-11 token 轮 02):与主 loop 同源——工具结果进历史前超阈落盘定形,
    * 之后永不改写(否则长子代理照旧每步重写历史中段、打碎提示前缀缓存)。缺省不配置=零变化。 */
   spill?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["spill"];
-  /** 大结果入口闸门(step-1029):与主 loop 同源注入(否则子代理照旧把大结果整段灌进上下文)。 */
+ /** 大结果入口闸门:与主 loop 同源注入(否则子代理照旧把大结果整段灌进上下文)。 */
   bigIntake?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["bigIntake"];
   /** 增长突增软阈值(tokens):子代理与主 loop 同源;0/缺省=关闭。 */
   growthSpurtTokens?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["growthSpurtTokens"];
   /** 上下文模型评分(Phase 1/2):子代理与主 loop 同源。 */
   modelScoring?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["modelScoring"];
-  /** 工具白名单(step-061:profile.tools 升级为执行白名单的单一下发口)。
+ /** 工具白名单(profile.tools 升级为执行白名单的单一下发口)。
    * 支持:具体工具名 / 组别名(read|write|exec|code_sense,agent-profiles.SUBAGENT_TOOL_GROUPS 展开)/
    * "*"(内置全集,不含 MCP)/ "mcp" 或 "mcp__<server>[__<tool>]" 前缀(显式开启 MCP 下发)。
    * 在场=按白名单过滤工具池(内置池+extraTools);缺席/空=角色二分兜底(行为同旧版,extraTools 不参与)。 */
@@ -353,11 +347,11 @@ export interface LlmLoopBackendOptions {
   /** 技能索引文本(granted 含 skill_view 时追加进子代理系统提示——模型由此知道可读的技能名)。
    * 由装配方构建(与主 agent 索引同源);缺席=只给工具不给索引(模型无从得知名字)。 */
   skillIndexText?: string;
-  /** 编辑后 LSP 诊断/保存格式化(step-114,coding.lsp);缺省=关闭(低层语义,生产由装配方注入)。 */
+ /** 编辑后 LSP 诊断/保存格式化(coding.lsp);缺省=关闭(低层语义,生产由装配方注入)。 */
   lsp?: LspSettings;
-  /** 写盘围栏(step-138,来自 profile.writeGlobs):在场时 write_file/edit_file 只允许命中这些
+ /** 写盘围栏(来自 profile.writeGlobs):在场时 write_file/edit_file 只允许命中这些
    *  glob(相对 workdir),越界直接拒绝并说明允许范围。典型=planner 只能写规划稿
-   *  tasks/step-NNN-<slug>/step.md——即使模型越权也不落盘(提示词约束之外的第二道锁)。 */
+ * <slug>/step.md——即使模型越权也不落盘(提示词约束之外的第二道锁)。 */
   writeGlobs?: string[];
 }
 
@@ -377,14 +371,14 @@ export function trimSubLoopEvent(kind: string, p: Record<string, unknown>): Reco
       return {
         text: s(p.text, 8000),
         turn: Number(p.turn ?? 0), step: Number(p.step ?? 0), llmMs: Number(p.llmMs ?? 0),
-        // 模型名(2026-10-28 成本核算):子代理用量要按它自己的模型计费,不能混进主轨单价。
+ // 模型名(成本核算):子代理用量要按它自己的模型计费,不能混进主轨单价。
         ...(typeof p.model === "string" && p.model ? { model: s(p.model, 120) } : {}),
         ...(p.reasoning ? { reasoning: s(p.reasoning, 4000) } : {}),
         ...(u ? { usage: {
           inputTokens: Number(u.inputTokens ?? 0), outputTokens: Number(u.outputTokens ?? 0),
           ...(u.totalTokens !== undefined ? { totalTokens: Number(u.totalTokens) } : {}),
           ...(u.cachedTokens !== undefined ? { cachedTokens: Number(u.cachedTokens) } : {}),
-          // 缓存写入量(2026-10-28 成本第三段;仅 Anthropic 原生口径下发)
+ // 缓存写入量(成本第三段;仅 Anthropic 原生口径下发)
           ...(u.cacheCreationTokens !== undefined ? { cacheCreationTokens: Number(u.cacheCreationTokens) } : {}),
         } } : {}),
         ...(calls.length ? { toolCalls: calls.slice(0, 12).map((c) => ({ id: s(c.id, 80), name: s(c.name, 80), arguments: s(c.arguments, 200) })) } : {}),
@@ -392,7 +386,7 @@ export function trimSubLoopEvent(kind: string, p: Record<string, unknown>): Reco
     }
     case "message.user":
       return { text: s(p.text, 2000) };
-    // LLM 轨迹指针(2026-10-20):此前落 default→{raw:"…"},面板无法渲染/复制轨迹路径。
+ // LLM 轨迹指针:此前落 default→{raw:"…"},面板无法渲染/复制轨迹路径。
     // 与主会话 llm.trace 同构的结构化摘要(全文仍在 .genie/llm-trace/subagent-<taskId>*/call-*.json)。
     case "llm.trace":
       return {
@@ -467,8 +461,8 @@ export const SUBAGENT_READ_TOOLS = ["read_file", "glob", "grep", "list_dir"] as 
 /** 子代理写/执行类工具名(过权限闸门;file.write 类别别名经 loop TASK_OUTPUT_ALIAS 覆盖写两件)。 */
 export const SUBAGENT_WRITE_TOOLS = ["write_file", "edit_file", "run_cmd"] as const;
 
-/** 工具执行统一帽(2026-10-29 冻结治理):缺省 600s——防「单工具无限挂死拖住整个 agent」
- *  (WSL 9p 停顿实锤:同步文件读冻住事件循环,主 agent+全部子代理一起停摆 35 分钟)。
+/** 工具执行统一帽(冻结治理):缺省 600s——防「单工具无限挂死拖住整个 agent」
+ * (WSL 9p 停顿注意:同步文件读冻住事件循环,主 agent+全部子代理一起停摆 35 分钟)。
  *  generous 值:terminal 上限 600s 恰好贴帽;文件/检索类正常操作秒级,帽只是最后防线。 */
 export const TOOL_TIMEOUT_CAP_MS = Number(process.env.GENIE_TOOL_TIMEOUT_MS ?? 600_000);
 /** 自管豁免清单:这些工具自身已有完备等待/超时语义,统一帽会误杀合法长等——
@@ -508,8 +502,8 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
   return [
     {
       name: "read_file",
-      // 2026-10-19 与主 agent 对齐:补 offset/limit 分窗(旧实现只能读前 120KB——1.1MB 的 panel.ts
-      // 永远读不全,实测同一文件同参重读 9 次);并把读取登记进「已读清单」,loop 每步注入
+ // 与主 agent 对齐:补 offset/limit 分窗(旧实现只能读前 120KB——1.1MB 的 panel.ts
+ // 永远读不全,经验证同一文件同参重读 9 次);并把读取登记进「已读清单」,loop 每步注入
       // 「文件未变不要整读」提醒(旧实现只有主 agent 登记,子代理无此提醒)。
       description: "读取一个文本文件(≤120KB/次,可分窗)。路径必须在仓库内。大文件先 grep 定位,再用 offset/limit 分窗读。**要看多个文件(或多个区间)就在同一步并发发多条 read_file**(本工具无状态),别一步只读一个文件——每次往返都会重发整段上下文。",
       parameters: { type: "object", properties: {
@@ -523,11 +517,11 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
         const a = (args ?? {}) as { path?: string; offset?: number; limit?: number; force?: boolean };
         const abs = guard(a.path);
         if (!abs) return "错误:路径缺失或越出仓库根";
-        // 输入边界防御(M136):realpath 归一 → ①设备/伪文件 → ②stat special → ③denylist
+ // 输入边界防御:realpath 归一 → ①设备/伪文件 → ②stat special → ③denylist
         // (必须在 readFileSync 之前;missing 交给下面的既有 try 分支,保持原有错误文案)
         const guarded = await readGuardPath(abs);
         if (!guarded.ok && guarded.kind === "denied") return guarded.reason;
-        // 编辑保鲜读侧(designs/25 ZCode ReadFileState):记录读取时刻 mtime,write/edit 据此拒盲写。
+ // 编辑保鲜读侧( ZCode ReadFileState):记录读取时刻 mtime,write/edit 据此拒盲写。
         let mtimeMs = 0;
         try { if (existsSync(abs)) { mtimeMs = statSync(abs).mtimeMs; if (readState) readState.set(abs, mtimeMs); } } catch { /* 状态记录失败不阻塞读 */ }
         try {
@@ -539,11 +533,11 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
           const offset = Math.max(1, Math.min(Number(a.offset) || 1, all.length));
           const limit = Math.min(Math.max(Number(a.limit) || 800, 1), 2000);
           const end = Math.min(offset - 1 + limit, all.length);
-          // 单行 clamp(M136):超 2000 字符按「…(+N 字符已截断)」截断,标记计入 2000 额度
+ // 单行 clamp:超 2000 字符按「…(+N 字符已截断)」截断,标记计入 2000 额度
           let body = all.slice(offset - 1, end).map((l) => clampLine(l)).join("\n");
           const truncated = body.length > MAX_FILE_BYTES;
           if (truncated) body = body.slice(0, MAX_FILE_BYTES);
-          // 已读登记(供 loop 的「已读清单/别整读」提醒;与主 agent 同语义)。读传递(2026-11-05 D3):
+ // 已读登记(供 loop 的「已读清单/别整读」提醒;与主 agent 同语义)。读传递( D3):
           // ①路径改相对 roots[0](与主 agent 同键——主侧 file-tools 登记 relDisplay(root,abs) 相对路径,
           //   旧实现登记绝对路径,父/子/兄弟清单键永远对不上);②带行段双写父会话键(父与兄弟子代理
           //   共享已读事实,兄弟互相可见);③读前查父清单行段交叠,命中→结果尾注「勿再整读」
@@ -557,7 +551,7 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
           try {
             if (parentReadSession) handoffHint = renderParentReadHint(readFilesOf(parentReadSession), relForState, offset, end);
           } catch { /* 提示层登记失败不阻塞读 */ }
-          // 重复读取去重(2026-11-07):判重键=该子代理自己的 readSessionRef(父键/兄弟已读不算本子
+ // 重复读取去重:判重键=该子代理自己的 readSessionRef(父键/兄弟已读不算本子
           // 上下文,否则子代理会看不到正文);判定必须在登记前(否则本次窗口自查自中)。
           if (!a.force && readSessionRef?.value && mtimeMs) {
             try {
@@ -581,7 +575,7 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
       },
     },
     {
-      // step-061:H1 六件套对齐——子代理读面补 glob(按改动时间新→旧,与主 agent glob 同语义)。
+ // H1 六件套对齐——子代理读面补 glob(按改动时间新→旧,与主 agent glob 同语义)。
       name: "glob",
       description: "按模式匹配仓库内文件路径(* 不跨目录,** 跨目录,? 单字符,{a,b} 枚举;结果按修改时间新→旧,≤200 条)。路径必须在仓库内。",
       parameters: { type: "object", properties: {
@@ -661,9 +655,9 @@ export function llmLoopReadOnlyTools(roots: string[], readState?: Map<string, nu
         try { re = new RegExp(a.pattern, "i"); } catch { re = new RegExp(a.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"); }
         const base = guard(a.path ?? roots[0]) ?? roots[0] ?? process.cwd();
         const files: string[] = [];
-        // 2026-10-19 修复:path 允许是文件(主 agent grep 同语义)。旧实现只按目录 readdir,
+ // 修复:path 允许是文件(主 agent grep 同语义)。旧实现只按目录 readdir,
         // 传文件时 readdirSync 抛 ENOTDIR 被 walk 静默吞掉→返回「(零命中)」,模型以为没匹配、
-        // 换 pattern 反复重试(实测探针:两个 explore 的 155 次调用里 68 次是这种空结果)。
+ // 换 pattern 反复重试(经验证探针:两个 explore 的 155 次调用里 68 次是这种空结果)。
         let baseStat: ReturnType<typeof statSync> | null = null;
         try { baseStat = statSync(base); } catch { baseStat = null; }
         if (!baseStat) return "错误:检索路径不存在: " + base;
@@ -697,10 +691,10 @@ export function fenceRunCmd(cmd: string, workdir: string): string | null {
 }
 
 /** worker/general 的写与执行工具(ZCode general-purpose 全工具语义):write_file/edit_file/run_cmd。
- *  编辑保鲜(designs/25 ZCode ReadFileState 语义):覆写/编辑已存在文件前必须先 read_file 且读后未被外部改动——防盲写覆盖。
- *  edit_file(step-061 补齐):精确字面替换,与主 agent edit_file 同语义(old 唯一命中/replace_all)。 */
+ * 编辑保鲜( ZCode ReadFileState 语义):覆写/编辑已存在文件前必须先 read_file 且读后未被外部改动——防盲写覆盖。
+ * edit_file(补齐):精确字面替换,与主 agent edit_file 同语义(old 唯一命中/replace_all)。 */
 function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?: LspSettings, writeGlobs?: string[]) {
-  // 写盘围栏(step-138):相对 workdir 的路径命中声明 glob 才允许写;越界给出允许范围,便于模型自我纠正。
+ // 写盘围栏:相对 workdir 的路径命中声明 glob 才允许写;越界给出允许范围,便于模型自我纠正。
   const fenceError = (abs: string): string | null => {
     if (!writeGlobs || writeGlobs.length === 0) return null;
     const root = resolve(workdir);
@@ -724,7 +718,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
     // 非 null 即拒绝,与原返回形状一致(字符串,前缀「错误:」),UI 直接显示拒因。
     const fenced = fenceRunCmd(cmd, workdir);
     if (fenced) return "错误:" + fenced + "(workspace 模式只允许操作工作目录内的文件;需要越界请在完全访问模式执行)";
-    // git 破坏命令硬拦(g1,2026-11-05):11-05 有子代理 git stash,把全仓 142 个未提交文件收走、
+ // git 破坏命令硬拦(g1:11-05 有子代理 git stash,把全仓 142 个未提交文件收走、
     // 工作树回退成"什么都没改"的假象。子代理**任何档位**都不许 git 写/破坏操作(按解析后的子命令判定),
     // 写盘/切换/清理由父代理(main agent)操作。runOne 拿不到 journal,故不留审计(职责在主 agent 面)。
     const gitVerdict = guardGitCommand(cmd);
@@ -762,7 +756,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
         if (!abs.startsWith(resolve(workdir))) return "错误:路径越出工作目录";
         const fenced = fenceError(abs);
         if (fenced) return fenced;
-        // 编辑保鲜写侧(designs/25 ZCode ReadFileState):已存在文件必须本会话读过且读后未被外部改。
+ // 编辑保鲜写侧( ZCode ReadFileState):已存在文件必须本会话读过且读后未被外部改。
         let prevText: string | undefined = ""; // 新文件:基线为空
         if (existsSync(abs)) {
           const cur = statSync(abs).mtimeMs;
@@ -773,7 +767,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
         }
         try {
           const { mkdirSync, writeFileSync } = await import("node:fs");
-          // M108:baseline 必须在落盘前采集(旧内容);采集失败标 unavailable,不阻塞写。
+ // baseline 必须在落盘前采集(旧内容);采集失败标 unavailable,不阻塞写。
           const base = await editBaselineSafe(workdir, abs, prevText, lsp);
           mkdirSync(join(abs, ".."), { recursive: true });
           writeFileSync(abs, String(a.content ?? ""), "utf-8");
@@ -793,7 +787,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
       async execute(args: unknown) { return await runOne(args); },
     },
     {
-      // step-061:六件套对齐——精确字面替换编辑(主 agent edit_file 同语义;编辑保鲜读侧共享)。
+ // 六件套对齐——精确字面替换编辑(主 agent edit_file 同语义;编辑保鲜读侧共享)。
       name: "edit_file",
       description: "对文件做精确字面替换编辑(old_string 逐字匹配,缺省要求唯一命中;replace_all 全替)。编辑前先 read_file 该文件。成功后做保存格式化与诊断(<diagnostics> 块;格式化可能改空白/引号,后续编辑需重新 read)。",
       parameters: { type: "object", properties: {
@@ -810,7 +804,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
         if (fenced) return fenced;
         if (!a.old_string) return "错误:old_string 不能为空(新建文件用 write_file)";
         if (a.old_string === a.new_string) return "错误:old_string 与 new_string 相同,是空操作";
-        // 编辑比例守卫(M136):与主 agent edit_file 同源,防放宽匹配后静默删大段
+ // 编辑比例守卫:与主 agent edit_file 同源,防放宽匹配后静默删大段
         const ratioDenied = checkEditRatio(a.old_string, a.new_string ?? "");
         if (ratioDenied) return ratioDenied;
         if (!existsSync(abs)) return "错误:文件不存在: " + abs;
@@ -826,7 +820,7 @@ function workerWriteTools(workdir: string, readState?: Map<string, number>, lsp?
         const replaced = a.replace_all === true ? text.split(a.old_string).join(a.new_string ?? "") : text.replace(a.old_string, a.new_string ?? "");
         try {
           const { writeFileSync } = await import("node:fs");
-          // M108:已读出的旧 text 直接作 baselineText;采集在落盘前(同主 agent file-tools)。
+ // 已读出的旧 text 直接作 baselineText;采集在落盘前(同主 agent file-tools)。
           const base = await editBaselineSafe(workdir, abs, text, lsp);
           writeFileSync(abs, replaced, "utf-8");
           const suffix = await editCheckSuffixSafe(workdir, abs, lsp, base?.baseline, base?.baselineText);
@@ -846,11 +840,11 @@ export class LlmLoopBackend implements SubagentBackend {
 
   async spawn(spec: TaskSpec, onEvent: (e: SubagentEvent) => void): Promise<SubagentHandle> {
     const spawnAt = Date.now(); // 时间盒起点(deadlineAt 收敛提醒的计时基准)
-    // LSP 检查器预热(step-114):子代理装配时后台加载 typescript,首条编辑不吃模块冷启动。
+ // LSP 检查器预热:子代理装配时后台加载 typescript,首条编辑不吃模块冷启动。
     if (this.opts.lsp && this.opts.lsp.enabled !== false) {
       void import("@lampgenie/lsp").then((m) => m.warmTypeScriptChecker()).catch(() => { /* fail-soft */ });
     }
-    // 父中止传播(designs/25 ZCode createSubagentTaskAbortController 语义):父 loop 取消→子代理一并取消。
+ // 父中止传播( ZCode createSubagentTaskAbortController 语义):父 loop 取消→子代理一并取消。
     if (spec.parentSignal) {
       spec.parentSignal.addEventListener("abort", () => {
         cancelled = true;
@@ -858,17 +852,17 @@ export class LlmLoopBackend implements SubagentBackend {
       }, { once: true });
     }
     const roots = this.opts.roots.length ? this.opts.roots : [spec.workdir];
-    // M58 图片 offload:缺省落盘根 = 子代理工作目录(与 bash/write 围栏同根);装配方可覆盖。
+ //  图片 offload:缺省落盘根 = 子代理工作目录(与 bash/write 围栏同根);装配方可覆盖。
     // 首跑与串台重派共用这一份(两个 loop 同值,避免重派轮行为分叉)。
     const imageOffload = this.opts.imageOffload ?? { root: this.opts.workdir ?? roots[0] ?? process.cwd() };
     // 子代理 journal(steering 介质 + 收尾事件面):提前到工具装配前,deliverable/cite_source 要写入它。
     const subJournal = new MemoryJournal();
-    // 收尾聚合(2026-11-07):所有终态(done/failed/cancelled/deadline/stall/串台重派)统一走
+ // 收尾聚合:所有终态(done/failed/cancelled/deadline/stall/串台重派)统一走
     // task-closeout(mode:"subagent",warn-only);同一 spawn 只收尾一次,finalText 写回结果。
     const closeoutSessionId = "subagent-" + spec.taskId;
     const closeoutRoot = this.opts.workdir ?? roots[0] ?? process.cwd();
     const closeoutStartSeq = subJournal.length;
-    // M16 基线必须在动手前建(git status 基线),否则末态对比恒为空。
+ //  基线必须在动手前建(git status 基线),否则末态对比恒为空。
     const closeoutBaseline = captureBaseline(closeoutRoot).catch(() => null);
     let closeoutPromise: Promise<TaskResult> | null = null;
     const finalizeResult = (r: TaskResult): Promise<TaskResult> => {
@@ -902,15 +896,15 @@ export class LlmLoopBackend implements SubagentBackend {
     const roleLabel: Record<string, string> = {
       worker: "通用执行子 agent", explore: "只读探索子 agent", judge: "评审判分子 agent",
       "test-analyst": "测试失败分析子 agent", general: "通用子 agent",
-      // step-138:规划角色(需求深挖→骨架→白板落板→DoD/风险),不写业务代码
+ // 规划角色(需求深挖→骨架→白板落板→DoD/风险),不写业务代码
       planner: "规划子 agent",
-      // 2026-11-05:演示文稿产出角色(判型→结构→页级正文→质量门导出)
+ // 演示文稿产出角色(判型→结构→页级正文→质量门导出)
       "ppt-master": "演示文稿子 agent",
     };
-    const sharedReadState = new Map<string, number>(); // 编辑保鲜读侧表(读/写工具共享;designs/25)
+    const sharedReadState = new Map<string, number>(); // 编辑保鲜读侧表(读/写工具共享
     // 子 loop sessionId 引用:工具构造早于 loop 实例化,读文件登记需要运行时拿到它(供「已读清单」提醒)。
     const readSessionRef = { value: "" };
-    // 工具装配(step-061 一处声明、执行面真实生效):
+ // 工具装配(一处声明、执行面真实生效):
     // 白名单在场=工具池过滤(声明源=profile.tools,组别名经 expandToolTokens 展开;extraTools 一并过滤);
     // 缺席/空=角色二分兜底(粗粒度保底,行为同旧版;extraTools 不参与兜底)。
     const whitelist = this.opts.toolWhitelist?.length ? expandToolTokens(this.opts.toolWhitelist) : undefined;
@@ -923,23 +917,23 @@ export class LlmLoopBackend implements SubagentBackend {
       ? pool.filter((t) => toolGrantMatched(t.name, whitelist))
       : writeRole
         ? pool.filter((t) => !(this.opts.extraTools ?? []).includes(t as never))
-        : // fixC-D1(2026-10-19 用户实报):读角色子代理默认带上注入池里的只读感知工具
+        : // fixC-D1(用户用户反馈):读角色子代理默认带上注入池里的只读感知工具
           // (code_sense/code_index/skill_view——isReadOnly 声明者)——旧实现只给
           // read_file/glob/grep/list_dir 四件,子代理查代码结构只能 grep(毫秒索引不可达);
           // 写角色维持排除(动手者不背认知工具,认知由父代理或读代理承担)。
           pool.filter((t) => (SUBAGENT_READ_TOOLS as readonly string[]).includes(t.name) || (this.opts.extraTools ?? []).includes(t as never) && !!(t as { isReadOnly?: () => boolean }).isReadOnly?.());
-    // 空工具面门禁(step-064):白名单已声明但展开后与工具池零交集=装配错配(profile.tools 拼错/
+ // 空工具面门禁:白名单已声明但展开后与工具池零交集=装配错配(profile.tools 拼错/
     // 组别名打错)。此时 provider 不带 tools 字段=子代理退化为纯文本对话且静默——「工具未配置」的
     // 唯一可达形态。fail-visible:spawn 即抛,错误回父 agent,不带病启动裸 loop。
     if (whitelist && tools.length === 0) {
       throw new Error(
         "子代理工具面为空:白名单声明 [" + (this.opts.toolWhitelist ?? []).join(",") +
         "] 展开后 [" + whitelist.join(",") + "] 与工具池零交集(池:" + pool.map((t) => t.name).join("/") +
-        ")。检查 .genie/agents/*.md 的 tools 声明或 agentType 拼写(step-064 fail-visible,不启动纯文本子代理)",
+        ")。检查 .genie/agents/*.md 的 tools 声明或 agentType 拼写( fail-visible,不启动纯文本子代理)",
       );
     }
-    // 收尾机制数据面(2026-11-07):写角色挂 deliverable(声明交付物→M170)、有 web_fetch 的角色
-    // 挂 cite_source(登记引用→M169);只读角色不挂写工具。journal 用子代理自己的 subJournal。
+ // 收尾机制数据面:写角色挂 deliverable(声明交付物→)、有 web_fetch 的角色
+ // 挂 cite_source(登记引用→);只读角色不挂写工具。journal 用子代理自己的 subJournal。
     {
       const writeFace = tools.some((t) => (SUBAGENT_WRITE_TOOLS as readonly string[]).includes(t.name));
       if (writeFace && !tools.some((t) => t.name === DELIVERABLE_TOOL_NAME)) {
@@ -957,12 +951,12 @@ export class LlmLoopBackend implements SubagentBackend {
     const grantedNames = tools.map((t) => t.name);
     const canWrite = tools.some((t) => (SUBAGENT_WRITE_TOOLS as readonly string[]).includes(t.name));
     const skillGranted = grantedNames.includes("skill_view");
-    // 工具面契约统一(2026-10-22):子代理与主 loop 同款——长描述摘要化 + 大 schema 工具延迟
+ // 工具面契约统一:子代理与主 loop 同款——长描述摘要化 + 大 schema 工具延迟
     // 加载(用时 tool_view 激活)。此前子代理面保留原文长描述/全量 schema,两侧策略不一致
-    // (实测子代理 15 工具里 code_sense/terminal/browser/session_search 均超 240 字符)。
+ // (经验证子代理 15 工具里 code_sense/terminal/browser/session_search 均超 240 字符)。
     const wireTools = attachToolView(tools);
-    // 权限传递收口:父会话有效规则快照进子 loop 闸门(onAsk 回调→装配方审批链;缺省 ask=fail-closed deny)。
-    // step-071:parentAsk 在场时叠加 heavyOp 重操作闸(绕过 allow 规则强制父 agent 审批)——
+ // 权限传递:父会话有效规则快照进子 loop 闸门(onAsk 回调→装配方审批链;缺省 ask=fail-closed deny)。
+ // parentAsk 在场时叠加 heavyOp 重操作闸(绕过 allow 规则强制父 agent 审批)——
     // 两者可独立在场(无规则也有重操作闸;rules??[] 已在 loop 侧加固)。
     const childPermission = this.opts.permissionRules?.length || this.opts.parentAsk
       ? {
@@ -1001,11 +995,11 @@ export class LlmLoopBackend implements SubagentBackend {
     let loop: AgentLoop | undefined;
     // 变量前置声明:abort 监听器在 loop 创建前也可能触发(竞态安全)。
     if (spec.parentSignal?.aborted) cancelled = true;
-    // 防死 watchdog(2026-10-13 用户口径):不设强制时限,等 loop 自然结束信号;仅
+ // 防死 watchdog:不设强制时限,等 loop 自然结束信号;仅
     // 「journal 零新增持续超过阈值(缺省 600s)」才强制退出——卡点报告回给父 agent(卡在哪/最后输出/步数)。
     const STALL_MS = Math.max(this.opts.stallTimeoutMs ?? 600_000, 1_000);
     let lastActivity = Date.now();
-    // ---- 机制2/3(2026-10-15):心跳判活 + 无产出预警的状态面 ----
+ // ---- 机制2/3:心跳判活 + 无产出预警的状态面 ----
     const startedAtMs = Date.now();
     let lastToolAt = startedAtMs; // 最近一次工具调用/返回(journal tool.call|tool.result)
     let toolCallsDone = 0;
@@ -1025,17 +1019,17 @@ export class LlmLoopBackend implements SubagentBackend {
       lastHeartbeatAt = now;
       try { onEvent({ type: "progress", note: `[心跳 ${hhmmss(now)}] ${detail}` }); } catch { /* 心跳失败不影响执行 */ }
     };
-    // holder 对象:闭包内赋值的 string 变量会被 CFA 收窄成 never(step-053 goal 同族),属性赋值不收窄
+ // holder 对象:闭包内赋值的 string 变量会被 CFA 收窄成 never( goal 同族),属性赋值不收窄
     const stall: { report: string | null } = { report: null };
     let stepsDone = 0;
     let lastAction = "(尚未开始)";
     let lastAgentText = "";
     let settled = false;
-    // ---- P1-4 产出纪律强制提醒(2026-10-29;2026-10-30 修永久锁)----
+ // ---- P1-4 产出纪律强制提醒(修永久锁)----
     // 判据=该 step 的 message.agent.payload.text **不足实质产出**(空或 < PRODUCTIVE_SUBSTANTIVE_CHARS);
     // step 号取自事件 payload,同 step 多次 message.agent(空响应重试)只计一次。
     // 旧实现用 `seenText` 永久关闭:任何一行非空文本(「我来看看」)就焊死闸门 →
-    // 实测今日 18 个大 run 里 16 个「有文本步 <15%」却一个都不触发。现在改为**循环计数**:
+ // 经验证今日 18 个大 run 里 16 个「有文本步 <15%」却一个都不触发。现在改为**循环计数**:
     // 实质产出才清零,零星短文不清零(短文本身不算交付物)。
     const NUDGE_STEPS = Math.max(this.opts.productiveNudgeSteps ?? PRODUCTIVE_NUDGE_STEPS, 0);
     const productive: { pending: number; lastStep: number; nudgedAt: number } = { pending: 0, lastStep: -1, nudgedAt: 0 };
@@ -1058,7 +1052,7 @@ export class LlmLoopBackend implements SubagentBackend {
         lastAgentText = p.text.slice(-400);
         const stepNo = typeof p.step === "number" ? p.step : -1;
         // 实质产出(≥200 字)才清零;零星短文不清零也不算「已产出」——旧实现见非空文本即永久关闸
-        // (实测 18 个大 run 里 16 个「有文本步 <15%」却全不触发)。
+ // (经验证 18 个大 run 里 16 个「有文本步 <15%」却全不触发)。
         const substantive = p.text.trim().length >= PRODUCTIVE_SUBSTANTIVE_CHARS;
         if (substantive) {
           productive.pending = 0;
@@ -1085,7 +1079,7 @@ export class LlmLoopBackend implements SubagentBackend {
         const calls = Array.isArray(p.toolCalls) ? p.toolCalls.length : 0;
         heartbeat("模型输出 " + String(p.text ?? "").length + " 字" + (calls ? `,发起 ${calls} 个工具调用` : ""));
       }
-      // 子代理工作区入账(2026-10-16):同一拦截点上裁剪回调(装配方 append 主 journal 为
+ // 子代理工作区入账:同一拦截点上裁剪回调(装配方 append 主 journal 为
       // subagent.event)——G2 心跳机制原样保留,本块只增不改;失败静默,入账绝不阻塞子代理执行。
       if (this.opts.onLoopEvent && e.kind) {
         try { this.opts.onLoopEvent({ kind: String(e.kind), payload: trimSubLoopEvent(String(e.kind), p) }); } catch { /* 入账失败不影响子代理 */ }
@@ -1098,7 +1092,7 @@ export class LlmLoopBackend implements SubagentBackend {
       subJournal.append({ kind: "message.user", sessionId: "subagent-" + spec.taskId, payload: { text: `[steer] ${text}` } });
       return true;
     };
-    // ---- 机制1:spawn deadline 强制收割(2026-10-15 狗food:152min 无一交卷,提示词时间盒被无视)----
+ // ---- 机制1:spawn deadline 强制收割(狗food:152min 无一交卷,提示词时间盒被无视)----
     // 到点=子 loop 收中止信号 + 部分结果打包交付(ok=true,finalText 显式标注);收割不是 fail。
     const DEADLINE_MS = Math.max(this.opts.deadlineMs ?? 0, 0);
     const GRACE_MS = Math.max(this.opts.deadlineGraceMs ?? 5_000, 100);
@@ -1143,22 +1137,22 @@ export class LlmLoopBackend implements SubagentBackend {
       deadlineTimer.unref?.();
     }
     const resultPromise = (async (): Promise<TaskResult> => {
-      // 系统提示按实际授予工具面生成(step-061):只读横幅=写类不在 granted;技能索引导读=skill_view 在场。
+ // 系统提示按实际授予工具面生成:只读横幅=写类不在 granted;技能索引导读=skill_view 在场。
       const subSystem = [
         `你是 lampgenie-harness 的${roleLabel[role] ?? "子 agent"}(${role},独立上下文,与主 agent 不共享历史)。`,
         "执行纪律:第一步就用工具动手做任务书;你自己就是执行者——禁止把任务转述回去、禁止说『请自行探索/请先阅读』、禁止输出与执行无关的元话语。",
         canWrite
           ? "用提供的工具(读文件/检索/写文件/编辑/命令)完整完成任务——任务书验收标准全满足才算完成。"
           : "只读模式:禁止创建/修改任何文件,禁止执行写操作;用只读工具完成调查后输出报告。",
-        // step-071 父子 ask-answer:写/执行角色注入重操作纪律(build 类先申请;拒绝后不绕行)。
+ // 父子 ask-answer:写/执行角色注入重操作纪律(build 类先申请;拒绝后不绕行)。
         ...(canWrite ? [renderSubagentHeavyOpDiscipline()] : []),
         ...(skillGranted && this.opts.skillIndexText
           ? ["可用 skill_view(category,name) 读技能/经验全文——可读清单如下,按名字调用,不要凭空猜名:\n" + this.opts.skillIndexText]
           : []),
-        // 2026-10-25:planner 角色专属板规范(变更契约图口径——planner 必然画板,别的角色零注入)。
+ // planner 角色专属板规范(变更契约图口径——planner 必然画板,别的角色零注入)。
         ...(role === "planner" ? [PLANNER_BOARD_SPEC] : []),
-        // 2026-10-21:code_sense 在授予面=注入调用手册——explore 等只读子代理的主生产力工具,
-        // 不教用法就会退化成「拿着 code_sense 只会 grep」(用户实报)。写角色默认不带,不注入。
+ // code_sense 在授予面=注入调用手册——explore 等只读子代理的主生产力工具,
+ // 不教用法就会退化成「拿着 code_sense 只会 grep」(用户用户反馈)。写角色默认不带,不注入。
         ...(grantedNames.includes(SENSE_TOOL_NAME) ? [SUBAGENT_CODE_SENSE_PLAYBOOK] : []),
         "完成后回复简明报告:做了什么/关键产出(带 文件:行号)/任何偏离任务书的地方;失败就如实说失败,不编造成功。",
         "回复里禁止出现任何内部协议标记(<think>、DSML 参数标签等)与任务书原文复述——那不是给用户看的内容。",
@@ -1174,31 +1168,31 @@ export class LlmLoopBackend implements SubagentBackend {
         sessionId: loopSessionId,
         // 写前持久化屏障(与主 agent 同源):undefined 不写键 → loop 缺省 hard,旧行为不变。
         ...(this.opts.writeBarrier ? { writeBarrier: this.opts.writeBarrier } : {}),
-        // 2026-10-19:时间盒收敛提醒——剩余 ≤2 分钟时注入一次临时提醒,强制「先输出结论、别再检索」。
-        // 实锤:两个 explore 用满 9 分钟时间盒、76 步、零文本产出(收割时只有「尚无模型文本输出」)。
+ // 时间盒收敛提醒——剩余 ≤2 分钟时注入一次临时提醒,强制「先输出结论、别再检索」。
+ // 注意:两个 explore 用满 9 分钟时间盒、76 步、零文本产出(收割时只有「尚无模型文本输出」)。
         ...(this.opts.deadlineMs && this.opts.deadlineMs > 0
           ? { deadlineAt: spawnAt + this.opts.deadlineMs, deadlineWarnMs: Math.min(120_000, Math.round(this.opts.deadlineMs * 0.2)) }
           : {}),
         system: subSystem,
         llm: this.opts.llm,
-        // step-132:子代理轨迹照落文件(subJournal 是内存件,指针事件 no-op——文件面 ls 可发现)。
+ // 子代理轨迹照落文件(subJournal 是内存件,指针事件 no-op——文件面 ls 可发现)。
         llmTrace: makeLlmTraceSink(subJournal),
-        // 2026-10-20:与 coding agent 同构——流式打字机 + 同一套上下文压缩配置。
+ // 与 coding agent 同构——流式打字机 + 同一套上下文压缩配置。
         ...(this.opts.onStream ? { onStream: this.opts.onStream } : {}),
         // P1-4 产出纪律强制提醒:每步组装消息时取一次「连续零文本步数已满 N」的硬提醒(ephemeral 不落
-        // journal,与 deadlineWarn/todo 提醒同机制)。实锤:两个 explore 跑满 140 步/263 次工具调用零文本。
+ // journal,与 deadlineWarn/todo 提醒同机制)。注意:两个 explore 跑满 140 步/263 次工具调用零文本。
         ...(NUDGE_STEPS > 0 ? { tips: () => takeProductiveNudge() } : {}),
         ...(this.opts.compactHook ? { compactHook: this.opts.compactHook } : {}),
         ...(this.opts.microcompact ? { microcompact: this.opts.microcompact } : {}),
         // 写时定形 spill(2026-11 token 轮 02):子代理与主 loop 同源注入。
         ...(this.opts.spill ? { spill: this.opts.spill } : {}),
-        // M58 图片 offload:与主 loop 同一套(缺省根=workdir;装配方传 repoRoot)。
+ //  图片 offload:与主 loop 同一套(缺省根=workdir;装配方传 repoRoot)。
         imageOffload,
         ...(this.opts.bigIntake ? { bigIntake: this.opts.bigIntake } : {}),
         ...(this.opts.growthSpurtTokens !== undefined ? { growthSpurtTokens: this.opts.growthSpurtTokens } : {}),
         ...(this.opts.modelScoring ? { modelScoring: this.opts.modelScoring } : {}),
         tools: withToolDeadlineDefaults(wireTools) as never,
-        // 执行 deadline 帽(2026-10-29 冻结治理):自管工具豁免,其余 600s;详见 withToolDeadlineDefaults。
+ // 执行 deadline 帽(冻结治理):自管工具豁免,其余 600s;详见 withToolDeadlineDefaults。
         ...(TOOL_TIMEOUT_CAP_MS > 0 ? { toolTimeoutMs: TOOL_TIMEOUT_CAP_MS } : {}),
         maxSteps: this.opts.maxSteps ?? 3000,
         ...(childPermission ? { permission: childPermission } : {}),
@@ -1206,7 +1200,7 @@ export class LlmLoopBackend implements SubagentBackend {
       const out0 = await loop.runTurn(spec.instructions + "\n\n" + toolSuffix);
       if (deadlineHit) {
         // 机制1:deadline 收割=交付已有进展(ok=true + 显式部分结果标注);与用户取消(丢弃)语义分离。
-        // 注意:收割触发的 cancel 会让 runTurn 以 cancelled 收口返回——此时 out0 若非空也只是
+ // 注意:收割触发的 cancel 会让 runTurn 以 cancelled 返回——此时 out0 若非空也只是
         // 「最后一个完成 step 的模型文本」,不是任务完成;统一走部分结果打包(其中已含最后输出摘录)。
         return packagePartial() as TaskResult & { note?: string };
       }
@@ -1214,7 +1208,7 @@ export class LlmLoopBackend implements SubagentBackend {
         if (stall.report) return { ok: false, finalText: stall.report, error: { kind: "stalled", detail: stall.report.slice(0, 200) } };
         return { ok: false, finalText: out0, error: { kind: "cancelled" } };
       }
-      // F2(2026-10-13 验收):空 finalText 会让父代理拿到「(子 agent 未返回结果)」并开始瞎猜——
+ // F2(验收):空 finalText 会让父代理拿到「(子 agent 未返回结果)」并开始瞎猜——
       // 清洗协议标签残渣;仍空则从子 journal 提取最后助手文本/错误,给父代理可用的诊断性结果。
       let out = String(out0 ?? "")
         .replace(/<\/?(tool_result|tool_message|task_serialism|system-提示)[^>]*>/g, "")
@@ -1236,14 +1230,14 @@ export class LlmLoopBackend implements SubagentBackend {
           return { ok: false, finalText: out, error: { kind: lastErr ? "backend-crash" : "budget-exhausted", detail: out.slice(0, 200) } };
         }
       }
-      // 串台/协议泄漏守卫(designs/25):首跑结果与任务书无关或泄内部协议 → 自动重派一次,标注后返回。
+ // 串台/协议泄漏守卫:首跑结果与任务书无关或泄内部协议 → 自动重派一次,标注后返回。
       // 已真实落板的子代理不走文本相关性判据:planner 的终稿=短摘要,长任务书下必然低覆盖(误杀)。
       const wroteBoard = hasBoardWriteEvidence(subJournal.readAll() as { kind?: string; payload?: unknown }[]);
       if (!wroteBoard && (isCrosstalk(spec.instructions, out) || isProtocolLeak(spec.instructions, out))) {
-        // P1-5 串台重派前置兜底(2026-10-29;2026-10-30 修「兜底永不生效」):
+ // P1-5 串台重派前置兜底(修「兜底永不生效」):
         // 旧实现用 `!isCrosstalk(instructions, joined)` 做出口判据——但 joined 的末条往往就是
         // 刚被判串台的那份终稿,同一把尺子再量一遍必然还是串台 → **结构上不可能救回**。
-        // 实测:真实 GLM 端到端任务日志仍打印「疑似串台…自动重派」,15 个 -retry 目录/230 次调用。
+ // 经验证:真实 GLM 端到端任务日志仍打印「疑似串台…自动重派」,15 个 -retry 目录/230 次调用。
         // 修法两条**并行**出口(判据本身不放宽,协议泄漏仍一律重派):
         //   ① 逐条筛:每条 message.agent 单独过 isCrosstalk/isProtocolLeak,通过的留下——
         //      中间有实质产出的段落能救回,被污染的终稿被丢掉(这是旧版想干但干不成的事);
@@ -1283,24 +1277,24 @@ export class LlmLoopBackend implements SubagentBackend {
             "完成后回复简明报告;失败就如实说失败,不编造成功。",
           ].join("\n"),
           llm: this.opts.llm,
-          llmTrace: makeLlmTraceSink(subJournal), // step-132:重派轨迹同落(-retry 后缀目录)
+          llmTrace: makeLlmTraceSink(subJournal), // 重派轨迹同落(-retry 后缀目录)
           ...(this.opts.onStream ? { onStream: this.opts.onStream } : {}),
           ...(this.opts.compactHook ? { compactHook: this.opts.compactHook } : {}),
           ...(this.opts.microcompact ? { microcompact: this.opts.microcompact } : {}),
           ...(this.opts.spill ? { spill: this.opts.spill } : {}),
-          // M58 图片 offload:重派 loop 与首跑同值(同一 imageOffload)。
+ //  图片 offload:重派 loop 与首跑同值(同一 imageOffload)。
           imageOffload,
         ...(this.opts.bigIntake ? { bigIntake: this.opts.bigIntake } : {}),
           ...(this.opts.growthSpurtTokens !== undefined ? { growthSpurtTokens: this.opts.growthSpurtTokens } : {}),
           ...(this.opts.modelScoring ? { modelScoring: this.opts.modelScoring } : {}),
           tools: withToolDeadlineDefaults(wireTools) as never,
-        // 执行 deadline 帽(2026-10-29 冻结治理):自管工具豁免,其余 600s;详见 withToolDeadlineDefaults。
+ // 执行 deadline 帽(冻结治理):自管工具豁免,其余 600s;详见 withToolDeadlineDefaults。
         ...(TOOL_TIMEOUT_CAP_MS > 0 ? { toolTimeoutMs: TOOL_TIMEOUT_CAP_MS } : {}),
           maxSteps: this.opts.maxSteps ?? 3000,
           ...(childPermission ? { permission: childPermission } : {}),
         });
         // 重派同样受 spawn deadline 约束:旧实现只把 loop 指向首跑,deadline 到点 cancel 的是已结束的
-        // 旧 loop,重派变成无人收割的长跑(实测 planner 误判重派后卡住,父 agent 一直等)。
+ // 旧 loop,重派变成无人收割的长跑(经验证 planner 误判重派后卡住,父 agent 一直等)。
         loop = retry;
         const out1 = await retry.runTurn(spec.instructions + "\n\n" + toolSuffix);
         if (deadlineHit) return packagePartial() as TaskResult & { note?: string };

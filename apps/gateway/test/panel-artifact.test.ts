@@ -1,5 +1,5 @@
 /**
- * 富图形交付(2026-11-06 step-1024)契约测试:md 围栏 ```html / ```svg → 图卡
+ * 富图形交付契约测试:md 围栏 ```html / ```svg → 图卡
  *  ① ```html 产 .md-artifact.md-html + sandbox="" iframe + CSP(default-src 'none')+ srcdoc 转义;
  *  ② height info 夹取(缺省 560,min 240,max 1200);
  *  ③ ```svg 产 .md-artifact.md-svg 占位 + data-art-src 完整保留(HTML 转义形态),不再落 code-wrap;
@@ -72,7 +72,7 @@ async function withPanel<T>(port: number, fn: (html: string) => T | Promise<T>):
 const HTML_SRC = "<!doctype html><html><head><style>body{background:#111}</style></head><body><div class=a>架构卡</div></body></html>";
 const SVG_SRC = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><rect x="4" y="4" width="90" height="50"/><text x="10" y="30">矩阵</text></svg>';
 
-describe("富图形交付:html/svg 图卡围栏(step-1024)", () => {
+describe("富图形交付:html/svg 图卡围栏", () => {
   it("① ```html → md-artifact.md-html + sandbox 空 iframe + CSP meta + 缺省高度 560", async () => {
     await withPanel(7911, (html) => {
       const mdToHtml = makeMdToHtml(html);

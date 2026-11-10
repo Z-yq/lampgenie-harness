@@ -1,11 +1,9 @@
 /**
  * 轨迹「聚合摘要区」与「模型名可见」回归(真跑逻辑,不是字符匹配)。
- *
- * step-1535 变更:轨迹从 status-widget.js 的全屏浮层 + 服务端 trace.query.summary,
+ * 变更:轨迹从 status-widget.js 的全屏浮层 + 服务端 trace.query.summary,
  * 改为面板内独立视图 #view-traj,聚合摘要由**本会话 histEvents 现场聚合**(trajLaneSumHtml)。
  * 因此本文件从 panel.ts 抽取真实函数段求值(不再是 status-widget.js),验的是真身:
  * 若将来这段被重构/移动,这里会显式报「抽取失败」而不是静默通过。
- *
  * 覆盖:事件分布(按 kind 降序前 5)、最慢工具(前 3 + 错误着色 + 错误计数)、
  * 空事件→空串(空态不占版面)、XSS 转义、shortModel 去前缀/截断、message.agent 模型名可见。
  */

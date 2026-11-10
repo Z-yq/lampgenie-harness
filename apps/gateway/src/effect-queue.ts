@@ -1,15 +1,12 @@
 /**
- * M189 持久效果队列(stored work)。
- *
+ * 持久效果队列(stored work)。
  * 问题:relay/launch/delivery/reply 等外部副作用内联执行——进程崩在发送途中就永久丢;
  * 重试没有账本会重复;同类副作用并发执行丢顺序;失败没有健康面。
- *
  * 本模块只做「效果账本 + 调度」这一层:
  *   1) 每个外部动作在事务内先落 effect.enqueued(append + flushStrict 成功后才允许执行);
  *   2) 同 kind 内 oldest-first,后一条必须等前一条 done/deferred/失败退避到期(同类保序);
  *   3) 每 kind 一个 handler,并发上限(缺省 1);失败指数退避;later(ms) 只延后不算失败;
  *   4) 连续失败进 health(degraded),成功一次清零;drain 停取新并保住 pending。
- *
  * 持久面只有 journal(唯一真源):
  *   effect.enqueued {id,kind,key,payload,at,attempts:0,nextAt}
  *   effect.replaced {id,payload,at}                    同 kind+key 等待中:替换 payload、nextAt=now、保 id/顺序
@@ -18,7 +15,6 @@
  *   effect.deferred {id,nextAt}
  *   effect.health   {kind,status:"ok"|"degraded",consecutiveFailures}
  * 冷恢复 = foldEffectQueue(readAll 的 effect.* 事件):done 丢弃,replaced/failed/deferred 覆盖,其余保序。
- *
  * 语义边角(与本仓其它模块一致):
  * - 无 sessionId 的 effect 事件落 global.jsonl(sharded journal 的「无 sessionId 兜底」),热窗下恒常驻;
  * - relay 未启用/不可用 → handler 直接返回成功(效果=无外部面),不记失败、不拖 health;
@@ -269,8 +265,7 @@ class EffectQueueImpl implements EffectQueue {
     const at = this.now();
     // 同 kind+key 仍在等待(未 done、未用尽重试)→ 替换 payload、立即到期、保 id/队列位置。
     const waiting = this.rows.find(
-      (r) => r.kind === input.kind && r.key === input.key && r.state === "waiting" && r.attempts < this.maxAttempts,
-    );
+      (r) => r.kind === input.kind && r.key === input.key && r.state === "waiting" && r.attempts < this.maxAttempts);
     if (waiting) {
       waiting.payload = input.payload;
       waiting.nextAt = at;

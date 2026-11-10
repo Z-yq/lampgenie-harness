@@ -1,6 +1,5 @@
 /**
  * RSI 周报(纯逻辑零 IO,RSI 复盘 2026-11)。
- *
  * 为什么需要它:自我改进循环(RSI)一周里会改一堆东西(采纳/拒绝/迭代/回滚/待定)、花与省一堆 token,
  * 还会积累「等人拍板」的事项(待批、冲突、断路器停摆、负净值)。这些信息散在实验账本、成本台账、
  * 断路器、注入/修改审批、证据图里,每周要人从五个地方拼一次,拼法还每次不一样。
@@ -8,7 +7,6 @@
  * - 本周改了什么(changed 按 decision 分组,组内按 decidedAt 降序,每条指标带 settled/deltaPct/improved)
  * - 净省了多少(savings 净值 + 按机制/项目分摊)
  * - 需要你决定什么(needsDecision 固定顺序:pending-approval → conflict → breaker-paused → negative-roi)
- *
  * 三个纯函数:
  * - buildWeeklyReport:输入侧宽进(缺字段/类型不对 → 默认值 + warnings 码,永不 throw),输出侧结构稳定
  *   (byDecision 五键常在、changed 五组常在、warnings 去重且有序)。
@@ -16,7 +14,6 @@
  *   attentionOnly 时按注意力预算压制:第一段只剩一行说明,第二段只剩净值。
  * - planCorrection / shouldRemindPending:周报的两个动作出口——纠错计划(rewrite/disable/rollback)
  *   与「待批提醒是否该发」的 TTL 判断。
- *
  * 依赖纪律:零 import(不读文件/环境/网络/时钟),所有函数不 throw。
  * 时间字段(decidedAt / since / now / lastRemindedAt)既收毫秒数也收 ISO 字符串,非法值一律当缺失。
  * 百分比与 ROI 统一 round2;round2 后的 -0 归一成 0(避免 Object.is(-0, 0) 之类的坑)。
@@ -339,8 +336,7 @@ function formatPct(value: number): string {
 function buildDirectionNote(
   direction: MetricDirection,
   deltaPct: number | null,
-  settled: boolean,
-): string {
+  settled: boolean): string {
   if (!settled) return "未结算";
   const word = directionWord(direction);
   const suffix = `(方向偏好${word})`;
@@ -439,8 +435,7 @@ function normalizeExperiment(raw: unknown, warnings: string[]): NormalizedChange
   const { metrics, settled, unsettled } = normalizeMetrics(
     id,
     raw.metrics === undefined ? undefined : raw.metrics,
-    warnings,
-  );
+    warnings);
   return {
     item: {
       id,
@@ -616,7 +611,6 @@ function negativeRoiSummaryText(cost: CostSummary): string {
 
 /**
  * 构造周报。输入宽进(缺字段/类型不对 → 默认值 + warnings),输出结构稳定,永不 throw。
- *
  * 细节:
  * - changed 按 decision 分五组,组内按 decidedAt 降序(缺 decidedAt 排尾,稳定排序)。
  * - 指标:result 缺失 → settled=false / deltaPct=null / directionNote="未结算";

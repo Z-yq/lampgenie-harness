@@ -1,8 +1,8 @@
 /**
- * step-057 压缩闸门:autoCompactGate 纯函数锚定。
+ * 压缩闸门:autoCompactGate 纯函数锚定。
  * 背景(真实 journal 26 次压缩回放):旧判定 used 扫描不认 compact.done 边界 + 基线超阈无检测
  * → 每步重压(锯齿「动不动上下文已压缩」)。
- * step-058:阈值优先序(窗口声明>显式阈值>0.8×缺省窗口 1M)+ 边界识别只认带摘要的 compact.done
+ * 阈值优先序(窗口声明>显式阈值>0.8×缺省窗口 1M)+ 边界识别只认带摘要的 compact.done
  * (旧 microcompact 无摘要 compact.done 不再清零 used)。
  */
 import { describe, it, expect } from "vitest";
@@ -13,7 +13,7 @@ function ev(kind: string, payload: Record<string, unknown> = {}, sid = "s1"): Ga
   return { kind, sessionId: sid, seq: ++seq, payload };
 }
 
-describe("autoCompactGate(step-057/058)", () => {
+describe("autoCompactGate(/058)", () => {
   it("边界感知:最后一次真压缩(compact.done 带摘要)之前的陈旧 usage 不参与判定(锯齿根治)", () => {
     const events: GateEvent[] = [];
     events.push(ev("message.agent", { usage: { inputTokens: 9000 } })); // 压缩前:超阈
@@ -72,7 +72,7 @@ describe("autoCompactGate(step-057/058)", () => {
     expect(d.fire).toBe(true);
   });
 
-  it("step-058 缺省保守:未配窗口且未配阈值 → 0.8×1M=800_000,但受 300_000 绝对封顶(2026-11-03)", () => {
+  it(" 缺省保守:未配窗口且未配阈值 → 0.8×1M=800_000,但受 300_000 绝对封顶(2026-11-03)", () => {
     const events: GateEvent[] = [];
     events.push(ev("compact.done", { summary: "x" }));
     for (let i = 0; i < 5; i++) events.push(ev("message.agent", { usage: { inputTokens: 500_000 } }));
@@ -97,7 +97,7 @@ describe("autoCompactGate(step-057/058)", () => {
       for (let i = 0; i < 5; i++) es.push(ev("message.agent", { usage: { inputTokens: used } }));
       return autoCompactGate(es, "s1", 1_000_000, 0, undefined, effort);
     };
-    // 2026-11-05:xhigh=满窗口 966k → 350k 不触发;high=封顶 300k → 350k 触发(档位语义真实生效)
+ // xhigh=满窗口 966k → 350k 不触发;high=封顶 300k → 350k 触发(档位语义真实生效)
     expect(mk("xhigh", 350_000).threshold).toBe(966_000);
     expect(mk("xhigh", 350_000).fire).toBe(false);
     expect(mk("high", 350_000).threshold).toBe(300_000);
@@ -118,7 +118,7 @@ describe("autoCompactGate(step-057/058)", () => {
   });
 
   it("2026-11-04 floor 护栏:刚压完就 ≥ 阈值(压不动)即使涨到 1.2×也不许强压(死亡螺旋根治)", () => {
-    // web-1793696471953 实锤形态:压缩后首个水位已超阈(基线/子代理用量在阈上),
+ // web-1793696471953 注意形态:压缩后首个水位已超阈(基线/子代理用量在阈上),
     // hardOver 旁路若放行 → 每步强压 12 条消息的对话史,摘要套摘要,原始用户消息全丢。
     const es: GateEvent[] = [ev("compact.done", { summary: "x" })];
     es.push(ev("message.agent", { usage: { inputTokens: 31_715 } }));  // floor=31715 ≥ 阈 24000
@@ -138,20 +138,20 @@ describe("autoCompactGate(step-057/058)", () => {
     expect(d.baseline).toBe(true);
   });
 
-  it("step-058 窗口优先:声明了 contextWindow 时显式阈值不生效(窗口是权威)", () => {
+  it(" 窗口优先:声明了 contextWindow 时显式阈值不生效(窗口是权威)", () => {
     const events: GateEvent[] = [ev("message.agent", { usage: { inputTokens: 30_000 } })];
     const d = autoCompactGate(events, "s1", 8192, 24000);
     expect(d.threshold).toBe(6554); // 0.8×8192,而非显式 24000
   });
 
-  it("step-058 旧 microcompact 边界(无摘要 compact.done)不被当真边界——used 不被清零", () => {
+  it(" 旧 microcompact 边界(无摘要 compact.done)不被当真边界——used 不被清零", () => {
     const events: GateEvent[] = [];
     events.push(ev("compact.done", { summary: "x" }));                 // 真压缩边界
     for (let i = 0; i < 3; i++) events.push(ev("message.agent", { usage: { inputTokens: 7000 } }));
     // 旧 microcompact 形态:payload={compacted,keepRecent},无 summary——不是压缩边界
     events.push(ev("compact.done", { compacted: 2, keepRecent: 5 }));
     const d = autoCompactGate(events, "s1", 8192, 24000);
-    // 若伪边界被认,used 清零→走 est 兜底(fire=true,force=false);修复后按真实测 force 触发
+ // 若伪边界被认,used 清零→走 est 兜底(fire=true,force=false);修复后按真经验证 force 触发
     expect(d.used).toBe(7000);
     expect(d.fire).toBe(true);
     expect(d.force).toBe(true);

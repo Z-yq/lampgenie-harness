@@ -1,10 +1,8 @@
 /**
  * 任务图持久层(生产侧,#174):把 task-graph-extension 的纯逻辑落到单份 JSON。
- *
  * 数据面:`<root>/.genie/rsi/task-graph.json`,形状 `{ v: 1, graph: TaskGraph }`。
  * 为什么原子写(tmp + rename):plannerRuns / reopens 是跨进程配额计数(CLI 每次都是新进程),
  * 半截文件会让「第 6 次 EXHAUSTED / 第 3 次 REOPEN_LIMIT」直接失真;写后重读校验让「写成功了吗」可断言。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑;runtime 模块按 evidence-graph-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
  * ② 裸 tsx/dist 缺该文件(dist 无新模块)时回退到仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
@@ -52,8 +50,7 @@ interface TaskGraphRuntime {
   validateExtension(graph: TaskGraph, output: PlannerOutput): { ok: boolean; codes: string[]; issues: ExtensionIssue[] };
   applyExtension(
     graph: TaskGraph,
-    output: PlannerOutput,
-  ): { ok: boolean; graph: TaskGraph; code: string; added?: ExtensionDelta; issues?: ExtensionIssue[] };
+    output: PlannerOutput): { ok: boolean; graph: TaskGraph; code: string; added?: ExtensionDelta; issues?: ExtensionIssue[] };
   runPlanner(
     graph: TaskGraph,
     output: PlannerOutput,

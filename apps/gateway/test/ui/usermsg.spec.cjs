@@ -1,5 +1,5 @@
-/** step-063 user 消息视觉重设计检查:气泡形态/右对齐/对比度/hover 按钮/slash-chip/markdown 不回退/重放一致/双路径同款。
- * 跑法:npx tsx test/ui/_ui_selfhost.cjs test/ui/usermsg.spec.cjs(自启临时实例,不碰产线 7700)。 */
+/** user 消息视觉重设计检查:气泡形态/右对齐/对比度/hover 按钮/slash-chip/markdown 不回退/重放一致/双路径同款。
+ * 跑法:npx tsx test/ui/_ui_selfhost.cjs test/ui/usermsg.spec.cjs(自启临时实例,不碰生产环境 7700)。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";
 const T0 = Date.parse("2026-10-14T10:00:00");
@@ -9,7 +9,7 @@ const CONV_A = [
   { kind: "message.agent", time: T0 + 8000, payload: { text: "先看渲染入口:\n\n```ts\nif (histEvents === null) return;\n```\n\n幂等缓存挡住全量重写。" } },
   { kind: "message.user", time: T0 + 30000, payload: { text: "/plan 输出重构方案,分三期" } },
   { kind: "compact.done", time: T0 + 40000, payload: { summary: "前 12 轮已蒸馏" } },
-  { kind: "message.user", time: T0 + 50000, payload: { text: "长文本压测:/mnt/e/workship/genie/lampgenie-harness/apps/gateway/src/panel.ts 希望换行不断章取义", attachments: [{ name: "a.png", mime: "image/png" }] } },
+  { kind: "message.user", time: T0 + 50000, payload: { text: "长文本压测:apps/gateway/src/panel.ts 希望换行不断章取义", attachments: [{ name: "a.png", mime: "image/png" }] } },
 ];
 const CONV_B = [
   { kind: "message.user", time: T0, payload: { text: "另一条会话的问句,内容不同" } },
@@ -154,7 +154,7 @@ const CONV_B = [
   await page.evaluate(() => document.body.classList.remove("light"));
   check("浅色主题气泡不破", light.bg && light.color === "rgb(61, 50, 35)", JSON.stringify(light));
 
-  // 14. step-095 新增:raw 前缀合流消息=chip+参数,模板 remainder 隐藏;手打余文保留(零丢失)
+ // 14. 新增:raw 前缀合流消息=chip+参数,模板 remainder 隐藏;手打余文保留(零丢失)
   await page.evaluate((t0) => {
     const evs = window.__mature.hist().slice();
     evs.push({ kind: "message.user", time: t0 + 60000, payload: { text: "/review 检查auth\n\n审查当前仓库最近的代码变更:按 正确性/风险/测试覆盖/可维护性 四维度输出 findings(有依据,不奉承)" } });
@@ -179,9 +179,9 @@ const CONV_B = [
       keep: body2 ? body2.textContent : "",
     };
   });
-  check("step-095 raw 前缀消息=chip(/review 检查auth)", chipNew.chip.indexOf("/review") === 0 && chipNew.args === "检查auth", JSON.stringify(chipNew.chip + "|" + chipNew.args));
-  check("step-095 模板 remainder 隐藏", chipNew.tplHidden, "");
-  check("step-095 未识别命令余文保留", chipNew.chip2.indexOf("/unsung") === 0 && chipNew.keep.indexOf("手打正文第二行") >= 0, chipNew.keep);
+  check(" raw 前缀消息=chip(/review 检查auth)", chipNew.chip.indexOf("/review") === 0 && chipNew.args === "检查auth", JSON.stringify(chipNew.chip + "|" + chipNew.args));
+  check(" 模板 remainder 隐藏", chipNew.tplHidden, "");
+  check(" 未识别命令余文保留", chipNew.chip2.indexOf("/unsung") === 0 && chipNew.keep.indexOf("手打正文第二行") >= 0, chipNew.keep);
 
   check("0 pageerror", consoleErrors.length === 0, consoleErrors.join(" | "));
   const fails = results.filter((r) => !r.ok).length;

@@ -1,7 +1,7 @@
 /**
- * 分层缓存 + single-flight(designs/16 §8)。
+ * 分层缓存 + single-flight( §8)。
  * 键=层名+项目根;失效=显式 refresh 或指纹变化(一期:构建时刻戳)。
- * 二期追加:逐键最近访问跟踪 + 闲时维护(IdleCacheMaintainer,designs/16 §8 缓存治理)——
+ * 二期追加:逐键最近访问跟踪 + 闲时维护(IdleCacheMaintainer, §8 缓存治理)——
  * 消费方在空闲时机显式调 maintenance(now):空闲过期键驱逐、陈旧但最近在用的键
  * 抢先重建(single-flight;失败吞掉=诚实续供旧值,不装刷新成功)。
  */
@@ -22,8 +22,7 @@ export class LayerCache<T> {
     private readonly build: (key: string) => Promise<T>,
     private readonly ttlMs: number,
     /** 可注入时钟(闲时维护测试确定性;缺省真实时钟,既有行为不变)。 */
-    private readonly now: () => number = Date.now,
-  ) {}
+    private readonly now: () => number = Date.now) {}
 
   async get(key: string, opts: { refresh?: boolean } = {}): Promise<CacheEntry<T>> {
     const t = this.now();

@@ -1,22 +1,18 @@
 #!/usr/bin/env tsx
 /**
  * 同步权威协议 CLI(#113)。
- *
  * 用法:
  *   tsx scripts/sync-authority.mts --root <dir> [动作]
- *
  * 动作(每次调用只做一件,按下面顺序取第一个命中的):
  *   --accept <file|->      接受一条事件;文件是事件对象或 {event:{...}};`-` 从 stdin 读
  *   --migrate              归属转移,需 --aggregate / --from / --to(可选 --at)
  *   --subscribe            先订阅拿脏位再读历史,需 --aggregate(可选 --since,缺省 0)
  *   --watermark <id>       查水位
  *   --report               报表(聚合摘要 + owner + 事件总数)
- *
  * 其它参数:
  *   --root <dir>           仓库/任务根(<root>/.genie/rsi/sync.json),必填
  *   --json                 stdout 打结构化 JSON(缺省打人读摘要)
  *   --help                 打用法
- *
  * 退出码:0 成功;1 参数错误 / IO 错 / SYNC_INVALID;
  *         2 协议冲突类失败(SYNC_CONFLICT_DIE / SYNC_MIGRATE_FAILED / SYNC_PROXY_REFUSED)。
  * stdout 只放结果,stderr 放给人读的失败原因(含稳定码,便于 grep)。

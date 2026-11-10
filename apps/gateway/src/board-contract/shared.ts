@@ -1,4 +1,4 @@
-/** 变更契约校验的共享类型/常量(2026-10-25 重构:rules/ + 编排层;原 board-accept.ts 内联)。 */
+/** 变更契约校验的共享类型/常量(重构:rules/ + 编排层;原 board-accept.ts 内联)。 */
 import type { BoardDoc } from "@lampgenie/protocol";
 
 export type BoardNodeT = BoardDoc["nodes"][number];

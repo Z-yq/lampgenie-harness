@@ -1,5 +1,5 @@
 /**
- * L1 契约 eval(designs/10):用代码锁定 prompt 关键语句/工具清单,防漂移。
+ * L1 契约 eval:用代码锁定 prompt 关键语句/工具清单,防漂移。
  * 模式参照 qwen-audio-agent 契约式 eval。
  */
 import { readFileSync } from "node:fs";

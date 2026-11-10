@@ -1,5 +1,5 @@
 /**
- * code_sense 结果 → LLM 增强信息文本(designs/16 §9 分工:图给人,增强信息给 LLM)。
+ * code_sense 结果 → LLM 增强信息文本( §9 分工:图给人,增强信息给 LLM)。
  * 原则:比裸 JSON 省 token 且信号前置;诚实标注 tier/kind/降级;file:line 全保(可点回源)。
  * mermaid 源不进 LLM 文本(图面向人;LLM 消费结构化行)。
  */
@@ -61,7 +61,7 @@ export function renderForLlm(r: CodeSenseResult): string {
   }
 
   if (r.symbols && r.symbols.length > 0) {
-    // 符号优先召回(2026-10-21):LLM 消费面先看候选符号(带 file:line + 关系 + 原因),
+ // 符号优先召回:LLM 消费面先看候选符号(带 file:line + 关系 + 原因),
     // grep 行命中只作补充证据(降权)。
     out.push(`候选符号 ${r.symbols.length} 个(符号优先召回):`);
     for (const s of r.symbols.slice(0, 10)) {

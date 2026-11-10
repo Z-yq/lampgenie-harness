@@ -1,7 +1,6 @@
 /**
  * 漏点预防路由(Gap Taxonomy):把 #210 缺陷血缘给出的 missedLink 七类漏点,
  * 路由到「防复发预防件」(context / gate / tool 三形态),并指明应在哪一个交付节点之前注入。
- *
  * 为什么要单独一层:
  * - 缺陷只回答「漏了哪道防线」,不回答「下次怎么不错」。缺了中转层,修复动作会退化成
  *   「记一条 note」,同一类漏点在下一个任务里原样复发。
@@ -9,7 +8,6 @@
  *   否则默认推荐最贵的一档,没人执行 = 等于没有预防件。
  * - 注入点(pre-requirement/pre-plan/pre-write/pre-verify/pre-close)必须显式落到交付节点之前,
  *   事后补的检查只能算发现,不能算预防。
- *
  * 纯逻辑:零 IO(不读文件 / 网络 / 环境 / 真实时钟),不依赖 defect-lineage 的实现,
  * 只沿用它的 MissedLink 字面量口径(此处以 GapCategory 表达,不含 "none")。
  * 所有导出函数同步且不抛异常:非法输入返回安全空值并带稳定码(GAP_CODES)。
@@ -730,8 +728,7 @@ function isDecisionRecord(v: unknown): v is DecisionRecord {
  */
 export function applyAt(
   entries: PreventionEntry[],
-  injectionPoint: InjectionPoint,
-): { contextBlocks: string[]; gates: string[]; toolChecks: string[] } {
+  injectionPoint: InjectionPoint): { contextBlocks: string[]; gates: string[]; toolChecks: string[] } {
   const empty = { contextBlocks: [] as string[], gates: [] as string[], toolChecks: [] as string[] };
   try {
     if (!Array.isArray(entries)) return empty;
@@ -756,8 +753,7 @@ export function applyAt(
 /** 过期切分:expiresAt 有限且 <= now 视为过期;无 expiresAt 的条目恒 active。 */
 export function expireEntries(
   entries: PreventionEntry[],
-  now: number,
-): { active: PreventionEntry[]; expired: PreventionEntry[] } {
+  now: number): { active: PreventionEntry[]; expired: PreventionEntry[] } {
   const active: PreventionEntry[] = [];
   const expired: PreventionEntry[] = [];
   try {

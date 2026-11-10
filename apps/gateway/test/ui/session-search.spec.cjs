@@ -1,12 +1,12 @@
 /**
- * step-115 面板会话搜索 UI 实测(真实 chromium 无头)。
- * 跑法(不碰产线 7700):cd apps/gateway && SELF_PORT=7717 npx tsx test/ui/_ui_selfhost.cjs test/ui/session-search.spec.cjs
+ * 面板会话搜索 UI 经验证(真实 chromium 无头)。
+ * 跑法(不碰生产环境 7700):cd apps/gateway && SELF_PORT=7717 npx tsx test/ui/_ui_selfhost.cjs test/ui/session-search.spec.cjs
  * 覆盖:Ctrl+K → # 域 → 结果(标题/时间/命中数/片段高亮/自动化降权徽标)→ 点进会话 → 多尺寸截图 → pageerror=0。
  */
 process.env.GENIE_CHECKPOINT = "off";
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7717";
-const SHOT_DIR = "/mnt/e/workship/genie/lampgenie-harness/tasks/step-115-session-search";
+const SHOT_DIR = require("node:path").join(__dirname, "shots-session-search");
 
 (async () => {
   const app = globalThis.__selfhostApp;

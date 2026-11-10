@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** 新建任务(草稿态)聊天窗全量重置(2026-11-09 用户实报「新建任务时聊天窗的按钮/显示数据要重置」)。
+/** 新建任务(草稿态)聊天窗全量重置(用户用户反馈「新建任务时聊天窗的按钮/显示数据要重置」)。
  *  面板 UI 全在 panel.ts 模板字符串内,这里读源码文本断言契约(同 annotate-panel-anchors 风格)。
  *  锁四件事:
  *  ① 重置清单抽成公共函数 resetSessionDomainUI,openSession 与 newDraft 共用(防两处漂移);

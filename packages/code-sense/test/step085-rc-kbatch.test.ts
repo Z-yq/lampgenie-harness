@@ -1,5 +1,5 @@
 /**
- * step-085 RC 批修复回归测试(RC-K/L/M/N/O 的机制层锚定):
+ * RC 批修复回归测试(RC-K/L/M/N/O 的机制层锚定):
  * - RC-L:listSourceFilesDetailed 超限按语言配额公平采样(确定性、比例≈磁盘占比、不超限零变化)
  * - RC-K:parseGuardReason 压缩产物/超大守卫 + buildCallGraph 逐文件包保护(坏文件不毙全仓)
  * - RC-M:extractApiSurface 文档路径守卫(.md/docs 不提取)

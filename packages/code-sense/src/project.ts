@@ -1,5 +1,5 @@
 /**
- * 项目状态判定(designs/16 §7 五态)+ 源文件枚举。
+ * 项目状态判定( §7 五态)+ 源文件枚举。
  * 确定性:文件计数即可判定。
  */
 import { readdir } from "node:fs/promises";
@@ -9,10 +9,10 @@ export type ProjectState = "EMPTY" | "SEEDLING" | "GROWING" | "MATURE" | "LEGACY
 
 /** 架构层激活的最小文件数(SEEDLING 上限)。 */
 export const SEEDLING_MAX = 10;
-/** MATURE 阈值(GROWING 上限);一期固定,大仓标定见 designs/16 §13。 */
+/** MATURE 阈值(GROWING 上限);一期固定,大仓标定见 §13。 */
 export const MATURE_MIN = 50;
 
-/** 源文件扩展名(2026-10-22 P0:补齐 C/C++ 与其它已适配/常见语言)。
+/** 源文件扩展名( P0:补齐 C/C++ 与其它已适配/常见语言)。
  *  旧表缺 .c/.h/.cpp/.hpp 等,导致纯 C/C++ 仓 scan.files 只剩个别 .py,techStack/目录拓扑/
  *  成熟度三处同时失真(saadk_c 280 文件 → `.py×1`、`(根)×1`、SEEDLING)。 */
 const SOURCE_EXT = new Set([

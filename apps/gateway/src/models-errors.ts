@@ -1,11 +1,9 @@
 /**
- * models.list 错误分类(2026-10-25 step-1002E:自 host 模型目录错误码可操作化)。
- *
+ * models.list 错误分类(自 host 模型目录错误码可操作化)。
  * 旧行为:main.ts 的 listModels 抛 `new Error("端点未配置"/"凭证不可解析"/"模型列表失败…")`,
  * server.ts 一律回 `models-list-failed` —— 面板只能显示「模型列表拉取失败」,用户不知道是
  * 没配 Provider、缺 Key、还是上游 401。这里把失败面拆成可编程错误码(protocol ErrorCode),
  * message 保持人话+下一步动作;成功路径与旧回包完全不变。
- *
  * 分派口径:
  *   models-not-implemented  → 网关装配里没有 listModels(生产入口 main.ts 才有;测试壳)
  *   models-no-provider      → providerId 未知 / 一个 Provider 都没配

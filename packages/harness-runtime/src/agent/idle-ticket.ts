@@ -1,24 +1,20 @@
 /**
  * 闲时算力票据(纯逻辑,零 IO,2026-11 #175)。
- *
  * 为什么需要它:可延后的活(夜间 RSI、批量分析、整理归因)不该挤占交互额度,
  * 也不该因为客户端重试/重复提交被派发多次。于是把「这次闲时执行」抽象成一张票据:
  * 先把票据拿到手(ticket),再落库排期;票据状态机由本模块唯一裁决,调用方只读结论。
- *
  * 双轴:
  * - localStatus(本地/展示轴):queued → schedulable → running → done | failed。
  * - ticketStatus(外部票据轴):queued → ready(带 deadline) → active → expired。
  * 只有 ticketStatus==="ready" 才允许被调度(claim);local 轴只用于展示,不得越权
  * (见 dualAxis:local 显示 schedulable 而票据已过期时,判定仍为不可调度)。
- *
  * 关键不变量:
  * 1. 同会话只允许一个 pending 票据(queued/ready/active 且未结算)。重复提交 = PENDING_EXISTS。
  * 2. 额度不足 = QUOTA_EXHAUSTED,且**不落库**(拒绝前不产生任何副作用)。
  * 3. claim 是原子 CAS:只有 ready 且未过 deadline 才能 → active;过 deadline 的 ready 就地转 expired。
  * 4. settle:ok/4xx 终态(4xx 幂等 ack,重复 ack 不再改状态);5xx 保持 active 等重试(RETRY_PENDING)。
- * 5. reclaimStale:active 超过 maxActiveMs 未结算 → 首次回 queued,再次 → failed(收口)。
+ * 5. reclaimStale:active 超过 maxActiveMs 未结算 → 首次回 queued,再次 → failed。
  * 6. continueExpired 只能手动触发:仅 expired 且本地仍 queued 的票可续一张新票。
- *
  * 依赖纪律:零 import(不读文件/环境/网络/时间),所有导出函数不 throw;
  * 非法入参折叠成 IDLE_INVALID,状态不允许折叠成 IDLE_NOT_SCHEDULABLE / IDLE_INVALID。
  * 码表顺序固定(便于自动化按码断言)。
@@ -364,7 +360,7 @@ export interface ExpireOptions {
 }
 
 /**
- * 过期收口:ready/queued 过了 deadline → expired(本地轴回 queued,等待手动 Continue)。
+ * 过期:ready/queued 过了 deadline → expired(本地轴回 queued,等待手动 Continue)。
  * 已 expired 幂等返回 EXPIRED;其它状态 / 未到 deadline 是 IDLE_INVALID(调用时机错)。
  */
 export function expire(store: TicketStore, opts: ExpireOptions): TicketResult {
@@ -449,7 +445,7 @@ export interface ReclaimResult {
 
 /**
  * 回收僵尸票:active 且未结算、认领已超 maxActiveMs(缺省 10min)。
- * 首次回收 → 回 queued(可再派发);第二次(attempts>=1)→ failed 收口(防无限空转)。
+ * 首次回收 → 回 queued(可再派发);第二次(attempts>=1)→ failed (防无限空转)。
  */
 export function reclaimStale(store: TicketStore, opts: ReclaimOptions): ReclaimResult {
   if (store === undefined || store === null) {
@@ -518,7 +514,7 @@ export interface ContinueOptions {
 
 /**
  * 手动 Continue:仅 expired 且本地仍 queued 的票可续一张新票(补号)。
- * 失败收口(local failed)或仍在 pending 的票不许续 —— 续号必须由人触发,不能被自动重试引爆。
+ * 失败(local failed)或仍在 pending 的票不许续 —— 续号必须由人触发,不能被自动重试引爆。
  */
 export function continueExpired(store: TicketStore, opts: ContinueOptions): TicketResult {
   if (store === undefined || store === null) return invalid({ reason: "store" });

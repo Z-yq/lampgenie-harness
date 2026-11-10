@@ -1,6 +1,6 @@
-/** 白板流程图组件主题跟随探针(自起临时实例 7794,不碰产线 7700)。
+/** 白板流程图组件主题跟随探针(自起临时实例 7794,不碰生产环境 7700)。
  * 口径:主题 = body 类切换(`body.light` + `body.theme-<key>`,与面板 setTheme 落到 DOM 的结果一致),
- *   逐套实测流程图组件的**计算色**:.cv-node 底/边、.cv-head 标题、.cv-sum 摘要、.cv-foot 元信息、
+ * 逐套经验证流程图组件的**计算色**:.cv-node 底/边、.cv-head 标题、.cv-sum 摘要、.cv-foot 元信息、
  *   .cv-fold 计数块、.cv-lane 泳道框;并核对 kind 图标色(.cv-kind.cv-k-*)是功能色,跨主题恒等。
  * 判定:浅色基座(light/sand/olive/plum/ink)卡底与计数块底必须是浅底(相对亮度>0.5);
  *       深色基座(dark/glass)必须是深底(<0.25);标题对比度≥3:1,摘要/脚注≥2.5:1;kind 图标色恒等。
@@ -109,7 +109,7 @@ const MEASURE_SRC = "(() => {" +
     const rows = [];
     for (const th of THEMES) {
       // 主题落点与面板 setTheme/applySettings 一致:light 基座=body.light(+theme-<key>),dark 基座只加 theme-<key>
-      // (逐套 applySettings 实测有异步回填,量测只认 CSS 契约 → 直接按契约切类,再等色彩稳定)
+ // (逐套 applySettings 经验证有异步回填,量测只认 CSS 契约 → 直接按契约切类,再等色彩稳定)
       await page.evaluate(([k, base]) => {
         const b = document.body;
         for (const c of [...b.classList]) if (c.startsWith("theme-")) b.classList.remove(c);

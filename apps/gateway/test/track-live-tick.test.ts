@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 
-// 追踪 Trace 轮询存活守卫(2026-10-22 用户实报:「任务都完成了,但追踪 trace 看板的数据却没有」)。
+// 追踪 Trace 轮询存活守卫(用户用户反馈:「任务都完成了,但追踪 trace 看板的数据却没有」)。
 // 根因两条,都在 panel.ts 的 trackLiveTick / trackRender:
 // ①在场判定用 elv.classList.contains("on")——画布形态下视图节点恒可见且从不挂 .on
 //   (canvas-shell 用 `body.cv-shell .cv-card-body>.view{display:flex!important}` 覆盖显隐),
@@ -102,7 +102,7 @@ describe("追踪 Trace:轮询存活守卫", () => {
   });
 
   it("B2 auto-advanced:task.phase(auto:true) 的 note 渲染为「自动推进」正常态标记,不算 skip", () => {
-    // B2(2026-11-05):板含内容节点→phase 自动置 plan。消费面契约:trackRender 三级节点对
+ // B2:板含内容节点→phase 自动置 plan。消费面契约:trackRender 三级节点对
     // auto:true 显示「自动推进」徽标(正常流转),与 skipped(跳过,灰斜体)互斥;
     // 五阶段轨迹条(phStrip)对 auto 显示「自」字。此处 vm 真跑 trackRender 断言 DOM。
     const renderSrc = extractFn(src, "trackRender");

@@ -1,4 +1,4 @@
-/** step-1010 白板配色接入主题令牌(--bcv-*):源码契约。
+/** 白板配色接入主题令牌(--bcv-*):源码契约。
  *  只做源码面断言(真实渲染走 Playwright 证据):
  *   a) :root 定义 ≥20 个 --bcv-* 令牌,且默认值区不含重复第二份色值定义(令牌是唯一出口);
  *   b) 六套主题(light/sand/glass/olive/plum/ink)各自覆写 --bcv-card-bg 与 --bcv-title-fg;
@@ -22,7 +22,7 @@ function boardCss(): string {
   return src.slice(a, b);
 }
 
-/** 取某主题的 --bcv-* 覆写块正文(step-1010 覆写块以 `body.X{` + `--bcv-canvas-bg` 开头)。 */
+/** 取某主题的 --bcv-* 覆写块正文(覆写块以 `body.X{` + `--bcv-canvas-bg` 开头)。 */
 function themeBcvBlock(sel: string): string {
   const i = src.indexOf(`  ${sel}{\n    --bcv-canvas-bg:`);
   expect(i, `${sel} 缺少 --bcv-* 覆写块`).toBeGreaterThan(0);

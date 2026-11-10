@@ -1,4 +1,4 @@
-/** 编排层(2026-10-25 重构):原 board-accept.validateChangeContract 的 N:1 收敛。
+/** 编排层(重构):原 board-accept.validateChangeContract 的 N:1 收敛。
  * 分支语义逐字保留:workflow 短路、page 判定、skipDesign、boardType 缺省风险、模板豁免。 */
 import type { BoardContractIssue, BoardNodeT, EdgeLike } from "./shared.js";
 import { BOARD_RISK_TYPES, CONTRACT_SKIP_KINDS, NON_TARGET_KINDS, isTemplateNode } from "./shared.js";
@@ -24,7 +24,7 @@ export function validateChangeContract(
     const id = String(n.id);
     const label = String(n.label ?? id);
     const problems: string[] = [];
-    // 2026-10-29(用户口径「画的是计划而不是代码逻辑」):keep = 纯读现有逻辑的逻辑快照,
+ // keep = 纯读现有逻辑的逻辑快照,
     // 不改代码就没有可验收的东西,不再要求 P0 accept;modify/add/delete 仍必须有。
     if (n.phase === "P0" && String(n.change ?? "") !== "keep") {
       for (const [i, a] of (n.accept ?? []).entries()) {

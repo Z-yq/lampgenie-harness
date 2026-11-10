@@ -1,13 +1,11 @@
 /**
- * 白板 → flowkit OFK DSL 序列化(designs/22 白板族,扩「白板出图」)。
- *
+ * 白板 → flowkit OFK DSL 序列化(白板族,扩「白板出图」)。
  * 职责单一:BoardDoc → OFK 文本(纯函数,无 IO 无依赖),编译/导出在 board-diagram.ts。
  * 为什么必须清洗:OFK 解析器(openflowkit-mcp 0.2.4)对标签里的语法字符敏感——
- * 实测 `{`/`}` 会被当成 group 块开合(W106)+ 连带 `->` 行被丢(W101);行内出现裸换行
+ * 经验证 `{`/`}` 会被当成 group 块开合(W106)+ 连带 `->` 行被丢(W101);行内出现裸换行
  * 直接 W102 Unterminated quote 并丢行;边标签里的 `{` 触发 W101 Block opener。
  * 丢行=整张图缺节点,所以这里逐字符族替换 + 每个替换记 warnings(排查用,不静默)。
- *
- * 实测(CLEAN = 无诊断):`[` `]` `|` `:` `；` `<` `>` `#` `%` 双引号(含转义)反斜杠在标签里安全;
+ * 经验证(CLEAN = 无诊断):`[` `]` `|` `:` `；` `<` `>` `#` `%` 双引号(含转义)反斜杠在标签里安全;
  * 危险集 = `{` `}` 换行 边标签 `{`。任务书要求的替换集是危险集超集,超集不伤正确性,一并执行。
  */
 
@@ -26,7 +24,7 @@ const MAX_NODES = 60;
 export const DESC_MAX = 120;
 /**
  * desc 内「summary 首句」部分的预算。
- * 出图实测(17 节点真板,节点卡宽 790px):~72 字就把卡撑到边、再长就被 flowkit 硬切且无省略号。
+ * 出图经验证(17 节点真板,节点卡宽 790px):~72 字就把卡撑到边、再长就被 flowkit 硬切且无省略号。
  * 总预算 DESC_MAX 不变,summary 单独限宽是为了留足给 flow 概述与锚段——三者一起挤 120 字时
  * 最先被切掉的总是锚段/流程,而锚段是「在哪」的唯一线索。
  */
@@ -166,7 +164,7 @@ const ANCHOR_MAX_TARGETS = 2;
 const DESC_SUMMARY_MIN = 40;
 
 /**
- * 路径 → 文件基名:targets 允许 `path#symbol`(step-137),只取 `#` 前的路径;兼容 `/` 与 `\`。
+ * 路径 → 文件基名:targets 允许 `path#symbol`,只取 `#` 前的路径;兼容 `/` 与 `\`。
  * 纯字符串切分,不引 path 依赖(本模块保持无依赖纯函数)。
  */
 function fileBase(raw: string): string {
@@ -255,7 +253,7 @@ export function sanitize(raw: string, where: string, warnings: string[], opts: {
   const noted = new Set<string>();
   for (const [ch, rep, name] of singles) {
     // 结构化锚(`⟨符号 @ file.ts:60⟩`)要保留 ASCII `:` 表达行号——`:` 在标签/desc 引号内
-    // 实测是 OFK 安全字符(见文件头),保留只为可读性。
+ // 经验证是 OFK 安全字符(见文件头),保留只为可读性。
     if (ch === ":" && opts.keepColon) continue;
     if (out.includes(ch)) {
       out = out.split(ch).join(rep);
@@ -373,7 +371,7 @@ export function serializeBoard(doc: BoardDoc): OfkSerializeResult {
 
   if (loose.length) {
     // `%%` 只能出现在版本行(grammar.md §2.2:它不是注释)——写成 `  %% 未分泳道` 会被解析成
-    // 名为「%% 未分泳道」的节点(2026-11-03 活面板实测:画布上多出一个空框)。注释统一用 `//`。
+ // 名为「%% 未分泳道」的节点(活面板经验证:画布上多出一个空框)。注释统一用 `//`。
     lines.push("// 未分泳道");
     for (const n of loose) lines.push(nodeLine(n, warnings));
     lines.push("");

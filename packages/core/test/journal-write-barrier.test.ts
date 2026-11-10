@@ -1,5 +1,5 @@
 /**
- * M24 写前持久化屏障:Journal.flushStrict(fail-closed)。
+ *  写前持久化屏障:Journal.flushStrict(fail-closed)。
  * 契约:
  * ①FileJournal 的 write-behind 队列在 flushStrict 时逐 target 同步落盘,失败**抛 JournalFlushError**
  *   且队列保留原批(下次 flushStrict 成功才清队,事件不丢、不重复);

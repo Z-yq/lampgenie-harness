@@ -6,7 +6,7 @@ import { DEFAULT_POLICY_CONFIG, type PolicyConfig } from "../../src/router/polic
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("step-0145 P3 Mandate:不可变授权凭证 + revalidate", () => {
+describe(" P3 Mandate:不可变授权凭证 + revalidate", () => {
   it("explicit 派发产 mandate 挂 Ticket + 随行落 audit;版本未变 revalidate 放行", async () => {
     const tm = new TaskSupervisor();
     const router = createRouter({ taskManager: tm, journal: new MemoryJournal(), config: configOf() });

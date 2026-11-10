@@ -1,10 +1,9 @@
 /**
- * review session 落盘/续跑/比较(step-116,参照 open-code-review internal/session):
+ * review session 落盘/续跑/比较(参照 open-code-review internal/session):
  * 每次 review 落 `<root>/.genie/reviews/<id>.json`(findings+目标+时间+基线);
  * 两次会话按「发现身份键」做多集匹配,输出四态:
  *   新增(当前有、基线无、更早也没有)/ 已修复(基线有、当前无)/
  *   未变(两边都有)/ 复现(当前有、基线无,但更早会话出现过)。
- *
  * 身份键 = path | 规则位(title 规范化,行号剔除)| 内容指纹(以 anchorText 锚定
  * 当前文件 ±2 行上下文的 sha1 截断;锚定位不到时退化为锚文本自身指纹,前缀区分防碰撞):
  * 行号绝不进指纹(行号只作展示),行号漂移不敏感,
@@ -236,8 +235,7 @@ export function compareFindings(
   before: Finding[],
   after: Finding[],
   older: Finding[][] = [],
-  readFile?: (file: string) => string | null,
-): Omit<SessionCompare, "baseline" | "current"> {
+  readFile?: (file: string) => string | null): Omit<SessionCompare, "baseline" | "current"> {
   const id = (f: Finding): string => findingIdentity(f, readFile);
   // 复现判定用宽松键(file|内容指纹,不含规则位):同一问题跨会话措辞/规则名可变,
   // 内容再现即复现(D3 约定);严格键只用于 before↔after 配对(规则+内容都同才算未变)。

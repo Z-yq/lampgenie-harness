@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 const execFileP = promisify(execFile);
 const git = (args: string[], cwd: string) => execFileP("git", args, { cwd }).then((r) => r.stdout.trim());
 
-describe("team provider 绑定(designs/06 R1:providers.yaml 按 team={provider, groupPath})", () => {
+describe("team provider 绑定( R1:providers.yaml 按 team={provider, groupPath})", () => {
   it("resolveTeamSecret:$ENV:NAME 从环境解析,缺失 fail-visible 抛错", () => {
     expect(resolveTeamSecret("$ENV:MY_TOK", { MY_TOK: "abc" } as NodeJS.ProcessEnv)).toBe("abc");
     expect(resolveTeamSecret("plaintext")).toBe("plaintext");

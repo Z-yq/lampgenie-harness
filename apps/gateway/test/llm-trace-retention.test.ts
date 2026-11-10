@@ -1,6 +1,5 @@
 /**
  * llm-trace 保留策略(P1-A:pruneLlmTrace)。
- *
  * 为什么这样测:.genie/llm-trace 此前无界增长(每次 chat 一份全量 request.messages 文件,
  * O(steps²) 近重复)。清理器是旁路,它的两条硬性质必须钉死,否则要么磁盘失控、要么把
  * 「最新轨迹」删掉导致排障时看不到现场:

@@ -52,7 +52,7 @@ if (mode === "happy") {
     setTimeout(() => { send({ t: "task.state", taskId: spec.task.id, state: "done", result: "board 桩完成" }); setTimeout(() => process.exit(0), 50); }, Number(process.env.STUB_HOLD_MS ?? 150));
   }, 80);
 } else if (mode === "journalsync") {
-  // M24 写前屏障桩(2026-11-07):按序发 appendSync(带一条事件)与 flushStrict,把两次 ack 回写 journal,
+ // 写前屏障桩:按序发 appendSync(带一条事件)与 flushStrict,把两次 ack 回写 journal,
   // 供 host 侧断言「落账 + flush 都成功才 ok」与失败分支。
   const listeners = {};
   process.on("message", (m) => { if (m.t === "res" && listeners[m.id]) { listeners[m.id](m); delete listeners[m.id]; } });
@@ -75,7 +75,7 @@ if (mode === "happy") {
     setTimeout(() => process.exit(0), 50);
   }
 } else if (mode === "durable") {
-  // 终态落盘对账桩(2026-10-29):交稿落盘 terminal.json 后**不发 task.state 直接退出**——
+ // 终态落盘对账桩:交稿落盘 terminal.json 后**不发 task.state 直接退出**——
   // 模拟「gateway 拥堵导致在途 uplink 随 IPC 通道关闭丢失」;host exit 收割应回读落盘按 done 记账。
   setTimeout(() => {
     const p = joinP(spec.repoRoot, ".genie", "session-workers", `${spec.task.id}.terminal.json`);
@@ -84,7 +84,7 @@ if (mode === "happy") {
     setTimeout(() => process.exit(0), 50); // 不发 task.state=uplink 丢失
   }, 80);
 } else if (mode === "freeze") {
-  // 冻结桩(2026-10-29 冻结探针):ready+镜像条目后完全静默——模拟事件循环被同步 IO 冻死
+ // 冻结桩(冻结探针):ready+镜像条目后完全静默——模拟事件循环被同步 IO 冻死
   // (不发心跳不发任何上行;真 worker 的心跳由 session-worker.ts 30s 一跳)。
   // host 侧冻结探针应在 GENIE_SESSION_WORKER_FREEZE_MS 后收割:任务翻 failed(worker.freeze)+镜像翻 failed。
   send({ t: "subagent.mirror", entries: [{ agentId: "agent_stub_frz", outputFile: "/tmp/stub-frz.txt", status: "running", sessionId: sid, title: "冻结桩子代理", lastEventAt: Date.now() }] });

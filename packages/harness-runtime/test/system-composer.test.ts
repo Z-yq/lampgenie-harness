@@ -94,7 +94,7 @@ describe("AGENTS.md(D2)", () => {
     const root = mkdtempSync(join(tmpdir(), "gh-agentsmd-"));
     const home = mkdtempSync(join(tmpdir(), "gh-agentsmd-home-"));
     const prevHome = process.env.GENIE_HOME;
-    process.env.GENIE_HOME = home; // 隔离真实用户级文件(M144)
+    process.env.GENIE_HOME = home; // 隔离真实用户级文件
     try {
       // 根=workspace 边界(有 .git);子目录有 AGENTS.md,根也有
       mkdirSync(join(root, "apps", "gateway"), { recursive: true });
@@ -102,7 +102,7 @@ describe("AGENTS.md(D2)", () => {
       writeFileSync(join(root, "AGENTS.md"), "root-instructions", "utf-8");
       writeFileSync(join(root, "apps", "gateway", "AGENTS.md"), "gateway-instructions", "utf-8");
       const found = discoverAgentsMd(join(root, "apps", "gateway"));
-      // M144:根通用在前、子目录具体在后(冲突时后者更具体)
+ // 根通用在前、子目录具体在后(冲突时后者更具体)
       expect(found.map((f) => f.text)).toEqual(["root-instructions", "gateway-instructions"]);
       // 边界之上(tmpdir 层)不应再收集
       expect(found.every((f) => f.path.startsWith(root))).toBe(true);
@@ -138,7 +138,7 @@ describe("golden 快照(D6,dsh 形态;UPDATE_SNAPSHOTS=1 再生)", () => {
   });
 });
 
-describe("AGENTS.md 压缩(2026-10-19 用户口径:超 4000 字符压缩)", () => {
+describe("AGENTS.md 压缩(2026-10-19 超 4000 字符压缩)", () => {
   it("未超阈值原样注入", () => {
     const small = "- 纪律A\n- 纪律B\n";
     const out = composeSystemPrompt({ ...fixtureInput(), agentsMd: [{ path: "/repo/AGENTS.md", text: small }] }).text;

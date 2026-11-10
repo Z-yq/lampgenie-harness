@@ -1,7 +1,6 @@
 /**
  * 白板关系推导的「符号调用」解析器(设计板节点 n4 的接线件)。
- *
- * 性能改造(2026-10-25 perf 板):
+ * 性能改造( perf 板):
  * - 索引缓存从 60s TTL 改为 **index.json mtime+size 短路**:索引未变时连续 upsert 不再重复 parse
  *   几十 MB JSON(只 stat 一次);索引变更后下一次调用即重新加载(不误缓存)。
  * - callees 查询从「每符号 querySymbol 全边扫描」改为 **一次性 from→callees Map**:O(E) 建图,

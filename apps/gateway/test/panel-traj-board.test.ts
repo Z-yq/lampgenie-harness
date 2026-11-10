@@ -1,10 +1,8 @@
 /**
- * 轨迹看板(step-1020)契约测试 —— PAGE 源码字符串断言 + 真函数求值。
- *
+ * 轨迹看板契约测试 —— PAGE 源码字符串断言 + 真函数求值。
  * 取码 harness 照抄 panel-trajectory.test.ts / panel-ide-deep.test.ts:面板是单 HTML 模板字符串,
  * 浏览器侧函数就在源码里,从 GET / 拿真 HTML → 正则/配平截取函数源码 → new Function 求值后断言
  * 「真函数真渲染」,不是只看源码里有没有这几个字。
- *
  * 覆盖:
  *  ①骨架锚点(overlay / 两处入口 / 过滤 chip 四值 / 搜索框 / 复制按钮 / inspector)
  *  ②汇总条 10 项口径词全在场
@@ -81,8 +79,8 @@ function syntheticEvents(n: number): unknown[] {
   return out;
 }
 
-describe("轨迹看板(step-1020)①骨架锚点", () => {
-  it("独立视图(step-1535:#view-traj 内常驻,不再是全屏 overlay)/两处入口/过滤四值/搜索/复制/inspector 全在场", async () => {
+describe("轨迹看板①骨架锚点", () => {
+  it("独立视图(#view-traj 内常驻,不再是全屏 overlay)/两处入口/过滤四值/搜索/复制/inspector 全在场", async () => {
     await withPanel(7893, (html) => {
       expect(html).toContain('id="view-traj"');           // 载体:独立视图
       expect(html).toContain('id="trajBoard"');           // 视图内保留容器 id(三 host 的锚点)
@@ -91,7 +89,7 @@ describe("轨迹看板(step-1020)①骨架锚点", () => {
       expect(html).toContain('id="trajSearch"');
       expect(html).toContain('id="trajCopyPath"');
       expect(html).toContain('id="trajInsp"');
-      // 三 pane host 同屏在场(step-1535):决策卡 / 事件账本 / 泳道
+ // 三 pane host 同屏在场:决策卡 / 事件账本 / 泳道
       expect(html).toContain('id="trajCardsHost"');
       expect(html).toContain('id="trajRowsHost"');
       expect(html).toContain('id="trajLanesHost"');
@@ -104,7 +102,7 @@ describe("轨迹看板(step-1020)①骨架锚点", () => {
       for (const m of ["all", "model", "tool", "error"]) {
         expect(html).toContain('data-traj-mode="' + m + '"');
       }
-      // pane chip 三值 + 泳道模式 chip 三值(step-1535)
+ // pane chip 三值 + 泳道模式 chip 三值
       for (const p of ["decisions", "ledger", "lanes"]) {
         expect(html).toContain('data-traj-pane="' + p + '"');
       }
@@ -151,7 +149,7 @@ describe("轨迹看板(step-1020)①骨架锚点", () => {
   }, 30_000);
 });
 
-describe("轨迹看板(step-1020)②注入串可执行 + 行表渲染", () => {
+describe("轨迹看板②注入串可执行 + 行表渲染", () => {
   it("④1600 条合成事件 → capTrajRows 返回最近 1500 行且 truncated=true", async () => {
     // 直接在 node 侧求值注入串:任何 ReferenceError 都会在这里炸
     // eslint-disable-next-line no-new-func
@@ -237,7 +235,7 @@ describe("轨迹看板(step-1020)②注入串可执行 + 行表渲染", () => {
   }, 30_000);
 });
 
-describe("轨迹看板(step-1020)③PAGE 零 emoji", () => {
+describe("轨迹看板③PAGE 零 emoji", () => {
   it("整页 HTML 无彩色 emoji(白名单=单色排版符号)", async () => {
     await withPanel(7897, (html) => {
       const bad = emojiBad(html);

@@ -30,7 +30,7 @@ describe("gateway+executor 端到端(一期 DoD)", () => {
   }, 15000);
 });
 
-describe("项目级 code-sense(2026-10-12 用户口径:能力挂在项目级,WS 端到端)", () => {
+describe("项目级 code-sense(2026-10-12 能力挂在项目级,WS 端到端)", () => {
   it("sense.query 带 projectId→项目根;不带→harness 根回退", async () => {
     const projDir = mkdtempSync(join(tmpdir(), "gh-sense-proj-"));
     writeFileSync(join(projDir, "solo.ts"), "export function soloSenseProbe(): number {\n  return 42;\n}\n");

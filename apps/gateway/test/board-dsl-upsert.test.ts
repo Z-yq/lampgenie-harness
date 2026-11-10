@@ -147,7 +147,7 @@ describe("board_upsert dsl 入参", () => {
     const jsonBytes = Buffer.byteLength(JSON.stringify({ nodes: d.nodes, edges: d.edges }));
     const dslBytes = Buffer.byteLength(DSL);
     expect(dslBytes).toBeLessThan(jsonBytes);
-    // 实测比值(报数用):dsl / json
+ // 经验证比值(报数用):dsl / json
     expect(dslBytes / jsonBytes).toBeLessThan(0.75);
   });
 

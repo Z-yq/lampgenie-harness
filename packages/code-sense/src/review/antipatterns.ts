@@ -1,10 +1,9 @@
 /**
- * 反模式八类检测(用户口径 2026-10-11):另起炉灶/孤独逻辑/丢三落四/换头不换尾/
+ * 反模式八类检测:另起炉灶/孤独逻辑/丢三落四/换头不换尾/
  * 虚假测试/作弊/补丁式屎山/治标不治本。
  * 确定性层(grep/diff 文本分析,零 LLM)+ LLM 维度(进 prompt)。
  * 经验来源:本工作区 completion-auditor P-NN 模式体系的实战语言。
- *
- * step-058 加强(vibe coding 孤儿逻辑全覆盖):
+ * 加强(vibe coding 孤儿逻辑全覆盖):
  * - 修死因:execFile 无 shell,--include=*.{ts,tsx} 花括号是字面量 → 引用计数恒零,
  *   孤独逻辑全靠「全部误报」活着、另起炉灶分支永死。改为重复 --include 逐扩展名传参。
  * - 引用计数升级:排除定义文件 + 引用文件分类(测试/生产)——「只有测试接线」是
@@ -32,9 +31,9 @@ export const ANTIPATTERN_DIMENSION = `**反模式(八类,重点检查 AI 生成�
 - 治标不治本:只压症状(catch 吞掉——尤其空 catch/except pass/特判绕过)而根因路径仍可达
 命中即报,detail 引用具体证据;不确定降为 nit 并写明存疑点。`;
 
-/** grep --include 必须逐个传(execFile 无 shell,花括号是字面量——step-058 修死因)。 */
-// 2026-10-20 修复(code_review 卡死实锤):全仓 grep 未排除 node_modules/dist 等目录——从仓根扫
-// 会进 node_modules(数百万文件),单个 pattern 实测 79.5s;一次审查跑几十个 pattern/事件名 =
+/** grep --include 必须逐个传(execFile 无 shell,花括号是字面量—— 修死因)。 */
+// 修复(code_review 卡死注意):全仓 grep 未排除 node_modules/dist 等目录——从仓根扫
+// 会进 node_modules(数百万文件),单个 pattern 经验证 79.5s;一次审查跑几十个 pattern/事件名 =
 // 几十分钟不返回(父任务卡在 code_review 的直接原因)。排除后同一 pattern 1.9s(42x)。
 const GREP_EXCLUDES = [
   "--exclude-dir=node_modules", "--exclude-dir=dist", "--exclude-dir=build",
@@ -56,7 +55,7 @@ function isTestFile(path: string): boolean {
 interface AddedExport { name: string; line: number; kind: "code" | "type" }
 
 /** 新增导出提取(diff + 行;含 interface/type/enum)。精度纪律:TS 家族必须显式 export——
- *  可选 export 前缀会把 diff 里每条 const 都当导出(「导出 a 无调用方」噪音刷屏,step-058 实测)。 */
+ * 可选 export 前缀会把 diff 里每条 const 都当导出(「导出 a 无调用方」噪音刷屏, 经验证)。 */
 function addedExports(diffText: string): AddedExport[] {
   const out: AddedExport[] = [];
   const seen = new Set<string>();
@@ -89,7 +88,7 @@ function addedExports(diffText: string): AddedExport[] {
 }
 
 /**
- * 批量引用扫描(R4-C10 修正版):一次进程扫全部名字,返回 name → 引用文件集合。
+ * 批量引用扫描(修正版):一次进程扫全部名字,返回 name → 引用文件集合。
  * 修正三点(此前引用层整体失效):①--include 逐扩展名(execFile 无 shell,花括号是字面量);
  * ②**按行内容**排除定义行——同文件的其他调用是合法接线,按文件排除会把「定义+同文件使用」
  * 误判孤儿(codeIndexTool 形态);③输出带绝对路径,调用方按内容判定不受相对/绝对影响。
@@ -192,7 +191,7 @@ function addedFunctionBodies(diffText: string, cap = 40): Array<{ name: string; 
 
 /**
  * 反模式确定性检测主入口。返回 findings。
- * step-058:孤儿逻辑家族六维全覆盖(vibe coding 高发),引用计数层修活。
+ * 孤儿逻辑家族六维全覆盖(vibe coding 高发),引用计数层修活。
  */
 export async function detectAntipatterns(root: string, t: ReviewTarget): Promise<Finding[]> {
   const out: Finding[] = [];

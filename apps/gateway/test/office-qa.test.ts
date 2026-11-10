@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkOfficeArtifact, type QaFinding } from "../src/office-qa.js";
 
-/** M101 产物 QA 合约:用 jszip 现场造最小 OOXML 夹具,不依赖仓内二进制。
+/** 产物 QA 合约:用 jszip 现场造最小 OOXML 夹具,不依赖仓内二进制。
  *  覆盖:三类产物正常、坏 zip、缺必需 part、占位残留、空内容、不支持扩展、
  *  XML 解析失败、checker 内部异常不得算通过。 */
 const dir = mkdtempSync(join(tmpdir(), "office-qa-"));

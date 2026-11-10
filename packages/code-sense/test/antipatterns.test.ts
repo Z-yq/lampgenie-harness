@@ -116,7 +116,7 @@ describe("反模式八类(确定性层)", () => {
   });
 });
 
-describe("孤儿逻辑加强(step-058,vibe coding 家族)", () => {
+describe("孤儿逻辑加强(,vibe coding 家族)", () => {
   it("仅测试接线:模块只有测试引用、生产链路零调用", async () => {
     const dir = repo();
     writeFileSync(join(dir, "fresh.ts"), "export function freshThing(x: number) { return x * 2; }\n");

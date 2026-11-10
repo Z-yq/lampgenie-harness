@@ -1,5 +1,5 @@
 /**
- * ask_user 面板问答(2026-10-19 许愿式编程):主 agent 在**需求有取舍/范围可能膨胀**时
+ * ask_user 面板问答(许愿式编程):主 agent 在**需求有取舍/范围可能膨胀**时
  * 主动向用户发问并阻塞等待答复,用户拍板后再行动——「不确定就 ask,别猜」。
  * 与 WorkflowAskRouter 同构(广播问题→挂起→面板直答→resolve;超时/无面板=null)。
  * 有界:工具侧 Promise.race 兜底,离线(无面板)立即返回 null 由 agent 按最合理推断继续,
@@ -21,10 +21,9 @@ export class AskUserRouter {
 
   constructor(
     private readonly broadcast: (msg: Record<string, unknown>) => void,
-    private readonly timeoutMs = 10 * 60_000,
-  ) {}
+    private readonly timeoutMs = 10 * 60_000) {}
 
-  /** step-1033:指挥台 inbox 的 ask 数据源(挂起中的提问,旧者在前)。 */
+ /** 指挥台 inbox 的 ask 数据源(挂起中的提问,旧者在前)。 */
   pending(): { requestId: string; sessionId: string; question: string; options?: string[]; since: number }[] {
     return [...this.waiting.entries()]
       .map(([requestId, p]) => ({ requestId, sessionId: p.sessionId, question: p.question, ...(p.options?.length ? { options: p.options } : {}), since: p.since }))

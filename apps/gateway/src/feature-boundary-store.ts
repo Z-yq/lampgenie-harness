@@ -2,7 +2,6 @@
  * 语义功能影响边界 store(IO 层):把「语义功能 / UI 表面 / 代码引用 / 语义采纳」四份输入采出来,
  * 交给 runtime 纯逻辑 `buildImpactBrief` 组装成影响边界简报(BoundaryItem 五级 / drift / 未决 owner / depth3)。
  * 语义判定全在 packages/harness-runtime/src/agent/feature-boundary.ts,本文件只做 IO、形状容错与落盘。
- *
  * 设计口径:
  * - 输入容错:三个输入文件都接受「裸数组」或「包裹对象」形状(feature / surfaces / codeRefs),
  *   形状不合法不抛异常,统一 `{ ok:false, codes:[FB_INVALID, FB_STORE_*] }`。
@@ -13,7 +12,6 @@
  *   ② <root>/.genie/rsi/boundaries/<featureId>.json 里的 accepted:{by,at}。都没有则不传 acceptedSemantics。
  * - featureId 落盘前清洗(禁止 `/`、`\`、`..` 与空白):穿越直接拒绝,不写盘、不回退到别的目录。
  * - 不 throw 到调用方;不 import agent loop;不写仓库 .genie(写盘只发生在调用方给的 root 之下)。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑模块;runtime 按 store 既有两跳惰性解析:
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
  * ② 裸 tsx/dist 缺该文件时回退仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。

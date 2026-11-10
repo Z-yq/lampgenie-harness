@@ -1,10 +1,9 @@
 /**
- * step-142 IDE 深化(VSCode P0 核心编辑体验)契约测试 —— PAGE 源码字符串断言。
+ * IDE 深化(VSCode P0 核心编辑体验)契约测试 —— PAGE 源码字符串断言。
  * 覆盖:①面包屑 #ideCrumb ②命令面板(Ctrl+Shift+P,含转到文件/IDE 命令) ③查找替换(Monaco find
  * options + addCommand + 全项目 fs.grep 侧栏面板) ④IDE 域 7 条快捷键进 KEY_DEFAULTS ⑤文件树
  * oncontextmenu 分支与 fs.mkdir/fs.remove/fs.rename 发包 ⑥状态栏 Ln/Col 等分段渲染
  * ⑦IDE 域拦截守卫(dataset.view !== "ide")≥3 处。
- *
  * 风格照抄 panel-canvas-fixes.test.ts:servePanel 取真实面板 HTML,再做字符串/函数体断言
  * (零构建链,页面 JS 是单 HTML 里的内联脚本)。
  */
@@ -351,7 +350,7 @@ describe("IDE 第二批(VSCode 对齐:活动栏/SCM/Diff/问题/终端/大纲)",
     });
   }, 30_000);
 
-  it("⑩step-1024 HTML 预览:IDE_COMMANDS 含 ide.preview + 双态切换/保存刷新接线", async () => {
+  it("⑩ HTML 预览:IDE_COMMANDS 含 ide.preview + 双态切换/保存刷新接线", async () => {
     await withPanel(7912, (html) => {
       const cmds = html.slice(html.indexOf("const IDE_COMMANDS = ["), html.indexOf("];", html.indexOf("const IDE_COMMANDS = [")));
       expect(cmds, "IDE_COMMANDS 缺 ide.preview").toContain('id: "ide.preview"');
@@ -461,7 +460,7 @@ describe("IDE Markdown 预览媒体链接(图/视频/相对链接渲染)", () =>
 });
 
 /**
- * step-1524 J5:文件类型图标(树/页签取形)+ 文件/目录右键一键注入聊天窗。
+ * 文件类型图标(树/页签取形)+ 文件/目录右键一键注入聊天窗。
  * 切片口径:函数名 index → 下一个 "\nfunction " index(不依赖行号:panel.ts 行号会漂移)。
  */
 function sliceFn(src: string, name: string): string {
@@ -472,7 +471,7 @@ function sliceFn(src: string, name: string): string {
   return src.slice(i, e < 0 ? src.length : e);
 }
 
-describe("step-1524 J5 文件类型图标与右键注入聊天窗", () => {
+describe(" J5 文件类型图标与右键注入聊天窗", () => {
   it("① FILE_ICONS 顶层 ≥12 组,FILE_EXT_GROUP 覆盖 ts/py/json/md/img/data/bin/sh/git/lock/txt", async () => {
     await withPanel(7927, (html) => {
       const fi = html.indexOf("const FILE_ICONS = {");

@@ -1,4 +1,4 @@
-/** step-046 成熟面板件 UI 实测:会话标签页/思考卡/变更条/双 pill/统计图表/自动化分栏/快捷键分区。
+/** 成熟面板件 UI 经验证:会话标签页/思考卡/变更条/双 pill/统计图表/自动化分栏/快捷键分区。
  * 真实 chromium 无头;面板地址默认 7700,PANEL_BASE 可覆盖。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
@@ -21,7 +21,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   await page.waitForTimeout(900);
   check("面板加载", await page.locator("#instruction").count() === 1);
 
-  // 1. 标签条:按用户口径已废弃——断言硬隐藏(口径即验收);会话切换走侧栏任务行/新建按钮。
+ // 1. 标签条:按已废弃——断言硬隐藏(口径即验收);会话切换走侧栏任务行/新建按钮。
   await page.fill("#instruction", "mature-spec 会话验证");
   await page.click("#go");
   await page.waitForTimeout(600);
@@ -41,7 +41,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("思考卡 CSS 在位", await page.locator("style").first().textContent().then((s) => s.includes("think-card")));
   check("变更条 CSS 在位", await page.locator("style").first().textContent().then((s) => s.includes("diffbar")));
 
-  // 3. 双 pill(2026-10-14 口径对齐):pill 点击=就地下拉菜单(视频 2 改造,非循环点击)——
+ // 3. 双 pill(口径对齐):pill 点击=就地下拉菜单(视频 2 改造,非循环点击)——
   // 断言改走菜单项点击;净状态归位纪律不变(选回原档)。
   const menuPick = async (pillSel, itemText) => {
     await page.click(pillSel);
@@ -111,7 +111,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("思考卡渲染(带时长)", await page.locator(".think-card summary").first().textContent().then((t) => /思考 · 4s/.test(t)).catch(() => false));
   check("思考卡内容在(展开)", await page.locator(".think-card .th-body").first().textContent().then((t) => t.includes("先想 A")).catch(() => false));
   check("变更条渲染(1 文件 +12 -4)", await page.locator(".diffbar").first().textContent().then((t) => t.includes("1 个文件已更改") && t.includes("+12") && t.includes("-4")).catch(() => false));
-  // 撤销按钮:确认拦截(step-090:step-088 把原生 confirm 迁为 uiConfirm 页内主题模态——
+ // 撤销按钮:确认拦截(把原生 confirm 迁为 uiConfirm 页内主题模态——
   // 等模态出现→校验消息→点确定,等价原 page.once("dialog")+d.accept();sha 为合成值,不发生真回滚)
   await page.locator(".diffbar button[data-act=undo]").first().click();
   let dialogSeen = "";

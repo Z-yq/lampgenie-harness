@@ -61,7 +61,7 @@ export async function resolveContext(opts: { root?: string; noBuild?: boolean; q
     root = hit.root;
     source = hit.source;
   }
-  // step-092 fail-visible:根不存在此前静默滑向「零仓 + 全 miss」(错误伪装成查询未命中);
+ // fail-visible:根不存在此前静默滑向「零仓 + 全 miss」(错误伪装成查询未命中);
   // 显式 --root 打错路径 / 注册表根被删都值得一句人话,而不是让用户怀疑索引质量。
   if (!existsSync(root)) {
     throw new ResolveError(
@@ -88,7 +88,7 @@ export async function resolveContext(opts: { root?: string; noBuild?: boolean; q
     } else if (indexStale(r, idx)) {
       notes.push(`${basename(r)}: 索引可能过期(源码有变动),查询按现有索引回答;运行 codesense index 更新`);
     }
-    // step-141 P0-1:采样索引的判定口径诚实呈报(不静默——COUNT 比对已退化,mtime/HEAD 仍是有效信号)
+ // P0-1:采样索引的判定口径诚实呈报(不静默——COUNT 比对已退化,mtime/HEAD 仍是有效信号)
     const sNote = samplingNote(idx);
     if (sNote) notes.push(`${basename(r)}: ${sNote}`);
   }
@@ -207,11 +207,11 @@ export function queryEntrypointsCmd(ctx: QueryContext, repo?: string, limit = 15
     json: {
       query: "entrypoints",
       repos: sts.map((st) => {
-        // step-067 fail-visible:覆盖状态随 entrypoints 一并返回(零覆盖语言不再无声缺席)
+ // fail-visible:覆盖状态随 entrypoints 一并返回(零覆盖语言不再无声缺席)
         const cov = st.index.coverage ?? languageCoverageCachedSync(st.root, Object.keys(st.index.byFile));
-        // step-141 P1-1:非产品路径过滤条数随 JSON 一并给出(agent 消费面同样可见过滤口径)
+ // P1-1:非产品路径过滤条数随 JSON 一并给出(agent 消费面同样可见过滤口径)
         const meta = queryEntryPointsMeta(st.index, limit, { all });
-        // 2026-10-22 P1:进程入口(启动器/进程 main)——JSON 面与文本首节同源
+ // P1:进程入口(启动器/进程 main)——JSON 面与文本首节同源
         const proc = scanProcessEntriesSync(st.root, st.index, { all });
         return {
           repo: st.name,
@@ -227,7 +227,7 @@ export function queryEntrypointsCmd(ctx: QueryContext, repo?: string, limit = 15
   };
 }
 
-/** modules:模块视图(2026-10-22 P1)——清单+跨模块交互矩阵+枢纽/测试面;--graph 追加 mermaid。 */
+/** modules:模块视图( P1)——清单+跨模块交互矩阵+枢纽/测试面;--graph 追加 mermaid。 */
 export function queryModulesCmd(ctx: QueryContext, repo?: string, json = false, graph = false): QueryOutput {
   const sts = pickRepos(ctx, repo);
   if (sts.length === 0) return { text: "索引尚未就绪", miss: true };
@@ -247,7 +247,7 @@ export function queryModulesCmd(ctx: QueryContext, repo?: string, json = false, 
 }
 
 export function queryFileCmd(ctx: QueryContext, path: string, repo: string | undefined, json: boolean, graph: boolean): QueryOutput {
-  // step-092 形态一致(vars/tokens 同族):波浪号自展 + 绝对路径落在仓内时相对化(索引键=根相对路径)。
+ // 形态一致(vars/tokens 同族):波浪号自展 + 绝对路径落在仓内时相对化(索引键=根相对路径)。
   const abs0 = expandTilde(path.replace(/\\/g, "/"));
   const relFor = (root: string): string => {
     if (!isAbsolute(abs0)) return abs0;
@@ -293,9 +293,9 @@ export function queryGraphCmd(ctx: QueryContext, name: string, repo?: string, js
   return { text: "", miss: true, json: { query: "graph", name, error: "未找到符号" } };
 }
 
-/** api:HTTP 接口表面(step-077,确定性行扫描,不依赖索引构建;索引在场=handler 影响面增强)。
- * 收尾批 I(2026-10-21):--semantics 走 api-semantics 模块(批量 ≤12/请求+上限 40+
- * git sha+端点指纹持久缓存+无凭证显式 off),替换 step-089 P2 的 sensing 单批注入路径
+/** api:HTTP 接口表面(确定性行扫描,不依赖索引构建;索引在场=handler 影响面增强)。
+ * 收尾批 I:--semantics 走 api-semantics 模块(批量 ≤12/请求+上限 40+
+ * git sha+端点指纹持久缓存+无凭证显式 off),替换 P2 的 sensing 单批注入路径
  * (旧路径无持久缓存、缺凭证 exit 2)。--write 显式开启缓存落盘(基线仓默认只读)。 */
 export async function queryApiCmd(
   ctx: QueryContext,
@@ -353,7 +353,7 @@ export async function queryApiCmd(
   return { text: semanticBlock ? `${base}\n${semanticBlock}` : base, miss: r.endpoints.length === 0 };
 }
 
-/** state:状态机表面(step-077 P2,五形态确定性提取,不依赖索引构建)。 */
+/** state:状态机表面( P2,五形态确定性提取,不依赖索引构建)。 */
 export async function queryStateCmd(ctx: QueryContext, json = false, opts?: { all?: boolean }): Promise<QueryOutput> {
   const { queryStateMachines, renderStateMachines } = await import("@lampgenie/code-sense/sensing/index");
   const r = await queryStateMachines(ctx.root, { all: opts?.all });
@@ -361,7 +361,7 @@ export async function queryStateCmd(ctx: QueryContext, json = false, opts?: { al
   return { text: renderStateMachines(r), miss: r.machines.length === 0 };
 }
 
-/** algo:算法画像(step-077 P3,框架 API 模式识别,不依赖索引构建;file=聚焦导读)。 */
+/** algo:算法画像( P3,框架 API 模式识别,不依赖索引构建;file=聚焦导读)。 */
 export async function queryAlgoCmd(ctx: QueryContext, json = false, file?: string, opts?: { all?: boolean }): Promise<QueryOutput> {
   const { queryAlgoProfiles, renderAlgoProfiles } = await import("@lampgenie/code-sense/sensing/index");
   const r = await queryAlgoProfiles(ctx.root, { ...(file ? { file } : {}), all: opts?.all });
@@ -369,11 +369,11 @@ export async function queryAlgoCmd(ctx: QueryContext, json = false, file?: strin
   return { text: renderAlgoProfiles(r), miss: r.profiles.length === 0 };
 }
 
-/** bridge:跨语言桥边(step-103 / designs/27;HTTP api 桥原型——前端 fetch 字面量 ↔ 后端
+/** bridge:跨语言桥边( /;HTTP api 桥原型——前端 fetch 字面量 ↔ 后端
  * route 的确定性配对,每条边带双端 file:line 证据;纯行扫描链,不依赖索引)。
- * step-107:--forms 扩展 A2-A6 形态(ws=WebSocket 通道/spec=OpenAPI 对账/ipc=Electron IPC/
- * capi=Python C-API/grpc=gRPC Protobuf;缺省 http-api,与 step-103 行为恒等;all=全形态)。
- * 2026-10-25:--candidates 追加 LLM 消歧候选区(tier=semantic,带双端证据链;确定性边仍默认输出
+ * --forms 扩展 A2-A6 形态(ws=WebSocket 通道/spec=OpenAPI 对账/ipc=Electron IPC/
+ * capi=Python C-API/grpc=gRPC Protobuf;缺省 http-api,与 行为恒等;all=全形态)。
+ * --candidates 追加 LLM 消歧候选区(tier=semantic,带双端证据链;确定性边仍默认输出
  * 且不进候选区);--candidates=all 追加 1 段前缀(low)。 */
 export async function queryBridgeCmd(
   ctx: QueryContext,
@@ -433,7 +433,7 @@ export async function queryBridgeCmd(
     }
   }
   if (json) {
-    // 兼容:缺省单形态 http-api 的 JSON 形态与 step-103 恒等(顶層铺平);多形态/显式指定才进 forms 区
+ // 兼容:缺省单形态 http-api 的 JSON 形态与 恒等(顶層铺平);多形态/显式指定才进 forms 区
     if (formsRaw.length === 0 || (forms.length === 1 && forms[0] === "http-api" && !formsRaw.includes("all"))) {
       return { text: "", miss: !anyHit, json: { query: "bridge", root: ctx.root, ...(jsonOut["http-api"] as object) } };
     }
@@ -442,7 +442,7 @@ export async function queryBridgeCmd(
   return { text: sections.join("\n"), miss: !anyHit };
 }
 
-/** refs:字面量引用面(2026-10-21,确定性行扫描,索引非前置)。
+/** refs:字面量引用面(确定性行扫描,索引非前置)。
  * 删除一个「字符串标识」的动作(如 action === "graph")时 symbol/impact 全空、review --scan
  * 0 条、explore 不命中——本命令按语境(case/eq/z-literal/object-key/string/doc)列出全部
  * 引用点,覆盖产品源码+测试+文档/提示词文本;所属符号读现成静态索引,缺席=留空不猜。
@@ -462,7 +462,7 @@ export async function queryRefsCmd(
   return { text: renderLiteralRefs(r), miss: r.hits.length === 0 };
 }
 
-/** branches:分支/循环骨架(2026-10-21,tree-sitter 全树走查,索引非前置)。
+/** branches:分支/循环骨架(tree-sitter 全树走查,索引非前置)。
  * 「这个调用在什么条件下发生」:if/elif/else 条件文本 + while/do-while/for/for-of/
  * for-in/switch/case + 三元,每点带行距/嵌套深度/迭代目标/该分支直接调用的函数/
  * 所属函数。refs 的代码命中已联动挂最内层决策点标注;本命令是文件级全骨架形态。 */
@@ -470,8 +470,7 @@ export async function queryBranchesCmd(
   ctx: QueryContext,
   path: string,
   repo: string | undefined,
-  json = false,
-): Promise<QueryOutput> {
+  json = false): Promise<QueryOutput> {
   const { root, rel } = resolveTypedTarget(ctx, path, repo);
   const { scanDecisionFile, renderDecisionSkeleton } = await import("@lampgenie/code-sense/sensing/decision");
   const r = await scanDecisionFile(root, rel.replace(/\\/g, "/"));
@@ -484,7 +483,7 @@ export async function queryBranchesCmd(
   return { text: renderDecisionSkeleton(r), miss: r.points.length === 0 };
 }
 
-// ---- cfg:函数级控制流图(2026-10-27) ----
+// ---- cfg:函数级控制流图 ----
 
 export interface CfgCliOptions {
   file?: string;
@@ -508,7 +507,7 @@ interface CfgHit { root: string; file: string; name: string; line: number; score
 const CALLABLE_KINDS = new Set(["function", "method", "arrow"]);
 
 /** --depth 跨文件解析时跳过的通用/内置名:属性调用(obj.get)与导入函数(get_time)语法同形,
- *  拿不到接收者类型时宁可不展开,也不把 dict.get 连到无关的同名方法(实锚踩过)。
+ * 拿不到接收者类型时宁可不展开,也不把 dict.get 连到无关的同名方法(依据踩过)。
  *  同文件解析不受此限(同文件同名方法大概率就是目标)。 */
 const GENERIC_CALLEES = new Set([
   "get", "set", "add", "append", "extend", "update", "items", "values", "keys", "pop", "remove",
@@ -636,7 +635,7 @@ export async function queryCfgCmd(
           ? { root: cur.hit.root, file: same.file, name: same.name, line: same.line, score: 0 }
           : null;
         if (!calleeHit && !GENERIC_CALLEES.has(call)) {
-          // 同名函数可能跨语言/跨任务目录(实锚:Python 的 .get 命中 tasks 里的 JS get):
+ // 同名函数可能跨语言/跨任务目录(依据:Python 的 .get 命中 tasks 里的 JS get):
           // 先按「同仓同目录 > 同仓 > 其它仓」+「同扩展名」+「非 tests/tasks」排序,再取第一个。
           const extOf = (f: string): string => f.slice(f.lastIndexOf(".")).toLowerCase();
           const callerExt = extOf(cur.hit.file);
@@ -752,8 +751,8 @@ function resolveTypedTarget(ctx: QueryContext, file: string, repo?: string): { r
   return { root: ctx.root, rel: p };
 }
 
-/** vars/tokens 缺文件预检(step-092):deep 层对读取失败只留 `slice(0,80)` 截断理由,ENOENT 完整路径
- * 被拦腰斩断(实测呈现为「open '/home/…/bench)」半截路径,读起来像参数被截断)。这里在读文件前拦:
+/** vars/tokens 缺文件预检:deep 层对读取失败只留 `slice(0,80)` 截断理由,ENOENT 完整路径
+ * 被拦腰斩断(经验证呈现为「open '/home/…/bench)」半截路径,读起来像参数被截断)。这里在读文件前拦:
  * 给完整解析路径 + 仓内同名文件建议(有界走查,只在错误路径付费)。命中返回 miss 输出,未命中返回 null。 */
 function typedFileMissing(ctx: QueryContext, root: string, rel: string, query: "vars" | "tokens", json: boolean): QueryOutput | null {
   if (existsSync(join(root, rel))) return null;
@@ -802,7 +801,7 @@ function suggestSameNameFiles(root: string, rel: string, cap = 5): string[] {
   return hits;
 }
 
-/** vars:文件变量类型清单(step-089 P1,逐文件深提取,不依赖索引构建)。
+/** vars:文件变量类型清单( P1,逐文件深提取,不依赖索引构建)。
  * locals=true(--locals)扩入函数内注解面(param/parameter/local;F 批收尾)。 */
 export async function queryVarsCmd(ctx: QueryContext, file: string, repo: string | undefined, json: boolean, locals = false): Promise<QueryOutput> {
   const { extractTypedSymbols, renderVars } = await import("@lampgenie/code-sense/typed/index");
@@ -821,7 +820,7 @@ export async function queryVarsCmd(ctx: QueryContext, file: string, repo: string
   return { text: renderVars(r, { locals }), miss: r.symbols.length === 0 };
 }
 
-/** tokens:semantic-token JSON 流导出(step-089 P1;--json=全量流,文本面=摘要)。 */
+/** tokens:semantic-token JSON 流导出( P1;--json=全量流,文本面=摘要)。 */
 export async function queryTokensCmd(ctx: QueryContext, file: string, repo: string | undefined, json: boolean): Promise<QueryOutput> {
   const { extractTypedSymbols, toSemanticTokens, varsOf } = await import("@lampgenie/code-sense/typed/index");
   const { root, rel } = resolveTypedTarget(ctx, file, repo);
@@ -847,7 +846,7 @@ export async function queryTokensCmd(ctx: QueryContext, file: string, repo: stri
   };
 }
 
-/** project:项目底座认知(step-089 P3;骨架现算,LLM purpose 走凭证解析链+指纹缓存)。 */
+/** project:项目底座认知( P3;骨架现算,LLM purpose 走凭证解析链+指纹缓存)。 */
 export async function queryProjectCmd(
   ctx: QueryContext,
   json: boolean,
@@ -876,7 +875,7 @@ export async function queryProjectCmd(
 }
 
 /** impact:改动影响面清单(签名/双向闭包/受影响文件/关联测试;--json 给 agent 结构化面)。 */
-/** 整仓 code flow(2026-10-26):module/file/function 三层聚合 + 入口/分层/裁剪,
+/** 整仓 code flow:module/file/function 三层聚合 + 入口/分层/裁剪,
  * 与 `codesense flow` / gateway code_sense action=flow / MCP code_index_flow 同核。 */
 export interface FlowCliOptions {
   level?: FlowLevel | "auto";
@@ -1002,8 +1001,8 @@ function pickRepos(ctx: QueryContext, repo?: string): RepoState[] {
   if (!repo) return ctx.repos;
   const hit = ctx.repos.filter((s) => s.name === repo);
   if (hit.length > 0) return hit;
-  // 注册表回查(2026-10-21 E④):--repo 定向的仓不在当前根的展开集时回查 ~/.codesense/registry.json
-  // ——cd 进仓可查而 --repo 报「未知仓」的路由不一致在此收口(dispatchTool 的 repoByName 同款)。
+ // 注册表回查( E④):--repo 定向的仓不在当前根的展开集时回查 ~/.codesense/registry.json
+ // ——cd 进仓可查而 --repo 报「未知仓」的路由不一致在此(dispatchTool 的 repoByName 同款)。
   const reg = loadRegistry().roots.find((e) => e.name === repo);
   if (reg && existsSync(reg.root)) {
     const idx = loadIndex(reg.root);

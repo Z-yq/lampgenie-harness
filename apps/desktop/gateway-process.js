@@ -1,5 +1,5 @@
 /**
- * gateway 子进程托管(step-136 P0-2/P0-3/P0-4)。
+ * gateway 子进程托管( P0-2/P0-3/P0-4)。
  * 允许 require("electron") 之外的一切 node 内置;本文件不 import electron(保持可单测)。
  */
 const { spawn } = require("node:child_process");

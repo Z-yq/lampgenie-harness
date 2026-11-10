@@ -1,7 +1,6 @@
 /**
  * 源码级改进提案通道(Change Request,RSI #208):把「观察到的问题 + 复现 + 期望行为」写成
  * 可去重、可流转、可发版核对、可投进证据图的提案,而不是散在会话里的一句「这里该改」。
- *
  * 为什么需要一条独立通道:
  * - RSI 产出的改进如果没有稳定 id 与 dedupeKey,同一条缺陷会被反复「发现」并重复派工;
  *   createProposal 用 (kind|module|symbol|归一化期望行为) 的短哈希做 id,deme 去重才有依据。
@@ -11,7 +10,6 @@
  *   仍可观察的提案要退回 accepted 重新排队,而不是带着 shipped 的假完成感沉底。
  * - 提案要能被知识面消费:toGraphNode 把「还没修的问题」投成 direction,把「已发版仍是坑」投成
  *   anti-pattern,并随核对结果降置信度。
- *
  * 纯逻辑:零 IO,不读文件/网络/环境。只用 node:crypto 的 sha256(稳定 id)。
  * 时间一律 epoch ms 数字;每个写时间的函数都可注入 at(缺省 Date.now())。
  * 所有函数不抛异常——非法输入返回稳定码或安全空值。
@@ -361,8 +359,7 @@ export function createProposal(input: unknown, opts: { at?: number } = {}): { re
  */
 export function findDuplicate(
   existing: unknown,
-  candidate: unknown,
-): { match?: ChangeRequest; reason?: "dedupeKey" | "similarity"; codes: string[] } {
+  candidate: unknown): { match?: ChangeRequest; reason?: "dedupeKey" | "similarity"; codes: string[] } {
   if (!Array.isArray(existing) || !isChangeRequest(candidate)) return { codes: [CHANGE_REQ_INVALID] };
   const pool = existing.filter((item): item is ChangeRequest => isChangeRequest(item) && item.id !== candidate.id);
   for (const item of pool) {

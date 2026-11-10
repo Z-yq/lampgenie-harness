@@ -1,5 +1,5 @@
 /**
- * 取消信号链+waterfall 四拦截点专项(step-008 二期收口,designs/14 §1.2/§1.4)。
+ * 取消信号链+waterfall 四拦截点专项(二期, §1.2/§1.4)。
  * 锚定:cancel 贯通 LLM/工具、ABORTED_BEFORE_DISPATCH 配对、四个拦截点的显式 next() 契约。
  */
 import { describe, it, expect } from "vitest";
@@ -78,7 +78,7 @@ describe("AgentLoop 取消信号链", () => {
   });
 });
 
-describe("AgentLoop waterfall 四拦截点(designs/14 §1.2)", () => {
+describe("AgentLoop waterfall 四拦截点( §1.2)", () => {
   it("preStep:next(改写) 生效;不 next 即拦截本轮", async () => {
     const journal = new MemoryJournal();
     const llm: LlmProvider = { async chat(msgs: Message[]) { return { content: `收到:${(msgs.find((m) => m.role === "user") as { content: string }).content}` }; } };

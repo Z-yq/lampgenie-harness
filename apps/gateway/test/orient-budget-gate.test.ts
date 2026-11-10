@@ -1,10 +1,10 @@
 /**
- * 扫描根预算闸(2026-10-21 7700 两次挂死根因修复;2026-10-23 起守护面=code_sense 工具语义面
- * +warmIndex,开工 orient 注入链已按用户口径删除):
+ * 扫描根预算闸( 7700 两次挂死根因修复; 起守护面=code_sense 工具语义面
+ * +warmIndex,开工 orient 注入链已按删除):
  * - rootScanVerdict:有界 walk 估算文件数/体积,超阈值(缺省 5000 文件/800MB,env 可调)→ 拒绝;
  *   fail-safe:阈值收紧即拒,memo TTL 内复用旧判定;
  * - code_sense 工具:超预算根返回显式拒绝+收窄指引,不进扫描。
- * 实锤背景:工作区根 /mnt/e/workship/genie(9p 巨型非 git 根)被当 taskRoot 时,主进程内
+ * 注意背景:巨型 9p 非 git 工作区根被当 taskRoot 时,主进程内
  * codeSense(plan) 全量扫描把 libuv 线程池 D 态占死,网关 HTTP 全停(当日两次挂死)。
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
@@ -91,7 +91,7 @@ describe("code_sense 工具闸", () => {
     process.env.GENIE_SENSE_ORIENT_MAX_FILES = "2";
     const tool = codeSenseTool(d);
     const out = String(await tool.execute({ query: "项目结构" }));
-    // 2026-10-30 契约升级:拒绝文本从「超出主进程扫描预算」升级为工作区感知版
+ // 契约升级:拒绝文本从「超出主进程扫描预算」升级为工作区感知版
     // (单一巨仓=CLI 显式构建指引;工作区根=子仓收窄三条出路)。拒绝必须带路。
     expect(out).toContain("已拒绝对该根自动语义扫描");
     expect(out).toContain("codesense index"); // 单一巨仓出路:人类显式 CLI
@@ -134,10 +134,10 @@ describe("工作区子仓识别(2026-11-08)", () => {
 
   it("非 git 工作区:package.json 子目录仍按子仓发现(旧行为保留)", async () => {
     const d = mk();
-    mkdirSync(join(d, "genie-voice"), { recursive: true });
-    writeFileSync(join(d, "genie-voice", "package.json"), "{}");
+    mkdirSync(join(d, "demo-service"), { recursive: true });
+    writeFileSync(join(d, "demo-service", "package.json"), "{}");
     process.env.GENIE_SENSE_REPOS_TTL_MS = "0";
     const repos = await detectWorkspaceRepos(d);
-    expect(repos.map((r) => r.name)).toContain("genie-voice");
+    expect(repos.map((r) => r.name)).toContain("demo-service");
   });
 });

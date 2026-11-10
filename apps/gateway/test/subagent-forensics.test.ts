@@ -1,11 +1,10 @@
 /**
- * 子代理能力取证脚本(step-061 交付一/三):真实起子代理跑一遍——脚本化 LLM 驱动
+ * 子代理能力取证脚本(交付一/三):真实起子代理跑一遍——脚本化 LLM 驱动
  * 真 LlmLoopBackend+AgentLoop+权限闸门,逐工具探针,工具结果/权限闸门事件经后端
- * onLoopEvent 通道取证(与产线 subagent.event 同源)=「真实运行日志显示可调/被拒」。
- *
+ * onLoopEvent 通道取证(与生产环境 subagent.event 同源)=「真实运行日志显示可调/被拒」。
  * 常态=纯冒烟(不写文件,断言只锚定「探针链路活着」);设 GENIE_FORENSICS_OUT=<目录>
  * (或 GENIE_FORENSICS=1)时跑全角色矩阵并把报告(JSON+MD)落盘——
- * 证据进 tasks/step-061-subagent-capability/evidence/。
+ * 证据进。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
@@ -49,7 +48,7 @@ function argsOf(dir: string, name: string): Record<string, unknown> {
   }
 }
 
-/** 单探针真实子代理:脚本化 LLM 先发该工具调用再收口;取证=chat 收到的工具面+tool.result/permission.gate 事件。 */
+/** 单探针真实子代理:脚本化 LLM 先发该工具调用再;取证=chat 收到的工具面+tool.result/permission.gate 事件。 */
 async function probeOne(opts: {
   role: string;
   dir: string;
@@ -130,7 +129,7 @@ const fakeMcp = (name: string): { name: string; execute: (a: unknown) => Promise
   execute: async () => "mcp-ok",
 });
 
-describe("子代理能力取证(step-061)", () => {
+describe("子代理能力取证", () => {
   it("探针链路冒烟(worker 可调 read_file、explore 不下发 write_file)", async () => {
     const d = mkdtempSync(join(tmpdir(), "s61smoke-"));
     writeFileSync(join(d, "sample.txt"), "sample line\n");
@@ -159,9 +158,9 @@ describe("子代理能力取证(step-061)", () => {
       const m = await probeRole({ role, profiles });
       matrix[role] = { declared: prof?.tools ?? [], offered: m.offered, rows: m.rows };
     }
-    // 权限档(worker)。产线布线形态:permRules 在场时 wiring 恒挂 makeSubagentPermissionAsker
+ // 权限档(worker)。生产环境布线形态:permRules 在场时 wiring 恒挂 makeSubagentPermissionAsker
     // (agent-wiring),故除显式审批案例外统一挂 ask=async()=>false(无面板时应答=fail-closed),
-    // 读类工具走 asker 链而非 loop 内部 ask-default——与产线一致。
+ // 读类工具走 asker 链而非 loop 内部 ask-default——与生产环境一致。
     const permMatrix: Record<string, ProbeRow[]> = {};
     const failClosed = async () => false;
     const permCases: { label: string; rules?: PermissionRule[]; ask?: (t: string, s: string) => Promise<boolean> }[] = [
@@ -187,7 +186,7 @@ describe("子代理能力取证(step-061)", () => {
       mkdirSync(OUT_DIR, { recursive: true });
       const report = { generatedAt: new Date().toISOString(), probeTools: PROBE_TOOLS, matrix, permMatrix };
       writeFileSync(join(OUT_DIR, "capability-matrix.json"), JSON.stringify(report, null, 2), "utf-8");
-      const lines = ["# 子代理能力矩阵(真实运行取证,step-061)", "", "生成:" + report.generatedAt + ";每个格子=一次真实子代理 spawn(脚本化 LLM 发起该工具调用),取证自 chat 工具面与 tool.result/permission.gate 事件。", ""];
+      const lines = ["# 子代理能力矩阵(真实运行取证)", "", "生成:" + report.generatedAt + ";每个格子=一次真实子代理 spawn(脚本化 LLM 发起该工具调用),取证自 chat 工具面与 tool.result/permission.gate 事件。", ""];
       for (const [role, m] of Object.entries(matrix)) {
         lines.push(`## ${role}(profile.tools 声明=[${Array.isArray(m.declared) ? (m.declared as string[]).join(",") : ""}])`, "", "实际下发工具面:" + m.offered.sort().join(", "), "", "| 探针工具 | 判定 | 明细 |", "|---|---|---|");
         for (const row of m.rows) lines.push(`| ${row.tool} | ${row.verdict} | ${row.detail} |`);

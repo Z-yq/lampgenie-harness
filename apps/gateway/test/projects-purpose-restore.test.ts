@@ -1,4 +1,4 @@
-// 「显式添加 harness 根后每次刷新项目消失」回归(2026-10-27):
+// 「显式添加 harness 根后每次刷新项目消失」回归:
 // add() 置 purpose=project 落盘 → 重建注册表(load)必须保留 purpose,而非回退 conversation。
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";

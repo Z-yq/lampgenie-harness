@@ -1,10 +1,10 @@
 /**
- * step-086 worker 生命周期测试(实测取证,全真实进程):
+ * worker 生命周期测试(经验证取证,全真实进程):
  * ①正常构建:fork worker(src .ts,tsx loader)→ exit 0 → index.json 落盘+worker.pid 自清;
  * ②杀父自退:中间父进程 fork worker 后被 kill -9 → worker ≤6s 自退(exit 3),宽限期取证;
  * ③起停泄漏计数:3 轮「起 worker→杀父→等自退」后,本夹具根的 sense-index-worker 进程数=0;
  * ④孤儿清扫 sweep:stale 锁删除/死 pid worker.pid 删除/活 worker(父活)不动手。
- * 夹具=3 文件小仓(worker 基线内存 ~300MB,秒级建完);不碰产线 7700。
+ * 夹具=3 文件小仓(worker 基线内存 ~300MB,秒级建完);不碰生产环境 7700。
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
@@ -71,7 +71,7 @@ async function waitFor(pred: () => boolean, timeoutMs: number, stepMs = 200): Pr
   }
 }
 
-describe("step-086 worker 生命周期", () => {
+describe(" worker 生命周期", () => {
   it("①正常构建:exit 0,index.json 在,worker.pid 自清", { timeout: 120_000 }, async () => {
     const root = mkroot("ok");
     const w = forkWorker(root);
@@ -114,7 +114,7 @@ describe("step-086 worker 生命周期", () => {
     const elapsed = Date.now() - t0;
     expect(gone).toBe(true);
     // 宽限期口径:disconnect(fork IPC)+2s 看门狗双通道;worker 在 ts-morph 同步解析块中事件循环
-    // 不让出,检测在让出后生效——实测 5.1-6.3s(块尾对齐),断言取 10s 上限。
+ // 不让出,检测在让出后生效——经验证 5.1-6.3s(块尾对齐),断言取 10s 上限。
     expect(elapsed).toBeLessThanOrEqual(10_000);
   });
 

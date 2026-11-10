@@ -1,4 +1,4 @@
-/** planner 板型提示词(2026-10-26 分阶段技能化):
+/** planner 板型提示词(分阶段技能化):
  * 系统提示只留调度器+通用硬规则+板型索引;13 类画法在 board-skills.ts 的 collect/draw/audit,
  * 由 planner 判定 boardType 后经 skill_view(category="board") 按需加载。
  * 防止后续把全部类型规则又塞回 planner 系统提示/board_upsert 描述。 */
@@ -43,7 +43,7 @@ describe("planner 板型技能调度", () => {
     expect(PLANNER_BOARD_SPEC).toContain("keep 节点免 accept");
     expect(PLANNER_BOARD_SPEC).toContain("本轮会动的节点");
     expect(PLANNER_BOARD_SPEC).toContain("仓库里不存在的待办");
-    // 2026-11-04「白板看得懂」:板首主题节点(全板型强制)
+ // 「白板看得懂」:板首主题节点(全板型强制)
     expect(PLANNER_BOARD_SPEC).toContain("板首必须有主题节点");
     expect(PLANNER_BOARD_SPEC).toContain("id 用 theme 开头或 group=主题");
     expect(PLANNER_BOARD_SPEC).toContain("本次开发内容改的是其中哪一环");

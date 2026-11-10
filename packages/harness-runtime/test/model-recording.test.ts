@@ -1,5 +1,5 @@
 /**
- * 模型名 t0 快照(2026-11-03):
+ * 模型名 t0 快照:
  * provider.modelName 是 getter,每次读返回**当前**值(openai-provider.ts:424,update() 热切换在 :435-447)。
  * 旧实现只在 chat() 返回**之后**才读 provider → 调用途中发生热切换(cfg.set llm.model / per-session
  * override 触发 update())时,记下的是「切换后的新模型」,不是本次请求实际用的模型 → journal 假数据。

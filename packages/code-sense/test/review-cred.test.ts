@@ -10,7 +10,7 @@ function onew(): string {
 /** 每形态正例:尾部由 [A-Za-z0-9] 伪随机拼成,不含任何真实 key 前缀内容。 */
 const TAIL = "abcdefgh1234567890KLMNOPQ";
 const POSITIVE: { name: string; text: string; expectForm: string }[] = [
-  // 实测 MISS 的三个样例(2026-10-20 缺陷现场)
+ // 经验证 MISS 的三个样例(2026-10-20 缺陷现场)
   { name: "sk-proj-*(实测 MISS 样例)", text: "sk" + onew() + "proj" + onew() + TAIL, expectForm: "sk-" },
   { name: "sk-live-*(实测 MISS 样例)", text: "sk" + onew() + "live" + onew() + TAIL, expectForm: "sk-" },
   { name: "sk-ant-api03-*(Anthropic)", text: "sk" + onew() + "ant" + onew() + "api03" + onew() + TAIL, expectForm: "sk-" },

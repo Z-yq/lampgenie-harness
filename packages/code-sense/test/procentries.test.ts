@@ -1,6 +1,6 @@
 /**
- * 进程入口扫描(2026-10-22 P1):五语言形态面 + 路径过滤 + 索引缺席降级 + spawn 边联动。
- * 实锚:agent_alpha webrtc_multiprocess_server.py(main@94 → run_master)在扇出榜 top-300 之外。
+ * 进程入口扫描( P1):五语言形态面 + 路径过滤 + 索引缺席降级 + spawn 边联动。
+ * 依据:agent_alpha webrtc_multiprocess_server.py(main@94 → run_master)在扇出榜 top-300 之外。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";

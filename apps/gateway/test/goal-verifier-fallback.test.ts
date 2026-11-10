@@ -1,5 +1,5 @@
 /**
- * 2026-11-07 goal 校验器失败不再静默停摆(专项)。
+ * goal 校验器失败不再静默停摆(专项)。
  * 锚定:
  * ① goal 存在且非 busy → 落 custom goal.tick;无 goal / busy → 不落;
  * ② 校验器首败(超时/抛错/非 JSON)→ 重试一次(45s/最近 16 条),每次尝试落 goal.verifier;

@@ -1,5 +1,5 @@
 /**
- * sensing/crosslang-bridge 测试(step-103 / designs/27):
+ * sensing/crosslang-bridge 测试( /):
  * ① 端到端 fixture(flask 后端 + ts 前端):exact / exact-folded / first2 候选 /
  *    无配对端点 / 未用字面量 五形态;
  * ② 每条正式边双端证据行齐备(防幻觉红线);
@@ -199,7 +199,7 @@ describe("matchBridgeEdges 纯函数:置信度规则", () => {
     expect(matchBridgeEdges([], []).stats.endpoints).toBe(0);
   });
 
-  it("可信度闸:纯通配互吸不出边(grafana 实锤形态),关闸仅对账可用", () => {
+  it("可信度闸:纯通配互吸不出边(grafana 实测确认形态),关闸仅对账可用", () => {
     const eps: ApiEndpoint[] = [
       { method: "GET", path: "/login/:name", file: "api.go", line: 86, framework: "chi", kind: "http" },
     ];
@@ -214,9 +214,9 @@ describe("matchBridgeEdges 纯函数:置信度规则", () => {
   });
 });
 
-// ============================ 非产品路径过滤(P1-1,2026-10-20) ============================
+// ============================ 非产品路径过滤(P1-1 ============================
 
-describe("queryBridgeEdges 非产品路径过滤(mocks/docs 下的前端字面量不作证据)", () => {  // poly-grafana 实锤形态:public/test/mocks/** 的 fetch 字面量被当作前端证据
+describe("queryBridgeEdges 非产品路径过滤(mocks/docs 下的前端字面量不作证据)", () => {  // poly-grafana 实测确认形态:public/test/mocks/** 的 fetch 字面量被当作前端证据
   // 专属后端:含一个只有 mocks/docs 才会去 fetch 的端点 /api/secret
   const FILTER_BACKEND = `from flask import Flask
 
@@ -290,7 +290,7 @@ def secret():
   });
 });
 
-// ============================ LLM 消歧候选区(2026-10-25) ============================
+// ============================ LLM 消歧候选区 ============================
 
 describe("LLM 消歧候选区:与确定性边分离 + 双端证据链", () => {
   it("缺省输出不含 semanticCandidates(既有消费面逐字节兼容)", async () => {
@@ -385,7 +385,7 @@ describe("LLM 消歧候选区:与确定性边分离 + 双端证据链", () => {
     const degraded = matchBridgeCandidates(
       [{ method: "GET", path: "/api/x/y", file: "b.go", line: 1, framework: "chi", kind: "http", prefixInferred: true }],
       [{ raw: "/api/x", file: "w.ts", line: 1, folded: false }],
-    );
+);
     expect(degraded.candidates[0]!.confidence).toBe("low");
     expect(degraded.candidates[0]!.evidence.join("\n")).toContain("prefixInferred");
   });

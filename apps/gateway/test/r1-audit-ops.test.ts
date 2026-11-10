@@ -1,5 +1,5 @@
 // 审计轮操作级探针(取证后删):R1 五项「已接线」声称的真行为验证
-// orient 关闭(2026-10-13):无符号任务首查会触发 plan 画像/索引构建(秒级~百秒),
+// orient 关闭:无符号任务首查会触发 plan 画像/索引构建(秒级~百秒),
 // 本文件的取消链用例在 orient 完成前提交 cancel 会只改状态不 abort(loop 未注册)——
 // 被测对象是取消链不是 orient,测试环境与产品开关隔离。
 process.env.GENIE_SENSE_ORIENT = "off";
@@ -94,7 +94,7 @@ it("E. 新视图服务面:/ 页含 team/nodes/approvals/board 视图与 goalPill
   const p2 = servePanel(7907, () => {});
   await new Promise((r) => setTimeout(r, 300));
   const html = await (await fetch("http://127.0.0.1:7907/")).text();
-  // step-131:总线路一级视图并入代码档案「总路线」tab——断言从 view-pipeline 换成 tab + 承载库位
+ // 总线路一级视图并入代码档案「总路线」tab——断言从 view-pipeline 换成 tab + 承载库位
   for (const marker of ['id="view-team"', 'id="view-nodes"', 'id="view-approvals"', 'id="view-board"', 'id="goalPill"', "builtinGoal", "builtinTeam", 'data-ptab="roadmap"', 'id="rmBody"', 'id="rmFunnel"']) {
     expect(html.includes(marker), "缺 " + marker).toBe(true);
   }

@@ -1,4 +1,4 @@
-/** step-1033 E2E:Super Agent 指挥台八场景(临时端口 + createGatewayApp 进程内装配;不动 7700)。
+/** E2E:Super Agent 指挥台八场景(临时端口 + createGatewayApp 进程内装配;不动 7700)。
  * 运行:cd apps/gateway && node --import tsx test/ui/super-console-e2e.mjs
  * 产出:evidence/e2e-summary.json + 截图 evidence/e2e-panel.png
  */
@@ -17,7 +17,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const EVID = join(HERE, "../../../../tasks/step-1033-superagent-chain/evidence");
+const EVID = join(HERE, "../../../../tasks/-superagent-chain/evidence");
 mkdirSync(EVID, { recursive: true });
 const results = [];
 function rec(id, name, ok, detail) {

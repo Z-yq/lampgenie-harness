@@ -28,7 +28,7 @@ export async function runDoctor(rootArg?: string): Promise<{ checks: DoctorCheck
   add("node", major >= 20 ? "ok" : "fail", `node ${process.versions.node}(要求 >= 20)`);
   add("platform", "ok", `${process.platform}/${process.arch}`);
 
-  // step-089 P2:LLM 档位检查(直连/中继/无;凭证只出脱敏形态,永不打原文)
+ // P2:LLM 档位检查(直连/中继/无;凭证只出脱敏形态,永不打原文)
   try {
     const r = resolveLlmConfig();
     if (!r) {
@@ -49,7 +49,7 @@ export async function runDoctor(rootArg?: string): Promise<{ checks: DoctorCheck
     add("ts-morph", "fail", `加载失败: ${String(e).slice(0, 120)}`);
   }
 
-  // 2026-10-25:Rust/C#/Ruby/PHP 接入结构 adapter → doctor 的 wasm 语法档检查同步覆盖
+ // Rust/C#/Ruby/PHP 接入结构 adapter → doctor 的 wasm 语法档检查同步覆盖
   for (const lang of ["python", "go", "java", "c", "cpp", "rust", "csharp", "ruby", "php"] as const) {
     const parser = await loadTsParser(lang);
     add(
@@ -74,7 +74,7 @@ export async function runDoctor(rootArg?: string): Promise<{ checks: DoctorCheck
       add("index", "warn", "索引不存在——运行 codesense index 或 init");
     } else {
       const stale = indexStale(root, idx);
-      // 抽取器版本一致性(2026-10-21 验收缺口 1):builtAt/源码 mtime 只证明「此时构建过」,
+ // 抽取器版本一致性(验收缺口 1):builtAt/源码 mtime 只证明「此时构建过」,
       // 不证明「产物由当前抽取器产出」——旧版索引会系统性缺报(纯类型文件 0 条/新 kind 缺席),
       // 必须在 doctor 显式告警,否则增量复用会把它保持成假绿。
       const versionSkew = idx.extractorVersion !== INDEX_EXTRACTOR_VERSION;
@@ -85,9 +85,9 @@ export async function runDoctor(rootArg?: string): Promise<{ checks: DoctorCheck
         + (stale ? "(可能过期:源码有变动,建议 codesense index)" : "")
         + (versionNote ? `;${versionNote}` : "");
       add("index", stale || versionSkew ? "warn" : "ok", detail);
-      // 语言覆盖核对(step-067 fail-visible):「索引有符号文件数 vs 磁盘源文件数」按扩展名。
-      // 根治 step-065 实测假绿:C 仓索引 1/~1846 文件 doctor 仍全 [ok]——零覆盖/低覆盖显式 WARN。
-      // step-079:manifest 带分层 coverage(full/lexical/empty/skipped+coveragePct)时优先用
+ // 语言覆盖核对( fail-visible):「索引有符号文件数 vs 磁盘源文件数」按扩展名。
+ // 根治 经验证假绿:C 仓索引 1/~1846 文件 doctor 仍全 [ok]——零覆盖/低覆盖显式 WARN。
+ // manifest 带分层 coverage(full/lexical/empty/skipped+coveragePct)时优先用
       // manifest(与索引同源),无 manifest(旧格式)才现场重算(legacy 口径,显式降级)。
       try {
         const cov = idx.coverage ?? (await languageCoverageCached(root, Object.keys(idx.byFile)));
@@ -113,7 +113,7 @@ export async function runDoctor(rootArg?: string): Promise<{ checks: DoctorCheck
       }
     }
     add("sidecar", existsSync(sidecarPath(root)) ? "ok" : "warn", sidecarPath(root) + (existsSync(sidecarPath(root)) ? "(增量复用指纹在)" : "(无——下次 index 走全量并生成)"));
-    // 堆预算自适应检查(step-086 RC-K2):按仓规模估内存,分级 ok/warn/risk + 建议堆帽;
+ // 堆预算自适应检查( RC-K2):按仓规模估内存,分级 ok/warn/risk + 建议堆帽;
     // 估算失败如实 warn 不假绿(不拦 doctor 其它检查)。
     try {
       const est = await estimateIndexMemory(root);

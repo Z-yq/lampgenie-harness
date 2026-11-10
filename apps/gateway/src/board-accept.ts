@@ -1,25 +1,23 @@
 /**
- * 代码级落目标(step-137):把白板节点从「描述」升级为「可执行验收契约」的判定层(纯函数,零 IO)。
- *
- * 背景实锤:桌面 exe 任务里白板节点「首启引导」在板上、step.md 的 DoD 也写了「无 API Key 首启有引导」,
+ * 代码级落目标:把白板节点从「描述」升级为「可执行验收契约」的判定层(纯函数,零 IO)。
+ * 背景注意:桌面 exe 任务里白板节点「首启引导」在板上、step.md 的 DoD 也写了「无 API Key 首启有引导」,
  * 但既没实现也没人核对,最终交付了 llm=off/echo 的应用被用户吐槽「根本不干活」。根因三条:
  * ① 白板节点无验收绑定(写了 DoD 就没人对);② 完工无证据门(宣称完成零成本);
  * ③ 子代理零报告时父 agent 无证据可用。
  * 本模块划定三件事:落板校验(P0 必须带 accept)、覆盖率核对(有证据才算过)、用户旅程冒烟模板。
- *
  * 语义约定(写清契约,后续人/agent 按此判定):
  * - phase=P0 的节点 = 必做落目标;accept 非空且每条 cmd 非空才允许落板。
  * - 节点「有证据」(covered)= 其 accept 里至少一条 cmd 有对应 evidence。
  * - 节点「通过」(passed)= 其 accept 里**每条** cmd 都有 ok=true 的 evidence。
- * - 覆盖率 = passed / P0 节点总数(收口门:100% 才允许宣称完成;covered 率单独展示便于区分「跑过但失败」)。
+ * - 覆盖率 = passed / P0 节点总数(门:100% 才允许宣称完成;covered 率单独展示便于区分「跑过但失败」)。
  */
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import type { BoardDoc, BoardEvidence } from "@lampgenie/protocol";
 import type { BoardContractIssue, BoardNodeT, EdgeLike } from "./board-contract/shared.js";
 
-/** 兼容窗口(2026-10-25 重构):校验实现已迁到 board-contract/;
- * 此文件保留原导出路径,3 个消费方(agent-wiring 动态 import、落板、收口)零改动。 */
+/** 兼容窗口(重构):校验实现已迁到 board-contract/;
+ * 此文件保留原导出路径,3 个消费方(agent-wiring 动态 import、落板零改动。 */
 export { validateChangeContract, validateBoardTypeConformance } from "./board-contract/index.js";
 export type { BoardContractIssue, BoardNodeT } from "./board-contract/shared.js";
 
@@ -28,8 +26,7 @@ export type { BoardContractIssue, BoardNodeT } from "./board-contract/shared.js"
 export function validateCallEdges(
   nodes: BoardNodeT[],
   edges: EdgeLike[] | undefined,
-  calleesOf?: (symbol: string) => string[] | null,
-): BoardContractIssue[] {
+  calleesOf?: (symbol: string) => string[] | null): BoardContractIssue[] {
   if (!edges || !calleesOf) return [];
   const byId = new Map(nodes.map((n) => [String(n.id), n]));
   const issues: BoardContractIssue[] = [];
@@ -83,9 +80,9 @@ export interface P0NodeStatus {
   passedCount: number;
   covered: boolean;
   passed: boolean;
-  /** 还没有 ok=true 证据的 cmd 原文(收口报告直接点名)。 */
+ /** 还没有 ok=true 证据的 cmd 原文(报告直接点名)。 */
   missing: string[];
-  /** 证据过期明细(M107):证据落账后目标文件被改动/消失,该 evidence 不算覆盖、不算通过。 */
+ /** 证据过期明细:证据落账后目标文件被改动/消失,该 evidence 不算覆盖、不算通过。 */
   stale: P0StaleEvidence[];
 }
 
@@ -96,7 +93,7 @@ export interface P0StaleEvidence {
   reason: "changed" | "missing";
 }
 
-/** 证据指纹校验(M107,2026-11-06):落账后目标文件被改动/消失 → 该 evidence 过期。
+/** 证据指纹校验:落账后目标文件被改动/消失 → 该 evidence 过期。
  * 只在读时计算,不回写板(不篡改历史证据);无 files 的旧 evidence 永远不算过期(逐字兼容)。
  * 说明:不缓存 sha256——缓存会让「内容变但 mtime/size 被还原」漏判成通过,而这正是本机制要防的
  * 假通过;单次读 ≤12 个小文件(捕获时已限 512KB/文件),成本可忽略。 */
@@ -134,7 +131,7 @@ export function staleFilesOfEvidence(ev: BoardEvidence): P0StaleEvidence[] {
   return out;
 }
 
-/** board_read / audit 摘要共用的一段过期证据提示(M107):空串=无过期。
+/** board_read / audit 摘要共用的一段过期证据提示:空串=无过期。
  * 入参直接吃 computeP0Coverage 的结果(防重复 stat/sha256)。audit 文本已接线;
  * board_read 摘要渲染在 agent-wiring 的 renderBoardText,该文件本轮被另一任务占用(文件面禁改),
  * 其接线列为残留。 */
@@ -153,11 +150,11 @@ export interface P0Coverage {
   /** passed/total,0~1(total=0 时记 1,无 P0 落目标视为无门要过)。 */
   rate: number;
   nodes: P0NodeStatus[];
-  /** 过期证据汇总(M107;节点级明细见 nodes[].stale):数量+前 5 条由调用方渲染。 */
+ /** 过期证据汇总(节点级明细见 nodes[].stale):数量+前 5 条由调用方渲染。 */
   stale: Array<P0StaleEvidence & { nodeId: string }>;
 }
 
-/** action=audit format=json 的结构化结果(2026-10-25):execute 仍返回字符串,JSON 是字符串内容,
+/** action=audit format=json 的结构化结果:execute 仍返回字符串,JSON 是字符串内容,
  * 协议/工具返回类型零变更;CLI/WS/面板可 JSON.parse 后按 grand/writers/boards 消费。 */
 export interface BoardAuditJsonResult {
   ok: boolean;
@@ -174,7 +171,7 @@ export interface BoardAuditJsonResult {
     scale?: string;
     coverage: P0Coverage;
     contractIssues: string[];
-    /** 板型一致性门(2026-10-25):与通用契约自检分开,便于按类型消费/统计。 */
+ /** 板型一致性门:与通用契约自检分开,便于按类型消费/统计。 */
     typeIssues: string[];
     symbolIssues: string[];
   }>;
@@ -186,7 +183,7 @@ export interface BoardAuditJsonResult {
   reason?: string;
 }
 
-/** 收口核对:逐 P0 节点算证据/通过状态与总覆盖率。 */
+/** 核对:逐 P0 节点算证据/通过状态与总覆盖率。 */
 export function computeP0Coverage(doc: Pick<BoardDoc, "nodes">): P0Coverage {
   const nodes: P0NodeStatus[] = [];
   for (const n of doc.nodes) {
@@ -201,7 +198,7 @@ export function computeP0Coverage(doc: Pick<BoardDoc, "nodes">): P0Coverage {
     let passedCount = 0;
     for (const a of accepts) {
       const hits = evidence.filter((e) => e.cmd === a.cmd);
-      // M107:过期证据不算覆盖、不算通过(无 files 的旧证据 staleFiles 恒空 = 行为逐字不变)。
+ // 过期证据不算覆盖、不算通过(无 files 的旧证据 staleFiles 恒空 = 行为逐字不变)。
       const live: BoardEvidence[] = [];
       for (const e of hits) {
         const bad = staleFilesOfEvidence(e);
@@ -240,7 +237,7 @@ function acceptedCovered(acceptCount: number, evidencedCount: number): boolean {
   return acceptCount > 0 && evidencedCount > 0;
 }
 
-/** 收口核对文本(agent 面回执 / 每 N 步再锚定提醒共用同一措辞,防两处漂移)。 */
+/** 核对文本(agent 面回执 / 每 N 步再锚定提醒共用同一措辞,防两处漂移)。 */
 export function renderP0Status(doc: Pick<BoardDoc, "title" | "status" | "nodes">, opts: { maxMissing?: number } = {}): string {
   const cov = computeP0Coverage(doc);
   if (cov.total === 0) {
@@ -291,7 +288,7 @@ export const SMOKE_TEMPLATE = {
     { cmd: "启动产品(桌面 exe/服务)并确认主界面可用", expect: "主窗口/首页可用,无崩溃与控制台致命错误", type: "manual" as const, note: "启动冒烟" },
     { cmd: "按用户旅程配置(至少覆盖首启引导与必要设置项)", expect: "首启无配置时出现引导;配置写入后重启仍生效", type: "manual" as const, note: "配置冒烟" },
     { cmd: "在配置后执行一次真实任务(要求模型/主链路真实产出)", expect: "产出非占位内容(真实模型输出/真实业务结果)", type: "manual" as const, note: "执行冒烟" },
-    { cmd: "负面断言:真实任务链路中不得出现 echo 回显或 llm=off 占位执行", expect: "日志/界面/回执中不出现 echo 回显、llm=off、placeholder 执行器标识", type: "negative" as const, note: "负面断言(step-137 事故直指项)" },
+    { cmd: "负面断言:真实任务链路中不得出现 echo 回显或 llm=off 占位执行", expect: "日志/界面/回执中不出现 echo 回显、llm=off、placeholder 执行器标识", type: "negative" as const, note: "负面断言(事故直指项)" },
   ],
 };
 

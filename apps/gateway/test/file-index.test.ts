@@ -1,5 +1,5 @@
 /**
- * step-056 修复轮:fileIndex 同步 walk 时间预算。
+ * fileIndex 同步 walk 时间预算。
  * 9p/网络盘上全仓 walk 曾分钟级卡死事件循环(连接预热+首查同路径);
  * 预算尽=部分结果+短 TTL,后续调用继续长全——同步 API 与语义不变。
  */
@@ -26,7 +26,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("fileIndex 时间预算(step-056)", () => {
+describe("fileIndex 时间预算", () => {
   it("预算尽=部分结果且被标记;小预算结果 ⊆ 全量", () => {
     const partial = fileIndex(dir, 0); // 预算 0:立刻截断
     const full = (() => { fileIndexReset(); return fileIndex(dir, 60_000); })();

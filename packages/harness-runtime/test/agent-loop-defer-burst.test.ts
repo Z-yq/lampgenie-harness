@@ -3,7 +3,7 @@
  * 契约:①零激活时广告面与改前逐字一致(不广告任何 deferred);
  * ②任一 deferred 工具被激活后,**所有** deferred 工具一次性进广告面,后续每一步的广告面
  *   JSON 逐字节相同(否则 tool_view 每激活一个就改一次 tools schema,提示缓存整块失效——
- *   实测单次 196k uncached);③tool_view 参数不可解析(坏 JSON)不算激活,不得误触发 burst。
+ * 经验证单次 196k uncached);③tool_view 参数不可解析(坏 JSON)不算激活,不得误触发 burst。
  */
 import { describe, it, expect } from "vitest";
 import { AgentLoop } from "../src/agent/loop";

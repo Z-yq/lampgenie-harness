@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 /**
- * safe-restart-gateway.cjs(2026-10-25 step-1002B)
- *
+ * safe-restart-gateway.cjs
  * 目的:重启 7700 前先问网关「现在有没有活跃任务(running/queued/blocked)」,
  * **0 活跃才停旧进程并拉起新进程**;有活跃任务就打印清单并非零退出(不静默杀),
  * 需要强制时显式 `--force`。
- *
  * 流程:
  *   1. WS 连 ws://127.0.0.1:<port>,发 task.list 取任务快照(5s 超时);
  *      连不上(ECONNREFUSED)=网关本来就不在 → 直接走启动;
@@ -15,21 +13,18 @@
  *   4. SIGTERM → 等待退出(killTimeoutMs;--force 超时补 SIGKILL)→ 回收陈旧 gateway.lock。
  *   5. setsid 起 node dist/gateway.mjs(日志 .genie/logs/gateway.log.<ts>),等 HTTP 200 后
  *      写 .genie/gateway.pid,再等 **WS hello 就绪探针**(--ws-ready-ms,缺省 300000)。
- *
- * WS 就绪探针(2026-11-09 实测补):HTTP 200 只代表端口先就绪,网关仍在装配(journal 分片
- * 加载实测 704741 行 ≈148s;同日 9p 缓存冷启动 722495 行/314832ms ≈5 分钟),WS upgrade
+ * WS 就绪探针(经验证补):HTTP 200 只代表端口先就绪,网关仍在装配(journal 分片
+ * 加载经验证 704741 行 ≈148s;同日 9p 缓存冷启动 722495 行/314832ms ≈5 分钟),WS upgrade
  * 处理器要等装配完成才挂;此时连 WS 会被回 200
  * (`Unexpected server response: 200`)。所以 HTTP 200 之后必须连 WS 等到一帧才算真就绪;
  * 老协议网关没有 hello 时,收到任意合法 JSON 帧(hello/error/…)即视为可交互。
  * 超时只报未就绪并退 5,**绝不杀进程**(可能只是慢)。
- *
  * 用法:
  *   node scripts/safe-restart-gateway.cjs [--port 7700] [--force] [--dry-run]
  *        [--pid <旧pid>] [--root <仓根>] [--timeout-ms 5000] [--wait-ms 180000]
  *        [--ws-ready-ms 300000] [--kill-timeout-ms 12000]
  * 退出码:0 成功/无事可做;1 参数错误;2 有活跃任务拒绝;3 状态未知拒绝;4 旧进程停不下来;
  *         5 新进程未就绪(HTTP 未 200,或 HTTP 200 但 WS 到超时仍未就绪)。
- *
  * 设计约束:脚本本身不做业务决策(活跃判定复用协议 state 终态集);不依赖 build/重启 7700;
  * 所有「杀/起」动作只在 main() 里发生,纯函数导出便于单测(require 本文件不会执行)。
  */
@@ -45,7 +40,7 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 /** 任务终态(与 protocol TaskState 对齐):其余 queued/running/blocked 都算活跃。 */
 const TERMINAL_STATES = new Set(["done", "failed", "cancelled", "interrupted"]);
 /**
- * interrupted = 进程已死 / 恢复待定,不是正在执行(2026-11-08 实锤:21 条历史 interrupted
+ * interrupted = 进程已死 / 恢复待定,不是正在执行(注意:21 条历史 interrupted
  * 让 0 running 的机器永久挡门)。所以它计入终态、不阻断重启,只单列打印计数与 ≤5 条明细。
  */
 const INTERRUPTED_STATE = "interrupted";
@@ -340,7 +335,7 @@ function probeWsHello({ port, timeoutMs, WebSocketImpl }) {
 
 /**
  * WS 就绪等待:反复尝试直到 wsReadyMs;每 attemptTimeoutMs 判一次「连上但无帧」。
- * 网关 HTTP 200 后仍在装配(journal 加载实测 ≈148s),upgrade 会被回 200 —— 这属未就绪,重试。
+ * 网关 HTTP 200 后仍在装配(journal 加载经验证 ≈148s),upgrade 会被回 200 —— 这属未就绪,重试。
  */
 async function waitWsReady({ port, wsReadyMs, WebSocketImpl, log, retryMs = 500, attemptTimeoutMs = 5000 }) {
   const t0 = Date.now();
@@ -489,8 +484,8 @@ async function waitHttpReady({ port, waitMs, log }) {
 }
 
 /** OOM 堆取证参数(纯函数,便于单测;与 gateway-watchdog.sh 同参,**必须两处一致**):
- *  - --max-old-space-size=6144:巨型会话投影把缺省 2GB 堆打穿成 OOM 崩溃循环的实锤
- *    (2026-11-03),缺此参数的任何启动路径都是崩溃循环的复活口。
+ * - --max-old-space-size=6144:巨型会话投影把缺省 2GB 堆打穿成 OOM 崩溃循环的注意
+ *,缺此参数的任何启动路径都是崩溃循环的复活口。
  *  - --report-on-fatalerror + --diagnostic-dir=<root>/.genie/heap-reports:OOM/致命错误时在
  *    诊断目录留下报告(堆快照/摘要),否则崩溃只剩 exit code,拿不到堆证据。
  * 顺序固定(测试断言 + 人工排障可读性)。 */
@@ -639,7 +634,7 @@ async function main(argv) {
     console.error(`[safe-restart] 新进程未就绪(pid=${started.pid},http=${ready.code || "000"});日志:${started.logPath}`);
     return EXIT.startFailed;
   }
-  // HTTP 200 只代表端口先就绪:网关还在装配(journal 分片加载实测 ≈148s),WS upgrade
+ // HTTP 200 只代表端口先就绪:网关还在装配(journal 分片加载经验证 ≈148s),WS upgrade
   // 处理器装配完才挂。pid 文件先写(进程已真实存在),再等 WS 帧确认可交互。
   const wrote = writePidFile(root, started.pid);
   log(`HTTP 200(等待 ${ready.waitedMs}ms)→ 等 WS hello 就绪(最多 ${opts.wsReadyMs}ms)`);

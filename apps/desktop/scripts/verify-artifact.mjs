@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包产物验收门(pkg-s3):校验 win-unpacked/resources/gateway 五件套 + staged node_modules 链。
+ * 打包产物验收门:校验 win-unpacked/resources/gateway 五件套 + staged node_modules 链。
  * 用法:
  *   node scripts/verify-artifact.mjs [--dir dist/win-unpacked] [--proto]
  * --proto 只做 gateway.mjs 与 session-worker.mjs 的 SESSION_WORKER_PROTOCOL_VERSION 同批一致性。

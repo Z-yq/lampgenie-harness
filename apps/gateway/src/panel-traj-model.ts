@@ -1,6 +1,5 @@
 /**
  * 会话轨迹纯函数建模层(panel 轨迹卡的数据面;零 DOM / 零 IO,可直接单测)。
- *
  * 事件形状(核准来源):
  *  - `{ seq, kind, time, sessionId, payload }` —— panel.ts:5604 `let histEvents = []`,
  *    增量入口 session.history.result(panel.ts:12665-12700)与 journal 落盘形状一致
@@ -21,12 +20,11 @@
  *      context.prune → { reason, compacted, savedTokens, growthSpurt, items[] }  loop.ts:1407
  *      context.model.score → { step, mode, durationMs, decisions[], ... }  loop.ts:1088
  *      task.trajectory → { step, turn, steps, tools{}, tokensSpent, errors, phase?, subgoal? }  loop.ts:1155
- *
  * 口径(写死在这里,别在消费端再猜):
  *  - calls:工具调用行数(kind==="tool");tools:去重后的工具名数。
  *  - token:只从 llm.trace.payload.usage 求和。message.agent.payload.usage 与 llm.trace 同源
  *    (同一次调用的两处落账),两边都取会双计 → 只认 llm.trace。
- *  - cacheHitRate = inputTokens > 0 ? cachedTokens / inputTokens : 0(0~1,step-048 口径 =
+ * - cacheHitRate = inputTokens > 0 ? cachedTokens / inputTokens : 0(0~1, 口径 =
  *    trace-stats.ts:122 注释「命中率=cached/input」)。
  *  - prunes:真实剪枝事件是 context.prune(loop.ts:1404-1418,只在 microcompact 真折叠时落),
  *    条目数 = Σ payload.items.length(无 items 时按 1 计)。整段没有 context.prune 时回落到
@@ -53,7 +51,7 @@ export type TrajRow = {
   toolName?: string;
   toolCallId?: string;
   error?: string;
-  /** llm.trace 专有(step-1026):全文文件指针 + 步号 + 首字耗时 + 工具名(干条直接用,零额外请求)。 */
+ /** llm.trace 专有:全文文件指针 + 步号 + 首字耗时 + 工具名(干条直接用,零额外请求)。 */
   traceFile?: string;
   stepNo?: number;
   ttftMs?: number;
@@ -184,7 +182,7 @@ export function buildTrajRows(events: unknown): TrajRow[] {
       base.summary = bits.join(" · ");
       const dur = numOf(p.durationMs) ?? numOf(p.ms); // 成功路径 durationMs,失败态 durable 事件用 ms(loop.ts:1598)
       if (dur !== undefined) base.durationMs = dur;
-      // step-1026:全文指针/步号/首字/工具名(干条直接用,不用取文件)
+ // 全文指针/步号/首字/工具名(干条直接用,不用取文件)
       const tf = strOf(p.file);
       if (tf) base.traceFile = tf;
       if (step !== undefined) base.stepNo = step;
@@ -384,8 +382,7 @@ export function summarizeTraj(rows: TrajRow[], turns: TrajTurn[]): TrajSummary {
 export function filterTrajRows(
   rows: TrajRow[],
   mode: "all" | "model" | "tool" | "error",
-  query?: string,
-): TrajRow[] {
+  query?: string): TrajRow[] {
   const src = Array.isArray(rows) ? rows : [];
   const q = String(query ?? "").trim().toLowerCase();
   return src.filter((r) => {
@@ -425,7 +422,7 @@ export function fmtDuration(ms: number): string {
   return m + "m" + String(s).padStart(2, "0") + "s";
 }
 
-// ===================== 逐次决策:公共前缀切分(step-1026) =====================
+// ===================== 逐次决策:公共前缀切分 =====================
 /** 单条消息的逐字比较键:role + content + toolCalls + toolCallId(对象一律 JSON 化)。 */
 function msgKeyOf(m: unknown): string {
   const o = obj(m);
@@ -475,16 +472,14 @@ export function splitCachedInput(prevMsgs: unknown, curMsgs: unknown): CachedSpl
   return { hitCount, hitTokens, miss: cur.slice(hitCount), total: cur.length };
 }
 
-// ===================== 浏览器侧注入串(step-1020 轨迹看板) =====================
+// ===================== 浏览器侧注入串(轨迹看板) =====================
 /**
  * 为什么是「源码串」而不是 import:PAGE(panel.ts:35)是模板字符串,内联脚本无法 import TS 模块;
  * 本仓既有做法就是注入源码(见 panel.ts:29 ERROR_TEXT_JS,error-text.ts 同款)。
- *
  * 为什么包一层 IIFE:注入串与 PAGE 落地在同一脚本作用域。内部辅助(obj/numOf/strOf/firstLine/
  * errText/sortEvents/rowKindOf)名字过于通用,平铺会与页面既有标识符撞车(SyntaxError 整页白屏);
  * 故私有辅助关在 IIFE 内,只把 7 个公开函数 + TRAJ_ROW_CAP 取到页面作用域——这 8 个名字在
  * panel.ts 里零占用(已核:rg 计数全 0)。
- *
  * 约束(改这里的人必读):参与拼接的函数体内**不得**引用模块级其它符号。新增依赖必须同步
  * 加进 TRAJ_INJECTED_FNS,否则浏览器侧 ReferenceError(单测 panel-traj-board.test.ts 会抓)。
  */

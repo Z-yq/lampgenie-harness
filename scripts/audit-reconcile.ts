@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * 审计覆盖对账(designs/10 §6「覆盖面核对」,step-015 D4):
+ * 审计覆盖对账( §6「覆盖面核对」, D4):
  * live 动作清单 vs 代码产生点 grep 对账——每个 live 动作必须有 ≥1 个真实产生点,
  * pending 清单显式登记(有表但不假装有产生点)。退出码=对账结果。
  */
@@ -11,7 +11,7 @@ const ROOT = join(import.meta.dirname, "..");
 const SRC_DIRS = ["packages", "apps"];
 
 /** 与 security/audit-log.ts 的 live/pending 清单同源(双处声明=对账对象;不一致即红)。
- * resource.push(step-069 同步):产生点=team-relay.ts doTeamaiPush(技能推送审计)。 */
+ * resource.push(同步):产生点=team-relay.ts doTeamaiPush(技能推送审计)。 */
 const LIVE = ["config.change", "member.invite", "resource.push", "roster.merge", "eval.gate-override"];
 const PENDING = ["permission.approve", "credential.rotate", "member.revoke", "build.push-direct", "im.pull-history", "node.remove", "role.change"];
 

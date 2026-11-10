@@ -1,4 +1,4 @@
-/** UI 实测:白板「看得懂」四件(2026-11-05 用户口径「看不明白是不是和当前代码有关系」)。
+/** UI 经验证:白板「看得懂」四件。
  * 断言(三张真实板,数据在 .genie/boards/<sid>/ 下,只读不删):
  *   ① 锚 chip 可见:节点卡出现 .cv-file-foot 内的文件 chip(.cv-file-name)或符号 chip(.cv-sym-name),
  *      且 chip 的 title 带全路径(不是只有 basename);
@@ -6,7 +6,7 @@
  *   ③ 板头统计:板头含「代码锚 K/N」,K/N 与带 targets/symbolRef 的节点数一致;
  *   ④ 主题带:另建一块带 theme 节点的临时板,断言 .cv-theme-band 出现且不遮挡节点卡;
  *   ⑤ 多板默认选主板:临时 session 里放 2 台板(3 节点 / 9 节点),默认渲染 9 节点那块。
- * 跑法:cd apps/gateway && npx tsx test/ui/boardanchors.spec.cjs(自起临时端口,不碰产线 7700)
+ * 跑法:cd apps/gateway && npx tsx test/ui/boardanchors.spec.cjs(自起临时端口,不碰生产环境 7700)
  * 无 chrome/无 playwright-core 时整文件 skip 并打印 skipped: <reason>(退出码 0,不谎报通过)。 */
 process.env.GENIE_CHECKPOINT = "off";
 const fs = require("node:fs");
@@ -118,7 +118,7 @@ const BIG_NODES = Array.from({ length: 9 }, (_, i) => node({
   try {
     // ---------- ① 三张真实板:锚 chip / 层带 / 板头统计 ----------
     // 两种渲染模式都验:cards(DOM 卡,锚走 .cv-file-foot chip)/ svg(flowkit 出图,默认;
-    // 锚走 OFK desc,断言 svg 文本里出现文件基名与符号名——2026-11-05 实测这才是用户默认看到的那条路)
+ // 锚走 OFK desc,断言 svg 文本里出现文件基名与符号名—— 经验证这才是用户默认看到的那条路)
     for (const r of REAL) {
       const dir = path.join(HARNESS_ROOT, ".genie", "boards", r.sid);
       if (!fs.existsSync(dir)) { check(r.name + " 板目录存在", false, dir + " 不存在"); continue; }
@@ -146,7 +146,7 @@ const BIG_NODES = Array.from({ length: 9 }, (_, i) => node({
       check(r.name + ":板头统计「现状/变更/代码锚」", !!stats, stats ? stats.raw : "未找到");
       const layers = await c.page.evaluate(() => [...document.querySelectorAll("#boardGraph .cv-laychip")].map((e) => e.textContent.trim()).slice(0, 6));
       check(r.name + ":层分组 chip 存在", layers.length >= 2, layers.join(" | ") || "无");
-      // 顶部浮层不互相遮挡(2026-11-05 截图实测过:层 chip 曾压在板型头上)
+ // 顶部浮层不互相遮挡(截图经验证过:层 chip 曾压在板型头上)
       const overlap = await c.page.evaluate(() => {
         const sels = [".cv-type-head", ".cv-theme-band", "#cvWbar", "#cvLbar"];
         const rects = sels.map((s) => { const el = document.querySelector("#boardGraph " + s); return el && el.offsetHeight ? { s, r: el.getBoundingClientRect() } : null; }).filter(Boolean);
@@ -178,7 +178,7 @@ const BIG_NODES = Array.from({ length: 9 }, (_, i) => node({
         return h ? (h.textContent || "") : "";
       });
       // 严格断言:结构化锚必须以 ⟨符号 @ 文件:行⟩ / ⟨文件, 文件⟩ 形态出现在出图文本里
-      // (2026-11-05:OFK desc 由 board-ofk.ts anchorText() 生成;summary 里偶然出现的 .ts 不算数)
+ // (OFK desc 由 board-ofk.ts anchorText 生成;summary 里偶然出现的 .ts 不算数)
       const svgAnchors = (svgText.match(/⟨[^⟩]+⟩/g) || []);
       check(r.name + ":svg 默认视图出图非空", svgText.length > 200, "textLen=" + svgText.length);
       check(r.name + ":svg 默认视图节点数", (await s.page.locator("#boardGraph [data-node-id]").count()) >= 3, "");

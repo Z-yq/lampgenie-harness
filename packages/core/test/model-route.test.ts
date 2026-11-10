@@ -1,5 +1,5 @@
 /**
- * 模型选择 → Provider 路由(2026-10-20 Provider Registry 语义)。
+ * 模型选择 → Provider 路由( Provider Registry 语义)。
  * 核心断言:选择是 (providerId, model) 对;模型在谁家目录里,端点/协议/凭证就必须用谁家的;
  * 绝不允许「模型来自 A 家、baseUrl/key 还是 B 家」的半切换。
  */

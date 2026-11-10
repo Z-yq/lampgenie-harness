@@ -1,5 +1,5 @@
 /**
- * 流式中继(step-050,ZCode 流式消息展示):loop onStream → 按会话聚合节流 → WS stream 消息。
+ * 流式中继(ZCode 流式消息展示):loop onStream → 按会话聚合节流 → WS stream 消息。
  * llm-delta 高频(逐 token)合批 80ms 窗;控制事件(llm-begin/end、tool-*)立即冲刷待发增量后直发,保序。
  * 旁路通道:不落 journal,终态(message.agent/tool.result)仍走既有持久链路。
  */

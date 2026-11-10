@@ -1,14 +1,12 @@
 /**
- * 同根索引单飞锁(step-086):同一索引根的并发索引请求合并为单飞。
- *
- * 事故基线(2026-10-16):3 个孤儿 sense-index-worker 并发重复索引同一仓根,各 ~1.3GB——
+ * 同根索引单飞锁:同一索引根的并发索引请求合并为单飞。
+ * 事故基线:3 个孤儿 sense-index-worker 并发重复索引同一仓根,各 ~1.3GB——
  * gateway 进程内有 building Map 去重,跨进程(多 gateway 实例/CLI 并存)零防护。
- *
  * 设计:
  *  - 锁文件 = <root>/.genie/sense-index/<sha1(root)12>/build.lock(c2f.indexDir 同目录),
  *    payload = { pid, holder, host, root, startedAt, owner(uuid) }。
  *  - 原子创建:硬链优先(wx 回退;drvfs 上 link 可能不可用)。性质与 harness-runtime locks/file-lock
- *    (teamai 契约移植件)同源,本实现自包含(code-sense-cli 零 lampgenie-harness 运行时依赖红线)
+ * (teamai 契约组件)同源,本实现自包含(code-sense-cli 零 lampgenie-harness 运行时依赖红线)
  *    并特化:pid+starttime 双校验(防 pid 复用假活)、活 worker 礼让、等待-复用语义。
  *  - 持锁者崩溃 → pid 消失 → 下一个申请者 stale 接管(哨兵串行化,只一个赢家)。
  *  - worker.pid 文件:worker 启动自登记(build-lock 只读),接管前礼让活 worker 自退
@@ -22,7 +20,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync, closeSync, openSync, li
 import { dirname } from "node:path";
 import { indexDir } from "@lampgenie/code-sense/callgraph/c2f";
 
-/** 锁持有者形态(2026-10-29 补 session-worker:sense-index-manager 在任务 worker 进程内也实例化,
+/** 锁持有者形态(补 session-worker:sense-index-manager 在任务 worker 进程内也实例化,
  *  等待方排障需要如实区分——此前硬编码 "gateway" 让「pid 是 worker」的锁信息自相矛盾)。 */
 export type LockHolder = "gateway" | "cli" | "session-worker";
 

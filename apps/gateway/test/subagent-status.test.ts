@@ -1,13 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// B(2026-10-14)子代理过程卡服务端面:session.status 带 subagentList(后台注册表按会话过滤+output.txt tail);
+// B子代理过程卡服务端面:session.status 带 subagentList(后台注册表按会话过滤+output.txt tail);
 // journal 的 subagent.spawn/subagent.result 带 agentId(面板卡关联键)。纯增量,不触权限语义。
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import WebSocket from "ws";
 import { createGatewayApp } from "../src/app.js";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("subagent-status"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -75,7 +75,7 @@ describe("子代理过程卡服务端面(B)", () => {
     expect(entry.status, "后台子代理应已终态").toBe("completed");
     expect(entry.tail, "tail 应含进度行").toContain("[progress] 扫描中第一批");
     expect(entry.tail, "tail 应含结果行").toContain("[result ok=true]");
-    // step-060 子代理目录:注册表带模型名(测试用自造 provider 无 modelName 字段=诚实回落「主模型」)
+ // 子代理目录:注册表带模型名(测试用自造 provider 无 modelName 字段=诚实回落「主模型」)
     expect(entry.model, "model 应回落主模型文案").toBe("主模型");
     // journal 事件关联键
     const all = (app as unknown as { journal: { readAll(): { kind: string; sessionId?: string; payload: Record<string, unknown> }[] } }).journal.readAll();

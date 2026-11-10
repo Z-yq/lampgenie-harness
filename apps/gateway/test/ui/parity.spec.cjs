@@ -1,4 +1,4 @@
-/** UI 实测:step-037 功能对齐批(真实 gateway+echo executor+chromium 无头)。 */
+/** UI 经验证: 功能对齐批(真实 gateway+echo executor+chromium 无头)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

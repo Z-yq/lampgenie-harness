@@ -16,7 +16,7 @@ function fakeLlm(script: Array<{ content: string; toolCalls?: { id: string; name
 }
 
 describe("llm-loop backend(完整角色机制)", () => {
-  it("worker 角色工具集=只读四件+write_file/edit_file/run_cmd;explore=只读(step-061:读面补 glob)", async () => {
+  it("worker 角色工具集=只读四件+write_file/edit_file/run_cmd;explore=只读(读面补 glob)", async () => {
     const roots = [tmpdir()];
     expect(llmLoopReadOnlyTools(roots).map((t) => t.name)).toEqual(["read_file", "glob", "list_dir", "grep"]);
   });
@@ -118,7 +118,7 @@ describe("llm-loop backend(完整角色机制)", () => {
     expect(out.startsWith("错误:")).toBe(true);
   });
 
-  // step-064 回归门禁:白名单声明与工具池零交集=装配错配,必须 fail-visible,
+ // 回归门禁:白名单声明与工具池零交集=装配错配,必须 fail-visible,
   // 不允许静默启动无 tools 的纯文本子 loop(provider 对空 tools 不带 tools 字段)。
   it("白名单错配 fail-visible:声明 tokens 与工具池零交集→spawn 即抛错,不产 result 事件", async () => {
     const dir = mkdtempSync(join(tmpdir(), "llmlb-wl-"));
@@ -148,7 +148,7 @@ describe("llm-loop backend(完整角色机制)", () => {
     expect(sawTools).not.toContain("write_file");
   }, 15_000);
 
-  // step-064 回归(承 step-062 遗留①「终止后端中断语义」):handle.cancel 必须**立即**打断
+ // 回归(承 遗留①「终止后端中断语义」):handle.cancel 必须**立即**打断
   // in-flight LLM 调用并落终态(result ok=false),不得等 deadline 兜底。fake LLM 按 fetch 同款
   // 语义响应 abort signal(reject on abort)=真实 fetch 中断行为的可测替身。
   it("cancel 即时中断:in-flight LLM 调用被 abort 打断,2s 内落 cancelled 终态", async () => {
@@ -252,7 +252,7 @@ it("planner 角色专属板规范注入;非 planner 不注入(2026-10-26 分阶�
   expect(pl).toContain("planner 板规范");
   expect(pl).toContain("控制流程图");
   expect(pl).toContain("交板自检");
-  // 2026-10-26 用户口径:13 类画法拆到 board-skills 的 collect/draw/audit;
+ // 13 类画法拆到 board-skills 的 collect/draw/audit;
   // 系统提示只保留调度器+通用硬规则+板型索引,不再把所有类型规则一次性塞进来。
   for (const m of [
     "先判型,再按需加载", 'skill_view(category="board"', "<boardType>/collect", "<boardType>/audit",

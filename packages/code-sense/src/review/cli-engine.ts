@@ -1,14 +1,14 @@
 /**
- * ocr(open-code-review)CLI 子进程评审引擎(designs/16 二期)。
+ * ocr(open-code-review)CLI 子进程评审引擎(二期)。
  * 真实协议(v1.12.13 源码 internal/model/review.go LlmComment + cmd/opencodereview/output.go
- * jsonOutput,并经真二进制实跑实证——首版 NDJSON 假设是错的,对真输出会零命中):
+ * jsonOutput,并经真二进制实跑验证——首版 NDJSON 假设是错的,对真输出会零命中):
  *   ocr review --format json --audience agent [--commit <sha>|--from <base>]
  *   → stdout = 单一 JSON 信封 {status, llm, message, summary, tool_calls,
  *     comments:[{path, content, existing_code?, start_line, end_line, thinking?, category?, severity?}]};
  *   进度/trace 全在 stderr,JSON 独占 stdout。
  * 映射:severity critical→blocker / high|medium→warning / low→nit(白名单外诚实 warning);
  * existing_code→anchorText(喂 resolver 定位);category→rule。
- * fail-visible:二进制缺失/超时/非零退出抛类型化错误。评审是 LLM agent loop(实测分钟级),超时默认 15min。
+ * fail-visible:二进制缺失/超时/非零退出抛类型化错误。评审是 LLM agent loop(经验证分钟级),超时默认 15min。
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

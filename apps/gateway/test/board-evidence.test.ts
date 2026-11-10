@@ -1,8 +1,8 @@
 /**
- * 代码级落目标机制(step-137)单测:
+ * 代码级落目标机制单测:
  * ① 协议向后兼容(旧板无 phase/accept/evidence 照常读写);
  * ② 落板门(phase=P0 缺 accept → 拒收并点名);
- * ③ 收口门(status=done 且 P0 无证据 → 拒收);
+ * ③ 门(status=done 且 P0 无证据 → 拒收);
  * ④ evidence 回填 + 覆盖率计算 + audit 只读核对;
  * ⑤ 用户旅程冒烟模板存在且含负面断言(禁 echo/llm=off);
  * ⑥ 主链路:AgentLoop 每 N 步注入 P0 再锚定提醒(ephemeral 不落 journal)。
@@ -45,7 +45,7 @@ const p0Node = {
   ],
 };
 
-describe("① 协议向后兼容(step-137 新字段全可选)", () => {
+describe("① 协议向后兼容(新字段全可选)", () => {
   it("旧板(无 phase/targets/accept/evidence)解析通过且字段保持 undefined", () => {
     const p = BoardDocZ.safeParse(baseDoc);
     expect(p.success).toBe(true);
@@ -102,8 +102,8 @@ describe("② 落板门:P0 缺 accept 拒收并点名", () => {
     const p1 = saveBoard(r, { ...baseDoc, nodes: [{ ...p0Node, phase: "P1", accept: undefined }] });
     expect(p1.ok).toBe(true);
   });
-  // 2026-11-05 白板适用面收口:composition(作业思路板)是表达结构不是代码契约,不出命令级验收——
-  // P0 accept 门跳过;覆盖率门/收口门不动(code 板照旧拒)。
+ // 白板适用面:composition(作业思路板)是表达结构不是代码契约,不出命令级验收——
+ // P0 accept 门跳过;覆盖率门/门不动(code 板照旧拒)。
   it("composition 板跳过 P0 accept 门;code 板照旧拒(门只对表达结构<>代码契约分流)", () => {
     const r1 = tmp();
     const comp = saveBoard(r1, { ...baseDoc, boardType: "composition", nodes: [{ ...p0Node, accept: undefined }] } as never);
@@ -111,7 +111,7 @@ describe("② 落板门:P0 缺 accept 拒收并点名", () => {
     const r2 = tmp();
     const code = saveBoard(r2, { ...baseDoc, boardType: "code", nodes: [{ ...p0Node, accept: undefined }] } as never);
     expect(code.ok, "code 板仍要求 P0 accept").toBe(false);
-    // 收口门不动:composition 置 done 且 P0 无证据仍拒
+ // 门不动:composition 置 done 且 P0 无证据仍拒
     const r3 = tmp();
     const done = saveBoard(r3, { ...baseDoc, boardType: "composition", status: "done", nodes: [{ ...p0Node, accept: undefined }] } as never);
     expect(done.ok, "composition 收口门不受本次改动影响").toBe(false);
@@ -351,7 +351,7 @@ describe("④ evidence 回填 + 覆盖率 + audit", () => {
   });
 });
 
-/* ---- M107:证据指纹与过期判定(2026-11-06) ---- */
+/* ---- :证据指纹与过期判定 ---- */
 describe("④b 证据指纹:落账捕获 / 读时 stale / 重提交刷新 / 旧证据兼容", () => {
   const oneAccept = [{ cmd: "npx vitest run test/x.test.ts", expect: "1 passed", type: "command" as const }];
   const evDoc = (extra: Record<string, unknown> = {}) => ({
@@ -519,7 +519,7 @@ describe("④b 证据指纹:落账捕获 / 读时 stale / 重提交刷新 / 旧�
       expect(bad.reason).toContain("证据过期");
       expect(bad.reason).toContain("fileA.ts");
     }
-    // 重跑后回填 → 收口门放行
+ // 重跑后回填 → 门放行
     const doc = loadBoard(r, "s1", "t1")!;
     const ok = saveBoard(r, {
       ...doc, status: "done",
@@ -598,7 +598,7 @@ describe("⑤ 用户旅程冒烟模板(P0-4)", () => {
   });
 });
 
-describe("⑥ 主链路:P0 再锚定提醒(step-137 P1,ephemeral)", () => {
+describe("⑥ 主链路:P0 再锚定提醒( P1,ephemeral)", () => {
   it("每 N 步注入 P0 清单;不落 journal;boardReminder 返回 null 时不注入", async () => {
     const seen: Message[][] = [];
     let called = 0;

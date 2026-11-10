@@ -1,5 +1,5 @@
 /**
- * explore 子命令 + 收敛项单测(2026-10-21 批次 C/E):
+ * explore 子命令 + 收敛项单测(批次 C/E):
  * C:codesense explore "<问题>" 复用 code-sense explore 管线(normalizeQuery 变体+grep+
  * 低命中自举二轮),索引非前置;--json 给 agent。
  * E①:index --register = init 登记语义;E②:symbol --graph/file --graph 与
@@ -133,7 +133,7 @@ describe("E①:index --register = init 登记语义", () => {
 });
 
 describe("E④:--repo 回查注册表(跨根路由)", () => {
-  it("--repo <外部仓名> 从另一根命中该仓符号(实锤:agent_alpha/process_chat)", async () => {
+  it("--repo <外部仓名> 从另一根命中该仓符号(实测确认:agent_alpha/process_chat)", async () => {
     // 前置:otherRepo 已登记(上一 describe);当前根=ws(不含 otherRepo)
     const t = capture();
     const code = await runCli(["symbol", "process_chat", "--root", ws, "--repo", basenameOf(otherRepo), "--json", "--quiet", "--no-build"], t.io);

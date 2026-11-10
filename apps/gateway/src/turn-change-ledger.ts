@@ -1,13 +1,11 @@
 /**
- * M16 轮末变更账本(turn-change-ledger),纯函数 + 异步 git 采集(2026-11-07)。
- *
+ *  轮末变更账本(turn-change-ledger),纯函数 + 异步 git 采集。
  * 口径:任务开工建 git 基线(路径 → XY 状态/mtime/大小),收尾再采一次并与本任务窗口内的
  * 工具触碰路径交叉,产出三态清单:
  *   changed   末态 git status 新增 / XY 变化 / stat 的 mtime 或 size 变化;
  *   unknown   工具触碰过但 git 看不见(被忽略/仓外/stat 失败)——「未知」不等于「未改」;
  *   oversized size 超阈值或缺省 1MB / 二进制文件,单列且不省略(人工需要知道它们);
  * 非 git 根:以工具触碰路径 + mtime 变化判 changed,stat 失败判 unknown。
- *
  * 纪律:
  *  - 全部异步(execFile,禁 execSync),不阻塞事件循环;
  *  - 输出只给 journal/面板/审计,**不进模型上下文**(调用方不得拼进 finalOut);

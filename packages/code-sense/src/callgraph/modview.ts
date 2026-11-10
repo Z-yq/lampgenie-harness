@@ -1,16 +1,13 @@
 /**
- * 模块视图(modview,2026-10-22 P1):「有哪些模块、模块间怎么交互」的架构级答案面。
- *
- * 背景(用户拷问实锚):agent_alpha 的模块清单+交互矩阵,CLI 此前完全无面(project 拓扑只给
+ * 模块视图(modview, P1):「有哪些模块、模块间怎么交互」的架构级答案面。
+ * 背景(用户拷问依据):agent_alpha 的模块清单+交互矩阵,CLI 此前完全无面(project 拓扑只给
  * top-6 目录计数、explore 返回散点函数、modulemap 无交互面且无 CLI 出口)——数据在索引里
  * 是全的,本模块把它产品化:分组 → 跨模块边聚合 → 枢纽/测试面/mermaid 架构图。
- *
  * 分组规则(在 agent_alpha 上经 grep 逐边验证):
  * - 根目录文件自成一组(web_chat_server.py、grpc_multimodal_adapter.py——进程启动器形态);
  * - 大目录摊开二级:modules/<sub>、tests、packages/<name>、apps/<name>、cmd/<bin>(Go 惯例)、
  *   src/<sub>、internal/<sub>——modules/ 不摊会把引擎主体与 v1 旧核混成一组;
  * - 其余取一级目录。
- *
  * 边语义:A→B = A 组内符号调用 B 组内符号的索引边数(方向=依赖方向);tests 组单独成面
  * (测试对模块的覆盖),不混入主干;枢纽=被非测试模块调用最多的组(入边+来源模块数)。
  * 纯查询层:零抽取变化,不触发索引版本迁移。
@@ -18,7 +15,7 @@
 import type { C2fIndex } from "./c2f";
 
 /** 摊开二级的顶层目录(modules/packages/apps/cmd/src/internal)。tests 不摊:测试=单一面
- * (实仓实锤:tests/ws_api_e2e、tests/bak 各自成组后测试边混进交互主干)。 */
+ * (实仓注意:tests/ws_api_e2e、tests/bak 各自成组后测试边混进交互主干)。 */
 const EXPAND_DIRS = new Set(["modules", "packages", "apps", "cmd", "src", "internal"]);
 
 export function moduleGroupOf(file: string): string {
@@ -26,7 +23,7 @@ export function moduleGroupOf(file: string): string {
   if (segs.length === 1) return file; // 根文件自成组(启动器/适配器形态)
   const first = segs[0]!;
   // 摊开目录下的散文件(modules/x.py 两段)也按根文件语义自成组——聚成裸组「modules」
-  // 会产出「modules → modules/digital_human」这类可读性差的边(实仓实锤)
+ // 会产出「modules → modules/digital_human」这类可读性差的边(实仓注意)
   if (EXPAND_DIRS.has(first)) {
     if (segs.length === 2) return file;
     if (segs.length > 2) return `${first}/${segs[1]!}`;

@@ -1,20 +1,16 @@
 /**
  * 漏点预防件持久层(生产侧,漏点预防路由 2026-11):把 gap-taxonomy 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:预防件的「种下来 / 路由给它 / 调权 / 失效」都是判断历史,不能被后来的写入覆盖——
  * 一个 0.6 的条目被两条缺陷佐证抬到 0.8,回看的价值在于知道「它凭什么变可信」,而不是只看到 0.8。
  * 单行追加 + 写后重读行数校验,让「写成功了吗」成为可复核断言,而不是信任 appendFileSync 没抛异常。
- *
- * 数据面:`<root>/.genie/rsi/gaps.jsonl`,每行 `{v:1,type,at,entries?,entryIds?,defectId?,codes?,matchReasons?,module?,boardType?,taskClass?}`
+ * 数据面:`<root>/.genie/rsi/.jsonl`,每行 `{v:1,type,at,entries?,entryIds?,defectId?,codes?,matchReasons?,module?,boardType?,taskClass?}`
  * - seed   {entries}                       分类法条目入库(幂等:同 id 不重复落行)
  * - route  {entries,entryIds,defectId,codes,matchReasons,module} 一次漏点路由的结论
  * - bump   {entries,entryIds,defectId}     佐证调权后的条目快照(confidence 已抬高)
  * - expire {entryIds}                      一次过期扫描命中(审计用;过期判定始终由 expiresAt 与 now 决定)
- *
  * 投影语义(loadGaps):按行序归并,同 id 条目 confidence 取 max、sourceDefectIds 取并集、
  * overfitRisk 取更高、expiresAt 取更早;坏行(JSON 坏 / v 不是 1 / type 未知 / 条目形状不合法)只计入
  * parseErrors 并跳过:一行坏不整文件失效,也不 throw。
- *
  * 依赖纪律(照抄 #210 store):node:fs / node:path + 同目录缺陷留存层(读 missedLink)+ runtime 纯逻辑模块;
  * 不引 agent loop、不静态 import runtime(未 build 的 dist 不存在),runtime 模块两跳惰性解析:
  * ① `--conditions=development` 的运行时(vitest / 带条件的 node)走包导出 src 入口;
@@ -92,8 +88,7 @@ interface GapRuntime {
   bumpConfidence(entry: PreventionEntry, corroboratingDefects: number): PreventionEntry;
   applyAt(
     entries: PreventionEntry[],
-    injectionPoint: InjectionPoint,
-  ): { contextBlocks: string[]; gates: string[]; toolChecks: string[] };
+    injectionPoint: InjectionPoint): { contextBlocks: string[]; gates: string[]; toolChecks: string[] };
   expireEntries(entries: PreventionEntry[], now: number): { active: PreventionEntry[]; expired: PreventionEntry[] };
   toGraphNodes(entries: PreventionEntry[]): {
     kind: "direction";
@@ -186,9 +181,9 @@ function uniqueStrings(values: string[]): string[] {
   return out;
 }
 
-/** 台账文件绝对路径:`<root>/.genie/rsi/gaps.jsonl`。 */
+/** 台账文件绝对路径:`<root>/.genie/rsi/.jsonl`。 */
 export function gapLedgerPath(root: string): string {
-  return join(root, ".genie", "rsi", "gaps.jsonl");
+  return join(root, ".genie", "rsi", ".jsonl");
 }
 
 /** 统计文件非空行数;文件不存在/读失败按 0。 */
@@ -611,8 +606,7 @@ export function routeFromDefect(
     const matchReasons = [...routeResult.matchReasons];
     const routed = annotateModule(
       completeTiers(routeResult.routed, pool, missedLink, matchReasons),
-      module,
-    );
+      module);
     // module 是路由上下文的一部分(applyAt/bump 都按它过滤),命中理由里必须留下这条依据,
     // 否则回看时看不出「这条经验教训凭什么接到这个模块」。
     if (module !== undefined && module.length > 0) {
@@ -716,8 +710,7 @@ export function listPreventions(
  */
 export function bumpForDefect(
   root: string,
-  defectId: string,
-): { ok: boolean; code?: string; updated: { id: string; from: number; to: number }[] } {
+  defectId: string): { ok: boolean; code?: string; updated: { id: string; from: number; to: number }[] } {
   try {
     if (!isFilled(root) || !isFilled(defectId)) {
       return { ok: false, code: "GAP_INVALID_INPUT", updated: [] };
@@ -888,8 +881,7 @@ export function reportGaps(root: string): {
     for (const row of projection.routeRows) {
       const emptyRoute = (row.entries?.length ?? 0) === 0;
       const noMatch = (row.codes ?? []).some(
-        (code) => code === rt.GAP_CODES.NO_MATCH || code === rt.GAP_CODES.CATEGORY_NONE,
-      );
+        (code) => code === rt.GAP_CODES.NO_MATCH || code === rt.GAP_CODES.CATEGORY_NONE);
       if (emptyRoute || noMatch) unrouted += 1;
     }
     return {

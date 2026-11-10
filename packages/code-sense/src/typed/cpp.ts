@@ -1,16 +1,15 @@
 /**
- * typed/cpp(step-089 P1 / designs/26 §2.2):C/C++ 逐文件深提取——文件级变量(带 span)+
+ * typed/cpp( P1 / §2.2):C/C++ 逐文件深提取——文件级变量(带 span)+
  * struct 字段+enum 常量+typedef,tree-sitter 档;解析不可用/零符号回退 adapters/cpp.ts 的
  * lexicalScan(regex 顶层声明,tier=lexical 如实)。分析原语(analyzeDeclarator 等)复用
  * adapters/cpp.ts 导出件(单一真相,防双胞胎实现漂移)。
- *
- * step-100 opencv 风格补强(着色补位,全部本地于本文件,adapters 索引路径零接触):
+ * opencv 风格补强(着色补位,全部本地于本文件,adapters 索引路径零接触):
  * ①namespace 下探:opencv `namespace cv { … }` 包裹的文件级变量/typedef 在
- *   namespace_definition→declaration_list 子树内(accum.cpp 实锤:620 行 13 token 的根因
+ * namespace_definition→declaration_list 子树内(accum.cpp 注意:620 行 13 token 的根因
  *   之一),文件级声明收集改为「顶层 + namespace 体」递归;
  * ②qualified 名字营救:function_declarator 的声明子为 qualified_identifier 时
  *   (清洁形态 `cv::accumulate`;宏吊死形态 `CV_STDCALL ippiAddWrap`——tree-sitter 解成含
- *   ERROR `::` 的 qualified,accum.cpp 实锤),取末段 identifier 为名字(span=该子节点),
+ * ERROR `::` 的 qualified,accum.cpp 注意),取末段 identifier 为名字(span=该子节点),
  *   次末段非 ALLCAPS 形(宏不冒充容器)才记 container;
  * ③函数指针 typedef 营救:`typedef void(*AccFunc)(…)` 名字在括号内(adapters typedefName
  *   登记的边界),本档按文本形态 `\(\s*\*\s*(Name)\s*\)` 营救,dataType 重构 `ret (*)(params)`。
@@ -28,7 +27,7 @@ import { readFailReason, type TypedFileResult, type TypedKind, type TypedSymbol 
 /** 单文件符号上限(病态大文件防炸;截断如实)。 */
 const MAX_SYMBOLS = 2000;
 
-/** 文件级声明收集(step-100):顶层 + namespace_definition 的 declaration_list 递归
+/** 文件级声明收集:顶层 + namespace_definition 的 declaration_list 递归
  * (嵌套 namespace 同)。只下探 namespace——class/函数体内的声明是成员/局部,不属文件级。 */
 function fileLevelDeclarations(unit: CppNode): CppNode[] {
   const out: CppNode[] = [];
@@ -87,8 +86,8 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
     return true;
   };
   const lineOf = (n: CppNode): number => n.startPosition.row + 1;
-  // step-100 整流环:多行声明里 line(外层节点起始行)与 span.character(名字节点自身列)会错配
-  // (opencv 实锤:`int dtype=…, wdepth=…,\n            wtype=…`、`} LABLUVLUTs16 = {…}`、
+ // 整流环:多行声明里 line(外层节点起始行)与 span.character(名字节点自身列)会错配
+ // (opencv 注意:`int dtype=…, wdepth=…,\n wtype=…`、`} LABLUVLUTs16 = {…}`、
   // `inline\nfloat initWideAngleProjMap(`)——push 时登记 (symbol, 节点),收尾统一校验
   // slice==name,失配则在节点行区间内按词边界重定位(首个=声明位),修不了丢 span 不造假。
   const rectPairs: { s: TypedSymbol; node: CppNode }[] = [];
@@ -118,7 +117,7 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
   };
 
   // ① 文件级变量(复用 adapters/cpp.ts fileScopeVars 的跳过语义;此处自带 span;
-  // step-100:namespace 体下探——opencv `namespace cv {}` 包裹形态)
+ // namespace 体下探——opencv `namespace cv {}` 包裹形态)
   for (const decl of fileLevelDeclarations(unit)) {
     if (symbols.length >= MAX_SYMBOLS) break;
     if (containsError(decl)) continue;
@@ -129,8 +128,8 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
       if (c.type === "function_declarator" && childrenOf(c).some((x) => x.type === "identifier")) continue; // 原型让位
       const info: DeclaratorInfo = { pointers: 0, arrays: [], isFnPtr: false };
       analyzeDeclarator(c, info);
-      // 数组名纠偏(step-100):analyzeDeclarator 递归进维度表达式,`accTab[CV_DEPTH_MAX]`
-      // 的 size 标识符会覆盖真名(accum.cpp 实锤);数组声明的名字=首个「[」前的 declarator 标识符。
+ // 数组名纠偏:analyzeDeclarator 递归进维度表达式,`accTab[CV_DEPTH_MAX]`
+ // 的 size 标识符会覆盖真名(accum.cpp 注意);数组声明的名字=首个「[」前的 declarator 标识符。
       // 注:共享件同型行为在索引档(adapters fileScopeVars)同样存在,登记为既有边界,不在本步动。
       const arrFix = arrayVarName(c);
       if (arrFix) { info.name = arrFix.name; info.nameSpan = { character: arrFix.character, length: arrFix.name.length }; }
@@ -149,7 +148,7 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
     }
   }
 
-  // ② struct/union 字段 + enum 常量(容器归属;索引档不收字段——体量面,designs/26 §2.4)
+ // ② struct/union 字段 + enum 常量(容器归属;索引档不收字段——体量面, §2.4)
   for (const spType of ["struct_specifier", "union_specifier", "enum_specifier"] as const) {
     for (const sp of unit.descendantsOfType(spType)) {
       if (containsError(sp)) continue;
@@ -201,7 +200,7 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
           if (!DECLARATOR_TYPES.has(c.type)) continue;
           const info: DeclaratorInfo = { pointers: 0, arrays: [], isFnPtr: false };
           analyzeDeclarator(c, info);
-          const arrFix = arrayVarName(c); // step-100 数组名纠偏(同 ① 循环,见该处注释)
+          const arrFix = arrayVarName(c); // 数组名纠偏(同 ① 循环,见该处注释)
           if (arrFix) { info.name = arrFix.name; info.nameSpan = { character: arrFix.character, length: arrFix.name.length }; }
           if (!info.name) continue;
           let dataType = baseType;
@@ -221,7 +220,7 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
     }
   }
 
-  // ③ typedef(kind=type,带底层类型;step-100:函数指针形态括号内名字营救)
+ // ③ typedef(kind=type,带底层类型;函数指针形态括号内名字营救)
   for (const td of unit.descendantsOfType("type_definition")) {
     if (symbols.length >= MAX_SYMBOLS) break;
     if (containsError(td)) continue;
@@ -239,7 +238,7 @@ export async function extractCppTyped(root: string, relFile: string): Promise<Ty
     }
   }
 
-  // ④ 函数/方法(kind=function——tokens 面供着色;零 dataType;step-100:qualified 名字营救)
+ // ④ 函数/方法(kind=function——tokens 面供着色;零 dataType;qualified 名字营救)
   for (const fd of unit.descendantsOfType("function_definition")) {
     if (symbols.length >= MAX_SYMBOLS) break;
     const inner = findFnDeclarator(fd);
@@ -303,8 +302,8 @@ function findFnDeclarator(node: CppNode): CppNode | undefined {
   return undefined;
 }
 
-/** step-100:数组声明真名定位——array_declarator 的首个「[」前 declarator 标识符
- * (analyzeDeclarator 会递归进维度表达式把 size 标识符当名,`accTab[CV_DEPTH_MAX]` 实锤);
+/** 数组声明真名定位——array_declarator 的首个「[」前 declarator 标识符
+ * (analyzeDeclarator 会递归进维度表达式把 size 标识符当名,`accTab[CV_DEPTH_MAX]` 注意);
  * 非数组声明返回 undefined(调用方保持 analyzeDeclarator 结果)。 */
 function arrayVarName(n: CppNode): { name: string; character: number } | undefined {
   if (n.type === "array_declarator") {
@@ -344,10 +343,10 @@ function ancestorClass(node: CppNode): string | undefined {
   return undefined;
 }
 
-/** step-100 ②:function_declarator 声明子为 qualified_identifier 时的名字营救。
- * 覆盖两形态(accum.cpp 实锤):清洁形态 `cv::accumulate`(qualified 无错)与宏吊死形态
+/** ②:function_declarator 声明子为 qualified_identifier 时的名字营救。
+ * 覆盖两形态(accum.cpp 注意):清洁形态 `cv::accumulate`(qualified 无错)与宏吊死形态
  * `CV_STDCALL ippiAddWrap`(tree-sitter 解成含 ERROR `::` 的 qualified:children=
- * namespace_identifier(CV_STDCALL)+ERROR(::)+identifier(ippiAddWrap))。
+ * namespace_identifier(CV_STDCALL)+ERROR()+identifier(ippiAddWrap))。
  * 取末段 identifier 为名字(span=该子节点);次末段为 ALLCAPS 形(调用约定/导出宏)不记
  * container(宏不冒充类容器),否则如实记(命名空间/类限定)。 */
 function qualifiedNameRescue(fd: CppNode): { name: string; container?: string; span: { character: number; length: number } } | undefined {
@@ -365,7 +364,7 @@ function qualifiedNameRescue(fd: CppNode): { name: string; container?: string; s
   return { name, ...(container ? { container } : {}), span: { character: last.startPosition.column, length: name.length } };
 }
 
-/** step-100 ③:函数指针 typedef 营救——`typedef void(*AccFunc)(const void*, …)` 名字在括号内
+/** ③:函数指针 typedef 营救——`typedef void(*AccFunc)(const void*, …)` 名字在括号内
  * (adapters typedefName 登记的边界)。dataType 重构为 `ret (*)(params)`;span 由节点偏移
  * 回算原文位置(typedef 体可能多行,name 所在行单独算)。 */
 function typedefFnPtrRescue(td: CppNode, text: string): { name: string; dataType: string; line: number; span?: { character: number; length: number } } | undefined {

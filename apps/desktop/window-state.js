@@ -1,11 +1,9 @@
 /**
  * 窗口状态持久化(设计参考 ZCode 项目,致谢;本仓独立实现)。
- *
  * 为什么需要:桌面壳固定 1440×900,用户每次调过的尺寸/位置/最大化状态/页面缩放,重启就丢。
  * ZCode 的两条关键约束原样保留:
  *   ① 最大化时持久化必须读 getNormalBounds(),否则会把「最后一次手动尺寸」覆盖成整块工作区;
  *   ② resize 高频触发(Windows/Linux 拖拽),防抖 250ms 再落盘,避免每次拖拽都写文件。
- *
  * 纯逻辑 + 只有一个 JSON 小文件;不 require electron(可 node --test 单测)。
  */
 const { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } = require("node:fs");

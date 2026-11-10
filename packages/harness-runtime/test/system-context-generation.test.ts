@@ -1,5 +1,5 @@
 /**
- * 系统上下文代(M125 / gap-matrix #125)单测:removal 三态、单块合成、代重开、codec 往返。
+ * 系统上下文代( / gap-matrix #125)单测:removal 三态、单块合成、代重开、codec 往返。
  * 这些断言只依赖本模块的纯函数,不需要 AgentLoop/journal(接线回归见 system-in-history.test.ts)。
  */
 import { describe, it, expect } from "vitest";

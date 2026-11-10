@@ -1,5 +1,5 @@
 /**
- * typed/index(step-089 P1 / designs/26 §2):变量类型识别编排面。
+ * typed/index( P1 / §2):变量类型识别编排面。
  * - extractTypedSymbols(root, file):按扩展名分派到语言深提取器(逐文件,毫秒~亚秒级,
  *   不依赖/不触发索引构建——api/state/algo 先例);
  * - varsOf / groupByDataType:类型分组变量清单(`codesense vars` 数据源);

@@ -1,4 +1,4 @@
-/** step-052 UI 实测:①变更条文件清单就地展开 + 右侧 diff 抽屉(零原生弹窗) ②模型列表逐一探活。
+/** UI 经验证:①变更条文件清单就地展开 + 右侧 diff 抽屉(零原生弹窗) ②模型列表逐一探活。
  * F1 动态找一条有 diffbar 的任务(快照 sha 存在即有空对比);F4 真实调用端点探活一个模型。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";

@@ -1,6 +1,5 @@
 /**
- * M162 任务执行信封(来源签发)。
- *
+ * 任务执行信封(来源签发)。
  * 断言面:
  * ① canonical digest/generation(键序/数组序/undefined 无关,能力目录变=代变);
  * ② verifyEnvelope 四态:digest 篡改 / 能力漂移 / 代漂移 / 策略漂移 + 全等 ok;
@@ -237,14 +236,12 @@ describe("外部来源提交闸(server task.submit 主体)", () => {
     const deps = { taskManager: tm, journal, capabilitySnapshot: () => SNAP, policy: () => POLICY };
     const w = gateExternalSubmit(
       { sessionId: "s1", instruction: "x", source: { kind: "remote", id: "r1" }, declared: { workspace: "/etc" } },
-      deps,
-    );
+      deps);
     expect(w.ok).toBe(false);
     if (!w.ok) expect(w.code).toBe("SOURCE_SELF_DECLARED_WORKSPACE");
     const p = gateExternalSubmit(
       { sessionId: "s1", instruction: "x", source: { kind: "remote", id: "r1" }, declared: { permissions: { sandbox: "full" } } },
-      deps,
-    );
+      deps);
     expect(p.ok).toBe(false);
     if (!p.ok) expect(p.code).toBe("SOURCE_SELF_DECLARED_PERMISSION");
     expect(tm.list().length).toBe(0);

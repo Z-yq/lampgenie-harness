@@ -1,5 +1,5 @@
 /**
- * fault 冷启动回归门(2026-10-25):28k+ 行 journal 用 FileJournal.loadChunked() 分片加载,
+ * fault 冷启动回归门:28k+ 行 journal 用 FileJournal.loadChunked 分片加载,
  * 事件循环在解析/入账期间能拿到 tick(不被同步全量重放独占);入账语义与同步 load 一致:
  * 全量行数、会话索引、seq 续写、task.deleted 墓碑仍在。
  */
@@ -47,7 +47,7 @@ describe("journal loadChunked(28k 行夹具)", () => {
       clearInterval(timer);
     }
 
-    // 2026-11-05 热窗(g2):length 语义 = 下一个 seq(seqHigh+1),不再是事件条数——
+ // 热窗(g2):length 语义 = 下一个 seq(seqHigh+1),不再是事件条数——
     // 热窗下冷会话事件不驻留,events.length 无法当水位用;server.ts seqBefore / search 增量都用它。
     // 夹具 seq 1..n 加墓碑 n+1 → 水位 n+2;事件条数仍要看 readAll/readSession。
     expect(j.length).toBe(n + 2);

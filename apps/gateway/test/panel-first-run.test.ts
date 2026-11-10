@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
 /**
- * 新用户首启引导(2026-11-08 桌面实测回归)。
- * 实测事故:全新数据根下点「无可用模型」只会发一条注定失败的 models.list,弹「到设置页…」
+ * 新用户首启引导(桌面经验证回归)。
+ * 经验证事故:全新数据根下点「无可用模型」只会发一条注定失败的 models.list,弹「到设置页…」
  * 的错误 toast 却没有入口(设置入口只有底部小齿轮);空会话也没有任何引导。
  * 这里锁三面:模型 pill 的零 provider 分支、首启引导卡、空态接线。
  */

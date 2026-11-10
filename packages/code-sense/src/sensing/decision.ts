@@ -1,12 +1,10 @@
 /**
- * sensing/decision(2026-10-21):分支/循环决策点感知——「这个调用在什么条件下发生」。
- *
- * 背景(ASR 考题实锤盲区):refs 能定位条件键(vad_endpointing_mode 在 qwen_asr.py:226),
+ * sensing/decision:分支/循环决策点感知——「这个调用在什么条件下发生」。
+ * 背景(ASR 考题注意盲区):refs 能定位条件键(vad_endpointing_mode 在 qwen_asr.py:226),
  * 但「if/else 后果」(哪个分支走哪条路)必须回去读源码。本模块把控制流骨架做成一等能力:
  *   if/elif/else 条件文本 + while/do-while/for/for-of/for-in/switch/case/default 循环语义
  *   (迭代目标 ← 被迭代对象)+ 三元 + 每个分支**直接归属**的调用清单 + 所属函数。
- *
- * 形态(probe 实测,tree-sitter-wasms 0.1.13):
+ * 形态(probe 经验证,tree-sitter-wasms 0.1.13):
  *   python  if_statement{condition,consequence,alternative=elif_clause|else_clause}(elif/else 独立节点);
  *   js/ts   if_statement{condition,consequence,alternative=else_clause},else-if=else_clause 包 if_statement,
  *           三元=ternary_expression;typescript wasm 独立(typescript 注解在 javascript 语法下必 ERROR);
@@ -15,7 +13,6 @@
  *           enhanced_for_statement{name,value};switch=switch_expression{switch_block_statement_group};
  *   go      if_statement{condition,alternative 直接挂}(同 java);for 三态:for_clause/range_clause/裸条件;
  *           expression_switch_statement{expression_case|default_case}。
- *
  * 纪律:tree-sitter 不可用=行级降级(kind+条件文本,深度按缩断推断,无归属/调用);语法错误区间
  * (ERROR 节点行界)内的决策点跳过不采;截断/降级写进 knownLimits,不静默。
  */

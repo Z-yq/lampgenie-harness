@@ -1,10 +1,10 @@
-/** UI 实测:f4 卡片头可读性 + f5 适配可读下限(2026-10-24 白板三修之一/之二)。
+/** UI 经验证:f4 卡片头可读性 + f5 适配可读下限(白板三修之一/之二)。
  * 病灶(已勘察):节点卡 208x116 头行里 kind20+验收badge+变更badge 挤完标题只剩 ~62px,
  *  22 节点板 13 个标题被 ellipsis 截断且标签 span 无 title(截断后无从看见全名);
- *  cvFitNow 只 clamp 到 CV_MIN_ZOOM=0.25,22 节点板实测 k=0.53 → 标签有效字号 6.4px 读不了。
+ * cvFitNow 只 clamp 到 CV_MIN_ZOOM=0.25,22 节点板经验证 k=0.53 → 标签有效字号 6.4px 读不了。
  * 断言:①#cvZfit「适」生效(fit 后 k 变化且 .cv-node 在位);②适配后 .cv-title 有效字号
  *  = computedStyle.fontSize × cvPan.k ≥ 8(f5 可读下限);③.cv-title 全部带非空 title(全名兜底)。
- * 跑法:cd apps/gateway && npx tsx test/ui/boardread.spec.cjs(自起临时端口实例,不碰产线 7700)
+ * 跑法:cd apps/gateway && npx tsx test/ui/boardread.spec.cjs(自起临时端口实例,不碰生产环境 7700)
  * 无 chrome/无 playwright-core 时整文件 skip 并打印 skipped: <reason>(退出码 0,不谎报通过)。 */
 process.env.GENIE_CHECKPOINT = "off";
 const fs = require("node:fs");
@@ -20,7 +20,7 @@ try { chromium = require("playwright-core").chromium; } catch (e) { skip("playwr
 if (!chromium) skip("playwright-core 不可用");
 if (!fs.existsSync(CHROME)) skip("无 chrome 可执行文件 " + CHROME);
 
-// 22 节点板(f4/f5 的实测规模):标题都是长中文短语,头行放不下必截断;三条带 accept(出「验 x/y」徽标)
+// 22 节点板(f4/f5 的经验证规模):标题都是长中文短语,头行放不下必截断;三条带 accept(出「验 x/y」徽标)
 const LONG = ["装配网关应用全链路接线与生命周期收口", "白板画布增量补丁与结构签名比对", "规划子代理勘察预算与产出优先纪律",
   "语义流程布局引擎入口主线出口识别", "验收三态统计与证据口径同源核对", "会话历史压缩钩子与断点续跑",
   "工具白名单展开与权限规则快照继承", "档案模块画布只读复用网格定位", "移动端窄视口抽屉与面板折叠",
@@ -120,9 +120,9 @@ const BOARD = {
     const missing = titles.filter((t) => !t.trim()).length;
     check("③ .cv-title 全部带非空 title", titles.length === n0 && missing === 0, "共 " + titles.length + " 个 / 空 " + missing);
     // ④ 卡片头信息预算:100% 缩放下量标题槽宽度,并与「改前形态」页内对照(自证收益,不靠估算)。
-    //   实测(22 节点板,chrome 无头):固定件 = padding20 + gap18 + kind20 + margin10(两个 bd-tag 各 5px)
-    //   + 验徽标37 + 变更徽标28 = 133px,标题槽剩 ~73px(主链实测 71~73)。
-    //   任务书的 100px 目标按「无 margin 的 92px」估,实测达不到——故断言写「比改前宽 ≥8px 且 ≥70px」,
+ // 经验证(22 节点板,chrome 无头):固定件 = padding20 + gap18 + kind20 + margin10(两个 bd-tag 各 5px)
+ // + 验徽标37 + 变更徽标28 = 133px,标题槽剩 ~73px(主链经验证 71~73)。
+ // 任务书的 100px 目标按「无 margin 的 92px」估,经验证达不到——故断言写「比改前宽 ≥8px 且 ≥70px」,
     //   真实数值打印进 detail(不编)。
     const budget = await page.evaluate(() => {
       cvPan.k = 1; cvApplyTf(); // 100% 缩放量宽度(不看 fit)

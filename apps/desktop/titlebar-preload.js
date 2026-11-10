@@ -1,6 +1,6 @@
-/** 桌面壳窗口控制桥(2026-10-25):面板无边框后,最小化/最大化/关闭走 IPC。
+/** 桌面壳窗口控制桥:面板无边框后,最小化/最大化/关闭走 IPC。
  * contextIsolation+sandbox 保持开启;只暴露固定方法,不暴露任意 IPC。
- * 2026-11-09 增补:系统通知(notify)与应用菜单/通知点击订阅(onMenuCommand/onNotificationClick)。 */
+ * 增补:系统通知(notify)与应用菜单/通知点击订阅(onMenuCommand/onNotificationClick)。 */
 const { contextBridge, ipcRenderer } = require("electron");
 
 function subscribe(channel, cb) {
@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld("genieWindow", {
   onNotificationClick: (cb) => subscribe("genie:notification-click", cb),
   // genie:// 深链:主进程解析后回传 {raw,action,...};面板按动作切视图/会话。
   onDeepLink: (cb) => subscribe("genie:deep-link", cb),
-  // 版本检查/应用内更新(2026-11-09):主进程持有状态机,面板只发白名单动作并订阅状态。
+ // 版本检查/应用内更新:主进程持有状态机,面板只发白名单动作并订阅状态。
   // 动作:state/check/download/dismiss/open-page/install;install 会静默安装并退出壳。
   updates: {
     getState: () => ipcRenderer.invoke("genie:update", "state"),

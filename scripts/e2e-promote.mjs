@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 /**
- * E2E 晋升事务(机制 M6):plan → validate(全量对账)→ apply(备份 / copy / matrix upsert)→ audit(重读真实文件)
+ * E2E 晋升事务(机制):plan → validate(全量对账)→ apply(备份 / copy / matrix upsert)→ audit(重读真实文件)
  * → 任一步失败整体回滚(恢复备份、删除本次新建)。
- *
  * 用法:
  *   node scripts/e2e-promote.mjs --plan <plan.json>                 # dry-run(默认,只校验并打印动作)
  *   node scripts/e2e-promote.mjs --plan <plan.json> --apply --reviewed
  *   可选:--force(允许覆盖已存在的目标文件)、--root <dir>(晋升根,缺省 cwd)、-h/--help
- *
  * 纪律:
  *   - 只动 --root 内的目标文件与 matrix,不碰 apps/gateway/src;
  *   - apply 前必须每个 case.reviewed=true 且 CLI 带 --reviewed(人工审核确认);

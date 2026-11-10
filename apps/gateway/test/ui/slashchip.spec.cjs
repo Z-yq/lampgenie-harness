@@ -1,4 +1,4 @@
-/** step-095 斜杠指令 chip 占位符交互检查:输入态 chip 挂载/参数续输/Backspace 摘除/Esc 取消/UI 类即执行/
+/** 斜杠指令 chip 占位符交互检查:输入态 chip 挂载/参数续输/Backspace 摘除/Esc 取消/UI 类即执行/
  * typed 直发保全/发送合成 raw 前缀/user message chip 渲染(模板隐藏+余文保留)/重放幂等/steer 函数/七主题取色。
  * 跑法:cd apps/gateway && SELF_PORT=7809 npx tsx test/ui/_ui_selfhost.cjs test/ui/slashchip.spec.cjs */
 const { chromium } = require("playwright-core");
@@ -145,7 +145,7 @@ const REVIEW_TPL = "审查当前仓库最近的代码变更:按 正确性/风险
   }));
   check("D2 /goal chip 发送=goal.set 执行", g2.frames >= 1 && !g2.chipOn && g2.val === "", JSON.stringify(g2));
 
-  // 7. typed 全量直发保全(step-056):手打 "/goal clear" Enter 直接执行(不进 chip;clear 分支无确认无派任务)
+ // 7. typed 全量直发保全:手打 "/goal clear" Enter 直接执行(不进 chip;clear 分支无确认无派任务)
   await page.fill("#instruction", "/goal clear");
   await page.waitForTimeout(150);
   await page.keyboard.press("Enter");

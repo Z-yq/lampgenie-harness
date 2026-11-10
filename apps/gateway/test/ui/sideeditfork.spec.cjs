@@ -1,4 +1,4 @@
-/** UI 实测:评论卡(伪造 review.findings 事件)/侧聊入管家窗(2026-10-14 语义)/重编/fork。 */
+/** UI 经验证:评论卡(伪造 review.findings 事件)/侧聊入管家窗(语义)/重编/fork。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -30,13 +30,13 @@ const { servePanel } = require("../../src/panel.ts");
   const journal = app.taskManager ? null : null;
   // gateway 的 journal 未暴露;利用 app 注入:走 WS 无法写 journal——诚实路径:
   // 用 codeReviewTool 的 journal 事件来自真实 code_review 调用(重)。替代:直接调用 app 内部?
-  // 实测改用 e2e 级:提交任务→backend ok→再向 panel 伪造不可行。
+ // 经验证改用 e2e 级:提交任务→backend ok→再向 panel 伪造不可行。
   // 采取:server 暴露测试钩子不可取;改为直接验证渲染函数——通过 evaluate 调用 panel 内部?
   // 最诚实可行:注入事件到 gateway journal(app 未暴露)→ 给 GatewayApp 暴露 journal 为观察面。
   const ws = await page.evaluate(() => typeof ws !== "undefined");
   check("前置:panel ws 全局可及(侧聊/指令路径)", ws === true || ws === undefined);
 
-  // ===== 侧聊(2026-10-14 用户口径:侧聊=super agent 通道):点历史消息「侧聊」→
+ // ===== 侧聊(侧聊=super agent 通道):点历史消息「侧聊」→
   // 内容带来源标注复制进右侧管家聊天窗输入框,用户编辑后手动发送;不自动发送、不进主线。
   await page.fill("#instruction", "主线任务甲");
   await page.keyboard.press("Enter"); // Enter 提交(1400 宽下 widget 停靠条物理遮住 #go,与产品布局无关)

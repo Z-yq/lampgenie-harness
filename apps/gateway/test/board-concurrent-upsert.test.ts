@@ -1,13 +1,11 @@
 /**
- * 白板并发落盘缺陷回归(f1/f2,2026-10-24):
+ * 白板并发落盘缺陷回归(f1/f2:
  * 缺陷背景:同一会话并行派 3 个 planner,每个都拿到 boardWrite.taskId=父任务 id → 三者写同一份
  * .genie/boards/<sid>/<taskId>.json;各自节点 id 都从 n1 顺排 → mergeBoardNodes 按 id 合并时
- * 后写者整块替换前者,先落的整块板静默消失(实测 A 的板内容 0 处命中)。
- *
+ * 后写者整块替换前者,先落的整块板静默消失(经验证 A 的板内容 0 处命中)。
  * 修法:
  * - f1 board-store.withBoardLock:按 boardPath 进程内串行化 read-modify-write(前一个失败不阻塞后一个);
  * - f2 跨写者 id 撞车硬拒:同 id 但 label 不同 → 整板拒收并点名,不落盘。
- *
  * 用例:
  * ① 三路并发各写唯一前缀 → 最终板节点并集齐全,无吞板;
  * ② 同 id 不同 label → 返回含「id 撞车」,盘上内容未被改动(rev/nodes/原文与写前一致);

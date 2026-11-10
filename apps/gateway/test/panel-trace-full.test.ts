@@ -1,11 +1,9 @@
 /**
- * 轨迹看板「逐次 LLM 决策」卡体渲染契约(step-1026)。
- *
+ * 轨迹看板「逐次 LLM 决策」卡体渲染契约。
  * 取码方式与 panel-traj-board.test.ts 同构:面板是单 HTML,浏览器侧函数就在源码里 ——
  * GET / 拿真 HTML → 花括号配平抽函数源码 → 与 TRAJ_MODEL_JS 一起 new Function 求值,
  * 断的是「真函数真渲染」而不是页面上有没有这几个字。
- *
- * 覆盖(用户口径逐条):
+ * 覆盖(逐条):
  *  ①干条:序号/turn-step/模型/耗时/首字/输入(缓存,命中%)/输出/工具名/错误红标
  *  ②未命中输入:已命中前缀一行(条数+约 tok),其后消息逐条全文、不截断
  *  ③长 tool 结果:首尾都在(证明没截断)
@@ -77,7 +75,7 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-/** trace 文件形状(实测:content/toolCalls/usage/reasoning;messages 三种 key 形态)。 */
+/** trace 文件形状(经验证:content/toolCalls/usage/reasoning;messages 三种 key 形态)。 */
 function trace(cur: unknown[], prevExtra: unknown[] = []): unknown {
   return {
     ts: 1793888000000, sessionId: "web-1", turn: 2, step: 1, model: "claude-sonnet",
@@ -97,7 +95,7 @@ const USR = { role: "user", content: "把轨迹看板做成逐次决策平铺" }
 const AST = { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read_file", arguments: '{"path":"a.ts"}' }] };
 const TOOL = { role: "tool", toolCallId: "c1", content: "HEAD-" + "z".repeat(4000) + "-TAIL" };
 
-describe("轨迹看板逐次决策卡(step-1026)", () => {
+describe("轨迹看板逐次决策卡", () => {
   it("①干条:序号/turn-step/模型/耗时/首字/token/工具名/错误红标", async () => {
     await withPanel(7898, (html) => {
       const fn = loadCardFns(html);

@@ -2,10 +2,9 @@
  * 模型选择 → Provider 路由解析(对齐 ZCode 的 registry 语义):
  * 选择是一个 (providerId, modelId) 对,端点/协议/凭证永远由**拥有该模型的 Provider** 派生;
  * 不允许出现「模型来自 A 家、baseUrl/apiKeyEnv 还是 B 家」的半切换。
- *
- * 2026-10-20 用户实报「最新的 session 用配置过的 GLM 模型一直不行」根因链:
+ * 用户用户反馈「最新的 session 用配置过的 GLM 模型一直不行」根因链:
  * 面板只发 model(或 providerId 与模型不匹配)→ 运行时仍用旧 baseUrl/旧凭证 →
- * 智谱端点收到阿里云 Key → 401「令牌已过期或验证不正确」。本文件把这条链在服务端收口。
+ * 智谱端点收到阿里云 Key → 401「令牌已过期或验证不正确」。本文件把这条链在服务端。
  */
 import type { Config } from "./schema.js";
 
@@ -58,12 +57,10 @@ export function findModelProvider(config: Config, model: string | undefined): Pr
 
 /**
  * 解析 coding 轨一次完整选择。
- *
  * 规则(按优先级):
  *  1. providerId 指向的 Provider 目录里**确实有**该模型 → 用它;
  *  2. 否则若另一个 Provider 唯一拥有该模型 → 用拥有者(服务端自愈「模型新、路由旧」);
  *  3. 都不命中 → 保留调用方显式给出的 baseUrl/apiKeyEnv(手填模型),标记 unverified。
- *
  * baseUrl 陈旧识别:显式 baseUrl 恰好是**另一个 Provider** 的端点时视为陈旧,改用拥有者端点;
  * 不是任何 Provider 端点的 baseUrl 视为用户自定义覆盖(代理等),保留,且协议不再从 provider 继承。
  * apiKeyEnv 在非自定义覆盖时一律以 Provider 为准——这是「拿对钥匙」的机制保证。

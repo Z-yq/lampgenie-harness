@@ -1,6 +1,5 @@
 /**
- * senseB21:内嵌脚本索引(网页结构感知地基,2026-10-18)。
- *
+ * senseB21:内嵌脚本索引(网页结构感知地基。
  * 盲区:panel.ts 这类单文件 SPA 的 JS 写在模板字符串/HTML <script> 块里——ts-morph 视之为
  * 字符串,内嵌函数(refreshModelPill/renderBoardCanvas 等)全不进索引,网页结构/前端路由/
  * 内嵌业务逻辑三重全盲。本模块对 *.ts 索引时额外提取「模板字符串里形似 JS 的片段」:
@@ -12,10 +11,8 @@
  *   - container=`<模板变量名>·script-N`(与宿主 TS 符号 id 隔离,防同名互踩);
  *   - 行号=片段在宿主文件中的真实行(字节偏移换算;单行 ${} 插值替换为 undefined 不移行,
  *     含换行的插值才标 approx——panel.ts 主战场唯一插值 ${PRESETS_JSON} 为单行,精确)。
- *
  * 防误伤:<style>/mermaid/纯文本不解析(密度门+<script> 语境门);tree-sitter 有 ERROR
  * 节点=整单元静默跳过(诚实降级,不产生半成品假符号)。
- *
  * 边语义:内嵌 JS 是浏览器侧代码,永不解析到宿主仓的 TS/其它语言符号——调用目标只在
  * **同宿主文件的内嵌符号集**内按唯一名解析(跨单元可见,panel 单大 script 块的主形态),
  * 解析不到保持 toName 未解析边(to=""),不造跨语言假边。模块级调用归 `<module>` 虚调用方
@@ -214,7 +211,7 @@ export interface InlineJsAst {
   decls: InlineJsDecl[];
   calls: InlineJsCall[];
   root: JsNode;
-  /** true=整段解析失败后按顶层声明切段容错解析(只覆盖无 ERROR 的段;2026-11-08)。 */
+ /** true=整段解析失败后按顶层声明切段容错解析(只覆盖无 ERROR 的段。 */
   partial?: boolean;
 }
 
@@ -299,7 +296,7 @@ const TOP_DECL_RE = /^(?:export\s+)?(?:async\s+)?(?:function\s+[\w$]+\s*\(|class
 
 interface JsSegment { text: string; /** 段首在整段 js 里的字符偏移 */ baseIdx: number; /** 段首行(0-based) */ startRow: number }
 
-/** 按顶层声明切段(2026-11-08):大内联脚本(panel 主脚本 1.37MB)tree-sitter 整段解析会因
+/** 按顶层声明切段:大内联脚本(panel 主脚本 1.37MB)tree-sitter 整段解析会因
  *  局部语法 ERROR 整单元判死 → 上千函数全丢。切段后逐段解析,坏段只丢自己,好段照常登记。
  *  切分点=「上一行是空行」后的列 0 声明行;声明之间的顶层语句归前一段。 */
 function splitJsSegments(js: string): JsSegment[] {
@@ -323,7 +320,7 @@ function splitJsSegments(js: string): JsSegment[] {
   return segs;
 }
 
-/** 容错解析(2026-11-08):先整段解析(好文件零行为变化);失败→按顶层声明切段逐段解析,
+/** 容错解析:先整段解析(好文件零行为变化);失败→按顶层声明切段逐段解析,
  *  只收「无 ERROR」的段,行号/字符偏移按段基址回填到整段坐标系。坏段不产生半成品符号。
  *  全段都无法解析才返回 undefined(保持原有诚实降级)。 */
 export async function parseInlineJsAstTolerant(js: string): Promise<InlineJsAst | undefined> {
@@ -409,7 +406,7 @@ export async function collectInlineJs(sf: SourceFile, graph: CallGraph, root: st
   // Pass 1:符号登记(全部单元先登记完,跨单元名字才可见)
   const inlineIds = new Map<string, string[]>();
   for (const u of units) {
-    // 2026-11-08:容错解析——整段 ERROR 时按顶层声明切段,坏段只丢自己(panel 主脚本 1.37MB
+ // 容错解析——整段 ERROR 时按顶层声明切段,坏段只丢自己(panel 主脚本 1.37MB
     // 整段曾直接判死,上千函数全丢);好文件走原整段路径,零行为变化。
     const ast = await parseInlineJsAstTolerant(u.js);
     if (!ast) {

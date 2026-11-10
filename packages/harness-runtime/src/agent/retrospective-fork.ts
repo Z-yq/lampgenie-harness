@@ -3,13 +3,11 @@
  * 在「本轮有 final response、未被打断、非 cron 触发、非 nudge 会话、fork 深度未超限」时,
  * fork 一个只读、完全 detach 的复盘会话;它只许看(memory/skills/read/search/grep),
  * 不许写文件、不许开 terminal,产出作为「洞察」写进证据图,供夜间整合聚合。
- *
  * 为什么单独一层纯逻辑:
  * - 触发口径(计数 + 四个跳过条件 + 阈值)必须能被单测逐条钉住,不能和调度器/文件 IO 搅在一起;
  * - fork 规格(继承 system prompt / tools / cache scope,白名单取交集,deny 固定四项)是安全边界,
  *   任何工具调用都要在纯函数里判一次,而不是指望调用方自觉;
  * - 复盘产物必须带幂等键 `retro:<session>:<retroCount>`,重复写不进账本 —— 去重判断同样属于纯逻辑。
- *
  * 红线:零 IO(不读文件 / 网络 / 环境);不 throw;不 mutate 入参;时间一律 epoch ms,
  * 每个会写时间的函数都可注入 at(缺省 Date.now() 只用于生产路径,测试一律显式传)。
  * 深度限制:fork 出的会话 depth = 父 depth + 1、nudge = 0;maxDepth 缺省 1,即最多一层复盘,
@@ -247,8 +245,7 @@ function skipped(code: RetroCode | undefined, reason: string): RetroDecision {
 export function shouldTrigger(
   state: RetroState,
   event: RetroEvent,
-  policy: RetroPolicy = DEFAULT_RETRO_POLICY,
-): RetroDecision {
+  policy: RetroPolicy = DEFAULT_RETRO_POLICY): RetroDecision {
   if (!isValidState(state) || !isValidEvent(event)) return skipped(RETRO_CODES.INVALID, "invalid-state-or-event");
   const normalized = normalizePolicy(policy);
   if (normalized === null) return skipped(RETRO_CODES.INVALID, "invalid-policy");

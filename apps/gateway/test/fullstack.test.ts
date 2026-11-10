@@ -1,5 +1,5 @@
 /**
- * step-048 单测:插件体系 / 向导命令 / 多模态消息 / quota / 附件链路。
+ * 单测:插件体系 / 向导命令 / 多模态消息 / quota / 附件链路。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -13,7 +13,7 @@ import { MemoryJournal } from "@lampgenie/core";
 import { TaskSupervisor } from "../src/task-manager.js";
 import { computeStatsSummary } from "../src/stats.js";
 
-describe("PluginSystem(step-048 插件市场)", () => {
+describe("PluginSystem(插件市场)", () => {
   function mk(tmp: string) {
     const mcpAdded: { id: string; name: string }[] = [];
     return {
@@ -77,7 +77,7 @@ describe("PluginSystem(step-048 插件市场)", () => {
   });
 });
 
-describe("远程连接向导(step-048)", () => {
+describe("远程连接向导", () => {
   it("SSH/Docker 命令含真实要素(gateway 地址/node id/下载路径)", () => {
     const ssh = genBootstrapCommand({ kind: "ssh", host: "192.168.1.20", user: "op", port: 2222, gatewayUrl: "ws://192.168.1.10:7700", nodeId: "my-node" });
     expect(ssh.command).toContain("ssh -p 2222 op@192.168.1.20");
@@ -91,7 +91,7 @@ describe("远程连接向导(step-048)", () => {
   });
 });
 
-describe("多模态消息链路(step-048)", () => {
+describe("多模态消息链路", () => {
   it("loop runTurn(images) → journal message.user.images;deriveMessages 还原", async () => {
     const journal = new MemoryJournal();
     const llm: LlmProvider = { async chat() { return { content: "看图作答" }; } };
@@ -132,7 +132,7 @@ describe("多模态消息链路(step-048)", () => {
   });
 });
 
-describe("quota(step-048 本地额度)", () => {
+describe("quota(本地额度)", () => {
   it("今日/本周聚合 + 周界(周一) + 预算注入", () => {
     const j = new MemoryJournal();
     const tm = new TaskSupervisor();
@@ -152,7 +152,7 @@ describe("quota(step-048 本地额度)", () => {
   });
 });
 
-describe("附件上传端点(step-048)", () => {
+describe("附件上传端点", () => {
   it("POST /upload 落盘 + 名字防穿越 + 8MB 拒绝", async () => {
     const { servePanel } = await import("../src/panel.js");
     const panel = servePanel(7893, () => {});

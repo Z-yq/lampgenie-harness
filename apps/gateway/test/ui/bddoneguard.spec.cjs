@@ -1,8 +1,8 @@
-/** done 板拖拽守卫 行为探针(2026-10-18 用户口径重试轮,最小改动面)。
+/** done 板拖拽守卫 行为探针(重试轮,最小改动面)。
  * 验证:①done 板拖拽不落盘 + 弹自绘确认条;②取消→位置回滚为拖拽前值(DOM/doc/盘三处);
  * ③取消不记忆(再拖还问);④允许编辑→sessionStorage 记住 + 补落盘,后续拖拽直通;
  * ⑤非 done(draft)板拖拽不弹条不误伤(旧行为保持)。
- * 跑法(不碰产线):cd apps/gateway && SELF_PORT=7716 SELF_SPEC=./bddoneguard.spec.cjs npx tsx test/ui/_board_selfhost.cjs
+ * 跑法(不碰生产环境):cd apps/gateway && SELF_PORT=7716 SELF_SPEC=./bddoneguard.spec.cjs npx tsx test/ui/_board_selfhost.cjs
  * board fixture 自己造自己清。 */
 const { chromium } = require("playwright-core");
 const fs = require("node:fs");

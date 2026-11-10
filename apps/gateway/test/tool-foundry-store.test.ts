@@ -355,8 +355,7 @@ describe("tool-foundry-store:report / 坏行 / not-found", () => {
     expect(() => mine(root, [] as unknown as { minOccurrences?: number })).toThrow(TypeError);
     expect(() => register(root, "cand_x", null as unknown as { approved: boolean })).toThrow(TypeError);
     expect(() => evaluateShadow(root, "cand_x", undefined as unknown as { runs: number; successes: number })).toThrow(
-      TypeError,
-    );
+      TypeError);
   });
 
   it("⑳ 全部落盘都在 root/.genie/rsi/foundry.jsonl 且追加不覆盖既有内容", () => {

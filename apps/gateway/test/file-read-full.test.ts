@@ -1,8 +1,7 @@
 /**
- * step-141:file.read full=true 全文读(IDE 编辑区数据源);缺省(不带参数)逐字节保持
+ * file.read full=true 全文读(IDE 编辑区数据源);缺省(不带参数)逐字节保持
  * ±20 行窗口旧语义(citation/#fileViewer/sidebar.spec 三消费面锁死)。另锁 binary/tooLarge
  * 标志:首 8KB 含 NUL=binary、>2MB=tooLarge,均不回全文。
- *
  * 测试基建纪律:
  * - 端口:http listen(0) 真实绑定取空闲口(不硬编码,合跑/并行零 EADDRINUSE);
  * - waitType 消费式(匹配后从 inbox 移除),同 type 多次请求各取各的响应,不误捞旧帧;

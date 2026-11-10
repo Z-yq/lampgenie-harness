@@ -2,10 +2,8 @@
 /**
  * 把 mermaid 源码渲染成 SVG/PNG(零联网:用仓内 apps/gateway/src/assets/mermaid.min.js
  * 与 gateway 依赖的 playwright-core;字体走系统 CJK)。给代码档案/评审/任务证据出图用。
- *
  * 用法:
  *   node scripts/render-mermaid.mjs <in.mmd> <out.svg|out.png> [--width 2200] [--theme dark]
- *
  * 说明:输出目录自动创建;渲染失败非零退出(不写半成品)。
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

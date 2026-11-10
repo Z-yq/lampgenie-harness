@@ -39,7 +39,7 @@ afterEach(() => {
 describe("rawTokens —— 真分词器逐值断言", () => {
   it("已知样本计数与 cl100k_base 一致", () => {
     expect(estimatorKind()).toBe("tokenizer");
-    // 以下真值由 cl100k_base 实测得出
+ // 以下真值由 cl100k_base 经验证得出
     expect(rawTokens("hello world")).toBe(2);
     expect(rawTokens("中文测试")).toBe(3);
     expect(rawTokens("hello, 世界!")).toBe(7);

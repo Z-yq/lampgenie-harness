@@ -1,4 +1,4 @@
-/** 非 page 板型画布接入契约(2026-10-26):
+/** 非 page 板型画布接入契约:
  * 板型画像资产/顶部类型头/节点卡角色+硬规则 chip+flow 分支/卡尺寸按板型放大。
  * 从真实面板 HTML 提取函数执行,不启浏览器。 */
 import { describe, it, expect } from "vitest";
@@ -50,8 +50,7 @@ describe("非 page 板型画布画像", () => {
     await withPanel(7898, (html) => {
       const src = [extractFn(html, "cvTypeProfileOf"), extractFn(html, "cvTypeHeadHtml"), extractFn(html, "cvTypeNodeHtml")].join(NL);
       const api = new Function("esc", "BoardTypeProfile", src + NL + "return { profile: cvTypeProfileOf, head: cvTypeHeadHtml, node: cvTypeNodeHtml };")(
-        (s: unknown) => String(s), BTP,
-      ) as {
+        (s: unknown) => String(s), BTP) as {
         profile: (d: unknown) => unknown;
         head: (d: unknown, info: unknown) => string;
         node: (n: unknown, d: unknown, info: unknown) => string;

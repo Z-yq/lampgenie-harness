@@ -1,8 +1,6 @@
-/** board_export_pptx 工具(2026-10-27,step-1011 重写)。
- *
+/** board_export_pptx 工具(重写)。
  * 分工:planner 画骨架板(章/页/总评)→ coding agent 写正文源稿(markdown,人可改)→
  * 本工具导出真实 .pptx。
- *
  * 为什么不让工具直接读板:第一版把页节点 1:1 铺成幻灯片,交付是「每页 1 行摘要 + 大片空白 +
  * 截断省略号」——白板页节点是规划卡片,不含页面正文。故本版把「渲染」与「内容」分开:
  *   mode=template 从板生成 <任务仓>/docs/review/<板id>.deck.md(结构已填、正文留 TODO)
@@ -52,8 +50,7 @@ export function boardExportPptxTool(
   sessionId: string,
   taskId: string,
   taskRoot: string,
-  storeRoot?: string,
-): Tool {
+  storeRoot?: string): Tool {
   return {
     name: "board_export_pptx",
     description: [
@@ -80,7 +77,7 @@ export function boardExportPptxTool(
     },
     execute: async (a: { mode?: string; source?: string; targetTaskId?: string; outDir?: string; outName?: string }) => {
       const mode = a.mode === "template" ? "template" : "export";
-      // 板存储根与 board_upsert 同口径:storeRoot ?? repoRoot()(实测踩坑:按 taskRoot 读板,
+ // 板存储根与 board_upsert 同口径:storeRoot ?? repoRoot(经验证注意:按 taskRoot 读板,
       // 任务项目指向别仓时永远「板不存在」——planner 在同一会话画的板读不到)。
       const boardRoot = storeRoot ?? repoRoot();
       const outDir = typeof a.outDir === "string" && a.outDir.trim() !== "" ? a.outDir.trim() : join(taskRoot, "docs", "review");

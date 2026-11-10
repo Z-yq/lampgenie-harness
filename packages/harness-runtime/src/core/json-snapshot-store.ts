@@ -1,13 +1,11 @@
 // @ts-nocheck — 小型 JSON 快照持久化基类(本仓自有实现;同类「原子写 + 损坏隔离 +
 // 降级禁写 + mtime/哈希双重变化检测」的健壮性组合参考 qwen-audio-agent,致谢)。
-//
 // 只负责「把 JSON 快照安全落盘、下次启动读回」;数据模型对它不透明,serialise/deserialise
 // 由使用方自理。写入范式:
 //   · 原子写:tmp → replaceFileSync → chmod 600
 //   · 损坏隔离:JSON 解析失败搬到 .corrupt-<ts>,服务带空快照继续跑
 //   · I/O 失败降级:setWarning + 关闭持久化,不阻塞主链路
 //   · mtime + 内容哈希双重检测:NTFS 与快速连续写入可能落同一时间刻度
-//
 // fileVersion 由子类指定,数据模型变更必须递增:版本不匹配走 quarantine(否则旧文件会被
 // 当新格式逐条校验、全部丢弃、静默变空)。
 
@@ -138,8 +136,7 @@ export class JsonCheckpointStore {
       renameSync(this.filePath, sideCar)
       this.note(
         `${reason}；原文件已隔离为 ${sideCar}，服务将使用空${this.label}继续运行。`,
-        sideCar,
-      )
+        sideCar)
     } catch (error) {
       this.persistenceDisabled = true
       this.note(

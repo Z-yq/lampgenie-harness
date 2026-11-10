@@ -1,6 +1,6 @@
 /**
- * 会议导入接线(step-013 二期收口,designs/08 §3):runtime 流水线(纪要→抽取→确认→批量任务)
- * 出两个 agent 工具 + WS 命令面。ASR 音频面仍留接口(designs/08 §6 凭证前置,不造假)。
+ * 会议导入接线(二期, §3):runtime 流水线(纪要→抽取→确认→批量任务)
+ * 出两个 agent 工具 + WS 命令面。ASR 音频面仍留接口( §6 凭证前置,不造假)。
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -41,12 +41,11 @@ export function meetingImportTool(llm: LlmProvider): Tool {
   };
 }
 
-/** 确认面:把选中的 todos 批量立任务(designs/08 §3 第四步;title 带 [会议] 前缀)。 */
+/** 确认面:把选中的 todos 批量立任务( §3 第四步;title 带 [会议] 前缀)。 */
 export function scheduleMeetingTodos(
   tm: TaskSupervisor,
   todos: { content: string; owner?: string; deadline?: string }[],
-  sessionId?: string,
-): { id: string; content: string }[] {
+  sessionId?: string): { id: string; content: string }[] {
   const created: { id: string; content: string }[] = [];
   for (const t of todos.slice(0, 20)) {
     const instruction = [

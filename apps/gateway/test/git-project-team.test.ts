@@ -30,7 +30,7 @@ describe("gitRemoteUrl(设计稿23 绑定键来源)", () => {
   });
 });
 
-describe("gitContributors(designs/23 候选名单)", () => {
+describe("gitContributors(候选名单)", () => {
   it("按邮箱聚合提交数并降序", async () => {
     const cwd = freshRepo(true);
     const list = await gitContributors(cwd);

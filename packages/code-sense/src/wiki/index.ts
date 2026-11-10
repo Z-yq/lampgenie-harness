@@ -1,6 +1,5 @@
 /**
- * wiki 编排层(step-118):生成/增量重建/读取/词法问答。
- *
+ * wiki 编排层:生成/增量重建/读取/词法问答。
  * 存储:.genie/wiki/<repo>/manifest.json + <page>.md
  * 缓存:git sha + 输入指纹(全文件 mtime:size);sha 变→git diff 求变更集→只重建受影响页。
  * 红线:不做 embedding/向量库;问答=wiki 页面词法检索 + 既有 grepIn(code_index/grep 面)。
@@ -189,7 +188,7 @@ export async function rebuildWiki(root: string, opts: WikiRebuildOptions = {}): 
   if (llmEnabled && config.maxLlmPages > 0) {
     const budget = config.maxLlmPages;
     llmPages.add("overview");
-    // 2026-10-26:语义指南/功能拆解优先(它们消费 code flow 骨架);剩余预算给模块页。
+ // 语义指南/功能拆解优先(它们消费 code flow 骨架);剩余预算给模块页。
     // 预算必须严格生效(--pages 1 的既有测试/成本护栏都按「最多 N 页 LLM」算)。
     if (flowBundle && llmPages.size < budget) llmPages.add("guide");
     if (flowBundle && llmPages.size < budget) llmPages.add("features");
@@ -438,7 +437,7 @@ export interface WikiAskPageHit {
   title: string;
   score: number;
   snippet: string;
-  /** 页面命中来源:symbol=由符号候选的文件归属补进来的页(2026-10-21 符号优先)。 */
+ /** 页面命中来源:symbol=由符号候选的文件归属补进来的页(符号优先)。 */
   via?: "symbol";
 }
 
@@ -448,7 +447,7 @@ export interface WikiAskResult {
   pages: WikiAskPageHit[];
   matches: { file: string; line: number; text: string }[];
   note: string;
-  /** 符号优先召回(2026-10-21,可选/加性):页面零命中时由符号命中兜底,
+ /** 符号优先召回(可选/加性):页面零命中时由符号命中兜底,
    * 并把符号所在文件映射到所属模块页。缺省=索引未就绪或零命中(已降级)。 */
   symbols?: SymbolCandidate[];
   /** 符号召回降级说明(索引未就绪时在场;可用时缺省)。 */
@@ -476,7 +475,7 @@ export function extractKeywords(question: string): string[] {
   return out.slice(0, 8);
 }
 
-/** grep 命中里的零信息声明行(2026-10-21 A):package/import/from-import/#include/using/
+/** grep 命中里的零信息声明行( A):package/import/from-import/#include/using/
  * require("…")/"use strict"——纯导入语句对「哪里实现/怎么用」零贡献,过滤后再截断呈现。 */
 const NOISE_DECL_LINE_RE = new RegExp(
   [
@@ -511,8 +510,8 @@ function snippetAround(text: string, needle: string): string {
 
 export async function askWiki(root: string, question: string, opts: { maxMatches?: number } = {}): Promise<WikiAskResult> {
   const keywords = extractKeywords(question);
-  // 符号优先召回(2026-10-21):与 explore 同源(cjk 分词+词典 → 静态索引打分)。
-  // 页面词法检索对中文问句经常 0 命中(「子代理怎么派发」实测页面无命中),符号命中兜底,
+ // 符号优先召回:与 explore 同源(cjk 分词+词典 → 静态索引打分)。
+ // 页面词法检索对中文问句经常 0 命中(「子代理怎么派发」经验证页面无命中),符号命中兜底,
   // 并把符号所在文件映射到所属模块页与源码行。
   const recall = recallSymbols(root, question, { limit: 6, expand: 2 });
   const manifest = await readWikiManifest(root);
@@ -563,8 +562,8 @@ export async function askWiki(root: string, question: string, opts: { maxMatches
     try {
       const hit = await grepIn(root, keywords.slice(0, 5), { max: opts.maxMatches ?? 30 });
       matches = hit
-        // 纯声明行过滤(2026-10-21 A):package/import/from-import/#include 对「哪里实现」零贡献
-        // (实锤:问 cobra flag 校验,命中含「bash_completionsV2_test.go:15 — package cobra」)
+ // 纯声明行过滤( A):package/import/from-import/#include 对「哪里实现」零贡献
+ // (注意:问 cobra flag 校验,命中含「bash_completionsV2_test.go:15 — package cobra」)
         .filter((m) => !NOISE_DECL_LINE_RE.test(m.text))
         .map((m) => ({ file: m.file, line: m.line, text: String(m.text).slice(0, 180) }));
     } catch {

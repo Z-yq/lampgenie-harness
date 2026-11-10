@@ -1,11 +1,9 @@
 /* super-console.js — Super Agent 指挥台(自包含资产:零构建/零外链/零 emoji/无音频播放)
- *
- * 契约: tasks/step-1033-superagent-chain/contract.md
+ * 契约: 
  *   出站: super.turn {text} / super.history {sinceSeq} / super.inbox {limit}
  *          voice.transcribe {audioB64,format,sampleRate} / permission.respond / ask.user.answer / task.resume / task.list
  *   入站: super.turn.user / super.turn.done / super.history.result / super.relay / super.notice
  *          super.inbox.result / super.inbox.changed / voice.transcribe.result
- *
  * 根元素:#superConsole(固定右缘,脚本自建、被面板重渲染抹掉时自愈重挂)
  * 内层:#sc-root(指挥台本体;面板 CSS 用它做 board/cv-shell/pp-wiki-tab 退场)
  */
@@ -74,7 +72,7 @@
   var CSS = [
     "#superConsole{position:fixed;right:16px;bottom:16px;z-index:60;width:min(360px,32vw);max-height:calc(100vh - 32px);",
     "  font-family:var(--sans,ui-sans-serif,system-ui,'PingFang SC',sans-serif);font-size:12px;color:var(--reply,#ece1d1)}",
-    // 布局兼容(step-1033):画布/白板/双中心是「内容优先」形态,指挥台折叠成头部条(只留头部一行),
+ // 布局兼容:画布/白板/双中心是「内容优先」形态,指挥台折叠成头部条(只留头部一行),
     // 不遮内容但仍在场;全屏 wiki 阅读态整块退场。绝不整块隐藏——否则默认画布形态下用户看不到待处理。
     "body.cv-shell #sc-root .sc-body,body.cv-shell #sc-root .sc-foot," +
       "body[data-view=board] #sc-root .sc-body,body[data-view=board] #sc-root .sc-foot," +
@@ -461,7 +459,7 @@
         pushTurn("agent", m.text, m.sessionId);
         break;
       case "error":
-        // step-1041:错误帧必须显式消费——此前 switch 无 error 分支,super.turn 失败(LLM 未装配/
+ // 错误帧必须显式消费——此前 switch 无 error 分支,super.turn 失败(LLM 未装配/
         // 上游报错)时「思考中…」等待气泡永不消失、无任何提示,用户表象=「发了没反应/不能聊天」。
         if (m.code && m.code !== "super-failed" && m.code !== "super-announce-failed") break; // 非指挥台错误不抢渲染
         dropWait();
@@ -625,7 +623,7 @@
     var it = id ? itemById(id) : null;
     if (act === "toggle-pending") { state.pendingOpen = !state.pendingOpen; renderRoot(); return; }
     if (act === "open-view") {
-      // step-1041:跳转面板「指挥台」view(完整聊天渲染区+看板;widget 保留为快捷入口)。
+ // 跳转面板「指挥台」view(完整聊天渲染区+看板;widget 保留为快捷入口)。
       // 与面板同窗口直接调 switchView;拿不到(极端时序)退化为事件,面板侧有监听。
       try {
         if (typeof window.switchView === "function") { window.switchView("super"); return; }

@@ -1,6 +1,5 @@
 /**
  * 丢事件自愈(2026-11):轨迹文件已落盘、journal 却没入账的 LLM 调用 → 合成行(synth)。
- *
  * 两块契约:
  *  ①纯函数 mergeSynthRows(从面板源码抽取,口径与 panel-usage-normalize.test.ts 一致):
  *    以 rows[].traceFile 为「已入账」集合,把 files 里多出来的调用插入并按 turn/step 重排;

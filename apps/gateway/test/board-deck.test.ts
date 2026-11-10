@@ -1,5 +1,5 @@
 /**
- * board→pptx 第三版(step-1013):按 ZCode pptx skill 规范重做渲染层。
+ * board→pptx 第三版:按 ZCode pptx skill 规范重做渲染层。
  * 回归锚(用户三次否定的具体事由,任一条退回即交付不合格):
  * - 每页必须有视觉版式(图/表格/对比/大数字/引言),纯文字页拒导;
  * - 版式互斥,要点只能配图(≤3)或引言(≤2);
@@ -21,11 +21,11 @@ const MD = readFileSync(new URL("./fixtures/deck.md", import.meta.url), "utf8");
 describe("parseDeckMd", () => {
   const d = parseDeckMd(MD) as any;
   it("章/页/元数据", () => {
-    expect(d.title).toBe("genie-memory 方案评审");
+    expect(d.title).toBe("记忆服务方案评审");
     expect(d.verdict).toBe("有条件通过");
     expect(d.chapters.map((c: any) => [c.no, c.title])).toEqual([["01", "定位与目标"], ["02", "核心流程"]]);
     expect(d.chapters[0].pages.map((p: any) => p.title)).toEqual(["这是什么系统", "系统边界"]);
-    expect(d.chapters[1].pages.map((p: any) => p.title)).toEqual(["写入链", "判定与建议", "死代码实证"]);
+    expect(d.chapters[1].pages.map((p: any) => p.title)).toEqual(["写入链", "判定与建议", "死代码验证"]);
   });
   it("stats/compare/flow/quote 四类块都解析", () => {
     const kinds = d.chapters.flatMap((c: any) => c.pages.map((p: any) => p.blocks.map((b: any) => b.kind)));
@@ -119,7 +119,7 @@ describe("planDeck(不再有章节页)", () => {
 
 describe("boardToDeckTemplate", () => {
   const doc = {
-    title: "genie-memory 方案评审 PPT 骨架(逐章扩页终版)",
+    title: "记忆服务方案评审 PPT 骨架(逐章扩页终版)",
     nodes: [
       { id: "agg", kind: "aggregate", label: "【总评】有条件通过", summary: "回答维度①:分层清晰" },
       { id: "s1", kind: "section", label: "01 定位与目标" },
@@ -129,7 +129,7 @@ describe("boardToDeckTemplate", () => {
   };
   const md = boardToDeckTemplate(doc);
   it("标题清洗 + 结构照板 + 视觉版式提示", () => {
-    expect(md.split("\n")[0]).toBe("# genie-memory 方案评审");
+    expect(md.split("\n")[0]).toBe("# 记忆服务方案评审");
     expect(md).toContain("## 01 定位与目标");
     expect(md).toContain("### 这是什么系统");
     expect(md).toContain("layers");

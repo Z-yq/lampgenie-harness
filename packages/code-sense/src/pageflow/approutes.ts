@@ -1,18 +1,17 @@
 /**
- * senseB22:app 路由画像(前端路由表,2026-10-18)。
- *
+ * senseB22:app 路由画像(前端路由表。
  * 盲区:panel.ts 这类零构建单文件 SPA 没有路由框架(无 React Router/Vue Router 配置),
  * 路由=自写 switchView(name) + data-view 属性 + act-* 按钮接线——pageflow 的三形态
  * (HTML 多页/React/Vue)全不命中,前端结构感知为零。本模块消费 senseB21 的内嵌脚本
  * 提取与 tree-sitter javascript AST,识别这类自写路由:
  *   - 路由器函数:function 名命中 switchView/setView/… 族,或函数体含 `dataset.view =`
- *     赋值(panel 实锚:switchView 内 `document.body.dataset.view = name`);
+ * 赋值(panel 依据:switchView 内 `document.body.dataset.view = name`);
  *   - 视图清单:路由器形参的 `param === "字面量"` 收敛守卫 ∪ 路由器调用点字面量实参
  *     ∪ 宿主文件 HTML/CSS 的 id="view-*" / data-view="*";
  *   - 打开函数:各 switchView("x") 调用点的最内层包围具名函数(newDraft/openSession…);
  *     顶层接线归「模块级」,同时识别 `$("act-xxx").onclick =` 触发器;
  *   - 入口渲染函数:路由器体内 `if (name === "x") { fn(); }` 守卫分支内的调用
- *     (board→boardRefresh/overlayPull、pipeline→renderPipeline 实锚)。
+ * (board→boardRefresh/overlayPull、pipeline→renderPipeline 依据)。
  * 确定性提取,零 LLM;未检出路由器=显式降级说明,不猜。
  */
 import { readFile } from "node:fs/promises";
@@ -118,8 +117,7 @@ interface UnitRoutes {
 function routesOfUnit(
   unit: { js: string; startLine: number },
   decls: InlineJsDecl[],
-  root: JsNode,
-): UnitRoutes {
+  root: JsNode): UnitRoutes {
   const views = new Map<string, { opens: AppRouteOpen[]; entries: AppRouteEntry[] }>();
   const viewOf = (v: string): { opens: AppRouteOpen[]; entries: AppRouteEntry[] } => {
     let e = views.get(v);

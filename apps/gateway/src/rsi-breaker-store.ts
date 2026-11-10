@@ -1,22 +1,18 @@
 /**
  * RSI 熔断台账持久层(生产侧,RSI 熔断 2026-11):把 rsi-circuit-breaker 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:暂停/恢复/评测/基线/回滚都是审计事实,不能被后来的写入覆盖或抹掉;
  * 单行追加 + 写后行数校验(重读文件统计非空行数)让「写成功了吗」变成可复核的断言,
  * 而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/breaker.jsonl`,每行一条 `{"v":1,"type":...,"at":ISO,...}`
  * - `pause{by,reason,scope,trigger}` / `resume{by,reason,kind}` —— 熔断开关状态折叠。
  * - `evaluate{shouldPause,trigger?,codes,streak,breaches}` —— 一次评测的结论(预览不落盘)。
  * - `baseline{snapshot}` —— 基线快照(同 id 不重复落盘)。
  * - `rollback-planned{targetId,steps,requeueExperiments}` / `rollback-applied{targetId}` —— 回滚动作。
- *
  * 投影语义(loadBreakerProjection):
  * - state = pause/resume 按行序折叠(latest wins);空态 `{paused:false,scope:"all"}`;
  *   evaluate 行只更新 lastEvaluation,不改 paused。
  * - baselines 按行序(同 id 只留首次);history 是每行的事件摘要;rollbacksApplied 是已应用目标。
  * - 坏行(JSON 坏 / 未知 v / 未知 type / 缺 at)只计入 badLines 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(两跳惰性解析)+ 只读复用 experiment-store 的
  * listExperiments(不重复实现实验投影)。参数错误是唯一允许 throw 的情形(TypeError);
  * IO/投影/闸门失败一律折叠成稳定码返回。
@@ -623,8 +619,7 @@ export async function planRollback(
 /** 标记回滚已应用:目标不存在 → RSI_BASELINE_MISSING;已标记过 → RSI_ROLLBACK_ALREADY_APPLIED。 */
 export async function markRollbackApplied(
   root: string,
-  targetId: string,
-): Promise<{ ok: boolean; codes: string[] }> {
+  targetId: string): Promise<{ ok: boolean; codes: string[] }> {
   const base = assertRoot("markRollbackApplied", root);
   const id = nonEmpty(targetId);
   if (id === undefined) throw new TypeError("markRollbackApplied: targetId 不能为空");

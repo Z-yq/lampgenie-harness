@@ -1,5 +1,5 @@
 /**
- * step-086 同根单飞锁测试:①申请/释放/owner 校验;②跨进程 busy(礼貌拒绝信息带持有者);
+ * 同根单飞锁测试:①申请/释放/owner 校验;②跨进程 busy(礼貌拒绝信息带持有者);
  * ③等待-复用(持有者释放后等到);④stale 接管(持有者死);⑤活 worker 礼让窗;
  * ⑥buildIndexWithReuse 接线(忙→IndexBusyError;闲→正常构建,二次构建全复用零重扫)。
  * 全部产物落 mkdtemp,不污染真实仓。
@@ -66,7 +66,7 @@ function waitLocked(c: ChildProcess): Promise<void> {
   });
 }
 
-describe("step-086 同根单飞锁", () => {
+describe(" 同根单飞锁", () => {
   it("①申请→释放→锁文件消失;重复释放无害", async () => {
     const root = mkroot("basic");
     const l = await acquireBuildLock(root, { holder: "cli", waitMs: 0 });
@@ -174,8 +174,7 @@ describe("step-086 同根单飞锁", () => {
     });
     const err = await buildIndexWithReuse(root, { lockWaitMs: 400, heapBudget: "off" }).then(
       () => null,
-      (e: unknown) => e,
-    );
+      (e: unknown) => e);
     expect(err).toBeInstanceOf(IndexBusyError);
     expect((err as Error).message).toContain("已有索引在飞");
     child.kill("SIGKILL");

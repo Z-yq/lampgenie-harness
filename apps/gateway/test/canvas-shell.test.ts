@@ -1,11 +1,10 @@
 /**
  * 无限画布外壳(assets/canvas-shell.js)契约测试。
- *
  * 三层:
  *  ①语法层:资产可被 JS 引擎解析(node:vm 编译);
  *  ②几何层:纯函数行为(吸附/包围盒/适配/光标锚定缩放)——画布手感正确性的确定性守卫;
- *  ③接线层:面板页注入 canvas-shell + 脚本暴露 init/focus 等 API,且视图→卡片映射覆盖全部 17 视图(step-141 增 ide)。
- * 说明:本仓无 DOM 环境(无 jsdom),因此不对 DOM 交互做单测——交互验收走浏览器实测。
+ * ③接线层:面板页注入 canvas-shell + 脚本暴露 init/focus 等 API,且视图→卡片映射覆盖全部 17 视图(增 ide)。
+ * 说明:本仓无 DOM 环境(无 jsdom),因此不对 DOM 交互做单测——交互验收走浏览器经验证。
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -193,7 +192,7 @@ describe("无限画布外壳", () => {
       expect(html).toContain("function switchViewActivate(");
       expect(html).toContain("function canvasActive(");
       expect(html).toContain("function viewLive(");
-      // 卡片规格:全部 17 个视图节点都要有卡片(缺一个=该模块在画布上消失;step-141 增 view-ide)
+ // 卡片规格:全部 17 个视图节点都要有卡片(缺一个=该模块在画布上消失; 增 view-ide)
       for (const node of [
         "view-tasks", "view-term", "view-git", "view-files", "view-ide", "view-board", "view-project", "view-sense",
         "view-wf", "view-exp", "view-team", "view-nodes", "view-approvals", "view-market", "view-browser", "view-sys",
@@ -207,7 +206,7 @@ describe("无限画布外壳", () => {
       expect(html).toContain("CanvasShell.toggleMode()");
       // 命令中心模块跳转
       expect(html).toContain("data-card=");
-      // 身份/取数分层(2026-10-20 真 bug 守卫:懒激活曾用 switchViewActivate → 多卡并行进入视口会抢改
+ // 身份/取数分层(真 bug 守卫:懒激活曾用 switchViewActivate → 多卡并行进入视口会抢改
       // 「当前视图」身份,切回经典布局时显示错页)。三段职责必须是分开的函数,且懒激活只调取数。
       expect(html).toContain("function setViewIdentity(");
       expect(html).toContain("function applyViewChrome(");
@@ -239,7 +238,7 @@ describe("无限画布外壳", () => {
       // 唤回职责迁托盘:卡片可见性广播(cv-cards 事件,面板监听后置灰托盘按钮)
       expect(asset).toContain("function notifyCards(");
       expect(asset).toContain('"cv-cards"');
-      // 布局守卫(2026-10-21 标题压叠修复):载入归一化 + 脏值不落盘 + applyCard 非有限钳回
+ // 布局守卫(标题压叠修复):载入归一化 + 脏值不落盘 + applyCard 非有限钳回
       expect(asset).toContain("normSavedCard(sc, defLayout[n])");
       expect(asset).toContain("function normSavedCard(");
       expect(asset.match(/Number\.isFinite/g)!.length).toBeGreaterThan(6);

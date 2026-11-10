@@ -1,5 +1,5 @@
 /**
- * 路径围栏单测(2026-10-27):Windows 端口径。
+ * 路径围栏单测:Windows 端口径。
  * 锚点:旧实现 `startsWith(root + "/")` 在 win32 realpath(反斜杠)下恒 false,
  * 导致 IDE 文件读/图片取数/嵌套写被误判越界;本判定必须两种方言都正确。
  */
@@ -28,7 +28,7 @@ describe("isPathInside · POSIX", () => {
   });
 });
 
-describe("isPathInside · Windows(2026-10-27 实锤)", () => {
+describe("isPathInside · Windows(2026-10-27 实测确认)", () => {
   it("盘符路径:反斜杠子项 → true(旧 startsWith(root+'/') 在这里全 false)", () => {
     expect(isPathInside("E:\\workship\\genie", "E:\\workship\\genie\\README.md", win32)).toBe(true);
     expect(isPathInside("E:\\workship\\genie\\", "E:\\workship\\genie\\a\\b.ts", win32)).toBe(true);

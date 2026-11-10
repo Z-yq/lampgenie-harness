@@ -149,7 +149,7 @@ export function mergeSkillIndex(userIndex: { category: string; name: string; des
   return [...userIndex, ...builtinNotOverridden];
 }
 
-/** step-047:过滤被停用的内置技能(面板技能分区开关;.genie/skills-disabled.json)。 */
+/** 过滤被停用的内置技能(面板技能分区开关;.genie/skills-disabled.json)。 */
 export function mergeSkillIndexWith(userIndex: { category: string; name: string; description: string }[], disabledBuiltins: string[]): { category: string; name: string; description: string }[] {
   const off = new Set(disabledBuiltins);
   const userKeys = new Set(userIndex.map((x) => `${x.category}/${x.name}`));

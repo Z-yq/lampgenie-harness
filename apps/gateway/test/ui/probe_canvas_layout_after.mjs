@@ -1,4 +1,4 @@
-/** 布局改后取证探针(2026-11-06):ELK 布局 + 一屏可读性。
+/** 布局改后取证探针:ELK 布局 + 一屏可读性。
  *  骨架抄 probe_canvas_baseline.mjs / probe_canvas_after.mjs;自起临时实例(7798,占用则 7799),**绝不碰 7700**。
  *  量:17 节点板与 60 节点板各 —— viewBox w/h/宽高比、「适」后 k+host+一屏完整可见节点数、「全」后 k+可见数、
  *      可见边标签数(g[data-connector-id] text 非空且未 display:none)、抽样 3 节点的文本溢出卡宽条数。

@@ -1,12 +1,10 @@
 // 板质量遥测基线表(bq5):纯聚合脚本,零仓内依赖(node:fs/node:path 直跑)。
 // 直跑:node --experimental-strip-types apps/gateway/src/board-quality-baseline.ts --journal <dir>
-//
-// journal 落盘布局(上游已实证):
+// journal 落盘布局(上游已验证):
 //   <journalDir>/global.jsonl          跨会话 kind
 //   <journalDir>/sessions/<sid>.jsonl  会话肥 kind
 //   <journalDir>/gateway.jsonl         旧文件(冻结,读到并入)
 // 逐行 JSON:{seq,kind,sessionId,time,payload}
-//
 // 事件字段契约(上游并行任务落账;本脚本对字段缺失防御,缺了当 0/跳过,不抛):
 //   kind=board.audit    payload={taskId,boardType?,ok,grand{total,passed,rate},
 //                                planQuality{nodes,contentNodes,anchorDensity,p0{passed,total,rate}},
@@ -81,8 +79,7 @@ export function aggregateBoardQuality(
   lines: string[],
   nowMs: number,
   days: number,
-  meta?: BaselineMeta,
-): string {
+  meta?: BaselineMeta): string {
   const winStart = nowMs - days * DAY_MS;
   const byType = new Map<string, BoardTypeAgg>();
   const skeletonTasks = new Set<string>();
@@ -196,8 +193,7 @@ export function aggregateBoardQuality(
   );
   out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   const types = [...byType.values()].sort((a, b) =>
-    a.boardType < b.boardType ? -1 : a.boardType > b.boardType ? 1 : 0,
-  );
+    a.boardType < b.boardType ? -1 : a.boardType > b.boardType ? 1 : 0);
   for (const t of types) {
     const okRate = rate3(t.okCount / t.audits);
     const contract = rate3(t.issueContract / t.audits);
@@ -227,7 +223,7 @@ export function aggregateBoardQuality(
 
 /** 从 cwd 向上逐级(限 8 级)找含 .genie/journals 的目录。 */
 /** 候选目录是否"有当轮数据":含 global.jsonl 或 sessions/ 下有 jsonl。
- *  2026-11-05 实测缺陷:apps/gateway/.genie/journals 是 10-18 的残留(只有旧 gateway.jsonl +
+ * 经验证缺陷:apps/gateway/.genie/journals 是 10-18 的残留(只有旧 gateway.jsonl +
  *  shots/),真源在仓根 —— 只判"目录存在"会把数据源指错,静默输出空表。 */
 function hasLiveJournal(cand: string): boolean {
   try {

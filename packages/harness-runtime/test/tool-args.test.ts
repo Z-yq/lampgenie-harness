@@ -1,5 +1,5 @@
 /**
- * 工具入参归一与校验诊断(机制 M150)。
+ * 工具入参归一与校验诊断(机制)。
  * 契约:
  *  - JSON-string 参数解析;坏 JSON / 非对象字符串 → issue(不是抛错);
  *  - 无歧义 coercion(数字串/布尔串/数组/对象/字符串),不确定则保留原值且不 issue;
@@ -150,8 +150,7 @@ describe("normalizeToolArgs:required / 改名 / 未知键", () => {
     });
     const r = normalizeToolArgs(
       { filePath: "p", oldString: "o", newString: "n", replaceAll: "true", query_string: "q" },
-      schema,
-    );
+      schema);
     expect(r.ok).toBe(true);
     expect(r.renamed.map((x) => `${x.from}->${x.to}`).sort()).toEqual(
       ["filePath->path", "newString->new_string", "oldString->old_string", "query_string->query", "replaceAll->replace_all"].sort(),

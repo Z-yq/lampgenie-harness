@@ -1,11 +1,9 @@
 /**
- * 2026-10-28 事故回归:web_search 打崩 session-worker。
- *
+ * 事故回归:web_search 打崩 session-worker。
  * 现场:未配搜索 provider → web_search 走 DuckDuckGo HTML 兜底 → 域名解析到本机
  * 无路由的 IPv6 → 旧 pinnedLookup 同步回调让 https 在 TLS 未装配好时同步建连,
  * setServername 抛 TypeError → 半建成 socket 泄漏 → 其 'error'(ENETUNREACH) 无人监听
  * → 进程级 uncaughtException → session-worker code=1,主 agent 与所有子代理一起被收尸。
- *
  * 判定口径:子进程跑真实 fetchPublicPage,hostname + 注入不可达公网 IPv6(免 DNS 依赖,
  * 且必须走 lookup——IP 字面量覆盖不到缺陷):
  * ①错误以 WebToolError 收敛(RESULT:caught),②进程不得因未捕获异常退出

@@ -48,7 +48,7 @@ function goFixture(): { dir: string; rel: string } {
   return { dir, rel: "svc.go" };
 }
 
-describe("Go structural adapter(designs/16 §5 二期)", () => {
+describe("Go structural adapter( §5 二期)", () => {
   it("包级 func/type/struct/interface/方法 提取+行号正确", async () => {
     const { dir, rel } = goFixture();
     const r = await parseGoFile(dir, rel);
@@ -158,8 +158,8 @@ describe("Go 跨文件候选(open-code-review 实证:368 文件只做同文件�
   });
 });
 
-// step-084 RC-A:接收者/包限定调用恢复跨文件候选(cobra/grpc-go/moby 全锚塌格的根因面)
-describe("Go RC-A:包限定与类型证据跨文件候选(step-084)", () => {
+// RC-A:接收者/包限定调用恢复跨文件候选(cobra/grpc-go/moby 全锚塌格的根因面)
+describe("Go RC-A:包限定与类型证据跨文件候选", () => {
   it("pkg.Func( 包限定调用发候选并经唯一名解析;无 import 证据的包名不猜", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-go-pkg-"));
     try {
@@ -288,8 +288,8 @@ describe("Go RC-A:包限定与类型证据跨文件候选(step-084)", () => {
   });
 });
 
-// step-102:自仓 import 前缀白名单重落地(094 存档回迁)+interface/struct 注册区分
-describe("Go 自仓 import 前缀白名单(step-102,094 存档复用)", () => {
+// 自仓 import 前缀白名单重落地(094 存档回迁)+interface/struct 注册区分
+describe("Go 自仓 import 前缀白名单(,094 存档复用)", () => {
   /** grpc-go 生成代码实形态:模块根包类型 ClientConn,生成 client 结构持 `cc *app.ClientConn`。 */
   function grpcShapeFixture(dir: string, modLine: string | null): void {
     if (modLine !== null) writeFileSync(join(dir, "go.mod"), modLine + "\n\ngo 1.22\n");
@@ -347,7 +347,7 @@ describe("Go 自仓 import 前缀白名单(step-102,094 存档复用)", () => {
     }
   });
 
-  it("无 go.mod=白名单关闭,行为与 step-084 一致(同形态不解析)", async () => {
+  it("无 go.mod=白名单关闭,行为与  一致(同形态不解析)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-go-wn-"));
     try {
       grpcShapeFixture(dir, null);
@@ -430,8 +430,8 @@ describe("Go 自仓 import 前缀白名单(step-102,094 存档复用)", () => {
   });
 });
 
-// step-102:interface/struct 注册区分(094 精度门假边归因修复)
-describe("Go interface/struct 注册区分(step-102)", () => {
+// interface/struct 注册区分(094 精度门假边归因修复)
+describe("Go interface/struct 注册区分", () => {
   it("typeKind 注册:type X struct→struct / type X interface→interface / 别名不设(未知)", async () => {
     const { dir, rel } = goFixture();
     const r = await parseGoFile(dir, rel);
@@ -612,8 +612,8 @@ describe("Go interface/struct 注册区分(step-102)", () => {
   });
 });
 
-// step-108:接口断言定向解析(grpc-go Invoke 生成代码接收者的诚实边界突破)
-describe("Go 接口断言定向解析(step-108)", () => {
+// 接口断言定向解析(grpc-go Invoke 生成代码接收者的诚实边界突破)
+describe("Go 接口断言定向解析", () => {
   /** grpc-go 生成代码实形态:根包接口+唯一断言实现;生成 client(子目录包)持接口字段。 */
   function grpcIfaceFixture(dir: string): void {
     writeFileSync(join(dir, "go.mod"), "module google.golang.org/grpc\n\ngo 1.22\n");

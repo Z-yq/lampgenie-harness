@@ -1,5 +1,5 @@
 /**
- * step-058 评审数据引用孤儿检查(board-store 边引用完整性同律):
+ * 评审数据引用孤儿检查(board-store 边引用完整性同律):
  * 幻觉路径拒收/越界行号夹紧/deleted 文件 diff 独引/回写店孤儿对账。
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -37,9 +37,9 @@ function f(file: string, line = 1): Finding {
   return { file, line, severity: "warning", title: "t", detail: "d" };
 }
 
-describe("checkFindingRefs(step-058)", () => {
+describe("checkFindingRefs()", () => {
   it("工作树文件收录;越界行号夹到文件末行并计数", () => {
-    // 2026-10-20 契约:findings 必须在变更集内(target 列出受审文件)
+ // 契约:findings 必须在变更集内(target 列出受审文件)
     const r = checkFindingRefs(dir, target(["real.ts", "sub/a.ts"]), [f("real.ts", 10), f("real.ts", 9999), f("sub/a.ts", 0)]);
     expect(r.kept).toHaveLength(3);
     expect(r.orphans).toHaveLength(0);
@@ -73,7 +73,7 @@ describe("checkFindingRefs(step-058)", () => {
   });
 });
 
-describe("sweepStoreOrphans(step-058,只报不删)", () => {
+describe("sweepStoreOrphans(,只报不删)", () => {
   it("文件已删/改名的条目记为孤儿;存量条目不被修改", () => {
     const store: ReviewCommentStore = {
       version: 1,
@@ -89,7 +89,7 @@ describe("sweepStoreOrphans(step-058,只报不删)", () => {
   });
 });
 
-describe("变更集范围(2026-10-20 用户口径:只审本 session 修改内容)", () => {
+describe("变更集范围(2026-10-20 只审本 session 修改内容)", () => {
   it("存在但不在变更集的文件 → 范围外剔除(计数),不进 findings", () => {
     const r = checkFindingRefs(dir, target(["sub/a.ts"]), [f("real.ts"), f("sub/a.ts")]);
     expect(r.kept).toHaveLength(1);

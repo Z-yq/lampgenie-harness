@@ -1,6 +1,5 @@
 /**
- * Rust / C# / Ruby / PHP 结构 adapter 共用件(2026-10-25)。
- *
+ * Rust / C# / Ruby / PHP 结构 adapter 共用件。
  * 这四个语言走 tree-sitter wasm 主路径(adapters/tree-sitter.ts 的 loadTsParser),
  * 本模块只做节点视图/错误区间/签名解析/类型文本归一的单一真相,避免四份拷贝漂移。
  * 纪律与既有 adapter 一致:
@@ -16,7 +15,7 @@ import { loadTsParser, type TsLang } from "./tree-sitter";
 /** web-tree-sitter 0.25 节点视图(只声明本模块用到的面)。 */
 export interface LangNode {
   /** 节点身份:web-tree-sitter 每次属性访问返回新包装对象,**引用比较必失效** ——
-   * 祖先/包含判定必须用 id(与 AGENTS.md 2026-10-21 决策点感知同一踩坑)。 */
+ * 祖先/包含判定必须用 id(与 AGENTS.md 决策点感知同一注意)。 */
   id?: number;
   type: string;
   text: string;

@@ -1,5 +1,5 @@
 /**
- * step-1042 节点 Fleet + 关卡 Gate 丰满测试。
+ * 节点 Fleet + 关卡 Gate 丰满测试。
  * 覆盖:①纯函数(pickLanAddress LAN 推导/riskOfTool 启发式/sampleLoad 界内)②broker 决议 ring
  * +onSettle(offline 不入账)③nodes.dispatch nodeId 精确钉选④真实 WS 网关:假节点注册→nodes.changed
  * 广播→node.exec 真路由(dispatch 下发→result 回流→node.exec.result)、离线显式错、local 照旧任务链、
@@ -22,7 +22,7 @@ import { NodeRegistry } from "../src/nodes.js";
 import { servePanel } from "../src/panel.js";
 
 // ── ① 纯函数 ──────────────────────────────────────────────────────────────────
-describe("step-1042 纯函数(LAN 推导/风险启发/负载采样)", () => {
+describe(" 纯函数(LAN 推导/风险启发/负载采样)", () => {
   it("pickLanAddress:私网段优先;env 一票覆盖;无命中回退 127.0.0.1", () => {
     const ifaces = [
       { name: "lo", address: "127.0.0.1", internal: true, family: "IPv4" },
@@ -55,7 +55,7 @@ describe("step-1042 纯函数(LAN 推导/风险启发/负载采样)", () => {
 });
 
 // ── ② broker 决议 ring + onSettle ─────────────────────────────────────────────
-describe("step-1042 broker 历史面(onSettle + recent ring)", () => {
+describe(" broker 历史面(onSettle + recent ring)", () => {
   it("panel 应答与超时都入账并触发 onSettle;offline/policy 直通不入账;history 截尾", async () => {
     const b = new PermissionBroker(80);
     const seen: { requestId: string; by: string }[] = [];
@@ -81,7 +81,7 @@ describe("step-1042 broker 历史面(onSettle + recent ring)", () => {
 });
 
 // ── ③ nodes.dispatch nodeId 精确钉选 ──────────────────────────────────────────
-describe("step-1042 nodes.dispatch nodeId 钉选(node.exec 真路由地基)", () => {
+describe(" nodes.dispatch nodeId 钉选(node.exec 真路由地基)", () => {
   it("nodeId 命中在线节点;钉选不在线节点=null;不钉选照旧负载最低优先", () => {
     const nodes = new NodeRegistry();
     nodes.register({ nodeId: "n1", capabilities: ["shell"], reachability: ["lan"] });
@@ -95,7 +95,7 @@ describe("step-1042 nodes.dispatch nodeId 钉选(node.exec 真路由地基)", ()
 });
 
 // ── ④ 真实 WS 网关:假节点全链 ─────────────────────────────────────────────────
-describe("step-1042 node.exec 真路由 + nodes.changed(真实 WS 网关)", () => {
+describe(" node.exec 真路由 + nodes.changed(真实 WS 网关)", () => {
   const ROOT = mkdtempSync(join(tmpdir(), "nodes-gate-ws-"));
   const OLD_ROOT = process.env.GENIE_REPO_ROOT;
   const PORT = 7963;
@@ -162,7 +162,7 @@ describe("step-1042 node.exec 真路由 + nodes.changed(真实 WS 网关)", () =
 });
 
 // ── ⑤ 协议新消息 ──────────────────────────────────────────────────────────────
-describe("step-1042 协议:nodes/permission 新消息", () => {
+describe(" 协议:nodes/permission 新消息", () => {
   it("permission.history 入站;nodes.changed/permission.resolved/permission.history.result/node.exec.result 出站", () => {
     expect(parseClientMessage('{"v":1,"type":"permission.history","limit":20}')?.type).toBe("permission.history");
     expect(parseClientMessage('{"v":1,"type":"permission.history","limit":0}')).toBeNull(); // limit 正整数约束
@@ -176,7 +176,7 @@ describe("step-1042 协议:nodes/permission 新消息", () => {
 });
 
 // ── ⑥ 面板/源码静态契约 ──────────────────────────────────────────────────────
-describe("step-1042 面板静态契约(Fleet/Gate 区块+WS 泵+统一应答口)+源码锚", () => {
+describe(" 面板静态契约(Fleet/Gate 区块+WS 泵+统一应答口)+源码锚", () => {
   const PORT = 7964;
   const panel = servePanel(PORT, () => { /* 纯静态 */ });
   let pageHtml = "";

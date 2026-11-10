@@ -1,5 +1,5 @@
 /**
- * 会话完整导出(2026-10-19 用户口径「日志下载就应该下载完全的内容」):
+ * 会话完整导出:
  * 此前「↓ 日志」只导 journal 事件(指针+摘要)——system 提示词/消息构型/工具 schema/响应
  * 全在 .genie/llm-trace 文件里,下载拿不到。本测试钉住三层打包契约:
  * ① export.meta 头行 ② journal 逐事件原样 ③ llm.trace 指针 → llm.trace.full 全文内嵌

@@ -1,14 +1,12 @@
 /**
- * board-sense(step-073,tasks/step-073-whiteboard-semantic/step.md D1):
+ * board-sense(D1):
  * code-sense 分析产物 → 可编辑语义白板(BoardDoc 的 nodes/edges 形态)的四个确定性纯函数转换器。
- *
  * 「模块语义级」相对 c2f fileToModules 模块板的增量:
  * - fileToModules=单文件内符号(函数级);本文件 moduleMapBoard=全仓模块(目录级),
  *   边=跨模块真实调用聚合(c2f 全量边按模块前缀归组 ×N)——分层+组件依赖语义进节点边。
- * - archGraphBoard:LLM 架构图(带 evidence 分级,inferred→「推断·」标签,不冒充实证)。
+ * - archGraphBoard:LLM 架构图(带 evidence 分级,inferred→「推断·」标签,不冒充验证)。
  * - sequenceBoard:符号静态语句序→链式时序板(序号+异步边界入边标签;静态序≠运行序如实标注)。
  * - pageFlowBoard:页面流→io 节点+导航边(trigger 入标签)。
- *
  * 纪律:转换器零 IO 零随机(幂等);边完整性=只引用已产出节点 id;全部产出过 BoardDocZ 才落盘(调用方职责)。
  */
 import type { BoardDoc, BoardFlowStep } from "@lampgenie/protocol";
@@ -198,7 +196,7 @@ export function pageFlowBoard(pf: PageFlowResult): { title: string; nodes: Board
   return { title: `页面流板(${nodes.length} 页面 · ${edges.length} 跳转)`, nodes, edges };
 }
 
-// ---- step-121 工作流板(docKind=workflow):结构化 spec→可执行编排板的确定性转换器 ----
+// ---- 工作流板(docKind=workflow):结构化 spec→可执行编排板的确定性转换器 ----
 
 /** 工作流板结构描述(程序化造板/agent 造板入口):
  * steps=节点(id / kind 为 wf-x 前缀类型 / label / config 按 kind);edges=执行顺序或分支(label 真/假)。 */
@@ -239,8 +237,8 @@ export function workflowBoard(spec: WorkflowSpec): { title: string; nodes: Board
   return { title: (spec.title ?? `工作流板(${nodes.length} 步骤)`).slice(0, 200), nodes, edges };
 }
 
-// ---- step-083 页面结构板(plan 白板化):规划产物→docKind=page 板的确定性转换器 ----
-// fixG(2026-10-18)两阶段复核:sections/components 本就可选——骨架版(pages+navs,无 sections)经本转换器
+// ---- 页面结构板(plan 白板化):规划产物→docKind=page 板的确定性转换器 ----
+// fixG两阶段复核:sections/components 本就可选——骨架版(pages+navs,无 sections)经本转换器
 // 自然成立(page 节点+nav 边零丢弃,summary 如实记「区块 0 · 组件 0」),丰满版(带 sections/components)
 // 同样全量成立;板全量覆盖+rev 自增,rev1 骨架→rev2 丰满无需任何兼容改动(零行为改动,验证见报告)。
 

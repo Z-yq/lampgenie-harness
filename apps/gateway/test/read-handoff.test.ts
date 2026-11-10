@@ -1,5 +1,5 @@
 /**
- * 读传递 gateway 集成锚(2026-11-05 D3:跨 agent 读重叠 17.5% 治理):
+ * 读传递 gateway 集成锚( D3:跨 agent 读重叠 17.5% 治理):
  * ①子 read_file 尾注:命中父已读行段交叠 → 结果尾部「已读提示」;不交叠/无父键零尾注;
  * ②双写登记:子读经父键入父清单(兄弟子代理共享已读事实),路径=roots 相对(与主 agent 同键);
  * ③真链 spawn:主 agent 先 read_file 再 spawn → 任务书含父已读块、subagent.spawn payload 带

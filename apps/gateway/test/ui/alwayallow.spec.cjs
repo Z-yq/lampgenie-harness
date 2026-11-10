@@ -1,4 +1,4 @@
-/** UI 实测:F2 always-allow(对话框三钮/总是允许写规则/二次同类自动放行)——真实 gateway+chromium。 */
+/** UI 经验证:F2 always-allow(对话框三钮/总是允许写规则/二次同类自动放行)——真实 gateway+chromium。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -45,7 +45,7 @@ const { repoRoot } = require("../../src/repo-root.ts");
     await page.locator("#permDialog.on").waitFor({ timeout: 6000 });
     check("审批对话框出现", true);
     check("三按钮在列", (await page.locator("#permDialog .perm-btns button").count()) === 3);
-    // C9 归一后的展示口径(2026-10-14 C):落盘规则=工具级 "*",meta 文案与实落一致展示 tool[*](摘要首词形态从未真实落盘)
+ // C9 归一后的展示口径( C):落盘规则=工具级 "*",meta 文案与实落一致展示 tool[*](摘要首词形态从未真实落盘)
     check("meta 显示将写规则(归一形态 tool[*])", ((await page.locator("#permMeta").textContent()) || "").includes("subagent[*]"));
     await page.click("#permAlways");
     // 决策链回灌走 ws+动态 import+慢盘写文件——固定 600ms 在 drvfs 上不够(P-12 族),改轮询等 decisions

@@ -1,16 +1,13 @@
 /**
  * #179 Peer 级访问快照(纯逻辑面)。
- *
  * 问题:一次会话里并发着 owner / member / viewer / relay / group 五种主体,每条 RPC 的
  * 准入都靠「临时查一遍策略」。临时查有两个缺口:①判定要在参数 schema 解析之前发生,
  * 否则非法参数会先被 schema 层拒掉,准入结论就永远看不到;②客户端重连后服务端没有
  * 「上次允许了什么」的快照,只能重新全量算,期间出现允许集空窗(或者更糟:按老策略放行)。
- *
  * 本模块只做三件事,全部是纯函数:
  *   ① 定死一次**单一主体 × 单一方法**的准入判定(decide),输出 10 个稳定码之一;
  *   ② 批量判定(listAllows / eventAllows)——一项坏不影响其它项(事件粒度需要知道「哪些项被拒」);
  *   ③ 快照的生成与演进(snapshotFor / applyFollow / invalidate / reloadSnapshot / mergeReconnect)。
- *
  * 三条硬边界:
  *   ① **owner 恒 allow**:owner 是自身的会话所有者,策略文件缺失、坏、写错都不该把它锁在门外;
  *   ② **失败一律 fail-closed**:condition / binding 抛错 → PEER_POLICY_FAILED(不是 allow,
@@ -18,7 +15,6 @@
  *      前者该授权从 baseline 中消失,后者明确写 false);
  *   ③ **不 throw、不改写入参**:任何输入(undefined / null / 畸形对象)都折叠成码;
  *      args 引用原样递给条件函数,不解析不改写、不深拷贝。
- *
  * 纪律:零 IO、零依赖(不 import node:*、不 import 其它 runtime 模块)、绝不 throw。
  * 本模块在参数 schema 解析**之前**被调用:只收 raw args,不解析、不改写、不校验其形状。
  */
@@ -236,11 +232,9 @@ function allowed(principalId: string, method: string): PeerDecision {
 
 /**
  * 单主体 × 单方法的准入判定。
- *
  * **调用时机**:参数 schema 解析之前。本函数只收 raw args,不解析不改写;
  * 条件函数拿到的是同一个 args 引用(由它自己决定怎么看)。
  * 任何输入都不 throw:畸形 policySet / principal 都折叠成稳定码。
- *
  * 判定顺序:
  *   1) kind === "owner" → allow(无 policy 也放行);
  *   2) 候选 = kind 相同 且(策略未声明 role 或 role 与 ctx.role 相等);无候选 → DENY_NO_POLICY;
@@ -388,8 +382,7 @@ export function eventAllows<T = unknown>(
 function buildBaseline(
   policySet: PolicySet | undefined,
   principal: Principal,
-  role?: string,
-): Record<string, boolean> {
+  role?: string): Record<string, boolean> {
   const baseline: Record<string, boolean> = {};
   const methods = isPlainObject(policySet) && Array.isArray((policySet as PolicySet).methods)
     ? (policySet as PolicySet).methods
@@ -427,8 +420,7 @@ export function snapshotFor(
   policySet: PolicySet | undefined,
   principal: Principal,
   at?: string,
-  role?: string,
-): PeerSnapshotResult {
+  role?: string): PeerSnapshotResult {
   void at; // 快照本体不记时间(时间属于 follow 项);保留参数以便调用方统一签名。
   const safePrincipal: Principal = {
     id: isPlainObject(principal) ? str((principal as Principal).id) : "",
@@ -460,7 +452,6 @@ export function applyFollow(
 
 /**
  * 从 policySet 反推 principal.kind(快照本身只记 id,不记 kind)。
- *
  * 反推顺序:① 有 binding 精确等于 principalId 的策略 → 用它的 kind;
  *          ② 全部策略 kind 唯一 → 用该 kind;③ 都推不出来 → 空 kind(等价「无策略」→ DENY_NO_POLICY)。
  * 调用方若已知 kind(store 层有),直接传第四参覆盖反推,避免猜。
@@ -468,8 +459,7 @@ export function applyFollow(
 function inferPrincipal(
   policySet: PolicySet | undefined,
   principalId: string,
-  principal?: Principal,
-): Principal {
+  principal?: Principal): Principal {
   if (isPlainObject(principal) && str((principal as Principal).kind)) {
     return { id: str((principal as Principal).id) || principalId, kind: (principal as Principal).kind };
   }
@@ -492,7 +482,6 @@ function inferPrincipal(
 /**
  * 策略失效重算:按**当前** policySet 重算 baseline,并清空 follow。
  * follow 里的历史动作属于旧策略,留着会让「失效」变成「半失效」。
- *
  * 快照只记 principalId(不记 kind),所以重算需要 kind:优先用第四参 principal 给的 kind,
  * 否则按 policySet 反推(见 inferPrincipal)。
  */
@@ -500,8 +489,7 @@ export function invalidate(
   snapshot: PeerSnapshot,
   policySet: PolicySet | undefined,
   at?: string,
-  principal?: Principal,
-): PeerSnapshotResult {
+  principal?: Principal): PeerSnapshotResult {
   void at;
   const current = isPlainObject(snapshot) ? snapshot : ({ principalId: "", baseline: {}, follow: [] } as PeerSnapshot);
   const resolved = inferPrincipal(policySet, str(current.principalId), principal);
@@ -515,8 +503,7 @@ export function invalidate(
 export function reloadSnapshot(
   policySet: PolicySet | undefined,
   principal: Principal,
-  at?: string,
-): PeerSnapshotResult {
+  at?: string): PeerSnapshotResult {
   void at;
   const safePrincipal: Principal = {
     id: isPlainObject(principal) ? str((principal as Principal).id) : "",

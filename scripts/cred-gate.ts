@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * 凭证红线门禁(designs/10 §5 红线①,step-015 D3):全仓精确前缀 grep,
- * 排除 fixture/测试样例/vendor/lock(精确前缀纪律:裸 "sk-" 会误伤 sk-m 子串——step-015 实测教训)。
+ * 凭证红线门禁( §5 红线①, D3):全仓精确前缀 grep,
+ * 排除 fixture/测试样例/vendor/lock(精确前缀纪律:裸 "sk-" 会误伤 sk-m 子串—— 经验证教训)。
  * --self-test:植入一个真形态密钥到临时文件,断言真能抓到(防自证空转)。
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";

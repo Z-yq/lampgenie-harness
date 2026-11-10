@@ -1,5 +1,5 @@
 /**
- * C# structural adapter(2026-10-25):tree-sitter wasm 主路径 + 文本回退。
+ * C# structural adapter:tree-sitter wasm 主路径 + 文本回退。
  * 覆盖:class/interface/构造器/方法/字段/内嵌调用/跨文件候选/签名/引擎集成。
  */
 import { describe, it, expect } from "vitest";

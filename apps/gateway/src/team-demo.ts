@@ -1,17 +1,14 @@
 /**
- * 本地虚拟组织自举(2026-10-29 团队移植第三段):「demo 团队 + demo git 项目 + 一键清理」。
- *
+ * 本地虚拟组织自举(团队移植第三段):「demo 团队 + demo git 项目 + 一键清理」。
  * 目标:一条命令在本机得到一个**可被真实消费**的最小团队仓——4 名 demo- 前缀成员
  * (owner/dev/dev/reviewer)、三角色定义、每角色至少 1 条规则 + 1 个技能、团队元信息与文化,
  * 外加一个有 2 次真实提交的 demo git 项目(bare 镜像作 origin,projects.yaml 注册)。
  * 团队页/资产面板/项目绑定因此可以在离线环境里端到端演示,演示结束再一条命令清干净。
- *
- * 契约(tasks/designs/30-teamai-port-matrix.md §2.1 布局 / §3 虚拟组织):
+ * 契约( §2.1 布局 / §3 虚拟组织):
  * - 根目录 `<root>/`:team-repo.git(bare)、relay/team-clone(工作克隆)、demo-projects/<id>(真仓)
  *   与 demo-projects/<id>.git(bare origin)。
  * - 成员文件字段沿用自有 yaml-lite(扁平 key:value + 块式列表),新增 roleId(≠ 权限位 role)。
  * - roles.yaml 用块式列表自拼字符串(不走 W2 的 parseRolesYaml,互不耦合)。
- *
  * 幂等纪律:所有内容由**纯函数**从 options 生成(不含当前时间/随机数),逐文件比对字节;
  * 内容相同即 skip,内容有差异才写,因此第二次 seed 零写入、零提交、零 push。
  * 全部入口只吃显式 options(不读 env),测试可直接指向临时目录。
@@ -602,8 +599,7 @@ export async function seedVirtualTeam(opts: VirtualTeamOptions): Promise<Virtual
       memberYaml(spec, projectId),
       `roster/members/${spec.username}.yaml`,
       created,
-      skipped,
-    );
+      skipped);
   }
   for (const [rel, content] of Object.entries(ruleFiles())) writeIfChanged(join(c, rel), content, rel, created, skipped);
   for (const [rel, content] of Object.entries(skillFiles())) writeIfChanged(join(c, rel), content, rel, created, skipped);
@@ -687,7 +683,6 @@ function decodePem(encoded: string): string {
  * 把 demo 成员换成真 ed25519 身份(sole production-code change of 虚拟组织协作流):
  * 保留 displayName/role/roleId/projects/invitedBy/registeredAt/revoked,fingerprint 改成公钥派生指纹,
  * keys 登记该指纹,新增 publicKey=PEM。**不改 seedVirtualTeam 的任何行为**(它仍写 demo 指纹)。
- *
  * 幂等:yaml 里的 publicKey 已能派生出与本地身份一致的指纹 → 跳过(不覆盖、不换钥匙),
  * 因此二次调用不会把已入册成员从 roster.keys 里踢出去。
  */
@@ -849,8 +844,7 @@ export async function cleanupVirtualTeam(opts: VirtualTeamOptions): Promise<{ re
 
 /** 只读状态:present = 工作克隆在;members = 成员文件名;project = 当前注册的 demo 项目 id。 */
 export async function virtualTeamStatus(
-  opts: VirtualTeamOptions,
-): Promise<{ present: boolean; members: string[]; project: string | null }> {
+  opts: VirtualTeamOptions): Promise<{ present: boolean; members: string[]; project: string | null }> {
   const projectId = opts.projectId?.trim() || DEFAULT_PROJECT_ID;
   const p = resolvePaths(opts, projectId);
   if (!existsSync(p.cloneDir)) return { present: false, members: [], project: null };

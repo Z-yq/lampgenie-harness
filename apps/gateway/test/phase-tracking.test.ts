@@ -1,5 +1,5 @@
 /**
- * 五硬阶段追踪(2026-10-20 用户口径:理解→规划→实施→验收→完成,每阶段上板,
+ * 五硬阶段追踪(理解→规划→实施→验收→完成,每阶段上板,
  * 不涉及也声明;代码级追踪防越做越偏):
  * - task_phase 推进:确认文本+journal task.phase 事件+板上「00 流程」泳道出现 ph- 节点;
  * - 越阶警告:understand 直接跳 close → 返回含越阶提醒(journal 留 warnings);
@@ -58,14 +58,14 @@ it("task_phase:推进上板+journal 留痕;越阶与回退有警告;skip 上板�
   expect(m).toContain("阶段已推进");
   expect(m).toContain("越阶");
   expect(m).toContain("阶段回退");
-  // 2026-10-21 用户口径修正:五阶段不落白板(白板=设计草图)——归宿=journal task.phase(带 taskId)
+ // 修正:五阶段不落白板(白板=设计草图)——归宿=journal task.phase(带 taskId)
   // +「任务追踪」看板。断言:不生成阶段板文件。
   const bp = boardPathOf(sid, t.id);
   expect(existsSync(bp), "task_phase 不得再写白板").toBe(false);
 }, 30_000);
 
 it("P1-3 账本零步:task_phase 与并发安全工具同批(同一步)时两者都执行,task.phase 仍落 journal", async () => {
-  // 背景(2026-10-30):task_phase 今日 97 次调用、每次独占一个完整 step(实测全仓 1.0 工具/步),
+ // 背景:task_phase 今日 97 次调用、每次独占一个完整 step(经验证全仓 1.0 工具/步),
   // 占 input 4.1~4.4%。改法=tool 声明 isConcurrencySafe:true + 纪律卡明确「不要为它单独走一步」,
   // 让模型可以把它和工作工具塞进同一步。
   // 这里断言的是行为契约(isConcurrencySafe 是 tool 对象的局部字段,不经 wire 暴露):

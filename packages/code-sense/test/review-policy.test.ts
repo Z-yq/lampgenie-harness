@@ -1,9 +1,9 @@
 /**
- * step-139 O1 深审策略闸测试:
+ * O1 深审策略闸测试:
  * ① decideDeepReview 纯函数三档(never/always/auto × 干净小变更/有 blocker/大 diff);
  * ② codeReview 引擎集成:auto 且干净小 diff → 0 次 LLM、summary 显式「深审跳过(auto…)」;
  *    有 blocker → 调 LLM;不传 policy(旧行为)= always 照常深审。
- * 背景(step-137 实测):深审跑满 8 分钟时间盒且零新增 findings(确定性层已 6→3 无 blocker)。
+ * 背景(经验证):深审跑满 8 分钟时间盒且零新增 findings(确定性层已 6→3 无 blocker)。
  */
 import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
@@ -28,7 +28,7 @@ function countingLlm(): { llm: ReviewLlm; calls: () => number } {
   return { calls: () => n, llm: { async chat() { n++; return { content: '{"findings":[]}' }; } } };
 }
 
-describe("decideDeepReview 纯函数(step-139 O1)", () => {
+describe("decideDeepReview 纯函数( O1)", () => {
   it("never=恒不跑(fast 复跑);always=恒跑(deep 强制)", () => {
     const nv = decideDeepReview("never", { files: 1, totalLines: 10, blocking: 0 });
     expect(nv.run).toBe(false);
@@ -58,7 +58,7 @@ describe("decideDeepReview 纯函数(step-139 O1)", () => {
   });
 });
 
-describe("codeReview 引擎 llmPolicy 集成(step-139 O1)", () => {
+describe("codeReview 引擎 llmPolicy 集成( O1)", () => {
   it("auto + 干净小 diff → 0 次 LLM,summary 显式「深审跳过(auto…)」", async () => {
     const dir = gitRepo();
     appendFileSync(join(dir, "a.ts"), "export const b = 2;\n"); // 干净小变更

@@ -1,6 +1,6 @@
 /**
- * 工具配对自愈(2026-10-19 用户实报「失败一次就一直卡住一直失败」)。
- * 实锤:后台子代理完成通知(message.system→user 角色)插在 assistant(tool_calls) 与其 tool 结果
+ * 工具配对自愈(用户用户反馈「失败一次就一直卡住一直失败」)。
+ * 注意:后台子代理完成通知(message.system→user 角色)插在 assistant(tool_calls) 与其 tool 结果
  * 之间 → 阿里云/OpenAI 协议 400("must be followed by tool messages"),坏历史被无限重放。
  * 自愈契约:①被夹的 tool 结果前移到 assistant 紧随(保持原序) ②真缺失补显式占位 ③正常序列零改动。
  */
@@ -33,7 +33,7 @@ describe("repairToolPairing", () => {
   });
 
   it("⑤ 孤儿 tool 结果(其 assistant 已丢失)→ 丢弃,不留 400 形态", () => {
-    // 实锤形态:assistant 消息在历史里丢失(双写/重启去重),只剩两条 tool 结果。
+ // 注意形态:assistant 消息在历史里丢失(双写/重启去重),只剩两条 tool 结果。
     const msgs = [U("任务"), A(["c1"]), T("c1"), T("orphan-1", "grep 输出"), T("orphan-2", "glob 输出"), A([])];
     const out = repairToolPairing(msgs);
     expect(out.filter((m) => m.role === "tool").map((m) => m.role === "tool" && m.toolCallId)).toEqual(["c1"]);
@@ -54,8 +54,8 @@ describe("repairToolPairing", () => {
     expect(out.filter((m) => m.role === "tool")).toHaveLength(1);
   });
 
-  it("⑦ 重复 toolCallId(重启双写实锤形态)→ 保首条丢重复,不再 400", () => {
-    // 实锤形态(llm-trace 2026-10-22):同一 toolCallId 两条 tool 消息——严格端点
+  it("⑦ 重复 toolCallId(重启双写实测确认形态)→ 保首条丢重复,不再 400", () => {
+ // 注意形态(llm-trace):同一 toolCallId 两条 tool 消息——严格端点
     // (DeepSeek)对重复 tool 响应报「must be a response to a preceding message」。
     const dup = T("c1", "重复副本");
     const msgs = [U("任务"), A(["c1", "c2"]), T("c1", "原结果"), T("c2"), dup, A([])];
@@ -87,8 +87,8 @@ describe("repairToolPairing", () => {
   });
 });
 
-describe("repairToolPairing 第 0 遍:重复 assistant 去重(2026-10-22 生产 400 实锤)", () => {
-  // 实锤形态(web-1792639728612 call-0133):ProxyJournal 回声双入(网关落账重赋 time,
+describe("repairToolPairing 第 0 遍:重复 assistant 去重(2026-10-22 生产 400 实测确认)", () => {
+ // 注意形态(web-1792639728612 call-0133):ProxyJournal 回声双入(网关落账重赋 time,
   // 回声去重键含 time 永不命中)→ 同一 message.agent(带 toolCalls)在副本出现两次。
   // 旧版:第一遍给重复副本补占位、第三遍又按同 id 删占位 → 重复 assistant 裸奔 →
   // 端点 400 "insufficient tool messages following tool_calls" 且坏历史无限重放。

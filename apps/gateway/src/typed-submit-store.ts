@@ -1,6 +1,5 @@
 /**
  * typed submit 台账(RSI #31):`<root>/.genie/rsi/typed-submits.json`,整文件原子写(tmp + rename)。
- *
  * 数据面:
  *   { v:1, asks: { [askId]: { state: TypedAskState, schema: JsonSchema } } }
  * 纯逻辑(校验 / 次数 / nudge)在 packages/harness-runtime/src/agent/typed-submit.ts,
@@ -115,8 +114,7 @@ function badCode(code: string, reason: string): TypedSubmitOpResult {
 export function openTypedSubmit(
   root: string,
   askId: string,
-  schema: JsonSchema,
-): TypedSubmitOpResult {
+  schema: JsonSchema): TypedSubmitOpResult {
   if (typeof askId !== "string" || askId.trim() === "") {
     return badCode(TYPED_INVALID, "ask-id-required");
   }
@@ -137,8 +135,7 @@ export function openTypedSubmit(
 export function submitTypedSubmit(
   root: string,
   askId: string,
-  payload: unknown,
-): TypedSubmitOpResult {
+  payload: unknown): TypedSubmitOpResult {
   if (typeof askId !== "string" || askId.trim() === "") {
     return badCode(TYPED_INVALID, "ask-id-required");
   }

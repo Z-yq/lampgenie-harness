@@ -3,7 +3,7 @@
  * - explicit → tm.submit 恰 1 次(idempotencyKey 派生自 trigger;task.submitted 回执与现状同构);
  * - 订阅命中且承接任务仍 running → journal 注入 steer(agent-wiring steer_task 同语义),直投 owner worker;
  * - observe 路径只落 disposition 即返回——observe 模式零 LLM 边界落点(不调 tm.submit、不触发 runSuperAgentTurn);
- * - step-0144 P2:auto 模式 inferred 候选接 LLM 研判(deps.assess=runSuperAgentTurn 包装),
+ * - P2:auto 模式 inferred 候选接 LLM 研判(deps.assess=runSuperAgentTurn 包装),
  *   settleAccept 闸(sr8):accept 必须带 intent_evidence,缺证据降级 ignore;研判产物全量落 audit。
  */
 import type { Task } from "@lampgenie/core";
@@ -46,7 +46,7 @@ export type DispatchOutcome =
 
 let ticketSeq = 0;
 
-/** step-0145 P3 Mandate 产出(explicit/auto-accept 派发时):只含授权溯源要素,无任何凭证字段(audit assertNoCredential 守门)。 */
+/** P3 Mandate 产出(explicit/auto-accept 派发时):只含授权溯源要素,无任何凭证字段(audit assertNoCredential 守门)。 */
 export function issueMandate(trigger: Trigger, config: PolicyConfig, at: number, strength: "explicit" | "inferred" = "explicit"): Mandate {
   return {
     policyVersion: policyVersion(config),
@@ -58,7 +58,7 @@ export function issueMandate(trigger: Trigger, config: PolicyConfig, at: number,
   };
 }
 
-/** step-0145 P3 复验活 Ticket 的 mandate:失效 → phase=closed + disposition outcome="revalidate_failed"(不 throw,幂等)。 */
+/** P3 复验活 Ticket 的 mandate:失效 → phase=closed + disposition outcome="revalidate_failed"(不 throw,幂等)。 */
 export function revalidateTicket(ticket: Ticket, currentPolicyConfig: PolicyConfig, hooks: {
   now: number;
   saveDisposition: (d: Disposition) => void;
@@ -99,7 +99,7 @@ export async function dispatch(trigger: Trigger, deps: DispatchDeps): Promise<Di
       deps.broadcast?.({ ticketId: ticket.ticketId, phase: ticket.phase, ...(ticket.taskId !== undefined ? { taskId: ticket.taskId } : {}), triggerId: trigger.id, threadKey: ticket.threadKey });
       return { kind: "steered", ticket, ...(task ? { task } : {}) };
     }
-    // step-0145 P3:订阅命中但承接任务已终态(非 running)→ steer 落空不静默:落 steer_miss 审计行
+ // P3:订阅命中但承接任务已终态(非 running)→ steer 落空不静默:落 steer_miss 审计行
     // (此前直接掉到 explicit 快径,回退行为保持,只补 disposition)。
     deps.saveDisposition({ triggerId: trigger.id, outcome: "steer_miss", steeredTicketId: ticket?.ticketId, policyVersion: version, at: now() });
   }
@@ -127,11 +127,11 @@ export async function dispatch(trigger: Trigger, deps: DispatchDeps): Promise<Di
     deps.broadcast?.({ ticketId: ticket.ticketId, phase: ticket.phase, taskId: task.id, triggerId: trigger.id, threadKey: ticket.threadKey });
     return { kind: "dispatched", task, ticket };
   }
-  // step-0144 P2 研判接线:observe 落账前,gate 判 inferred(不派发)且 mode=auto 时走 LLM 研判
+ // P2 研判接线:observe 落账前,gate 判 inferred(不派发)且 mode=auto 时走 LLM 研判
   // (runSuperAgentTurn 产 decision+intent_evidence;observe 模式恒不调——P1 零新增 LLM 调用不回归)。
   // settleAccept 闸(sr8):accept 必须带 intent_evidence,缺证据仍 ignore 落账。
   if (deps.config.mode === "auto" && deps.assess && !verdict.admissible) {
-    // step-0145 P3 Eval 重试熔断(DSH evals.ts 等价):deadline(Promise.race)内未 settle 或抛错 →
+ // P3 Eval 重试熔断(DSH evals.ts 等价):deadline(Promise.race)内未 settle 或抛错 →
     // 重排同一 trigger(≤2 次);第三次失败记 unavailable(fail-soft,不派发不 throw)。observe/explicit 不经此路径。
     const deadline = deps.config.evalDeadlineMs ?? 120_000;
     const attemptAssess = async (): Promise<{ decision: "accept" | "ignore"; intent_evidence?: string } | undefined | "timeout"> => {

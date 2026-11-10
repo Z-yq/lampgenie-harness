@@ -1,17 +1,14 @@
 /**
- * change_surface 工具 + 全链路变更判据(2026-11-06「全链路闭环变更」机制)。
- *
- * 用户口径:「用户只描述意图,harness 自动找出该意图涉及的所有链路节点(UI/入口/协议/服务/
+ * change_surface 工具 + 全链路变更判据(「全链路闭环变更」机制)。
+ * 「用户只描述意图,harness 自动找出该意图涉及的所有链路节点(UI/入口/协议/服务/
  * 业务逻辑/数据/journal/配置/资产/文档/测试/部署),一次性全部改到一致,并证明没有残留、
  * 没有孤儿、没有只改一半。」
- *
  * 三件事,全部确定性(不调 LLM):
  *  1) 盘点:scan → scanSurface(概念词) 落 journal `custom/change.surface`(含清单摘要与 id 集),
  *     回 markdown checklist(每项 `[ ] category file:line —— 文本`);
  *  2) 审计:audit → 重扫同一批概念,与 agent 提交的 resolutions(resolved/removed/keep-legacy+理由)
  *     对比,落 journal `custom/change.audit`,passed=false 时列出剩余;
  *  3) 判据:surfaceGateVerdict(纯函数,plan-gate 消费)与 closeAuditVerdict(纯函数,收尾回执消费)。
- *
  * 落 journal 而不加协议字段:packages/protocol 不动(与并行任务隔离),事件仍可回放审计。
  */
 import type { Tool } from "@lampgenie/runtime/agent/loop";
@@ -30,7 +27,7 @@ import type {
 } from "@lampgenie/code-sense/surface";
 import { classifyChangeScope } from "@lampgenie/code-sense/surface";
 import type { ChangeScope } from "@lampgenie/code-sense/surface";
-// 语义孤儿检查(2026-11-06 第二批):复用 code_review 的确定性反模式层,六维算法不重写。
+// 语义孤儿检查(第二批):复用 code_review 的确定性反模式层,六维算法不重写。
 import { collectReviewTarget } from "@lampgenie/code-sense/review";
 import type { Finding, ReviewTarget } from "@lampgenie/code-sense/review";
 import { detectAntipatterns } from "@lampgenie/code-sense/review/antipatterns";
@@ -44,7 +41,7 @@ export interface ChangeSurfaceJournal {
 }
 
 /**
- * journal `custom/change.surface` 里的链路图摘要(2026-11-06 链路图轮):
+ * journal `custom/change.surface` 里的链路图摘要(链路图轮):
  * 由 buildSurfaceChainMap 的结果裁到「回执/判据够用」的量级(数组与长字符串都截断),
  * 旧事件没有这个字段——缺省即「无链路图」,不许炸。
  */
@@ -170,7 +167,7 @@ function degradedChainSummary(reason: string): ChangeSurfaceChainSummary {
   };
 }
 
-/** audit 里 agent 自报的 E2E 命令结果(2026-11-06 第二批:验收证据入审计)。 */
+/** audit 里 agent 自报的 E2E 命令结果(第二批:验收证据入审计)。 */
 export interface VerifyE2eItem {
   command: string;
   passed: boolean;
@@ -246,8 +243,7 @@ function payloadType(e: { payload?: unknown }): string | undefined {
 export function readChangeSurfaceManifest(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string,
-): ChangeSurfaceManifest | null {
+  taskId: string): ChangeSurfaceManifest | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.surface",
   );
@@ -271,8 +267,7 @@ export function readChangeSurfaceManifest(
 export function readChangeAudit(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string,
-): ChangeAuditRecord | null {
+  taskId: string): ChangeAuditRecord | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.audit",
   );
@@ -306,8 +301,7 @@ export function readChangeAudit(
 export function readChangeExempt(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string,
-): string | null {
+  taskId: string): string | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.exempt",
   );
@@ -340,7 +334,7 @@ export interface SurfaceGateInput {
   /** 本任务是否已有 change.surface 清单(journal 事实,不是提示词自述)。 */
   hasManifest: boolean;
   /**
-   * 本任务清单是否带链路图(2026-11-06 链路图轮)。
+ * 本任务清单是否带链路图(链路图轮)。
    * 缺省(undefined)= 调用方不看这一维,按旧尺度放行;显式 false = 旧清单/手造清单。
    */
   hasChain?: boolean;
@@ -371,7 +365,7 @@ export function surfaceGateVerdict(i: SurfaceGateInput): SurfaceGateVerdict {
   const base = { scope: v.scope, matched: v.matched, needsManifest: v.scope === "surface" };
   if (i.taskClass !== "coding") return { ...base, deny: false };
   if (v.scope !== "surface") return { ...base, deny: false };
-  // 直达实施路由(2026-11-06):agent 已在理解阶段判定「明确具体小改」并声明 route=direct——
+ // 直达实施路由:agent 已在理解阶段判定「明确具体小改」并声明 route=direct——
   // 与既有 plan-gate 的 direct 尺度豁免同一语义,不因词表命中就把它升级成全链路任务;
   // 收尾审计仍按 instruction 判 surface,漏盘点会在终稿处被标「未通过全链路审计」。
   if (i.directRoute) return { ...base, deny: false };
@@ -440,7 +434,7 @@ export function closeAuditVerdict(input: {
       "[全链路审计] 本任务是全链路变更类,但没有 change.surface 盘点记录——先 change_surface(action=\"scan\")。",
     );
   }
-  // 链路图轮(2026-11-06):hard 额外要求清单带链路图(旧清单 → 重新 scan 一次即可)。
+ // 链路图轮:hard 额外要求清单带链路图(旧清单 → 重新 scan 一次即可)。
   if (hard && !input.manifest.chain) {
     return fail(
       true,
@@ -793,7 +787,7 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
 
       if (action === "scan") {
         const ids = [...new Set(report.hits.map((h) => h.id))];
-        // 链路图(2026-11-06 链路图轮):清单 + 分层/边/建议顺序;失败不阻断盘点。
+ // 链路图(链路图轮):清单 + 分层/边/建议顺序;失败不阻断盘点。
         let chain: ChangeSurfaceChainSummary;
         let chainError = "";
         let chainMarkdown = "";

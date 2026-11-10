@@ -1,5 +1,5 @@
 /**
- * step-044:checkpoint 快照/预览/回滚(真实 git 仓)+自动归档清扫+经验禁用过滤。
+ * checkpoint 快照/预览/回滚(真实 git 仓)+自动归档清扫+经验禁用过滤。
  */
 import { describe, it, expect } from "vitest";
 import { checkpointCreate, checkpointPreview, checkpointRewind } from "../src/git-service.js";
@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 
 const gitP = (args: string[], cwd: string) => promisify(execFile)("git", args, { cwd }).then((r) => r.stdout);
 
-describe("checkpoint 回滚(designs/21)", () => {
+describe("checkpoint 回滚", () => {
   it("全链:变更→快照→再改→rewind→内容恢复快照态;无变更→null", async () => {
     const root = mkdtempSync(join(tmpdir(), "ckpt-"));
     await gitP(["init", "-b", "main"], root);
@@ -51,7 +51,7 @@ describe("checkpoint 回滚(designs/21)", () => {
   });
 });
 
-describe("经验禁用(step-044)", () => {
+describe("经验禁用", () => {
   it("disable→index/disabledEntries 分流→enable 恢复;recall 走 index 自动排除", async () => {
     const dir = mkdtempSync(join(tmpdir(), "expd-"));
     const store = new ExperienceStore(join(dir, "exp"));
@@ -70,7 +70,7 @@ describe("经验禁用(step-044)", () => {
   });
 });
 
-describe("自动归档清扫(step-044)", () => {
+describe("自动归档清扫", () => {
   it("终态+超阈值→归档;运行中/新任务/已归档不动;0 天=关", () => {
     const tm = new TaskSupervisor();
     const t1 = tm.submit("user", "s", "旧的完成了");

@@ -1,6 +1,5 @@
 /**
- * M147 工具面即 SDK(PTC/代码模式)run_code 工具级单测。
- *
+ * 工具面即 SDK(PTC/代码模式)run_code 工具级单测。
  * 覆盖:串行多工具链(结果/calls/journal 三账一致)、未知工具、maxCalls、
  * 子调用超时不污染后续、权限 predicate 拒绝且目标未执行、输出截断、沙箱越界、并发排队、签名清单。
  */
@@ -73,7 +72,7 @@ async function run(tool: Tool, code: string): Promise<RunCodeResult> {
   return JSON.parse(String(await tool.execute({ code }))) as RunCodeResult;
 }
 
-describe("M147 run_code 代码模式", () => {
+describe(" run_code 代码模式", () => {
   it("两个工具串行调用 → result 正确、calls 2 条、journal code.mode.call 2 条", async () => {
     const tools = [
       mkTool("add", (a) => {

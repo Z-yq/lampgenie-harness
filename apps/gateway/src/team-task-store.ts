@@ -1,16 +1,13 @@
 /**
- * M90 团队任务 DAG(journal 持久团队任务板)。
- *
+ *  团队任务 DAG(journal 持久团队任务板)。
  * 问题:多 agent 协作时「谁在做什么、谁等谁、谁认领了哪块」只存在于对话里——子代理各自跑,
  * 主 agent 不知道彼此边界,重复改同一个文件、越权推进未就绪的步骤、断了没人续手。
- *
  * 本模块只做「任务板 + 依赖拓扑 + 认领租约」这一层,事实源只有 journal(append-only):
  *   team.task.created {task}                      创建(全量行,revision=1)
  *   team.task.changed {id,patch}                  变更(局部字段 + revision/updatedAt)
  *   team.task.deleted {id,at}                     删除
  * 冷恢复 = foldTeamTasks(readAll 的 team.task.* 事件):create 落行、changed 覆盖、deleted 移除,
  * 未知 kind 一律忽略(与其它 fold 族一致,不因新增 kind 崩)。
- *
  * 语义边角:
  * - 依赖就绪传播只在 `complete` 一处发生(只升一层;链式 A→B→C 靠 B 完成时再升 C);
  * - CAS 只防「读到旧值再写」:凡 mutation 传了 expectedRevision 就比对,不等抛

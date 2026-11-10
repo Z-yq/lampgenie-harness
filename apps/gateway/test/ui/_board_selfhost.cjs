@@ -1,4 +1,4 @@
-/** board.spec.cjs 自启跑法(2026-10-14 浮窗升级轮):不碰产线 7700,自起临时端口实例后原地运行 board.spec.cjs。
+/** board.spec.cjs 自启跑法(浮窗升级轮):不碰生产环境 7700,自起临时端口实例后原地运行 board.spec.cjs。
  * 形态学 apps/gateway/test/ui/sidebar.spec.cjs 的自启:npx tsx 加载 src,createGatewayApp(useExternalHttp)+servePanel;
  * 板 fixture 由 board.spec.cjs 自己造自己清(.genie/boards/ui-board-test,repoRoot 解析与实例一致)。
  * 用法:cd apps/gateway && npx tsx test/ui/_board_selfhost.cjs   (SELF_PORT 可改端口,默认 7714) */

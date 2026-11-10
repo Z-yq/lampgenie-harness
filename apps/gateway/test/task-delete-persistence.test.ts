@@ -1,7 +1,7 @@
 /**
- * 任务删除持久化(2026-10-19 用户实报「为什么这些删不掉」):
+ * 任务删除持久化(用户用户反馈「为什么这些删不掉」):
  * 根因三件——①删除只从内存 Map 移除,journal 无删除事件 → 网关重启回放 task.* 快照把删掉的任务全复活;
- * ②侧栏一行=一个会话(step-048 聚合),右键只删单条 → 该会话另 N 条照旧撑住整行;
+ * ②侧栏一行=一个会话(聚合),右键只删单条 → 该会话另 N 条照旧撑住整行;
  * ③运行中任务的后续 setState 能把已删任务塞回 Map。
  * 本文件守这三条的回归:墓碑语义 / 会话级批量删除 / journal 回放跳过已删。
  */
@@ -143,7 +143,7 @@ describe("协议面:task.deleteSession 走真实 WS handler + 重启回放不复
     expect((list.tasks as { id: string }[]).map((t) => t.id)).toEqual([keepId]);
     expect(app.taskManager.list({ sessionId: "auto-z" })).toEqual([]);
 
-    // 落盘实证:journal 里那条 task.deleted 的 taskIds 精确等于被删的 3 条(不靠子串,防弱断言)
+ // 落盘验证:journal 里那条 task.deleted 的 taskIds 精确等于被删的 3 条(不靠子串,防弱断言)
     const dels = app.journal.readAll().filter((e) => e.kind === "task.deleted");
     expect(dels).toHaveLength(1);
     expect((dels[0]!.payload as { taskIds: string[] }).taskIds.sort()).toEqual([...made].sort());

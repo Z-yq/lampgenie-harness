@@ -1,5 +1,5 @@
 /**
- * step-116:codesense review --scan / --sessions / --resume / --compare 的 CLI 契约。
+ * codesense review --scan / --sessions / --resume / --compare 的 CLI 契约。
  * 进程内 runCli + 临时夹具仓;不联网、不 --deep。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * 符号优先召回单测(2026-10-21):
+ * 符号优先召回单测:
  *  - 中文问句分词(停用词剥离/词典最长匹配/无残渣)
  *  - 驼峰/下划线/点号切分
  *  - 中英词典映射(≥40 组、一对多)
@@ -145,8 +145,7 @@ describe("符号打分(纯函数)", () => {
     const boosted = applyNeighborCoherence(
       first,
       (id) => id === "b#LlmLoopBackend.spawn" ? ["renderSubagentHeavyOpDiscipline", "workerWriteTools"] : [],
-      t,
-    );
+      t);
     const spawnRow = boosted.find((s) => s.doc.name === "LlmLoopBackend.spawn")!;
     expect(spawnRow.neighborHits).toBeGreaterThan(0);
     expect(spawnRow.score).toBeGreaterThan(first.find((s) => s.doc.name === "LlmLoopBackend.spawn")!.score);

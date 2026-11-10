@@ -1,9 +1,8 @@
 /**
- * /ide/asset `from=<md 相对路径>` 候选链契约测试(2026-11-06)。
+ * /ide/asset `from=<md 相对路径>` 候选链契约测试。
  * 前端 md 预览不再预折叠 ../,改把 md 自身相对路径放进 from;服务端按
  * ①from 所在目录 + path ②项目根 + path ③path 绝对(仅根内) 逐候选 realpath + isPathInside,
  * 越界候选跳过(第一个越界不得否掉后续合法候选),全失败时越界者优先 403、否则 404。
- *
  * 做法照抄 test/panel-ide-asset.test.ts:临时项目根 + 真 servePanel 实例 + 真 HTTP 断言。
  */
 import { describe, it, expect, afterAll } from "vitest";

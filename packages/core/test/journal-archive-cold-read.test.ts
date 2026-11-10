@@ -1,6 +1,6 @@
 /**
- * M123 归档冷读开关(2026-11-09):归档目录只作显式读的兜底,boot 期内部回读不得碰它。
- * 实测背景:归档 70 文件/422MB 后,某次 boot 期内部 readSession 把 29 个 archive 文件逐个 parse,
+ * 归档冷读开关:归档目录只作显式读的兜底,boot 期内部回读不得碰它。
+ * 经验证背景:归档 70 文件/422MB 后,某次 boot 期内部 readSession 把 29 个 archive 文件逐个 parse,
  * 进程 6 分钟仍在装配——归档收益被 boot 期冷读抵消。
  */
 import { describe, it, expect } from "vitest";
@@ -52,7 +52,7 @@ function spyParse(j: FileJournal): { paths: string[] } {
 
 const archivedHits = (paths: string[], archiveDir: string) => paths.filter((p) => p.startsWith(archiveDir));
 
-describe("FileJournal 归档冷读开关(M123)", () => {
+describe("FileJournal 归档冷读开关", () => {
   it("archiveDir 已配置但未 enable:已归档 sid 读不到会话域事件,且从不 parse 归档文件", () => {
     const root = mk("arch-off-");
     try {

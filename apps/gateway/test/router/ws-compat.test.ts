@@ -1,5 +1,5 @@
 /**
- * step-0144 super agent 深化验收用例:
+ * super agent 深化验收用例:
  * - WS 协议双写:super.turn 新名与 companion.turn 旧名均被受理(zod ClientMessage 联合);
  * - auto 研判闸:mode=observe 时 assess 恒不被调(零新增 LLM);mode=auto 时 inferred 候选
  *   走 assess,accept 且带 intent_evidence 才派发+落审计;
@@ -15,7 +15,7 @@ import { recentSystemInjections } from "../../src/super-agent.js";
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("WS 协议 super 新链(step-1033)", () => {
+describe("WS 协议 super 新链", () => {
   it("super.turn 新名被受理(进 ClientMessage 联合)", async () => {
     const m = parseClientMessage('{"v":1,"type":"super.turn","text":"现在有什么任务"}');
     expect(m?.type).toBe("super.turn");
@@ -67,7 +67,7 @@ describe("WS 协议 super 新链(step-1033)", () => {
   });
 });
 
-describe("auto 研判闸(step-0144 sa7/sa8)", () => {
+describe("auto 研判闸( sa7/sa8)", () => {
   it("mode=observe:assess 恒不被调(零新增 LLM,P1 行为不回归)", async () => {
     const tm = new TaskSupervisor();
     const assess = vi.fn();

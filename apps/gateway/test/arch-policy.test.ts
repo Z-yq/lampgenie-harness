@@ -1,6 +1,5 @@
 /**
- * arch-policy(M2 架构策略门)单测:全部用 mkdtemp 临时仓夹具,不依赖本仓真实 .genie/arch-policy.json。
- *
+ * arch-policy(架构策略门)单测:全部用 mkdtemp 临时仓夹具,不依赖本仓真实 .genie/arch-policy.json。
  * 覆盖:
  * ①入座(unmanaged-new-file):同 package 内但不属于任何 module root 的新文件 → 违规;managed root 内新文件 → 干净;
  * ②跨层(cross-layer-import):layer 白名单 / module.allowImport 两条放行口径;目标不在任何 module 内不报;

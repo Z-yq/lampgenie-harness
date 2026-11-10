@@ -1,15 +1,12 @@
 /**
- * M147 工具面即 SDK(PTC/代码模式):一个 `run_code` 调用完成多步工具链。
- *
+ * 工具面即 SDK(PTC/代码模式):一个 `run_code` 调用完成多步工具链。
  * 病灶(机制「工具面即 SDK」):
  * - 多步工具链每步烧一次推理轮(模型看结果→决定下一步),N 步=N 次完整往返;
  * - 中间结果(文件全文/日志/列表)全部倒进模型上下文;
  * - 工具多到选不动(wire schema 常驻)。
- *
  * 本模块把已注册工具投影成沙箱里的 `tools` SDK:模型写一段 async 代码,
  * 沙箱内 `await tools.<name>(args)` 逐个走正常执行管线(executeSub 注入=权限/plan-gate/超时),
  * 只回**最终返回值 + 子调用账本 + console logs**。核心工具仍 eager 暴露(本工具不替代它们)。
- *
  * 设计纪律:
  * - 沙箱用 `node:vm.runInNewContext`,globals 只给 tools/console/Math/JSON/Number/String/Array/Object/Promise;
  *   无 require/process/fetch/setTimeout/import(越界访问=ReferenceError 进 ok:false)。
@@ -52,15 +49,13 @@ export interface CodeModeSubCallOptions {
 export type CodeModeSubExecutor = (
   name: string,
   args: unknown,
-  opts: CodeModeSubCallOptions,
-) => Promise<string>;
+  opts: CodeModeSubCallOptions) => Promise<string>;
 
 /** 子调用权限判据(装配方注入现网 plan-gate/权限规则;缺省=放行但照常落账本)。 */
 export type CodeModePermissionResult = boolean | { allow: boolean; reason?: string };
 export type CodeModePermission = (
   name: string,
-  args: unknown,
-) => CodeModePermissionResult | Promise<CodeModePermissionResult>;
+  args: unknown) => CodeModePermissionResult | Promise<CodeModePermissionResult>;
 
 /** 账本最小依赖(只用到 custom append;失败静默)。 */
 export interface CodeModeJournal {

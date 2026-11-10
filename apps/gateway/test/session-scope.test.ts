@@ -1,6 +1,5 @@
 /**
- * session→owner project 桥(2026-10-22 归属漂移根治,session.owner.get 服务端半边)。
- *
+ * session→owner project 桥(归属漂移根治,session.owner.get 服务端半边)。
  * 语义:该会话**最早**一条带 projectId 的任务的 projectId = 会话既有 owner
  * (server.ts `sessionOwnerProjectId`);无任务/无归属 → projectId:null。
  * 契约字面:{type:"session.owner.get", sessionId}(c2s)/{type:"session.owner.result", sessionId, projectId}(s2c)。

@@ -1,10 +1,9 @@
 /**
- * genie 远端工作区服务(ZCode 远端 agent runtime 的 genie 形态,2026-10-26):
+ * genie 远端工作区服务(ZCode 远端 agent runtime 的 genie 形态:
  * 部署到远端 ~/.genie/agent-stdio.mjs,网关经 SSH 复用通道拉起
  * `node agent-stdio.mjs --stdio <workspacePath>`,stdin/stdout JSON-Lines 全双工。
  * 一条持久管道承载该远程项目的全部 workspace 服务(fs/grep/exec/git),
  * 替代逐命令拼 shell(ZCode:远端 agent 持有 workspace runtime,UI 全功能走它)。
- *
  * 协议:请求 {"id","op","args"} 单行;响应 {"id","ok","data"|"error"} 单行。
  * ops:ping / fs.list / fs.read / fs.write / fs.mkdir / fs.remove / fs.rename / fs.grep / exec / git.status
  * 自检:`node agent-stdio.mjs selftest`(不经管道,直接输出版本后退出)。
@@ -18,7 +17,7 @@ import { homedir } from "node:os";
 const VERSION = 1;
 const MAX_OUT = 512 * 1024;
 
-/** node8 兼容 mkdir -p(10.12 前 mkdirSync 无 recursive;10.18.70 实测 EEXIST 实锤)。 */
+/** node8 兼容 mkdir -p(10.12 前 mkdirSync 无 recursive;10.18.70 经验证 EEXIST 注意)。 */
 function mkdirp(p: string): void {
   const segs = p.split(sep).filter(Boolean);
   let cur = p.startsWith("/") ? "/" : "";
@@ -69,7 +68,7 @@ function handle(wsPath: string, op: string, a: Record<string, unknown>): Record<
     const file = inside(wsPath, String(a.path ?? ""));
     if (!file) throw new Error("路径越界");
     if (!existsSync(file)) throw new Error("文件不存在");
-    // 2026-10-27:二进制/图片预览要能取 >512KB(IDE /ide/asset 走远程通道);普通文本调用方仍传小 max。
+ // 二进制/图片预览要能取 >512KB(IDE /ide/asset 走远程通道);普通文本调用方仍传小 max。
     const max = Math.min(Math.max(1, Number(a.max ?? MAX_OUT)), 24 * 1024 * 1024);
     const buf = readFileSync(file).subarray(0, max);
     return { ok: true, data: { base64: buf.toString("base64"), bytes: buf.length, binary: buf.subarray(0, 8000).includes(0), truncated: statSync(file).size > max } };
@@ -128,7 +127,7 @@ function handle(wsPath: string, op: string, a: Record<string, unknown>): Record<
     const out = ((r.stdout ?? "") + (r.stderr ?? "")).slice(0, MAX_OUT);
     return { ok: true, data: { stdout: out, exit: r.status ?? -1, truncated: ((r.stdout ?? "") + (r.stderr ?? "")).length > MAX_OUT } };
   }
-  // 远端代码认知/评审(2026-10-27,ZCode Source Server 形态):连接时随包安装到
+ // 远端代码认知/评审(ZCode Source Server 形态):连接时随包安装到
   // ~/.genie/genie-sense(自带 Node 20 + code-sense CLI),这里在远端执行——桌面端只发 argv,
   // 不再逐次 wsl.exe / ssh 拼命令。输出上限 256KB(评审 --json 可能较大)。
   if (op === "sense" || op === "review") {
@@ -158,7 +157,7 @@ function handle(wsPath: string, op: string, a: Record<string, unknown>): Record<
     };
   }
   if (op === "git") {
-    // 通用 git(2026-10-26 远端化:checkpoint/diffstat/review 基线等任务链 git 消费)
+ // 通用 git(远端化:checkpoint/diffstat/review 基线等任务链 git 消费)
     const gitArgs = (a.gitArgs ?? []) as string[];
     if (!Array.isArray(gitArgs) || gitArgs.some((x) => typeof x !== "string")) throw new Error("gitArgs 须为字符串数组");
     const r = spawnSync("git", gitArgs, { cwd: wsPath, encoding: "utf-8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });

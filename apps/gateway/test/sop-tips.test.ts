@@ -108,7 +108,7 @@ it("GENIE_TIPS=off 全关(含 SOP 分支)", () => {
   expect(tips({ step: 2, lastStepTools: [], lastStepError: true })).toBeNull();
 });
 
-// ---- 全链路变更覆盖卡(2026-11-06) ----
+// ---- 全链路变更覆盖卡 ----
 it("SOP_SURFACE_TIPS:只覆盖 plan/close 两阶段,每卡 ≤ SOP_TIP_MAX_LINES", () => {
   expect(Object.keys(SOP_SURFACE_TIPS).sort()).toEqual(["close", "plan"]);
   for (const [k, lines] of Object.entries(SOP_SURFACE_TIPS) as [string, readonly string[]][]) {

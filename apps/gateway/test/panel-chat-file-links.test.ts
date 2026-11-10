@@ -1,5 +1,5 @@
 /**
- * step-1025 聊天消息文件路径 → IDE 打开 契约测试。
+ * 聊天消息文件路径 → IDE 打开 契约测试。
  * 做法同 panel-md-image.test.ts:servePanel 取真面板 HTML → 切出 PAGE 内源码 → new Function 求值(零构建链)。
  * 覆盖:路径扫描(cfScanText)/行号拆分/URL 与版本号不误链/markdown 相对链接/归一化/归属解析(最长前缀+越界)/
  * DOM 链接化幂等与容器跳过(迷你 DOM 桩)/PAGE 静态接线(MutationObserver + a.chat-file 委托)。

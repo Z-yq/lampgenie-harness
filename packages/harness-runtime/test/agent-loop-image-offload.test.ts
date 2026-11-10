@@ -1,6 +1,5 @@
 /**
- * M58 图片 offload 持久位置:loop 接线契约(假 provider,不连网)。
- *
+ *  图片 offload 持久位置:loop 接线契约(假 provider,不连网)。
  * 契约:chat 抛「图片预算/尺寸」类错误且本请求带图 → offload 一次 + 用新 messages 立即重试一次
  * (不占 provider 重试预算);无可 offload / 写盘失败 / 投影校验不符 → 抛原错误(不重试);
  * 非图片错误逐字不变(1 次调用,零 journal 自定义事件);已 offload 占位不再处理。

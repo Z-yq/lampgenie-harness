@@ -1,5 +1,5 @@
 /**
- * 机制4 网关启动僵尸清算 + 机制1/3 的 wiring 侧(外部后端形态)(2026-10-15):
+ * 机制4 网关启动僵尸清算 + 机制1/3 的 wiring 侧(外部后端形态):
  * - 启动清算:上一进程遗留 spawn-无-result 子代理补终态(journal append-only),幂等,不误伤本次进程所派;
  * - 外部后端 deadline 收割:wiring 层到点取消子代理,已有输出轨迹打包为部分结果交付(ok=true 显式标注);
  * - task_output stale 标记:运行中子代理超 staleWarnMin 无任何事件→stale:true(主 agent 止损依据)。
@@ -13,7 +13,7 @@ import WebSocket from "ws";
 import { createGatewayApp } from "../src/app.js";
 import { reapOrphanSubagents } from "../src/agent-wiring.js";
 
-// plan-gate 豁免(2026-10-21):本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
+// plan-gate 豁免:本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
 process.env.GENIE_PLAN_GATE = "off";
 
 

@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 /**
  * 全量桌面包运行时 staging(ONNX 版):让安装包在新 PC 上零外部依赖运行,且不再随 Python/torch。
- *
  * 产物(全部由 electron-builder extraResources 搬进 <install>/resources):
  *   .stage/runtime/model-150m    ONNX 模型服务(server.mjs + lib/ + onnx/ + node_modules)
  *   .stage/browsers/chrome-win64 Chrome for Testing(与 playwright-core 同 revision)
  *   .stage/git                   PortableGit(bash + git,Windows 无 bash 的兜底)
- *
  * 幂等:下载缓存在 .stage/downloads;组件关键文件齐全则跳过;--force 全量重建。
  * 模型来自 services/model-150m(先跑 .venv/bin/python tools/export_onnx.py)。
  */

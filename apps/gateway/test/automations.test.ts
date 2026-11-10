@@ -1,5 +1,5 @@
 /**
- * step-043 定时自动化:store CRUD/持久化/调度纯函数/手动运行。
+ * 定时自动化:store CRUD/持久化/调度纯函数/手动运行。
  */
 import { describe, it, expect } from "vitest";
 import { AutomationStore, dueAutomations, AutomationScheduler, type Automation } from "../src/automations.js";

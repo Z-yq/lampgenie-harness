@@ -10,7 +10,7 @@ import { fileSymbolsOf } from "../src/index";
 import { INDEX_EXTRACTOR_VERSION } from "../src/callgraph/engine";
 import { extractTypedSymbols, renderVars, varsOf } from "../src/typed/index";
 
-/** 2026-10-21 file 动作符号表补全:interface/type/enum/const 箭头/嵌套函数/类方法
+/** file 动作符号表补全:interface/type/enum/const 箭头/嵌套函数/类方法
  * 全进符号表且 parent 正确;类型声明不污染 trunk/leaf 与调用解析目标;
  * 模板字符串内嵌 JS 保持 inline-js 边界(短模板不触发既有 inline-js 提取)。 */
 let dir = "";
@@ -67,7 +67,7 @@ const SAME_NAME = [
   "export function useThing(): number { return Thing(); }",
 ].join("\n");
 
-// 纯类型文件(2026-10-21 验收缺口 1 活例 apps/gateway/src/session-worker-protocol.ts):
+// 纯类型文件(验收缺口 1 活例 apps/gateway/src/session-worker-protocol.ts):
 // 只有 interface/type/enum + 模块级 const(含非导出 const),没有任何函数——旧抽取器 0 节点,
 // file/symbol 系统性缺报。Envelope/ClientMessage 形态对齐 packages/protocol(zod 联合)。
 const TYPES_ONLY = [
@@ -157,7 +157,7 @@ describe("file 符号表补全(2026-10-21)", () => {
   it("类型声明不作调用解析目标:裸调用 Thing() 保持未解析(interface 不进 CallGraph.byName)", () => {
     const hit = querySymbol(idx, "Thing")[0]!;
     expect(hit.symbol.symKind).toBe("interface");
-    expect(hit.callers).toEqual([]); // 没有把 useThing 的 Thing() 伪连到 interface
+    expect(hit.callers).toEqual([]); // 没有把 useThing 的 Thing 伪连到 interface
     const unresolved = idx.edges.find((e) => e.from === "same-name.ts#useThing" && e.toName === "Thing");
     expect(unresolved?.to).toBe("");
   });

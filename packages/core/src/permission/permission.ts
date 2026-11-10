@@ -34,8 +34,7 @@ export function evaluatePermission(
   permission: string,
   pattern: string,
   rulesets: PermissionRule[][],
-  wildcardMatchFn: (input: string, pattern: string) => boolean = wildcardMatch,
-): PermissionRule {
+  wildcardMatchFn: (input: string, pattern: string) => boolean = wildcardMatch): PermissionRule {
   for (const ruleset of [...rulesets].reverse()) {
     for (const rule of [...ruleset].reverse()) {
       if (wildcardMatchFn(permission, rule.permission) && wildcardMatchFn(pattern, rule.pattern)) {
@@ -84,8 +83,7 @@ export function deriveChildRules(parent: PermissionRule[]): PermissionRule[] {
 export function matchPermissionRule(
   rules: PermissionRule[],
   permission: string,
-  summary: string,
-): PermissionRule | undefined {
+  summary: string): PermissionRule | undefined {
   for (const r of rules) {
     if (r.permission !== permission && r.permission !== "*") continue;
     const pattern = r.pattern ?? "*";

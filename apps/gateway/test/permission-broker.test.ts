@@ -1,5 +1,5 @@
 /**
- * step-037 B2 权限审批端到端:ask→面板广播→应答/超时→执行结果分叉。
+ * B2 权限审批端到端:ask→面板广播→应答/超时→执行结果分叉。
  * 三级决策语义:env allow-once > 面板审批 > (无 broker/超时)fail-closed。
  */
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PermissionBroker } from "../src/permission-broker.js";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("permission-broker"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -52,7 +52,7 @@ describe("PermissionBroker 单元", () => {
 describe("执行路径 ask 三级决策(e2e 语义)", () => {
   // 环境隔离(同 permission-wiring):生产根可能有「总是允许」规则文件,无 broker→fail-closed
   // 断言依赖规则缺席;env 空集覆盖,零文件争用。
-  // step-1042 补:runTask 会做 checkpoint 快照(git-service)+ExperienceStore 扫描——不设
+ // 补:runTask 会做 checkpoint 快照(git-service)+ExperienceStore 扫描——不设
   // GENIE_REPO_ROOT 时全部落在真仓 9p 树上,高峰期单测 10s 超时假红;改指临时空根(与
   // annotate/nodes-gate WS 用例同口径),还原后清理。
   let oldRoot: string | undefined;

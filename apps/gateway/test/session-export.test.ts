@@ -1,5 +1,5 @@
 /**
- * 会话导出(step-004 二期收口)+ 会议批量立任务(step-013 二期收口)单测。
+ * 会话导出(二期)+ 会议批量立任务(二期)单测。
  * 导出规格源=vendor dsh session-format v4(本地行帧实现,校验=exact-keys 复刻)。
  */
 import { describe, it, expect } from "vitest";

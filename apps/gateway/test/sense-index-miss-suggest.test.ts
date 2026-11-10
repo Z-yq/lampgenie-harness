@@ -1,6 +1,5 @@
 /**
- * code_sense miss 建议器(a2,2026-11-03 命中率三修)。
- *
+ * code_sense miss 建议器(a2, 命中率三修)。
  * 契约:
  *  - miss 文本必须仍以「未找到符号」开头(sense-tool.ts 扇出过滤、agent-wiring.ts 依赖 startsWith 前缀);
  *  - 索引为空的分支逐字保持原文案(建议器只对非空索引生效);

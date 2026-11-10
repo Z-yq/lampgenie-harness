@@ -1,6 +1,5 @@
 /**
- * 架构策略门(M2):唯一 policy 文件 + managed 入座 + 跨层边 + 公开入口 + 内容指纹 baseline ratchet。
- *
+ * 架构策略门:唯一 policy 文件 + managed 入座 + 跨层边 + 公开入口 + 内容指纹 baseline ratchet。
  * 设计口径:
  * - policy 是唯一真源(.genie/arch-policy.json,version=1);结构规则只对 managed 模块生效。
  * - 判据是纯函数(scanPolicy/parsePolicy/ratchet),CLI 与测试共用同一套语义,零外部依赖(仅 node 内建)。
@@ -729,8 +728,7 @@ export function scanPolicy(input: ScanInput): ScanResult {
             RULE_CROSS_LAYER,
             file,
             `layer ${from.module.layer} may not import ${to.module.layer}: ${from.module.id} -> ${to.module.id}`,
-            ref.line,
-          ),
+            ref.line),
         );
       }
 
@@ -740,8 +738,7 @@ export function scanPolicy(input: ScanInput): ScanResult {
             RULE_DEEP_IMPORT,
             file,
             `deep import into ${to.module.id} bypasses entry ${to.module.entry}`,
-            ref.line,
-          ),
+            ref.line),
         );
       }
     }
@@ -810,8 +807,7 @@ export function baselineFrom(violations: Violation[], generatedAt: string): Base
 
 export function ratchet(
   violations: Violation[],
-  baseline: Baseline | undefined,
-): { fresh: Violation[]; baselined: Violation[] } {
+  baseline: Baseline | undefined): { fresh: Violation[]; baselined: Violation[] } {
   const known = new Set(
     (baseline?.entries ?? []).map((e) => `${e.rule}\u0000${e.file}\u0000${e.detailHash}`),
   );

@@ -1,5 +1,5 @@
 /**
- * 压缩模型入账(2026-11-03):compact.start / compact.done 的 payload 带 model,
+ * 压缩模型入账:compact.start / compact.done 的 payload 带 model,
  * 来源 opts.compactLlm 的 modelName ?? model,且在 compactLlm.chat() **之前**快照
  * (同 loop.ts 理由:modelName 是 getter,压缩途中热切换会读出新值)。
  */

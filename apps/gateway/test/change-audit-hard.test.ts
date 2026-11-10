@@ -1,6 +1,5 @@
 /**
- * 全链路变更第二批(2026-11-06):收尾硬门 + E2E/负面断言入审计 + 语义孤儿接入 change.audit。
- *
+ * 全链路变更第二批:收尾硬门 + E2E/负面断言入审计 + 语义孤儿接入 change.audit。
  * 覆盖三块:
  *  A. closeAuditVerdict 三态(warn 行为逐字不变 / hard 各缺口 hardFail 且文案点名 / directRoute 豁免);
  *  B. change_surface audit 的 verify 规整与落账(缺省/非法形状/截断/旧事件回读不炸);

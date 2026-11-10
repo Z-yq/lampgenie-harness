@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll } from "vitest";
 import { buildC2fIndex, loadIndex, saveIndex, querySymbol, queryEntryPoints, queryEntryPointsMeta, renderNeighborhood, renderFile, indexStale, srcFingerprint, isSampledIndex, samplingNote, type C2fIndex } from "../src/callgraph/c2f";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const REPO = "/mnt/e/workship/genie/lampgenie-harness";
+const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 let idx: C2fIndex;
 
 beforeAll(async () => {
@@ -44,7 +45,7 @@ describe("c2f 静态索引(2026-10-12 三改)", () => {
     expect(hits[0]!.callers.map((c) => c.name)).toContain("entry");
     expect(hits[0]!.callees.map((c) => c.name)).toContain("leafFn");
   });
-  it("indexStale 采样档(step-141):采样索引 count 口径不同不误报;取样集删除/编辑仍判过期", () => {
+  it("indexStale 采样档:采样索引 count 口径不同不误报;取样集删除/编辑仍判过期", () => {
     const r = mkdtempSync(join(tmpdir(), "gh-c2f-sampled-"));
     try {
       // 磁盘 3 个源文件,索引记的 srcCount 是「采样 2 个」——旧逻辑 fp.count(3) !== srcCount(2) 恒 stale
@@ -97,7 +98,7 @@ describe("c2f 静态索引(2026-10-12 三改)", () => {
     }
   });
 
-  it("entrypoints 非产品路径过滤(step-141 P1-1):docs/examples 入口默认过滤,--all 可见,过滤条数如实", async () => {
+  it("entrypoints 非产品路径过滤( P1-1):docs/examples 入口默认过滤,--all 可见,过滤条数如实", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-c2f-eps-filter-"));
     try {
       mkdirSync(join(dir, "docs_src", "tutorial"), { recursive: true });
@@ -222,7 +223,7 @@ describe("c2f 全图索引收结构语言(2026-10-14 修复:此前 listSourceFil
     }
   });
 
-  it("indexStale 确定性空(step-141):覆盖报告证明支持语言全零符号=不再永久自愈抖动;旧格式无 coverage 仍自愈", () => {
+  it("indexStale 确定性空:覆盖报告证明支持语言全零符号=不再永久自愈抖动;旧格式无 coverage 仍自愈", () => {
     const r = mkdtempSync(join(tmpdir(), "gh-c2f-detempty-"));
     try {
       // php-laravel/ruby-jekyll 形态:磁盘只剩零函数 js 资源脚本,索引 0 节点 + coverage 诚实登记

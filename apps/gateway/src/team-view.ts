@@ -1,5 +1,5 @@
 /**
- * 团队视图服务面(step-032 遗留收口:团队页 UI 的数据层)+多 org(step-032 多 relay 并存)。
+ * 团队视图服务面(遗留:团队页 UI 的数据层)+多 org(多 relay 并存)。
  * 每个 relay URL 一个 TeamRelayClient;presence diff 应用成全量视图;activity 滚动缓存;
  * 邀请码经 relay.invite.create。红线不变:relay 不可达=该 org 显示 disconnected,本地零影响。
  */
@@ -23,9 +23,9 @@ interface OrgEntry {
   member?: { username: string; role: string };
   fingerprint?: string;
   presence: Map<string, { username: string; state: string; lastActiveAt: number; projects: string[] }>;
-  /** 项目注册表镜像(designs/23:relay 下发的 roster projects 投影;绑定键匹配数据源)。 */
+ /** 项目注册表镜像(relay 下发的 roster projects 投影;绑定键匹配数据源)。 */
   projectsRegistry: Record<string, { type?: string; repo?: string }>;
-  /** teamai 团队仓资产投影(designs/24:relay 下发的 digest;secrets 只含 key)。 */
+ /** teamai 团队仓资产投影(relay 下发的 digest;secrets 只含 key)。 */
   teamai: Record<string, unknown> | null;
   activity: OrgView["activity"];
 }
@@ -46,7 +46,7 @@ export class TeamView {
 
   constructor(private readonly opts: TeamViewOptions) {
     for (const url of opts.urls) this.addOrg(url);
-    // presence 心跳(25s 节律,沿用 step-032 实测形态);unref 不钉进程。
+ // presence 心跳(25s 节律,沿用 经验证形态);unref 不钉进程。
     this.heartbeat = setInterval(() => this.sendPresence(), 25_000);
     this.heartbeat.unref?.();
   }
@@ -110,7 +110,7 @@ export class TeamView {
 
   private inviteListeners: ((orgUrl: string, code: string, expiresAt: number) => void)[] = [];
   private pushListeners: ((r: { ok: boolean; branch?: string; reason?: string }) => void)[] = [];
-  /** designs/30:经验贡献/资源删除的结果挂勾(与 push 分流,互不串包)。 */
+ /** :经验贡献/资源删除的结果挂勾(与 push 分流,互不串包)。 */
   private contributeListeners: ((r: { ok: boolean; branch?: string; path?: string; reason?: string }) => void)[] = [];
   private removeListeners: ((r: { ok: boolean; path?: string; reason?: string }) => void)[] = [];
 
@@ -162,7 +162,7 @@ export class TeamView {
   }
 
   /**
-   * 项目绑定团队(designs/23):激活项目 → roster projects.repo 归一化匹配 → 该项目的真成员。
+ * 项目绑定团队:激活项目 → roster projects.repo 归一化匹配 → 该项目的真成员。
    * 每个绑定的 org 出一份成员切片;绑不上时 bound=false(候选-only 视图的信号)。
    */
   projectTeam(binding: { remoteUrl: string | null; label: string }): {
@@ -208,7 +208,7 @@ export class TeamView {
     return true;
   }
 
-  /** teamai contribute:会话经验写 learnings 分支(designs/30 §2.4);结果经 contribute.result 异步回。 */
+ /** teamai contribute:会话经验写 learnings 分支( §2.4);结果经 contribute.result 异步回。 */
   teamaiContribute(orgUrl: string, payload: { title: string; body: string; tags?: string[]; project?: string }): boolean {
     const entry = this.orgs.get(orgUrl);
     if (!entry || !entry.client.ready) return false;
@@ -216,7 +216,7 @@ export class TeamView {
     return true;
   }
 
-  /** teamai remove:删团队仓 main 上一份资源(designs/30 §2.3);结果经 remove.result 异步回。 */
+ /** teamai remove:删团队仓 main 上一份资源( §2.3);结果经 remove.result 异步回。 */
   teamaiRemove(orgUrl: string, payload: { kind: "skill" | "rule" | "doc"; ns?: string; name: string }): boolean {
     const entry = this.orgs.get(orgUrl);
     if (!entry || !entry.client.ready) return false;
@@ -232,7 +232,7 @@ export class TeamView {
   }
 
   /**
-   * 任务级活动上行(2026-10-27:此前活动流只有 P2P 兜底会推,任务开始/完成无人推=活动区恒空)。
+ * 任务级活动上行(此前活动流只有 P2P 兜底会推,任务开始/完成无人推=活动区恒空)。
    * userId 服务端强制=本连接 member 名(伪造他人=forbidden),故由已认证 entry.member 决定;
    * projectId 传 roster 绑定键(未绑定时传空——relay 可见性按「未登记项目仅本人」收敛)。
    */

@@ -322,8 +322,7 @@ describe("tool-pins-store 坏行容错与参数校验", () => {
       TOOL_PIN_NOT_FOUND,
     ]);
     expect(
-      (await applyUpgrade(root, { sessionId: "ghost", tool: "toolA", to: "2.0.0", by: "me", confirmed: true })).codes,
-    ).toEqual([TOOL_PIN_NOT_FOUND]);
+      (await applyUpgrade(root, { sessionId: "ghost", tool: "toolA", to: "2.0.0", by: "me", confirmed: true })).codes).toEqual([TOOL_PIN_NOT_FOUND]);
   });
 
   it("root/sessionId 非法抛 TypeError,其余坏参数折叠成 INVALID", async () => {

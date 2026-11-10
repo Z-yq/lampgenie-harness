@@ -1,4 +1,4 @@
-/** UI 实测:step-044——sinceSeq 增量(同会话两任务无重复回放)+经验禁用/恢复+checkpoint 预览。 */
+/** UI 经验证:——sinceSeq 增量(同会话两任务无重复回放)+经验禁用/恢复+checkpoint 预览。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -21,7 +21,7 @@ const { join } = require("node:path");
   await new Promise((r) => setTimeout(r, 400));
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--no-proxy-server"] });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  // step-090:原生 confirm 已迁 uiConfirm 页内模态(step-088),page.on("dialog") 捕获退役;
+ // 原生 confirm 已迁 uiConfirm 页内模态,page.on("dialog") 捕获退役;
   // 确认类交互就地驱动模态,「不弹确认」类断言改判页内模态未出现。
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e).slice(0, 120)));
@@ -55,7 +55,7 @@ const { join } = require("node:path");
   await page.locator("#taskMenu .tm-item", { hasText: "回滚到此任务前" }).click();
   await page.waitForTimeout(4000);
   // echo 后端不改文件→快照 vs 当前 diff=0→「无可回滚变更」toast(语义正确;真回滚链路由单测覆盖:改文件→快照→再改→rewind→恢复)。
-  // step-090:「不弹回滚确认」改判页内模态(.uid-msg 含「回滚到此任务前」)未出现——原生 dialog 捕获已退役。
+ // 「不弹回滚确认」改判页内模态(.uid-msg 含「回滚到此任务前」)未出现——原生 dialog 捕获已退役。
   const toastNoop = await page.locator(".toast", { hasText: "无可回滚" }).count();
   const uidRewind = await page.locator(".uid-box .uid-msg", { hasText: "回滚到此任务前" }).count();
   check("无变更任务→预览 toast 拦截(不弹回滚)", toastNoop >= 0 && uidRewind === 0, "uid=" + uidRewind);
@@ -69,7 +69,7 @@ const { join } = require("node:path");
   const probeRow = page.locator(".exp-item", { hasText: "tip-probe" });
   check("经验条目在列", (await probeRow.count()) === 1);
   await probeRow.locator("button", { hasText: "禁用" }).click();
-  await page.locator(".uid-box .uid-msg", { hasText: "禁用经验" }).waitFor({ state: "visible", timeout: 3000 }); // step-090:禁用确认=页内模态,显式确认等价原自动应答
+  await page.locator(".uid-box .uid-msg", { hasText: "禁用经验" }).waitFor({ state: "visible", timeout: 3000 }); // 禁用确认=页内模态,显式确认等价原自动应答
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(800);
   check("禁用后从激活区消失", (await page.locator(".exp-item:not([data-d])", { hasText: "tip-probe" }).count()) === 0);

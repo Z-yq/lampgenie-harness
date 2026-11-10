@@ -4,8 +4,8 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 /**
- * 快捷方式自愈契约(2026-11-09):安装器提权内层实例里 NSIS CreateShortCut 与子进程 PowerShell
- * 都不可用(实测),入口改由应用首启用 Electron shell.writeShortcutLink(用户态,带 AUMID)补齐。
+ * 快捷方式自愈契约:安装器提权内层实例里 NSIS CreateShortCut 与子进程 PowerShell
+ * 都不可用(经验证),入口改由应用首启用 Electron shell.writeShortcutLink(用户态,带 AUMID)补齐。
  */
 test("main.js: ensureShortcuts 用 shell.writeShortcutLink + AUMID,尊重桌面重定向", () => {
   const src = readFileSync(join(__dirname, "..", "main.js"), "utf8");

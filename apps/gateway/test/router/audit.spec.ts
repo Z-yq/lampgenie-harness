@@ -5,7 +5,7 @@ import { MemoryJournal } from "@lampgenie/core";
 import { createRouter } from "../../src/router/index.js";
 import { DEFAULT_POLICY_CONFIG } from "../../src/router/policy.js";
 
-describe("router audit:append-only 落账 + 无凭证断言(step-0143 sr8)", () => {
+describe("router audit:append-only 落账 + 无凭证断言( sr8)", () => {
   it("append 追加 jsonl,readAll 回放,行不覆盖(append-only)", async () => {
     const lines: string[] = [];
     const log = createAuditLog("/r/.genie/router/audit.jsonl", {

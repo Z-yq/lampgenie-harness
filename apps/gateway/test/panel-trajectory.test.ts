@@ -1,10 +1,8 @@
 /**
  * 面板轨迹卡(J1 2026-11 token 轮)渲染测试:喂一条 task.trajectory 事件,验真身渲染出来的 HTML。
- *
  * 做法取自 panel-subagent-merge.test.ts 的同族手法:面板是单 HTML 模板字符串,浏览器侧函数在源码里,
  * 这里从 GET / 拿到的真实 HTML 中**抽取 trajCardHtml 函数源码**,用 new Function 求值后喂假 payload
  * —— 断言的是「真函数真渲染」,不是源码里有没有这几个字。
- *
  * 覆盖:summary 四要素(步数/工具类别数/并行百分比/错误数)、子目标+阶段行、工具分布 top6 归一、
  * token 曲线(polyline)、负面(无 phase/subgoal 时不出空行标记)。
  * 零反斜杠纪律:断言全用 includes 字面串。
@@ -45,8 +43,7 @@ function loadRenderer(html: string): (tp: unknown, series: unknown[]) => string 
   const src = extractFn(html, "trajCardHtml");
   // eslint-disable-next-line no-new-func
   return new Function("esc", src + String.fromCharCode(10) + "return trajCardHtml;")(
-    escT,
-  ) as (tp: unknown, series: unknown[]) => string;
+    escT) as (tp: unknown, series: unknown[]) => string;
 }
 
 describe("面板轨迹卡(J1):task.trajectory → 折叠画像卡", () => {
@@ -72,7 +69,7 @@ describe("面板轨迹卡(J1):task.trajectory → 折叠画像卡", () => {
       // 卡片本体:折叠容器 + 标签
       expect(out).toContain('class="traj-line"');
       expect(out).toContain('class="tj-tag"');
-      // 摘要行只留 标签/token/看板(用户反馈 2026-11-06:第 N 步·工具 N 类·并行%·错误 N 整行不需要)
+ // 摘要行只留 标签/token/看板(用户反馈 :第 N 步·工具 N 类·并行%·错误 N 整行不需要)
       expect(out).not.toContain("tj-meta");
       expect(out).not.toContain("第 12 步");
       expect(out).not.toContain("工具 3 类");
@@ -109,7 +106,7 @@ describe("面板轨迹卡(J1):task.trajectory → 折叠画像卡", () => {
       // 无工具 → 不出空条带;单点曲线 → 不画(无曲线信息)
       expect(out2).not.toContain('class="traj-bars"');
       expect(out2).not.toContain("<polyline");
-      // 四项摘要已删(2026-11-06 用户反馈),不再出现任何「工具 N 类」字样
+ // 四项摘要已删(用户反馈),不再出现任何「工具 N 类」字样
       expect(out2).not.toContain("工具 0 类");
       expect(out2).not.toContain("tj-meta");
     });

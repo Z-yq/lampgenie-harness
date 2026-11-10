@@ -1,12 +1,9 @@
 /**
  * 截图标注(面板原生标注窗→coding agent)——服务端纯逻辑。
- *
- * 交互链(2026-10-26 用户口径「按钮→画框截图→标注评论窗→反馈发给 coding agent」,
- * 交互与数据契约设计参考 EditHere 开源项目(致谢),为本仓独立 TS 实现):
+ * 交互链( * 交互与数据契约设计参考 EditHere 开源项目(致谢),为本仓独立 TS 实现):
  *   面板按钮 → getDisplayMedia 取屏 → 画框裁剪(PNG dataURL)→ 面板内标注编辑器
  *   (框/点/全局三类编号批注)→ annotate.submit → 本模块规整几何+构造反馈 JSON →
  *   落盘 <项目>/.genie/feedback/ → 组装 instruction → task.submit(忙则自动入队)。
- *
  * 反馈 JSON 沿用 feedback-minimal-4 结构(schemaVersion/annotationSpace/objects[]
  * {id,kind,source|point,annotations[]}/image 描述符),编码 agent 侧解释契约与
  * 工具名署 LampGenie。几何规整规则(区域 x1∈[0,w-1] 且 x2≥x1+1、

@@ -1,5 +1,5 @@
 /**
- * policy gate + 版本哈希(step-0143 P1,参照 dsh-superagent-prototype/src/policy.ts):
+ * policy gate + 版本哈希( P1,参照 dsh-superagent-prototype/src/policy.ts):
  * - gate():observe 模式下 explicit(面板/白名单)或命中运行中 Ticket 订阅 → 派发;inferred 候选恒 ignore,
  *   audit 记 would_accept:true(不派发);显式授权用户请求走既有 TaskSupervisor 路径行为不变。
  * - policyVersion():对 rules/mode/sources 三要素哈希——改任一项 → 版本变化。
@@ -31,7 +31,7 @@ export interface PolicyConfig {
   mode: AcceptMode;
   rules: PolicyRule[];
   sources: PolicySource[];
-  /** step-0145 P3:auto 研判 deadline ms(缺省 120_000)。运维参数,不参与 policyVersion 哈希(非授权要素)。 */
+ /** P3:auto 研判 deadline ms(缺省 120_000)。运维参数,不参与 policyVersion 哈希(非授权要素)。 */
   evalDeadlineMs?: number;
 }
 
@@ -86,7 +86,7 @@ export function policyVersion(config: PolicyConfig): string {
 }
 
 /**
- * step-0145 P3 Mandate 授权凭证:accept 派发时产出的不可变凭证,挂 Ticket + 随行落 audit。
+ * P3 Mandate 授权凭证:accept 派发时产出的不可变凭证,挂 Ticket + 随行落 audit。
  * 只含授权溯源要素,不含任何密钥/令牌字段(audit assertNoCredential 全量守门)。
  */
 export interface Mandate {

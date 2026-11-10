@@ -1,13 +1,10 @@
 /**
  * RSI 周报 IO 层(聚合六源 + 纠错落地 + 事件/提醒)。
- *
  * 为什么需要它:周报的纯逻辑(build/render/planCorrection/shouldRemindPending)零 IO,
  * 六个真源(实验账本、成本台账、断路器、自我修改审批、注入审批、证据图冲突)各自是一个 store。
  * 本模块只干「把真源读成 WeeklyInput、把纠错动作写回真源、把事件落到 weekly.jsonl」,
  * 不重复任何统计口径(全部委托 runtime 的纯函数)。
- *
  * 数据面:`<root>/.genie/rsi/weekly.jsonl`(逐行 JSON,只增不改;坏行读取时跳过)。
- *
  * 依赖纪律:
  * - 只 import gateway 既有 store + runtime 纯逻辑;不改任何既有模块。
  * - 聚合侧每个源独立 try/catch:失败 = 该源缺失(传 undefined/[]),绝不把异常抛给调用方;

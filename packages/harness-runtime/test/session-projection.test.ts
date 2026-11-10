@@ -61,8 +61,8 @@ describe("projectSession(F1 归约器)", () => {
   });
 });
 
-// 2026-11-04 有界化(网关 OOM 根因):rows 尾部窗口 50 + 单行 200 字 + rowCount 总数。
-// 实锤:巨型会话投影含数千条全文消息,session.status 每 3s 轮询全量序列化,4GB 堆被打穿
+// 有界化(网关 OOM 根因):rows 尾部窗口 50 + 单行 200 字 + rowCount 总数。
+// 注意:巨型会话投影含数千条全文消息,session.status 每 3s 轮询全量序列化,4GB 堆被打穿
 // (崩溃栈=JsonStringify);而面板状态条只消费 todo/subagents/workflows/compactions。
 it("rows 有界:尾部 50 条窗口 + 单行 200 字截断 + rowCount=真实总数", () => {
   const events: { kind: string; payload: Record<string, unknown> }[] = [];

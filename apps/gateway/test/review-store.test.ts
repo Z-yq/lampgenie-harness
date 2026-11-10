@@ -13,7 +13,7 @@ import { EchoChildBackend } from "@lampgenie/executors";
 let app: GatewayApp | null = null;
 afterEach(async () => { await app?.close(); app = null; });
 
-// 随机高位端口(step-083):固定 7801/7802 与并发会话在跑实例相撞(2026-10-16 实锤:step-082 的
+// 随机高位端口:固定 7801/7802 与并发会话在跑实例相撞(2026-10-16 注意: 的
 // serve 占 7802,WS 连到外来服务→resolveWorkdir 回退根→root 店 6 条假阳性)。同 session-fork 模式;
 // 段取 24000+(避开仓内 18000-19499 测试惯例段——并发会话 vitest 同段跑会互撞)。
 const PORT_A = 24000 + Math.floor(Math.random() * 2000);

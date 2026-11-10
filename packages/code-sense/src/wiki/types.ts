@@ -1,9 +1,8 @@
 /**
- * wiki(step-118):repo wiki 的类型与常量。
- *
+ * wiki:repo wiki 的类型与常量。
  * 定位:持久、可导航、可引用的仓库 wiki(给人看 + 给 agent 读)。事实/行号/图确定性;
  * LLM 仅写叙述,且每条叙述必须带可回查的 file:line anchor(无据不写)。
- * 红线(designs/16):不引入 embedding/向量库;Q&A 走既有 code_index/grep。
+ * 红线:不引入 embedding/向量库;Q&A 走既有 code_index/grep。
  */
 import { join } from "node:path";
 
@@ -12,9 +11,9 @@ export const WIKI_GENERATOR_VERSION = 15;
 
 export type WikiPageKind =
   | "overview" | "file-tree" | "modules" | "entrypoints" | "dependencies"
-  // 2026-10-26:整仓 code flow 落档 + 由 flow 派生的语义指南/功能拆解
+ // 整仓 code flow 落档 + 由 flow 派生的语义指南/功能拆解
   | "flow" | "flow-module" | "guide" | "features"
-  // 2026-10-27:管线关键函数语句级流程图
+ // 管线关键函数语句级流程图
   | "algo";
 export type WikiPageSection =
   | "overview" | "structure" | "modules" | "entrypoints" | "graph"
@@ -36,7 +35,7 @@ export interface WikiNarrativeSection {
   cites: WikiCitation[];
 }
 
-/** 功能线的 LLM 语义命名(2026-10-26):只改展示名/一句话能力,不改确定性入口/模块/文件清单;
+/** 功能线的 LLM 语义命名:只改展示名/一句话能力,不改确定性入口/模块/文件清单;
  * cites 必须通过 file:line 回查,id 必须对应 flow 骨架里的功能线 id。 */
 export interface WikiNarrativeFeature {
   id: string;
@@ -119,7 +118,7 @@ export interface WikiFeature {
   id: string;
   /** 确定性标题(代表触发面);LLM 可在叙述里给语义名,不改事实字段。 */
   title: string;
-  /** 2026-10-27 管线簇:一个功能线可有多个触发面(5 个训练脚本共享下游=1 族)。 */
+ /** 管线簇:一个功能线可有多个触发面(5 个训练脚本共享下游=1 族)。 */
   triggers?: WikiFeatureTrigger[];
   entry: { label: string; kind: string; file?: string; line?: number };
   /** 贪心主干(入口 → … ≤4 跳)。 */
@@ -189,7 +188,7 @@ export interface WikiManifest {
   graphs: WikiGraph[];
   citationAudit: WikiCitationAudit;
   degraded: WikiDegraded[];
-  /** 2026-10-26:整仓 code flow 摘要(旧 manifest 无此字段=旧版本生成)。 */
+ /** :整仓 code flow 摘要(旧 manifest 无此字段=旧版本生成)。 */
   flow?: WikiFlowSummary;
 }
 
@@ -212,7 +211,7 @@ export interface WikiConfig {
   maxSymbols: number;
   /** 功能拆解条数上限(入口 flow 数)。 */
   maxFeatures: number;
-  /** 全仓/模块 file 级 flow 的节点预算(0=不设上限,诚实全量;2026-10-27 用户口径)。 */
+ /** 全仓/模块 file 级 flow 的节点预算(0=不设上限,诚实全量。 */
   maxFlowFiles: number;
 }
 

@@ -1,9 +1,10 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";
 import { WorkflowEngine } from "../src/engine";
 import { renderTemplate, TEMPLATES } from "../src/templates";
 
-const ROOT = "/mnt/e/workship/genie/lampgenie-harness";
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("D7 模板", () => {
   it("unit-tests 模板对本仓 packages/core 真跑(vitest)", async () => {

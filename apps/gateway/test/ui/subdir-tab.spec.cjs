@@ -1,4 +1,4 @@
-/** UI 实测(step-062 用户口径:「以子智能体目录为一级入口——点击目录条目应在目录所在层级弹出/激活该子
+/** UI 经验证( 「以子智能体目录为一级入口——点击目录条目应在目录所在层级弹出/激活该子
  * agent 独立的 tab 页」+多尺寸视觉校验)。自启跑法:
  * npx tsx test/ui/_ui_selfhost.cjs --opts test/ui/_subws.opts.cjs test/ui/subdir-tab.spec.cjs
  * 断言面:①目录条目主区域点击=开/激活工作区 tab(运行中开=实时流;已结束点=回放;重复点=激活不重复开)
@@ -10,7 +10,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";
 const SID = "spec-sess-subtab";
-const SHOTS = path.join(__dirname, "..", "..", "..", "..", "tasks", "step-062-subagent-workspace-tab", "shots");
+const SHOTS = path.join(__dirname, "..", "..", "..", "..", "tasks", "-subagent-workspace-tab", "shots");
 const VIEWPORTS = [
   [1440, 900], [1280, 800], [1920, 1080], [1024, 700], // 末档=窄窗不破版校验
 ];
@@ -36,7 +36,7 @@ const VIEWPORTS = [
     localStorage.setItem("zh:g-term", "off");
   });
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 30000 });
-  // 2026-10-21 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
+ // 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
   // 会话流不渲染子代理过程卡——本规格守经典契约(浮窗/工作区 tab/会话流过程卡),先切经典布局。
   await page.waitForTimeout(600);
   await page.evaluate(() => { try { if (document.body.classList.contains("cv-shell")) CanvasShell.setMode("classic"); } catch (e) {} });
@@ -54,7 +54,7 @@ const VIEWPORTS = [
   }
 
   // 2. 目录条目出现(运行中)→ 点击条目主区域(一级入口)
-  // step-101 环境硬化:窗口 10s→20s——094 同机并发负载(双 agent+重索引)下「LLM 桩→spawn→注册表
+ // 环境硬化:窗口 10s→20s——094 同机并发负载(双 agent+重索引)下「LLM 桩→spawn→注册表
   // 广播→渲染」链超 10s 致首断言红(修前修后同红,登记在案);空载本机两跑 35/35。意图不变:
   // 运行中子代理的目录条目必须出现,只是给共享机负载留与同 spec 注册表窗(12s)同级的余量。
   await page.click("#subDirBtn");

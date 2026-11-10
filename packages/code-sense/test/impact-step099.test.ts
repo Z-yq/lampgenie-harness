@@ -1,5 +1,5 @@
 /**
- * step-099 测试(096 评测缺口收口):
+ * 测试(096 评测缺口):
  * ③ RC-B3 关联测试跨深度通道:测试在 3 跳外(ValidateFlagGroups 形态)也能定位,
  *    标 beyondDepth 并单列「跨深度」组;「未发现」措辞带深度外未穷尽的诚实尾巴;
  * ⑤ RC-B5 弃边可见化:同名消歧弃边进索引 dropped 台账 → impact 渲染「弃边与不可见」段
@@ -52,7 +52,7 @@ beforeAll(async () => {
 
 afterAll(() => { rmSync(ws, { recursive: true, force: true }); }, 60_000);
 
-describe("step-099 RC-B3:关联测试跨深度通道", () => {
+describe(" RC-B3:关联测试跨深度通道", () => {
   it("3 跳外的专属测试被定位,标 beyondDepth,d1 直接测试语义不动", () => {
     const r = queryImpact(index, "target", { depth: 2 });
     const direct = r.tests.filter((t) => t.via === "call" && t.depth === 1 && !t.beyondDepth);
@@ -78,7 +78,7 @@ describe("step-099 RC-B3:关联测试跨深度通道", () => {
   });
 });
 
-describe("step-099 RC-B5:弃边可见化", () => {
+describe(" RC-B5:弃边可见化", () => {
   it("同名消歧弃边进索引台账(dropped),impact 渲染弃边段带数量+原因+同名头", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cs-099-drop-"));
     mkdirSync(join(dir, "m"), { recursive: true });

@@ -1,19 +1,15 @@
 /**
  * 实验台账持久层(生产侧,实验台账 2026-11):把 experiment-ledger 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only 而不是读改写整文件:决策是审计事实,不能被后来的写入覆盖或抹掉;
  * 单行追加 + 写后行数校验(重读文件统计非空行数)让「写成功了吗」变成可复核的断言,
  * 而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/experiments/ledger.jsonl`,每行一条
  * - `{type:"record", at, v:1, experiment}` —— 实验本体(台账底账)。
  * - `{type:"decision", at, v:1, id, kind, by?, reason?, resultMetrics?, codes?}` —— 决策/结果指标。
- *
  * 投影语义(loadProjection):
  * - record 建底(同 id 后写覆盖前写);decision 按行序依次套用 → latest wins;
  *   decision 携带的 resultMetrics 按指标名合并进 metrics。
  * - 坏行(JSON 坏 / 未知 v / 缺必需字段)只计入 badLines 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
  * runtime 模块按 trace-harvest 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出的 src 入口;
@@ -151,8 +147,7 @@ function isRecord(value: unknown): value is UnknownRecord {
 /** 时间窗重叠(ISO 字符串比较;任一方缺失视为重叠,与 runtime 口径一致)。 */
 function windowsOverlap(
   a: { from: string; to: string } | undefined,
-  b: { from: string; to: string } | undefined,
-): boolean {
+  b: { from: string; to: string } | undefined): boolean {
   if (!a || !b) return true;
   return a.from <= b.to && b.from <= a.to;
 }

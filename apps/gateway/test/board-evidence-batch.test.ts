@@ -1,5 +1,5 @@
 /**
- * board_upsert action=evidence 批量回填(2026-10-31,token 成本优化第三轮):
+ * board_upsert action=evidence 批量回填(token 成本优化第三轮):
  * 原来一次只能回填一个节点,3 节点板要跑 3 次(每步 ~18k input token)。
  * - evidenceByNode 一次回填多节点;空数组跳过该键;
  * - negative:含不存在节点时,**其它节点的证据照落盘**,回执单独点名 ghost(不整次丢弃);

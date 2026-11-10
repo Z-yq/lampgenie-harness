@@ -1,8 +1,8 @@
-# genie-memory 方案评审
+# 记忆服务方案评审
 subtitle: 面向技术负责人的架构与风险评审
 verdict: 有条件通过
 verdict_note: 分层清晰;凭据与口径先整改
-meta: genie-memory@abc123 · 2026-10-27
+meta: memory-service@abc123 · 
 
 ## 01 定位与目标
 claim: 它是记忆服务,不是对话服务
@@ -53,7 +53,7 @@ start_service.sh:9-10
 - **整改节奏** — 凭据问题本周轮换止血,向量口径下个迭代统一到文档
 > 证据: start_service.sh:9-10
 
-### 死代码实证
+### 死代码验证
 ```code
 service/recall_engine.py:20-25
 try:

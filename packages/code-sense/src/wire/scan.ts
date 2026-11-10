@@ -1,6 +1,5 @@
 /**
  * wire 扫描器:纯 fs 行/结构扫描。不读索引、不调 LLM、不写盘。
- *
  * 扫描面(固定,见 WIRE_PATHS):
  *   协议声明  packages/protocol/src/index.ts  (z.discriminatedUnion + Envelope.extend)
  *   服务端    apps/gateway/src/server.ts       (switch (msg.type) 的 case,含 fallthrough)
@@ -564,7 +563,7 @@ function relevantRel(rel: string): boolean {
 
 /** 只收 type 字面量三种形态(z.literal / type: / case),**不做大写标识符收集**。
  * 旧实现按 changed 行收集 decls 里的大写标识符:union 成员数组行(如 `[Ping, TrackView, ...]`)
- * 本身包含全部声明名,任何一次协议改动都会把整条 union 报成 changed(实测 153 types)。 */
+ * 本身包含全部声明名,任何一次协议改动都会把整条 union 报成 changed(经验证 153 types)。 */
 function typeLiteralsIn(text: string): string[] {
   const out = new Set<string>();
   const zRe = /\bz\.literal\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g;
@@ -785,8 +784,7 @@ export function scanWire(rootInput: string, opts: WireScanOptions = {}): WireSca
   const keptUnions = filterSet ? unions.filter((u) => u.members.some((m) => filterSet.has(m.type))) : unions;
   const memberships = keptUnions.reduce(
     (n, u) => n + (filterSet ? u.members.filter((m) => filterSet.has(m.type)).length : u.members.length),
-    0,
-  );
+    0);
   return {
     query: "wire",
     root,

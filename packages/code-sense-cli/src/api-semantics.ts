@@ -1,14 +1,11 @@
 /**
  * api-semantics(收尾批 I 项):api 命令的 LLM 语义描述层模块。
- *
  * 定位:api 命令已有确定性层(method/path/handler 行扫描,sensing/http-api)。本模块在其上
- * 加语义层——每端点一句业务/职责描述。只做「模块+单测+脚本实测」,不改 cli.ts 命令分发表
+ * 加语义层——每端点一句业务/职责描述。只做「模块+单测+脚本经验证」,不改 cli.ts 命令分发表
  * (CLI 接线由另一子代理负责)。
- *
  * 凭证:复用 llm-config.ts 的解析链(flag > GENIE_LLM_* env > ~/.codesense/config.json >
  * ask-file > null),不新造凭证链。无凭证=返回显式 off 状态+文案(仿 project 命令 llmState
  * 先例:确定性清单独立可用),不抛错、不静默降级冒充成功。
- *
  * 规模纪律:
  *  - 上限:单仓 >40 端点只取前 40 送 LLM,其余在输出里保留并标 truncatedOut(显式标注,
  *    不静默丢);
@@ -89,7 +86,7 @@ export interface ApiSemanticsOpts {
 
 // ---- 指纹与缓存 ----
 
-/** 路径参数归一(:id / {id} → {},与 sensing/index normalizeKey 同规则)。 */
+/** 路径参数归一(id / {id} → {},与 sensing/index normalizeKey 同规则)。 */
 function normalizeEpPath(p: string): string {
   return p.replace(/:([\w]+)/g, "{}").replace(/\{[^}]+\}/g, "{}").replace(/\/+$/, "");
 }
@@ -206,7 +203,6 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 
 /**
  * 语义层主入口:端点列表(method/path/handler+代码窗摘要)→ 每端点一句语义描述。
- *
  * 流程:截断标注(>40)→ 缓存命中检查(文件已存在才读;命中=0 次 LLM 调用)→ 凭证解析
  * (复用 llm-config 链;无凭证=显式 off,不抛错)→ 分片批跑(≤12/请求)→ 结果回填。
  * writeCache=true 且 status=ok 时才写缓存文件;默认 false,零落盘。

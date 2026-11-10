@@ -594,8 +594,7 @@ describe("toAuditRows", () => {
     expect("signature" in withoutSig[0]!).toBe(false);
 
     const computed = toAuditRows(
-      computeCohortMetrics({ deliveries: [delivery({ id: "d1" })] }).cohorts,
-    );
+      computeCohortMetrics({ deliveries: [delivery({ id: "d1" })] }).cohorts);
     expect("signature" in computed[0]!).toBe(false);
   });
 

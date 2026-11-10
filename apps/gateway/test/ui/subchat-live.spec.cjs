@@ -1,4 +1,4 @@
-/** UI 实测(step-141 子agent会话流改「选中式消息流」):左=子代理选择器,右=选中者实时消息流。
+/** UI 经验证(子agent会话流改「选中式消息流」):左=子代理选择器,右=选中者实时消息流。
  * 自启跑法(沿用 subdir-tab/_subws 装配,不放大轮询/超时):
  * cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs --opts test/ui/_subws.opts.cjs test/ui/subchat-live.spec.cjs
  * 断言四组:
@@ -12,7 +12,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";
 const SID = "spec-sess-subchat";
-const SHOTS = path.join(__dirname, "..", "..", "..", "..", "tasks", "step-141-subchat-live-message-view", "shots");
+const SHOTS = path.join(__dirname, "..", "..", "..", "..", "tasks", "-subchat-live-message-view", "shots");
 const NL = String.fromCharCode(10);
 
 (async () => {
@@ -36,7 +36,7 @@ const NL = String.fromCharCode(10);
 
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForTimeout(600);
-  // step-141 是画布形态专属卡:确保画布形态(默认 canvas;防 localStorage 残留经典态)。
+ // 是画布形态专属卡:确保画布形态(默认 canvas;防 localStorage 残留经典态)。
   await page.evaluate(() => { try { if (!document.body.classList.contains("cv-shell")) CanvasShell.setMode("canvas"); } catch (e) {} });
   await page.waitForFunction("window.ws && window.ws.readyState === 1", null, { timeout: 15000 }).catch(() => {});
   await page.evaluate((s) => sessionStorage.setItem("zh:sid", s), SID);

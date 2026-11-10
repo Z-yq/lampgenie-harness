@@ -1,17 +1,14 @@
 /**
- * step-142 消息流排版系统化:实测校准 + 排版守卫。
- *
+ * 消息流排版系统化:经验证校准 + 排版守卫。
  * 契约(上一批落地的排版令牌层,src/panel.ts `:root` 内 --fs-x / --lh-x / --indent-x / --gap-x / --font-x 四族):
  * ① 8 类消息(用户消息 / agent 正文 md / 思考卡 / 工具卡 / 代码·终端·JSON 板 / 子代理卡 / 系统行 / chip)
  *    的字号·行高·字体·缩进·块距只允许引用令牌,同类出现第二种取值即为缺陷;
  * ② 排版与主题解耦:body.light 与五套 body.theme-* 一律不得覆写排版令牌;
  * ③ 窄视口(375)不得把正文压到不可读,代码板必须能横向滚动而非破版。
- *
- * 实测口径:真 chromium(playwright-core + /usr/bin/google-chrome)打开 servePanel 起的临时实例,
+ * 经验证口径:真 chromium(playwright-core + /usr/bin/google-chrome)打开 servePanel 起的临时实例,
  * 用面板自带的测试钩子 window.__mature.setHist + renderHistory 注入多类型会话(与 test/ui/*.spec.cjs 同源做法),
  * 再用 getComputedStyle 读真实计算值,与 :root 令牌解析值比对——**不硬编码 px 数字**:令牌微调后本测试不脆。
- * 端口走 7880-7889 空闲探测(不碰产线 7700,也不与 7891/7892/7897 撞)。
- *
+ * 端口走 7880-7889 空闲探测(不碰生产环境 7700,也不与 7891/7892/7897 撞)。
  * 页面脚本语法守卫不在此重复:test/panel-script-syntax.test.ts 已对每个内联 <script> 做编译校验。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -101,7 +98,7 @@ function __report(){
   out.els.table = __read(md && md.querySelector("table.md-table"));
   out.els.ul1 = __read(md && md.querySelector("ul"));
   out.els.ul2 = __read(md && md.querySelector("ul ul"));
-  // 2026-11-06 有序列表嵌套(缺陷1):顶层 ol + 子 ol 探针
+ // 有序列表嵌套(缺陷1):顶层 ol + 子 ol 探针
   out.els.ol1 = __read(md && md.querySelector("ol"));
   out.els.olSub = __read(md && md.querySelector("ol ol"));
   out.els.blockquote = __read(md && md.querySelector("blockquote"));
@@ -121,11 +118,11 @@ function __report(){
   out.els.subSummary = __read(document.querySelector(".sub-card summary"));
   out.els.sysLine = __read(document.querySelector(".sys-line"));
   out.els.chipText = __read(document.querySelector(".tr-chip") || document.querySelector(".cp-pill") || document.querySelector(".user-line .who"));
-  // 2026-10-22 tips 注入留痕:折叠提示行(摘要行档 --fs-body-sm / --lh-tight / sans)
+ // tips 注入留痕:折叠提示行(摘要行档 --fs-body-sm / --lh-tight / sans)
   out.els.tipLine = __read(document.querySelector(".tip-line > summary"));
   out.els.tipBody = __read(document.querySelector(".tip-line .tl-body"));
   out.counts.tipLine = __all(".tip-line").length;
-  // 2026-11-06 缺陷1 计数:子 ol 数量 + 顶层 ol 直接子元素数(嵌套若没挂进父 li,顶层会多出一项)
+ // 缺陷1 计数:子 ol 数量 + 顶层 ol 直接子元素数(嵌套若没挂进父 li,顶层会多出一项)
   out.counts.olSub = __all(".task-reply ol ol").length;
   out.counts.olTopLi = md ? (md.querySelectorAll("ol").length ? md.querySelector("ol").children.length : 0) : 0;
   return out;
@@ -163,7 +160,7 @@ const CONV = [
   { seq: 10, kind: "message.system", time: Date.parse("2026-10-14T10:00:18"), payload: { text: "goal 已切换:消息流排版系统化" } },
   { seq: 11, kind: "message.user", time: Date.parse("2026-10-14T10:00:20"), payload: { text: "第二条用户消息(同类同规格对照实例)" } },
   { seq: 12, kind: "compact.done", time: Date.parse("2026-10-14T10:00:22"), payload: { summary: "前 12 轮已蒸馏" } },
-  // 2026-10-22 tips 注入留痕:loop 旁路落 journal,面板折叠展示「tips · 类别 · 第N步 · 字符数」
+ // tips 注入留痕:loop 旁路落 journal,面板折叠展示「tips · 类别 · 第N步 · 字符数」
   {
     seq: 13, kind: "tip.injected", time: Date.parse("2026-10-14T10:00:24"),
     payload: {
@@ -245,7 +242,7 @@ beforeAll(async () => {
   // 造数据路线:面板自带测试钩子 window.__mature.setHist + renderHistory(panel.ts:16066)
   // ——走真实 renderHistory 渲染链(mdToHtml/工具卡/子代理卡/系统行全真产),比手写 DOM 片段保真。
   // 注:这里必须把数据 JSON.stringify 进脚本字符串再 evaluate 整串——evaluate 传函数字面量会被 vitest/esbuild
-  // 的 keepNames 包一层 __name(...),页面上下文没有 __name 直接 ReferenceError(实测坑,详见报告)。
+ // 的 keepNames 包一层 __name(...),页面上下文没有 __name 直接 ReferenceError(经验证坑,详见报告)。
   const injected = await page.evaluate(
     "(function(){ if(!window.__mature) return false; window.__mature.setHist(" + JSON.stringify(CONV) +
       "); window.__mature.renderHistory(); return true; })()",
@@ -260,7 +257,7 @@ afterAll(async () => {
   if (server) await server.close().catch(() => {});
 });
 
-describe("step-142 消息流排版系统化", () => {
+describe(" 消息流排版系统化", () => {
   it("① 排版令牌层齐备:18 个令牌在 :root 定义,var() 引用 ≥60,主题块零覆写", () => {
     // 令牌定义:任务书列举的 6 字号 + 3 行高 + 3 缩进 + 3 块距 + 3 字体族 = 18 项,全部落在 :root 块内。
     const rootStart = html.indexOf(":root{");
@@ -293,7 +290,7 @@ describe("step-142 消息流排版系统化", () => {
     }
 
     // 派生标题令牌(--fs-h1/h2/h3)必须有真实 CSS 消费者:定义在 :root 却没人 var() 引用 = 死令牌。
-    // step-142 起标题分级由 .task-reply h3/h4/h5 三条规则消费(mdToHtml 把 md #/##/### 降两级映射到 h3/h4/h5),
+ // 起标题分级由 .task-reply h3/h4/h5 三条规则消费(mdToHtml 把 md #/##/### 降两级映射到 h3/h4/h5),
     // 故不再靠往 .task-reply append h1/h2 探针节点证明令牌生效。
     for (const hTok of ["--fs-h1", "--fs-h2", "--fs-h3"]) {
       const defM = new RegExp(hTok + "\\s*:\\s*([^;}]+)").exec(rootBlock);
@@ -352,7 +349,7 @@ describe("step-142 消息流排版系统化", () => {
 
     // 令牌自身解析(浏览器侧):确认 :root 令牌在页面里真的拿到了值
     expect(bodyPx).toBe(19);
-    // 行高只守「放松档区间」不写死数值:--lh-body 由 step-142 起从 1.8 调到 1.85(panel.ts:217),
+ // 行高只守「放松档区间」不写死数值:--lh-body 由 起从 1.8 调到 1.85(panel.ts:217),
     // 精确值已由 ① 的 SPEC 表锚定,这里只证浏览器侧真的解析出了值。
     expect(lhBody, "--lh-body 应为放松档(1.8~2.0)").toBeGreaterThanOrEqual(1.8);
     expect(lhBody, "--lh-body 应为放松档(1.8~2.0)").toBeLessThanOrEqual(2.0);
@@ -405,7 +402,7 @@ describe("step-142 消息流排版系统化", () => {
     expect(h2Px, "--fs-h2 必须 > --fs-h3(=正文)").toBeGreaterThan(bodyPx);
     expect(bodyPx, "第三档 --fs-h3 必须 = 正文(--fs-body)").toBeCloseTo(bodyPx, 1);
     // 令牌值侧:--fs-h3 定义为 var(--fs-body),Chrome 对 custom property 返回未替换的 token 序列,
-    // 故不取 computed 值,改在 ① 断言定义串与 h5 实测字号(=正文)双证。
+ // 故不取 computed 值,改在 ① 断言定义串与 h5 经验证字号(=正文)双证。
 
     // 4) agent 表格:次要叙述档 --fs-body-sm + 紧凑行高 --lh-tight
     expectFs(r.els.table!, bodySmPx, "agent 表格 .md-table", "--fs-body-sm");
@@ -418,7 +415,7 @@ describe("step-142 消息流排版系统化", () => {
     expect(px(t["--indent-2"]), "indent-2 应为 indent-1 的两倍").toBeCloseTo(px(t["--indent-1"]) * 2, 1);
     expect(px(t["--indent-3"]), "indent-3 应为 indent-1 的三倍").toBeCloseTo(px(t["--indent-1"]) * 3, 1);
 
-    // 5b) 有序列表嵌套(2026-11-06 缺陷1):ol 嵌套能力须与 ul 对称
+ // 5b) 有序列表嵌套(缺陷1):ol 嵌套能力须与 ul 对称
     //     —— 嵌套 ol 真的挂在第一个父 li 内(顶层 ol 直接子元素=2),缩进走 --indent-2 令牌。
     expect(r.els.ol1!.present && r.els.olSub!.present, "有序列表嵌套缺席(顶层 ol / ol ol)").toBe(true);
     expect(px(r.els.olSub!.marL), "嵌套有序列表 margin-left 应等于 --indent-2").toBeCloseTo(px(t["--indent-2"]), 1);
@@ -443,7 +440,7 @@ describe("step-142 消息流排版系统化", () => {
     expectFs(r.els.toolSummary1!, toolPx, "工具卡标题 summary", "--fs-tool");
     expect(fam(r.els.toolSummary1!.ff), "工具卡标题 font-family 首项(必须 mono)").toBe(fMono);
 
-    // 10) 终端板行:板族 mono + 板族本体档 --fs-code(step-142 提权:工具卡内 .tc-body 不再压成 code-sm)
+ // 10) 终端板行:板族 mono + 板族本体档 --fs-code(提权:工具卡内 .tc-body 不再压成 code-sm)
     expect(r.els.termLine!.present, "终端板行缺席").toBe(true);
     expect(fam(r.els.termLine!.ff), "终端板行 font-family 首项(必须 mono)").toBe(fMono);
     expectFs(r.els.termLine!, codePx, "终端板行 .cl", "--fs-code");
@@ -482,7 +479,7 @@ describe("step-142 消息流排版系统化", () => {
     expect(r.els.tipBody!.present, "tips 展开正文 .tl-body 缺席").toBe(true);
     expectFs(r.els.tipBody!, codeSmPx, "tips 展开正文 .tl-body", "--fs-code-sm");
 
-    // D-3 逐类核对表数据:把实测值打到测试输出(供收口报告直接引用;真值来自本次 run,非硬编码)。
+ // D-3 逐类核对表数据:把经验证值打到测试输出(供报告直接引用;真值来自本次 run,非硬编码)。
     const rows: Array<[string, Reading | undefined, string]> = [
       ["用户消息 .user-line", r.els.userLine, "--fs-body / --lh-body / serif"],
       ["用户消息 .who 徽标", r.els.userWho, "--fs-chip / --lh-tight / sans"],
@@ -499,7 +496,7 @@ describe("step-142 消息流排版系统化", () => {
       ["思考卡体 .th-body", r.els.thinkBody, "--fs-body-sm / --lh-body / sans"],
       ["工具卡标题 summary", r.els.toolSummary1, "--fs-tool / --lh-tight / mono"],
       ["工具卡体 .tc-body", r.els.toolBody, "--fs-code-sm / --lh-code / mono"],
-      ["终端板行 .cl", r.els.termLine, "--fs-code(板族本体档,step-142 提权) / --lh-code / mono"],
+      ["终端板行 .cl", r.els.termLine, "--fs-code(板族本体档, 提权) / --lh-code / mono"],
       ["终端板体 .code-wrap.is-term>.tc-body", r.els.termBody, "--fs-code / --lh-code / mono"],
       ["JSON 板 pre.code", r.els.jsonPre, "--fs-code / --lh-code / mono"],
       ["子代理卡正文 .sub-task", r.els.subTask, "--fs-code-sm / --lh-code / sans"],

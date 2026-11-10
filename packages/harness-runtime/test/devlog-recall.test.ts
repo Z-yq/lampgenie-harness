@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-describe("DevLog 检索注入(R5-C9 修复:step-009 P5 补账)", () => {
+describe("DevLog 检索注入(修复: P5 补账)", () => {
   let dir: string | null = null;
   const cleanup = () => { if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; } };
 
@@ -34,7 +34,7 @@ describe("DevLog 检索注入(R5-C9 修复:step-009 P5 补账)", () => {
     cleanup();
   });
 
-  it("AgentLoop compactHook 每 step 前被调(R5-C9:压缩链接线进 loop)", async () => {
+  it("AgentLoop compactHook 每 step 前被调(:压缩链接线进 loop)", async () => {
     const journal = new MemoryJournal();
     const calls: string[] = [];
     const loop = new AgentLoop({

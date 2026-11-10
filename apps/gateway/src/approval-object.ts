@@ -1,8 +1,7 @@
 /**
- * M151 审批对象=执行对象(审批前冻结入参,执行前按同一对象复核):
+ * 审批对象=执行对象(审批前冻结入参,执行前按同一对象复核):
  * 批准的是 A、执行的是 B(路径替换/工作流设置)是典型 TOCTOU——面板确认窗内入参可被改动,
  * 同一次调用在两处上下文得出两种判定。
- *
  * 口径:
  * - snapshotApprovalObject(input):JSON 安全深拷贝(循环引用/不可序列化→错误码)+ deepFreeze,
  *   返回 {frozen, hash, json};hash=canonical JSON 的 sha256 前 16 位。

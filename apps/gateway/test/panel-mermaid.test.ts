@@ -1,5 +1,5 @@
 /**
- * 消息流 mermaid 懒加载渲染(2026-10-29)契约测试:
+ * 消息流 mermaid 懒加载渲染契约测试:
  *  ① mdToHtml 对 ```mermaid 围栏产 .md-mermaid 占位节点且 data-src 完整保留源文本(HTML 转义形态);
  *  ② 普通 ```js 代码块路径零改动(is-code 板 + span.cl 行 + 复制钮);
  *  ③ 未闭合 ```mermaid 不炸(单遍状态机尾部 renderCodeBlock 路径);
@@ -105,10 +105,10 @@ describe("消息流 mermaid 懒加载渲染(2026-10-29)", () => {
       }
       // 单例懒注入:/assets/mermaid.min.js 由 mmEnsureLib 动态创建(不再有 CODE_SRC Map)
       expect(html).toContain('sc.src = "/assets/mermaid.min.js"');
-      expect(html).not.toMatch(/CODE_SRC\s*\./); // CODE_SRC 退役:无成员访问(页面其它 new Map() 合法存在,不能一刀切)
+      expect(html).not.toMatch(/CODE_SRC\s*\./); // CODE_SRC 退役:无成员访问(页面其它 new Map 合法存在,不能一刀切)
       // 主历史/子代理工作区/Wiki/IDE md 预览四处钩子换用 mmRenderIn
       expect((html.match(/mmRenderIn\(/g) || []).length).toBeGreaterThanOrEqual(5); // 定义 1 + 调用 4
-      // IDE markdown 预览宿主落位后必须扫占位出图(漏调=占位卡永久卡「mermaid 图渲染中…」,2026-11-02 修复)
+ // IDE markdown 预览宿主落位后必须扫占位出图(漏调=占位卡永久卡「mermaid 图渲染中…」, 修复)
       expect(/ideBodyShow\("md"\)/.test(html)).toBe(true);
       expect(html).toContain("mmRenderIn(host); // mermaid 围栏懒加载出图(与消息流");
       // 旧 data-mermaid-id 消费面全部移除(不留死代码)

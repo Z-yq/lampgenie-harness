@@ -1,6 +1,5 @@
 /**
  * 一次通过率与缺陷逃逸度量(RSI #212):纯逻辑、零 IO。
- *
  * 问题:「争取一步到位」没有度量——返工率只算任务内返工,交付后被修复任务打穿的缺陷不算进来,
  * 于是「预防机制到底有没有用」无从判定。本模块把交付与修复两条记录流关联成「逃逸」,
  * 再按 module / defectClass / taskClass / boardType / signature 分桶算五项指标:
@@ -9,16 +8,13 @@
  * - 逃逸缺陷缺失类别分布     escapeClasses
  * - 扇出返工率 fanoutReworkRate = Σ fix.changeNodes / Σ delivery.changeNodes(分母 0 → null)
  * - 发现延迟 discoveryDelay = fix.at - delivery.at 天数的中位数 + 分档计数
- *
  * 关联规则(linkFixes):
  * 1. 显式 relatedDeliveryId 命中既有交付即关联(显式优先,不看窗口);
  * 2. 否则隐式:同 module 且 fix.at ∈ (delivery.at, delivery.at + windowDays] 取最近一次交付;
  * 3. 一个 fix 只归一个 delivery(多 fix 可归同一交付)。
- *
  * 前后对比(compareBeforeAfter)按同一签名桶比:firstPassRate 提升 → improved;
  * |Δ| < minDeltaPct → flat;下降 → declined。flat / declined 一律 COHORT_REVIEW_REQUIRED,
  * 因为「预防机制没能提高一次通过率」本身就是要复审的信号。
- *
  * 纪律:不抛异常(非法记录计数跳过、缺字段给默认)、不做 IO、不依赖其它模块。
  */
 

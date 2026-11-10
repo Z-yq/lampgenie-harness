@@ -1,5 +1,5 @@
 /**
- * 子代理防死机制直测(2026-10-20 用户口径:派发后主 agent 自行判断等待/继续,harness 只负责检测死活):
+ * 子代理防死机制直测(派发后主 agent 自行判断等待/继续,harness 只负责检测死活):
  * - scanBgAgentsForWatchdog 判定面:idle>staleWarnMs→stale-warn(只一次);超 deadline+宽限→reap-dead;
  *   终态条目零动作。
  * - runSubagentWatchdog 执行面:预警落 message.system;判死翻 failed+output.txt 补 [watchdog 收割]+
@@ -69,7 +69,7 @@ it("scan:超 deadline+60s 宽限仍 running→reap-dead(收割失灵=死);终态
   expect(acts.filter((a) => a.agentId === "a-done")).toEqual([]);
 });
 
-it("scan:无 deadlineAt=不限时条目——永不判死(2026-10-21 用户口径),无论闲置多久只有 stale 预警一路", () => {
+it("scan:无 deadlineAt=不限时条目——永不判死(2026-10-21 ),无论闲置多久只有 stale 预警一路", () => {
   const now = Date.now();
   // 旧兜底:60min 硬上限后 reap-dead。现口径:未设时间盒=子代理跑完为止,watchdog 不杀。
   addEntry("a-nodl", { spawnedAt: now - 59 * 60_000, lastEventAt: now - 59 * 60_000, staleNotified: true });

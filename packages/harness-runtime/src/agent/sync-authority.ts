@@ -1,6 +1,5 @@
 /**
  * 同步权威协议(#113,纯逻辑零 IO)。
- *
  * 为什么需要协议:会话切换归属(agent 迁移、实例接管)后,同一段历史会同时存在于新旧实例。
  * 只要没有「唯一权威序列」,就会稳定复现五类事故:
  * ① 旧实例迟到事件写回,把已迁移的历史改花;
@@ -12,8 +11,7 @@
  * 归属转移按「拉平 → claim → replay → steal」四段做;订阅先拿脏位再读历史;
  * 非 GET 响应附 seq 水位,代理等本地追平后再返回,超时 503,sync 断开直接拒代理。
  * 本模块只做纯逻辑:落盘在 gateway 的 sync-authority-store,命令行在 scripts/sync-authority.mts。
- *
- * 设计取舍(每条都对应一个真实踩坑):
+ * 设计取舍(每条都对应一个真实注意):
  * - **先判「这个 seq 写过没有」,再判 owner**:重复投递是常态(网络重试),迟到写回是事故。
  *   顺序反过来会让「旧 owner 重投一条早就存在的事件」被误判成迁移事故,噪音盖掉信号。
  * - **同 seq 同 payloadHash = NOOP,同 seq 异 hash = CONFLICT_DIE**:同 hash 是幂等重投,
@@ -38,7 +36,6 @@
  *   宁可让调用方回 503,也不要让它拿着旧副本冒充权威结果。
  * - **sync 断开禁止代理**:没有 sync 连接就没有判据判断「我是不是最新」,此时放行代理等于
  *   用旧副本回答新问题;显式 SYNC_PROXY_REFUSED 让上层回 409/503 而不是静默错读。
- *
  * 依赖纪律:零 import(不碰 fs/net/path/node:*),不读时钟(时间一律由调用方传数字时间戳,
  * 非法按 0);全部函数纯函数:不 throw、不改入参、返回深拷贝。
  */
@@ -165,8 +162,7 @@ function isValidEvent(event: AuthorityEvent): boolean {
  */
 export function acceptEvent(
   state: SyncState,
-  event: AuthorityEvent,
-): { state: SyncState; code: SyncCode } {
+  event: AuthorityEvent): { state: SyncState; code: SyncCode } {
   if (!isValidEvent(event)) return { state, code: "SYNC_INVALID" };
 
   const existing = state.aggregates?.[event.aggregateId];
@@ -353,8 +349,7 @@ function defaultSleep(ms: number): Promise<void> {
 export async function awaitCatchup(
   localSeq: number,
   watermark: number,
-  options: AwaitCatchupOptions,
-): Promise<AwaitCatchupResult> {
+  options: AwaitCatchupOptions): Promise<AwaitCatchupResult> {
   const now = typeof options?.now === "function" ? options.now : () => 0;
   const sleep = typeof options?.sleep === "function" ? options.sleep : defaultSleep;
   const readLocalSeq = typeof options?.readLocalSeq === "function" ? (options.readLocalSeq as () => number) : undefined;
@@ -414,8 +409,7 @@ export function proxyAllowed(input: { syncConnected: boolean }): {
 /** 非 GET 响应附水位头:代理/客户端据此决定要不要等追平再采信这份结果。 */
 export function responseWatermark(
   state: SyncState,
-  aggregateId: string,
-): { watermark: number; headers: Record<string, string> } {
+  aggregateId: string): { watermark: number; headers: Record<string, string> } {
   const watermark = watermarkFor(state, aggregateId);
   return { watermark, headers: { "x-sync-watermark": String(watermark) } };
 }

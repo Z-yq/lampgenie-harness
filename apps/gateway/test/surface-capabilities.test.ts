@@ -1,6 +1,5 @@
 /**
- * M167 表面/通道能力包测试(2026-11-08)。
- *
+ * 表面/通道能力包测试。
  * 覆盖:
  * a. resolveSurfaceCaps:缺省=LEGACY(零变化)/ 部分字段 / maxChars clamp / 未知 media 丢弃 / source 判定;
  * b. validateSurfaceRaw:坏字段稳定 error;
@@ -52,8 +51,7 @@ function mkJournal(): FakeJournal {
 function declareWeak(journal: FakeJournal, sid: string): SurfaceCaps {
   const r = handleClientSurfaceDeclare(
     { sessionId: sid, rendersMarkdown: false, maxChars: 800, mediaKinds: ["link"], hasUI: false },
-    journal,
-  );
+    journal);
   if (!r.ok) throw new Error("declare failed: " + r.error);
   return r.caps;
 }

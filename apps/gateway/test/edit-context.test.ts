@@ -1,6 +1,6 @@
 /**
- * edit_file 改后上下文快照(2026-11-08 session 实证落地)单测:
- * 实测 464 次「编辑后立刻 read_file 回读验证」——回执自带 <edited> 块(改动处±5行带行号,
+ * edit_file 改后上下文快照( session 验证落地)单测:
+ * 经验证 464 次「编辑后立刻 read_file 回读验证」——回执自带 <edited> 块(改动处±5行带行号,
  * read_file 同格式)后该往返应消失。
  * ①快照格式:lines 区间正确、行号 padStart(6)+"\t"、含 new_string 内容;
  * ②replace_all 多处→「共 N 处,显示第 1 处」;

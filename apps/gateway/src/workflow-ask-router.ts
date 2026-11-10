@@ -1,5 +1,5 @@
 /**
- * F6 workflow ask 面板应答(designs/20;ZCode WorkflowRunPendingQuestion 面板直答的等价):
+ * F6 workflow ask 面板应答(ZCode WorkflowRunPendingQuestion 面板直答的等价):
  * engine dispatch 前,先把问题广播给面板,等待直答;超时/无面板回退 executor dispatch。
  * journal-first 语义不变:engine 侧 ask 落盘照旧,直答只替代 dispatch 的执行方。
  */
@@ -10,8 +10,7 @@ export class WorkflowAskRouter {
 
   constructor(
     private readonly broadcast: (msg: Record<string, unknown>) => void,
-    private readonly timeoutMs = 90_000,
-  ) {}
+    private readonly timeoutMs = 90_000) {}
 
   /** 询问:面板在线→广播+挂起等待直答;离线→null(调用方回退 executor)。 */
   ask(wfId: string, cacheKey: string, instructions: string): Promise<string | null> {

@@ -1,10 +1,8 @@
 /**
- * Mock ACP adapter(step-117 协议级验证夹具):node mock-acp-adapter.mjs
- *
+ * Mock ACP adapter(协议级验证夹具):node mock-acp-adapter.mjs
  * 以最小 ACP agent 侧实现顶替真实 adapter(claude-code-acp/codex-acp/kimi acp…),
  * 覆盖 initialize → session/new → session/prompt → session/update 通知流 +
  * session/request_permission 反向请求 + session/cancel 通知。
- *
  * env:
  *   MOCK_ACP_MODE = happy | permission | slow | crash | badversion | unknown-stop | no-text
  *   MOCK_ACP_TRACE = <file>  追加关键帧(prompt/cancel/permission decision),给「取消链/权限回传」留证据

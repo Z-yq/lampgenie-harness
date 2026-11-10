@@ -1,5 +1,5 @@
 /**
- * board_upsert action=audit format="json" 的结构化收口结果(2026-10-25 code 板 P0):
+ * board_upsert action=audit format="json" 的结构化结果( code 板 P0):
  * - JSON 主路径:grand/boards/coverage 可 JSON.parse 消费,execute 仍返回 string;
  * - scope 分区只统计本写者前缀节点;
  * - all=true 跨板聚合;
@@ -40,7 +40,7 @@ const p0 = (id: string, label = "落目标") => ({
 });
 
 function board(taskId: string, nodes: unknown[], extra: Record<string, unknown> = {}) {
-  // 板型门(step-1008,2026-10-29):code 板一律是控制流程图——start→步骤→decision 是/否→end。
+ // 板型门:code 板一律是控制流程图——start→步骤→decision 是/否→end。
   // 审计测试的 fixture 也按合格 flow 板构造(步骤节点带仓库相对路径 targets + change + flow 行)。
   const s = { id: "s", kind: "start", label: "用户发起", summary: "触发入口", change: "keep" as const, group: "01 触发", targets: ["apps/gateway/src/panel.ts"] };
   const cur = { id: "cur", kind: "function", label: "读现状链路", summary: "现状链路", change: "keep" as const, group: "01 触发",
@@ -51,7 +51,7 @@ function board(taskId: string, nodes: unknown[], extra: Record<string, unknown> 
   const e2 = { id: "e-keep", kind: "end", label: "保持现状", summary: "另一出口", change: "keep" as const, group: "02 变更", targets: ["apps/gateway/src/panel.ts"] };
   const reg = { id: "reg", kind: "function", label: "回归测试断言", summary: "测试:期望 ok", change: "keep" as const, group: "03 测试",
     targets: ["apps/gateway/test/board-audit-json.test.ts"], flow: [{ type: "step" as const, text: "expect(x.ok).toBe(true)" }] };
-  // 板首主题节点(2026-11-04「白板看得懂」硬规则):code 板必须有一个 id 以 theme 开头(或 group=主题)
+ // 板首主题节点(「白板看得懂」硬规则):code 板必须有一个 id 以 theme 开头(或 group=主题)
   // 的节点讲清「这流程干什么用 + 本次改哪一环」,否则类型门报「code 板缺板首主题节点」→ audit 的
   // type 桶非 0、ok=false。审计测试要断言「干净板 = 四桶全 0」,fixture 必须带上它(口径与
   // board-type-conformance.test.ts 的 theme-1 一致:kind=note 走侧栏、change=keep=现状描述)。
@@ -126,7 +126,7 @@ describe("board_upsert audit format=json", () => {
     expect(x.grand).toMatchObject({ total: 0, passed: 0, covered: 0 });
   });
 
-  it("M107:coverage.stale 进 JSON(stale 证据不算通过,nodeId/cmd/file/reason 可消费)", async () => {
+  it(":coverage.stale 进 JSON(stale 证据不算通过,nodeId/cmd/file/reason 可消费)", async () => {
     const r = tmp();
     const p = join(r, "staleTarget.ts");
     writeFileSync(p, "export const v = 1;\n");
@@ -190,7 +190,7 @@ describe("board_upsert audit format=json", () => {
     expect(x.boards[0].contractIssues.join("\n")).toContain("缺 before");
   });
 
-  // ---- targets 真实性核对(2026-11-04):只报不判,ok 口径不变 ----
+ // ---- targets 真实性核对:只报不判,ok 口径不变 ----
   it("targets 指向真实文件 → targetIssues 为空", async () => {
     const r = tmp();
     mkdirSync(join(r, "apps/gateway/src"), { recursive: true });
@@ -231,20 +231,20 @@ describe("board_upsert audit format=json", () => {
     expect(x.targetIssues.filter((l: string) => l.includes("越界")).length).toBe(2);
   });
 
-  // ---- ③ 规划质量字段(2026-11-06,B2 P2):面板结算直接读,不重放板 ----
+ // ---- ③ 规划质量字段(B2 P2):面板结算直接读,不重放板 ----
   it("planQuality 五字段:boardType/节点数/内容节点数/P0 覆盖率/锚密度", async () => {
     const r = tmp();
     saveBoard(r, board("t1", [p0("p1")]) as never);
     const x = JSON.parse(String(await boardUpsertTool(new MemoryJournal(), "s1", "t1", r, r).execute({ action: "audit", format: "json" })));
     // fixture:8 个非 ph- 节点(板首 theme-1 + start/cur/p1/decision/两个 end/reg)全部带 targets(=内容节点),
-    // p1 是唯一 P0(accept 2 条已全过);theme-1 是 2026-11-04 板首主题硬规则要求的那一个。
+ // p1 是唯一 P0(accept 2 条已全过);theme-1 是 板首主题硬规则要求的那一个。
     expect(x.planQuality).toEqual({
       boardType: "code", nodes: 8, contentNodes: 8,
       p0: { passed: 1, total: 1, rate: 1 }, anchorDensity: 1,
     });
   });
 
-  // ---- ③ audit 落盘(2026-11-06,N1「9 条清单事后取不到」)----
+ // ---- ③ audit 落盘(N1「9 条清单事后取不到」)----
   it("audit JSON 结果落盘 <storeRoot>/.genie/boards-audit/<taskId>-<ts>.json 且内容与回执同源", async () => {
     const r = tmp();
     saveBoard(r, board("t1", [p0("p1")]) as never);
@@ -263,7 +263,7 @@ describe("board_upsert audit format=json", () => {
     expect(saved.contractIssues).toEqual(x.contractIssues);
   });
 
-  // ---- bq1(2026-11-05 板质量遥测):audit 旁路落 board.audit journal 事件 ----
+ // ---- bq1(板质量遥测):audit 旁路落 board.audit journal 事件 ----
   it("audit JSON 后 journal 出现 board.audit:issueCounts 四桶/snapshotFp/skeletonPrefilled/planQuality/auditPath/boards 摘要", async () => {
     const r = tmp();
     // targets 真实性核对只报不判:fixture 路径在 tmp 里不存在会把 target 桶记成 7。

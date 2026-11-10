@@ -1,15 +1,12 @@
 /**
- * llm-trace 保留策略(轨迹追踪 P1-A,2026-10-29)。
- *
+ * llm-trace 保留策略(轨迹追踪 P1-A。
  * 背景:`llm-trace.ts` 每次 chat 落一个文件,内含**全量 request.messages**(会话越长越肥,
  * O(steps²) 近重复);此前全仓无任何清理/轮转 → .genie/llm-trace 无界增长。
- *
  * 两级保留:
  *  ① 每 session 目录最近 **N=200** 份(env `GENIE_LLM_TRACE_KEEP_PER_SESSION`,按文件名里的
  *     epochMs 倒序——llm-trace 文件名 `call-<seq>-t<turn>s<step>-<ms>.json`,ms 即写盘时刻);
  *  ② 全树总量上限 **512MB**(env `GENIE_LLM_TRACE_MAX_BYTES`),超限从**最老的**文件开始删,
  *     直到回落到上限的 90%(留头部空间,避免每次写盘都触发一轮删除)。
- *
  * 纪律(与 llm-trace.ts 头注释记录的 196s 冻结事故直接相关):
  * - **全异步**(fs.promises)且旁路:清理是优化,不是主链——任何异常静默吞掉,绝不让
  *   LLM 调用失败、绝不同步阻塞事件循环(9p 上 writeFileSync 大文件曾把 worker 冻 196s)。

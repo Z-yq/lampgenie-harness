@@ -1,6 +1,6 @@
 /**
- * session.history 游标分页(2026-10-22):长会话首开不全量拉历史的「向后翻页」通道。
- * 语义抄 ZCode conversationProjectionStore rowsRange(beforeRowId, limit):
+ * session.history 游标分页:长会话首开不全量拉历史的「向后翻页」通道。
+ * 语义设计参考 ZCode(致谢) conversationProjectionStore rowsRange(beforeRowId, limit):
  *  - beforeSeq + limit → seq < beforeSeq 的最后 limit 条(按 seq 升序);
  *  - hasMore = 还存在更早事件;nextBeforeSeq = 本页最小 seq(仅 hasMore=true 时给);
  *  - 游标必须严格推进(本页为空或本页最小 seq >= beforeSeq → hasMore:false 且无 nextBeforeSeq),防前端死循环。

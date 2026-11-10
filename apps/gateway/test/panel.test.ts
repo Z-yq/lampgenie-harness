@@ -17,7 +17,7 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("lampgenie-harness");
     expect(html).toContain("task.submit");
     expect(html).toContain("WebSocket");
-    // step-035 项目区:添加入口+项目消息族在页面脚本中。
+ // 项目区:添加入口+项目消息族在页面脚本中。
     expect(html).toContain("添加项目");
     expect(html).toContain("project.list.result");
     expect(html).toContain("project.activate");
@@ -28,12 +28,12 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("winControls");
     expect(html).toContain("winDragBar");
     expect(html).toContain("desktop-shell");
-    // step-036 斜杠指令:指令面板+目录在页面脚本中。
+ // 斜杠指令:指令面板+目录在页面脚本中。
     expect(html).toContain("slashMenu");
     expect(html).toContain("SLASH_COMMANDS");
     expect(html).toContain("newtask");
     expect(html).toContain("slashExec");
-    // step-046 成熟面板件:思考卡/变更条/计时/双 pill/标签页/统计/自动化分栏/快捷键分区。
+ // 成熟面板件:思考卡/变更条/计时/双 pill/标签页/统计/自动化分栏/快捷键分区。
     expect(html).toContain("think-card");
     expect(html).toContain("diffbar");
     expect(html).toContain("task.diffstat");
@@ -50,7 +50,7 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("sec-shortcuts");
     expect(html).toContain("kbd-table");
     expect(html).toContain("已工作");
-    // step-048:市场/浏览器/账号/引导/附件/远程。
+ // 市场/浏览器/账号/引导/附件/远程。
     expect(html).toContain("mktGrid");
     expect(html).toContain("plugins.install");
     expect(html).toContain("brFrame");
@@ -60,13 +60,13 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("upload?sid");
     expect(html).toContain("wizard.gen");
     expect(html).toContain("node.exec");
-    // step-049:项目档案。
+ // 项目档案。
     expect(html).toContain("profile.get");
     expect(html).toContain("ppGraph");
     expect(html).toContain("ppSearch");
     expect(html).toContain("profile.rebuild");
     expect(html).toContain("/profile?p=");
-    // step-047:终端/管理面/新设置项/预设与模型列表。
+ // 终端/管理面/新设置项/预设与模型列表。
     expect(html).toContain("term.exec");
     expect(html).toContain("termBody");
     expect(html).toContain("agents.list");
@@ -83,22 +83,22 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("office-chip");
     expect(html).toContain("cycleTheme");
     expect(html).toContain("zoomStep");
-    // step-049 追记(用户口径「拒绝 emoji 风格」):浏览器可见层零 emoji;
+ // 浏览器可见层零 emoji;
     // 白名单=单色排版符号(箭头/勾叉/乘号等)。♥/⚙/⌕/⌄ 是既有 UI 图标;
     // ◇/▶/●/▤/◈/▣ 是 code 板 C4 类型标记;✂ 是截图标注按钮,均为单色排版符号,不是彩色 emoji。
     const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{2300}-\u{23FF}]/u;
     const ALLOW = new Set(["✓", "✗", "✕", "→", "←", "↑", "↓", "↵", "⇤", "⇥", "↳", "⎇", "■", "»", "…", "⚠", "☰", "♥", "⚙", "⌕", "⌄", "◇", "▶", "●", "▤", "◈", "▣", "✂"]);
     const bad = [...html].filter((ch) => EMOJI.test(ch) && !ALLOW.has(ch));
     expect(bad, "页面含 emoji: " + [...new Set(bad)].join(" ")).toEqual([]);
-    // 2026-10-13 视频四诉:置顶条 sticky(qk 快捷卡移除)/HUD 滚动跟随/响应式/goal sync 静默。
-    // 2026-10-28 用户口径推翻置顶条:顶部那条灰线空着也占位、chips 一多就折行把消息上下顶(周期变两条),
+ // 视频四诉:置顶条 sticky(qk 快捷卡移除)/HUD 滚动跟随/响应式/goal sync 静默。
+ // 推翻置顶条:顶部那条灰线空着也占位、chips 一多就折行把消息上下顶(周期变两条),
     // 已整块删除——chips 挂 footer .aff-strip(不在滚动容器内、单行 nowrap 不折)。
     expect(html).not.toContain('id="chatTopbar"');    // 会话流顶部置顶条已整块删除
     expect(html).not.toContain("#chatTopbar{position:sticky");
     expect(html).toContain('<div class="aff-strip">');
     expect(html).toMatch(/class="aff-strip"[\s\S]{0,400}id="chatStatusbar"/); // chips 宿主在底部状态条内
     expect(html).toContain("flex-wrap:nowrap");      // 单行不折(折行=消息晃动根因)
-    expect(html).not.toContain("qk-exp");           // 快捷卡与侧栏入口重复,按用户口径移除
+    expect(html).not.toContain("qk-exp");           // 快捷卡与侧栏入口重复,按移除
     expect(html).not.toContain("qk-wf");
     expect(html).toContain("@media (max-width:1400px)"); // 响应式:窗口变窄布局收敛
     expect(html).toContain("!m.sync");              // goal.get 同步回包不 toast
@@ -107,12 +107,12 @@ describe("桌面 Web 面板", () => {
     const swJs = await swRes.text();
     expect(swJs).toContain("scrollTop + 6");        // HUD 视口钉住(absolute top 随滚动回写)
     expect(swJs).toContain('classList.toggle("sw-active"');
-    // step-056 视频三诉:命令真执行标识/技能反馈闭环/重启降级
+ // 视频三诉:命令真执行标识/技能反馈闭环/重启降级
     expect(html).toContain("cmdChip");
     expect(html).toContain("slashTypedMatch");      // 徽标与提交分发同源判定(非装饰)
     expect(html).toContain("cmdChipFlash");         // 真执行闪确认
     expect(html).toContain('kind === "message.system"'); // journal 系统通知渲染进聊天流
-    // 2026-10-22: tips 注入留痕(tip.injected)在消息流可折叠展示,显示类别+第N步+字符数
+ // tips 注入留痕(tip.injected)在消息流可折叠展示,显示类别+第N步+字符数
     expect(html).toContain('kind === "tip.injected"');
     expect(html).toContain('class="tip-line"');
     expect(html).toContain(".tip-line>summary");   // 折叠行样式(与 tips 分支同批落地)
@@ -129,7 +129,7 @@ describe("桌面 Web 面板", () => {
     const profileHtml = await pr.text();
     const bad2 = [...profileHtml].filter((ch) => EMOJI.test(ch) && !ALLOW.has(ch));
     expect(bad2, "/profile 含 emoji: " + [...new Set(bad2)].join(" ")).toEqual([]);
-    // 全页脚本语法门(step-051 补装):并发编辑把 TS 标注(`let x: T | null`)写进页面脚本曾整页 SyntaxError——
+ // 全页脚本语法门(补装):并发编辑把 TS 标注(`let x: T | null`)写进页面脚本曾整页 SyntaxError——
     // 内容断言/emoji 门都拦不住。vm.Script 编译即验,主页面与 /profile 两页同口径。
     const { Script } = await import("node:vm");
     for (const [label, pageHtml] of [["主页面", html], ["/profile", profileHtml]] as const) {
@@ -152,7 +152,7 @@ describe("WSL 连接面(2026-10-27:Windows 桌面壳)", () => {
       // 子项拼接按方言(Windows UNC/盘符用反斜杠)
       expect(html).toContain('cur.replace(/[/\\\\]+$/, "")');
       expect(html).toContain('base.indexOf("\\\\") >= 0');
-      // 连接向导(用户口径):先连接 → 连接中装工作区服务 → 服务返回目录 → 选目录添加
+ // 连接向导:先连接 → 连接中装工作区服务 → 服务返回目录 → 选目录添加
       expect(html).toContain("srvPlatform");
       expect(html).toContain('srvPlatform === "win32"');
       expect(html).toContain("工作区服务");

@@ -1,11 +1,9 @@
 /**
- * 轨迹数据面接线守卫(step-1535 改写)。
- *
+ * 轨迹数据面接线守卫(改写)。
  * 历史:轨迹曾是 status-widget.js 里的「#sw-trace 全屏浮层」,数据由服务端 `trace.query` 提供
- * (openTrace → sendTraceQuery → trace.query.result → renderTrace)。step-1535 把轨迹拆成面板内
+ * (openTrace → sendTraceQuery → trace.query.result → renderTrace)。 把轨迹拆成面板内
  * 独立视图 #view-traj,唯一数据源改为前端已在场的 **histEvents(会话重放事件)**,零额外请求;
  * 前端消费者整段删除,服务端 `trace.query` 协议保留(本轮禁服务端改动)。
- *
  * 因此本文件从「前端浮层接线」改为双向守卫:
  *   ① 前端净身:status-widget.js 不得再含 sw-trace / openTrace / renderTrace / traceState / sendTraceQuery;
  *   ② 协议保留:服务端 server.ts 的 trace.query 处理分支仍在(只删前端消费者,不删协议);
@@ -23,7 +21,7 @@ const widget = readFileSync(WIDGET, "utf8");
 const panel = readFileSync(PANEL, "utf8");
 const server = readFileSync(SERVER, "utf8");
 
-describe("① 前端浮层已摘除(step-1535)", () => {
+describe("① 前端浮层已摘除", () => {
   it("status-widget.js 不含 sw-trace 浮层与全套函数", () => {
     for (const dead of ["sw-trace", "sw-open-trace", "openTrace", "renderTrace", "traceState", "sendTraceQuery", "pendingTraceQuery", "ensureTraceLayer", "debouncedTraceQuery"]) {
       expect(widget, "status-widget.js 仍残留已删符号:" + dead).not.toContain(dead);

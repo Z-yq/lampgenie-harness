@@ -1,24 +1,19 @@
 /**
  * #179 Peer 级访问快照(生产侧):把 peer-policy 的纯判定落到 .genie/rsi 下两个 JSON 文件。
- *
  * 为什么两份文件(而不是一份):
  *   - `peer-policies.json` 是**只读策略**(谁写的?人/配置;读多次、改得少),
  *   - `peer-snapshots.json` 是**运行期快照**(每个 principal 一份 baseline + follow 流),
  *     每次 snapshot/reload/invalidate/applyFollow 都要整份重写。合并成一份会让策略读被快照写牵连。
- *
  * 数据面:
  * - `<root>/.genie/rsi/peer-policies.json`
  *   `{"v":1,"methods":["msg.send"],"policies":[{"kind":"member","condition":"method-in:msg.send"}]}`
  * - `<root>/.genie/rsi/peer-snapshots.json`
  *   `{"v":1,"peers":{"<principalId>":PeerSnapshot}}`
- *
  * 写入纪律:**原子写**(同目录临时文件 + rename)。快照是「上一次允许了什么」的唯一凭据,
  * 半个文件写进去(进程被杀/磁盘满)比重连时没有快照更糟:读侧会把它当坏文件,全部授权消失。
  * 目录 `<root>/.genie/rsi` 首次写入时必须 mkdir recursive(该目录当前不存在)。
- *
  * 读纪律:**坏条目只计数不 throw**(坏 JSON / v 不对 / 策略项非法 / 快照条目畸形),
  * 一条坏不让整份文件失效 —— 与 rsi-injection-store 的坏行口径一致。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑。runtime 的值走惰性 URL 动态 import
  * (`.ts` 显式后缀:`node --experimental-strip-types` 下静态包名 import 会解析到 dist,
  * 而 CLI 场景没有 development 条件);`import type` 静态引用**只为类型**。
@@ -58,8 +53,7 @@ async function loadPeer(): Promise<PeerModule> {
   if (peerModule) return peerModule;
   const srcUrl = new URL(
     "../../../packages/harness-runtime/src/agent/peer-policy.ts",
-    import.meta.url,
-  ).href;
+    import.meta.url).href;
   peerModule = (await import(srcUrl)) as PeerModule;
   return peerModule;
 }
@@ -351,8 +345,7 @@ export interface PeerSnapshotStoreResult extends PeerSnapshotResult {
 
 async function persist(
   root: string,
-  snapshot: PeerSnapshot,
-): Promise<{ file: string; written: boolean; risks?: string[] }> {
+  snapshot: PeerSnapshot): Promise<{ file: string; written: boolean; risks?: string[] }> {
   const existing = await readPeerSnapshots(root);
   const peers = { ...existing.peers, [snapshot.principalId]: snapshot };
   const written = await writePeerSnapshots(root, peers);
@@ -365,8 +358,7 @@ async function persist(
 /** 生成快照并落盘(principal 级整份替换,其它 principal 的条目保留)。 */
 export async function snapshotPeer(
   root: string,
-  options: PeerSnapshotOptions,
-): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();
@@ -393,8 +385,7 @@ export async function reloadPeer(root: string, options: PeerSnapshotOptions): Pr
  */
 export async function invalidatePeer(
   root: string,
-  options: PeerSnapshotOptions,
-): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();
@@ -411,8 +402,7 @@ export async function invalidatePeer(
 /** 重连:保留最后一份快照(follow 原样),不重算;无既有快照时才 fresh。 */
 export async function mergeReconnectPeer(
   root: string,
-  options: PeerSnapshotOptions,
-): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();

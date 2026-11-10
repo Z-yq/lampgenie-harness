@@ -1,5 +1,5 @@
 /**
- * CLI `bridge --candidates`(2026-10-25):候选区文本/JSON 输出 + 参数解析兼容。
+ * CLI `bridge --candidates`:候选区文本/JSON 输出 + 参数解析兼容。
  * 契约:缺省 bridge 输出不变;--candidates 追加 tier=semantic 候选区(确定性边仍在默认区)。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

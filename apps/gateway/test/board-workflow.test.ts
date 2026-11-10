@@ -1,5 +1,5 @@
 /**
- * step-121 工作流板单测:编译器(图规则 fail-visible)/WFN 标记解析/runner 真跑(MemoryJournal+假 executor)。
+ * 工作流板单测:编译器(图规则 fail-visible)/WFN 标记解析/runner 真跑(MemoryJournal+假 executor)。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";

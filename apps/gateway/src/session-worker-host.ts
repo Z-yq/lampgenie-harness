@@ -1,12 +1,10 @@
 /**
- * 会话 worker host(gateway 侧,2026-10-21 抄 ZCode:一会话一进程,gateway 只做聚合)。
- *
+ * 会话 worker host(gateway 侧, 设计参考 ZCode(致谢):一会话一进程,gateway 只做聚合)。
  * 职责:对 TaskSupervisor 的 running 任务 fork session-worker 进程;中继 worker 通知进 gateway
  * (journal.appendMany 落账+订阅派发 / task.state 镜像 / 子代理注册表镜像 / 流式出口);
  * 应答 worker RPC(journal 读 / MCP / 权限审批 / wf·askUser / 子代理取消);cancel 下发;
  * 模型热切 reload 广播。fork 工程学抄 sense-index-manager(双形态路径/execArgv 堆帽/stderr
  * tail/失败冷却);ppid 看门狗在 worker 侧(session-worker.ts)。
- *
  * 退化:host 自身不 fallback 进程内(避免双跑);fork 失败=任务显式失败+提示关
  * agent.sessionWorker。测试环境(VITEST)与 GENIE_SESSION_WORKER=off 由 app.ts 决定不装配本 host。
  */
@@ -24,7 +22,7 @@ import type { SessionWorkerSpec, WorkerToHost, HostToWorker, WorkerRequest } fro
 import { SESSION_WORKER_PROTOCOL_VERSION } from "./session-worker-protocol.js";
 import { snapshotApprovalObject, verifyApprovalObject } from "./approval-object.js";
 
-/** M151 审批对象=执行对象:permission.ask 的可执行面(tool+summary+可选 args)。 */
+/** 审批对象=执行对象:permission.ask 的可执行面(tool+summary+可选 args)。 */
 export interface PermissionAskPayload {
   sessionId?: string;
   tool: string;
@@ -34,7 +32,7 @@ export interface PermissionAskPayload {
 }
 
 /**
- * M151:worker 侧 permission.ask 的冻结/复核体。
+ * worker 侧 permission.ask 的冻结/复核体。
  * ask 前冻结可执行面;broker 回 allow 后按同一上下文复核,不一致→{decision:"reject"} + object-changed 审计;
  * 冻结失败同样 fail-closed(无法复核就不放行)。
  */
@@ -42,8 +40,7 @@ export async function askPermissionWithApprovalObject(
   broker: PermissionBroker,
   journal: Journal | undefined,
   requestId: string,
-  payload: PermissionAskPayload,
-): Promise<PermissionOutcome> {
+  payload: PermissionAskPayload): Promise<PermissionOutcome> {
   const approvalObject = () =>
     payload.args === undefined
       ? { tool: payload.tool, summary: payload.summary }
@@ -101,7 +98,7 @@ export interface SessionWorkerHostDeps {
   /** gateway 进程的浏览器/窗口配置快照源。 */
   browserConfig: { enabled: () => boolean; allowDomains: () => string[]; idleMinutes?: () => number; profile?: () => "persistent" | "ephemeral"; profileDir?: () => string; headless?: () => boolean };
   contextWindow?: number;
-  /** /proc 法证读取器(2026-11-01 第四次冻结后的根治批):判决前读 worker 的主线程 state/
+ /** /proc 法证读取器(第四次冻结后的根治批):判决前读 worker 的主线程 state/
    *  wchan/线程态分布——D(不可中断 IO)=盘停顿可自愈→延长耐心;R/S 静默=用户态死锁→照杀。
    *  缺省=readProcForensics(本机 procfs);测试注入假态。 */
   readProcForensics?: (pid: number | undefined) => { state: string; wchan: string; dThreads: number; threads: number } | null;
@@ -110,9 +107,9 @@ export interface SessionWorkerHostDeps {
   sessionModels?: import("./session-model.js").SessionModelFace;
   /** 任务终态回写(gateway TaskSupervisor 权威)。 */
   setState: (task: Task, to: TaskState, result?: string) => Task;
-  /** 项目表快照源(2026-10-21 P0:worker resolveWorkdir 同源注入)。 */
+ /** 项目表快照源( P0:worker resolveWorkdir 同源注入)。 */
   projects?: { list(): { id: string; path: string; label: string; availability: "available" | "unavailable-local-directory" | "unavailable-remote-unverified" | "unavailable-remote-unreachable"; addedAt: number }[]; activeId(): string };
-  /** 任务 done 后回调(2026-10-21 P0:goal 续跑由网关统一发起——worker 内本地 submit 不可见且会被退出截杀)。 */
+ /** 任务 done 后回调( P0:goal 续跑由网关统一发起——worker 内本地 submit 不可见且会被退出截杀)。 */
   onTaskDone?: (task: Task) => void;
   /** 测试缝:显式指定 worker 入口(缺省=dist/src 双形态探测)。 */
   workerEntry?: string;
@@ -131,9 +128,9 @@ function resolveWorkerEntry(repoRoot: string): { file: string; isTs: boolean } |
   return null;
 }
 
-/** /proc 法证(2026-11-01 第四次冻结后的根治批):读 worker 的主线程 state/wchan/线程态分布。
+/** /proc 法证(第四次冻结后的根治批):读 worker 的主线程 state/wchan/线程态分布。
  *  只读 procfs(内存文件系统,毫秒级,不碰 9p);非 Linux/进程已死/权限不可得=null(如实)。
- *  四次冻结收割全部无证据定因(话术一律「疑似文件系统停顿」;11-01 实锤收割时网关全健康、
+ * 四次冻结收割全部无证据定因(话术一律「疑似文件系统停顿」;11-01 注意收割时网关全健康、
  *  盘根本没停——真因无据可查)。从此:判决即留证,死因可分型。 */
 export function readProcForensics(pid: number | undefined): { state: string; wchan: string; dThreads: number; threads: number } | null {
   if (!pid || !Number.isFinite(pid)) return null;
@@ -170,9 +167,9 @@ interface WorkerRun {
   startedAt: number;
   readyAt?: number;
   lastEventAt?: number;
-  /** ready 定时器饥饿重武装次数(2026-10-29:gateway 拥堵致定时器超睡时重武装,至多 2 次)。 */
+ /** ready 定时器饥饿重武装次数(gateway 拥堵致定时器超睡时重武装,至多 2 次)。 */
   readyRetries?: number;
-  /** D 态耐心留痕节流(2026-11-01:盘等待期间每 60s 一条 worker.disk-wait,不刷屏)。 */
+ /** D 态耐心留痕节流(盘等待期间每 60s 一条 worker.disk-wait,不刷屏)。 */
   lastDiskWaitNote?: number;
   stderrTail: string[];
   ready: boolean;
@@ -233,8 +230,7 @@ export function sweepOrphanSessionWorkers(currentGatewayPid: number): { killed: 
  *  agent-wiring / server.ts 的写板路径同语义;面板侧 board.changed 是幂等重拉,重复广播无害。 */
 export function relayBoardChanged(
   landed: { kind?: string; sessionId?: string; payload?: unknown }[],
-  emit: (topic: string, payload: unknown) => void,
-): void {
+  emit: (topic: string, payload: unknown) => void): void {
   for (const e of landed) {
     if (typeof e.kind !== "string" || !e.kind.startsWith("board.")) continue;
     const p = (e.payload ?? {}) as { taskId?: unknown };
@@ -304,7 +300,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
 
   const send = (run: WorkerRun, msg: HostToWorker): void => {
     // IPC 已断开时 child.send 会**异步 emit 'error'**(ERR_IPC_CHANNEL_CLOSED)而不是同步 throw;
-    // 只 try/catch 拦不住,会冒到 process.uncaughtException(2026-10-25 实测 watchdog 取消死子代理时炸),
+ // 只 try/catch 拦不住,会冒到 process.uncaughtException(经验证 watchdog 取消死子代理时炸),
     // 巡检被打断→父任务等不到子代理终态→并发槽被长期占住。先判 connected,并给 send 回调吞错误。
     if (!run.child.connected) return;
     try { run.child.send?.(msg, () => { /* 通道关闭竞态:错误已由 error 监听兜底,不抛 */ }); } catch (err) { console.warn("[session-worker] 下发失败(可能已退出)", err); }
@@ -323,7 +319,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
           return { ok: true, value: evs };
         }
         case "journal.appendSync": {
-          // M24 生产态(2026-11-07):worker 写前屏障。落账 + flushStrict **都成功才 ack**——
+ //  生产态:worker 写前屏障。落账 + flushStrict **都成功才 ack**——
           // worker 收到 ok 才放行工具/LLM;任一失败回 ok:false(worker 侧抛错,阻止副作用)。
           const r = ingestEvents(run, req.payload.events);
           if (!r.ok) return { ok: false, error: r.error };
@@ -345,7 +341,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
           }
         }
         case "session.search": {
-          // step-166:worker 的 session_search 代理到 gateway 真 journal(全历史索引)。
+ // worker 的 session_search 代理到 gateway 真 journal(全历史索引)。
           // 现场建工具执行(sessionSearchTool 内部走 WeakMap 单例+盘上缓存,不重复构建);
           // 缺 sessionId 的 discover 由工具默认排除当前会话(worker 上报)。
           const p = req.payload as { op: "discover" | "scroll" | "read"; args: unknown; currentSessionId?: string };
@@ -363,7 +359,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
         }
         case "permission.ask": {
           if (!deps.permissionBroker) return { ok: true, value: { decision: "reject", by: "offline" } satisfies PermissionOutcome };
-          // M151:冻结 tool/summary/args,回包前复核(变了→reject)。
+ // 冻结 tool/summary/args,回包前复核(变了→reject)。
           const outcome = await askPermissionWithApprovalObject(deps.permissionBroker, deps.journal, `w-${run.rpcId}-${req.id}`, req.payload);
           return { ok: true, value: outcome };
         }
@@ -392,10 +388,10 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
   };
 
   /** journal 落账:重分配全局 seq/time(权威),保序入账;记录权威 seq 供订阅转发去重。
-   *  M24(2026-11-07):返回 {ok,error} 供 RPC 路(journal.appendSync)判定;notify 路仍只记日志不抛。 */
+ * :返回 {ok,error} 供 RPC 路(journal.appendSync)判定;notify 路仍只记日志不抛。 */
   const ingestEvents = (run: WorkerRun, events: unknown[]): { ok: true } | { ok: false; error: string } => {
     if (!Array.isArray(events) || events.length === 0) return { ok: true };
-    // worker 上行可观测(2026-10-24 tips 留痕丢失排查):GENIE_WORKER_JOURNAL_DEBUG=1 时每批
+ // worker 上行可观测( tips 留痕丢失排查):GENIE_WORKER_JOURNAL_DEBUG=1 时每批
     // kind 摘要一行——审计「哪些事件真的从 worker 到达 gateway」;tip.injected 是否上行一眼可判。
     if (process.env.GENIE_WORKER_JOURNAL_DEBUG === "1") {
       const kinds = (events as { kind?: string }[]).map((e) => String(e.kind ?? "?"));
@@ -444,7 +440,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
             if (task && task.state !== msg.state) deps.setState(task, msg.state as TaskState, msg.result ?? msg.error);
             // 终态 uplink 已落地=落盘对账文件使命完成(读后即清,防残骸误对账)。
             try { rmSync(join(deps.repoRoot, ".genie", "session-workers", `${msg.taskId}.terminal.json`), { force: true }); } catch { /* 清理失败无害 */ }
-            // goal 续跑网关统一发起(2026-10-21 P0:worker 内已禁本地续跑;done 才续,failed 不续=与进程内语义一致)
+ // goal 续跑网关统一发起( P0:worker 内已禁本地续跑;done 才续,failed 不续=与进程内语义一致)
             if (msg.state === "done" && task) { try { deps.onTaskDone?.(task); } catch { /* 续跑发起失败不影响终态 */ } }
           }
           break;
@@ -506,7 +502,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
     killLadder(run);
   };
 
-  /** 终态落盘对账(2026-10-29 晚间事故产物):worker 终态时会写 <taskId>.terminal.json;
+ /** 终态落盘对账(晚间事故产物):worker 终态时会写 <taskId>.terminal.json;
    *  gateway 消息处理被饿死时在途 task.state uplink 随 IPC 通道关闭丢失,exit 收割把已交稿
    *  任务误判「异常退出」。收割路径判决前回读落盘——有则按真实终态记账(读后即清)。 */
   const applyDurableTerminal = (run: WorkerRun): { state: string; result: string } | null => {
@@ -521,8 +517,8 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
     return null;
   };
 
-  // ── 冻结探针(2026-10-29 冻结治理)───────────────────────────────────────────
-  // 背景:worker 事件循环被同步 IO 停顿冻住(WSL 9p 实锤:四 loop 卡死 35 分钟无人收割,
+ // ── 冻结探针(冻结治理)───────────────────────────────────────────
+ // 背景:worker 事件循环被同步 IO 停顿冻住(WSL 9p 注意:四 loop 卡死 35 分钟无人收割,
   // exit 收割不触发——进程活着只是不响应;子代理级 stale 预警只发一次不收割)。
   // 机制:worker 侧 30s 心跳(协议 v2 {t:"hb"})+ host 侧 lastEventAt(心跳/任何上行都刷新);
   // 超过 FREEZE_MS 无任何上行 = 事件循环冻结 → 任务翻 failed(可续:重发任务即新 worker)+
@@ -566,7 +562,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
         console.warn(`[session-worker] 终态落盘对账(冻结路径):任务 ${run.taskId} 静默 ${Math.round(silentMs / 1000)}s 但已交稿,按落盘终态 ${durable.state} 记账`);
         deps.setState(t, durable.state as TaskState, durable.result);
       } else {
-        // 话术按 /proc 法证分型(2026-11-01:四次冻结两种真因被同一句话术掩盖——盘停顿(可自愈,
+ // 话术按 /proc 法证分型(四次冻结两种真因被同一句话术掩盖——盘停顿(可自愈,
         // 已由 D 态耐心兜住)与用户态死锁/同步计算(真 bug)。法证进 journal 与失败回执,下次有据可查)
         const f = forensics ? `[/proc 法证:主线程 ${forensics.state} 态,wchan=${forensics.wchan || "?"},${forensics.dThreads}/${forensics.threads} 线程 D 态]` : "[/proc 法证不可得]";
         const cause = forensics?.state === "D"
@@ -597,7 +593,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       lastFreezeTickAt = now;
       const ms = freezeMs();
       if (ms <= 0) return;
-      // 饥饿免疫(2026-10-29 晚间事故:gateway 被巨型会话轮询饿死 200s+,worker 心跳在队列里
+ // 饥饿免疫(晚间事故:gateway 被巨型会话轮询饿死 200s+,worker 心跳在队列里
       // 没被处理,静默被误归因于 worker 冻结→健康任务被误杀)。本扫描自身超睡(gap>>scanMs)
       // = gateway 拥堵的确定性证据——期间的静默不可归因,重置观察窗,本轮不判决。
       if (lastFreezeTickAt > 0 && gap > scanMs * 2 + 2_000) {
@@ -608,7 +604,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       for (const run of [...runs.values()]) {
         const silent = Date.now() - (run.lastEventAt ?? run.startedAt);
         if (silent <= ms) continue;
-        // 判决前先拿 /proc 法证(2026-11-01:四次冻结首次有死因证据)。D 态=盘等待可自愈:
+ // 判决前先拿 /proc 法证(四次冻结首次有死因证据)。D 态=盘等待可自愈:
         // 静默不足硬顶(diskWaitMs)就再等——停顿解除后 worker 自行恢复,任务零损失;
         // 其余态(R/S 静默=用户态死锁/同步计算)照杀。到顶仍 D=永久楔死(9p 已知形态),也杀。
         const forensics = (deps.readProcForensics ?? readProcForensics)(run.pid);
@@ -729,13 +725,13 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       run.stderrTail.push(d.toString("utf-8"));
       if (run.stderrTail.length > 40) run.stderrTail.shift();
     });
-    // stdout 同样消费(2026-10-21:P0 复审——只 pipe 不读会背压堵死 worker;日志并入 tail 留尸)
+ // stdout 同样消费(P0 复审——只 pipe 不读会背压堵死 worker;日志并入 tail 留尸)
     run.child.stdout?.on("data", (d: Buffer) => {
       run.stderrTail.push(d.toString("utf-8"));
       if (run.stderrTail.length > 40) run.stderrTail.shift();
     });
     run.child.on("message", onMessage(run));
-    // ready 超时(带饥饿免疫,2026-10-29 晚间事故:gateway 消息处理被巨型会话轮询饿死,
+ // ready 超时(带饥饿免疫, 晚间事故:gateway 消息处理被巨型会话轮询饿死,
     // worker 的 ready 消息还在队列里,超时判决先处理→健康 worker 被误判「30s 未就绪」)。
     // 定时器超睡(实际耗时远超预算)= gateway 自身拥堵,通道仍连则重武装(至多 2 次)不判决。
     const readyTimerHolder: { t?: ReturnType<typeof setTimeout> } = {};
@@ -763,7 +759,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       if (still !== run) return; // 已被 reap(cancel 路径)
       runs.delete(task.id);
       runsBySession.get(run.sessionId)?.delete(run);
-      // 非终态退出(worker 崩溃/被杀):先对账落盘终态(2026-10-29 uplink 丢失事故),无落盘才判异常。
+ // 非终态退出(worker 崩溃/被杀):先对账落盘终态( uplink 丢失事故),无落盘才判异常。
       const t = deps.taskManager.list().find((x) => x.id === task.id);
       if (t && !["done", "failed", "cancelled"].includes(t.state)) {
         const durable = applyDurableTerminal(run);
@@ -781,7 +777,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       reapMirrorAgents(run, "[worker 退出收割] 宿主 worker 进程已退出,该子代理随之终止(后台存活语义仅在进程内模式成立)。", "worker-exit");
       try { rmSync(specFile, { force: true }); } catch { /* 清理失败无害 */ }
     });
-    ensureFreezeScan(); // 冻结探针(2026-10-29):首个 run 注册后启动周期扫描(unref 不挡退出)
+    ensureFreezeScan(); // 冻结探针:首个 run 注册后启动周期扫描(unref 不挡退出)
   };
 
   const cancelTask = (taskId: string): void => {

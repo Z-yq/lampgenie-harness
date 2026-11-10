@@ -1,6 +1,5 @@
 /**
  * 轨迹查询层(txa6/txa7/txa8 + txa9 聚合面):journal 事件的**过滤 + 投影裁剪 + 聚合**。
- *
  * 纯函数、零 IO——journal 由调用方(gateway 的 trace.query 命令)传入,便于单测与复用。
  * 设计纪律:
  * - **不抛**:空事件 / 非法 filter 一律按默认口径给零值,面板侧「查不到」不该变连接错误。
@@ -213,7 +212,7 @@ export function queryTrace(
     } else if (e.kind === "llm.trace" && isLlmFailure(e.payload)) {
       // 失败调用由 loop 落成 llm.trace 事件(带 error,见 loop.ts 失败分支),不在 message.agent 里;
       // 这里只补失败计数、**不进 llmCalls**——与 trace-stats 口径对齐(llmCalls 只数成功的 message.agent)。
-      // 2026-11-03 真实浏览器验证发现:漏了这条分支 → 面板摘要永远显示「失败 0」。
+ // 真实浏览器验证发现:漏了这条分支 → 面板摘要永远显示「失败 0」。
       summary.llmFailures += 1;
     }
     if (e.kind === "tool.result") {

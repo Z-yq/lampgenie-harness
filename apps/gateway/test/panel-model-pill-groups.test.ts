@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
-/** step-132 模型快切菜单:provider 两层分组(ZCode ModelConfigSelect 语义)的结构回归。
+/** 模型快切菜单:provider 两层分组(ZCode ModelConfigSelect 语义)的结构回归。
  * 真 UI 在 panel.ts 模板字符串内(浏览器侧),这里锁关键面不丢:两级渲染函数/直展组与折叠组
  * 双标记/二级面板 + 返回行/sticky footer/视觉徽标真源/两级判定常量/端点一致性补丁。 */
-describe("step-132 模型菜单 provider 两层分组", () => {
+describe(" 模型菜单 provider 两层分组", () => {
   const fetchHtml = async (port: number) => {
     const panel = servePanel(port, () => {});
     try {
@@ -93,6 +93,7 @@ describe("step-132 模型菜单 provider 两层分组", () => {
       hints,
       sliceTopFn("function modelVisionCapable("),
       sliceTopFn("function presetOfProvider("),
+      sliceTopFn("function modelKeyLockReason("),
       sliceTopFn("function modelProviderBadge("),
       sliceTopFn("function pillMenuModelGroups("),
       sliceTopFn("function modelItemHtml("),
@@ -169,7 +170,7 @@ describe("step-132 模型菜单 provider 两层分组", () => {
     // 当前模型不在任何 provider 目录 → 「当前」兜底组(directItems,providerId 空=不误改路由)
     const g4 = mk([], []).pillMenuModelGroups("手填模型");
     expect(g4[0]).toMatchObject({ key: "@current", label: "当前", directItems: true, containsCurrent: true });
-    expect(g4[0].items).toEqual([{ value: "手填模型", name: "手填模型", sub: "", providerId: "", vision: false, visionInferred: false, unverified: false }]);
+    expect(g4[0].items).toEqual([{ value: "手填模型", name: "手填模型", sub: "", providerId: "", vision: false, visionInferred: false, unverified: false, locked: false, lockReason: "" }]);
     expect(g4.length).toBe(4);
 
     // A3 两级 HTML:一级=直展组平铺 + 折叠组单行(chevron) + sticky footer;二级=原位面板 + ‹ 返回
@@ -212,7 +213,7 @@ describe("step-132 模型菜单 provider 两层分组", () => {
     expect(html).toContain("unverified: !(verifiedModels.size === 0 || verifiedModels.has(name))");
     expect(html).toContain('class="pm-unv"');
     expect(html).toContain("端点未确认提供该模型");
-    // 选中项带 providerId(2026-10-29:随 session.model.set 直接透传,服务端按 Provider Registry
+ // 选中项带 providerId(随 session.model.set 直接透传,服务端按 Provider Registry
     // 解析端点/凭证——前端不再拼 cfg.set patch,「模型新端点旧」一类问题在服务端预检解决)
     expect(html).toContain("function pillPickModel(v, providerId)");
     expect(html).toContain("...(providerId ? { providerId: providerId } : {})");
@@ -230,7 +231,7 @@ describe("step-132 模型菜单 provider 两层分组", () => {
     expect(html).toContain("switchView(\"sys\"); setSection(\"model\");");
     // 端点拉取兜底清单也走两级渲染器(不再另起一层菜单)
     expect(html).toContain("function modelMenuOpen(fallbackIds)");
-    expect(html).toContain("// step-132:兜底清单也走两级渲染器(同一套直展组/折叠组 + sticky footer 语义)\n      modelMenuOpen(list);");
+    expect(html).toContain("// 兜底清单也走两级渲染器(同一套直展组/折叠组 + sticky footer 语义)\n      modelMenuOpen(list);");
     // 既有通用渲染器未被改动(4 个无关调用方依赖其签名/行为)
     expect(html).toContain("function pillMenuOpen(anchor, groups, current, onPick, footLabel, footGo) {");
     expect(html).toContain("function pillOpenMenu() { modelMenuOpen(); }");

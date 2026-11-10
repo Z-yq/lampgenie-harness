@@ -3,7 +3,6 @@
  * planner 调 board_upsert 时传 scope="bp",节点 id **已自带** `bp-` 前缀(bp-space/bp-selbar…),
  * 并提交 8 条显式边(from/to 用同一批带前缀 id)。回执说「显式 8 条」,board_read 回读却只有引擎
  * 推导的 virtual 边——显式边被静默丢弃。
- *
  * 断言:合并后 edges 里这 8 条显式边都在,且 from/to 都能解析到真实存在的节点。
  */
 import { describe, it, expect, afterEach } from "vitest";

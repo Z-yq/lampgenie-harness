@@ -1,5 +1,5 @@
 /**
- * 身份层(designs/05):设备 ed25519 密钥对 + 指纹 + 邀请码流。
+ * 身份层:设备 ed25519 密钥对 + 指纹 + 邀请码流。
  * 密钥本地生成,私钥 600 权限,指纹=公钥短码。
  */
 import { generateKeyPairSync, createHash } from "node:crypto";

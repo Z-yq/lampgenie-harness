@@ -1,10 +1,8 @@
 /**
- * 工具参数/结果脱敏(轨迹追踪 P1-B,2026-10-29)。
- *
+ * 工具参数/结果脱敏(轨迹追踪 P1-B。
  * 背景:journal 的 `tool.call.arguments` 与 `tool.result.content` 是**原样字符串**,LLM 把用户
  * 口令、API key、Bearer token 当工具入参传下去是常态(如 `curl -H "Authorization: Bearer sk-…"`)。
  * 轨迹落盘(journal / llm-trace / 会话导出)三条链都带同一份明文,任何一条被分享/上传即泄漏。
- *
  * 设计纪律:
  * - **幂等**:占位符 `<redacted:kind>` 自身不命中任何规则(规则都要求 ≥16 位密文主体,assign 规则
  *   的值字符集还排除了 `<`),因此对已脱敏文本再跑一次输出不变——重放/重复导出不会层层打标。
@@ -102,7 +100,6 @@ function redactField(v: unknown): { value: unknown; hit: boolean } {
 
 /**
  * 事件 payload 脱敏(浅层 + 数组一层,与 harness-runtime `projectPayload` 的覆盖口径一致)。
- *
  * 处理键:
  * - `arguments`(tool.call 的工具入参,string)→ 命中置 `argumentsRedacted: true`,**类型仍是 string**
  * - `content`(tool.result 的工具结果正文,string)→ 命中置 `contentRedacted: true`

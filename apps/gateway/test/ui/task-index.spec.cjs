@@ -1,16 +1,14 @@
-/** UI 实测(step-169 协议瘦身验收):WS 任务协议「索引 + 按需详情 + 增量」改造后,
+/** UI 经验证(协议瘦身验收):WS 任务协议「索引 + 按需详情 + 增量」改造后,
  *  四个消费面不回归——真实 gateway + 真实 chromium,零桩:
  *  A 侧栏:hello/task.list/task.changed 只带 TaskIndex,但 title 必须派生到位(多行任务书取首行);
  *  B 任务头:running 帧带 startedAt / 终态帧带 updatedAt+state(增量合并,不是重拉全量);
  *  C 终态失败面(按需拉正文主战场):失败 chip tooltip 的 result、重试回填的 instruction 都只能
  *    经 task.detail.get 拿到 —— 且同一 taskId 只发一次(幂等);
  *  D 体量面:全场 task.list ≤ 3 次、无重复 task.detail.get(增量推送没有退化成轮询/全量重拉)。
- *
  * 观测手段:goto 之前 page.addInitScript 给 WebSocket.prototype.send 打补丁,把客户端发出的每条
  * 消息登记进 window.__sent;同时包裹 HTMLTextAreaElement.value 的 setter,记录 #instruction 被
  * 程序化回填过的完整文本(window.__instrLog)——面板的重试路径「回填后立即 submit」会把输入框清空,
  * 只看点击后的 value 永远读到空串,故以「曾经回填的逐字全文」+「发出帧的 instruction 逐字全文」双证。
- *
  * 失败任务不经执行器:直接 TaskSupervisor.inject 一条 failed 终态任务(带 result 正文),页面初始
  * hello 只拿到索引(无 result),result 必须由 task.detail.get 现取——正是 C 组要验的链路。 */
 process.env.GENIE_CHECKPOINT = process.env.GENIE_CHECKPOINT || "off"; // 与 rowops 同款:本 spec 不测 checkpoint

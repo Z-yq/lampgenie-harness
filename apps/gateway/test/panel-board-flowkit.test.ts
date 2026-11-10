@@ -1,5 +1,5 @@
 /**
- * 白板画布「flowkit 单张 SVG」(2026-10-29)契约测试 —— 锁住渲染模式开关与 svg 路径的五个硬口径:
+ * 白板画布「flowkit 单张 SVG」契约测试 —— 锁住渲染模式开关与 svg 路径的五个硬口径:
  *  ①svg 模式渲染: #cvWorld 里没有卡片 DOM(.cv-node 计数 0),世界内容只有一个 .cv-svg-host 主机;
  *  ②cards 回退(localStorage.cvRender="cards"):逐节点卡片照旧出,画布内 0 个 svg 主机;
  *  ③世界尺寸:回包 svg 的 viewBox w/h + 60 留白;viewBox 畸形 → 回退(cards 累加结果),不抛错;
@@ -134,7 +134,7 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       const outC = mk("cards", { laneHtml: "<LANE>", edgeSvg: "<EDGE>", popupMask: "<MASK>", cards: "<CARDS>", anchors: "<ANCH>", fold: "<FOLD>", svg: SVG_OK, sig: "s" });
       expect(outC).toBe("<LANE><EDGE><MASK><CARDS><ANCH><FOLD>");
       expect(outC).not.toContain("cv-svg-host");
-      // DOM 计数口径(实测):svg 模式画布内 .cv-node=0、.cv-svg-host=1;cards 模式 .cv-node=N、.cv-svg-host=0
+ // DOM 计数口径(经验证):svg 模式画布内 .cv-node=0、.cv-svg-host=1;cards 模式 .cv-node=N、.cv-svg-host=0
       const count = (h: string, cls: string) => h.split('class="' + cls).length - 1;
       expect(count(out, "cv-node")).toBe(0);
       expect(count(out, "cv-svg-host")).toBe(1);
@@ -158,7 +158,7 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       expect(sbC.cvSvgSig({ taskId: "t1", rev: 3 })).toBe("t1|3|cards");
       expect(sandbox(html, lsStub({})).cvSvgSig({ taskId: "t1", rev: 3 })).toBe("t1|3|svg");
       // cards 模式下不拼 svg 主机(cvSvgBodyHtml 空串),旧串仍在
-      // 2026-11-03 P0 修复后:cvSvgBodyHtml 只传**裸 svg 文本**(外壳由 cvWorldBodyHtml 唯一负责),
+ // P0 修复后:cvSvgBodyHtml 只传**裸 svg 文本**(外壳由 cvWorldBodyHtml 唯一负责),
       // 且内容只在「缓存签名命中且非空」时才带上;否则空串(空壳帧,等回包)。
       expect(html).toContain('const cvSvgBodyHtml = cvMode === "svg" ?');
       expect(html).toContain('(cvSvgHasNow ? cvSvgCacheHtml : "") : "";');
@@ -234,7 +234,7 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       expect(fitK(200, 500, 400).k).toBeGreaterThan(0.7);
       // 实际源码口径一致:svg 模式的包围盒 = viewBox + 60,常量与夹取原样保留
       const fit = extractFn(html, "cvFitNow");
-      // 2026-11-05 任务B(E1):「适」默认改紧凑 fit(引擎 resolveSvgBoundsFromDom 的可见图形并集,
+ // 任务B(E1):「适」默认改紧凑 fit(引擎 resolveSvgBoundsFromDom 的可见图形并集,
       // 排除 defs/mask/clipPath/画布背景 rect);旧 viewBox 口径只在取证开关 __cvFitBasis==="viewbox"
       // 时启用。两条口径都必须保留,否则新旧对照截图无从取证、回退也没着落。
       expect(fit).toContain('window.__cvFitBasis === "viewbox"');
@@ -249,7 +249,7 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       // 畸形 viewBox(svg 模式没有任何卡片 DOM)→ 直接返回,不把视野 reset 成 NaN/0
       expect(fit).toContain('if (cvFitMode === "svg" && !cvSvgB) return;');
       expect(fit).toContain('if (cvFitMode !== "svg" && !cvH.querySelectorAll(".cv-node").length) return;');
-      // 卡片用 DOM 实测(面板无 jsdom 时也走不到的兜底口径保留):offsetWidth/offsetHeight 未删
+ // 卡片用 DOM 经验证(面板无 jsdom 时也走不到的兜底口径保留):offsetWidth/offsetHeight 未删
       expect(fit).toContain("const w = el.offsetWidth || 220, h = el.offsetHeight || 110;");
       // 小地图:svg 模式按 viewBox 画等比矩形占位(选"画占位"而非"隐藏",保持小地图可见可用)
       expect(html).toContain("const sbMini = cvRenderMode() === ");
@@ -424,7 +424,7 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       expect(inj).toBeGreaterThan(0);
       expect(patch.indexOf("cvSvgApplySel(", inj)).toBeGreaterThan(inj);
       // ③renderBoardCanvas 里的 svg 交互委托:命中函数 + 全局选中 + 详情卡,且不整板重渲
-      // 2026-11-06 B(契约变更,原断言随设计一起改):点选从 pointerdown 挪到 pointerup 结算,
+ // B(契约变更,原断言随设计一起改):点选从 pointerdown 挪到 pointerup 结算,
       // 因为默认左键在节点上也要能平移整张图(原实现 pointerdown 即 stopPropagation → 图内拖不动)。
       // 新的契约:pointerdown 只记命中(cvSvgDown),pointerup 且位移 <4px 才算点击。
       const canvas = extractFn(html, "renderBoardCanvas");

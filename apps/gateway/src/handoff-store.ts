@@ -1,22 +1,17 @@
 /**
  * 子代理进程交接台账:把 subagent-handoff 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:交接是一次审计事实(谁在什么时候把哪个进程交给谁、为什么),
  * 事后改写 owner 会让「谁把进程弄丢了」变成不可查。每行只增不改,当前状态由重放得到。
- *
  * 数据面:`<root>/.genie/rsi/handoff.jsonl`,每行 `{v:1,type,at,...}`
  * - agent     {id,maxHandoffs}                                  一次代理注册
  * - process   {id,owner,purpose?}                               一个进程登记(owner 自动登记)
  * - handoff   {processId,fromAgent,toAgent,purpose,maxPerAgent}  一次交接(成功才写)
  * - delegate  {group,concurrency,joinOrder,buckets}             一次按 group 分桶
  * - inventory {agentId,handedOff,orphaned,unreadCompletions}    一次退出盘点
- *
  * 投影语义:按行序重放;坏行(JSON 坏 / v 不是 1 / type 未知 / 载荷不合法)只计入 parseErrors
  * 并跳过——一行坏不整文件失效、不 throw。重放中语义非法的交接(非 owner、超限)计入 replayRejects,
  * 同样不 throw(它只说明台账里有过被拒的尝试,真相以行序为准)。
- *
  * 写作纪律:单行追加 + 写后重读行数校验,让「写成功了吗」成为可复核断言。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块两跳解析(同 cohort-metrics-store 套路):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -157,8 +152,7 @@ async function loadHandoffRuntime(): Promise<HandoffRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/subagent-handoff.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     handoffRuntime = (await import(srcUrl)) as HandoffRuntime;
   }
   return handoffRuntime;

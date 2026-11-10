@@ -127,7 +127,7 @@ export class RepoIssues implements IssueChannel {
     mkdirSync(join(this.projectRoot, ".genie", "issues"), { recursive: true });
     // 并发安全(多成员共享 .genie/issues):编号分配不能用「读 max + 写覆盖」——两个实例各自
     // 读到同一个 max 时会写同一个文件名,后者静默覆盖前者(丢单)。改为 wx 独占创建:占号失败
-    // (EEXIST=对端刚占了这号)就顺延重试;上限 50 次后放弃并如实报错(不自造编号)。
+ // (EEXIST=对端刚占了这号)就顺延重试;上限 50 次后放弃并如用户反馈错(不自造编号)。
     for (let attempt = 0; attempt < 50; attempt++, n++) {
       const rec: IssueRecord = {
         number: n,
@@ -190,7 +190,7 @@ export class RepoIssues implements IssueChannel {
 const STATUS_LABEL: Record<IssueStatus, string> = { todo: "status:todo", doing: "status:doing", done: "status:done" };
 
 /** 平台差异的集中表。
- * 收敛动机(实测踩过):平台差异原先散落在 list/create/update/comment/toRecord 五处 if 分支,
+ * 收敛动机(经验证踩过):平台差异原先散落在 list/create/update/comment/toRecord 五处 if 分支,
  * 每加一处分支就有一次「只改 GitHub 忘了 GitLab」的静默失效(评论端点、state 取值、
  * 标签形状、指派人形状各错过一次)。现在所有差异只在这两张表里,新增差异加字段即可。 */
 interface PlatformProfile {
@@ -263,8 +263,7 @@ class NativeIssues implements IssueChannel {
     private readonly info: GitHostInfo,
     private readonly token: string,
     private readonly fetchImpl: FetchLike,
-    private readonly user: string,
-  ) {}
+    private readonly user: string) {}
 
   get kind(): "github" | "gitlab" {
     return this.info.kind === "github" ? "github" : "gitlab";

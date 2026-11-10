@@ -4,7 +4,7 @@ import { todoTool } from "../src/agent-wiring.js";
 
 const todoEvents = (journal: MemoryJournal) => journal.readAll().filter((e) => e.kind === "todo.updated");
 
-describe("M43 todo_write 严格整表纪律", () => {
+describe(" todo_write 严格整表纪律", () => {
   it("空 items / 缺 items → 失败且不落 journal", async () => {
     const journal = new MemoryJournal();
     const tool = todoTool(journal, "s1");

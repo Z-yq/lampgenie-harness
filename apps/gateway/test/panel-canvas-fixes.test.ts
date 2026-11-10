@@ -1,5 +1,5 @@
 /**
- * 面板渲染缺陷修复批(2026-10-21)契约测试:
+ * 面板渲染缺陷修复批契约测试:
  *  ①超宽消息行换行约束(事件元信息行/工具行块 CSS);
  *  ②终端转轮帧折叠去重(foldTermFrames 连续注记合并/幂等/计数);
  *  ③白板入口画布分流(boardEntryGo:画布=定位白板卡,经典=浮窗);
@@ -57,7 +57,7 @@ describe("面板渲染缺陷修复批(2026-10-21)", () => {
       const frames = [F1, F2, F3, String.fromCharCode(0x2838), String.fromCharCode(0x283c)];
       // 连续帧:一段折叠成单注记(计数=帧数)
       expect(fold(frames.join(NL))).toBe("（已折叠 5 帧转轮动画）");
-      // 空行分隔的两段:合并为一个注记、帧数累加(实测重复标签主诉)
+ // 空行分隔的两段:合并为一个注记、帧数累加(经验证重复标签主诉)
       expect(fold(frames.join(NL) + NL + NL + frames.join(NL))).toBe("（已折叠 10 帧转轮动画）");
       // 输入里已是注记:与后续帧段合并累加(重复折叠幂等,不增殖)
       expect(fold("（已折叠 7 帧转轮动画）" + NL + NL + frames.join(NL))).toBe("（已折叠 12 帧转轮动画）");

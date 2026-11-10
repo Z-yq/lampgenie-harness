@@ -1,15 +1,12 @@
 /**
  * 方向总览(RSI #194)持久层:把 direction-atlas 的纯逻辑落到两份盘上事实。
- *
  * 为什么两块盘:
  * ① `<root>/.genie/rsi/atlas/entries.jsonl` append-only —— 「方向为什么转」是审计事实,
  *    目标/变更/冲突/裁决/决策/缺陷基因逐条追加,永不改写历史行;投影(project)在内存里重放。
  * ② `<root>/.genie/rsi/atlas/<projectId>.json` —— build 出来的快照,给 --show/--render/--report 读;
  *    只用「写 tmp + rename」落盘,并发读者不会读到半截 JSON(同 board-store.ts:1166-1168)。
- *
  * 一次 resolveConflict 失败(冲突不存在 / chosen 不属于该冲突)时**绝不写盘**:既不追加 entries,
  * 也不碰 atlas 快照 —— 失败路径字节不变化。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不读 cwd;
  * root 一律由调用方传入。除参数错误外不 throw:一律折叠成稳定码返回。
  */
@@ -201,8 +198,7 @@ function appendEvent(root: string, projectId: string, kind: AtlasEventKind, payl
 /** 逐行读事件:空行跳过(不计坏行),JSON 坏/结构坏计入 badLines 后跳过,永不 throw。 */
 export function loadAtlasEvents(
   root: string,
-  projectId: string,
-): { events: AtlasEvent[]; badLines: number; totalLines: number } {
+  projectId: string): { events: AtlasEvent[]; badLines: number; totalLines: number } {
   let text: string;
   try {
     text = readFileSync(atlasEntriesPath(root), "utf8");
@@ -411,8 +407,7 @@ export function resolveConflict(
   root: string,
   projectId: string,
   conflictId: string,
-  opts: AtlasResolveOpts,
-): AtlasOk & { idempotent?: boolean } {
+  opts: AtlasResolveOpts): AtlasOk & { idempotent?: boolean } {
   const chosenGoalId = isFilled(opts?.chosenGoalId) ? opts.chosenGoalId.trim() : "";
   if (!isFilled(projectId) || !isFilled(conflictId) || chosenGoalId === "") {
     return { ok: false, code: ATLAS_INVALID_INPUT };

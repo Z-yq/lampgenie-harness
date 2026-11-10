@@ -1,13 +1,13 @@
 /**
- * 权限审批中介(step-037 B2,ZCode PermissionDialog/interactionAutoResolution 移植):
+ * 权限审批中介( B2,ZCode PermissionDialog/interactionAutoResolution 移植):
  * executor 的 permission-ask 不再只有 auto-fail-closed——面板在线时广播征求用户,
  * 超时/无连接自动拒绝(fail-closed 不变);env GENIE_SUBAGENT_ASK=allow-once 优先级仍最高。
- * 会话级代答层(step-033 收口):qwen permission-policy 移植件接入——「本次会话总是允许」
+ * 会话级代答层:qwen permission-policy 组件接入——「本次会话总是允许」
  * (allow-always)除写 F2 规则文件外同时登记 policy,同会话后续 ask 免弹窗直通。
  */
 export type PermissionDecision = "allow-once" | "reject";
 /** 决策+来源(panel=面板应答;timeout=超时自动拒;offline=无面板连接;policy=会话级代答直通;
- * object-changed/object-snapshot-failed=M151 审批对象复核失败(fail-closed))。 */
+ * object-changed/object-snapshot-failed= 审批对象复核失败(fail-closed))。 */
 export interface PermissionOutcome {
   decision: PermissionDecision;
   by: "panel" | "timeout" | "offline" | "policy" | "object-changed" | "object-snapshot-failed";
@@ -33,14 +33,14 @@ interface Pending {
   sessionId: string;
   resolve: (d: PermissionOutcome) => void;
   timer: NodeJS.Timeout;
-  /** 审批中心列表面(step-010 二期收口):ask 全量信息驻留。 */
+ /** 审批中心列表面(二期):ask 全量信息驻留。 */
   tool: string;
   summary: string;
   risk: string;
   since: number;
 }
 
-/** 已决议记录(step-1042 关卡 Gate 历史面):一次真实挂起(广播过)的收敛结果。 */
+/** 已决议记录(关卡 Gate 历史面):一次真实挂起(广播过)的收敛结果。 */
 export interface PermissionHistoryItem {
   requestId: string;
   sessionId: string;
@@ -57,13 +57,13 @@ export class PermissionBroker {
   private pending = new Map<string, Pending>();
   /** 面板在线性(server 连接时置位;无连接=立即 auto-fail-closed,与既有行为一致)。 */
   online = false;
-  /** 会话级代答层(step-033 收口):qwen permission-policy;未注入=旧行为。 */
+ /** 会话级代答层:qwen permission-policy;未注入=旧行为。 */
   policy?: PermissionPolicyPort;
 
   private broadcastFn: (msg: Record<string, unknown>) => void = () => {};
-  /** step-1042:决议回调(server 注入→广播 permission.resolved + super.inbox.changed;缺省=无)。 */
+ /** 决议回调(server 注入→广播 permission.resolved + super.inbox.changed;缺省=无)。 */
   onSettle?: (item: PermissionHistoryItem) => void;
-  /** step-1042:最近决议 ring(内存,重启即失;只收真实挂起过=广播过的 ask;offline/policy 直通不入账)。 */
+ /** 最近决议 ring(内存,重启即失;只收真实挂起过=广播过的 ask;offline/policy 直通不入账)。 */
   recent: PermissionHistoryItem[] = [];
 
   constructor(private readonly timeoutMs = 60_000) {}
@@ -81,7 +81,7 @@ export class PermissionBroker {
         if (!p) return;
         clearTimeout(p.timer);
         this.pending.delete(input.requestId);
-        // step-1042:入账历史 ring + 通知(server 用它广播 permission.resolved,多端一致清理)。
+ // 入账历史 ring + 通知(server 用它广播 permission.resolved,多端一致清理)。
         const item: PermissionHistoryItem = {
           requestId: input.requestId, sessionId: p.sessionId, tool: p.tool, summary: p.summary,
           risk: p.risk, since: p.since, settledAt: Date.now(),
@@ -92,7 +92,7 @@ export class PermissionBroker {
         try { this.onSettle?.(item); } catch { /* 回调失败不碰主链 */ }
         resolve(outcome);
       };
-      // 会话级代答(step-033 收口):policy 说本会话/任务已授予→不弹窗直通(来源如实标 policy)。
+ // 会话级代答:policy 说本会话/任务已授予→不弹窗直通(来源如实标 policy)。
       if (this.policy?.shouldAutoAllow("local", input.sessionId, input.taskId)) {
         resolve({ decision: "allow-once", by: "policy" });
         return;
@@ -124,14 +124,14 @@ export class PermissionBroker {
     });
   }
 
-  /** 审批中心挂起清单(step-010 二期收口;旧者在前)。 */
+ /** 审批中心挂起清单(二期;旧者在前)。 */
   pendingList(): { requestId: string; sessionId: string; tool: string; summary: string; risk: string; since: number }[] {
     return [...this.pending.entries()]
       .map(([requestId, p]) => ({ requestId, sessionId: p.sessionId, tool: p.tool, summary: p.summary, risk: p.risk, since: p.since }))
       .sort((a, b) => a.since - b.since);
   }
 
-  /** step-1042:最近决议(旧在前;limit 截尾)。 */
+ /** 最近决议(旧在前;limit 截尾)。 */
   history(limit = 20): PermissionHistoryItem[] {
     return this.recent.slice(-Math.max(1, Math.min(100, Math.trunc(limit) || 20)));
   }

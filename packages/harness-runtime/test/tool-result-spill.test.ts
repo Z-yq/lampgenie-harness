@@ -27,8 +27,8 @@ describe("常量与判定", () => {
     for (const name of ["tool_view", "code_sense", "code_index", "board_read", "board_upsert", "edit_file", "write_file", "todo_write", "task_phase"]) {
       expect(SPILL_EXCLUDED_TOOLS.has(name)).toBe(true);
     }
-    // read_file 移出排除名单(2026-10-29 token 轮 04):改用独立高阈值 32000,
-    // 否则单次整读大文件(实测峰值 71,967 字符)全量进历史,每步重付。
+ // read_file 移出排除名单( token 轮 04):改用独立高阈值 32000,
+ // 否则单次整读大文件(经验证峰值 71,967 字符)全量进历史,每步重付。
     expect(SPILL_EXCLUDED_TOOLS.has("read_file")).toBe(false);
     expect(TOOL_SPILL_THRESHOLDS["read_file"]).toBe(32_000);
   });
@@ -103,7 +103,7 @@ describe("spillToolResult 写时定形", () => {
   it("read_file 走独立高阈值 32000:低于阈值原样、超过才 spill,且提示回读**原文件**", async () => {
     const dir = tmp();
     const small = big(20_000);
-    // 20K < 32000:不 spill(绝大多数常规读都在这一档——实测 p90=6,450)
+ // 20K < 32000:不 spill(绝大多数常规读都在这一档——经验证 p90=6,450)
     expect(shouldSpill("read_file", small)).toBe(false);
     const outSmall = await spillToolResult({ dir, sessionId: "s2", callId: "c2s", toolName: "read_file", content: small });
     expect(outSmall).toBe(small); // 逐字节原样

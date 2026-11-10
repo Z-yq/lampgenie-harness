@@ -1,11 +1,9 @@
 /**
- * 板型分阶段技能(2026-10-26 用户口径):13 类任务图 + matrix 变体,每类拆 collect→draw→audit。
- *
+ * 板型分阶段技能:13 类任务图 + matrix 变体,每类拆 collect→draw→audit。
  * 目的:planner 判定 boardType 后只加载对应类型的三个阶段技能(约 3~6KB),
  * 不再把 13 类规则一次性塞进 planner 系统提示/board_upsert 描述(旧口径约 30KB)。
  * 内容与 board-contract/type-conformance.ts、board-type-profile.js 的确定性规则同源;
  * 这里是给模型的操作说明,校验仍以代码门为准。
- *
  * 名称约定:skill_view(category="board", name="<type>/<stage>"),stage=collect|draw|audit。
  */
 
@@ -28,7 +26,7 @@ export interface BoardTypeSkill {
 
 const COMMON = "通用硬规则见 planner 规范 §硬规则(1-7);本阶段只做本阶段的事,不越界。";
 
-/** 文档体裁库(2026-10-27 通用机制,用户口径「换一种文档内容需求,新机制也能生效」):
+/** 文档体裁库(通用机制:
  * 文档(PPT/报告)的内容需求千差万别,机制不写死任何一种——每种体裁=一组**必答维度**
  * (读者读完必须在文档里得到回答的问题)。collect 判体裁→把必答维度映射成章(对纲);
  * draw 按纲组织两层(章→页);audit/类型门按维度别名查覆盖,缺维度点名。

@@ -1,4 +1,4 @@
-/** UI 实测:IDE Markdown 预览的图/视频/链接渲染 + 阅读密度(2026-11-05)。
+/** UI 经验证:IDE Markdown 预览的图/视频/链接渲染 + 阅读密度。
  *  跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/mdpreview.spec.cjs
  *  覆盖:①md 标签默认进预览层 ②相对图重写 /ide/asset 且真解码(naturalWidth>0)
  *  ③外链图原样 ④视频产 <video> 且字节路由 200+video/mp4 ⑤相对链接 data-ide-mdlink 点击开新标签

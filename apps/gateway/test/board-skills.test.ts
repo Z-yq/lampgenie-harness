@@ -61,7 +61,7 @@ describe("board-skills registry", () => {
     expect(draw).toContain("start/end");
     expect(draw).toContain("主图只画");
     expect(draw).toContain("验收/风险/测试/回滚/根因/非锚点现状细节不进主图");
-    // 2026-10-26 示例图口径:一条主线/方法分组/代码框/正交连线/是-否出口
+ // 示例图口径:一条主线/方法分组/代码框/正交连线/是-否出口
     expect(draw).toContain("一条主线");
     expect(draw).toContain("group=方法/阶段容器");
     expect(draw).toContain("代码级动作");
@@ -144,14 +144,14 @@ describe("board-skills registry", () => {
   });
 
   it("关键类型的专用约束不丢", () => {
-    // 2026-10-26 用户口径:测试任务画纯 code flow,不画用例卡/六段两张皮
+ // 测试任务画纯 code flow,不画用例卡/六段两张皮
     const tDraw = boardSkillBody("test", "draw")!;
     expect(tDraw).toContain("纯 code flow");
     expect(tDraw).toContain("boardType=code");
     expect(tDraw).toContain("用例卡");
     expect(tDraw).toContain("expect 原文");
     expect(tDraw).toContain("是：");
-    // 被测链路逐函数展开(用户口径:被测链路得画详细)
+ // 被测链路逐函数展开(被测链路得画详细)
     expect(tDraw).toContain("被测链路必须逐函数展开");
     expect(tDraw).toContain("一个");
     expect(boardSkillBody("test", "audit")!).toContain("无用例卡层");
@@ -181,7 +181,7 @@ describe("board-skills registry", () => {
     expect(boardSkillBody("matrix", "draw")).toContain("权重");
   });
 
-  it("perf(2026-10-29 用户口径「性能优化的 flow 还差点意思」):三阶段都是控制流程图口径", () => {
+  it("perf(2026-10-29 「性能优化的 flow 还差点意思」):三阶段都是控制流程图口径", () => {
     for (const s of ["collect", "draw", "audit"] as const) {
       const body = boardSkillBody("perf", s)!;
       expect(body, `perf/${s}`).toContain("start");
@@ -217,7 +217,7 @@ describe("board-skills registry", () => {
         expect(d.aliases.length, `${k}.${d.key}`).toBeGreaterThanOrEqual(2);
       }
     }
-    // 方案评审的必答维度:这是干什么的/架构/流程 pipeline 必须在场(用户口径)
+ // 方案评审的必答维度:这是干什么的/架构/流程 pipeline 必须在场
     const rs = DOC_GENRES["review-solution"].dimensions.map((d) => d.key);
     expect(rs).toContain("positioning");
     expect(rs).toContain("architecture");

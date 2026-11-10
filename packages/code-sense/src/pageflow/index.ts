@@ -1,6 +1,6 @@
 /**
- * pageflow(designs/16 §6.5,step-019):路由表→组件树→交互边→意图解析。
- * 支持:React Router 配置对象/JSX <Link>/纯 HTML 多页;Vue Router(step-019 二期收口):
+ * pageflow( §6.5:路由表→组件树→交互边→意图解析。
+ * 支持:React Router 配置对象/JSX <Link>/纯 HTML 多页;Vue Router(二期):
  * createRouter({routes}) 配置对象 + <router-link to> 边 + useRouter().push 编程式跳转。
  * tier:TSX=semantic / 纯 HTML=structural / 动态拼接=inferred。
  */
@@ -126,7 +126,7 @@ export async function parseReactRoutes(root: string, files: string[]): Promise<P
   return { pages, edges, mermaid: toMermaid(pages, edges), routerDetected: pages.length > 0 };
 }
 
-/** Vue:Vue Router 路由配置 + <router-link to> + useRouter().push(step-019 二期收口)。semantic 档。 */
+/** Vue:Vue Router 路由配置 + <router-link to> + useRouter.push(二期)。semantic 档。 */
 export async function parseVueRoutes(root: string, files: string[]): Promise<PageFlowResult> {
   const pages: PageNode[] = [];
   const edges: PageEdge[] = [];
@@ -145,7 +145,7 @@ export async function parseVueRoutes(root: string, files: string[]): Promise<Pag
         pages.push({ id: f, route: routeDef[1]!, file: f, components: [] });
       }
       if (inRouter && /]\s*\)\s*;?\s*$/.test(line) && !/path\s*:/.test(line)) inRouter = false;
-      // <router-link to="/x">(:to 绑定动态→inferred)
+ // <router-link to="/x">(to 绑定动态→inferred)
       for (const m of line.matchAll(/<router-link[^>]+:?to="([^"]+)"/g)) {
         const to = m[1]!;
         edges.push({

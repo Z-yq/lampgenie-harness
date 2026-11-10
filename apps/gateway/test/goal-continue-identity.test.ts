@@ -1,5 +1,5 @@
 /**
- * M26 收口(2026-11-08):Goal 续跑身份护栏接生产链专项。
+ * Goal 续跑身份护栏接生产链专项。
  * 锚定:
  * ① 生产传 expectedRevision:过期(任务运行期间 goal.set 再来一条)→ GOAL_REVISION_STALE,无 submit;
  * ② 任务运行期间 goal 被 clear → 无目标静默返回(无 submit / 无 blocked);

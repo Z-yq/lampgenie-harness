@@ -1,6 +1,6 @@
 /**
- * 唯一名兜底的词法作用域闸(2026-10-26 整仓 flow 前置修复)。
- * 实锚:整仓模块图出现 `packages/code-sense → apps/gateway ×851` 假主干——`import { join }
+ * 唯一名兜底的词法作用域闸(整仓 flow 前置修复)。
+ * 依据:整仓模块图出现 `packages/code-sense → apps/gateway ×851` 假主干——`import { join }
  * from "node:path"` 的 join 被连到测试文件里的同名小工具;`handler(payload)` 参数被连到另一个
  * 包的 handler;`dirOf(...)` 回调参数被连到 ExperienceStore.dirOf。
  * 规则:本文件有局部绑定(import/参数/变量)时,只允许同文件声明或 import 真来源文件;自由标识符

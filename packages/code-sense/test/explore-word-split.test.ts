@@ -1,5 +1,5 @@
 /**
- * explore 短语分词(2026-10-20 用户实报:「code_sense explore 'tts voice audio chat' → 零命中」)。
+ * explore 短语分词(用户用户反馈:「code_sense explore 'tts voice audio chat' → 零命中」)。
  * 根因:normalizeQuery 只做 camel↔snake 变换,空格多词短语原样进 grep——代码里永远没有
  * "tts voice audio chat" 这个字面量,必然零命中;而拆词后 tts|audio 命中大量真行。
  * 契约:≥2 个英文词的短语 → 词根组(any 命中)+ ≥4 字符单词单列;单词/camelCase 查询零影响。

@@ -1,9 +1,7 @@
 /**
- * journal 存储维护协议(M123,2026-11-08)。
- *
+ * journal 存储维护协议。
  * 背景:文件式 journal(.genie/journals = global.jsonl + sessions/<sid>.jsonl)无归档面,
- * 冷启动逐文件 load,实测 178 个会话文件 / 813MB 让 boot 从 ~8s 退化到 ~6min。
- *
+ * 冷启动逐文件 load,经验证 178 个会话文件 / 813MB 让 boot 从 ~8s 退化到 ~6min。
  * 协议(对应 mechanisms #123 存储维护):
  *   ① 快照:snapshotJournal 枚举 global.jsonl + sessions/*.jsonl 的 dev/ino/size/mtimeMs;
  *   ② 活 writer 保护:listHolders 读 gateway.pid / gateway.lock / session-workers/*.run.json 的 pid,
@@ -12,7 +10,6 @@
  *   ④ 执行:applyArchive 逐候选 pre stat 对快照 → sha256 → rename 到 archiveDir → post 复核,
  *      发生 stat 漂移(=归档窗口内被写)立即 abort 后续候选,已归档项标 drift;manifest + durable cursor;
  *   ⑤ 校验/恢复:verifyArchive 逐条重算 sha256;restoreArchive 校验后 rename 回 sessions/(目标存在拒)。
- *
  * 纪律:本模块所有 IO 失败都不抛(回报 skipped/aborted),只由 CLI 决定退出码;
  *      不做活 writer 下的自动维护(自动维护只会 skip,不 force)。
  * 注:本文件不 import 任何相对模块——scripts/journal-maintenance.mts 需能被裸 node --experimental-strip-types

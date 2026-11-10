@@ -1,15 +1,12 @@
 #!/usr/bin/env node
 /**
  * 语义功能影响边界 CLI(语义边界 2026-10):采集一份影响边界简报 / 落盘语义采纳 / 输出文本或 JSON 报告。
- *
  * 纯表面层:所有采集与判定逻辑在
  *   packages/harness-runtime/src/agent/feature-boundary.ts(buildImpactBrief / canWriteE2E / FB_CODES)
  *   apps/gateway/src/feature-boundary-store.ts(.genie/rsi/boundaries 落盘 / 输入形状容错 / drift 聚合 / 报告文本)
  * 本文件只做 argv 解析、输出与退出码映射。
- *
  * 用法:node --experimental-strip-types scripts/feature-boundary.mts \
  *        --root <dir> --feature <json> --surfaces <json> --code <json> [--accept-by <who>] [--json] [--out <file>]
- *
  * 退出码:0 成功且 E2E 允许(--help 也 0)/ 1 参数错误 / 2 E2E 阻塞或输入缺失(collectBrief.ok=false)。
  */
 import fs from "node:fs";
@@ -170,8 +167,7 @@ async function main(): Promise<number> {
           codes: brief.codes,
         },
         null,
-        2,
-      )}\n`
+        2)}\n`
     : report(root, opts).text;
   process.stdout.write(body);
   writeOut(get("out"), body);

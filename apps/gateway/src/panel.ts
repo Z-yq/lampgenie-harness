@@ -12,16 +12,16 @@ import { fileURLToPath } from "node:url";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodeFsAll from "node:fs";
 import { repoRoot as repoRootDir } from "./repo-root.js";
-import { isPathInside } from "./path-safety.js"; // 2026-10-27:Windows 分隔符无关越界判定(/ide/asset 等)
-import { parseRemoteProject } from "./remote-project.js"; // 2026-10-27:/ide/asset 远程项目(SSH/WSL)分流
-import { parseOffice, readOfficePart, OFFICE_DOC_EXT, OFFICE_MAX_BYTES } from "./office-ooxml.js"; // 2026-10-29 Office(pptx/docx)只读预览服务端解析(板 ide-o1)
+import { isPathInside } from "./path-safety.js"; // :Windows 分隔符无关越界判定(/ide/asset 等)
+import { parseRemoteProject } from "./remote-project.js"; // :/ide/asset 远程项目(SSH/WSL)分流
+import { parseOffice, readOfficePart, OFFICE_DOC_EXT, OFFICE_MAX_BYTES } from "./office-ooxml.js"; // Office(pptx/docx)只读预览服务端解析(板 ide-o1)
 import { PROVIDER_PRESETS as PROVIDER_PRESET_CATALOG } from "./provider-presets.js";
 import { PANEL_BUILD } from "./build-stamp.js";
 import { ERR_TEXT as ERR_TEXT_SRC, ERR_UNKNOWN_PREFIX, errorText as errorTextSrc, errorDiagnostic as errorDiagnosticSrc } from "./error-text.js";
-/** 轨迹看板数据层(step-1020):纯函数源码注入浏览器侧,见 panel-traj-model.ts 尾部 TRAJ_MODEL_JS。 */
+/** 轨迹看板数据层:纯函数源码注入浏览器侧,见 panel-traj-model.ts 尾部 TRAJ_MODEL_JS。 */
 import { TRAJ_MODEL_JS } from "./panel-traj-model.js";
 
-/** step-125:预设目录单一出处(TS 模块)注入面板浏览器侧;JSON 只含公开 URL/模型 ID。 */
+/** 预设目录单一出处(TS 模块)注入面板浏览器侧;JSON 只含公开 URL/模型 ID。 */
 const PRESETS_JSON = JSON.stringify(PROVIDER_PRESET_CATALOG);
 /**
  * 错误文案表单一出处(apps/gateway/src/error-text.ts):ERR_TEXT 映射表 + errorText/errorDiagnostic
@@ -52,14 +52,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --sans:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
     --sbw:264px;
-    /* ---- step-088 主题变量层扩展:语义化二级变量(每套主题必答;默认值=鎏金夜 dark 现状,视觉零漂移) ---- */
+ /* ---- 主题变量层扩展:语义化二级变量(每套主题必答;默认值=鎏金夜 dark 现状,视觉零漂移) ---- */
     --hover-bg:rgba(255,255,255,.05);            /* 悬停叠层(列表行/按钮) */
     --hover-bg2:rgba(255,255,255,.08);           /* 悬停叠层加重 */
     --on-accent:#1c1108;                          /* 主色底上的文字(seg 选中/渐变按钮) */
     --input-bg:rgba(0,0,0,.3);                    /* 输入类元件底 */
     --input-border:var(--border-soft);            /* 输入类元件边 */
     --code-bg:rgba(0,0,0,.35);                    /* 代码块/终端底 */
-    /* ---- step-137 消息流视觉分层令牌(内容类型→背景板;默认值=鎏金夜口径,
+ /* ---- 消息流视觉分层令牌(内容类型→背景板;默认值=鎏金夜口径,
      *      body 层按主题派生/覆写,七套主题零手写跟随。消费者=renderCodeBlock/codeLinesBlock/trGenericBody/trGrep) ---- */
     --surf-code:rgba(0,0,0,.34);                  /* 代码块板(源码/JSON 之外的通用代码面) */
     --surf-term:rgba(4,6,4,.52);                  /* 终端输出板(更沉,近真终端) */
@@ -76,9 +76,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --accent2:#e08a7a;                            /* 第二强调色(glass 紫粉/ink 黑/新主题第二色) */
     --bubble-a:rgba(201,143,69,.14);              /* 用户气泡渐变起 */
     --bubble-b:rgba(201,143,69,.05);              /* 用户气泡渐变止 */
-    /* ---- step-093 语义着色色板(dark=鎏金夜基调,VS Code Dark+ 族色 adapted):
+ /* ---- 语义着色色板(dark=鎏金夜基调,VS Code Dark+ 族色 adapted):
      *     变量在 body.light 与各 body.theme-* 块内同键覆盖;消费者=代码行块 .cl 内 span.tk-*
-     *     (数据源=journal tool.tokens 事件,step-089 SemanticTokenFile)。 ---- */
+ * (数据源=journal tool.tokens 事件, SemanticTokenFile)。 ---- */
     --tok-func:#dcdcaa;            /* 函数/方法名 */
     --tok-type:#4ec9b0;            /* 类型名(class/struct/enum/interface/type 强调色) */
     --tok-var:#9cdcfe;             /* 变量/字段(无家族 dataType 或结构体/自定义类型) */
@@ -87,7 +87,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --tok-bool:#4fc1ff;            /* 布尔家族 */
     --tok-enum:#c3a6ff;            /* 枚举成员 */
     --tok-comment:#6e7f72;         /* 非代码调子(行号前缀 tk-lnno/指针点线) */
-    /* ---- step-129 动效变量层(一套定义,七套主题取值;默认=dark 鎏金夜;ink 全量压低+位移归零) ----
+ /* ---- 动效变量层(一套定义,七套主题取值;默认=dark 鎏金夜;ink 全量压低+位移归零) ----
      * 红线:动画只用 transform/opacity/极小面积 box-shadow;大面积背景动画不做。
      * --anim-ease=出场快起缓收;--anim-ease-soft=柔进柔出(glass/浅色主题);--anim-ease-spring=回弹(done ✓)。 */
     --anim-dur-fast:130ms;         /* 微反馈(图标/工具卡/点按) */
@@ -98,8 +98,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --anim-ease-spring:cubic-bezier(.34,1.45,.5,1);
     --view-shift:6px;              /* 视图/面板入场位移量(ink=0) */
     --anim-decor:1;                /* 装饰性循环动画开关(ink=0 全关;参与 calc 幅度) */
-    /* ---- step-1010 白板配色令牌层(--bcv-*;默认值=鎏金夜现状逐字相等 → 默认主题视觉零漂移) ----
-     * 红线:画布外壳 canvas-shell.js 已占用 --cv-* 前缀(:620 --cv-g / :627 --cv-s / :1533-1535 --cv-tray-*),
+ /* ---- 白板配色令牌层(--bcv-*;默认值=鎏金夜现状逐字相等 → 默认主题视觉零漂移) ----
+ * 红线:画布外壳 canvas-shell.js 已占用 --cv-* 前缀(620 --cv-g / :627 --cv-s / :1533-1535 --cv-tray-*),
      *      白板令牌一律 --bcv-*,不得复写 --cv-*。
      * 消费者=白板 CSS 区(.bf-canvas/.bf-cv-*/.cv-*)与泳道色相内联 style(CV_LANE_HUES/CV_CODE_LANE_HUES/PG_HUES);
      *     六套主题只做本组令牌覆写(见 body.light / body.theme-* 的 bcv 覆写块),白板区不再出现第二份色值。 */
@@ -125,7 +125,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --bcv-lane-no-fg:#0b1118;                     /* 泳道编号(彩色章上的深字) */
     --bcv-lane-seg-fg:var(--faint);               /* 分段序号 */
     --bcv-lane-seg-fg-strong:#9a9083;/* 分段序号强对比档(--faint #6b5c4a 压泳道底仅 2.46:1 → 5.08:1;暗底默认值) */
-    /* step-1011 卡片文字清晰度:强对比档(浅底主题覆写为深一档同色系;默认=既有值 → 默认主题零漂移) */
+ /* 卡片文字清晰度:强对比档(浅底主题覆写为深一档同色系;默认=既有值 → 默认主题零漂移) */
     --bcv-lane-h-fg-strong:var(--bcv-lane-h-fg); /* 泳道标题强对比档(内联 tag 色的强档,见 CV_*_LANE_HUES) */
     --bcv-lane-1-fg-strong:var(--bcv-lane-1-fg); --bcv-lane-2-fg-strong:var(--bcv-lane-2-fg); --bcv-lane-3-fg-strong:var(--bcv-lane-3-fg);
     --bcv-lane-4-fg-strong:var(--bcv-lane-4-fg); --bcv-lane-5-fg-strong:var(--bcv-lane-5-fg); --bcv-lane-6-fg-strong:var(--bcv-lane-6-fg);
@@ -184,7 +184,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --bcv-pgmain-ring:rgba(224,180,106,.75); --bcv-pgmain-glow:rgba(224,180,106,.22);
     --bcv-dot-idle:#7a6a4e; --bcv-dot-ok:#9dc08b; --bcv-dot-warn:#d9b36c; --bcv-dot-bad:#e08a7a;
     --bcv-port-bd:#0b0806; --bcv-file-fg:#b9a887;
-    /* step-1012 卡脚/徽标可读性:code flow 卡脚文件名(.cv-file-name/.cv-file-foot)+ 变更徽标(.bd-tag.cv-chg 四色);
+ /* 卡脚/徽标可读性:code flow 卡脚文件名(.cv-file-name/.cv-file-foot)+ 变更徽标(.bd-tag.cv-chg 四色);
      * 默认值=现状字面量逐字相等 → 默认主题视觉零漂移;浅底主题在本组里换深一档同色系(对比度 ≥4.5)。
      * 消费点:.cv-file-foot / .cv-file-name / .cv-file-sep / .cv-file-more / .bd-tag.add|modify|delete|keep */
     --bcv-file-name-fg:#bcd8f4; --bcv-file-name-bg:rgba(111,168,255,.10); --bcv-file-name-bd:rgba(111,168,255,.3);
@@ -201,7 +201,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --bcv-doc-page-bg:rgba(20,14,8,.96); --bcv-doc-page-bd:rgba(200,143,69,.4);
     --bcv-doc-pg-h:#e8dcc0; --bcv-doc-pg-hb:#d9b36c; --bcv-doc-pg-hb-bd:rgba(217,179,108,.45); --bcv-doc-pg-sum:#a8987a;
     --bcv-doc-shadow:rgba(0,0,0,.32); --bcv-doc-shadow-soft:rgba(0,0,0,.3);
-    /* ---- step-142 消息流排版令牌层(排版与主题解耦:body.light 与七套 body.theme-* 一律不得覆写本组令牌) ----
+ /* ---- 消息流排版令牌层(排版与主题解耦:body.light 与七套 body.theme-* 一律不得覆写本组令牌) ----
      * 目的:消息流 8 类内容(用户消息 / agent 正文 md / 思考卡 / 工具卡 / 代码·终端·JSON 板 /
      * 子代理过程卡 / 系统通知行 / chip 徽标)各自只允许一套字号·行高·字体·缩进·块距,
      * 同一类出现第二种取值即为缺陷。消费者=下方消息流各分区选择器;所有 font-size/line-height/
@@ -212,7 +212,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --fs-code:12.5px;             /* 代码·终端·JSON 板(=设置-外观代码字号「中」;--code-fs 兜底覆盖) */
     --fs-code-sm:11.5px;           /* 行内 code / 路径 / 工具卡参数摘要 / 命中与 diff 行 */
     --fs-chip:11px;                /* chip / 徽标(固定档,不随正文字号缩放) */
-    --lh-body:1.85;                /* 中文正文(衬线,行距放松;2026-11-05 1.8→1.85) */
+    --lh-body:1.85;                /* 中文正文(衬线,行距放松; 1.8→1.85) */
     --lh-code:1.6;                 /* 代码/终端行距 */
     --lh-tight:1.6;                /* 表格 / 列表 / 从属卡(1.5→1.6:密排换成可读) */
     --indent-1:22px;               /* 正文→列表 / 引用(14→22:缩进不足则层级看不出) */
@@ -228,17 +228,17 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --fs-h1:calc(var(--fs-body) * 1.3);   /* md 一级标题档(上限=正文×1.3) */
     --fs-h2:calc(var(--fs-body) * 1.15);  /* md 二级标题档 */
     --fs-h3:var(--fs-body);               /* md 三级标题档(=正文) */
-    /* ---- J5 字距族(2026-11-05):与 fs/lh/indent/gap/font 同层;body.light 与 body.theme-* 一律不得覆写 ---- */
+ /* ---- J5 字距族:与 fs/lh/indent/gap/font 同层;body.light 与 body.theme-* 一律不得覆写 ---- */
     --ls-body:-.003em;   /* 中文正文 + 中英混排:略收,长段不散 */
     --ls-cjk:.01em;      /* 纯中文短标签/标题:微放 */
     --ls-tight:.02em;    /* 11~12px 小字可读性补偿 */
     --ls-code:0;         /* 等宽代码/路径/终端:恒 0,任何字距都会破列对齐 */
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  #tabbar{display:none !important} /* step-048 追记五:用户明确不要会话标签条;即使 renderTabs 被恢复也硬隐藏 */
+  #tabbar{display:none !important} /* 用户明确不要会话标签条;即使 renderTabs 被恢复也硬隐藏 */
   html,body{height:100%}
   body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow:hidden}
-  /* 无边框桌面窗口(2026-10-25):顶部 12px 画布留白=窗口拖拽带;右上角窗口控制做成画布卡片。
+ /* 无边框桌面窗口:顶部 12px 画布留白=窗口拖拽带;右上角窗口控制做成画布卡片。
      浏览器/纯 Web 面板没有 preload,body.desktop-shell 不生效,零影响。 */
   #winDragBar,#winControls{display:none}
   body.desktop-shell #winDragBar{display:block;position:fixed;top:0;left:0;right:0;height:12px;z-index:10000;
@@ -270,31 +270,31 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --border:rgba(150,100,45,.35);--border-soft:rgba(150,100,45,.18);--text:#3d3223;--muted:#7c6c52;
     --faint:#a3937a;--reply:#43371f;--brand:#6b4a1d;--accent-bright:#7a5423;--accent-soft:rgba(150,100,45,.14);
     --green:#5c8a4a;--red:#b8543f;--warn:#a67c2e;
-    /* step-088 二级变量(浅色口径) */
+ /* 二级变量(浅色口径) */
     --hover-bg:rgba(120,90,50,.07);--hover-bg2:rgba(120,90,50,.12);--on-accent:#fff8ec;
     --input-bg:rgba(255,255,255,.72);--input-border:rgba(150,100,45,.28);--code-bg:#f1e9d9;--sunken:rgba(120,90,50,.08);
     --chip-bg:rgba(120,90,50,.12);--overlay:rgba(80,60,40,.35);--solid:#fffdf8;
     --scrollbar:rgba(150,100,45,.35);--focus-ring:rgba(150,100,45,.6);--accent2:#b8543f;
     --bubble-a:rgba(150,100,45,.16);--bubble-b:rgba(150,100,45,.06);
-    /* step-093 语义色板(暖纸浅色口径,VS Code Light+ 族色 adapted) */
+ /* 语义色板(暖纸浅色口径,VS Code Light+ 族色 adapted) */
     --tok-func:#795e26;--tok-type:#267f99;--tok-var:#0b4a8f;--tok-num:#7c4a03;
     --tok-str:#a31515;--tok-bool:#2456d9;--tok-enum:#7a3e9d;--tok-comment:#8b8272;
-    /* step-137 板色(暖纸浅色口径:浅底要更淡的板+更实的边,否则与纸面糊成一片) */
+ /* 板色(暖纸浅色口径:浅底要更淡的板+更实的边,否则与纸面糊成一片) */
     --surf-code:rgba(150,100,45,.07);--surf-term:rgba(120,90,50,.10);--surf-json:rgba(150,100,45,.05);
     --surf-hit:rgba(150,100,45,.08);--surf-card:rgba(150,100,45,.04);--surf-fail:rgba(184,84,63,.07);
-    /* step-129 动效变量(柔和过渡:稍缓,无装饰循环) */
+ /* 动效变量(柔和过渡:稍缓,无装饰循环) */
     --anim-dur-fast:140ms;--anim-dur-base:200ms;--anim-dur-slow:300ms;--anim-decor:0}
   body.light::before{background:radial-gradient(900px 600px at 85% 8%,rgba(150,100,45,.06),transparent 60%),
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(120,90,50,.12) 100%)}
   body.light #sidebar{background:rgba(250,246,238,.9)}
   body.light .cc-box{background:#fffdf8;color:var(--text)}
-  /* step-1010 白板配色:暖纸浅色(light) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:暖纸浅色(light) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.light{
     --bcv-canvas-bg:rgba(255,252,246,.72);--bcv-grid-dot:rgba(150,100,45,.20);--bcv-float-bg:rgba(255,253,248,.96);--bcv-float-bg-dim:rgba(255,253,248,.90);--bcv-float-bg-solid:rgba(255,253,248,.98);--bcv-card-bg:#fffdf8;
     --bcv-card-bd:rgba(90,70,40,.28);--bcv-card-head-bg:rgba(201,162,94,.14);--bcv-card-shadow:rgba(120,90,50,.16);--bcv-title-fg:#2a2118;--bcv-sum-fg:#6b5c4a;--bcv-foot-fg:#6b5c4a;
     --bcv-on-accent:#fff8ec;--bcv-lane-bg:rgba(150,100,45,.05);--bcv-lane-bd:rgba(150,100,45,.28);--bcv-lane-orphan-bd:#a89372;--bcv-lane-orphan-bg:rgba(150,100,45,.05);--bcv-lane-h-fg:#5c4b2e;
     --bcv-lane-h-bg:rgba(255,252,246,.86);--bcv-lane-no-fg:#fff8ec;--bcv-lane-seg-fg:#8a7a5a;--bcv-lane-1:#a8763a;--bcv-lane-2:#3f6fa8;--bcv-lane-3:#3f7a5a;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#3A2E1C;--bcv-lane-seg-fg:#6B5A3A;--bcv-lane-seg-fg-strong:#6B5A3A;
     --bcv-lane-1-fg-strong:#6E4A12;--bcv-lane-2-fg-strong:#1F4C7A;--bcv-lane-3-fg-strong:#1E5C3E;
     --bcv-lane-4-fg-strong:#6E2440;--bcv-lane-5-fg-strong:#4A2F7A;--bcv-lane-6-fg-strong:#0F5460;
@@ -322,14 +322,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --bcv-doc-root-title:#2a2118;--bcv-doc-root-sum:#6b5c4a;--bcv-doc-ch-h:#2a2118;--bcv-doc-ch-hb-fg:#fffdf8;--bcv-doc-ch-hb-bg:#7a5423;--bcv-doc-ch-n:#6B5A3A;--bcv-doc-ch-sum:#6b5c4a;
     --bcv-doc-page-bg:rgba(255,253,248,.96);--bcv-doc-page-bd:rgba(150,100,45,.35);--bcv-doc-pg-h:#2a2118;--bcv-doc-pg-hb:#7a5423;--bcv-doc-pg-hb-bd:rgba(150,100,45,.35);--bcv-doc-pg-sum:#6b5c4a;
     --bcv-doc-shadow:rgba(120,90,50,.16);--bcv-doc-shadow-soft:rgba(120,90,50,.12);
-    /* step-1012 卡脚文件名/变更徽标:浅底换深一档同色系(实测 >=5.0:1) */
+ /* 卡脚文件名/变更徽标:浅底换深一档同色系(经验证 >=5.0:1) */
     --bcv-file-name-fg:#1F4C7A;--bcv-file-name-bg:rgba(63,111,168,.12);--bcv-file-name-bd:rgba(63,111,168,.45);
     --bcv-file-foot-fg:#3A5C7A;--bcv-file-sep-fg:#56677F;--bcv-file-more-fg:#46596E;
     --bcv-chg-add-fg:#1E5C3E;--bcv-chg-add-bg:rgba(63,122,90,.16);--bcv-chg-modify-fg:#7A4E0E;--bcv-chg-modify-bg:rgba(168,118,58,.20);
     --bcv-chg-delete-fg:#8E1F2E;--bcv-chg-delete-bg:rgba(184,84,63,.14);--bcv-chg-keep-fg:#5C4B2E;--bcv-chg-keep-bg:rgba(122,84,35,.12)}
 
 
-  /* ===== step-088 多主题体系(追加式;每套=完整 CSS 变量集+特征装饰层;类切换 body.theme-<key>,localStorage zh:theme) =====
+ /* ===== 多主题体系(追加式;每套=完整 CSS 变量集+特征装饰层;类切换 body.theme-<key>,localStorage zh:theme) =====
    * 义务:按钮四态/输入/下拉/模态/卡片/滚动条/选区/chip 全覆盖——变量层保证「一套变量=全站成立」。 */
 
   /* --- 主题公共件:统一按钮基座(裸 button 兜底,类规则特异性更高不受影响)+ 四态 + 键盘可达 --- */
@@ -395,7 +395,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .uid-btns .uid-ok:hover{box-shadow:0 0 14px var(--bronze-glow);color:var(--on-accent)}
   .uid-btns .uid-cancel{background:transparent;color:var(--muted)}
   .uid-btns .uid-cancel:hover{border-color:var(--red);color:var(--red)}
-  /* step-165 运行中项目移除确认(ref WorkspaceSidebarItem.tsx:349-368 confirmVariant:"destructive"):危险色确认钮 */
+ /* 运行中项目移除确认(ref WorkspaceSidebarItem.tsx:349-368 confirmVariant:"destructive"):危险色确认钮 */
   .uid-btns .uid-ok.danger{border-color:var(--red);background:linear-gradient(135deg,var(--red),var(--red));color:#fff}
   .uid-btns .uid-ok.danger:hover{box-shadow:0 0 14px rgba(224,138,122,.45);color:#fff}
   .uid-box.danger{--uid-tone:var(--red)}
@@ -416,13 +416,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --chip-bg:rgba(1,51,40,.08);--overlay:rgba(16,12,13,.35);--solid:#F6F1E9;
     --scrollbar:rgba(1,51,40,.28);--focus-ring:rgba(204,139,101,.68);
     --bubble-a:rgba(204,139,101,.18);--bubble-b:rgba(204,139,101,.06);
-    /* step-093 语义色板(sand:松绿/陶土暖色族,冷底暖字) */
+ /* 语义色板(sand:松绿/陶土暖色族,冷底暖字) */
     --tok-func:#8A4B2B;--tok-type:#013328;--tok-var:#1E5A4A;--tok-num:#9C5A2A;
     --tok-str:#8E3B3B;--tok-bool:#2F6B57;--tok-enum:#6D4C41;--tok-comment:#87948B;
-    /* step-137 板色(sand:暖砂薄板,靠明度差分层) */
+ /* 板色(sand:暖砂薄板,靠明度差分层) */
     --surf-code:rgba(1,51,40,.06);--surf-term:rgba(1,51,40,.10);--surf-json:rgba(1,51,40,.04);
     --surf-hit:rgba(204,139,101,.10);--surf-card:rgba(1,51,40,.03);--surf-fail:rgba(168,74,60,.07);
-    /* step-129 动效变量(sand:浅色柔和,无装饰循环) */
+ /* 动效变量(sand:浅色柔和,无装饰循环) */
     --anim-dur-fast:140ms;--anim-dur-base:200ms;--anim-dur-slow:300ms;--view-shift:4px;--anim-decor:0}
   body.theme-sand::before{background:
     radial-gradient(900px 600px at 85% 8%,rgba(204,139,101,.10),transparent 60%),
@@ -430,13 +430,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(16,12,13,.10) 100%)}
   body.theme-sand #sidebar{background:rgba(237,231,222,.9)}
   body.theme-sand .cc-box{background:#F8F3EC;color:var(--text)}
-  /* step-1010 白板配色:沙丘(sand) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:沙丘(sand) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-sand{
     --bcv-canvas-bg:rgba(237,231,222,.72);--bcv-grid-dot:rgba(1,51,40,.18);--bcv-float-bg:rgba(246,241,233,.96);--bcv-float-bg-dim:rgba(246,241,233,.90);--bcv-float-bg-solid:rgba(246,241,233,.98);--bcv-card-bg:#F6F1E9;
     --bcv-card-bd:rgba(1,51,40,.28);--bcv-card-head-bg:rgba(204,139,101,.16);--bcv-card-shadow:rgba(16,12,13,.14);--bcv-title-fg:#013328;--bcv-sum-fg:#4E655A;--bcv-foot-fg:#4E655A;
     --bcv-on-accent:#FFF8F1;--bcv-lane-bg:rgba(1,51,40,.05);--bcv-lane-bd:rgba(1,51,40,.22);--bcv-lane-orphan-bd:#7E8C80;--bcv-lane-orphan-bg:rgba(1,51,40,.05);--bcv-lane-h-fg:#013328;
     --bcv-lane-h-bg:rgba(246,241,233,.86);--bcv-lane-no-fg:#FFF8F1;--bcv-lane-seg-fg:#87948B;--bcv-lane-1:#CC8B65;--bcv-lane-2:#4A7A8C;--bcv-lane-3:#3F6B4F;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#3A2E1C;--bcv-lane-seg-fg:#4F5A54;--bcv-lane-seg-fg-strong:#4F5A54;
     --bcv-lane-1-fg-strong:#6E4A12;--bcv-lane-2-fg-strong:#1F4C7A;--bcv-lane-3-fg-strong:#1E5C3E;
     --bcv-lane-4-fg-strong:#6E2440;--bcv-lane-5-fg-strong:#4A2F7A;--bcv-lane-6-fg-strong:#0F5460;
@@ -484,13 +484,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --chip-bg:rgba(255,255,255,.12);--overlay:rgba(30,26,48,.5);--solid:#2c2742;
     --scrollbar:rgba(255,255,255,.32);--focus-ring:rgba(196,181,253,.85);
     --bubble-a:rgba(196,181,253,.2);--bubble-b:rgba(240,171,252,.08);
-    /* step-093 语义色板(glass 流光玻璃:柔和粉彩族色) */
+ /* 语义色板(glass 流光玻璃:柔和粉彩族色) */
     --tok-func:#ffd98e;--tok-type:#8ee6d2;--tok-var:#b9c8ff;--tok-num:#ffb38a;
     --tok-str:#f2a6c4;--tok-bool:#c0b0ff;--tok-enum:#9fd8ff;--tok-comment:#857da8;
-    /* step-137 板色(glass:半透白叠层,玻璃质感靠 blur 不靠厚底) */
+ /* 板色(glass:半透白叠层,玻璃质感靠 blur 不靠厚底) */
     --surf-code:rgba(20,16,34,.42);--surf-term:rgba(12,10,24,.6);--surf-json:rgba(255,255,255,.07);
     --surf-hit:rgba(196,181,253,.1);--surf-card:rgba(255,255,255,.06);--surf-fail:rgba(253,164,175,.12);
-    /* step-129 动效变量(glass:柔光浮动=柔曲线+时长+20%,位移稍大) */
+ /* 动效变量(glass:柔光浮动=柔曲线+时长+20%,位移稍大) */
     --anim-dur-fast:160ms;--anim-dur-base:230ms;--anim-dur-slow:340ms;
     --anim-ease:cubic-bezier(.3,.6,.3,1);--view-shift:8px;--anim-decor:0}
   body.theme-glass::before{background:
@@ -500,13 +500,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.theme-glass #sidebar,body.theme-glass .cc-box,body.theme-glass .perm-box,body.theme-glass .db-card,
   body.theme-glass .fv-box,body.theme-glass .uid-box{backdrop-filter:blur(26px) saturate(1.35)}
   body.theme-glass button{background:rgba(255,255,255,.06)}
-  /* step-1010 白板配色:流光玻璃(glass,深色只微调紫调) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:流光玻璃(glass,深色只微调紫调) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-glass{
     --bcv-canvas-bg:rgba(26,22,42,.52);--bcv-grid-dot:rgba(196,181,253,.13);--bcv-float-bg:rgba(40,35,60,.92);--bcv-float-bg-dim:rgba(40,35,60,.60);--bcv-float-bg-solid:rgba(40,35,60,.97);--bcv-card-bg:rgba(44,39,66,.86);
     --bcv-card-bd:rgba(255,255,255,.22);--bcv-card-head-bg:rgba(196,181,253,.14);--bcv-card-shadow:rgba(10,8,22,.50);--bcv-title-fg:#f4f1fb;--bcv-sum-fg:#b6b0d2;--bcv-foot-fg:#b6b0d2;
     --bcv-on-accent:#2a2440;--bcv-lane-bg:rgba(255,255,255,.06);--bcv-lane-bd:rgba(255,255,255,.22);--bcv-lane-orphan-bd:rgba(255,255,255,.20);--bcv-lane-orphan-bg:rgba(255,255,255,.03);--bcv-lane-h-fg:#e4dcff;
     --bcv-lane-h-bg:rgba(20,16,34,.50);--bcv-lane-no-fg:#2a2440;--bcv-lane-seg-fg:#8882ab;--bcv-lane-1:#d8b98a;--bcv-lane-2:#8fb8ff;--bcv-lane-3:#86efac;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#e4dcff;--bcv-lane-seg-fg:#B3ACD8;--bcv-lane-seg-fg-strong:#B3ACD8;
     --bcv-lane-1-fg-strong:#f0d39a;--bcv-lane-2-fg-strong:#b8d4ff;--bcv-lane-3-fg-strong:#b8e6cd;
     --bcv-lane-4-fg-strong:#f0bfd0;--bcv-lane-5-fg-strong:#d8c2f0;--bcv-lane-6-fg-strong:#96d8e4;
@@ -556,13 +556,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --chip-bg:rgba(47,48,32,.08);--overlay:rgba(47,48,32,.35);--solid:#E3E1E9;
     --scrollbar:rgba(47,48,32,.28);--focus-ring:rgba(217,104,70,.68);
     --bubble-a:rgba(217,104,70,.16);--bubble-b:rgba(217,104,70,.06);
-    /* step-093 语义色板(olive:橄榄/赤陶族色,冷紫底暖字) */
+ /* 语义色板(olive:橄榄/赤陶族色,冷紫底暖字) */
     --tok-func:#7A4A20;--tok-type:#596235;--tok-var:#3A4F3A;--tok-num:#B04E2A;
     --tok-str:#8A3A3A;--tok-bool:#4F5C2B;--tok-enum:#6B4A2F;--tok-comment:#8C8F7E;
-    /* step-137 板色(olive:灰紫薄板,橄榄边) */
+ /* 板色(olive:灰紫薄板,橄榄边) */
     --surf-code:rgba(47,48,32,.06);--surf-term:rgba(47,48,32,.10);--surf-json:rgba(47,48,32,.04);
     --surf-hit:rgba(217,104,70,.10);--surf-card:rgba(47,48,32,.03);--surf-fail:rgba(168,64,46,.07);
-    /* step-129 动效变量(olive:浅色柔和,无装饰循环) */
+ /* 动效变量(olive:浅色柔和,无装饰循环) */
     --anim-dur-fast:140ms;--anim-dur-base:200ms;--anim-dur-slow:300ms;--view-shift:4px;--anim-decor:0}
   body.theme-olive::before{background:
     radial-gradient(900px 600px at 85% 8%,rgba(217,104,70,.10),transparent 60%),
@@ -570,13 +570,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(47,48,32,.10) 100%)}
   body.theme-olive #sidebar{background:rgba(216,214,223,.9)}
   body.theme-olive .cc-box{background:#F0EFF4;color:var(--text)}
-  /* step-1010 白板配色:橄榄石(olive) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:橄榄石(olive) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-olive{
     --bcv-canvas-bg:rgba(216,214,223,.72);--bcv-grid-dot:rgba(47,48,32,.16);--bcv-float-bg:rgba(240,239,246,.96);--bcv-float-bg-dim:rgba(240,239,246,.90);--bcv-float-bg-solid:rgba(240,239,246,.98);--bcv-card-bg:#E3E1E9;
     --bcv-card-bd:rgba(47,48,32,.26);--bcv-card-head-bg:rgba(217,104,70,.14);--bcv-card-shadow:rgba(30,30,25,.14);--bcv-title-fg:#2F3020;--bcv-sum-fg:#5C604A;--bcv-foot-fg:#5C604A;
     --bcv-on-accent:#FFF8F4;--bcv-lane-bg:rgba(47,48,32,.05);--bcv-lane-bd:rgba(47,48,32,.22);--bcv-lane-orphan-bd:#8C8F7E;--bcv-lane-orphan-bg:rgba(47,48,32,.05);--bcv-lane-h-fg:#2F3020;
     --bcv-lane-h-bg:rgba(240,239,246,.86);--bcv-lane-no-fg:#FFF8F4;--bcv-lane-seg-fg:#8C8F7E;--bcv-lane-1:#B85A3C;--bcv-lane-2:#4A6FA8;--bcv-lane-3:#596235;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#3A2E1C;--bcv-lane-seg-fg:#464A34;--bcv-lane-seg-fg-strong:#464A34;
     --bcv-lane-1-fg-strong:#5E3E0C;--bcv-lane-2-fg-strong:#1F4C7A;--bcv-lane-3-fg-strong:#174E33;
     --bcv-lane-4-fg-strong:#6E2440;--bcv-lane-5-fg-strong:#4A2F7A;--bcv-lane-6-fg-strong:#0F5460;
@@ -624,13 +624,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --chip-bg:rgba(43,38,45,.08);--overlay:rgba(43,38,45,.35);--solid:#FBF7F3;
     --scrollbar:rgba(43,38,45,.28);--focus-ring:rgba(159,73,110,.68);
     --bubble-a:rgba(159,73,110,.16);--bubble-b:rgba(159,73,110,.06);
-    /* step-093 语义色板(plum:梅紫/板岩蓝族色,奶油底) */
+ /* 语义色板(plum:梅紫/板岩蓝族色,奶油底) */
     --tok-func:#7A3F5C;--tok-type:#4C5C82;--tok-var:#3E4A66;--tok-num:#9A5A2E;
     --tok-str:#8E3B5A;--tok-bool:#2F5D6B;--tok-enum:#6B4A7A;--tok-comment:#9A939C;
-    /* step-137 板色(plum:奶油薄板+梅紫边) */
+ /* 板色(plum:奶油薄板+梅紫边) */
     --surf-code:rgba(43,38,45,.06);--surf-term:rgba(43,38,45,.10);--surf-json:rgba(43,38,45,.04);
     --surf-hit:rgba(159,73,110,.10);--surf-card:rgba(43,38,45,.03);--surf-fail:rgba(168,74,74,.07);
-    /* step-129 动效变量(plum:浅色柔和,无装饰循环) */
+ /* 动效变量(plum:浅色柔和,无装饰循环) */
     --anim-dur-fast:140ms;--anim-dur-base:200ms;--anim-dur-slow:300ms;--view-shift:4px;--anim-decor:0}
   body.theme-plum::before{background:
     radial-gradient(900px 600px at 85% 8%,rgba(159,73,110,.09),transparent 60%),
@@ -638,13 +638,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(43,38,45,.10) 100%)}
   body.theme-plum #sidebar{background:rgba(248,243,238,.9)}
   body.theme-plum .cc-box{background:#FCF8F4;color:var(--text)}
-  /* step-1010 白板配色:梅紫(plum) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:梅紫(plum) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-plum{
     --bcv-canvas-bg:rgba(248,243,238,.72);--bcv-grid-dot:rgba(159,73,110,.18);--bcv-float-bg:rgba(252,248,244,.96);--bcv-float-bg-dim:rgba(252,248,244,.90);--bcv-float-bg-solid:rgba(252,248,244,.98);--bcv-card-bg:#FCF8F4;
     --bcv-card-bd:rgba(43,38,45,.28);--bcv-card-head-bg:rgba(159,73,110,.13);--bcv-card-shadow:rgba(43,38,45,.14);--bcv-title-fg:#2B262D;--bcv-sum-fg:#6B6470;--bcv-foot-fg:#6B6470;
     --bcv-on-accent:#FFF8F1;--bcv-lane-bg:rgba(43,38,45,.05);--bcv-lane-bd:rgba(43,38,45,.22);--bcv-lane-orphan-bd:#9A939C;--bcv-lane-orphan-bg:rgba(43,38,45,.05);--bcv-lane-h-fg:#2B262D;
     --bcv-lane-h-bg:rgba(252,248,244,.86);--bcv-lane-no-fg:#FFF8F1;--bcv-lane-seg-fg:#9A939C;--bcv-lane-1:#A8632F;--bcv-lane-2:#4A5E86;--bcv-lane-3:#4F6B5A;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#3A2E1C;--bcv-lane-seg-fg:#5A5460;--bcv-lane-seg-fg-strong:#5A5460;
     --bcv-lane-1-fg-strong:#6E4A12;--bcv-lane-2-fg-strong:#1F4C7A;--bcv-lane-3-fg-strong:#1E5C3E;
     --bcv-lane-4-fg-strong:#6E2440;--bcv-lane-5-fg-strong:#4A2F7A;--bcv-lane-6-fg-strong:#0F5460;
@@ -692,26 +692,26 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --chip-bg:rgba(17,17,17,.07);--overlay:rgba(20,20,20,.42);--solid:#ffffff;
     --scrollbar:rgba(17,17,17,.3);--focus-ring:rgba(212,61,42,.7);
     --bubble-a:rgba(17,17,17,.06);--bubble-b:rgba(17,17,17,.02);
-    /* step-093 语义色板(ink 薄墨:克制单色——灰阶亮度分层,唯一朱红给类型强调) */
+ /* 语义色板(ink 薄墨:克制单色——灰阶亮度分层,唯一朱红给类型强调) */
     --tok-func:#000000;--tok-type:#d43d2a;--tok-var:#333333;--tok-num:#666666;
     --tok-str:#777777;--tok-bool:#444444;--tok-enum:#555555;--tok-comment:#b5b3ad;
-    /* step-137 板色(ink:纸面灰阶板,零色彩——靠明度差与边框分层) */
+ /* 板色(ink:纸面灰阶板,零色彩——靠明度差与边框分层) */
     --surf-code:rgba(17,17,17,.055);--surf-term:rgba(17,17,17,.08);--surf-json:rgba(17,17,17,.035);
     --surf-hit:rgba(17,17,17,.05);--surf-card:rgba(17,17,17,.03);--surf-fail:rgba(198,40,40,.06);
-    /* step-129 动效变量(ink:克制几乎无动画——时长压至近即时、位移归零、装饰全关、无弹性) */
+ /* 动效变量(ink:克制几乎无动画——时长压至近即时、位移归零、装饰全关、无弹性) */
     --anim-dur-fast:60ms;--anim-dur-base:80ms;--anim-dur-slow:120ms;
     --anim-ease:linear;--anim-ease-soft:linear;--anim-ease-spring:linear;
     --view-shift:0px;--anim-decor:0}
   body.theme-ink::before{background:none}
   body.theme-ink #sidebar{background:rgba(255,255,255,.92);border-right:1px solid var(--border-soft)}
   body.theme-ink .cc-box{background:#ffffff;color:var(--text)}
-  /* step-1010 白板配色:薄墨(ink) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
+ /* 白板配色:薄墨(ink) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-ink{
     --bcv-canvas-bg:rgba(252,252,251,.86);--bcv-grid-dot:rgba(17,17,17,.14);--bcv-float-bg:rgba(255,255,255,.97);--bcv-float-bg-dim:rgba(255,255,255,.92);--bcv-float-bg-solid:rgba(255,255,255,1);--bcv-card-bg:#ffffff;
     --bcv-card-bd:rgba(17,17,17,.38);--bcv-card-head-bg:rgba(17,17,17,.05);--bcv-card-shadow:rgba(20,20,20,.10);--bcv-title-fg:#141414;--bcv-sum-fg:#5c5c58;--bcv-foot-fg:#5c5c58;
     --bcv-on-accent:#ffffff;--bcv-lane-bg:rgba(17,17,17,.03);--bcv-lane-bd:rgba(17,17,17,.20);--bcv-lane-orphan-bd:#98978f;--bcv-lane-orphan-bg:rgba(17,17,17,.04);--bcv-lane-h-fg:#141414;
     --bcv-lane-h-bg:rgba(255,255,255,.92);--bcv-lane-no-fg:#ffffff;--bcv-lane-seg-fg:#98978f;--bcv-lane-1:#d43d2a;--bcv-lane-2:#1f5fa0;--bcv-lane-3:#2f7d32;
-    /* step-1011 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
+ /* 文字清晰度:强对比档(同色系加深/提亮,消除浅底上的淡彩小字) */
     --bcv-lane-h-fg-strong:#3A2E1C;--bcv-lane-seg-fg:#5F5E58;--bcv-lane-seg-fg-strong:#5F5E58;
     --bcv-lane-1-fg-strong:#6E4A12;--bcv-lane-2-fg-strong:#1F4C7A;--bcv-lane-3-fg-strong:#1E5C3E;
     --bcv-lane-4-fg-strong:#6E2440;--bcv-lane-5-fg-strong:#4A2F7A;--bcv-lane-6-fg-strong:#0F5460;
@@ -758,13 +758,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 
   /* 白板可读性修复:Super Agent 指挥台(#sc-root)只在 board 视图退场并释放右侧预留
      (pp-wiki-tab 已有同款先例;实测 1440 视口下白板画布 330px→满宽,29% 缩放不可读根治)。
-     收窄到 board 视图的原因:全局隐藏会让指挥台盖住项目/档案视图的右侧可点项(board.spec arc 点击实锤) */
+ 收窄到 board 视图的原因:全局隐藏会让指挥台盖住项目/档案视图的右侧可点项(board.spec arc 点击实测确认) */
   body[data-view="board"] #sc-root{display:none}
   body[data-view="board"] .page{padding-right:28px}
   button{font-family:var(--sans);cursor:pointer}
   *{scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent}
-  *::-webkit-scrollbar{width:5px}
-  *::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px}
+ *:-webkit-scrollbar{width:5px}
+ *:-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px}
 
   /* ===== 左侧栏(复刻 ZCode WorkspaceSidebar) ===== */
   #sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sbw);z-index:6;display:flex;flex-direction:column;
@@ -793,7 +793,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sb-act svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
   .sb-kbd{margin-left:auto;font-size:9px;color:var(--faint);border:1px solid var(--border-soft);border-radius:4px;padding:1px 5px}
   .sb-sep{height:1px;background:var(--border-soft);margin:10px 16px;flex-shrink:0}
-  /* ---- 画布形态:侧栏托盘承接导航(2026-10-21 双导航融合,cvRail 窄定位栏退役)----
+ /* ---- 画布形态:侧栏托盘承接导航(双导航融合,cvRail 窄定位栏退役)----
    * · .cv-card-off:对应画布卡片被隐藏 → 托盘按钮置灰(点击仍可点,switchView 分流会唤回+聚焦);
    * · .cv-bad/.cv-warn:卡片状态点(待审批/Git 变更/运行中)同款落到按钮右上角;
    * · .cv-conn-*:连接点(header 画布形态隐藏)落到托盘品牌点;
@@ -811,12 +811,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     align-items:center;justify-content:center;border:1px solid var(--border-soft);border-radius:6px;background:transparent;
     color:var(--faint);font-size:11px;line-height:1;cursor:pointer;padding:0}
   body.cv-shell .cv-tray-min:hover{color:var(--text);border-color:var(--bronze)}
-  /* ---- 子agent会话流卡(2026-10-21:分身消息独立看板;画布形态专属,经典布局整体隐藏)----
+ /* ---- 子agent会话流卡(分身消息独立看板;画布形态专属,经典布局整体隐藏)----
    * 正文块直接复用 Chat 卡渲染器(replyBlockHtml → .task-reply/.reply-wrap:同款转轮折叠/折行/展开全文)。 */
   body:not(.cv-shell) #view-subchat{display:none}
   body:not(.cv-shell) #act-subchat{display:none}
   .sm-h{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--faint);margin:4px 0 6px}
-  /* step-141 选中式消息流:左=子代理选择器(运行中/已结束两区),右=选中者消息流(形态对齐主 chat)。 */
+ /* 选中式消息流:左=子代理选择器(运行中/已结束两区),右=选中者消息流(形态对齐主 chat)。 */
   #subchat-body{display:flex;flex:1;min-height:0;overflow:hidden}
   #subchat-list{width:clamp(180px,24%,260px);flex-shrink:0;overflow-y:auto;overflow-x:hidden;
     border-right:1px solid var(--border-soft);padding:4px 8px;display:flex;flex-direction:column;gap:3px}
@@ -889,7 +889,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sb-proj svg{width:14px;height:14px;stroke:var(--bronze);fill:none;stroke-width:1.8;stroke-linecap:round}
   .sb-proj .cnt{margin-left:auto;font-size:10px;color:var(--faint)}
   #taskList{flex:1;overflow-y:auto;padding:2px 8px 8px;min-height:0}
-  /* ---- 侧栏折叠细轨 + workspace 行为深拷贝(2026-10-14,ZCode WorkspaceSidebar 逻辑移植) ---- */
+ /* ---- 侧栏折叠细轨 + workspace 行为深拷贝(ZCode WorkspaceSidebar 逻辑移植) ---- */
   #sidebar{transition:transform .2s ease-out,opacity .2s ease-out}
   body.sb-resizing #sidebar{transition:none}
   #sbRail{position:fixed;left:0;top:0;bottom:0;width:44px;z-index:30;display:none;flex-direction:column;align-items:center;gap:6px;padding-top:12px;border-right:1px solid var(--border-soft);background:var(--window-bg,#141009)}
@@ -915,7 +915,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bh-new:hover,.bh-more:hover{color:var(--bronze);border-color:var(--bronze)}
   .bh-files,.bh-ide{display:inline-flex;align-items:center;font-size:10px;line-height:1;color:var(--faint);border:1px solid var(--border-soft);border-radius:6px;padding:2px 5px;cursor:pointer}
   .bh-files:hover,.bh-ide:hover{color:var(--bronze);border-color:var(--bronze)}
-  /* ── step-141:#view-ide 编辑器视图(vscode 风格三栏:树/标签条/编辑区)。
+ /* ── #view-ide 编辑器视图(vscode 风格三栏:树/标签条/编辑区)。
      编辑区容器 .ide-edit 显式豁免严格交互禁选中(input-policy TEXT_SEL 引用该 id);
      树/标签条 chrome 面随面板既有 user-select 约束。全部新类走 .ide-* 前缀(与文件树 .ft-row 区隔)。 ── */
   .ide-shell{flex:1;display:flex;min-height:0;overflow:hidden}
@@ -961,15 +961,15 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ide-body{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
   .ide-edit{flex:1;width:100%;min-height:0;margin:0;padding:8px 10px;border:none;outline:none;resize:none;background:transparent;color:var(--text);font-family:var(--mono);font-size:var(--fs-code);line-height:var(--lh-code);tab-size:4}
   .ide-edit:focus{outline:none}
-  /* step-141 C:Monaco 挂载容器(与 .ide-edit 同布局位;高度由 monaco.editor.create 自管) */
+ /* C:Monaco 挂载容器(与 .ide-edit 同布局位;高度由 monaco.editor.create 自管) */
   .ide-monaco{flex:1;width:100%;min-height:0;position:relative;overflow:hidden}
   .ide-monaco .monaco-editor{font-family:var(--mono)!important}
-  /* step-166:Markdown 预览层(与 #ideMonacoHost 同布局位;预览时 Monaco 只 display:none,不卸载模型) */
+ /* Markdown 预览层(与 #ideMonacoHost 同布局位;预览时 Monaco 只 display:none,不卸载模型) */
   .ide-md{flex:1;width:100%;min-height:0;overflow:auto;padding:20px 26px;user-select:text;color:var(--text);
     line-height:var(--lh-body);letter-spacing:var(--ls-body);font-size:var(--fs-body-sm)}
   .ide-preview{flex:1;width:100%;min-height:0;background:#fff}
   .ide-preview iframe{width:100%;height:100%;border:0;display:block}
-  /* 2026-11-05 阅读密度:.ide-md 标题层级靠「上间距 + 分隔线 + 字号差」三件套区分,
+ /* 阅读密度:.ide-md 标题层级靠「上间距 + 分隔线 + 字号差」三件套区分,
      段落/列表/表格统一放大块距;表格改由 .md-table-wrap 横向滚动,不再压列宽。 */
   .ide-md h1,.ide-md h2,.ide-md h3,.ide-md h4,.ide-md h5,.ide-md h6{font-family:var(--sans);color:var(--brand);margin:var(--gap-head) 0 calc(var(--gap-block) / 2);line-height:var(--lh-tight)}
   .ide-md h1,.ide-md h2{font-size:1.5em;font-weight:600;padding-bottom:6px;border-bottom:1px solid var(--border-soft)}
@@ -1020,7 +1020,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ide-img-btn:hover{color:#f0b25c;border-color:#f0b25c;background:rgba(255,255,255,.08)}
   .ide-img-pct{min-width:42px;text-align:center;font-size:10.5px;font-family:var(--mono);color:rgba(255,255,255,.72);cursor:pointer;user-select:none}
   .ide-img-pct:hover{color:#f0b25c}
-  /* IDE 媒体层(第六层,2026-10-28):<video>/<audio> 直连 /ide/asset;音频附频谱 canvas(点画布定位时间轴) */
+ /* IDE 媒体层(第六层:<video>/<audio> 直连 /ide/asset;音频附频谱 canvas(点画布定位时间轴) */
   .ide-media{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;background:var(--sunken);overflow:auto;overscroll-behavior:contain}
   .ide-media video{max-width:100%;max-height:100%;background:#000;border-radius:8px}
   .ide-media-audio{width:100%;max-width:760px;display:flex;flex-direction:column;gap:8px}
@@ -1030,7 +1030,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ide-media-spec{width:100%;height:140px;display:block;background:var(--sunken);border:1px solid var(--border-soft);border-radius:8px;cursor:crosshair}
   .ide-media-spec+.ide-media-hint{margin-top:-4px}
   .ide-office{flex:1;width:100%;min-height:0;overflow:auto;padding:12px;background:var(--sunken)}
-  /* 2026-10-29 板「OOXML 文本回写」P2:Office 预览上方工具条(编辑文本/保存/取消编辑) */
+ /* 板「OOXML 文本回写」P2:Office 预览上方工具条(编辑文本/保存/取消编辑) */
   .ide-office-wrap{flex:1;width:100%;min-height:0;display:flex;flex-direction:column}
   .ide-office-bar{flex-shrink:0;display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--border-soft);font:10.5px/1.6 var(--mono);color:var(--faint);user-select:none}
   .ide-office-bar .io-b{background:transparent;color:var(--faint);border:1px solid var(--border-soft);border-radius:6px;padding:1px 8px;font:inherit;cursor:pointer}
@@ -1040,7 +1040,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ide-office-bar .io-hint{margin-left:auto;opacity:.8}
   .ide-office-hint{color:var(--faint);font-size:12px;line-height:1.8;font-family:var(--mono);user-select:text}
   .ide-status{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:3px 10px;font-size:10.5px;color:var(--faint);border-top:1px solid var(--border-soft);font-family:var(--mono);user-select:none}
-  /* ---- step-142 IDE 深化(VSCode P0 编辑体验):面包屑/侧栏操作条/搜索面板/命令面板/状态条分段 ---- */
+ /* ---- IDE 深化(VSCode P0 编辑体验):面包屑/侧栏操作条/搜索面板/命令面板/状态条分段 ---- */
   .ide-side-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .ide-side-acts{display:flex;align-items:center;gap:3px;flex-shrink:0}
   .ide-side-btn{font-size:10px;line-height:1;color:var(--faint);border:1px solid var(--border-soft);border-radius:6px;padding:2px 5px;cursor:pointer;background:transparent;font-family:var(--mono);white-space:nowrap}
@@ -1094,7 +1094,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   /* purpose 分区头(项目/任务) */
   .sb-sec{padding:10px 8px 4px;font-size:10.5px;color:var(--muted);letter-spacing:2px}
   /* ---- 侧栏文件树滑入层(ZCode WorkspaceFileTree:桶头「文件树」打开,树层自右滑入盖住主区,底部用户行常驻) ---- */
-  #sbFt{position:absolute;inset:0;z-index:12;display:flex;flex-direction:column;background:var(--window-bg,#141009);transform:translateX(-100%);visibility:hidden;transition:transform .2s ease-out,visibility .2s} /* 从左缘划出(用户口径) */
+  #sbFt{position:absolute;inset:0;z-index:12;display:flex;flex-direction:column;background:var(--window-bg,#141009);transform:translateX(-100%);visibility:hidden;transition:transform .2s ease-out,visibility .2s} /* 从左缘划出 */
   #sidebar.ft-open #sbFt{transform:none;visibility:visible}
   .sbft-head{display:flex;align-items:center;gap:8px;padding:14px 12px 8px;flex-shrink:0}
   .sbft-head .t{font-family:var(--serif);font-size:12px;letter-spacing:2px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1139,7 +1139,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .t-bucket{font-size:10px;color:var(--faint);letter-spacing:1px;padding:8px 8px 3px}
   .t-more{padding:4px 12px 6px 20px;font-size:10.5px;color:var(--faint);cursor:pointer;user-select:none}
   .t-more:hover{color:var(--muted)}
-  /* 项目区(step-035,ZCode workspace 移植) */
+ /* 项目区(ZCode workspace 移植) */
   .proj-row{display:flex;align-items:center;gap:8px;padding:4px 16px;font-size:11.5px;color:var(--muted);cursor:pointer;border-left:2px solid transparent}
   .proj-row:hover{background:var(--hover-bg)}
   .proj-row.on{color:var(--text);border-left-color:var(--warn)}
@@ -1167,7 +1167,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .u-gear.on{background:rgba(201,143,69,.12)}
   .u-gear svg{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;display:block}
   .u-gear.on svg{stroke:var(--accent-bright)}
-  /* 版本更新提示(2026-11-09):侧栏底部常驻,发现新版本才出现;强制更新(minVersion)时不可忽略 */
+ /* 版本更新提示:侧栏底部常驻,发现新版本才出现;强制更新(minVersion)时不可忽略 */
   .sb-update{margin:0 10px 8px;padding:9px 10px;border:1px solid var(--border-soft);border-radius:9px;
     background:linear-gradient(180deg,rgba(201,143,69,.13),rgba(201,143,69,.05));flex-shrink:0;position:relative;z-index:13}
   .sb-update .up-head{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text)}
@@ -1212,7 +1212,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .middle{flex:1;display:flex;min-height:0;align-items:stretch}
   .view{flex:1;display:none;flex-direction:column;min-width:0;overflow-y:auto}
   .view.on{display:flex}
-  /* ── 双中心布局(2026-10-25):会话流+IDE 并列常驻;DOM 零移动,仅 body.dual-center 态生效 ── */
+ /* ── 双中心布局:会话流+IDE 并列常驻;DOM 零移动,仅 body.dual-center 态生效 ── */
   #dualSplit{display:none;flex:0 0 6px;width:6px;cursor:col-resize;border-radius:3px;background:transparent;transition:background .15s}
   #dualSplit:hover,#dualSplit.drag{background:var(--accent-soft)}
   /* 只在「会话流」视图显示分隔条:切到 board 等全屏视图时 dual 类仍挂着,不能让 6px 条留在画面上 */
@@ -1233,17 +1233,17 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   }
   /* safe center:内容超高时顶部可达(flex 居中溢出截断的老 bug——轮次导航器点击第 1 轮暴露) */
   .chat-col{justify-content:flex-start;padding:14px 8px 14px 34px;gap:22px}
-  /* step-048:原 safe center 内容不足一屏时整列垂直居中(空态/短会话浮在中部+标签条错位)——改顶对齐 */
-  /* 完整版轮次导航器(step-045,ZCode ConversationTurnNavigator 裁剪) */
+ /* 原 safe center 内容不足一屏时整列垂直居中(空态/短会话浮在中部+标签条错位)——改顶对齐 */
+ /* 完整版轮次导航器(ZCode ConversationTurnNavigator 裁剪) */
   #view-tasks{position:relative;overflow-anchor:none}
-  /* 轮次时间轴(2026-10-14 用户口径:右缘浮层融入 footer 状态条——minimap→scrubber):
+ /* 轮次时间轴(右缘浮层融入 footer 状态条——minimap→scrubber):
      横向刻度=用户轮次,高度随问句长度(8-24px,--h 变量承载,hover/cur 可正常覆盖),金色=当前轮,红=该轮含失败任务 */
   #turnNav{flex:1;min-width:0;display:none;flex-direction:row;align-items:flex-end;gap:3px;overflow-x:auto;overflow-y:hidden;padding:2px 0 1px}
-  /* step-048 语义保留:nav 自身可滚,高亮器只动 nav.scrollLeft,绝不反向滚动会话视口 */
+ /* 语义保留:nav 自身可滚,高亮器只动 nav.scrollLeft,绝不反向滚动会话视口 */
   #turnNav.on{display:flex}
   .tn-item{flex:0 0 auto;width:4px;height:var(--h,9px);border-radius:2px;background:var(--accent-soft);cursor:pointer;transition:.15s;overflow:hidden}
   .tn-item:hover{background:var(--bronze-dim);height:15px}
-  /* 进度三态(2026-10-14 用户口径:按当前会话任务进度实时点亮,完成/就绪=满条):
+ /* 进度三态(按当前会话任务进度实时点亮,完成/就绪=满条):
      ok=该轮任务已完成(亮),run=会话有活动任务且该轮未决(呼吸),fail=该轮含失败(红);cur 金色高亮恒最上层 */
   .tn-item.ok{background:var(--bronze-dim)}
   .tn-item.ok:hover{background:var(--bronze)}
@@ -1252,12 +1252,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tn-item.fail{background:var(--red);opacity:.8}
   .tn-item.cur{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));height:21px;width:6px;box-shadow:0 0 8px var(--bronze-glow);opacity:1;animation:none}
   .empty-line{color:var(--faint);font-family:var(--font-body);font-size:var(--fs-body-sm);letter-spacing:2px}
-  /* step-048 追记十五:压缩边界行(ZCode TimelineMarkerRow 对齐)
-     step-142:边界 pill 属徽标族(固定档 --fs-chip);边界整行块距纳入 --gap-msg */
+ /* 压缩边界行(ZCode TimelineMarkerRow 对齐)
+ 边界 pill 属徽标族(固定档 --fs-chip);边界整行块距纳入 --gap-msg */
   .cp-divider{display:flex;align-items:center;gap:8px;margin:var(--gap-msg) 0;padding:0 4px}
   .cp-line{flex:1;height:1px;background:var(--border-soft);opacity:.5}
   .cp-pill{font-family:var(--font-mono);font-size:var(--fs-chip);letter-spacing:1px;color:var(--faint);border:1px solid var(--border-soft);border-radius:999px;padding:1px 10px;white-space:nowrap}
-  /* 板 n3(2026-10-29):压缩边界行的可展开详情(pill 后「详情」小钉,收起态与旧观感一致)+ 指示 chip;
+ /* 板 n3:压缩边界行的可展开详情(pill 后「详情」小钉,收起态与旧观感一致)+ 指示 chip;
      失败/跳过走弱色变体(横线/pill 换色,不抢眼但一眼可辨)。 */
   .cp-divider{flex-wrap:wrap}
   .cp-divider .cp-more{font-family:var(--font-ui);font-size:var(--fs-chip);color:var(--faint);margin-left:2px}
@@ -1277,14 +1277,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cp-divider.compact-skipped .cp-pill{color:var(--faint);border-color:var(--border-soft);opacity:.8}
   /* fixE22:顶窗渲染——窗口外占位(零高零布局,仅保 mfPatch 对位)与顶部「加载更早」哨兵 */
   .msg-ph{display:none}
-  /* 历史分页入口(2026-10-22):首屏只取末 200 条,更早事件靠顶部「加载更多历史」按游标回溯。
+ /* 历史分页入口:首屏只取末 200 条,更早事件靠顶部「加载更多历史」按游标回溯。
      视觉与顶窗哨兵同族(虚线 pill),但语义不同(远端翻页 vs 本地窗口展开)——共享一套声明,免两处漂移。 */
   .win-sent,.hist-more{margin:12px auto;max-width:420px;text-align:center;font-family:var(--font-ui);font-size:var(--fs-body-sm);letter-spacing:1px;color:var(--faint);
     border:1px dashed var(--border-soft);border-radius:999px;padding:7px 16px;cursor:pointer;user-select:none;transition:color .13s,border-color .13s}
   .win-sent:hover,.hist-more:hover{color:var(--muted);border-color:var(--border)}
   /* 空态时段问候(ZCode ConversationDraftEmptyState 对齐) */
   .draft-greet{font-family:var(--font-ui);font-size:calc(var(--fs-h1) * 0.9);color:var(--reply);letter-spacing:1px;margin-bottom:var(--gap-block)}
-  /* step-165(块4·4.3):草稿欢迎态「新会话」占位标题行(ref events.ts:624 New session 占位语义)——
+ /* (块4·4.3):草稿欢迎态「新会话」占位标题行(ref events.ts:624 New session 占位语义)——
      虚线 pill 与 .win-sent/.hist-more 同族(待收敛态);本仓无 LLM 标题轨,首发即 deriveTitle,
      占位只活在草稿欢迎态头部,首发后被派生标题取代(不闪)。 */
   .draft-newtitle{max-width:fit-content;font-family:var(--font-mono);font-size:var(--fs-chip);letter-spacing:2px;color:var(--faint);
@@ -1296,7 +1296,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   #scrollBottom{position:sticky;bottom:16px;align-self:flex-end;flex-shrink:0;margin-right:22px;
                 opacity:0;transition:opacity .2s;pointer-events:none;z-index:25}
   #scrollBottom.on{opacity:1;pointer-events:auto}
-  /* fixT6 P2:超长 agent 汇报折叠(实测一条 2800 字汇报=4631px=7.3 屏,下接下一轮要狂滚);
+ /* fixT6 P2:超长 agent 汇报折叠(经验证一条 2800 字汇报=4631px=7.3 屏,下接下一轮要狂滚);
      折起态给 max-height+渐隐遮罩,「展开全文」按钮在折起盒之外(不会被 overflow 裁掉)。 */
   .reply-wrap.reply-long:not(.open) .task-reply{max-height:420px;overflow:hidden;
     /* 渐隐用 mask 而非背景色遮罩(review nit):mask 不需要知道页面底色,七套主题下都天然正确
@@ -1306,9 +1306,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .reply-more{display:block;margin:var(--gap-tool) 0 2px;background:transparent;border:1px solid var(--border-soft);
     color:var(--bronze);border-radius:7px;font-size:var(--fs-tool);padding:2px 12px;cursor:pointer}
   .reply-more:hover{border-color:var(--bronze);color:var(--accent-bright)}
-  /* step-063:user 消息气泡化(右对齐暖铜玻璃泡,与 task-reply/sys-line/cp-divider 一眼可分辨);
+ /* user 消息气泡化(右对齐暖铜玻璃泡,与 task-reply/sys-line/cp-divider 一眼可分辨);
      主会话(message.user 渲染)与子代理工作区 steer 共用此类=纯 CSS 双路径生效,渲染端零结构变更。
-     step-142:用户消息与 agent 正文同类同规格(font-body + fs-body + lh-body),左右缩进与正文对齐
+ 用户消息与 agent 正文同类同规格(font-body + fs-body + lh-body),左右缩进与正文对齐
      (max-width 收窄到正文栏宽,不再比正文更宽或更窄)。 */
   .user-line{width:fit-content;max-width:min(76%,720px);margin:var(--gap-tool) 2px var(--gap-tool) auto;display:flex;gap:10px;align-items:flex-start;
              font-family:var(--font-body);font-size:var(--fs-body);color:var(--text);line-height:var(--lh-body);overflow-wrap:anywhere;
@@ -1321,12 +1321,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .user-line .txt{min-width:0}
   .user-line .msg-acts{align-self:flex-end;margin-bottom:1px;flex-shrink:0}
   .user-line .msg-acts button{white-space:nowrap}
-  /* step-142:agent 正文容器=唯一「正文层」基准(font-body + fs-body + lh-body)。
+ /* agent 正文容器=唯一「正文层」基准(font-body + fs-body + lh-body)。
      --reply-fs 仍由设置页注入(documentElement 行内变量,优先级高于本组令牌),未设置时回落到 --fs-body=19px。 */
   .task-reply{font-family:var(--font-body);font-size:var(--reply-fs,var(--fs-body));line-height:var(--lh-body);color:var(--reply);letter-spacing:var(--ls-body);overflow-wrap:anywhere;word-break:normal}
-  /* 内嵌图片(2026-10-19 截图预览):browser shot 的 ![…](/uploads?…) 渲染产物 */
+ /* 内嵌图片(截图预览):browser shot 的 ![…](/uploads?…) 渲染产物 */
   .task-reply img.md-img{display:block;max-width:100%;max-height:520px;margin:10px auto 6px;border-radius:10px;border:1px solid rgba(128,128,128,.35);box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:zoom-in;background:#fff}
-  /* 流式消息(step-050,ZCode 流式消息展示):打字光标+工具执行中行 */
+ /* 流式消息(ZCode 流式消息展示):打字光标+工具执行中行 */
   .st-cursor{display:inline-block;width:8px;height:1.05em;vertical-align:-3px;margin-left:4px;border-radius:1px;
              background:var(--bronze);box-shadow:0 0 8px var(--bronze-glow);animation:stblink 1s steps(2,start) infinite}
   @keyframes stblink{to{visibility:hidden}}
@@ -1344,13 +1344,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .st.done{color:var(--green);border:1px solid rgba(157,192,139,.35)}
   .st.failed,.st.cancelled{color:var(--red);border:1px solid rgba(224,138,122,.35)}
   @keyframes blink{50%{opacity:.35}}
-  /* step-137:事件行(任务结算/白板/注入/LLM 轨迹)统一「元信息层」形态——
+ /* 事件行(任务结算/白板/注入/LLM 轨迹)统一「元信息层」形态——
      mono 小字 + 左侧细条 + 略缩进,与正文(serif 大字)形成明确层级;不抢正文也不淹没 */
   .task-sub{font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--faint);margin:3px 0 3px 1px;line-height:var(--lh-tight);
     border-left:2px solid color-mix(in srgb,var(--bronze) 28%,transparent);padding:1px 0 1px 8px;letter-spacing:.2px}
   /* fixI11: 排队消息卡——时钟图标+「排队中」pill+正文+三按钮(立即发送/编辑/删除);
      发送后转正常用户消息气泡(队列移除+journal message.user 到达)。
-     step-142:排队卡=用户消息的未发送态,正文与 .user-line 同规格(font-body + fs-body + lh-body)。 */
+ 排队卡=用户消息的未发送态,正文与 .user-line 同规格(font-body + fs-body + lh-body)。 */
   .qm-card{display:flex;align-items:flex-start;gap:8px;margin:var(--gap-tool) 0 2px auto;max-width:86%;padding:8px 12px;border:1px dashed rgba(217,179,108,.45);border-radius:12px 4px 12px 12px;background:rgba(217,179,108,.06)}
   .qm-card .qm-clock{flex:none;width:15px;height:15px;margin-top:2px;color:var(--warn);animation:stpulse 2.4s infinite}
   .qm-card .qm-body{flex:1;min-width:0}
@@ -1361,16 +1361,16 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .qm-card .qm-acts button:hover{color:var(--text);border-color:var(--bronze)}
   .qm-card .qm-acts button.qm-now{color:var(--accent-bright);border-color:rgba(217,179,108,.5)}
   #go.queue-mode{border-color:rgba(217,179,108,.55);color:var(--warn)}
-  /* step-165(块4·4.6):draftSubmitPending 等待态——发送按钮禁点+呼吸点视觉(防重复点击;
+ /* (块4·4.6):draftSubmitPending 等待态——发送按钮禁点+呼吸点视觉(防重复点击;
      样式与 compact-wait 同形,互斥关系见 renderSendBtn 尾部同步块)。 */
   #go.wait-ack{border-color:rgba(217,179,108,.55);color:var(--warn);animation:stpulse 1.6s infinite}
   .ev-line{font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--faint);padding:1px 0 1px 10px;line-height:var(--lh-tight)}
-  /* fix(2026-10-21):超宽消息行约束——事件元信息行(.task-sub/.ev-line)与工具行块(.tr-lines .cl、
+ /* fix:超宽消息行约束——事件元信息行(.task-sub/.ev-line)与工具行块(.tr-lines .cl、
      分组工具块 .tc-body)此前没有任何换行约束,一条无空格长串(URL/哈希/长路径)把消息区横向撑开、
-     撑破卡内布局(画布形态下直接穿透卡片边界,用户截图实锤)。
+ 撑破卡内布局(画布形态下直接穿透卡片边界,用户截图实测确认)。
      白名单:body.nowrapcode 的 pre.code 保持 nowrap+overflow-x:auto——代码块可横向滚动,但不撑破卡片。 */
   .task-sub,.ev-line{overflow-wrap:anywhere;word-break:break-word}
-  /* LLM 轨迹行(2026-10-21 修复):构型/模型/耗时全部收在一行内,超宽省略;「复制轨迹路径」固定在右端,
+ /* LLM 轨迹行(修复):构型/模型/耗时全部收在一行内,超宽省略;「复制轨迹路径」固定在右端,
      不再被长 roles 链冲走。构型本身已由 roleShape 压缩,title 里保留全量。 */
   .llm-trace-line{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
   .llm-trace-line .lt-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -1380,22 +1380,22 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .llm-trace-line:hover .lt-copy{color:var(--accent-bright);border-color:var(--bronze)}
   .tr-lines .cl{overflow-wrap:anywhere}
   .tool-card .tc-body,.tool-group .tg-item .tc-body{overflow-wrap:anywhere}
-  /* step-048 追记十四:技能/命令占位行(ZCode optimistic command overlay 对齐) */
+ /* 技能/命令占位行(ZCode optimistic command overlay 对齐) */
   .skill-inv{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight);
     color:var(--muted);padding:4px 10px;margin:var(--gap-tool) 0;border:1px dashed var(--border-soft);border-radius:8px}
   .skill-inv .si-k{color:var(--accent-bright)}
   .skill-inv .si-a{color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
   .skill-inv .si-st{margin-left:auto;color:var(--faint)}
   .skill-inv .si-st.done{color:var(--green)}
-  /* step-142:chip/徽标全族统一固定档 --fs-chip(11px),不随正文/代码字号缩放 */
+ /* chip/徽标全族统一固定档 --fs-chip(11px),不随正文/代码字号缩放 */
   .slash-chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--accent-bright)}
   .slash-chip .sc-icon{font-size:var(--fs-chip);color:var(--bronze)}
   .slash-chip .sc-args{color:var(--muted);font-size:var(--fs-chip)}
-  /* step-095:user 消息 chip 渲染的 remainder 展示态(raw 前缀行成 chip,模板体隐藏后的用户正文/未识别余文)
-     step-142:余文=用户正文的一部分,走 font-body + fs-body 同一规格 */
+ /* user 消息 chip 渲染的 remainder 展示态(raw 前缀行成 chip,模板体隐藏后的用户正文/未识别余文)
+ 余文=用户正文的一部分,走 font-body + fs-body 同一规格 */
   .user-line .u-slash-body{display:block;margin-top:3px;font-family:var(--font-body);font-size:var(--fs-body);
     line-height:var(--lh-body);color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
-  /* 2026-10-29 文件引用 chip(对齐 ref/zcode PromptMention files 形态):输入区与聊天流气泡共用一套视觉。
+ /* 文件引用 chip(对齐 ref/zcode PromptMention files 形态):输入区与聊天流气泡共用一套视觉。
      点击=在 IDE 打开该文件;目录补尾斜杠并发目录语义(▸ 图标)。 */
   .file-chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:var(--fs-chip);
     line-height:var(--lh-tight);color:var(--text);background:var(--chip-bg);border:1px solid var(--border-soft);
@@ -1444,8 +1444,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .kv .k{color:var(--faint)}
   .kv .v{color:var(--muted);font-family:var(--mono);word-break:break-all}
 
-  /* ===== step-046 成熟面板组件:思考卡/变更条/运行时长/双 pill/会话标签页/统计图表 ===== */
-  /* 2026-11-05 表格可读性:表宽自撑、单元格加内边距、隔行底色(长表横向追踪行不串行)、
+ /* ===== 成熟面板组件:思考卡/变更条/运行时长/双 pill/会话标签页/统计图表 ===== */
+ /* 表格可读性:表宽自撑、单元格加内边距、隔行底色(长表横向追踪行不串行)、
      表头字重 600 且不折行;宽表由 mdToHtml 外包的 .md-table-wrap 横向滚动,不再挤压列宽。 */
   .md-table-wrap{max-width:100%;overflow-x:auto;overflow-y:hidden;margin:var(--gap-block) 0;
     border:1px solid var(--border-soft);border-radius:8px}
@@ -1457,16 +1457,16 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .md-table tbody tr:hover{background:rgba(201,143,69,.11)}
   .md-quote{border-left:3px solid var(--bronze);margin:var(--gap-block) 0;padding:4px 12px 4px var(--indent-1);
     color:var(--muted);background:var(--hover-bg);font-size:var(--fs-body-sm);line-height:var(--lh-body)}
-  /* step-137:所有 code-wrap 一律带板(默认=代码板色),is-term/is-json 再覆写——
+ /* 所有 code-wrap 一律带板(默认=代码板色),is-term/is-json 再覆写——
      旧实现纯文本结果只有一圈细边、和白纸正文糊在一起,这是「看不出哪里是重点」的主因之一。
-     step-142:整族板统一一套排版(font-mono + fs-code + lh-code)、统一 border-radius 与内容 padding
+ 整族板统一一套排版(font-mono + fs-code + lh-code)、统一 border-radius 与内容 padding
      ——板内 pre.code 与 .tc-body 取同一值,不再因外层是工具卡而各用一套内距。 */
   .code-wrap{border:1px solid var(--border-soft);border-radius:9px;overflow:hidden;margin:var(--gap-tool) 0;
     background:var(--surf-code);font-family:var(--font-mono);font-size:var(--fs-code);line-height:var(--lh-code)}
   .code-bar{display:flex;align-items:center;justify-content:space-between;padding:3px 10px;
     background:var(--hover-bg);border-bottom:1px solid var(--border-soft);
     font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-code);color:var(--faint)}
-  /* step-137 视觉分层:语言名从灰字升为「类型铭牌」(左色点+mono),一眼分辨这是代码/终端/JSON */
+ /* 视觉分层:语言名从灰字升为「类型铭牌」(左色点+mono),一眼分辨这是代码/终端/JSON */
   .code-bar .code-lang{display:inline-flex;align-items:center;gap:5px;letter-spacing:.4px}
   .code-bar .code-lang::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--bronze);opacity:.7;flex-shrink:0}
   .code-copy{border:none;background:transparent;color:var(--faint);cursor:pointer;
@@ -1476,10 +1476,10 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     padding:var(--gap-block) 10px;font-family:var(--font-mono);font-size:var(--fs-code);line-height:var(--lh-code)}
   .code-wrap>.tc-body{padding:var(--gap-block) 10px;font-family:var(--font-mono);
     font-size:var(--fs-code);line-height:var(--lh-code);color:var(--faint)}
-  /* step-142:终端板体嵌在工具卡内时会被 .tool-card .tc-body(同权重、源序更后)压成 code-sm 档
+ /* 终端板体嵌在工具卡内时会被 .tool-card .tc-body(同权重、源序更后)压成 code-sm 档
      ——这里提权一档锁回板族本体档,保证「终端板行与代码板同字号」。 */
   .code-wrap.is-term>.tc-body,.code-wrap.is-term .tc-body{font-size:var(--fs-code);line-height:var(--lh-code)}
-  /* --- step-137 内容类型板:同一 .code-wrap 家族,按类型给不同底色/边/左色条(七主题经 --surf-* 跟随) --- */
+ /* --- 内容类型板:同一 .code-wrap 家族,按类型给不同底色/边/左色条(七主题经 --surf-* 跟随) --- */
   .code-wrap.is-code{background:var(--surf-code)}
   .code-wrap.is-code pre.code{color:var(--text)}
   .code-wrap.is-term{background:var(--surf-term);border-color:color-mix(in srgb,var(--green) 22%,var(--border-soft));
@@ -1513,7 +1513,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.theme-ink .code-wrap.is-term pre.code,body.theme-ink .code-wrap.is-term .tc-body{color:var(--text)}
   body.theme-ink .code-wrap.is-term .code-bar{color:var(--muted)}
   body.theme-ink .code-wrap.is-term .code-bar .code-lang::before{background:var(--text);opacity:.55}
-  /* step-142:思考卡=无衬线讲述层(不是正文衬线),正文一档以下=fs-body-sm,行高取正文 lh-body(比工具卡松) */
+ /* 思考卡=无衬线讲述层(不是正文衬线),正文一档以下=fs-body-sm,行高取正文 lh-body(比工具卡松) */
   .think-card{border:1px solid var(--border-soft);border-radius:9px;background:var(--sunken);
     margin:var(--gap-tool) 0;font-family:var(--font-ui)}
   .think-card summary{cursor:pointer;font-family:var(--font-ui);font-size:var(--fs-tool);line-height:var(--lh-tight);
@@ -1522,7 +1522,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .think-card[open] summary{border-bottom:1px solid var(--border-soft)}
   .think-card .th-body{font-family:var(--font-ui);font-size:var(--fs-body-sm);line-height:var(--lh-body);color:var(--muted);
     padding:var(--gap-block) 12px;white-space:pre-wrap}
-  /* 调用轨迹聚合卡(2026-10-20):连续 LLM 调用的 trace 行 + 思考内容收成一张可展开卡,
+ /* 调用轨迹聚合卡:连续 LLM 调用的 trace 行 + 思考内容收成一张可展开卡,
      与工具分组卡同语言(默认闭合、summary 给次数与 roles 计数),把消息流高度还给正文。 */
   .trace-group{border:1px solid var(--border-soft);border-radius:9px;background:var(--sunken);margin:var(--gap-tool) 0}
   .trace-group>summary{cursor:pointer;font-family:var(--font-ui);font-size:var(--fs-tool);line-height:var(--lh-tight);
@@ -1533,7 +1533,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .trace-group .tg-roles{font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--bronze-dim)}
   .trace-group .task-sub,.trace-group .think-card{margin:2px 8px}
   .trace-group .think-card{border-color:transparent;background:transparent}
-  /* step-142:变更条/运行时长属消息流元信息层,与工具卡同规格(板档 + mono) */
+ /* 变更条/运行时长属消息流元信息层,与工具卡同规格(板档 + mono) */
   .diffbar{display:flex;align-items:center;gap:8px;margin:var(--gap-tool) 0;padding:6px 12px;border:1px solid rgba(157,192,139,.25);border-radius:9px;
     background:rgba(157,192,139,.07);font-size:var(--fs-code-sm);line-height:var(--lh-code);color:var(--muted)}
   .diffbar .da{color:var(--green);font-family:var(--font-mono)}
@@ -1543,25 +1543,25 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .diffbar button:hover{background:rgba(224,138,122,.12)}
   .work-timer{font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight);color:var(--bronze);white-space:nowrap}
   .mode-pill{font-size:10.5px;color:var(--muted);border:1px solid var(--border-soft);border-radius:999px;padding:1px 9px;cursor:pointer;white-space:nowrap;user-select:none}
-  /* 命令「真执行」徽标(step-056 视频):亮=该输入经提交分发真实执行;done=已执行闪确认;warn=仅菜单可选
-     step-142:徽标字号统一固定档 --fs-chip(不随正文/代码字号缩放) */
+ /* 命令「真执行」徽标(视频):亮=该输入经提交分发真实执行;done=已执行闪确认;warn=仅菜单可选
+ 徽标字号统一固定档 --fs-chip(不随正文/代码字号缩放) */
   .cmd-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--bronze);border:1px solid var(--bronze);
     border-radius:999px;padding:1px 10px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis;cursor:default}
   .cmd-chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
   .cmd-chip b{color:var(--text);font-weight:600}
   .cmd-chip.done{color:var(--green);border-color:var(--green)}
-  /* 技能执行反馈闭环(step-056 视频 T3):journal message.system(目标切换/续跑通知)在聊天流可见 */
-  /* step-137:系统行=「分隔型元信息」——淡底胶囊+居中细线,与正文/工具卡都不混层。
-     step-142:系统/通知行统一 --fs-body-sm + --font-ui + 弱色,块距纳入 --gap-msg(上下各半档)。 */
+ /* 技能执行反馈闭环(视频 T3):journal message.system(目标切换/续跑通知)在聊天流可见 */
+ /* 系统行=「分隔型元信息」——淡底胶囊+居中细线,与正文/工具卡都不混层。
+ 系统/通知行统一 --fs-body-sm + --font-ui + 弱色,块距纳入 --gap-msg(上下各半档)。 */
   .sys-line{font-family:var(--font-ui);font-size:var(--fs-body-sm);line-height:var(--lh-tight);color:var(--bronze);letter-spacing:.4px;
     margin:var(--gap-msg) 0 calc(var(--gap-msg) / 2);display:flex;align-items:center;gap:8px;
     background:color-mix(in srgb,var(--bronze) 6%,transparent);border-radius:7px;padding:3px 10px}
   .sys-line::before{content:'';width:16px;height:1px;background:var(--bronze);opacity:.55;flex-shrink:0}
-  /* 被拒/异常系统行(2026-10-20):plan-gate 等工具层拒绝曾经只显示绿色「完成」导致用户误判——
+ /* 被拒/异常系统行:plan-gate 等工具层拒绝曾经只显示绿色「完成」导致用户误判——
      拒绝行人话 + 暖红描边,与普通通知行一眼可分。 */
   .sys-line.sys-warn{color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)}
   .sys-line.sys-warn::before{background:var(--red);opacity:.7}
-  /* tips 注入留痕(2026-10-22):loop 的 ephemeral tip 旁路落 journal tip.injected,此处可折叠展示
+ /* tips 注入留痕:loop 的 ephemeral tip 旁路落 journal tip.injected,此处可折叠展示
      「tips · 类别 · 第 N 步 · 字符数」,展开看注入原文。形态与系统行同族(淡底+细线),
      但用 <details> 收起长块——code-orient/history-align 动辄数千字,不许刷屏。 */
   .tip-line{font-family:var(--font-ui);font-size:var(--fs-body-sm);line-height:var(--lh-tight);color:var(--bronze);
@@ -1597,13 +1597,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .traj-line .traj-bar b{color:var(--muted);font-weight:400}
   .traj-line .tj-spark{margin-top:4px;color:var(--bronze)}
   .traj-line .tj-spark polyline{fill:none;stroke:currentColor;stroke-width:1.2;opacity:.85}
-  /* 轨迹卡「看板」入口(step-1020):卡片 summary 右侧,点击开全屏看板,不展开 details */
+ /* 轨迹卡「看板」入口:卡片 summary 右侧,点击开全屏看板,不展开 details */
   .traj-line .tj-open{cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--bronze-dim);
     border:1px solid var(--border-soft);border-radius:6px;padding:0 6px;line-height:15px;flex-shrink:0}
   .traj-line .tj-open:hover{color:var(--bronze);border-color:var(--bronze)}
   .traj-line .tj-tok{font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--muted);margin-left:auto}
-  /* ===== 轨迹看板(step-1020 → step-1535 拆为独立视图):#view-traj 内常驻三 pane 内容区。
-     原形态是全屏 overlay(position:fixed + 遮罩 + Esc 关闭),step-1535 起改为视图内常驻区:
+ /* ===== 轨迹看板( → 拆为独立视图):#view-traj 内常驻三 pane 内容区。
+ 原形态是全屏 overlay(position:fixed + 遮罩 + Esc 关闭), 起改为视图内常驻区:
      不遮罩、不锁 body 滚动、不用 display 开关(视图身份由 applyViewChrome 决定)。
      主题色全部走既有变量,不新造色值 ===== */
   .traj-board{display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
@@ -1647,7 +1647,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tb-warn{font-size:10.5px;color:var(--warn);padding:4px 9px;border-bottom:1px solid var(--border-soft);
     font-family:var(--font-mono)}
   .tb-empty{padding:18px;text-align:center;color:var(--faint);font-size:11px;letter-spacing:.6px}
-  /* ---- 轨迹泳道 pane(step-1535 从 status-widget.js 迁入;class 名 sw-lane/sw-rec/sw-turn 同名复用,
+ /* ---- 轨迹泳道 pane(从 status-widget.js 迁入;class 名 sw-lane/sw-rec/sw-turn 同名复用,
      两侧不再重复定义:status-widget.js 内已无这套样式) ---- */
   .traj-lanes{flex:1;min-width:0;overflow:auto;border:1px solid var(--border-soft);border-radius:8px;background:var(--sunken);padding:6px}
   .traj-lanes-box{position:relative;min-height:240px}
@@ -1676,7 +1676,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     color:var(--red);font-family:var(--font-mono);font-size:10px;white-space:pre-wrap;word-break:break-all;
     user-select:text;cursor:text}
   .tb-insp .ihint{color:var(--faint);letter-spacing:.6px}
-  /* ===== 逐次决策卡(step-1026):一次 LLM 决策一张卡;干条常显,卡体懒加载 ===== */
+ /* ===== 逐次决策卡:一次 LLM 决策一张卡;干条常显,卡体懒加载 ===== */
   .tb-cards{flex:1;min-width:0;overflow:auto;border:1px solid var(--border-soft);border-radius:8px;background:var(--sunken);padding:6px}
   .tb-card{border:1px solid var(--border-soft);border-radius:7px;margin:5px 0;background:var(--glass2);overflow:hidden}
   .tb-card.err{border-color:var(--red)}
@@ -1713,25 +1713,25 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tb-card .tb-c-copy{margin-left:6px;cursor:pointer;color:var(--bronze-dim);border:1px solid var(--border-soft);
     border-radius:4px;padding:0 4px;font-size:9.5px}
   .tb-card .tb-c-copy:hover{color:var(--accent-bright);border-color:var(--bronze)}
-  /* step-1027:usage 可疑徽标(克制:细边 + 警示色文字,不填充色块) */
+ /* usage 可疑徽标(克制:细边 + 警示色文字,不填充色块) */
   .tb-card .tb-c-head .tb-suspect{color:var(--warn);border:1px solid var(--border-soft);border-radius:4px;
     padding:0 4px;font-size:9.5px;letter-spacing:.3px}
   /* 2026-11 自愈:合成行标记(轨迹文件已落盘但 journal 未入账)+ 聊天流速览行 usage 可疑徽标 */
   .tb-card .tb-c-head .tb-synth,.tb-row .tb-synth{color:var(--bronze-dim);border:1px solid var(--border-soft);
     border-radius:4px;padding:0 4px;font-size:9.5px;letter-spacing:.3px}
   .llm-trace-line .lt-sus{flex:none;color:var(--warn);font-size:9.5px;letter-spacing:.3px}
-  /* step-1027:context.prune 独立卡(左竖线 + 灰标签的克制形态,不做彩色块) */
+ /* context.prune 独立卡(左竖线 + 灰标签的克制形态,不做彩色块) */
   .tb-card.tb-prune{background:transparent;border-left:2px solid var(--bronze-dim)}
   .tb-card.tb-prune .tb-c-head{cursor:default}
   .tb-card .tb-c-head .lbl{color:var(--faint);font-size:9.5px;letter-spacing:.5px}
 
-  /* 服务重启降级横幅(step-056 视频 T1):停机窗口内不再裸 ERR_CONNECTION_REFUSED */
+ /* 服务重启降级横幅(视频 T1):停机窗口内不再裸 ERR_CONNECTION_REFUSED */
   #svcBanner{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:95;display:none;
     background:var(--window-bg,#141009);border:1px solid var(--bronze);border-top:none;border-radius:0 0 10px 10px;
     color:var(--bronze);font-size:11px;letter-spacing:1px;padding:6px 18px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
   .mode-pill:hover{border-color:var(--bronze);color:var(--text)}
   .mode-pill.on{color:var(--accent-bright);border-color:var(--bronze)}
-  /* 权限 pill 首同步前的「同步中」半透明态(2026-10-19 用户实报「每次询问和真实值对不上」):
+ /* 权限 pill 首同步前的「同步中」半透明态(用户用户反馈「每次询问和真实值对不上」):
    * 首帧 localStorage 种子可能是旧值,服务端 cfg.get 回包才落真值——这段窗口不许装成已确认。 */
   .mode-pill.sync{opacity:.5;border-style:dashed}
   #tabbar{display:flex;gap:4px;align-items:center;padding:0 2px 6px;flex-wrap:wrap}
@@ -1765,7 +1765,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .kbd-table td{padding:5px 12px;border-bottom:1px solid rgba(200,143,69,.08);color:var(--muted)}
   .kbd-table td:first-child{font-family:var(--mono);color:var(--accent-bright);white-space:nowrap}
 
-  /* ===== step-047:终端 / 分组工具卡 / 办公模式 / 代码设置 / 预设与模型列表 ===== */
+ /* ===== 终端 / 分组工具卡 / 办公模式 / 代码设置 / 预设与模型列表 ===== */
   /* 终端视图 */
   .term-body{flex:1;overflow-y:auto;background:var(--code-bg);border:1px solid var(--border-soft);border-radius:10px;
     padding:10px 14px;font-family:var(--font-mono);font-size:var(--code-fs,var(--fs-code));line-height:var(--lh-code);white-space:pre-wrap;word-break:break-word}
@@ -1779,12 +1779,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     color:var(--text);font-family:var(--font-mono);font-size:var(--fs-code);padding:7px 12px;outline:none}
   .term-input-row input:focus{border-color:var(--bronze)}
   /* 分组工具卡(ZCode 分组搜索工具/终端命令/文件更改)
-     step-142:分组卡与工具卡同型同规格(summary=tool 档 font-mono,组项=tool 档) */
+ 分组卡与工具卡同型同规格(summary=tool 档 font-mono,组项=tool 档) */
   .tool-group{border:1px solid var(--border-soft);border-radius:9px;background:var(--sunken);margin:var(--gap-tool) 0;
     font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight)}
   .tool-group>summary{cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight);
     color:var(--muted);padding:6px 11px;list-style:none;user-select:none}
-  /* step-097:折叠指示改 CSS 描绘箭头(替代 ▸/▾ 字符形态),主题变量上色 */
+ /* 折叠指示改 CSS 描绘箭头(替代 ▸/▾ 字符形态),主题变量上色 */
   .tool-group>summary::before{content:'';display:inline-block;width:5px;height:5px;margin:0 6px 1px 1px;border-left:1.5px solid var(--bronze-dim);border-bottom:1.5px solid var(--bronze-dim);transform:rotate(-135deg);vertical-align:middle}
   .tool-group[open]>summary::before{transform:rotate(-45deg);margin-bottom:2px}
   .tool-group .tg-item{padding:2px 12px 6px;font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight)}
@@ -1796,7 +1796,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.office .office-chip{display:inline-block}
   .office-chip{display:none;font-family:var(--font-mono);font-size:var(--fs-chip);color:var(--faint);border:1px dashed var(--border-soft);
     border-radius:6px;padding:1px 8px;margin:2px 4px 2px 0}
-  /* 代码块设置(字号/行号/换行)——step-142:--code-fs 由设置页注入时优先,未设置回落排版令牌 --fs-code */
+ /* 代码块设置(字号/行号/换行)——--code-fs 由设置页注入时优先,未设置回落排版令牌 --fs-code */
   pre.code, .fv-body, .tc-body{font-family:var(--font-mono);font-size:var(--code-fs,var(--fs-code));line-height:var(--lh-code)}
   body.nowrapcode pre.code{white-space:pre;overflow-x:auto}
   body.nowrapcode pre.code .cl{white-space:pre}
@@ -1820,7 +1820,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .preset-card:hover{border-color:var(--bronze)}
   .preset-card .pc-name{font-size:11.5px;color:var(--text)}
   .preset-card .pc-url{font-size:9.5px;color:var(--faint);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* step-125 预设卡:服务商/套餐标记/模型数 */
+ /* 预设卡:服务商/套餐标记/模型数 */
   .preset-card .pc-top{display:flex;align-items:center;gap:6px;margin-bottom:2px}
   .preset-card .pc-top .pc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .preset-card .pc-tag{font-size:8.5px;letter-spacing:.5px;color:var(--bronze);border:1px solid var(--border-soft);border-radius:4px;padding:0 4px;white-space:nowrap}
@@ -1829,7 +1829,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .preset-card .pc-models{font-size:9px;color:var(--faint);margin-top:2px}
   .prov-auth{font-size:9px;color:var(--bronze);border:1px solid var(--border-soft);border-radius:4px;padding:0 5px;white-space:nowrap}
   .prov-auth.plan{color:var(--green);border-color:rgba(157,192,139,.4)}
-  /* step-125 预设接入对话框:复用 uid-mask 壳,宽度/表单独立 */
+ /* 预设接入对话框:复用 uid-mask 壳,宽度/表单独立 */
   .pp-box{width:min(620px,calc(100vw - 36px));max-height:calc(100vh - 48px);overflow-y:auto}
   .pp-sub{font-size:11px;color:var(--muted);line-height:1.7;margin:-4px 0 12px}
   .pp-label{font-size:10px;letter-spacing:1px;color:var(--faint);margin:12px 0 5px}
@@ -1879,7 +1879,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .mgr-row .m-meta{font-size:10px;color:var(--faint);white-space:nowrap}
   .mgr-row button{font-size:10px;color:var(--muted);border:1px solid var(--border-soft);border-radius:6px;padding:2px 10px;cursor:pointer;background:transparent;white-space:nowrap}
   /* ── 运行看板(ref dashboard 融合;暖纸主题一致,纯 DOM/CSS 零图库) ── */
-  /* 2026-10-16 收编:#view-dash 不再是顶级 .view,是团队视图内的「看板」面板(switchView("dash")=团队看板子标签的内部路由) */
+ /* 收编:#view-dash 不再是顶级 .view,是团队视图内的「看板」面板(switchView("dash")=团队看板子标签的内部路由) */
   #view-dash{display:none;flex-direction:column;gap:12px;min-width:0}
   #view-dash.on{display:flex}
   .vw-tabs{display:inline-flex;border:1px solid var(--border-soft);border-radius:8px;overflow:hidden;flex-shrink:0}
@@ -1953,7 +1953,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .mem-box pre{font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--muted);white-space:pre-wrap;
     border-left:2px solid var(--bronze-dim);padding-left:12px;max-height:260px;overflow-y:auto}
 
-  /* 规划态(step-049 全量开发) */
+ /* 规划态(全量开发) */
   .plan-box{border:1px solid rgba(157,192,139,.3);border-radius:11px;background:rgba(157,192,139,.05);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
   .plan-box h5{font-size:11px;color:var(--green);font-weight:400;letter-spacing:1px}
   .plan-form{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -1966,8 +1966,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .plan-apply:hover{filter:brightness(1.08)}
   .git-line{font-size:10px;color:var(--faint);margin-top:2px}
 
-  /* ===== step-049:项目档案(架构图管线) ===== */
-  /* step-048 追记八:文件与函数钻取 */
+ /* ===== 项目档案(架构图管线) ===== */
+ /* 文件与函数钻取 */
   .ppf{margin-top:14px;border-top:1px solid var(--border-soft);padding-top:10px}
   .ppf-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .ppf-head input{background:var(--input-bg);border:1px solid var(--border-soft);border-radius:8px;color:var(--text);font-size:11px;padding:3px 10px;outline:none;width:200px}
@@ -1982,7 +1982,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ppf-fn:hover{background:rgba(201,143,69,.08)}
   .ppf-fn .ln{color:var(--faint);font-size:9.5px}
   .ppf-fn .kd{color:var(--bronze);font-size:9px}
-  /* code2flow 分类徽标(2026-10-12 三改):入=trunk 棕底/叶=leaf 绿底 */
+ /* code2flow 分类徽标(三改):入=trunk 棕底/叶=leaf 绿底 */
   .kd2-trunk{background:#8a5a2a;color:#fff;border-radius:4px;padding:0 3px;font-weight:600}
   .kd2-leaf{background:#3a5a3a;color:#b8e0b8;border-radius:4px;padding:0 3px}
   .ppf-fn .ct{color:var(--faint);font-size:9.5px}
@@ -2025,7 +2025,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .pp-ch{border:1px solid var(--border-soft);border-radius:9px;background:var(--glass2);padding:6px 11px;font-size:10.5px;color:var(--muted)}
   .pp-ch .pc-t{color:var(--text)}
   .pp-ch .pc-m{color:var(--bronze);font-family:var(--mono)}
-  /* ===== step-058:设计沉淀(done 板项目级索引)+ 反查角标 ===== */
+ /* ===== 设计沉淀(done 板项目级索引)+ 反查角标 ===== */
   .arc-item{border:1px solid var(--border-soft);border-radius:9px;background:var(--glass2);padding:6px 11px;font-size:10.5px;color:var(--muted);cursor:pointer;margin-bottom:4px}
   .arc-item:hover{border-color:var(--bronze)}
   .arc-item .arc-t{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2033,11 +2033,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .arc-filter{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--bronze);padding:2px 0 6px}
   .arc-badge{background:rgba(201,143,69,.15);border:1px solid var(--bronze);color:var(--bronze);border-radius:8px;font-size:var(--fs-chip);padding:0 6px;cursor:pointer;flex:none;font-family:var(--font-mono)}
   .arc-badge:hover{background:var(--bronze);color:#1a140c}
-  /* step-1010 K:档案灯箱宿主是固定高内联块,画布与底部图例条(.cv-rail)按 flex 列分摊高度 */
+ /* K:档案灯箱宿主是固定高内联块,画布与底部图例条(.cv-rail)按 flex 列分摊高度 */
   #arcCv{display:flex;flex-direction:column}
   #arcCv .bf-canvas{flex:1;min-height:0;height:auto}
 
-  /* ===== step-048:市场/浏览器/账号/引导/附件/远程 ===== */
+ /* ===== 市场/浏览器/账号/引导/附件/远程 ===== */
   .mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;max-width:980px}
   .mkt-card{border:1px solid var(--border-soft);border-radius:11px;background:var(--glass2);padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-height:0}
   .mkt-card.on{border-color:var(--bronze);box-shadow:0 0 0 1px var(--bronze-glow)}
@@ -2063,7 +2063,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   #view-browser .br-bar{display:flex;gap:8px;align-items:center;padding:0 0 8px}
   #view-browser .br-bar input{flex:1;background:var(--input-bg);border:1px solid var(--border-soft);border-radius:8px;color:var(--text);font-size:12px;padding:6px 12px;outline:none}
   #view-browser iframe{flex:1;width:100%;border:1px solid var(--border-soft);border-radius:10px;background:#fff}
-  /* 2026-10-21 内置浏览器视图(browser-view.js 自建 .gbv-root;宿主只给空容器) */
+ /* 内置浏览器视图(browser-view.js 自建 .gbv-root;宿主只给空容器) */
   .gbv-host{flex:1;min-height:0;display:flex;overflow:hidden;position:relative}
   #view-browser #brLegacyBar[hidden],#view-browser #brFrame[hidden]{display:none}
   .br-note{font-size:10px;color:var(--faint);padding-top:6px}
@@ -2086,7 +2086,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .guide-item .g-d{font-size:10.5px;color:var(--faint);margin-top:2px}
   #tourMask{position:fixed;inset:0;z-index:120;background:var(--overlay);display:none;align-items:center;justify-content:center}
   #tourMask.on{display:flex}
-  /* 画布形态下导览避让画布中心(2026-10-20):弹窗原本正压中央卡片区,用户看不到它指向的界面。
+ /* 画布形态下导览避让画布中心:弹窗原本正压中央卡片区,用户看不到它指向的界面。
      改为贴底居中并让出 HUD(底部 10+30+14)与 PTT 悬浮件的高度。 */
   body.cv-shell #tourMask.on{align-items:flex-end;justify-content:center;padding-bottom:110px}
   .tour-box{max-width:420px;background:var(--window-bg);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
@@ -2094,7 +2094,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tour-box p{font-size:12px;color:var(--muted);line-height:1.8}
   .tour-box .tour-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
   .tour-box button{font-size:11px;color:var(--bronze);background:transparent;border:1px solid var(--border-soft);border-radius:7px;padding:4px 14px;cursor:pointer}
-  /* 附件 chips(2026-10-19 升级:图片真缩略图/视频首帧 chip,数量多时换行+纵向滚动不溢出) */
+ /* 附件 chips(升级:图片真缩略图/视频首帧 chip,数量多时换行+纵向滚动不溢出) */
   .att-bar{display:flex;gap:6px;flex-wrap:wrap;padding:4px 2px;max-height:132px;overflow-y:auto;overflow-x:hidden}
   .att-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-chip);line-height:var(--lh-tight);color:var(--muted);border:1px solid var(--border-soft);border-radius:999px;padding:2px 10px}
   .att-chip img{width:16px;height:16px;border-radius:3px;object-fit:cover}
@@ -2161,7 +2161,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .prov-act{font-size:10px;color:var(--muted);border:1px solid var(--border-soft);border-radius:6px;padding:2px 9px;cursor:pointer;background:transparent}
   .prov-act:hover{border-color:var(--bronze);color:var(--text)}
   .prov-test{font-size:10px;color:var(--faint);margin-top:3px}
-  /* 生效模型区块(step-997):当前值/下拉/确认/状态四件套;与 composer pill 共用 staged/CAS 语义 */
+ /* 生效模型区块:当前值/下拉/确认/状态四件套;与 composer pill 共用 staged/CAS 语义 */
   .ms-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:960px;margin:0 0 10px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:9px;background:var(--glass2)}
   .ms-switch .ms-cur{display:flex;align-items:center;gap:6px;min-width:220px}
   .ms-switch .ms-cur .sk{font-size:10px;color:var(--faint)}
@@ -2201,13 +2201,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cm-model-dir summary:hover{color:var(--text)}
   .cm-model-dir[open] summary{border-bottom:1px solid var(--border-soft)}
   .cm-model-dir .model-list{padding:8px 10px}
-  /* ZCode 模型管理:模型列表行(step-048) */
+ /* ZCode 模型管理:模型列表行 */
   .prov-models{margin-top:8px;border-top:1px dashed var(--border-soft);padding-top:6px;max-height:300px;overflow-y:auto;padding-bottom:4px}
   .pv-mrow{display:flex;align-items:center;gap:6px;padding:2px 0}
   .pv-mname{flex:1;font-family:var(--mono);font-size:10.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pv-mbadge{font-size:var(--fs-chip);color:var(--bronze);border:1px solid var(--border-soft);border-radius:4px;padding:0 4px;margin-left:4px}
   .pv-mrow .num-in,.pv-madd .num-in{font-size:9.5px;padding:1px 6px}
-  /* 单价覆盖行(2026-10-28):模型行下方一行四个窄框(元/百万 token);留空=用内置价目表 */
+ /* 单价覆盖行:模型行下方一行四个窄框(元/百万 token);留空=用内置价目表 */
   .pv-prow{display:flex;align-items:center;gap:4px;margin-left:6px;padding-left:6px;border-left:1px dashed var(--border-soft)}
   .pv-pl{font-size:9px;color:var(--faint);letter-spacing:1px;white-space:nowrap}
   .pv-prow .num-in{font-size:9.5px;padding:1px 5px}
@@ -2215,7 +2215,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .pv-madd{display:flex;gap:6px;margin-top:4px}
   .prov-test.ok{color:var(--green)}
   .prov-test.bad{color:var(--red)}
-  /* step-112 Coding 模型设置:角色下拉/能力徽标/自定义模型/高级折叠(全部走 088 主题变量) */
+ /* Coding 模型设置:角色下拉/能力徽标/自定义模型/高级折叠(全部走 088 主题变量) */
   .cm-roles{display:grid;grid-template-columns:repeat(2,minmax(250px,1fr));gap:8px 12px;max-width:900px}
   .cm-role{border:1px solid var(--border-soft);border-radius:10px;background:var(--glass2);padding:9px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
   .cr-head{display:flex;align-items:baseline;gap:8px;justify-content:space-between}
@@ -2256,7 +2256,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cap-chip{font-size:var(--fs-chip)!important;border-radius:5px!important;padding:1px 6px!important}
   .cap-chip.on{color:var(--green)!important;border-color:rgba(157,192,139,.45)!important}
   .cap-chip.off{color:var(--faint)!important;text-decoration:line-through}
-  /* 未知=不显示(step-112):Provider 模型行悬停时才露出未标注能力的标记入口 */
+ /* 未知=不显示:Provider 模型行悬停时才露出未标注能力的标记入口 */
   .pv-mrow .cap-chip.unknown{display:none}
   .pv-mrow:hover .cap-chip.unknown{display:inline-block;color:var(--faint)!important;opacity:.8}
   .prov-proto{font-size:9px;color:var(--bronze);border:1px solid var(--border-soft);border-radius:4px;padding:0 6px}
@@ -2303,7 +2303,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cc-item:hover,.cc-item.hot{background:rgba(201,143,69,.10)}
   .cc-item .ct{flex:1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cc-item:hover .ct{color:var(--text)}
-  /* 会话搜索域(step-115):标题+来源徽标/时间一行,命中片段两行(«»→mark 高亮) */
+ /* 会话搜索域:标题+来源徽标/时间一行,命中片段两行(«»→mark 高亮) */
   .cc-item.cc-sess{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"t meta" "s s";
                    gap:2px 10px;align-items:start;padding:7px 12px}
   .cc-sess .ct{grid-area:t;min-width:0}
@@ -2314,11 +2314,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cc-sess .cc-badge{font-size:var(--fs-chip);color:var(--warn);border:1px solid rgba(217,179,108,.4);
                      border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:1px}
   .cc-empty{padding:18px;text-align:center;font-size:11px;color:var(--faint)}
-  /* 全局次级信息类(2026-10-20):子代理/追踪/用量三卡等大量使用 class="dim" 标注次级文字,
+ /* 全局次级信息类:子代理/追踪/用量三卡等大量使用 class="dim" 标注次级文字,
      此前全仓只在 .term-line/.sense-detail/.g .node 等局部作用域定义过 → 这些位置次级信息与正文同亮度。 */
   .dim{color:var(--muted)}
   body.light .dim{color:var(--muted)}
-  /* ---- 看板三件套(子代理/任务追踪/用量)统一骨架 2026-10-20 ----
+ /* ---- 看板三件套(子代理/任务追踪/用量)统一骨架 ----
      痛点:三卡此前各自内联 style,列宽靠 min-width 猜 → 一屏内对不齐、数字跳列、次级信息无层级。 */
   .bd3-sec{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.6px;margin:0 0 6px}
   .bd3-sec .bd3-n{font-family:var(--mono);font-size:9.5px;font-weight:400;color:var(--faint)}
@@ -2347,7 +2347,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bd3-ph.dim2{opacity:.4}
   .bd3-todos{margin-top:4px;display:flex;flex-direction:column;gap:1px}
   .bd3-todo{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* ---- 追踪 Trace:单数据窗口(2026-10-21 用户口径「只有一个数据窗口」)----
+ /* ---- 追踪 Trace:单数据窗口----
    * 统计区(#sw-slot 内 status-widget)与 turn 树(#track-body)同属一个流式滚动区;
    * 统计区无数据时整块不占位(sw-active 由 widget 自己切),turn 树因此恒为最后一个数据块。 */
   #sw-slot{display:none;flex:0 0 auto;padding:0 2px 8px;margin-bottom:8px;border-bottom:1px solid var(--border-soft)}
@@ -2357,7 +2357,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tk-hd{display:flex;align-items:center;gap:8px;margin:2px 0 6px}
   .tk-hd-t{font-family:var(--mono);font-size:9px;letter-spacing:2.6px;color:var(--faint)}
   .tk-hd:after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(201,162,94,.26),rgba(201,162,94,0))}
-  /* ---- 追踪 Trace:turn 三级树(2026-10-21 用户口径,重设计)----
+ /* ---- 追踪 Trace:turn 三级树(重设计)----
    * 一级 turn 卡 · 二级五阶段(左侧引导线) · 三级阶段任务(note 圆点列表) */
   .tk-turn{border:1px solid var(--border-soft);border-radius:12px;margin:8px 0;overflow:hidden;
            background:linear-gradient(180deg,rgba(201,162,94,.055),rgba(201,162,94,.012))}
@@ -2420,7 +2420,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sense-detail .sec{color:var(--bronze)}
   .sense-detail .dim{color:var(--faint)}
 
-  /* 代码档案 tab(step-118 产品决策:wiki 并入代码档案,不再有独立一级视图) */
+ /* 代码档案 tab(产品决策:wiki 并入代码档案,不再有独立一级视图) */
   #view-project{overflow:hidden}
   .pp-tabs{display:flex;gap:4px;margin:2px 0 10px;border-bottom:1px solid var(--border-soft);padding-bottom:6px}
   .pp-tab{background:transparent;border:1px solid transparent;border-radius:8px;color:var(--muted);font-size:11.5px;
@@ -2431,7 +2431,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .pp-tabpane.on{display:flex}
   #ppTab-files{overflow-y:auto}
   #ppTab-files .ppf{margin-top:0;border-top:0;padding-top:0;flex:1}
-  /* 总路线 tab(step-131:原侧栏「总线路」一级视图并入代码档案;上=宗旨主线,下=任务漏斗) */
+ /* 总路线 tab(原侧栏「总线路」一级视图并入代码档案;上=宗旨主线,下=任务漏斗) */
   #ppTab-roadmap{overflow-y:auto}
   .rm-wrap{display:flex;flex-direction:column;gap:14px;padding-bottom:18px}
   .rm-purpose{border:1px solid var(--border-soft);border-radius:12px;background:var(--glass);padding:12px 14px}
@@ -2496,7 +2496,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .md-mermaid{overflow:auto;max-width:100%;margin:10px 0;padding:8px;border:1px solid var(--border-soft);border-radius:10px;background:var(--sunken)} /* mermaid 懒加载占位容器(消息流;wiki-md 内已有特化) */
   .md-mermaid svg{max-width:100%;height:auto}
   .md-mermaid pre.md-mermaid-src{margin:0;color:var(--text)}
-  /* 2026-11-06 step-1024 富图形交付:md 围栏 html / svg 渲染成「可看图卡」(mermaid 表达不了的设计稿级
+ /* 富图形交付:md 围栏 html / svg 渲染成「可看图卡」(mermaid 表达不了的设计稿级
      分层容器/散点带/编号标注)。html 走 sandbox="" iframe(内联源再带 CSP default-src 'none'),
      svg 由 artSanitizeSvg 解析剥险后内联;失败/超 512KB 回落代码块 + 一行说明(.md-art-note)。 */
   .md-artifact{position:relative;margin:var(--gap-block) 0;border:1px solid var(--border-soft);border-radius:10px;
@@ -2534,7 +2534,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   }
 
   /* footer(companion):AFFINITY 金线 + 快捷卡 + composer —— 仅 chat 视图显示(composer 属于对话,复刻 ZCode) */
-  footer{padding:0 28px 16px 34px;flex-shrink:0} /* 全流宽(step-055 自由伸缩:composer 跟随聊天窗宽度,原 680 写死) */
+  footer{padding:0 28px 16px 34px;flex-shrink:0} /* 全流宽(自由伸缩:composer 跟随聊天窗宽度,原 680 写死) */
   body:not([data-view="chat"]) footer{display:none}
   .aff-head{display:flex;align-items:baseline;margin-bottom:6px}
   .aff-title{font-size:9px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
@@ -2542,7 +2542,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .aff-bar{height:3px;border-radius:2px;background:var(--accent-soft);overflow:hidden;margin-bottom:8px}
   .aff-bar i{display:block;height:100%;width:0;border-radius:2px;background:linear-gradient(90deg,var(--grad-b),var(--grad-a));transition:width .5s}
   .aff-stats{font-size:10px;color:var(--faint);letter-spacing:1px}
-  /* footer 双段条(2026-10-14):左=管线状态,右=轮次时间轴(#turnNav 迁入,同高不增 footer 高度) */
+ /* footer 双段条:左=管线状态,右=轮次时间轴(#turnNav 迁入,同高不增 footer 高度) */
   .aff-strip{display:flex;align-items:flex-end;gap:16px;margin-bottom:9px;min-width:0}
   .aff-strip .aff-stats{flex-shrink:0;white-space:nowrap;margin-bottom:1px}
   .input-row{display:flex;align-items:flex-end;gap:10px;margin-top:3px}
@@ -2553,38 +2553,38 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .send-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border-soft);flex-shrink:0;
             background:var(--glass2);color:var(--bronze);font-size:13px;transition:.2s}
   .send-btn:hover{border-color:var(--bronze);box-shadow:0 0 16px var(--bronze-glow)}
-  /* 斜杠指令面板(step-036,ZCode SlashCommandPlugin 移植) */
+ /* 斜杠指令面板(ZCode SlashCommandPlugin 移植) */
   footer{position:relative}
-  /* 批A(step-037):多行输入/ markdown/工具卡/状态条/查找/错误横幅 */
+ /* 批A:多行输入/ markdown/工具卡/状态条/查找/错误横幅 */
   .input-row textarea{flex:1;border:0;border-bottom:1px solid var(--border-soft);background:transparent;
                    color:var(--text);font-size:14px;padding:6px 2px;outline:none;font-family:var(--sans);min-height:24px;
                    max-height:160px;resize:none;line-height:1.5}
   .input-row textarea:focus{border-color:var(--bronze)}
-  /* composer 容器(2026-10-13 视频 2:模型/模式/思考/用量入框,ZCode composer 对齐) */
+ /* composer 容器(视频 2:模型/模式/思考/用量入框,ZCode composer 对齐) */
   .composer{border:1px solid var(--border-soft);border-radius:12px;background:var(--input-bg);padding:4px 10px 6px;margin-top:3px;position:relative}
   .composer:focus-within{border-color:var(--bronze)}
   .composer textarea{width:100%;border:0;border-bottom:1px solid var(--border-soft);background:transparent;
                    color:var(--text);font-size:14px;padding:6px 2px;outline:none;font-family:var(--sans);min-height:24px;
                    max-height:160px;resize:none;line-height:1.5;box-sizing:border-box}
   .composer textarea:focus{border-color:transparent}
-  /* step-095:输入框指令 chip 覆盖层——chip 态渲染不可编辑的指令占位符,textarea 首行文字自 padding-left 起;
+ /* 输入框指令 chip 覆盖层——chip 态渲染不可编辑的指令占位符,textarea 首行文字自 padding-left 起;
      全变量取色(--chip-bg/--bronze/--accent-bright)=七主题自动成立;pointer-events:none 让点击穿透聚焦 textarea。 */
   #inChip{position:absolute;left:12px;top:10px;z-index:5;display:none;align-items:center;max-width:72%;pointer-events:none}
   #inChip .slash-chip{background:var(--chip-bg);border:1px solid var(--border-soft);border-radius:6px;padding:2px 8px;box-shadow:0 1px 4px rgba(0,0,0,.22)}
   #inChip .slash-chip .sc-args{font-size:var(--fs-chip);color:var(--faint);letter-spacing:1px}
   .composer-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding-top:4px}
-  /* step-165 busy 视觉态:有在办任务时 composer 边框暖色提示「输入会排队」(ref:busy 不禁用输入,
+ /* busy 视觉态:有在办任务时 composer 边框暖色提示「输入会排队」(ref:busy 不禁用输入,
      转排队语义;textarea 本身永不禁用)。占位符双态见 renderSendBtn。 */
   .composer.busy{border-color:rgba(217,179,108,.55)}
   .send-btn.stop{border-color:var(--red);color:var(--red)}
-  /* 语音任务书(2026-11-08):录音态按钮红脉冲;撰写锁态 composer 降透明+textarea 只读灰字。
+ /* 语音任务书:录音态按钮红脉冲;撰写锁态 composer 降透明+textarea 只读灰字。
      禁输入用 readOnly(保留文本可选中/复制),不用 disabled(避免丢焦点与提交路径分叉)。 */
   .composer-plus.rec{border-color:var(--red);color:var(--red);animation:vrecPulse 1.2s ease-in-out infinite}
   @keyframes vrecPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--red) 40%,transparent)}50%{box-shadow:0 0 0 6px transparent}}
   .composer.voice-wait{opacity:.82}
   .composer.voice-wait textarea{color:var(--faint)}
-  /* step-137:正文内联代码/围栏块统一走板令牌(原硬编码 rgba 在浅色主题出暗块)
-     step-142:围栏块与 .code-wrap 同族同规格(font-mono + fs-code + lh-code);行内 code 用 fs-code-sm
+ /* 正文内联代码/围栏块统一走板令牌(原硬编码 rgba 在浅色主题出暗块)
+ 围栏块与 .code-wrap 同族同规格(font-mono + fs-code + lh-code);行内 code 用 fs-code-sm
      (相对正文比例,不随正文字号漂移)。 */
   .task-reply pre{background:var(--surf-code);border:1px solid var(--border-soft);border-radius:8px;
     padding:var(--gap-block) 10px;font-family:var(--font-mono);font-size:var(--fs-code);line-height:var(--lh-code);
@@ -2593,9 +2593,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     background:color-mix(in srgb,var(--bronze) 14%,transparent);border:1px solid color-mix(in srgb,var(--bronze) 22%,transparent);border-radius:4px;padding:1px 5px;letter-spacing:var(--ls-code)}
   .task-reply pre code{background:transparent;padding:0;font-size:var(--fs-code)}
   .task-reply a{color:var(--bronze)}
-  /* step-137:正文内强调/标题/引用分层——正文是唯一「重点层」,其中的小结构也要能一眼分级:
+ /* 正文内强调/标题/引用分层——正文是唯一「重点层」,其中的小结构也要能一眼分级:
      h 级标题带左侧粗条,b/i 加强,b/mark 高亮,引用块走板,none 处保持 serif 大字。
-     step-142 分型排版规范:标题一律 --font-ui + 三档字号(h1=正文×1.3 / h2=×1.15 / h3=×1.0,
+ 分型排版规范:标题一律 --font-ui + 三档字号(h1=正文×1.3 / h2=×1.15 / h3=×1.0,
      上限即正文×1.3,不允许更大);正文段落 / 标题 / 表格 / 引用统一 --gap-block 块距;
      列表缩进走 --indent-1 / --indent-2(嵌套);引用左 3px 边条 + --indent-1 左缩进。 */
   .task-reply b,.task-reply strong{color:var(--accent-bright);font-weight:600}
@@ -2604,7 +2604,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .task-reply h1,.task-reply h2,.task-reply h3,.task-reply h4,.task-reply h5,.task-reply h6{
     font-family:var(--font-ui);color:var(--brand);margin:var(--gap-head) 0 calc(var(--gap-block) / 2);
     line-height:var(--lh-tight)}
-  /* step-142:mdToHtml 把 markdown 的 #/##/### 降两级映射到 h3/h4/h5(渲染层既有口径),
+ /* mdToHtml 把 markdown 的 #/##/### 降两级映射到 h3/h4/h5(渲染层既有口径),
      故字号分级要按「真实 DOM 级别」给三档,否则 # 与 ## 在消息流里同字号(无层级感):
      h3(=md #)=正文×1.3 / h4(=md ##)=正文×1.15 / h5-h6(=md ###+)=正文;h1/h2 同档兜底。 */
   .task-reply h1,.task-reply h3{font-size:var(--fs-h1);font-weight:600}
@@ -2627,9 +2627,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .task-reply .code-wrap{letter-spacing:var(--ls-code)}
   .task-reply .code-wrap,.task-reply .td-mini,.task-reply .md-table{margin:var(--gap-block) 0}
   .task-reply mark{background:color-mix(in srgb,var(--bronze) 30%,transparent);color:var(--accent-bright);border-radius:3px;padding:0 2px}
-  /* step-137:工具卡=「底噪层」——比正文更沉、边更淡,让 AI 正文成为视觉重点;
+ /* 工具卡=「底噪层」——比正文更沉、边更淡,让 AI 正文成为视觉重点;
      失败卡=浮起层(红边+红底),异常必须比正文更抢眼。
-     step-142:工具卡标题行 --fs-tool + --font-mono;参数/摘要/结果体 --fs-code-sm;
+ 工具卡标题行 --fs-tool + --font-mono;参数/摘要/结果体 --fs-code-sm;
      失败态只换 color(success/fail 同字号同行高,不允许靠字号区分)。 */
   .tool-card{border:1px solid var(--border-soft);border-radius:9px;margin:var(--gap-tool) 0;
     font-family:var(--font-mono);font-size:var(--fs-tool);line-height:var(--lh-tight);background:var(--surf-card)}
@@ -2639,17 +2639,17 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tool-card .tc-body{padding:2px 10px 8px;font-family:var(--font-mono);font-size:var(--fs-code-sm);
     line-height:var(--lh-code);color:var(--faint);white-space:pre-wrap;word-break:break-word;max-height:280px;overflow-y:auto}
   .tool-card .tc-state{margin-left:auto;font-family:var(--font-mono);font-size:var(--fs-chip);line-height:var(--lh-tight)}
-  /* step-142:标题行里的参数/摘要(工具卡 .tc-args、分组项 .tg-args)统一 code-sm 档——全组同规格 */
+ /* 标题行里的参数/摘要(工具卡 .tc-args、分组项 .tg-args)统一 code-sm 档——全组同规格 */
   .tool-card .tc-args,.tg-head .tc-args{font-family:var(--font-mono);font-size:var(--fs-code-sm);line-height:var(--lh-tight);
     color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .tc-ok{color:var(--green)} .tc-err{color:var(--red)}
-  /* 工具结果展开全文(A 2026-10-14):嵌套 details,免 JS 原生开合 */
+ /* 工具结果展开全文(A):嵌套 details,免 JS 原生开合 */
   .tool-card .tr-more{margin:var(--gap-tool) 0 2px}
   .tool-card .tr-more summary{cursor:pointer;color:var(--bronze);padding:2px 0;
     font-size:var(--fs-tool);line-height:var(--lh-tight)}
   .tool-card .tr-more summary:hover{color:var(--accent-bright)}
   .tool-card .tr-full{max-height:420px}
-  /* step-087:工具结果行块(.tr-lines=逐行 .cl 结构;容器折叠裸换行,.cl display:block 承担换行) */
+ /* 工具结果行块(.tr-lines=逐行 .cl 结构;容器折叠裸换行,.cl display:block 承担换行) */
   .tr-lines .cl{display:block;white-space:pre-wrap}
   .tool-card .tc-body.tr-lines{white-space:normal;padding:4px 10px 6px}
   .tool-group .tg-item .code-wrap{margin:4px 0 2px}
@@ -2659,8 +2659,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tool-card .tc-ic{width:12px;height:12px;vertical-align:-1.5px;opacity:.8;flex-shrink:0}
   .tool-card .tc-verb{color:var(--muted);flex-shrink:0;letter-spacing:.5px}
   .tc-state.tc-run{color:var(--warn)}
-  /* step-137:失败卡整卡浮红(底+边+头同色域),成功卡保持底噪层——一眼分清「出事的」和「跑过的」。
-     step-142:失败态只换 color/底色/边,字号行高继承工具卡同一档(同型同规格)。 */
+ /* 失败卡整卡浮红(底+边+头同色域),成功卡保持底噪层——一眼分清「出事的」和「跑过的」。
+ 失败态只换 color/底色/边,字号行高继承工具卡同一档(同型同规格)。 */
   .tool-card.tc-fail{border-color:color-mix(in srgb,var(--red) 55%,var(--border-soft));background:var(--surf-fail)}
   .tool-card.tc-fail>.summary, .tool-card.tc-fail>summary{color:var(--red)}
   .tg-head{display:flex;gap:7px;align-items:baseline;padding:3px 0 1px;font-family:var(--font-mono);
@@ -2668,7 +2668,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tg-head .tc-ic{vertical-align:-1.5px}
   .tg-head .tg-st{margin-left:auto;font-size:var(--fs-chip);flex-shrink:0}
   .tg-head .tg-st.ok{color:var(--green)} .tg-head .tg-st.err{color:var(--red)}
-  /* fixH1:专属结果体——chips 行/摘要计数(step-142:chip 固定档 --fs-chip) */
+ /* fixH1:专属结果体——chips 行/摘要计数(chip 固定档 --fs-chip) */
   .tr-chips{display:flex;flex-wrap:wrap;gap:4px 6px;margin:4px 0 6px;font-family:var(--font-mono)}
   .tr-chip{border:1px solid var(--border-soft);border-radius:6px;padding:1px 7px;font-size:var(--fs-chip);line-height:var(--lh-tight);color:var(--muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tr-chip b{color:var(--text);font-weight:600}
@@ -2677,8 +2677,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .tr-chip.note{color:var(--warn);border-color:var(--warn)}
   .tr-empty{color:var(--faint);font-family:var(--font-mono);font-size:var(--fs-code-sm);line-height:var(--lh-code);padding:2px 0}
   /* fixH2:grep/code_sense 命中——文件分组+行号 */
-  /* step-137:命中结果成「板」——每文件一组带米色底与左侧竖线,行内命中行加悬停,和正文文本区分开
-     step-142:板内所有行同一档 --fs-code-sm + --lh-code(文件头/命中行/diff 行/诊断行不各写一套) */
+ /* 命中结果成「板」——每文件一组带米色底与左侧竖线,行内命中行加悬停,和正文文本区分开
+ 板内所有行同一档 --fs-code-sm + --lh-code(文件头/命中行/diff 行/诊断行不各写一套) */
   .gr-blk{background:var(--surf-hit);border:1px solid var(--border-soft);border-radius:8px;
     border-left:2px solid color-mix(in srgb,var(--bronze) 55%,transparent);padding:2px 0 4px;margin:var(--gap-tool) 0}
   .gr-file{margin:4px 0 1px;color:var(--bronze);font-size:var(--fs-code-sm);line-height:var(--lh-code);font-family:var(--font-mono);word-break:break-all;
@@ -2692,7 +2692,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .dir-row .icn{width:11px;height:11px;vertical-align:-1px;opacity:.7;flex-shrink:0}
   .dir-row .dir-meta{margin-left:auto;color:var(--faint);font-size:var(--fs-chip);flex-shrink:0}
   /* fixH3:edit/write 迷你 diff(+绿/-红,主题变量跨 7 主题) */
-  /* step-137:diff 板与终端板同族但走「增/删」语义色;尾部行号带用淡底分隔 */
+ /* diff 板与终端板同族但走「增/删」语义色;尾部行号带用淡底分隔 */
   .td-mini{margin:var(--gap-tool) 0;border:1px solid var(--border-soft);border-radius:7px;overflow:hidden;
     font-family:var(--font-mono);font-size:var(--fs-code-sm);line-height:var(--lh-code);background:var(--surf-code)}
   .td-mrow{display:block;white-space:pre-wrap;word-break:break-all;font-size:var(--fs-code-sm);line-height:var(--lh-code);padding:0 8px}
@@ -2705,7 +2705,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   /* fixH5:诊断块(warn 调) */
   .diag-row{color:var(--warn);font-size:var(--fs-code-sm);line-height:var(--lh-code);white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono)}
   .diag-row.dg-err{color:var(--red,#e08a7a)}
-  /* step-137:诊断板(编辑/写入后的 LSP 反馈)——独立板式,error 级别整板加深,不再是「一行淡红字」 */
+ /* 诊断板(编辑/写入后的 LSP 反馈)——独立板式,error 级别整板加深,不再是「一行淡红字」 */
   .diag-box{margin:5px 0;border:1px solid color-mix(in srgb,var(--warn) 30%,var(--border-soft));
     border-left:2px solid color-mix(in srgb,var(--warn) 65%,transparent);border-radius:7px;
     background:color-mix(in srgb,var(--warn) 7%,transparent);padding:4px 8px}
@@ -2753,7 +2753,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bd-row{display:flex;gap:7px;font-size:var(--fs-code-sm);line-height:var(--lh-code);align-items:baseline}
   .bd-kind{border:1px solid var(--border-soft);border-radius:5px;padding:0 5px;font-size:var(--fs-chip);color:var(--muted);flex-shrink:0;font-family:var(--font-mono)}
   .bd-row .bd-tx{min-width:0;word-break:break-word}
-  /* step-093:语义着色 span(.cl 内切片;色值=--tok-* 七主题变量,缺席=纯文本零变化) */
+ /* 语义着色 span(.cl 内切片;色值=--tok-* 七主题变量,缺席=纯文本零变化) */
   .cl .tk-func{color:var(--tok-func)}
   .cl .tk-type{color:var(--tok-type)}
   .cl .tk-var{color:var(--tok-var)}
@@ -2764,9 +2764,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cl .tk-lnno{color:var(--tok-comment)}        /* read_file 行号前缀(非代码调子) */
   .cl .tk-ptr{text-decoration:underline dotted var(--tok-comment);text-underline-offset:3px} /* 指针/数组标记 */
   /* 主题特征:glass 柔光 / ink 零装饰(浅色主题单色分层即语义) */
-  /* 子代理过程卡(B 2026-10-14):spawn 处内联,状态/耗时/tail */
-  /* step-137:过程卡再降一层(比工具卡更淡的底 + 角色色左边条加宽),层次=正文 > 失败卡 > 工具卡 > 过程卡
-     step-142:全卡统一「从属档」--fs-code-sm + --lh-code(.sub-task/.sub-tail/.sub-polls/.sub-st 同档不跳),
+ /* 子代理过程卡(B):spawn 处内联,状态/耗时/tail */
+ /* 过程卡再降一层(比工具卡更淡的底 + 角色色左边条加宽),层次=正文 > 失败卡 > 工具卡 > 过程卡
+ 全卡统一「从属档」--fs-code-sm + --lh-code(.sub-task/.sub-tail/.sub-polls/.sub-st 同档不跳),
      3px border-left 保留以呈现从属缩进;状态只换 color。 */
   .sub-card{border-left:3px solid var(--border-soft);background:color-mix(in srgb,var(--surf-card) 70%,transparent);
     font-family:var(--font-ui);font-size:var(--fs-code-sm);line-height:var(--lh-code)}
@@ -2781,11 +2781,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sub-card .sub-task{color:var(--text);font-size:var(--fs-code-sm);line-height:var(--lh-code);padding:2px 10px 4px;font-family:var(--font-ui)}
   .sub-card .sub-tail{margin:2px 10px var(--gap-block);border:1px solid var(--border-soft);border-radius:7px;background:var(--surf-code);
     padding:6px 8px;font-family:var(--font-mono);font-size:var(--fs-code-sm);line-height:var(--lh-code);color:var(--muted);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto}
-  /* task_output 轮询聚合卡(step-060 刷屏治理):聚合说明行+等待卡头部标色 */
+ /* task_output 轮询聚合卡(刷屏治理):聚合说明行+等待卡头部标色 */
   .sub-card .sub-polls{margin:2px 10px var(--gap-block);font-family:var(--font-mono);font-size:var(--fs-code-sm);line-height:var(--lh-code);color:var(--faint)}
   .sub-card.sub-wait{border-left:2px solid var(--warn)}
   .sub-card.sub-wait.ok,.sub-card.sub-wait.fail{border-left-color:var(--border-soft)}
-  /* 子智能体目录抽屉(step-060,ZCode SubagentDirectory 对齐):右侧滑出,两区+条目下钻;关闭钮复用 .sd-close */
+ /* 子智能体目录抽屉(ZCode SubagentDirectory 对齐):右侧滑出,两区+条目下钻;关闭钮复用 .sd-close */
   #subDir{position:fixed;right:0;top:0;bottom:0;width:min(440px,82vw);background:var(--window-bg,#141009);
     border-left:1px solid var(--border-soft);box-shadow:-20px 0 50px rgba(0,0,0,.5);z-index:76;
     display:flex;flex-direction:column;transform:translateX(105%);transition:transform .22s}
@@ -2798,7 +2798,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sd-empty{font-size:11px;color:var(--faint);padding:4px 2px}
   .sd-item{border:1px solid var(--border-soft);border-radius:9px;margin:0 0 6px;font-size:11px}
   .sd-item.ws-open{border-color:rgba(201,143,69,.45)}
-  /* step-062:条目主区域=一级入口(点击开/激活工作区 tab,tab 条在中间列顶部);下钻改挂「详情」钮轻展开 */
+ /* 条目主区域=一级入口(点击开/激活工作区 tab,tab 条在中间列顶部);下钻改挂「详情」钮轻展开 */
   .sd-item summary{cursor:pointer;padding:6px 10px;display:flex;gap:8px;align-items:center;font-family:var(--mono);color:var(--muted)}
   .sd-item summary:hover{color:var(--text);background:rgba(201,143,69,.06)}
   .sd-item .sd-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -2808,7 +2808,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sd-item .sd-role{color:var(--bronze);flex-shrink:0}
   .sd-item .sd-st{margin-left:auto;font-size:9px;flex-shrink:0}
   .sd-item .sd-st.run{color:var(--warn)} .sd-item .sd-st.ok{color:var(--green)} .sd-item .sd-st.fail{color:var(--red)} .sd-item .sd-st.end{color:var(--faint)}
-  /* 目录深化(2026-10-16,ZCode 条目密度对齐):摘要行下的元信息行(模型/deadline 倒计时/心跳)+运行条目「终止」按钮 */
+ /* 目录深化(ZCode 条目密度对齐):摘要行下的元信息行(模型/deadline 倒计时/心跳)+运行条目「终止」按钮 */
   .sd-item summary{flex-wrap:wrap}
   .sd-item .sd-meta2{flex-basis:100%;display:flex;gap:10px;font-size:9.5px;color:var(--faint);font-family:var(--mono);padding-top:2px;min-width:0}
   .sd-item .sd-meta2 .sd-stale{color:var(--warn)}
@@ -2824,7 +2824,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sd-tail{margin-top:6px;border:1px solid var(--border-soft);border-radius:7px;background:rgba(0,0,0,.3);padding:6px 8px;
     font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto}
   #subDirBadge{display:inline-block;min-width:14px;text-align:center;margin-left:5px;border-radius:999px;background:var(--warn);color:#1a120a;font-size:9px;padding:0 4px;font-family:var(--mono)}
-  /* 子代理工作区 tab 条(2026-10-16 用户口径:点子代理弹它的完整工作区,如 vibe coding agent 工作区):
+ /* 子代理工作区 tab 条(点子代理弹它的完整工作区,如 vibe coding agent 工作区):
      中间工作区顶部一排 tab——「主会话」恒第一位不可关+每个打开的子代理工作区一个(状态点+标题+关闭);
      无工作区打开=整条隐藏。与已废弃硬隐藏的 #tabbar(会话标签条)不同 id 不冲突。 */
   #wsTabbar{display:none;gap:6px;align-items:center;padding:0 2px 8px;flex-wrap:wrap}
@@ -2859,12 +2859,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ws-note{font-size:10.5px;color:var(--faint);font-family:var(--mono);padding:2px 4px 8px}
   .sd-open{font-size:9.5px;font-family:var(--mono);border:1px solid var(--border-soft);color:var(--bronze);background:transparent;border-radius:6px;padding:1px 8px;cursor:pointer;flex-shrink:0}
   .sd-open:hover{border-color:var(--bronze)}
-  /* step-062:spawn 过程卡的「工作区」按钮(消息流内就地开 tab,与目录条目行同一 data-subws 委托) */
+ /* spawn 过程卡的「工作区」按钮(消息流内就地开 tab,与目录条目行同一 data-subws 委托) */
   .sc-ws{font-size:9px;font-family:var(--mono);border:1px solid var(--border-soft);color:var(--bronze);background:transparent;border-radius:6px;padding:0 7px;cursor:pointer;flex-shrink:0}
   .sc-ws:hover{border-color:var(--bronze)}
-  /* step-062:工作区头部「终止」按钮(运行中且注册表在场才渲染;复用 data-subcancel 全局委托) */
+ /* 工作区头部「终止」按钮(运行中且注册表在场才渲染;复用 data-subcancel 全局委托) */
   .ws-head .ws-title .sd-cancel{margin-left:auto}
-  /* 2026-10-28 用户口径:删除会话流顶部置顶条(#chatTopbar)。它空着也占 14px 灰线、chips 一多就折行
+ /* 删除会话流顶部置顶条(#chatTopbar)。它空着也占 14px 灰线、chips 一多就折行
      (8px→40px+),随 3s session.status 轮询反复出现/消失,把会话流消息上下顶(用户实报「这条线周期变两条」)。
      chips 改挂 footer 底部状态条 .aff-strip:不在滚动容器内,单行不折(nowrap+横向滚动),高度只在真有 chips 时出现。 */
   #chatStatusbar{display:flex;flex-wrap:nowrap;gap:6px;font-size:11px;align-items:center;min-width:0;flex:0 1 auto;
@@ -2897,7 +2897,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .find-bar button{background:transparent;border:1px solid var(--border-soft);color:var(--muted);border-radius:6px;cursor:pointer;font-size:11px;padding:1px 8px}
   .find-count{font-size:10px;color:var(--faint);font-family:var(--mono)}
   mark{background:var(--bronze-glow);color:var(--text);border-radius:3px;padding:0 2px}
-  /* 权限审批对话框(step-037 B2,ZCode PermissionDialog 裁剪) */
+ /* 权限审批对话框( B2,ZCode PermissionDialog 裁剪) */
   #permDialog{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;z-index:80}
   #permDialog.on{display:flex}
   .perm-box{width:420px;background:var(--window-bg,#141009);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
@@ -2912,7 +2912,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .perm-allow:hover{background:rgba(157,192,139,.12)}
   .perm-deny{border:1px solid var(--border-soft);color:var(--muted);background:transparent}
   .perm-deny:hover{border-color:var(--red);color:var(--red)}
-  /* Git 面板(step-037 批C) */
+ /* Git 面板(批C) */
   .git-bar{display:flex;gap:10px;align-items:center;margin-bottom:10px}
   .git-branch{font-family:var(--mono);font-size:12px;color:var(--bronze)}
   .git-bar select,.git-bar button{background:var(--glass);border:1px solid var(--border-soft);border-radius:9px;color:var(--text);font-size:11px;padding:5px 10px;outline:none}
@@ -2929,7 +2929,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .git-commit input{flex:1;background:rgba(0,0,0,.3);border:1px solid var(--border-soft);border-radius:9px;color:var(--text);font-size:12px;padding:7px 10px;outline:none}
   .git-commit button{background:transparent;border:1px solid var(--border-soft);border-radius:9px;color:var(--text);font-size:11px;padding:0 16px;cursor:pointer}
   .git-commit button:hover{border-color:var(--bronze);color:var(--bronze)}
-  /* F1 多快照浏览(designs/21):git 视图快照区 */
+ /* F1 多快照浏览:git 视图快照区 */
   .snap-sec{margin-top:14px;border-top:1px solid var(--border-soft);padding-top:10px}
   .snap-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .snap-head .vw-act{margin-left:0}
@@ -2947,7 +2947,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   /* F4 file:line citation */
   a.cite{font-family:var(--mono);font-size:.92em;color:var(--green);text-decoration:none;border-bottom:1px dashed var(--green);cursor:pointer}
   a.cite:hover{color:var(--text);border-color:var(--text)}
-  /* step-1025 聊天正文文件路径(裸路径/markdown 相对链接)→ 点击在 IDE 打开 */
+ /* 聊天正文文件路径(裸路径/markdown 相对链接)→ 点击在 IDE 打开 */
   a.chat-file{font-family:var(--mono);font-size:.94em;color:var(--bronze);text-decoration:none;
     border-bottom:1px dotted var(--bronze);cursor:pointer;word-break:break-all}
   a.chat-file:hover{color:var(--text);border-color:var(--text)}
@@ -2963,7 +2963,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .fv-line .ln{width:44px;flex-shrink:0;color:var(--faint);text-align:right;padding-right:12px;user-select:none}
   .fv-line.hl{background:var(--accent-soft)}
   .fv-line.hl .ln{color:var(--bronze)}
-  /* ── step-056:添加项目重做(打开文件夹=服务端目录浏览器 / 远程连接向导) ── */
+ /* ── 添加项目重做(打开文件夹=服务端目录浏览器 / 远程连接向导) ── */
   .proj-add-quick{display:flex;gap:6px;margin-bottom:6px}
   .proj-add-quick button{flex:1;background:var(--accent-soft);border:1px solid var(--border-soft);color:var(--text);
     border-radius:8px;font-size:11px;padding:5px 4px;cursor:pointer}
@@ -3005,7 +3005,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .pr-form .note{font-size:10.5px;color:var(--faint);line-height:1.6}
   .pr-form .go{background:var(--accent-soft);border:1px solid var(--bronze);color:var(--bronze);border-radius:8px;
     font-size:11.5px;padding:5px 14px;cursor:pointer;align-self:flex-start}
-  /* ── step-056:项目文件树视图 ── */
+ /* ── 项目文件树视图 ── */
   .files-tree{flex:1;overflow:auto;padding:6px 4px;font-size:12px}
   .ft-row{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:7px;color:var(--muted);cursor:pointer;white-space:nowrap}
   .ft-row:not(.sel):hover{background:var(--hover-bg2);box-shadow:inset 2px 0 0 var(--bronze)}
@@ -3015,7 +3015,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ft-row .nm{overflow:hidden;text-overflow:ellipsis}
   .ft-row.dir .nm{color:var(--text)}
   .ft-row.sel{background:var(--accent-soft)}
-  /* ── step-056:侧栏分桶折叠(项目内 session 可折叠) ── */
+ /* ── 侧栏分桶折叠(项目内 session 可折叠) ── */
   .t-bh{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
   .t-bh:hover{color:var(--muted)}
   .t-bh .bh-chev{font-size:8px;width:10px;display:inline-block}
@@ -3029,7 +3029,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .wf-q .q-row{display:flex;gap:8px}
   .wf-q input{flex:1;background:rgba(0,0,0,.3);border:1px solid var(--border-soft);border-radius:7px;color:var(--text);font-size:11px;padding:4px 8px;outline:none}
   .wf-q button{background:transparent;border:1px solid var(--warn);color:var(--warn);border-radius:7px;font-size:11px;padding:2px 12px;cursor:pointer}
-  /* 代码评论卡(step-041,ZCode AssistantCodeCommentCards 移植) */
+ /* 代码评论卡(ZCode AssistantCodeCommentCards 移植) */
   .rev-group{border:1px solid var(--border-soft);border-radius:11px;margin:6px 0;overflow:hidden}
   .rev-head{padding:7px 12px;font-size:11px;color:var(--bronze);cursor:pointer;background:var(--accent-soft)}
   .rev-card{display:flex;gap:10px;padding:7px 12px;border-top:1px solid var(--border-soft);cursor:pointer;align-items:baseline}
@@ -3041,7 +3041,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .rev-loc{font-family:var(--mono);font-size:10.5px;color:var(--green);flex-shrink:0}
   .rev-title{font-size:11.5px;color:var(--text)}
   .rev-detail{font-size:10.5px;color:var(--faint);margin-top:2px}
-  /* 评审评论一键回注(step-074):单条/整批注入聊天窗 */
+ /* 评审评论一键回注:单条/整批注入聊天窗 */
   .rev-inj,.rev-inj-all{background:transparent;border:1px solid var(--bronze);color:var(--bronze);border-radius:7px;font-size:10px;padding:1px 8px;cursor:pointer;flex-shrink:0;white-space:nowrap}
   .rev-inj:hover,.rev-inj-all:hover{background:rgba(200,143,69,.15)}
   .rev-inj-all{margin-left:8px}
@@ -3062,14 +3062,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .rij-note{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--border-soft);border-radius:7px;color:var(--text);font-size:11.5px;padding:5px 8px;outline:none;box-sizing:border-box}
   .rij-go{align-self:flex-end;background:transparent;border:1px solid var(--bronze);color:var(--bronze);border-radius:8px;font-size:12px;padding:4px 18px;cursor:pointer}
   .rij-go:hover{background:rgba(200,143,69,.18)}
-  /* 消息动作钮(step-041,ZCode edit/fork 移植);侧聊已改走 super agent(sideToSuper,独立抽屉退役);
+ /* 消息动作钮(ZCode edit/fork 移植);侧聊已改走 super agent(sideToSuper,独立抽屉退役);
      .sd-close 保留=通用抽屉关闭钮(diff 抽屉在用) */
   .sd-close{background:transparent;border:1px solid var(--border-soft);color:var(--muted);border-radius:7px;font-size:11px;padding:2px 10px;cursor:pointer}
   .msg-acts{display:inline-flex;gap:6px;margin-left:10px;opacity:0;transition:.15s}
   .user-line:hover .msg-acts,.t-row:hover .msg-acts{opacity:1}
   .msg-acts button{background:transparent;border:1px solid var(--border-soft);color:var(--faint);border-radius:6px;font-size:9px;padding:1px 7px;cursor:pointer}
   .msg-acts button:hover{color:var(--bronze);border-color:var(--bronze)}
-  /* step-043:自动化管理/toast/模型快切/跳轮 */
+ /* 自动化管理/toast/模型快切/跳轮 */
   .auto-sec{border:1px solid var(--border-soft);border-radius:11px;padding:10px 12px;margin-bottom:10px}
   .auto-row{display:flex;gap:8px;align-items:center;padding:5px 0;font-size:11px;border-top:1px solid var(--border-soft)}
   .auto-row:first-of-type{border-top:0}
@@ -3084,7 +3084,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .auto-form input[name=every]{width:70px}
   .auto-form input[name=instruction]{flex:1;min-width:160px}
   #toastHost{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:85}
-  /* 右侧 diff 抽屉(step-052 F1,参考「从右边弹出展示修改了什么」):变更条文件→单文件补丁 */
+ /* 右侧 diff 抽屉( F1,参考「从右边弹出展示修改了什么」):变更条文件→单文件补丁 */
   #dd{position:fixed;right:0;top:0;bottom:0;width:min(640px,55vw);background:var(--window-bg,#141009);
       border-left:1px solid var(--border-soft);box-shadow:-20px 0 50px rgba(0,0,0,.5);z-index:75;
       display:flex;flex-direction:column;transform:translateX(105%);transition:transform .22s}
@@ -3097,7 +3097,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .dl-del{color:#e08585;background:rgba(220,90,90,.08)}
   .dl-hunk{color:#7fa7d9}
   .dl-meta{color:var(--faint)}
-  /* 变更条内联文件清单(step-052:点击就地列出修改了什么) */
+ /* 变更条内联文件清单(点击就地列出修改了什么) */
   .filelist{margin:2px 0 4px 6px;border-left:2px solid var(--border-soft);padding-left:10px;display:flex;flex-direction:column;gap:2px}
   .fl-row{display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 8px;border-radius:6px;font-family:var(--mono);font-size:11px;color:var(--muted);max-width:680px}
   .fl-row:hover{background:rgba(255,255,255,.05);color:var(--text)}
@@ -3193,7 +3193,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .pill-menu .pm-foot .pm-item .pm-flip{display:inline-flex;margin-right:4px;color:var(--faint)}
   .pill-menu .pm-grp{display:flex;flex-direction:column;gap:2px}
   .pill-menu .pm-grp.off{display:none}
-  /* step-132 模型菜单:provider 两层分组(ZCode ModelConfigSelect 语义)——直展组一级平铺 / 折叠组 hover 子菜单 */
+ /* 模型菜单:provider 两层分组(ZCode ModelConfigSelect 语义)——直展组一级平铺 / 折叠组 hover 子菜单 */
   .pill-menu .pm-ghead{font-size:13.5px;color:var(--muted);white-space:nowrap}
   .pill-menu .pm-ghead.pm-head{padding:4px 8px 2px}
   .pill-menu .pm-badge{font-size:11px;letter-spacing:0;color:var(--faint);background:rgba(255,255,255,.06);
@@ -3233,9 +3233,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   #wbWidth{width:90px;accent-color:var(--bronze)}
   .wb-wrap{flex:1;min-height:0;border:1px solid var(--border-soft);border-radius:12px;background:rgba(255,255,255,.03);overflow:hidden;position:relative}
   #wbCanvas{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
-  /* 语义流程白板(step-057,designs/22) */
-  .board-main{flex:1;min-height:420px;display:flex;gap:10px} /* step-111:min-height 保底——flex basis 0 的画布区在大板(45 卡清单)下被挤成 padding 条(实测 22px),画布是给人看的主角不能塌 */
-  /* step-094 白板 vw-head 窄视口挤压修复:副标单行省略+flex:1 1 0(假设尺寸 0,不把后续项挤下一条
+ /* 语义流程白板 */
+  .board-main{flex:1;min-height:420px;display:flex;gap:10px} /* min-height 保底——flex basis 0 的画布区在大板(45 卡清单)下被挤成 padding 条(实测 22px),画布是给人看的主角不能塌 */
+ /* 白板 vw-head 窄视口挤压修复:副标单行省略+flex:1 1 0(假设尺寸 0,不把后续项挤下一条
    * flex 线;剩余宽全归副标,紧张时 ellipsis)+按钮成组收纳;「更多」溢出菜单样式全走 088 主题变量 */
   #view-board .vw-sub{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #view-board .vw-acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
@@ -3262,7 +3262,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     #view-board .vw-acts .vw-act.vw-fold{display:none}
     #view-board .vw-menu-it.vw-fold{display:flex}
   }
-  /* 2026-10-25 C 窄视口/窄卡片板头余量:视口宽 != 卡片宽(画布外壳的卡片可拖到 320px),所以按
+ /* C 窄视口/窄卡片板头余量:视口宽 != 卡片宽(画布外壳的卡片可拖到 320px),所以按
      **自身宽度**裁决(container query),不只看 @media。目标:板头 toolbar 换行/缩小/留 padding,
      不与「白板 Sketch」页标题/板名重叠,画布仍可点。 */
   #view-board{container-type:inline-size}
@@ -3288,7 +3288,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     .bf-head .bf-close{font-size:14px}
   }
   .board-graph{flex:1;min-width:0;display:flex;flex-direction:column;overflow:auto;border:1px solid var(--border-soft);border-radius:12px;background:rgba(255,255,255,.03);padding:10px} /* 白板修复:块级父里 .bf-canvas 的 flex:1 无效→恒 340px min-height;flex 列后画布吃满 board-main */
-  /* step-1010 K:宿主已是 flex 列(画布 flex:1 + 底部图例条),不许再让画布 340px 下限把自己顶出
+ /* K:宿主已是 flex 列(画布 flex:1 + 底部图例条),不许再让画布 340px 下限把自己顶出
      scrollHeight 之外——否则窄视口下底部图例条要滚动才看得见(实测 418 高宿主 + 85 高图例条 → 滚动 33px)。 */
   .board-graph>.bf-canvas{min-height:220px}
   .board-graph svg{max-width:none}
@@ -3297,7 +3297,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .board-nodes-box summary{cursor:pointer;font-size:11.5px;color:var(--bronze);user-select:none;list-style:none}
   .board-nodes-box summary::before{content:"▸ ";color:var(--faint)}
   .board-nodes-box[open] summary::before{content:"▾ "}
-  .board-nodes{display:flex;flex-wrap:wrap;gap:8px;max-height:260px;overflow-y:auto} /* 白板修复:41 节点清单全展吃掉 ~300px 画布高,展开时也限高滚动;2026-10-21 用户实报「清单太小」150px→260px(约 3 行卡),卡片字号/内边距同步上调一档 */
+  .board-nodes{display:flex;flex-wrap:wrap;gap:8px;max-height:260px;overflow-y:auto} /* 白板修复:41 节点清单全展吃掉 ~300px 画布高,展开时也限高滚动; 用户用户反馈「清单太小」150px→260px(约 3 行卡),卡片字号/内边距同步上调一档 */
   .bd-card{border:1px solid var(--border-soft);border-radius:10px;padding:8px 12px;cursor:pointer;max-width:340px;background:rgba(255,255,255,.02)}
   .bd-card:hover{border-color:var(--bronze)}
   .bd-card.on{border-color:var(--accent-bright);box-shadow:0 0 0 1px var(--accent-bright)}
@@ -3316,7 +3316,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bd-tag.bd-p0.full{border-color:rgba(90,160,106,.5);color:#7ec98f;background:rgba(90,160,106,.16)}
   /* 白板可见化(n2):节点卡/明细卡的验收三态行与证据摘要 */
   .bd-acc-list{margin-top:4px;display:flex;flex-direction:column;gap:3px}
-  .bd-acc-row{font-size:11px;color:var(--muted);border-left:2px solid var(--border-soft);padding-left:6px;margin-top:3px} /* 2026-10-21 任务3:验收三态行 10px→11px(清单卡字号上调一档,三态可读) */
+  .bd-acc-row{font-size:11px;color:var(--muted);border-left:2px solid var(--border-soft);padding-left:6px;margin-top:3px} /* 任务3:验收三态行 10px→11px(清单卡字号上调一档,三态可读) */
   .bd-acc-row .bd-acc-st{margin-left:0;font-weight:600}
   /* n10 明细卡「关系」段:出边/入边逐条(目标节点名 + kind 中文名 + 边标签 + 推导徽标) */
   .bd-rel-row{display:flex;align-items:baseline;gap:5px;font-size:10px;color:var(--muted);margin-top:2px;border-left:2px solid var(--border-soft);padding-left:6px}
@@ -3361,14 +3361,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .board-sketch .wb-wrap{height:320px;flex:none}
   .board-chip{background:transparent;border:1px solid var(--bronze);color:var(--bronze);border-radius:6px;font-size:var(--fs-chip);padding:1px 8px;cursor:pointer;margin-left:8px}
   .board-chip:hover{color:var(--accent-bright);border-color:var(--accent-bright)}
-  /* 实时白板浮窗(step-057 五期;2026-10-14 升级为大覆盖层:入口统一后浮窗=主入口,
+ /* 实时白板浮窗(五期; 升级为大覆盖层:入口统一后浮窗=主入口,
      布局=左板清单 + 中 Dify 画布 + 右抽屉节点明细/评论;与大白板视图同一板状态的两个视口) */
   .board-float{position:fixed;right:24px;bottom:120px;width:520px;max-width:44vw;z-index:58;display:flex;flex-direction:column;
     background:rgba(18,13,8,.97);border:1px solid var(--bronze);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
   .board-float.bf-big{width:min(1150px,92vw);height:min(780px,88vh);max-width:none;bottom:48px}
   .bf-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border-soft);cursor:move;user-select:none}
   .bf-title{font-size:12px;color:var(--bronze);font-weight:700}
-  .bf-prog{font-size:11px;color:#b9a887} /* 2026-10-18 体验官C:浮窗恒深底,文字固定浅色(light/ink 下按钮/进度灰字 2.7:1 不足) */
+  .bf-prog{font-size:11px;color:#b9a887} /* :浮窗恒深底,文字固定浅色(light/ink 下按钮/进度灰字 2.7:1 不足) */
   .bf-close{background:none;border:none;color:#9a8c72;font-size:15px;cursor:pointer;padding:0 4px}
   .board-float .vw-act{color:#d8c9a8;border-color:#8a7a5a} /* 浮窗内操作按钮同根因(全局 vw-act 走主题变量,深底上洗白) */
   .board-float .vw-act:hover{color:#eee2c6}
@@ -3389,7 +3389,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bf-cmt-edit input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--bronze-dim);color:var(--text);border-radius:8px;padding:3px 7px;font-size:11px}
   .cv-ncmt .bf-cmt-row{margin:1px 0}
   .cv-ncmt .bf-cmt-acts button{font-size:11px;padding:1px 4px}
-  /* n1 画布白板卡一级操作条 + n2 评论模式/节点内联评论框(2026-10-22) */
+ /* n1 画布白板卡一级操作条 + n2 评论模式/节点内联评论框 */
   /* 操作条贴在卡头右侧(与 .cv-card-tools 成组):抢在 tools 的 margin-left:auto 之前吃掉余量 */
   .cv-card-acts{margin-left:auto;display:flex;gap:4px;align-items:center;flex-shrink:0}
   .cv-card-acts + .cv-card-tools{margin-left:4px}
@@ -3442,7 +3442,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   /* 九期:画布交互全集——框选/多选/小地图/缩放控件/对齐辅助线 */
   .bf-marquee{position:absolute;border:1px solid var(--bronze);background:rgba(201,143,69,.10);pointer-events:none;z-index:6}
   .cv-node.selected{border-color:var(--accent-bright);box-shadow:0 0 0 2px rgba(236,225,209,.35),0 6px 18px rgba(0,0,0,.45)}
-  /* 2026-10-29 svg 模式选中态:flowkit 出的 <g data-node-id> 就地加 .cv-svg-on(详情卡选中的视觉回声) */
+ /* svg 模式选中态:flowkit 出的 <g data-node-id> 就地加 .cv-svg-on(详情卡选中的视觉回声) */
   #cvSvgHost [data-node-id].cv-svg-on rect, #cvSvgHost [data-node-id].cv-svg-on path, #cvSvgHost [data-node-id].cv-svg-on ellipse, #cvSvgHost [data-node-id].cv-svg-on polygon { stroke: var(--bronze, #c98b52) !important; stroke-width: 2.5 !important; }
   .cv-helpline{position:absolute;background:var(--accent-bright);opacity:.65;pointer-events:none;z-index:7}
   .cv-helpline.v{width:1px}.cv-helpline.hh{height:1px}
@@ -3454,7 +3454,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   /* fixD4(v2): 小地图保持可点(z8/auto 不变——直接点击兼容既有用法/回归),但两处让位:
      ①背景降透明(.92→.62)盖不住下层节点;②点按位置正下方有节点卡=转派 pointerdown 给节点(见 ensureCvDelegation),
      不再劫持该点拖拽/不再跳视口。无节点处点按=原跳转行为。 */
-  /* 2026-10-21 画布态新卡头部压缩:卡 chrome 已有标题/副标,卡内 vw-sub 冗余 */
+ /* 画布态新卡头部压缩:卡 chrome 已有标题/副标,卡内 vw-sub 冗余 */
   body.cv-shell #view-track .vw-sub, body.cv-shell #view-usage .vw-sub{display:none}
   .cv-node[data-cv^="ph-"]{padding:3px 8px;overflow:hidden}
   .cv-node[data-cv^="ph-"] .cv-nsub,.cv-node[data-cv^="ph-"] .cv-nfoot{display:none}
@@ -3462,7 +3462,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .kb-line{border:1px solid var(--border);border-radius:8px;padding:5px 10px}
   .kb-dot{display:inline-block;min-width:8px;height:8px;border-radius:50%}
   body.cv-shell #view-track .vw-head, body.cv-shell #view-usage .vw-head{padding:4px 8px}
-  /* 白板小地图默认收起为角标,hover 展开(2026-10-21:不再压住流程泳道首节点/元信息条) */
+ /* 白板小地图默认收起为角标,hover 展开(不再压住流程泳道首节点/元信息条) */
   .bf-minimap{width:44px;height:26px;transition:width .18s,height .18s}
   .bf-minimap:hover,.bf-minimap:focus-visible{width:148px;height:96px}
   .bf-minimap{position:absolute;left:10px;bottom:10px;z-index:8;
@@ -3473,15 +3473,15 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bf-cv-edges path.bfe-call{stroke:var(--bcv-edge-call)}
   .bf-cv-edges path.bfe-data{stroke:var(--bcv-edge-data);stroke-dasharray:5 3}
   .bf-cv-edges path.bfe-verify{stroke:var(--bcv-edge-verify);stroke-dasharray:2 3}
-  /* step-083 页面结构板:nav=页面间导航(实线箭头)/contains=包含(无线头,浅色实线) */
+ /* 页面结构板:nav=页面间导航(实线箭头)/contains=包含(无线头,浅色实线) */
   .bf-cv-edges path.bfe-nav{stroke:var(--bcv-edge-line);stroke-width:1.8} /* 白板修复:普通 nav 弃金(#c9a25e≈主线金)→青铜,主线亮金唯一 */
   .bf-cv-edges path.bfe-contains{stroke:var(--bcv-edge-contains);stroke-width:1.4}
   .bf-cv-edges path.bfe-virtual{stroke:var(--bcv-edge-line);stroke-dasharray:2 5;stroke-width:1.2}
   .bf-cv-edge-label{font-size:11px;fill:var(--bcv-edge-label);paint-order:stroke;stroke:var(--bcv-edge-label-halo);stroke-width:3px;stroke-linejoin:round} /* 白板修复:标签深色底衬(halo),压在线条/深底上可读 */
-  /* 边标签常显(2026-11-06):隐藏门槛由 cvLabelHideK() 单一出处给出(默认 40%,UI 交互图 38%)——
+ /* 边标签常显:隐藏门槛由 cvLabelHideK 单一出处给出(默认 40%,UI 交互图 38%)——
      「适」(k≈0.9)与常规阅读距离下标签一律可见,只有真缩到看不清时才让位。 */
   .bf-cv-world.z-low .bf-cv-edge-label{display:none}
-  /* 2026-11-06 C(实测:svg 模式下缩到 k=0.3,3 条 flowkit 边标签仍全可见 = z-low 名存实亡):
+ /* C(经验证:svg 模式下缩到 k=0.3,3 条 flowkit 边标签仍全可见 = z-low 名存实亡):
      flowkit 出的边标签是 g[data-connector-id] 里的 rect(底衬)+text(关系词),没有 .bf-cv-edge-label 类,
      上一条规则匹配不到。这里按 connector 组兜住:只隐 rect(底衬)+text(关系词),path(线/箭头)照常可见。 */
   .bf-cv-world.z-low [data-connector-id] rect,.bf-cv-world.z-low [data-connector-id] text{display:none}
@@ -3505,12 +3505,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-addpanel .cv-aitem.cv-reco-on{background:rgba(201,143,69,.1)}
   .cv-node{position:absolute;width:216px;background:var(--bcv-card-bg);border:1px solid var(--bcv-card-bd);border-radius:12px;
     padding:0 0 8px;cursor:pointer;box-shadow:0 6px 18px var(--bcv-card-shadow);user-select:none;
-    /* 2026-10-21 主题跟随:卡主体色改走主题变量(--solid 不透明面板色/--border 结构边/--text/--muted),
+ /* 主题跟随:卡主体色改走主题变量(--solid 不透明面板色/--border 结构边/--text/--muted),
        七套主题与 light 自动继承;卡内三层字色做成局部变量,深底线框变体(k-page/k-section/component/nav)
        在自己的规则里回填原浅色(它们只换底色,不跟浅色主题)——默认值=鎏金夜现状,视觉零漂移 */
     --cv-head-fg:var(--bcv-title-fg);--cv-sub-fg:var(--bcv-sum-fg);--cv-foot-fg:var(--bcv-foot-fg)}
-  /* step-083 页面结构板线框形态:page=浏览器窗线框/section=虚线区框/component=轻量件/nav=导航条
-     (2026-10-21:这四类是「线框窗口/分区框」而不是普通节点卡——底色本就是深色线框语义,保留;
+ /* 页面结构板线框形态:page=浏览器窗线框/section=虚线区框/component=轻量件/nav=导航条
+ (这四类是「线框窗口/分区框」而不是普通节点卡——底色本就是深色线框语义,保留;
       字色因此回填固定浅色,不吃浅色主题的深字) */
   .cv-node.k-page{border-color:var(--bcv-wire-page-bd);background:var(--bcv-wire-page-bg);--cv-head-fg:var(--bcv-wire-title-fg);--cv-sub-fg:var(--bcv-wire-sum-fg);--cv-foot-fg:var(--bcv-wire-foot-fg)}
   .cv-node.k-page .cv-head{background:var(--bcv-wire-page-head);border-radius:11px 11px 0 0;border-bottom:1px solid var(--bcv-wire-page-head-bd);padding:6px 10px}
@@ -3518,7 +3518,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-node.k-section{border-style:dashed;border-color:var(--bcv-wire-section-bd);background:var(--bcv-wire-section-bg);--cv-head-fg:var(--bcv-wire-title-fg);--cv-sub-fg:var(--bcv-wire-sum-fg);--cv-foot-fg:var(--bcv-wire-foot-fg)}
   .cv-node.k-component{border-color:var(--bcv-wire-component-bd);background:var(--bcv-wire-component-bg);--cv-head-fg:var(--bcv-wire-title-fg);--cv-sub-fg:var(--bcv-wire-sum-fg);--cv-foot-fg:var(--bcv-wire-foot-fg)}
   .cv-node.k-nav{border-color:var(--bcv-wire-nav-bd);background:var(--bcv-wire-nav-bg);--cv-head-fg:var(--bcv-wire-title-fg);--cv-sub-fg:var(--bcv-wire-sum-fg);--cv-foot-fg:var(--bcv-wire-foot-fg)}
-  /* ---- step-111 页面结构板语义布局:page=浏览器窗容器(三点头+地址条+分区底色+主线金框);
+ /* ---- 页面结构板语义布局:page=浏览器窗容器(三点头+地址条+分区底色+主线金框);
        section/component=容器内 UI 线框(role 类:顶栏横条/侧栏/主区/底栏/浮层/未归属);
        主线边粗金、回边虚线灰;图例左下 ---- */
   .cv-node.pgbox{width:216px;border-radius:12px;box-shadow:0 4px 16px var(--bcv-card-shadow)}
@@ -3529,11 +3529,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-node.pgbox .cv-dots i:first-child{background:var(--bcv-dot-bad)}
   .cv-node.pgbox .cv-dots i:nth-child(2){background:var(--bcv-dot-warn)}
   .cv-node.pgbox .cv-dots i:nth-child(3){background:var(--bcv-dot-ok)}
-  .cv-node.pgbox .cv-url{flex:1;min-width:0;font-size:11px;color:var(--bcv-wire-foot-fg);background:var(--bcv-wire-url-bg);border-radius:6px;padding:2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)} /* 2026-10-18 体验官C:节点卡底恒为深色内联,文字弃主题变量固定浅色——light/ink 下 var(--faint) 深字压深底 1.0x:1 近隐形 */
+  .cv-node.pgbox .cv-url{flex:1;min-width:0;font-size:11px;color:var(--bcv-wire-foot-fg);background:var(--bcv-wire-url-bg);border-radius:6px;padding:2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)} /* :节点卡底恒为深色内联,文字弃主题变量固定浅色——light/ink 下 var(--faint) 深字压深底 1.0x:1 近隐形 */
   .cv-node.pgbox .cv-pgmain-tag{font-size:11px;color:var(--bcv-on-accent);background:var(--bcv-accent);border-radius:4px;padding:1.5px 6px;font-weight:700;flex-shrink:0}
-  .cv-node.pgbox .cv-pgtitle{font-size:13px;font-weight:700;color:#eee2c6;padding:5px 12px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} /* 2026-10-18 体验官C P1:固定浅色(同上,light/ink 1.0-1.3:1 近隐形根治) */
+  .cv-node.pgbox .cv-pgtitle{font-size:13px;font-weight:700;color:#eee2c6;padding:5px 12px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} /* :固定浅色(同上,light/ink 1.0-1.3:1 近隐形根治) */
   .cv-wire{background:var(--bcv-wire-bg);border:1px solid;border-radius:6px;overflow:hidden;display:flex;align-items:center;gap:6px;padding:0 8px}
-  /* 2026-10-26 docs 两层 PPT:结论根横幅 / 章容器卡 / 章内页卡 */
+ /* docs 两层 PPT:结论根横幅 / 章容器卡 / 章内页卡 */
   .cv-doc-root{background:linear-gradient(135deg,var(--bcv-doc-root-bg1),var(--bcv-doc-root-bg2));border:2px solid var(--bcv-doc-root-bd);border-radius:10px;box-shadow:0 6px 18px var(--bcv-doc-shadow);padding:10px 14px;overflow:hidden}
   .cv-doc-root-tag{display:inline-block;font-size:11px;font-weight:700;color:var(--bcv-doc-root-tag-fg);background:var(--bcv-doc-root-tag-bg);border-radius:4px;padding:1px 6px;letter-spacing:1px}
   .cv-doc-root-title{font-size:14px;font-weight:800;color:var(--bcv-doc-root-title);line-height:1.35;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -3549,14 +3549,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-doc-pg-h b{font-family:var(--mono);font-size:11px;color:var(--bcv-doc-pg-hb);border:1px solid var(--bcv-doc-pg-hb-bd);border-radius:3px;padding:0 3px;margin-right:4px}
   .cv-doc-pg-sum{font-size:11px;color:var(--bcv-doc-pg-sum);margin-top:3px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
   .cv-wire .cv-wire-tt{position:absolute;left:0;top:0;bottom:0;width:3px}
-  .cv-wire .cv-wire-label{font-size:11px;color:#e6d9bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;line-height:1.3;position:relative} /* 2026-10-18 体验官C:线框卡标签固定浅色(卡底深色内联,同 pgtitle 根因) */
+  .cv-wire .cv-wire-label{font-size:11px;color:#e6d9bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;line-height:1.3;position:relative} /* :线框卡标签固定浅色(卡底深色内联,同 pgtitle 根因) */
   .cv-wire .cv-dot{flex-shrink:0}
   .cv-wire.rw-top{border-radius:4px}
   .cv-wire.rw-overlay{border-style:dashed;background:rgba(30,20,12,.86);box-shadow:0 6px 14px rgba(0,0,0,.45);z-index:3}
   .cv-wire.rw-orphan{border-style:dotted;opacity:.8}
   .cv-wire.on{box-shadow:0 0 0 1px var(--accent-bright)}
   .cv-wire.selected{border-color:var(--accent-bright)}
-  /* ---- 2026-10-26 UI 交互流程板:多屏原型地图(屏幕卡/元素行/触点/流线/图例) ----
+ /* ---- UI 交互流程板:多屏原型地图(屏幕卡/元素行/触点/流线/图例) ----
      形态来源=用户给的线稿交互流程:多屏并排 + 元素级跳转 + 彩色流线图例 + 主线屏。
      不是把页面结构图缩小,而是「屏幕地图」:屏卡在底层(z1),区块(z2)/元素行(z3)浮在屏上,
      字幕带(z4)在屏上方,顶部摘要/图例(z6)固定在世界顶部(导出 PNG 同图)。 */
@@ -3738,7 +3738,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bf-cv-edges path.bfe-main{stroke:var(--bcv-edge-main)!important;stroke-width:3.2px!important;filter:drop-shadow(0 0 2px var(--bcv-pgmain-glow))}
   .bf-cv-edges path.bfe-back{stroke:var(--bcv-edge-back)!important;stroke-width:1.2px!important;stroke-dasharray:5 4!important;opacity:.85}
   .bf-cv-edges path.bfe-selfloop{stroke-width:1.4px}
-  /* step-1010 K:图例曾是画布底部绝对定位浮层(position:absolute;bottom:10px),适配时靠
+ /* K:图例曾是画布底部绝对定位浮层(position:absolute;bottom:10px),适配时靠
      legendReserve 预留高度躲它——但 fitMinK 可读下限一夹,内容一超就钻到图例底下被盖住
      (实测 docs/code/ui-func/contract 底排卡被压一两行)。改为画布外的底部占位条:
      #cvHost 在 .board-graph/.bf-graph 的 flex 列里 flex:1 自然收缩,图例排在它下面,
@@ -3750,7 +3750,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-legend .lg-branch{display:inline-block;width:22px;height:0;border-top:1.5px solid var(--bcv-edge-line);vertical-align:middle} /* 白板修复:与 bfe-nav 同步改青铜 */
   .cv-legend .lg-back{display:inline-block;width:22px;height:0;border-top:1.2px dashed var(--bcv-edge-back);vertical-align:middle}
   .cv-legend .lg-box{display:inline-block;width:14px;height:10px;border:1.5px solid var(--bcv-accent-2);border-radius:3px;background:rgba(201,162,94,.12);vertical-align:middle}
-  /* 2026-10-22 关系图例:边按 kind 分色 + 虚线=自动推导待核实(与 bfe-* 描边色同源) */
+ /* 关系图例:边按 kind 分色 + 虚线=自动推导待核实(与 bfe-* 描边色同源) */
   .cv-legend .lg-call{display:inline-block;width:22px;height:0;border-top:2px solid var(--bcv-edge-call);vertical-align:middle}
   .cv-legend .lg-data{display:inline-block;width:22px;height:0;border-top:2px solid var(--bcv-edge-data);vertical-align:middle}
   .cv-legend .lg-verify{display:inline-block;width:22px;height:0;border-top:2px dashed var(--bcv-edge-verify);vertical-align:middle}
@@ -3758,19 +3758,19 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-legend .lg-virtual{display:inline-block;width:22px;height:0;border-top:1.2px dashed var(--bcv-edge-line);vertical-align:middle}
   .cv-legend .lg-tag{color:var(--bcv-legend-fg-dim)}
   /* ---- fixH2 设计板「一眼看懂」流动布局:泳道虚线框/主线粗绿/入口出口角标/编号/副标题条 ---- */
-  .cv-lane{position:absolute;border:1px dashed var(--bcv-lane-bd);border-radius:18px;background:var(--bcv-lane-bg);pointer-events:none;z-index:0} /* 2026-10-21 主题跟随:兜底线/底改走变量(实际色相由渲染侧 CV_LANE_HUES 内联 5 色循环=阶段识别功能色,保留) */
+  .cv-lane{position:absolute;border:1px dashed var(--bcv-lane-bd);border-radius:18px;background:var(--bcv-lane-bg);pointer-events:none;z-index:0} /* 主题跟随:兜底线/底改走变量(实际色相由渲染侧 CV_LANE_HUES 内联 5 色循环=阶段识别功能色,保留) */
   .cv-lane-orphan{border-style:dotted;border-color:var(--bcv-lane-orphan-bd);background:var(--bcv-lane-orphan-bg)}
   .cv-lane-h{position:absolute;left:14px;top:10px;display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.4px;white-space:nowrap;color:var(--bcv-lane-h-fg)}
   .cv-lane-h b{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--bcv-lane-no-fg);background:var(--bcv-lane-2,#6f9ac4);border-radius:4px;padding:1px 5px;letter-spacing:0}
-  /* 2026-10-25 A:宽板折行后同一条泳道按行拆分,每段头标注「第 i/N 段」(段与段不连续,编号相同) */
-  .cv-lane-seg{font-style:normal;font-size:11px;font-weight:400;color:var(--bcv-lane-seg-fg-strong,var(--bcv-lane-seg-fg));margin-left:4px} /* step-1011:段序号走强对比档(暗底 #9a9083 / 浅底各主题深一档),治 --faint 压泳道底 2.46:1 */
+ /* A:宽板折行后同一条泳道按行拆分,每段头标注「第 i/N 段」(段与段不连续,编号相同) */
+  .cv-lane-seg{font-style:normal;font-size:11px;font-weight:400;color:var(--bcv-lane-seg-fg-strong,var(--bcv-lane-seg-fg));margin-left:4px} /* 段序号走强对比档(暗底 #9a9083 / 浅底各主题深一档),治 --faint 压泳道底 2.46:1 */
   .cv-legend .lg-wrap{display:inline-block;font-size:11px;color:var(--bronze);border:1px solid var(--border-soft);border-radius:6px;padding:0 5px}
   .cv-flow-world .cv-node{width:208px;height:116px;padding-bottom:6px;display:flex;flex-direction:column}
-  /* 2026-10-26 工程师图形态(code):C4 类型/技术行 + 组件/存储/决策/起终点形状 + 关系线型 */
+ /* 工程师图形态(code):C4 类型/技术行 + 组件/存储/决策/起终点形状 + 关系线型 */
   .cv-code-world .cv-node.cv-code-node{background:var(--bcv-code-bg);border-color:var(--bcv-code-bd);border-radius:8px;overflow:hidden;box-shadow:0 4px 14px var(--bcv-card-shadow)}
-  /* step-1011 文字清晰度:浅底主题里 code 卡标题/摘要改走与卡底同源的 --bcv-code-fg(治「深字压深底」);深底主题不参与=默认零漂移 */
+ /* 文字清晰度:浅底主题里 code 卡标题/摘要改走与卡底同源的 --bcv-code-fg(治「深字压深底」);深底主题不参与=默认零漂移 */
   body.light .cv-code-world .cv-node.cv-code-node,body.theme-sand .cv-code-world .cv-node.cv-code-node,body.theme-olive .cv-code-world .cv-node.cv-code-node,body.theme-plum .cv-code-world .cv-node.cv-code-node,body.theme-ink .cv-code-world .cv-node.cv-code-node{--cv-head-fg:var(--bcv-code-fg);--cv-sub-fg:var(--bcv-code-sum-fg)}
-  /* 2026-10-26 code flow:方法/阶段分组=实色分区(黄/蓝/绿/粉),标题条浮左上;代码卡内放伪代码行 */
+ /* code flow:方法/阶段分组=实色分区(黄/蓝/绿/粉),标题条浮左上;代码卡内放伪代码行 */
   .cv-code-world .cv-lane{border-style:solid;border-width:1.2px;border-radius:12px}
   .cv-code-world .cv-lane .cv-lane-h{left:12px;top:8px;padding:2px 8px;border-radius:6px;background:var(--bcv-lane-h-bg);font-size:10.5px;letter-spacing:0}
   .cv-code-world .cv-lane .cv-lane-h b{font-size:11px}
@@ -3837,9 +3837,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-code-node.k-end.cv-code-pill{background:var(--bcv-pill-end-bg)!important;border-color:var(--bcv-pill-end-bd)!important}
   .cv-pill-label{font-size:12px;font-weight:700;color:var(--bcv-pill-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .cv-code-pill small{margin-top:2px;font-size:11px;color:var(--bcv-pill-fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  /* 2026-10-29 仓库关系上屏:targets 文件名行(.cv-file-foot)+ 药丸/菱形上的小号变更徽标。
+ /* 仓库关系上屏:targets 文件名行(.cv-file-foot)+ 药丸/菱形上的小号变更徽标。
      徽标绝对定位挂在形状角上,不参与药丸(220×64)/菱形(132×132)的列布局预算 → 不撑破几何。 */
-  /* 2026-10-29 排版治「看不懂」:文件名之间给 .cv-file-sep(·)分隔 + 每个 chip 可收缩省略(min-width:0),
+ /* 排版治「看不懂」:文件名之间给 .cv-file-sep(·)分隔 + 每个 chip 可收缩省略(min-width:0),
      260 宽卡里 2 个文件名 + +N + 徽标一行不粘连;徽标 8px→9px/15px(k=0.7 折算约 6.3px,原 5.6px 看不见)。 */
   .cv-file-foot{display:flex;align-items:center;gap:4px;margin:3px 10px 0;font-size:11px;line-height:15px;color:var(--bcv-file-foot-fg);white-space:nowrap;overflow:hidden}
   .cv-file-name{flex:0 1 auto;min-width:0;font-family:var(--mono);border:1px solid var(--bcv-file-name-bd);border-radius:4px;padding:0 4px;
@@ -3847,12 +3847,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-file-sep{flex:0 0 auto;font-style:normal;font-size:11px;color:var(--bcv-file-sep-fg)}
   .cv-file-more{flex:0 0 auto;font-style:normal;font-size:11px;color:var(--bcv-file-more-fg)}
   .cv-file-foot .bd-tag.cv-chg{margin-left:auto;flex-shrink:0;font-size:11px;line-height:15px;padding:0 4px}
-  /* 2026-11-05「看得懂」:卡脚符号 chip(name@basename:line)——颜色沿用文件名 chip 的令牌组,
+ /* 「看得懂」:卡脚符号 chip(name@basename:line)——颜色沿用文件名 chip 的令牌组,
      只是边框改虚线区分「这里是符号锚,不是文件」。卡高是布局常量(code flow 176),所以 chip 行
      必须单行不换行:flex 不 wrap + 省略号(见 .cv-file-foot 的 nowrap/overflow:hidden)。 */
   .cv-sym-name{flex:0 1 auto;min-width:0;font-family:var(--mono);border:1px dashed var(--bcv-file-name-bd);border-radius:4px;padding:0 4px;
     color:var(--bcv-file-name-fg);background:var(--bcv-file-name-bg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;cursor:default}
-  /* 2026-11-05 层标注带(现状层/变更层)+ 层高亮:dim 只降透明,不改任何布局量/几何/连线——
+ /* 层标注带(现状层/变更层)+ 层高亮:dim 只降透明,不改任何布局量/几何/连线——
      opacity 不影响 flex/绝对定位,卡片位置与边端口零漂移。 */
   .cv-lbar{gap:4px}
   .cv-laychip{cursor:pointer;font-weight:600}
@@ -3861,20 +3861,20 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-node.cv-layer-on{outline:1px dashed var(--bronze,#c98b52);outline-offset:1px}
   #cvSvgHost [data-node-id].cv-layer-dim{opacity:.35}
   #cvSvgHost [data-node-id].cv-layer-on rect,#cvSvgHost [data-node-id].cv-layer-on path,#cvSvgHost [data-node-id].cv-layer-on polygon{stroke:var(--bronze,#c98b52)!important;stroke-width:2.2!important}
-  /* 2026-11-05 主题横幅(.cv-theme-band):横贯板首的主题条——绝对定位浮在画布顶部、指上不挡卡;
+ /* 主题横幅(.cv-theme-band):横贯板首的主题条——绝对定位浮在画布顶部、指上不挡卡;
      它只表达「这块板在讲什么」,不参与 flow 布局、不参与连线、不进小地图。 */
   .cv-theme-band{position:absolute;left:12px;top:44px;z-index:6;max-width:calc(100% - 190px);pointer-events:none;
     display:flex;align-items:baseline;gap:8px;padding:4px 10px 5px;border-radius:10px;
     border:1px solid var(--bcv-thead-bd);background:var(--bcv-thead-bg);box-shadow:var(--bcv-thead-shadow)}
   .cv-theme-band b{font-size:12px;font-weight:800;color:var(--bcv-pill-fg,#f4e8cd);white-space:nowrap}
   .cv-theme-band span{font-size:11px;color:var(--bcv-file-foot-fg);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-width:820px}
-  /* 2026-10-29 逻辑层口径:modify/delete 卡上的一行「现状:<before>」(「改这里」不是「计划」)。
+ /* 逻辑层口径:modify/delete 卡上的一行「现状:<before>」(「改这里」不是「计划」)。
      颜色沿用已有令牌(--bcv-side-fg-dim 系的一档弱字色 + 代码行左边线),默认视觉即当前主题。 */
   .cv-before{margin:3px 10px 0;padding:0 5px;border-left:1px solid var(--bcv-code-line-bd);
     font-size:11px;line-height:15px;color:var(--bcv-side-fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cv-code-pill .bd-tag.cv-chg{position:absolute;right:8px;top:1px;margin:0;font-size:11px;line-height:15px;padding:0 4px;z-index:2;opacity:.95}
   .cv-decision-diamond .bd-tag.cv-chg{position:absolute;right:4px;top:2px;margin:0;font-size:11px;line-height:15px;padding:0 4px;z-index:2;opacity:.95}
-  /* 2026-10-26 板型画像:画布顶部类型/规模/阶段覆盖浮层(不随世界缩放,始终可读) */
+ /* 板型画像:画布顶部类型/规模/阶段覆盖浮层(不随世界缩放,始终可读) */
   .cv-type-head{position:absolute;left:12px;top:8px;z-index:7;max-width:calc(100% - 24px);pointer-events:none;
     background:var(--bcv-thead-bg);border:1px solid var(--bcv-thead-bd);border-radius:10px;padding:5px 9px 6px;
     box-shadow:var(--bcv-thead-shadow);font-size:11px;color:var(--bcv-thead-fg)}
@@ -3891,7 +3891,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-type-stage.missing{border-style:dashed;color:#8f8068}
   .cv-type-rule{margin-top:3px;font-size:11px;color:#8f8068;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:960px}
   .cv-flow-world .cv-node .cv-head{padding:8px 10px 3px}
-  .cv-flow-world .cv-node .cv-sum{margin:2px 8px 0;padding:3px 7px;background:var(--hover-bg);border:1px solid var(--border-soft);border-radius:6px;font-size:11px;line-height:1.4;color:var(--cv-sub-fg);max-height:31px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical} /* 2026-10-21 主题跟随:底色/边/字色改走变量(原 rgba(255,255,255,.055)/#d8c9a8) */
+  .cv-flow-world .cv-node .cv-sum{margin:2px 8px 0;padding:3px 7px;background:var(--hover-bg);border:1px solid var(--border-soft);border-radius:6px;font-size:11px;line-height:1.4;color:var(--cv-sub-fg);max-height:31px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical} /* 主题跟随:底色/边/字色改走变量(原 rgba(255,255,255,.055)/#d8c9a8) */
   /* 板型节点条:角色/硬规则徽标 + flow 关键步骤/if-else(卡高由引擎 nodeH 撑开) */
   .cv-flow-world .cv-node .cv-type-line{display:flex;gap:3px;align-items:center;margin:3px 8px 0;overflow:hidden;white-space:nowrap}
   .cv-type-chip{flex-shrink:0;max-width:92px;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:15px;
@@ -3941,9 +3941,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-node:hover{border-color:var(--bronze)}
   .cv-node.on{border-color:var(--accent-bright);box-shadow:0 0 0 1px var(--accent-bright),0 6px 18px rgba(0,0,0,.45)}
   .cv-node.dragging{cursor:grabbing;z-index:5}
-  .cv-node .cv-head{display:flex;align-items:center;gap:6px;padding:7px 10px 4px;font-size:12px;color:var(--cv-head-fg);background:var(--bcv-card-head-bg);font-weight:600;flex-wrap:wrap} /* 2026-10-21 主题跟随:字色由固定浅色(#eee2c6)改走卡内变量 --cv-head-fg(默认 --text;深底线框变体自填浅色),light/七套主题自动跟随 */
+  .cv-node .cv-head{display:flex;align-items:center;gap:6px;padding:7px 10px 4px;font-size:12px;color:var(--cv-head-fg);background:var(--bcv-card-head-bg);font-weight:600;flex-wrap:wrap} /* 主题跟随:字色由固定浅色(#eee2c6)改走卡内变量 --cv-head-fg(默认 --text;深底线框变体自填浅色),light/七套主题自动跟随 */
   /* f4 卡片头信息预算:标题独占剩余宽度且可省略(title=全名兜底);徽标一律不压缩(否则宽度不足时先挤标题再溢出错位) */
-  /* 2026-10-25 头信息分层(治 k=1 时 5/7 主干卡标题被 ellipsis):卡宽 208 定死,头行原来
+ /* 头信息分层(治 k=1 时 5/7 主干卡标题被 ellipsis):卡宽 208 定死,头行原来
      kind20+验收「验 x/y」37+变更「新增」28 全部常驻 → 标题槽只剩 71–73px。改为 .cv-head 允许换行 +
      标题给 min-width 下限:头行只留「kind 图标 + 标题」占满整行宽度,**验收/变更徽标自动折到第二行**。
      选 CSS 折行而非把徽标搬进 .cv-foot 的理由:①.cv-acc 仍留在 .cv-head 内,boardread.spec 的 ④⑤
@@ -3961,12 +3961,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-kind.cv-k-start{background:#155eef;color:#fff}.cv-kind.cv-k-end{background:#f79009;color:#fff}.cv-kind.cv-k-http{background:#875bf7;color:#fff}
   .cv-kind.cv-k-template{background:#1570ef;color:#fff}.cv-kind.cv-k-aggregate{background:#1570ef;color:#fff}.cv-kind.cv-k-loop{background:#067f96;color:#fff}
   .cv-kind.cv-k-retrieval{background:#039855;color:#fff}.cv-kind.cv-k-classifier{background:#039855;color:#fff}.cv-kind.cv-k-agent{background:#6172f3;color:#fff}
-  /* step-083 页面结构板族 */
+ /* 页面结构板族 */
   .cv-kind.cv-k-page{background:#c9a25e;color:#241a08}.cv-kind.cv-k-section{background:#8a7a5a;color:#fff}.cv-kind.cv-k-component{background:#5a5346;color:#fff}.cv-kind.cv-k-nav{background:#6172f3;color:#fff}
-  /* step-121 工作流板可执行节点族(参照 dify 类型配色:脚本=蓝/测试=绿/代理=紫/条件=青/并行=橙/通知=金) */
+ /* 工作流板可执行节点族(参照 dify 类型配色:脚本=蓝/测试=绿/代理=紫/条件=青/并行=橙/通知=金) */
   .cv-kind.cv-k-wf-script{background:#1570ef;color:#fff}.cv-kind.cv-k-wf-test{background:#039855;color:#fff}.cv-kind.cv-k-wf-agent{background:#6172f3;color:#fff}
   .cv-kind.cv-k-wf-condition{background:#067f96;color:#fff}.cv-kind.cv-k-wf-parallel{background:#f79009;color:#241a08}.cv-kind.cv-k-wf-notify{background:#c9a25e;color:#241a08}
-  /* step-121 运行态高亮:running=金框呼吸/done=绿框/failed=红框;角标=状态+耗时 */
+ /* 运行态高亮:running=金框呼吸/done=绿框/failed=红框;角标=状态+耗时 */
   .cv-node.wf-running{border-color:#e0b46a;box-shadow:0 0 0 1px rgba(224,180,106,.75),0 0 14px rgba(224,180,106,.28);animation:wf-pulse 1.2s ease-in-out infinite}
   .cv-node.wf-done{border-color:#5aa06a;box-shadow:0 0 0 1px rgba(90,160,106,.55)}
   .cv-node.wf-failed{border-color:#e08a7a;box-shadow:0 0 0 1px rgba(224,138,122,.6)}
@@ -3975,15 +3975,15 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-wf-badge.running{background:rgba(224,180,106,.18);color:#e0b46a}
   .cv-wf-badge.done{background:rgba(90,160,106,.2);color:#7ec492}
   .cv-wf-badge.failed{background:rgba(224,138,122,.2);color:#e8a294}
-  /* 2026-10-18 体验官C:固定浅色(深底内联同根因)。
-   * 2026-10-25 白板易读性 w3:摘要默认**单行**(实测 100% 下 52/60 摘要被 max-height 裁成毛刺),
+ /* C:固定浅色(深底内联同根因)。
+ * 白板易读性 w3:摘要默认**单行**(经验证 100% 下 52/60 摘要被 max-height 裁成毛刺),
    * hover 展开到 6 行;**卡片 z-index 提升**避免展开后压到邻卡下面看不见(父子 span 不参与层叠,
    * 抬卡本身才有效);全文另外走 .cv-sum 的 title 属性(悬停可看完整摘要)。 */
   .cv-node .cv-sum{font-size:11px;color:var(--cv-sub-fg);padding:0 10px;line-height:1.45;max-height:16px;overflow:hidden;
-    display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;text-overflow:ellipsis} /* 2026-10-21 主题跟随:摘要字色 #c4b494→var(--cv-sub-fg)(默认 --muted,深底线框变体自填浅色) */
+    display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;text-overflow:ellipsis} /* 主题跟随:摘要字色 #c4b494→var(--cv-sub-fg)(默认 --muted,深底线框变体自填浅色) */
   .cv-node:hover{z-index:6}
   .cv-node:hover .cv-sum{-webkit-line-clamp:6;max-height:92px;background:var(--sunken);border-radius:6px;padding-bottom:2px} /* 同上:hover 展开的压底由 rgba(0,0,0,.28) 改走 --sunken(浅色主题自动变成淡底) */
-  /* 2026-10-25 白板易读性 w1/w2:写者过滤 chip 条(画布左上浮动)+ 密度分层计数块(.cv-fold) */
+ /* 白板易读性 w1/w2:写者过滤 chip 条(画布左上浮动)+ 密度分层计数块(.cv-fold) */
   .cv-wbar{position:absolute;left:10px;top:30px;z-index:8;display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:calc(100% - 130px)}
   .cv-wchip{background:var(--bcv-float-bg);border:1px solid var(--border-soft);border-radius:999px;color:var(--muted);
     font-size:11px;padding:2px 8px;cursor:pointer;white-space:nowrap;user-select:none}
@@ -3995,14 +3995,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .cv-wall:hover{border-color:var(--bronze);color:var(--bronze)}
   .cv-fold{position:absolute;z-index:5;display:inline-flex;align-items:center;gap:6px;background:var(--solid);
     border:1px dashed var(--border);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted);
-    cursor:pointer;white-space:nowrap;user-select:none} /* 2026-10-21 主题跟随:计数块底/边 rgba(24,17,10,.94)+#6b5c3a → var(--solid)/var(--border) */
+    cursor:pointer;white-space:nowrap;user-select:none} /* 主题跟随:计数块底/边 rgba(24,17,10,.94)+#6b5c3a → var(--solid)/var(--border) */
   .cv-fold b{font-size:11px;color:var(--bronze)}
   .cv-fold:hover{border-color:var(--bronze);background:rgba(201,143,69,.16);color:var(--bronze)}
   /* 反向块(已展开泳道的「−N 收起」):虚线换实线 + 强调色,与 +N 一眼区分开 */
   .cv-fold[data-fold-dir="close"]{border-style:solid;border-color:rgba(201,143,69,.5);color:var(--bronze)}
   .cv-fold[data-fold-dir="close"] b{color:var(--accent-bright)}
-  .cv-node .cv-foot{display:flex;align-items:center;gap:5px;padding:6px 10px 0;font-size:11px;color:var(--cv-foot-fg);flex-wrap:wrap} /* 2026-10-21 主题跟随:卡脚元信息 #a89a7d→var(--cv-foot-fg)(默认 --muted) */
-  /* ---- 2026-10-21 白板 light 覆盖:上面主体色走主题变量后,少数「深底内联/深色板」件在浅色主题下
+  .cv-node .cv-foot{display:flex;align-items:center;gap:5px;padding:6px 10px 0;font-size:11px;color:var(--cv-foot-fg);flex-wrap:wrap} /* 主题跟随:卡脚元信息 #a89a7d→var(--cv-foot-fg)(默认 --muted) */
+ /* ---- 白板 light 覆盖:上面主体色走主题变量后,少数「深底内联/深色板」件在浅色主题下
      仍需单独改浅(它们要么是深底线框件、要么是画布浮层),字色同步取主题深色,避免深底深字 ---- */
   body.light .cv-node{box-shadow:0 6px 18px var(--bcv-card-shadow)} /* 深色投影在纸面上糊成一坨(值走 --bcv-card-shadow) */
   body.light .cv-node.k-page{border-color:var(--bcv-wire-page-bd);background:var(--bcv-wire-page-bg);--cv-head-fg:var(--bcv-wire-title-fg);--cv-sub-fg:var(--bcv-wire-sum-fg);--cv-foot-fg:var(--bcv-wire-foot-fg)}
@@ -4032,17 +4032,17 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bf-cv-edges .cv-edge-del circle{fill:var(--bcv-float-bg-solid);stroke:var(--bcv-dot-bad);stroke-width:1}
   .bf-cv-edges .cv-edge-del line{stroke:var(--bcv-dot-bad);stroke-width:1.4;stroke-linecap:round}
   .bf-cv-edges .bfe-connect{stroke:var(--accent-bright,#ece1d1);stroke-width:2;stroke-dasharray:6 4;fill:none}
-  /* step-1010 K:「添加模块/整理」原来是画布右上绝对定位浮层(压住右上角卡片,ui.light 复现)。
+ /* K:「添加模块/整理」原来是画布右上绝对定位浮层(压住右上角卡片,ui.light 复现)。
      改为底部占位条(.cv-rail)右端项:不再覆盖任何卡片,也不吃顶部预留高度。 */
   .cv-addbar{display:flex;gap:4px;margin-left:auto;flex:0 0 auto}
   .cv-addbar button{white-space:nowrap}
   .cv-addbar button{background:rgba(18,13,8,.92);border:1px solid var(--border-soft);color:var(--muted);font-size:11px;cursor:pointer;padding:4px 10px;border-radius:8px}
   .cv-addbar button:hover{color:var(--bronze);background:rgba(255,255,255,.05)}
-  /* 2026-10-25 C 画布板头余量:板名 meta 原先内联 white-space:nowrap → 窄卡片(面板卡片可缩到 320px)
+ /* C 画布板头余量:板名 meta 原先内联 white-space:nowrap → 窄卡片(面板卡片可缩到 320px)
      会横穿右上工具栏。改为可换行 + 右侧给「添加/整理」留位;行数上限 2 行防压住下方写者 chip 条。 */
   .bd-meta-canvas{position:absolute;left:10px;top:8px;margin-top:0;max-width:calc(100% - 150px);white-space:normal;overflow-wrap:anywhere;
     line-height:1.45;max-height:2.9em;overflow:hidden;pointer-events:none}
-  /* 2026-10-25 B:research 板决策矩阵视图(候选 × 维度) */
+ /* B:research 板决策矩阵视图(候选 × 维度) */
   .cv-matrix-btn{position:absolute;right:10px;top:36px;z-index:8;background:rgba(18,13,8,.92);border:1px solid var(--border-soft);
     color:var(--bronze);font-size:11px;cursor:pointer;padding:4px 10px;border-radius:8px}
   .cv-matrix-btn:hover{color:var(--accent-bright);border-color:var(--bronze)}
@@ -4083,14 +4083,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .bd-mx-note{color:var(--faint)}
   .bd-mx-hint{color:var(--warn,#d9b36c);border-left-color:var(--warn,#d9b36c)}
   .bd-mx-empty{margin:auto;padding:20px;max-width:560px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center}
-  /* 2026-10-25 C 画布浮层(板名 meta / 写者 chip / 添加工具条)按画布自身宽度让位:
+ /* C 画布浮层(板名 meta / 写者 chip / 添加工具条)按画布自身宽度让位:
      窄卡片下 meta 换行不再横穿工具条,chip 条下移,图例收窄——三者都保持可点区域不被糊住。 */
   .bf-canvas{container-type:inline-size}
   @container (max-width:760px){
     /* 窄卡片:仍给右上工具条留 150px(否则板名横穿「添加/整理」);两行封顶,写者 chip 条已下移到 44px */
     .bd-meta-canvas{max-width:calc(100% - 150px);max-height:2.9em;left:8px;right:auto}
     .cv-wbar{top:44px;left:8px;max-width:calc(100% - 16px)}
-    /* step-1010 K:工具条已移到底部占位条(静态 flex 项),不再有 right/top 定位可改,只收按钮内距 */
+ /* K:工具条已移到底部占位条(静态 flex 项),不再有 right/top 定位可改,只收按钮内距 */
     .cv-addbar button{padding:3px 7px;font-size:10px}
     .cv-matrix-btn{right:8px;top:34px;padding:3px 8px;font-size:10px}
     .cv-legend{max-width:100%;gap:8px;font-size:11px;padding:3px 8px}
@@ -4126,7 +4126,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sc-item.sc-newcmd .sc-name{color:var(--muted);font-size:11px}
   .hint{font-size:9px;color:var(--faint);margin-top:5px;letter-spacing:1px}
 
-  /* ---- 响应式(step-054/055:聊天窗按窗口尺寸自由伸缩)----
+ /* ---- 响应式(/055:聊天窗按窗口尺寸自由伸缩)----
    * 原则:连续 fluid(clamp)优先,断点只做离散档位;右侧停靠(Super Agent 指挥台)由 #superConsole 自身定位。 */
   @media (max-width:1600px){
     .chat-col{padding-right:10px}
@@ -4163,7 +4163,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     .sb-brand{justify-content:center;padding:14px 6px 10px}
     .sb-tt{font-size:0;padding:3px 6px}
   }
-  /* ===================== step-097:图标/素描 emoji 基座 + 主题质感层 ===================== */
+ /* ===================== 图标/素描 emoji 基座 + 主题质感层 ===================== */
   /* 线性图标基座:stroke=currentColor 跟文字色走(七主题自适配),描边粗细 --ic-sw 变量 */
   .icn{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:var(--ic-sw,1.7);stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;vertical-align:-0.13em;display:inline-block}
   button .icn{width:1.08em;height:1.08em;vertical-align:-0.16em}
@@ -4183,7 +4183,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4.5 13.5l2-7h11l2 7v5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/><path d='M4.5 13.5H9a3 3 0 0 0 6 0h4.5' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/></svg>") center/contain no-repeat}
   /* 位点级尺寸/节奏收敛 */
   .empty-line .icn{width:14px;height:14px;vertical-align:-2px;opacity:.7}
-  /* 2026-11-08 新用户实测:首启空会话只有「该会话暂无记录」,缺模型/项目时无路可走。
+ /* 新用户经验证:首启空会话只有「该会话暂无记录」,缺模型/项目时无路可走。
      引导卡只在缺失项存在时出现,点到即直达(接入模型=设置页模型区;添加项目=目录浏览器)。 */
   .first-run-card{max-width:480px;margin:20px auto;border:1px solid var(--border-soft);border-radius:12px;background:var(--glass);padding:16px 18px;text-align:left;font-family:var(--font-body)}
   .first-run-card .fr-title{font-size:14px;color:var(--text);font-weight:600;letter-spacing:.5px}
@@ -4219,34 +4219,34 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.light .icn{stroke-width:1.8}
   body.light .emj-rw{filter:grayscale(1) contrast(.9) sepia(.15);opacity:.85}
 
-  /* ===== step-129 动效体系(变量层见 :root/--anim-*;七主题取值见各 theme 块) =====
+ /* ===== 动效体系(变量层见 :root/--anim-*;七主题取值见各 theme 块) =====
    * 红线:transform/opacity 为主;循环装饰按主题气质选择性挂载;ink 全量静态;
    * 视图/面板入场走 display 切换的 animation 重启机制(零 JS);reduced-motion 统一降级见尾部。 */
 
-  /* --- M2 输入类基线过渡补全(与 button 基座同节奏:focus 边框/辉光渐变,ink 即时) --- */
+ /* ---  输入类基线过渡补全(与 button 基座同节奏:focus 边框/辉光渐变,ink 即时) --- */
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),textarea{
     transition:border-color var(--anim-dur-fast) var(--anim-ease),box-shadow var(--anim-dur-fast) var(--anim-ease)}
 
-  /* --- M3/M4 视图与 tab 面板入场(淡入+微位移;位移量=--view-shift,ink=0) --- */
+ /* --- / 视图与 tab 面板入场(淡入+微位移;位移量=--view-shift,ink=0) --- */
   .view.on{animation:viewIn var(--anim-dur-base) var(--anim-ease)}
   .pp-tabpane.on{animation:viewIn var(--anim-dur-base) var(--anim-ease)}
   @keyframes viewIn{from{opacity:0;transform:translateY(var(--view-shift,6px))}to{opacity:1;transform:none}}
 
-  /* --- M5 新消息入场(mfPatch 追加路径的新根挂 .msg-in;全量重建/替换区不加防闪烁) --- */
+ /* ---  新消息入场(mfPatch 追加路径的新根挂 .msg-in;全量重建/替换区不加防闪烁) --- */
   .msg-in{animation:viewIn var(--anim-dur-base) var(--anim-ease)}
 
-  /* --- M6 工具卡展开内容浮现(收起走 native;transform 不受自身 overflow 影响) --- */
+ /* ---  工具卡展开内容浮现(收起走 native;transform 不受自身 overflow 影响) --- */
   .tool-card[open] .tc-body{animation:tcReveal var(--anim-dur-fast) var(--anim-ease)}
   @keyframes tcReveal{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-  /* --- M7 思考卡呼吸态(流式生成中;伪元素 opacity 循环=合成层,不动布局) --- */
+ /* ---  思考卡呼吸态(流式生成中;伪元素 opacity 循环=合成层,不动布局) --- */
   .think-card.think-live{position:relative}
   .think-card.think-live::after{content:'';position:absolute;inset:-1px;border-radius:9px;pointer-events:none;
     border:1px solid var(--bronze);box-shadow:0 0 14px var(--bronze-glow);opacity:0;
     animation:thinkBreath 2.2s ease-in-out infinite}
   @keyframes thinkBreath{0%,100%{opacity:0}50%{opacity:.45}}
 
-  /* --- M8/M9/M10 任务状态点:running=转圈(既有 tSpin)+辉光呼吸;done=✓ 弹入一次;failed=轻晃一次 --- */
+ /* --- // 任务状态点:running=转圈(既有 tSpin)+辉光呼吸;done=✓ 弹入一次;failed=轻晃一次 --- */
   .t-dot.running{animation:tSpin .8s linear infinite,dotGlow 1.6s ease-in-out infinite}
   @keyframes dotGlow{0%,100%{box-shadow:0 0 0 transparent}50%{box-shadow:0 0 7px var(--bronze-glow)}}
   .t-dot.done{animation:popIn var(--anim-dur-slow) var(--anim-ease-spring) both}
@@ -4256,17 +4256,17 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.theme-ink .t-dot.running{animation:tSpin .8s linear infinite} /* ink:保留功能性转圈,去装饰 */
   body.theme-ink .t-dot.done,body.theme-ink .t-dot.failed{animation:none}
 
-  /* --- M11 白板节点拖拽提升态(scale+深影;left/top 不入 transition 列=拖拽跟手不受影响) --- */
+ /* ---  白板节点拖拽提升态(scale+深影;left/top 不入 transition 列=拖拽跟手不受影响) --- */
   .cv-node.dragging{cursor:grabbing;z-index:5;transform:scale(1.03);
     box-shadow:0 14px 36px rgba(0,0,0,.5),0 0 0 1px var(--accent-soft);
     transition:transform var(--anim-dur-fast) var(--anim-ease),box-shadow var(--anim-dur-fast) var(--anim-ease)}
 
-  /* --- M12 连线绘制中的流动虚线(SVG stroke 例外:单临时元素,paint 面积极小) --- */
+ /* ---  连线绘制中的流动虚线(SVG stroke 例外:单临时元素,paint 面积极小) --- */
   .bf-cv-edges .bfe-connect{animation:dashFlow .9s linear infinite}
   @keyframes dashFlow{to{stroke-dashoffset:-20}}
   body.theme-ink .bf-cv-edges .bfe-connect{animation:none}
 
-  /* --- M13 主线金框微光呼吸(step-111 pgmain;仅暗色/glass,浅色主题静态) --- */
+ /* ---  主线金框微光呼吸( pgmain;仅暗色/glass,浅色主题静态) --- */
   .cv-node.pgbox.pgmain{position:relative}
   .cv-node.pgbox.pgmain::after{content:'';position:absolute;inset:-3px;border-radius:12px;pointer-events:none;
     border:2px solid rgba(224,180,106,.5);box-shadow:0 0 18px rgba(224,180,106,.3);opacity:0}
@@ -4274,23 +4274,23 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     animation:mainGlow 2.6s ease-in-out infinite}
   @keyframes mainGlow{0%,100%{opacity:0}50%{opacity:.6}}
 
-  /* --- M14 主题切换全页色彩过渡(JS 在主题类真变化时挂 body.theme-fade 320ms;变量变化经 transition 平滑) --- */
+ /* ---  主题切换全页色彩过渡(JS 在主题类真变化时挂 body.theme-fade 320ms;变量变化经 transition 平滑) --- */
   body.theme-fade,body.theme-fade *,body.theme-fade *::before,body.theme-fade *::after,body.theme-fade::before,body.theme-fade::after{
     transition:background-color .24s ease,color .24s ease,border-color .24s ease,box-shadow .24s ease,
                fill .24s ease,stroke .24s ease,background-position 0s ease !important}
 
-  /* --- M15 空态入场+图标微浮动(幅度走 --anim-decor:ink/light=0) --- */
+ /* ---  空态入场+图标微浮动(幅度走 --anim-decor:ink/light=0) --- */
   .cc-empty{animation:viewIn var(--anim-dur-base) var(--anim-ease)}
   .cc-empty::before{animation:emptyFloat 6s ease-in-out infinite}
   @keyframes emptyFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(calc(-2.5px * var(--anim-decor,1)))}}
   body.theme-ink .cc-empty::before,body.light .cc-empty::before{animation:none}
 
-  /* --- M16 初始加载骨架点(cc-empty.loading:HTML 模板初始占位挂类;整组 opacity 呼吸,合规) --- */
+ /* ---  初始加载骨架点(cc-empty.loading:HTML 模板初始占位挂类;整组 opacity 呼吸,合规) --- */
   .cc-empty.loading::after{content:' · · ·';display:inline-block;margin-left:2px;color:var(--faint);
     animation:dotsBlink 1.2s ease-in-out infinite}
   @keyframes dotsBlink{0%,100%{opacity:.15}50%{opacity:.9}}
 
-  /* --- M18 主题特征循环装饰 ---
+ /* ---  主题特征循环装饰 ---
    * dark:品牌点辉光呼吸(伪元素 opacity);light/glass/ink 关。 */
   .brand-dot{position:relative}
   .brand-dot::after{content:'';position:absolute;inset:-3px;border-radius:50%;pointer-events:none;opacity:0;
@@ -4299,13 +4299,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.theme-glass .brand-dot::after{animation:none}
   @keyframes decorGlow{0%,100%{opacity:0}50%{opacity:.55}}
 
-  /* --- M17 全局可访问性降级(088 glass 先例的泛化:一次性动画立即完成,循环动画停首帧) --- */
+ /* ---  全局可访问性降级(088 glass 先例的泛化:一次性动画立即完成,循环动画停首帧) --- */
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
       transition-duration:.01ms !important;transition-delay:0ms !important}
   }
 
-  /* --- 截图标注(2026-10-26):取屏画框覆盖层 + 标注编辑器 --- */
+ /* --- 截图标注:取屏画框覆盖层 + 标注编辑器 --- */
   #capOverlay{position:fixed;inset:0;z-index:100000;background:rgba(8,5,3,.72);display:flex;align-items:center;justify-content:center;cursor:crosshair}
   /* 显式吃满覆盖层:位图按 dpr 放大,尺寸换算由脚本归一;缺席时 flex 会把 canvas 等比压缩→rect≠位图=取屏偏移源 */
   #capCanvas{display:block;width:100%;height:100%;box-shadow:0 8px 40px rgba(0,0,0,.55)}
@@ -4365,7 +4365,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .ann-card textarea{width:100%;box-sizing:border-box;background:transparent;border:0;color:var(--text,#ece1d1);font-size:12px;line-height:1.5;resize:vertical;min-height:38px;outline:none}
   .ann-card textarea::placeholder{color:var(--faint,#8d7f6a)}
   #annEmpty{color:var(--faint,#8d7f6a);font-size:12px;text-align:center;padding:26px 0}
-  /* ── step-1041:Super Agent 指挥台 view(左聊天渲染区 + 右调度看板;widget=快捷入口)──
+ /* ── Super Agent 指挥台 view(左聊天渲染区 + 右调度看板;widget=快捷入口)──
      看板设计借鉴 ref/dsh-superagent-prototype(docs/005-panel.md「三问」看板:有什么要我处理/
      系统健康吗/一件工作的历史;src/core/stage.ts「人先行」阶段:person/* 置顶于 working/*):
      待人工置顶、行数=计数、健康态不占位。数据全来自既有 WS,确定性聚合零 LLM。 */
@@ -4410,7 +4410,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .sup-answer input{flex:1 1 auto;min-width:0;background:rgba(0,0,0,.28);border:1px solid var(--border-soft,rgba(201,143,69,.24));border-radius:6px;color:var(--text,#ece1d1);font:inherit;padding:4px 7px;outline:none}
   .sup-proj-h{display:flex;align-items:center;gap:6px;font-size:11.5px;margin-top:5px}
   .sup-proj-t{font-size:11px;color:var(--faint,#7d6c58);letter-spacing:1px}
-  /* step-1042 关卡 Gate TTL 倒计时(≤10s 变红)与 Fleet 负载条 */
+ /* 关卡 Gate TTL 倒计时(≤10s 变红)与 Fleet 负载条 */
   .gate-ttl{font-family:var(--mono,ui-monospace,monospace);font-size:10px;color:var(--faint,#7d6c58);flex:0 0 auto}
   .gate-ttl.hot{color:var(--accent2,#e08a7a);font-weight:700}
   .loadbar{height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;min-width:56px}
@@ -4436,7 +4436,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
       新建任务<span class="sb-kbd">Ctrl N</span>
     </div>
-    <!-- step-1041:Super Agent 指挥台一级入口(调度本系统与全部工作区的 coding agent;跨项目/跨机联调)。
+ <!-- Super Agent 指挥台一级入口(调度本系统与全部工作区的 coding agent;跨项目/跨机联调)。
          tooltip/显示名 = CV_CARDS.super.title 同串(panel-card-naming 守卫)。 -->
     <div class="sb-act" id="act-super" title="指挥台 Super">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><path d="M12 3v4.2"/><path d="M12 16.8V21"/><path d="M3 12h4.2"/><path d="M16.8 12H21"/><circle cx="12" cy="12" r="8.4" stroke-dasharray="3.2 3.2"/></svg>
@@ -4472,7 +4472,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><path d="M3 6l3-2 3 2v12l-3-2-3 2z"/><path d="M12 4l3 2v12l-3-2-3 2V6z" transform="translate(6 0)"/><path d="M21 6v12"/></svg>
       插件市场 Market
     </div>
-    <!-- 终端/文件两个左栏入口已撤(2026-10-19 用户口径:不展示);浏览器入口 2026-11 恢复(见下方 act-web)。
+ <!-- 终端/文件两个左栏入口已撤(2026-10-19 不展示);浏览器入口 2026-11 恢复(见下方 act-web)。
          未展示者的能力入口仍在,勿删对应视图与路由:
            · 终端    → Ctrl+J(KEYMAP open-terminal)/ 命令中心;视图 #view-term,WS term.exec
            · 文件    → 侧栏任务/项目桶头「文件树」滑入层 #sbFt(与 #view-files 同源 dirCache)+ 项目右键「查看文件」
@@ -4485,8 +4485,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.9.4 5 2.8 5 5.8"/></svg>
       团队 Crew
     </div>
-    <!-- 总线路一级入口已并入代码档案「总路线」tab(2026-10-19 用户口径:总路线与代码档案是同一功能) -->
-    <!-- 运行看板顶级入口已收编进团队视图「看板」子标签(2026-10-16 用户口径:运行看板是团队的一个子功能,每项目一块看板) -->
+ <!-- 总线路一级入口已并入代码档案「总路线」tab(2026-10-19 总路线与代码档案是同一功能) -->
+ <!-- 运行看板顶级入口已收编进团队视图「看板」子标签(2026-10-16 运行看板是团队的一个子功能,每项目一块看板) -->
     <div class="sb-act" id="act-nodes" title="节点 Fleet">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="13" width="7" height="7" rx="1.5"/><line x1="14" y1="16.5" x2="21" y2="16.5"/><line x1="17.5" y1="13" x2="17.5" y2="20"/></svg>
       节点 Fleet
@@ -4503,7 +4503,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><path d="M4 6h7"/><path d="M4 12h7"/><path d="M4 18h7"/><path d="M14 6l2 2 4-4"/><path d="M14 12l2 2 4-4"/><path d="M14 18l2 2 4-4"/></svg>
       追踪 Trace
     </div>
-    <!-- step-1535:轨迹从「追踪 Trace」拆成独立看板视图(逐次决策 + 事件账本 + 泳道,数据源 = histEvents)。
+ <!-- 轨迹从「追踪 Trace」拆成独立看板视图(逐次决策 + 事件账本 + 泳道,数据源 = histEvents)。
          与 track 职责分离:track = 召回·审途五阶段统计,traj = 逐次决策账本。显示名/tooltip 取 CV_CARDS.traj.title 同串。 -->
     <div class="sb-act" id="act-traj" title="轨迹 Trail">
       <svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><circle cx="8" cy="16" r="1.7"/><circle cx="15" cy="9" r="1.7"/><path d="M9 15l5-5"/></svg>
@@ -4529,7 +4529,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   </div>
   <div id="projList"></div>
   <div id="projAdd" style="display:none">
-    <!-- step-056:目录浏览走服务端(gateway 在 WSL,才能看到 /home 真实路径);
+ <!-- 目录浏览走服务端(gateway 在 WSL,才能看到 /home 真实路径);
          浏览器侧 webkitdirectory 选择器只能拿 Windows 侧相对路径——已删,勿恢复 -->
     <div class="proj-add-quick">
       <button id="projBrowseBtn" title="浏览 WSL/本地文件系统选目录(服务端目录浏览器)">打开文件夹</button>
@@ -4555,7 +4555,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     </div>
     <div id="sbFtTree"></div>
   </div>
-  <!-- 版本更新提示(2026-11-09):桌面壳 update-check 状态驱动;浏览器内无 genieWindow.updates 时整块不出现 -->
+ <!-- 版本更新提示:桌面壳 update-check 状态驱动;浏览器内无 genieWindow.updates 时整块不出现 -->
   <div class="sb-update" id="updateBar" style="display:none" role="status" aria-live="polite">
     <div class="up-head"><span class="up-dot"></span><b id="upTitle">发现新版本</b><button class="up-close" id="upLater" type="button" title="稍后再说" aria-label="稍后再说">×</button></div>
     <div class="up-sub" id="upSub"></div>
@@ -4600,9 +4600,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   </header>
   <div class="middle">
     <div class="view chat-col on" id="view-tasks">
-      <!-- 子代理工作区 tab 条(2026-10-16):主会话+每个打开的子代理工作区;空态整条隐藏(JS 渲染) -->
+ <!-- 子代理工作区 tab 条:主会话+每个打开的子代理工作区;空态整条隐藏(JS 渲染) -->
       <div id="wsTabbar"></div>
-      <!-- 标签条已按用户口径废弃(硬隐藏 CSS 在样式区;勿再恢复) -->
+ <!-- 标签条已按废弃(硬隐藏 CSS 在样式区;勿再恢复) -->
       <div class="find-bar" id="findBar" style="display:none">
         <input id="findQ" placeholder="会话内查找…" autocomplete="off">
         <span class="find-count" id="findCount"></span>
@@ -4611,9 +4611,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       </div>
       <div id="chatBody"><div class="empty-line">尚 无 任 务 —— 说 点 什 么</div></div>
     <button id="scrollBottom" title="回到底部" style="display:none;width:32px;height:32px;border-radius:50%;border:1px solid var(--border-soft);background:var(--glass2);color:var(--bronze);cursor:pointer;font-size:14px;align-items:center;justify-content:center"><svg class="icn" viewBox="0 0 24 24"><path d="M5.5 9.5l6.5 6.5 6.5-6.5"/></svg></button><!-- fixT6:定位/尺寸/层叠移交 CSS(sticky;z-index 同归 CSS)——内联 z-index 会压过 #scrollBottom 规则,故不留 -->
-      <!-- turnNav 已迁 footer .aff-strip(2026-10-14 用户口径:轮次时间轴与管线状态同条,右缘浮层退役) -->
+ <!-- turnNav 已迁 footer .aff-strip(2026-10-14 轮次时间轴与管线状态同条,右缘浮层退役) -->
     </div>
-    <!-- 双中心布局(2026-10-25):会话流|IDE 之间的拖拽分隔条;CSS 默认隐藏,仅 body.dual-center 显示 -->
+ <!-- 双中心布局:会话流|IDE 之间的拖拽分隔条;CSS 默认隐藏,仅 body.dual-center 显示 -->
     <div id="dualSplit" title="拖拽调会话流宽度(双击收起 IDE)"></div>
     <div class="view panel-wrap" id="view-git">
       <div class="git-bar">
@@ -4630,11 +4630,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <div class="git-commit">
         <input id="gitMsg" placeholder="提交信息…(可勾选文件只提交选中)" autocomplete="off">
         <button id="gitCommitBtn">提交全部变更</button>
-        <button id="gitLogBtn" title="提交历史(step-042)">历史</button>
-        <button id="gitAiMsg" title="AI 生成提交信息(step-043)">AI 提交信息</button>
+        <button id="gitLogBtn" title="提交历史">历史</button>
+        <button id="gitAiMsg" title="AI 生成提交信息">AI 提交信息</button>
       </div>
       <div class="snap-sec" id="snapSec">
-        <div class="snap-head"><span class="stat-h" style="margin:0">快照(designs/21 · 任务级回滚点)</span>
+        <div class="snap-head"><span class="stat-h" style="margin:0">快照( · 任务级回滚点)</span>
           <button class="vw-act" id="snapLoad">拉取快照</button></div>
         <div id="snapList" style="display:flex;flex-direction:column;gap:4px;max-width:760px"></div>
       </div>
@@ -4916,29 +4916,29 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
         <div class="wf-name">单元测试 · unit-tests</div>
         <div class="wf-desc">自动发现 packages/* 逐包跑测试,失败包派 agent 分析根因。无需参数。</div>
         <button class="wf-go" id="wf-unit">提 交</button>
-      </div>
+          </div>
       <div class="wf-card">
         <div class="wf-name">功能测试 · functional-test</div>
         <div class="wf-desc">场景清单逐项执行命令 + 确定性验证。参数 = scenarios JSON 数组。</div>
         <input class="wf-args" id="wf-func-args" placeholder='[{"name":"冒烟","run":"node --version"}]'>
         <div class="wf-err" id="wf-func-err">参数必须是 JSON 数组,如 [{"name":"冒烟","run":"…"}]</div>
         <button class="wf-go" id="wf-func">提 交</button>
-      </div>
+          </div>
       <div class="wf-card">
         <div class="wf-name">算法效果评测 · algo-eval</div>
         <div class="wf-desc">数据集逐例 judge 判分并聚合命中率。参数 = cases JSON 数组。</div>
         <input class="wf-args" id="wf-algo-args" placeholder='[{"id":"c1","input":"1+1","expect":"2"}]'>
         <div class="wf-err" id="wf-algo-err">参数必须是 JSON 数组,如 [{"id":"c1","input":"…","expect":"…"}]</div>
         <button class="wf-go" id="wf-algo">提 交</button>
-      </div>
-    </div>
+          </div>
+          </div>
     <div class="view panel-wrap" id="view-exp">
       <div class="vw-head"><span class="vw-title">经验库 Memo</span><span class="vw-sub">Hermes 沉淀 · 主 agent 开工自动回顾</span>
         <span class="vw-scope" title="经验库取数作用域:exp.list 按项目沉淀(与当前会话无关)">作用域:项目级</span>
         <button class="vw-act" id="exp-refresh">刷新</button></div>
       <div id="exp-list" style="display:flex;flex-direction:column;gap:2px"></div>
       <div class="exp-body" id="exp-body" style="display:none"></div>
-    </div>
+          </div>
     <!-- 团队视图(2026-10-16 收编:运行看板=团队「看板」子标签;每项目一块看板,作用域锁定当前项目) -->
     <div class="view panel-wrap" id="view-team">
       <div class="vw-head"><span class="vw-title">团队 Crew</span>
@@ -4957,14 +4957,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
           <span id="issueChanTag" style="font-size:9.5px;color:var(--faint)"></span>
           <button class="vw-act" id="issueNewBtn" title="标题/正文/指派/项目,走当前通道">+新建 issue</button>
           <button class="vw-act" id="issueSyncBtn" title="仓内自建通道:git 提交 .genie/issues 共享(原生通道无需)">同步到 git</button>
-        </div>
+          </div>
         <div id="p2pStrip" style="display:flex;gap:10px;flex-wrap:wrap"></div>
         <div id="issueBoard" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start">
           <div class="issue-col" data-col="todo"><div class="issue-col-h">待 办 <span id="issueCntTodo"></span></div><div class="issue-cards" data-col="todo"></div></div>
           <div class="issue-col" data-col="doing"><div class="issue-col-h">进 行 中 <span id="issueCntDoing"></span></div><div class="issue-cards" data-col="doing"></div></div>
           <div class="issue-col" data-col="done"><div class="issue-col-h">已 完 成 <span id="issueCntDone"></span></div><div class="issue-cards" data-col="done"></div></div>
-        </div>
-      </div>
+          </div>
+          </div>
       <!-- 看板面板(原顶级 view-dash 收编;数据源/渲染/协议不变,dashLoad/dashRender 全保留) -->
       <div id="view-dash">
       <div id="dash-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"></div>
@@ -4972,9 +4972,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <div id="dash-body" style="display:flex;flex-direction:column;gap:10px"></div>
       <!-- 详情抽屉(ref session-dialog 对应物) -->
       <div id="dashDrawer"><div class="dash-d-head"><span>会话详情</span><button class="vw-act" data-dashclose="1">关闭</button></div><div id="dashDetailBody"></div></div>
-      </div>
-    </div>
-    <!-- step-1041:Super Agent 指挥台(独立 view:左=持久聊天渲染区,右=调度看板四区;右下角 widget=快捷入口)。
+          </div>
+          </div>
+ <!-- Super Agent 指挥台(独立 view:左=持久聊天渲染区,右=调度看板四区;右下角 widget=快捷入口)。
          看板四区借鉴 ref/dsh-superagent-prototype(docs/005-panel.md 三问看板 / src/core/stage.ts 人先行:
          待人工置顶、计数=清单长度、健康态不占位)。数据源全部既有 WS:super.history / super.inbox /
          task.list / project.list / nodes.list;聊天发送 super.turn,动作复用 ask.user.answer /
@@ -4991,7 +4991,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <input id="superInput" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调)" autocomplete="off" spellcheck="false">
             <button class="vw-act" id="superSend" title="发送 (Enter)">发送</button>
           </div>
-        </div>
+          </div>
         <div class="sup-boardcol">
           <div class="sup-sec" id="supSecInbox">
             <div class="sup-sec-h">待你处理 <span class="sup-cnt" id="supInboxCnt"></span></div>
@@ -5009,26 +5009,26 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <div class="sup-sec-h">系统健康</div>
             <div class="sup-list" id="supHealth"></div>
           </div>
-        </div>
-      </div>
-    </div>
-    <!-- 原「总线路」一级视图已并入代码档案「总路线」tab(step-131) -->
+          </div>
+          </div>
+          </div>
+ <!-- 原「总线路」一级视图已并入代码档案「总路线」tab -->
     <div class="view panel-wrap" id="view-nodes">
       <div class="vw-head"><span class="vw-title">节点 Fleet</span><span class="vw-sub">注册/负载/命令下发/远程项目;接入向导在设置-远程连接</span>
         <span class="vw-scope" title="节点注册表是全局设施(nodes.list 无 session 维度),与当前选中会话无关">作用域:全局</span>
         <button class="vw-act" id="nodes-refresh">刷新</button></div>
       <div id="nodes-body" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
+          </div>
     <div class="view panel-wrap" id="view-approvals">
       <div class="vw-head"><span class="vw-title">关卡 Gate</span><span class="sup-cnt" id="approvalsCount"></span><span class="vw-sub">挂起权限批量处理+最近决定;超时自动拒(fail-closed 不变)</span>
         <span class="vw-scope" title="挂起权限是全局队列(permission.pending 无 session 维度),可批量放行">作用域:全局</span>
         <button class="vw-act" id="approvals-refresh">刷新</button></div>
       <div id="approvals-body" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-    <!-- n3 看板融合(2026-10-22):「分身 Agents」独立视图已删(CV_CARDS 同步删卡)。
+          </div>
+ <!-- n3 看板融合:「分身 Agents」独立视图已删(CV_CARDS 同步删卡)。
          原分身卡的独有能力(注册表运行态/失败原因 reap/模型/会话短码/终态文本)全部并入下面这张卡。 -->
-    <!-- 子agent会话流(2026-10-21 用户口径:分身消息独立一个看板,不与 coding agent 共用会话流)。
-         step-141 选中式消息流:左=子代理选择器(运行中/已结束两区),右=选中者的实时消息流
+ <!-- 子agent会话流(2026-10-21 分身消息独立一个看板,不与 coding agent 共用会话流)。
+ 选中式消息流:左=子代理选择器(运行中/已结束两区),右=选中者的实时消息流
          (派发卡→assistant 文本→工具合并卡→终态卡),形态对齐主 chat。画布形态专属卡:经典布局 CSS 隐藏且无入口。
          n3 融合后左栏条目额外承载:模型标签/会话短码/失败原因(reap)/终态文本展开(≤200 字)。 -->
     <div class="view panel-wrap" id="view-subchat">
@@ -5036,19 +5036,19 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
         <span class="vw-scope" id="scopeSubchat" title="本卡取数作用域:只列当前选中会话派出的子代理">作用域:当前会话</span>
         <button class="vw-act" id="subchat-refresh">刷新</button></div>
       <div id="subchat-body"><div id="subchat-list"></div><div id="subchat-pane"></div></div>
-    </div>
+          </div>
     <div class="view panel-wrap" id="view-track">
       <div class="vw-head"><span class="vw-title">追踪 Trace</span><span class="vw-sub">召回·审途统计(上)+ turn × 五阶段 × 阶段任务(下)</span>
         <span class="vw-scope" id="scopeTrack" title="本卡取数作用域:跟踪的是当前选中会话">作用域:当前会话</span>
         <button class="vw-act" id="track-refresh">刷新</button></div>
-      <!-- 2026-10-21 用户口径「显示应当只有一个数据窗口」:统计区与 turn 树合成一个流式数据区——
+ <!-- 2026-10-21 统计区与 turn 树合成一个流式数据区——
            旧实现两区各自 overflow:auto + sw-slot max-height:44%,把卡切成上下两个独立滚动窗口。
            现在唯一滚动落在卡自身(.view overflow-y:auto),统计区只在有数据时作为头部块出现
            (#sw-slot:not(.sw-active) 整块隐藏,避免空态占位),turn 树即最后一个数据块。 -->
       <div id="sw-slot"></div>
       <div id="track-body"></div>
-    </div>
-    <!-- step-1535:轨迹独立视图(原 #trajBoard 全屏 overlay → 视图内常驻内容区;外层 #view-traj,内层保留 id="trajBoard")。
+          </div>
+ <!-- 轨迹独立视图(原 #trajBoard 全屏 overlay → 视图内常驻内容区;外层 #view-traj,内层保留 id="trajBoard")。
          三 pane 同屏切换:逐次决策(卡片)/ 事件账本(行表)/ 泳道(工具·消息·系统三轨 + turn 分隔线 + 聚合摘要)。
          唯一数据源 = histEvents(前端已在场的会话重放事件,零额外请求),取数只走 PAGE 内函数 trajBoardRefresh。 -->
     <div class="view panel-wrap" id="view-traj">
@@ -5086,15 +5086,15 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <div class="traj-lanes" id="trajLanesHost" style="display:none"><div class="traj-lanes-box" id="trajLanesBox"></div></div>
           </div>
           <div class="traj-lane-sum" id="trajLaneSum" style="display:none"></div>
-        </div>
-      </div>
-    </div>
+          </div>
+          </div>
+          </div>
     <div class="view panel-wrap" id="view-usage">
       <div class="vw-head"><span class="vw-title">吞吐 Telemetry</span><span class="vw-sub">token/调用按模型×会话聚合(journal llm.trace)</span>
         <span class="vw-scope" id="scopeUsage" title="usage.view 协议无 session 参数(服务端全量聚合):前端按当前会话过滤展示">作用域:当前会话(前端过滤)</span>
         <button class="vw-act" id="usage-refresh">刷新</button></div>
       <div id="usage-body" style="display:flex;flex-direction:column;gap:8px;overflow:auto"></div>
-    </div>
+          </div>
     <div class="view" id="view-sys">
       <div class="set-layout">
         <nav class="set-nav" id="setNav">
@@ -5167,7 +5167,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <div class="set-row"><div class="sk">网络代理</div>
               <div class="kv" style="grid-template-columns:130px 1fr" id="proxy-kv">
                 <span class="k">HTTPS_PROXY</span><span class="v">…</span>
-              </div>
+          </div>
               <div class="sd">只读显示服务进程当前生效的代理环境(模型/工具流量继承该环境)</div></div>
             <div class="set-row"><div class="sk">语言</div><div class="sd">zh-CN(一期)</div></div>
           </div>
@@ -5195,7 +5195,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <div class="codeprev-row">
                 <div class="codeprev" id="prev-light"><div class="cp-head">浅色预览</div><pre class="code"><span class="cl">const theme = {</span><span class="cl">  surface: "panel",</span><span class="cl">  accent: "#c98f45",</span><span class="cl">};</span></pre></div>
                 <div class="codeprev" id="prev-dark"><div class="cp-head">深色预览</div><pre class="code"><span class="cl">const theme = {</span><span class="cl">  surface: "panel",</span><span class="cl">  accent: "#c98f45",</span><span class="cl">};</span></pre></div>
-              </div>
+          </div>
               <div class="sd">两种主题下代码块的实际渲染效果(当前生效的主题标亮)</div></div>
           </div>
           <div class="set-sec" id="sec-shortcuts">
@@ -5222,7 +5222,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
               <button class="vw-act" id="kbdReset">恢复默认</button>
               <span class="sd">点「自定义」后按下新组合(Esc 取消);保存在浏览器本地,冲突组合自动让位</span>
-            </div>
+          </div>
           </div>
           <div class="set-sec" id="sec-agents">
             <div class="vw-head"><span class="vw-title">子智能体</span><span class="vw-sub">内置 + 用户自定义(同名可覆盖内置)</span></div>
@@ -5239,7 +5239,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <input name="cname" placeholder="命令名(如 deploy,斜杠后输入;小写字母/数字/-)" autocomplete="off">
               <input name="cbody" placeholder="指令模板(执行时填入输入框,可含 $ARG)" autocomplete="off">
               <button id="cmdSave">保存</button>
-            </div>
+          </div>
           </div>
           <div class="set-sec" id="sec-hooks">
             <div class="vw-head"><span class="vw-title">钩子</span><span class="vw-sub">任务生命周期事件运行命令</span></div>
@@ -5254,7 +5254,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               </select>
               <input name="hcmd" placeholder="命令(在项目根执行,30s 超时)" autocomplete="off">
               <button id="hookSave">添加</button>
-            </div>
+          </div>
           </div>
           <div class="set-sec" id="sec-mcp">
             <div class="vw-head"><span class="vw-title">MCP 服务器</span><span class="vw-sub">在界面中管理外部工具服务;接入后自动并入助手可用工具</span>
@@ -5265,7 +5265,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <input name="mcmd" placeholder="命令(如 npx)" autocomplete="off">
               <input name="margs" placeholder="参数(空格分隔,如 -y @modelcontextprotocol/server-filesystem /tmp)" autocomplete="off">
               <button id="mcpSave">添加</button>
-            </div>
+          </div>
           </div>
           <div class="set-sec" id="sec-memory">
             <div class="vw-head"><span class="vw-title">记忆</span><span class="vw-sub">Super Agent 的跨会话记忆,此处只读查看;内容由 agent 的记忆工具维护</span></div>
@@ -5289,38 +5289,38 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                 <div class="cr-head"><span class="cr-name">主模型</span><span class="cr-sub">执行任务与对话的主力模型</span></div>
                 <select class="cm-select" id="role-main"><option value="">(加载中…)</option></select>
                 <div class="cr-foot"><span class="cr-hint">其他角色未设置时都回退主模型</span><span class="sd" id="role-main-badge"></span></div>
-              </div>
+            </div>
               <div class="cm-role">
                 <div class="cr-head"><span class="cr-name">子代理模型</span><span class="cr-sub">派生子任务时使用的模型</span></div>
                 <select class="cm-select" id="role-subagent"><option value="">(默认使用主模型)</option></select>
                 <div class="cr-foot"><span class="cr-hint">想让子任务用更快的模型时单独设置</span><span class="sd" id="role-subagent-badge"></span></div>
-              </div>
+            </div>
               <div class="cm-role">
                 <div class="cr-head"><span class="cr-name">压缩模型</span><span class="cr-sub" title="配置键 coding.models.compact">上下文压缩与导读</span></div>
                 <select class="cm-select" id="role-compact"><option value="">(默认使用主模型)</option></select>
                 <div class="cr-foot"><span class="cr-hint">长对话自动压缩时使用;未设置回退主模型</span><span class="sd" id="role-compact-badge"></span></div>
-              </div>
+            </div>
               <div class="cm-role">
                 <div class="cr-head"><span class="cr-name">提炼模型</span><span class="cr-sub" title="配置键 coding.models.digest">大结果与 git diff 提炼</span></div>
                 <select class="cm-select" id="role-digest"><option value="">(默认回退压缩模型)</option></select>
                 <div class="cr-foot"><span class="cr-hint">大结果/批量 diff 超阈值时用它提炼,不丢 hunk 与 file:line</span><span class="sd" id="role-digest-badge"></span></div>
-              </div>
+            </div>
               <div class="cm-role">
                 <div class="cr-head"><span class="cr-name">评审模型</span><span class="cr-sub" title="配置键 coding.models.review">提交后深度代码评审</span></div>
                 <select class="cm-select" id="role-review"><option value="">(不配置=仅确定性层)</option></select>
                 <div class="cr-foot"><span class="cr-hint">不配置则只跑确定性检查,不调用模型</span><span class="sd" id="role-review-badge"></span></div>
-              </div>
+            </div>
               <div class="cm-role">
                 <div class="cr-head"><span class="cr-name">语音任务书模型</span><span class="cr-sub" title="配置键 coding.models.voice">聊天窗 🎤 录音 → 整理成任务书</span></div>
                 <select class="cm-select" id="role-voice"><option value="">(未配置=语音任务书不可用)</option></select>
                 <div class="cr-foot"><span class="cr-hint">只支持 omni 多模态模型(名字含 omni,如 qwen3.8-omni-flash);不配置则🎤按钮不可用</span><span class="sd" id="role-voice-badge"></span></div>
-              </div>
+            </div>
             </div>
             <div class="cm-effort-row">
               <div class="sk">思考力度</div>
               <div class="seg" id="effortSeg">
                 <button data-v="">关</button><button data-v="low">低</button><button data-v="medium">中</button><button data-v="high">高</button><button data-v="xhigh">最高</button>
-              </div>
+            </div>
               <span class="sd" id="effortNow">当前:高</span>
               <span class="sd">与输入框「思考」档位联动,保存即生效</span>
             </div>
@@ -5331,12 +5331,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                 <div class="prov-modal-head">
                   <div><b id="prov-modal-title">添加供应商</b><span class="sd">从常用服务商一键接入,或手动填写端点</span></div>
                   <button type="button" class="prov-modal-close" id="prov-modal-close" title="关闭" aria-label="关闭">×</button>
-                </div>
+            </div>
                 <div class="prov-modal-body">
                   <div id="prov-preset-sec" class="prov-preset-sec">
                     <div class="prov-sec-title">常用服务商 <span class="sd">点卡片,填 API Key 即可接入;端点已预填</span></div>
                     <div class="preset-grid" id="provPresets"></div>
-                  </div>
+            </div>
                   <details id="prov-manual-sec" class="prov-manual-sec">
                     <summary id="prov-manual-toggle">手动填写(端点 / 模型)</summary>
                     <div class="set-row cm-addprov"><div class="sk">添加供应商</div>
@@ -5357,10 +5357,10 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                       <input class="num-in" id="cm-new-mt" placeholder="最大输出" autocomplete="off">
                       <button class="vw-act" id="cm-new-add">添加</button>
                       <span class="sd" id="cm-new-status"></span>
-                    </div>
+            </div>
                   </details>
-                </div>
-              </div>
+            </div>
+            </div>
             </div>
 
             <div class="set-group"><span class="gt">已接入供应商</span><span class="gl"></span><span class="sd">编辑、测试连接、拉取模型、设为默认、删除都在卡片内完成</span></div>
@@ -5396,7 +5396,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                 <button data-v="perplexity" title="Perplexity Sonar API">Perplexity</button>
                 <button data-v="custom" title="自定义 OpenAI 兼容检索端点">自定义</button>
                 <button data-v="off" title="关闭搜索 API:web_search 改用内置静态检索(curl 等价)+ browser">关闭(curl/browser)</button>
-              </div>
+            </div>
               <div class="sd">默认态直接用已接入的 DeepSeek 密钥;没有密钥时不会报错,自动降级为内置静态检索(DuckDuckGo HTML),失败再指路 browser 工具。「关闭」= 强制走 curl/browser,即便配了密钥。</div></div>
             <div class="auto-form" id="wsForm">
               <input name="wkey" type="password" placeholder="API Key(可选:默认态沿用 DeepSeek 供应商的密钥)" autocomplete="off">
@@ -5409,14 +5409,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             </div>
 
             <datalist id="model-ids"></datalist>
-          </div>
+    </div>
           <div class="set-sec" id="sec-context">
             <div class="vw-head"><span class="vw-title">上下文精简</span><span class="vw-sub">对话过长时,自动判断哪些内容重要、哪些可以压缩,为主模型腾空间</span></div>
             <div class="set-group"><span class="gt">工作模式</span><span class="gl"></span><span class="sd">默认用内置的本地小模型打分,无需任何配置;改动对下一个任务生效</span></div>
             <div class="set-row"><div class="sk">模式</div>
               <div class="seg" id="ms-mode">
                 <button data-v="off">关闭</button><button data-v="shadow">只记录</button><button data-v="active">自动精简</button>
-              </div>
+    </div>
               <span class="sd" id="ms-mode-badge"></span></div>
             <div class="set-row"><div class="sk">评分服务地址</div>
               <input class="num-in" id="ms-url" style="width:320px;text-align:left" placeholder="留空=内置本地服务(127.0.0.1:8105)">
@@ -5440,13 +5440,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <div class="sd">三个数依次是:置信度阈值(0-1) · 单批候选数 · 评分间隔(轮)</div></div>
             <div class="sd" style="max-width:900px;line-height:1.8;padding-bottom:8px">
               工作方式:内置的本地小模型(约 150MB,随本机自动启动)会阅读对话历史,给每段内容判断「重要/可压缩」。重要的原样保留;不重要的压成摘要;报错记录、你明确交代过的事、不可逆操作的结果始终保留,不会被压缩。「只记录」模式先把判断结果记下来供你查看,不动原文;「自动精简」才真正生效。
-            </div>
+    </div>
             <details style="padding-bottom:16px"><summary class="sd">自部署细节(更换评分服务时才需要)</summary>
               <div class="sd" style="max-width:900px;line-height:1.8;padding-top:8px">
                 内置服务=仓库 <code>services/model-150m</code>,网关启动时自动拉起(<code>127.0.0.1:8105</code>,POST <code>/decide</code>);首次使用先运行其 <code>setup.sh</code>(加载+预热约 1–2 分钟,网关最多等 5 分钟)。批量接口按 8 问/行分块,12 候选(24 问)自动拆 3 行;直接对上游 <code>05_serve</code> 会截断到 8 问,建议走批量服务。换 OpenAI 兼容服务时协议选「OpenAI 兼容服务(自定义)」。
-              </div>
+    </div>
             </details>
-          </div>
+    </div>
           <div class="set-sec" id="sec-audio">
             <div class="vw-head"><span class="vw-title">语音助手</span><span class="vw-sub" id="audio-track"></span></div>
             <div class="set-group"><span class="gt">语音输入/朗读模型</span><span class="gl"></span><span class="sd">只用于指挥台麦克风的语音转写;Super Agent 的对话大脑固定跟随 Coding 主模型,此处不再决定对话</span></div>
@@ -5470,7 +5470,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <input class="num-in" id="a-tts-voice" style="width:110px;text-align:left" placeholder="voice">
               <button class="vw-act" id="a-tts-apply">应用</button>
               <span class="sd" id="a-tts-badge"></span></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-subagent">
             <div class="vw-head"><span class="vw-title">子代理与执行</span><span class="vw-sub">任务用什么方式跑、同时能跑几件</span></div>
             <div class="set-row"><div class="sk">执行方式</div>
@@ -5482,21 +5482,21 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <div class="sd">同时运行任务上限(重启生效)</div></div>
             <div class="set-row"><div class="sk">每会话并发</div><div class="sd" id="cc-perowner"></div></div>
             <div class="set-row"><div class="sk">系统任务并发</div><div class="sd" id="cc-system"></div></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-tools">
             <div class="vw-head"><span class="vw-title">工具</span><span class="vw-sub">主 agent 在场工具面(单一出处)</span></div>
             <div id="tools-list"></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-automations">
             <div class="vw-head"><span class="vw-title">自动化</span><span class="vw-sub">workflow 模板 · 确定性编排</span>
               <button class="vw-act" id="auto-open">打开自动化</button></div>
             <div id="auto-list"></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-experience">
             <div class="vw-head"><span class="vw-title">经验库</span><span class="vw-sub">Hermes 沉淀 · 开工自动回顾</span>
               <button class="vw-act" id="exp-open">打开经验库</button></div>
             <div class="kv" id="exp-kv"></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-browserctl">
             <div class="vw-head"><span class="vw-title">浏览器控制</span><span class="vw-sub">agent 无头浏览器工具(headless chromium)</span></div>
             <div class="set-row"><div class="sk">启用 browser 工具</div>
@@ -5509,7 +5509,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
             <div class="set-row"><div class="sk">面板侧</div>
               <button class="vw-act" id="browser-open-view">打开内嵌浏览器</button>
               <div class="sd">你自己看网页用(agent 工具之外)</div></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-account">
             <div class="vw-head"><span class="vw-title">账号与额度</span><span class="vw-sub">自托管:本地身份 + 用量额度(非计费)</span></div>
             <div id="acctId"><div class="cc-empty loading">加载中…</div></div>
@@ -5518,7 +5518,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <input class="num-in" id="quota-budget" type="number" min="0" step="10000" placeholder="0=不设限">
               <button class="vw-act" id="quota-apply">应用</button>
               <div class="sd">超预算仅面板警示(自托管不硬拦;0=关闭)</div></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-remote">
             <div class="vw-head"><span class="vw-title">远程连接</span><span class="vw-sub">把这台电脑/服务器接入为执行节点(SSH · Docker)</span></div>
             <div class="set-row"><div class="sk">主机</div>
@@ -5544,13 +5544,13 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <select id="nodeSel" style="background:var(--input-bg);border:1px solid var(--input-border);border-radius:7px;color:var(--text);font-size:11px;padding:4px 8px"></select>
               <input id="nodeCmd" placeholder="命令(在节点上执行)" style="flex:1;min-width:200px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:7px;color:var(--text);font-size:11px;padding:4px 8px;outline:none">
               <button id="nodeExecGo" style="background:transparent;border:1px solid var(--border-soft);color:var(--bronze);border-radius:7px;font-size:11px;padding:4px 12px;cursor:pointer">下发</button>
-            </div>
-          </div>
+    </div>
+    </div>
           <div class="set-sec" id="sec-guide">
             <div class="vw-head"><span class="vw-title">引导中心</span><span class="vw-sub">上手清单(按真实状态自动勾) + 界面导览</span>
               <button class="vw-act" id="guideTour">重看导览</button></div>
             <div id="guideList"><div class="cc-empty loading">加载中…</div></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-data">
             <div class="vw-head"><span class="vw-title">数据与统计</span><span class="vw-sub" id="sys-proj">全部会话的用量与统计汇总</span>
               <button class="exp-btn" id="statsExportJson" style="margin-left:auto">导出 JSON</button>
@@ -5558,11 +5558,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
               <button class="exp-btn" id="statsRefresh">刷新</button></div>
             <div id="statsView"><div class="cc-empty">加载中…(进入本分区时拉取)</div></div>
             <div class="kv" id="sys-kv" style="margin-top:10px"></div>
-          </div>
+    </div>
           <div class="set-sec" id="sec-about">
             <div class="vw-head"><span class="vw-title">关于</span></div>
             <div class="kv" id="about-kv"></div>
-            <!-- 应用更新(2026-11-09):桌面壳才显示。更新源落盘 .genie/update-config.json,
+ <!-- 应用更新:桌面壳才显示。更新源落盘 .genie/update-config.json,
                  覆盖 genie.config.json 的 update.feedUrl;env 优先级最高。 -->
             <div id="upCfg" style="display:none">
               <div class="vw-head" style="margin-top:18px"><span class="vw-title">应用更新</span><span class="vw-sub" id="upCfgState">…</span></div>
@@ -5572,40 +5572,40 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                   style="flex:1;min-width:240px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:7px;color:var(--text);padding:5px 8px;font-size:11.5px">
                 <button class="vw-act" id="upSave">保存并检查</button>
                 <div class="sd" style="flex-basis:100%">桌面壳每 6 小时自动检查,也可从帮助菜单/托盘手动检查;留空则回退到 genie.config.json 的 update.feedUrl。</div>
-              </div>
-              <div class="set-row"><div class="sk">当前版本</div><div class="sd" id="upCfgInfo">-</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
+              <div class="set-row"><div class="sk">当前版本</div><div class="sd" id="upCfgInfo">-</div></div>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
   <footer>
-    <div class="aff-head"><span class="aff-title">PIPELINE</span><span class="aff-stage" id="aff-stage">空闲</span><!-- 沉淀入口(2026-10-25 用户口径:自聊天顶部置顶条迁至 footer,箭头所指「就绪」旁) --><button class="vw-act" id="expDistillBtn" style="display:none;margin-left:8px" title="一键沉淀:把当前会话最近任务的经验写入经验库(F5)">沉淀</button></div>
+ <div class="aff-head"><span class="aff-title">PIPELINE</span><span class="aff-stage" id="aff-stage">空闲</span><!-- 沉淀入口(自聊天顶部置顶条迁至 footer,箭头所指「就绪」旁) --><button class="vw-act" id="expDistillBtn" style="display:none;margin-left:8px" title="一键沉淀:把当前会话最近任务的经验写入经验库(F5)">沉淀</button></div>
     <div class="aff-bar"><i id="aff-bar"></i></div>
-    <!-- wf 待答(2026-10-28):自会话流顶部置顶条迁来,独立一行;无待答时整块为空(:empty 不占位) -->
+ <!-- wf 待答:自会话流顶部置顶条迁来,独立一行;无待答时整块为空(empty 不占位) -->
     <div id="wfAskHost"></div>
     <div class="aff-strip">
       <div class="aff-stats"><span id="c-running">0</span> 运行 · <span id="c-queued">0</span> 排队 · <span id="c-done">0</span> 完成 · <span id="c-failed">0</span> 失败</div>
-      <!-- 状态 chips(清单/子代理/压缩/wf/失败/重试):2026-10-28 自会话流顶部迁来,单行不折,不推消息 -->
+ <!-- 状态 chips(清单/子代理/压缩/wf/失败/重试): 自会话流顶部迁来,单行不折,不推消息 -->
       <div id="chatStatusbar"></div>
-      <!-- 轮次时间轴(2026-10-14 用户口径):#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
+ <!-- 轮次时间轴(2026-10-14):#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
       <div id="turnNav" title=""></div>
     </div>
-    <!-- quick-row 快捷卡已按用户口径移除(2026-10-13 视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->
+ <!-- quick-row 快捷卡已按移除(2026-10-13 视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->
     <div class="att-bar" id="attBar" style="display:none"></div>
     <!-- 2026-10-29 文件引用条:正文里的 [文件名](./路径) 引用渲染成 chip(与聊天气泡同形态;× 从正文移除) -->
     <div class="att-bar" id="fileRefBar" style="display:none"></div>
     <!-- ask_user 问答条(2026-10-19 许愿式编程):agent 需求取舍时发问,这里作答(选项按钮/自由输入) -->
     <div id="askBar" style="display:none;margin:0 0 8px;border:1px solid var(--bronze);border-radius:10px;background:var(--glass2);padding:10px 12px"></div>
-    <!-- composer 容器(2026-10-13 视频 2 用户口径:模型选择/模式/思考/用量全部入框,ZCode composer 对齐) -->
-    <!-- step-095:#inChip=输入框指令 chip 覆盖层(绝对定位于 composer 内,chip 态渲染指令占位符) -->
+ <!-- composer 容器(2026-10-13 视频 2 模型选择/模式/思考/用量全部入框,ZCode composer 对齐) -->
+ <!-- #inChip=输入框指令 chip 覆盖层(绝对定位于 composer 内,chip 态渲染指令占位符) -->
     <div class="composer">
       <div id="inChip" style="display:none"></div>
-      <!-- step-165 占位符双态:空闲文案在此(静态初值);busy 态由 renderSendBtn 切「任务运行中,输入内容会排队」(ref i18n busyPlaceholder 双态) -->
+ <!-- 占位符双态:空闲文案在此(静态初值);busy 态由 renderSendBtn 切「任务运行中,输入内容会排队」(ref i18n busyPlaceholder 双态) -->
       <textarea id="instruction" rows="1" placeholder="说点什么…(Enter 发送,Shift+Enter 换行;/ 打开指令;可拖文件/贴图)" autocomplete="off" spellcheck="false"></textarea>
       <div class="composer-bar">
-        <!-- 命令「真执行」标识(step-056 视频):与 slashTypedSubmit 同一判定源,徽标亮=回车必然真实执行该命令,非装饰 -->
+ <!-- 命令「真执行」标识(视频):与 slashTypedSubmit 同一判定源,徽标亮=回车必然真实执行该命令,非装饰 -->
         <span id="cmdChip" class="cmd-chip" style="display:none"></span>
         <div class="composer-plus" id="attBtn" title="添加附件(图片可直接识别)或 @ 引用项目文件">+</div>
         <input type="file" id="attInput" multiple style="display:none">
@@ -5623,7 +5623,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
         <button class="thought-btn" id="effortPill" type="button" title="思考力度(点击选择,热生效):关/低/中/高/最高" aria-label="思考力度:高"><span class="tb-icon" id="effortIcon"></span><span class="tb-bar" aria-hidden="true"><span class="tb-fill" id="effortFill" style="height:75%"></span></span><span class="tb-text" id="effortText">思考:高</span></button>
         <button class="send-btn" id="go">发</button>
 
-      </div>
+    </div>
     </div>
     <div id="slashMenu" style="display:none"></div>
     <div id="mentionMenu" style="display:none"></div>
@@ -5660,7 +5660,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   </div>
 </div>
 <div id="dd"><div class="dd-head"><span id="ddTitle" class="dd-title">diff</span><button class="sd-close" id="ddClose" style="margin-left:auto">收起</button></div><div class="dd-body" id="ddBody"></div></div>
-<!-- 子智能体目录(step-060,ZCode SubagentDirectory 对齐):本会话全部子 agent 两区(运行中/已结束),
+<!-- 子智能体目录(ZCode SubagentDirectory 对齐):本会话全部子 agent 两区(运行中/已结束),
      条目=状态点+角色+标题+已工作时长;点击条目下钻=任务详情与实时输出。
      数据源=session.status 3s 轮询的 subagentList(注册表在场)+journal spawn/result 事件
      (旧会话注册表缺席=降级渲染并标注「历史会话」)。 -->
@@ -5675,14 +5675,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     <div class="fv-body" id="fvBody"></div>
   </div>
 </div>
-<!-- step-074:评审评论一键回注——目标会话选择(评论所属/当前/新会话)+预览+附言 -->
+<!-- 评审评论一键回注——目标会话选择(评论所属/当前/新会话)+预览+附言 -->
 <div id="revInjMask">
   <div class="fv-box rij-box">
     <div class="fv-head"><span class="fv-path">注入评审评论 → 聊天窗</span><button class="fv-close" id="revInjCancel"><svg class="icn" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11"/><path d="M17.5 6.5l-11 11"/></svg></button></div>
     <div class="rij-body" id="revInjBody"></div>
   </div>
 </div>
-<!-- step-056:服务端目录浏览器(添加项目「打开文件夹」)——gateway 在 WSL,浏览的是真实 /home 路径 -->
+<!-- 服务端目录浏览器(添加项目「打开文件夹」)——gateway 在 WSL,浏览的是真实 /home 路径 -->
 <div id="dirBrowser">
   <div class="db-card">
     <div class="db-head"><span>选择文件夹</span><button class="fv-close" id="dbClose">关闭</button></div>
@@ -5690,18 +5690,18 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <button id="dbUp" title="上级目录" aria-label="上级目录"><svg class="icn" viewBox="0 0 24 24"><path d="M5.5 14.5l6.5-6.5 6.5 6.5"/></svg></button>
       <input id="dbPath" placeholder="路径(绝对)" autocomplete="off" spellcheck="false">
       <button id="dbGo">跳转</button>
-    </div>
+  </div>
     <div class="db-quick">
       <span class="db-anchor" data-p="__home__">主目录</span>
       <span class="db-anchor" data-p="/">根目录</span>
       <label class="db-hidden"><input type="checkbox" id="dbHidden">隐藏文件</label>
       <span id="dbErr" class="db-err"></span>
-    </div>
+  </div>
     <div class="db-list" id="dbList"><div class="cc-empty loading">加载中…</div></div>
     <div class="db-foot"><span class="db-sel" id="dbSel"></span><button class="perm-allow" id="dbPick">选择此目录</button></div>
   </div>
 </div>
-<!-- step-056:远程连接向导(SSH/WSL/Docker)——命令由服务端 wizard.gen 生成(节点注册形态) -->
+<!-- 远程连接向导(SSH/WSL/Docker)——命令由服务端 wizard.gen 生成(节点注册形态) -->
 <div id="projRemote">
   <div class="db-card" style="max-width:560px;width:92vw">
     <div class="db-head"><span id="prTitle">新建连接</span><span id="prSub" style="font-size:10px;color:var(--faint)"></span><button class="fv-close" id="prClose">关闭</button></div>
@@ -5711,12 +5711,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <button class="pr-tab2" data-kind="docker">Docker</button>
       <span style="flex:1"></span>
       <select id="prConfigImport" title="从 SSH config 导入" style="max-width:170px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:7px;color:var(--text);font-size:11px;padding:4px 6px;outline:none;display:none"><option value="">从 SSH config 导入</option></select>
-    </div>
+  </div>
     <div id="prBody"></div>
     <div class="pr-foot" style="display:flex;justify-content:flex-end;gap:8px;padding-top:10px">
       <button id="prCancel" style="background:transparent;border:1px solid var(--border-soft);color:var(--text);border-radius:7px;font-size:11px;padding:5px 14px;cursor:pointer">取消</button>
       <button id="prGo" style="background:var(--bronze);border:none;color:#111;border-radius:7px;font-size:11px;padding:5px 14px;cursor:pointer;font-weight:600;display:none">添加并连接</button>
-    </div>
+  </div>
   </div>
 </div>
 <div id="permDialog">
@@ -5729,7 +5729,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <button class="perm-allow" id="permAllow">允许一次</button>
       <button class="perm-allow" id="permAlways" title="写入项目级规则,后续同类请求自动放行(F2)">总是允许</button>
       <button class="perm-deny" id="permDeny">拒绝</button>
-    </div>
+  </div>
   </div>
 </div>
 <div id="cc">
@@ -5739,7 +5739,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     <div class="cc-foot"><span>↑↓ 选择</span><span>↵ 打开会话</span><span>Esc 关闭</span></div>
   </div>
 </div>
-<!-- step-142 IDE 命令面板(Ctrl+Shift+P,仅 IDE 视图内拦截;含「转到文件」与 IDE 命令) -->
+<!-- IDE 命令面板(Ctrl+Shift+P,仅 IDE 视图内拦截;含「转到文件」与 IDE 命令) -->
 <div id="ideCmd">
   <div class="ide-cmd-box">
     <input id="ideCmdQ" placeholder="转到文件 / 执行 IDE 命令…(如 > 保存、> 新建文件、文件名)" autocomplete="off" spellcheck="false">
@@ -5749,8 +5749,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </div>
 <script src="/assets/mermaid.min.js"></script>
 <script src="/assets/status-widget.js"></script>
-<script src="/assets/super-console.js"></script> <!-- step-1033 Super Agent 指挥台(自包含资产:待处理/活动/任务/会话) -->
-<script src="/assets/board-page-layout.js"></script> <!-- step-111 页面结构板语义布局引擎(纯函数;加载失败画布回退旧分层) -->
+<script src="/assets/super-console.js"></script> <!-- Super Agent 指挥台(自包含资产:待处理/活动/任务/会话) -->
+<script src="/assets/board-page-layout.js"></script> <!-- 页面结构板语义布局引擎(纯函数;加载失败画布回退旧分层) -->
 <script src="/assets/annotate-layout.js"></script> <!-- 截图标注组件拆移引擎(纯几何;加载失败组件模式禁用) -->
 <script src="/assets/annotate-coords.js"></script> <!-- 截图标注坐标换算层(纯函数;缺失/加载失败→面板内联兜底并 console.warn,不抛) -->
 <script src="/assets/ide-spectrum.js"></script> <!-- 2026-10-28 音频频谱分析件(离线 decodeAudioData+AnalyserNode;缺失/失败→媒体层仅播放,window.IdeSpectrum 不存在即降级) -->
@@ -5760,7 +5760,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <script src="/assets/board-type-profile.js"></script> <!-- 2026-10-26 13 类板型画像:阶段/角色/硬规则徽标/flow 分支(纯函数;加载失败回退通用卡) -->
 <script src="/assets/canvas-shell.js"></script> <!-- 2026-10-20 无限画布外壳:视图=卡片/左侧定位栏/平移缩放/布局持久化(加载失败=退回经典单视图) -->
 <script>
-/* 任务B(2026-10-29):图视口引擎 + mermaid 主题归一化挂全局。两个资产尾部带 ESM export,
+/* 任务B:图视口引擎 + mermaid 主题归一化挂全局。两个资产尾部带 ESM export,
  * 经典 <script src> 会整文件 SyntaxError(挂全局代码没机会执行),故用动态 import(模块上下文
  * 合法)挂 window;失败静默——面板内已有同式兜底数学(dvZoomAtPoint/mmThemeVars 回退链),
  * 引擎缺席行为不降级。挂载完成后若 mermaid 已就绪,用归一化主题变量补跑一次 initialize
@@ -5780,14 +5780,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 })();
 </script>
 <script src="/assets/browser-view.js"></script> <!-- 2026-10-21 内置浏览器视图(形态来源 ZCode browser-use UnifiedBrowserView):截图面+工具栏+视口拖拽 -->
-<script src="/assets/input-policy.js"></script> <!-- step-124 网页版输入交互策略(分区:画布/侧栏接管,文本区例外) -->
+<script src="/assets/input-policy.js"></script> <!-- 网页版输入交互策略(分区:画布/侧栏接管,文本区例外) -->
 <script>
-/* 服务重启降级(step-056 视频 T1):注册 SW 缓存面板壳。停机窗口内刷新页面→缓存壳+探活横幅(svcWaitRestart),不再裸错误页。 */
+/* 服务重启降级(视频 T1):注册 SW 缓存面板壳。停机窗口内刷新页面→缓存壳+探活横幅(svcWaitRestart),不再裸错误页。 */
 if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("/assets/sw.js").catch(function () {}); } catch (e) {} }
 </script>
 <script>
 if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: mmBaseTheme(), themeVariables: mmThemeVars() });
-// step-070 WS 韧性:socket 降为可换槽位(let)——断线后 connectWs() 换新连接,wireWs() 统一挂
+// WS 韧性:socket 降为可换槽位(let)——断线后 connectWs 换新连接,wireWs 统一挂
 // 处理器;指数退避在 wsOnClose,成功重放在 wsOnOpen。此前 const 一次性连接,断开只能整页刷新。
 let ws = null; // 当前 socket(重连时整体换新;全部 ws.* 引用经 let 绑定读到最新)
 function connectWs() {
@@ -5796,7 +5796,7 @@ function connectWs() {
 }
 connectWs();
 // 十期后记:全面板安全发送——CONNECTING 期入队,开连后冲刷(七期 hello 恢复之后);
-// step-070:重连等待期(CLOSED 且重连在途)也限深入队(≤100),重连成功一并冲刷——
+// 重连等待期(CLOSED 且重连在途)也限深入队(≤100),重连成功一并冲刷——
 // 断链窗口内的发送/轮询不再无痕丢失(超限仍丢弃,submit 的守卫 toast 是超限兜底)。
 var wsQueue = [];
 function wsSafeSend(payload) {
@@ -5806,7 +5806,7 @@ function wsSafeSend(payload) {
     if (ws.readyState === 3 && rcAttempt > 0 && wsQueue.length < 100) { wsQueue.push(payload); return; }
   } catch (e) { /* 已关闭=丢弃 */ }
 }
-// 重连状态(step-070):rcAttempt=已发生的断连次数(重连成功清零);RC_MAX=连续失败上限,
+// 重连状态:rcAttempt=已发生的断连次数(重连成功清零);RC_MAX=连续失败上限,
 // 超过退回 svcWaitRestart(reload 保底)。声明在文件头部:wsSafeSend 等早期求值路径零 TDZ 风险。
 let rcAttempt = 0, rcTimer = 0;
 const RC_MAX = 6;
@@ -5815,7 +5815,7 @@ let lastPong = 0; // 最近一次 pong/入站消息时刻(半开连接检测;0=�
 const $ = (id) => document.getElementById(id);
 const NL = String.fromCharCode(10);
 const tasks = new Map();
-// J4(2026-11-05 用户口径「排序要按 session 有动作更新时间」):会话最近活动时间(sid → ms)。
+// 会话最近活动时间(sid → ms)。
 // 数据源=hello.sessionActivity 首帧快照 + session.status.changed 帧的 lastActivityAt(服务端按
 // 200ms per-session 合并下发)。只用于排序/展示,绝不回写进任务对象——task.updatedAt 是事实。
 const sessionActivity = new Map();
@@ -5828,7 +5828,7 @@ function actOf(t) {
   if (!t) return 0;
   return Math.max(sessionActivity.get(t.sessionId) || 0, t.updatedAt || 0, t.createdAt || 0);
 }
-// J4:活动帧触发的侧栏重渲合并(服务端已 200ms/1s 闸,这里再挡一层连发;单次 timer 只落末次)。
+// 活动帧触发的侧栏重渲合并(服务端已 200ms/1s 闸,这里再挡一层连发;单次 timer 只落末次)。
 let sbActTid = 0;
 function scheduleSidebarRefresh() {
   if (sbActTid) return;
@@ -5841,7 +5841,7 @@ function scheduleSidebarRefresh() {
     if (el && st) el.scrollTop = st;
   }, 400);
 }
-// step-169 协议瘦身:任务索引(task.list/hello/task.changed 只带 TaskIndex,无 instruction/result)。
+// 协议瘦身:任务索引(task.list/hello/task.changed 只带 TaskIndex,无 instruction/result)。
 // 正文(instruction/result/attachments…)走 task.detail.get 按需拉:taskBodyIds=已有正文的 id,
 // taskDetailPending=在飞请求(防重复发),taskDetailWaiters=等正文的回调队列(id→cb[])。
 // 三常量紧邻 tasks 声明(首次调用早于脚本尾);下面的函数声明可提升,零 TDZ 风险。
@@ -5875,7 +5875,7 @@ let currentSid = null;      // 选中会话(null=草稿态/全部任务流)
 // per-session 主模型(白板「per-session 主模型」前端半边):sid → {model,providerId}|null。
 // null=服务端已确认该会话无覆盖;undefined(条目不存在)=未初始化,切会话时发 session.model.get 拉取。
 const sessionModelOverride = new Map();
-// n8 staged 态(2026-10-22):sid → {model,providerId,at} 用户点了但回包未确认的选择。
+// n8 staged 态:sid → {model,providerId,at} 用户点了但回包未确认的选择。
 // pill 显 staged 值+转轮;session.model.result 确认才写入 sessionModelOverride 落定,routeError/ok:false
 // 则清 staged 并回滚显示(effective 或上次已确认值)——不再「乐观直写缓存然后停在新模型上」。
 const sessionModelStaged = new Map();
@@ -5884,7 +5884,7 @@ const MODEL_STAGED_TTL = 15000;
 // n8 服务端 revision 记账(消费 session.model.result.revision):下次 set 带 expectedRevision 做 CAS;
 // revision-mismatch(别的标签页刚改过)→ 自动重拉 session.model.get 对齐再让用户重试,不静默失败。
 const sessionModelRev = new Map();
-// 2026-10-29 用户口径「模型切换只跟 session 走」:草稿态(无 currentSid)不再走全局 cfg.set——
+// 草稿态(无 currentSid)不再走全局 cfg.set——
 // 每个项目下的新建任务有一个预设会话 id(按项目隔离、localStorage 持久化),模型/推理档位等
 // 提交前的行为设置全部经 session.model.set 绑定到它;提交时直接以该 sid 派任务。全局 coding.llm
 // 只能从设置页改,快切菜单永不触碰(旧 draftModelPick + cfg.set 补发机制退役)。
@@ -5918,16 +5918,16 @@ function draftSidOf() {
 }
 /** m4 重试料:draftModelAbort(拒绝/超时)后保留的选择,再点发送按同一模型重发 session.model.set。 */
 let draftModelRetry = null;
-// m4(2026-10-22)草稿首发等 set 回包:submit 命中「草稿 + 已选模型」时只发 session.model.set,把任务体暂存成
+// m4草稿首发等 set 回包:submit 命中「草稿 + 已选模型」时只发 session.model.set,把任务体暂存成
 // pending{sid,text,atts,pick,at,timer}。收到 session.model.result 且 ok 且无 routeError 才发暂存的 task.submit;
 // 失败/超时一律不发(否则 set 被拒时任务已派出,用户看到「选了没用上」),草稿与选择都保留供重试。
 let draftSubmitPending = null;
 /** m4 pending 等回包的超时(秒级体验:超过就退回草稿可重试,不把 composer 永久锁在「等模型」)。 */
 const DRAFT_MODEL_ACK_TIMEOUT = 8000;
-// ---- step-046 成熟面板状态 ----
+// ---- 成熟面板状态 ----
 const diffstats = new Map(); // taskId → {files,total,sha}(task.diffstat.result 缓存;变更条渲染源)
-let diffOpenTask = null; // 变更条文件清单展开态(step-052 F1)
-let ddSel = null;        // 右侧 diff 抽屉当前 {taskId,file}(step-052 F1)
+let diffOpenTask = null; // 变更条文件清单展开态( F1)
+let ddSel = null;        // 右侧 diff 抽屉当前 {taskId,file}( F1)
 let statsCache = null;       // stats.summary.result 缓存 {at,data}
 let autoScope = "global";    // 自动化分栏过滤
 // 会话标签页:打开过的 sessionId 序列(≤8),localStorage 持久化;draft 伪 tab 尾置。
@@ -5940,16 +5940,16 @@ function fmtDur(ms) {
   return Math.floor(m / 60) + "小时" + (m % 60) + "分";
 }
 let histEvents = [];        // 会话重放事件(null=加载中)
-let revSrcCache = {};       // step-074:review.findings 组的注入数据源(rk→{items,sid}),每次 renderHistory 重建
-let histLanding = 0;        // 打开会话的落底宽窗(step-048:history 分块到达,1.2s 内每次渲染都贴底;此后交回保持语义)
-// 重连保会话(step-042):reload 后恢复选中会话与视图(此前全丢回草稿态)。
-// 2026-10-26(ZCode 恢复语义对齐):会话/视图恢复从 sessionStorage 升级 localStorage——
+let revSrcCache = {};       // review.findings 组的注入数据源(rk→{items,sid}),每次 renderHistory 重建
+let histLanding = 0;        // 打开会话的落底宽窗(history 分块到达,1.2s 内每次渲染都贴底;此后交回保持语义)
+// 重连保会话:reload 后恢复选中会话与视图(此前全丢回草稿态)。
+// (ZCode 恢复语义对齐):会话/视图恢复从 sessionStorage 升级 localStorage——
 // 关浏览器/桌面壳重开不再是草稿态(此前 sessionStorage 随标签页失效,重开回到空白)。
 const savedSid = localStorage.getItem("zh:sid") || sessionStorage.getItem("zh:sid");
 const savedView = localStorage.getItem("zh:view") || sessionStorage.getItem("zh:view");
-let traceStats = {};        // sid -> trace.stats(step-037 B4)
-let sessionStatus = null;   // 当前会话状态投影(todo/子代理/workflow;step-037 B3)
-// step-1036 ssc1/ssc2:session.status 增量化(治网关 OOM)。sid -> 已收到末条事件的 seq(水位)。
+let traceStats = {};        // sid -> trace.stats( B4)
+let sessionStatus = null;   // 当前会话状态投影(todo/子代理/workflow; B3)
+// ssc1/ssc2:session.status 增量化(治网关 OOM)。sid -> 已收到末条事件的 seq(水位)。
 // 有此水位→请求带 sinceSeq 只归约新增;无→首拉全量。切会话/回草稿必须清(旧水位 + 服务端另一份
 // 累积态会对不上 → 状态条显示错),见 openSession/newDraft/draftModelAbort 三处同清。
 const ssSeqBySid = new Map();
@@ -5964,7 +5964,7 @@ function ssSendStatus(sid) {
 // 重试态跨会话保活(batch1b):sid -> apiRetry(服务端 gateway 内存镜像回填)。切会话不清——
 // 切走再回来仍能看到「重新连接中」;服务端每次 session.status.result 现读镜像,权威在服务端。
 let apiRetryBySid = {};
-let findQuery = "", findIdx = 0;  // 会话内查找(step-037 批A)
+let findQuery = "", findIdx = 0;  // 会话内查找(批A)
 let promptHist = JSON.parse(localStorage.getItem("zh:prompt-hist") || "[]"); // 输入历史
 let histNav = -1;           // 输入历史浏览位(-1=不在历史态)
 let sysMeta = {};           // sys.meta.result
@@ -5972,10 +5972,10 @@ let cfgView = null;         // cfg.get.result {config,sources,projectPath}
 let projState = "";         // 项目状态摘要(系统活性面板消费)
 let expItems = [];
 let mainView = "chat";      // chat | sense | wf | exp | sys(复刻 ZCode workspaceMainView)
-let projectTab = "structure"; // 代码档案 tab:structure | files | wiki(step-118 wiki 并入档案)
+let projectTab = "structure"; // 代码档案 tab:structure | files | wiki( wiki 并入档案)
 let organize = localStorage.getItem("zh:sb-organize") || "project"; // project | time
 let showLimit = {};         // 分页: 桶键 -> 可见条数(复刻 ZCode 每页5,+5)
-const bucketCollapsed = new Set(JSON.parse(localStorage.getItem("zh:bucket-collapse") || "[]")); // step-056:折叠桶键(持久)
+const bucketCollapsed = new Set(JSON.parse(localStorage.getItem("zh:bucket-collapse") || "[]")); // 折叠桶键(持久)
 let ccHot = 0;
 const VIEW_NAMES = { chat: "", sense: "代码透镜 Lens", project: "代码档案 Atlas", wf: "自动化 Flows", exp: "经验库 Memo", sys: "配置台 Config", team: "团队 Crew", pipeline: "总线路", dash: "团队 · 看板", issues: "团队 · Issue", nodes: "节点 Fleet", approvals: "关卡 Gate", board: "白板 Sketch", files: "文件树 Files", ide: "编辑器 IDE", git: "Git", term: "命令台 Shell", market: "插件市场 Market", browser: "网页 Webview", subchat: "子代理会话流", track: "追踪 Trace", traj: "轨迹 Trail", usage: "吞吐 Telemetry", super: "指挥台 Super" };
 // ── 设置状态(全部真实生效+localStorage 持久化,参照 ZCode 设置页) ──
@@ -5985,7 +5985,7 @@ const settings = {
   sortBy: localStorage.getItem("zh:sort") || "updated",
   organizeDefault: localStorage.getItem("zh:sb-organize") || "project",
   reconnect: Number(localStorage.getItem("zh:reconnect") || 3),
-  // ---- step-047:通用/外观新增项 ----
+ // ---- 通用/外观新增项 ----
   mode: localStorage.getItem("zh:mode") || "code",                 // code | office(办公模式=只留摘要)
   thinking: localStorage.getItem("zh:thinking") || "on",           // 显示思考过程
   showTodo: localStorage.getItem("zh:show-todo") || "on",          // 显示待办
@@ -6018,7 +6018,7 @@ function effectiveTheme() {
   }
   return settings.theme;
 }
-// step-088:主题注册表(key/名称/色板预览/明暗基座)——设置色板卡与循环切换共用单一出处
+// 主题注册表(key/名称/色板预览/明暗基座)——设置色板卡与循环切换共用单一出处
 const THEMES = [
   { key: "dark", name: "鎏金夜", sw: ["#0b0806", "#c98f45", "#ece1d1"], base: "dark" },
   { key: "light", name: "暖纸", sw: ["#faf6ee", "#c98f45", "#3d3223"], base: "light" },
@@ -6030,15 +6030,15 @@ const THEMES = [
 ];
 const THEME_KEYS = THEMES.map((t) => t.key);
 function isLightBase() { const th = THEMES.find((t) => t.key === effectiveTheme()); return th ? th.base === "light" : false; }
-// step-129 M14:主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
+// :主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
 let __lastThemeSig = "";
 function applySettings() {
   document.body.classList.toggle("light", isLightBase());
-  // step-088:主题类单一在位(新主题=body.theme-<key>;dark/light 走既有 light 开关)
+ // 主题类单一在位(新主题=body.theme-<key>;dark/light 走既有 light 开关)
   for (const t of THEME_KEYS) {
     if (t !== "dark" && t !== "light") document.body.classList.toggle("theme-" + t, settings.theme === t);
   }
-  // step-129 M14:主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
+ // :主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
   // 初载(签名空)不挂=首屏即正确主题;reduced-motion 由 CSS 大降级自动兜底。
   const themeSig = settings.theme + "|" + (isLightBase() ? "l" : "d");
   if (__lastThemeSig && __lastThemeSig !== themeSig) {
@@ -6046,7 +6046,7 @@ function applySettings() {
     setTimeout(() => document.body.classList.remove("theme-fade"), 320);
   }
   __lastThemeSig = themeSig;
-  // 任务B(2026-10-29):主题(基座/主题类)真变 → mermaid 用同一份归一化变量重新 initialize;
+ // 任务B:主题(基座/主题类)真变 → mermaid 用同一份归一化变量重新 initialize;
   // 此前只有解析期一次写死 dark,浅主题下 mermaid 图恒为深色。库未到=空转(onload 用当前基座兜住)。
   try {
     if (typeof mmThemeSigApplied !== "undefined" && mmThemeSigApplied !== themeSig && typeof mmApplyTheme === "function") {
@@ -6124,7 +6124,7 @@ function wireSettings() {
   $("termClear").onclick = () => { $("termBody").innerHTML = ""; };
   $("termKill").onclick = () => termSend({ type: "term.cancel" });
 }
-// 任务最大步数(用户口径:maxSteps 1000 且设置页可配)——cfg.set agent.maxSteps 热生效。
+// 任务最大步数(maxSteps 1000 且设置页可配)——cfg.set agent.maxSteps 热生效。
 {
   const inp = $("set-maxsteps");
   if (inp) {
@@ -6188,7 +6188,7 @@ function beep() {
     setTimeout(() => { try { ctx.close(); } catch (e) {} }, 600);
   } catch (e) { /* 忽略 */ }
 }
-// 任务终态通知(2026-11-09 移植 ZCode desktopNotifications 语义):
+// 任务终态通知(移植 ZCode desktopNotifications 语义):
 // ① 只对「本端看到 running/queued/pending → done/failed」的跃迁通知——重连重放、首屏历史里的终态不刷
 // ② 当前会话且窗口有焦点 = 用户正看着,不打扰;当前会话但窗口失焦/最小化 → 系统通知
 // ③ 后台会话沿用原「toast + 未读」并补系统通知
@@ -6235,7 +6235,7 @@ function setSection(sec) {
   if (lazy[sec]) sendOrQueue({ v: 1, type: lazy[sec] });
   renderSectionDyn();
 }
-/** step-125 隐私:路径脱敏(设置页只给产品信息,不暴露本机目录)。
+/** 隐私:路径脱敏(设置页只给产品信息,不暴露本机目录)。
  * 无正则转义坑:id 命中前缀后整段截断;公开 URL(https://)不受影响。 */
 function redactPaths(s) {
   let t = String(s == null ? "" : s);
@@ -6327,7 +6327,7 @@ function renderSectionDyn() {
   const tplDesc = { "unit-tests": "逐个模块跑测试,失败时自动分析原因", "functional-test": "场景清单逐项执行+确定性验证", "algo-eval": "数据集逐例 judge 判分+命中率聚合" };
   $("auto-list").innerHTML = tpls.map((t) =>
     '<div class="tool-item"><div class="tool-name">' + esc(t) + '</div><div class="tool-desc">' + esc(tplDesc[t] || "workflow 模板") + '</div></div>').join("") || '<div class="cc-empty">未启用</div>';
-  // 经验库(step-125:不展示内部目录,只给产品信息)
+ // 经验库(不展示内部目录,只给产品信息)
   $("exp-kv").innerHTML =
     '<span class="k">条目</span><span class="v">' + expItems.length + ' 条(active)</span>' +
     '<span class="k">存储</span><span class="v">内置经验库(本地)</span>' +
@@ -6386,7 +6386,7 @@ function trajCardHtml(tp, series) {
     }).join(" ");
     spark = '<svg class="tj-spark" width="260" height="42" viewBox="0 0 260 42"><polyline points="' + coords + '"/></svg>';
   }
-  // token 总量(step-1020):输入/缓存/出。tp 无 usage 时回落到 tokensSpent(整段计费口径),
+ // token 总量:输入/缓存/出。tp 无 usage 时回落到 tokensSpent(整段计费口径),
   // 全 0 不出空标记(空标记=噪音,与 tj-sub 同一纪律)。
   // typeof 守卫:本函数被 panel-trajectory.test.ts 抽出来 new Function("esc", …) 求值(只注入 esc),
   // 直接引用 fmtTokens 会在那条既有测试里 ReferenceError。
@@ -6403,26 +6403,26 @@ function trajCardHtml(tp, series) {
     + '<span class="tj-open" data-traj-open="1" title="打开轨迹看板:本会话每一步的类型/耗时/token/状态">看板</span>'
     + "</summary>" + subH + bars + spark + "</details>";
 }
-// ===================== step-1020:轨迹看板(全屏 overlay 事件账本) =====================
+// ===================== 轨迹看板(全屏 overlay 事件账本) =====================
 // 纯前端形态:数据源=histEvents(会话重放事件,已在场),建模层 buildTrajRows/groupTrajTurns/summarizeTraj/
 // filterTrajRows/capTrajRows/fmtTokens/fmtDuration 由 panel-traj-model.ts 源码注入(PAGE 无法 import)。
 // 渲染函数一律纯函数(只依赖 esc + 注入的格式化函数),面板测试可从 PAGE 抽源码 new Function 求值断言。
 let trajBoardState = { pane: "decisions", mode: "all", lmode: "sequence", q: "", sel: -1, rows: [], turns: [], view: [], files: [], ord: {}, filesKey: "", prunes: [] };
-// 逐次决策视图(step-1026):卡体全文按需拉取;缓存 key=轨迹文件绝对路径(相邻卡的 prev 复用同一份)。
+// 逐次决策视图:卡体全文按需拉取;缓存 key=轨迹文件绝对路径(相邻卡的 prev 复用同一份)。
 const trajTraceCache = new Map(); // path -> {state:"loading"|"ok"|"err", data?, err?}
 const trajExpanded = new Set();   // 已展开的轨迹文件路径
 const TRAJ_EXPAND_ALL_MAX = 30;   // 「全部展开」单次上限(不一次拉上百个文件)
 let trajBoardInitDone = false;    // 本次打开会话只自动展开最新卡一次(不覆盖用户手动收起)
 let trajDashPullAt = 0, trajDashPullTimer = 0; // 看板在场时 dashboard.changed 驱动的增量拉史节流水位(尾沿补拉)
 
-/** step-1027:数值取证(非法/缺失/非正数一律 null,渲染层据此回退旧口径,不出 undefined/NaN)。 */
+/** 数值取证(非法/缺失/非正数一律 null,渲染层据此回退旧口径,不出 undefined/NaN)。 */
 function trajNumOrNull(v) {
   if (v === undefined || v === null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 /**
- * step-1027:行级 usage 归并(估算口径补到决策行上)。
+ * 行级 usage 归并(估算口径补到决策行上)。
  * 数据源=histEvents 的 llm.trace payload(estimatedInputTokens / estimatedCachedTokens /
  * usageSuspect / usageAnomaly),按 payload.file 建 Map 后补到对应决策行。
  * 旧 journal 没有这些字段 → 行不变(渲染层继续走上报口径);不改原行对象(账本视图共享同一批行)。
@@ -6460,7 +6460,7 @@ function decorateTrajUsage(rows, events) {
   }
   return out;
 }
-/** 汇总合计:主口径=LLM API 实测 usage(repInput/repCached,全行求和);
+/** 汇总合计:主口径=LLM API 经验证 usage(repInput/repCached,全行求和);
  *  估算只作次级(estInput/estCached,仅统计带估算的行);suspect 单独计数(0 时不出现「异常」项)。 */
 function trajBoardUsageTotals(rows) {
   const src = Array.isArray(rows) ? rows : [];
@@ -6542,7 +6542,7 @@ function mergeSynthRows(rows, files) {
   return all;
 }
 /** 汇总条(10 项口径=summarizeTraj;缓存命中率一位小数百分比)。
- *  主口径一律=API 实测(repInput/repCached):输入=API 合计,命中率=cached/input,input=0 → 「—」;
+ * 主口径一律=API 经验证(repInput/repCached):输入=API 合计,命中率=cached/input,input=0 → 「—」;
  *  估算只作次级一项「估算(触发用)」(仅 estRows>0 时出现);「异常 N」仅 N>0。
  *  第 2 参 u 缺省/旧调用方 → 逐字回退到旧的 a.inputTokens / a.cacheHitRate 形态。 */
 function trajBoardSumHtml(s, u) {
@@ -6625,8 +6625,8 @@ function trajBoardInspHtml(r) {
   if (r.error) html += '<div class="errtext">错误文本:' + esc(r.error) + "</div>";
   return html;
 }
-/** ===== step-1026:逐次决策视图(每次 llm.trace 一张卡,卡体懒加载全文) ===== */
-/** 思考截断字数(用户口径:thinking 可截断,正式 content 与入参必须完整)。 */
+/** ===== 逐次决策视图(每次 llm.trace 一张卡,卡体懒加载全文) ===== */
+/** 思考截断字数(thinking 可截断,正式 content 与入参必须完整)。 */
 const TRAJ_THINK_CAP = 600;
 /** 视图过滤:全部/模型=全部决策;工具=有工具调用;错误=失败决策;q 搜模型/摘要/工具名。 */
 function filterDecisionRows(rows, mode, q) {
@@ -6671,8 +6671,8 @@ function trajBoardCardHeadHtml(r, n, expanded) {
   if (r.ttftMs !== undefined) durs.push("首字 " + fmtDuration(r.ttftMs));
   if (durs.length) bits.push('<span class="num">' + esc(durs.join(" / ")) + "</span>");
   const toks = [];
-  // 主数字一律 = LLM API 实测 usage(input 缺/0 → 「输入 —」且不出命中%);本地估算只作次级「估算 Z(触发用)」。
-  // usageSuspect 只出徽标,绝不改写主数字(实测 85.8% 就显示 85.8%)。
+ // 主数字一律 = LLM API 经验证 usage(input 缺/0 → 「输入 —」且不出命中%);本地估算只作次级「估算 Z(触发用)」。
+ // usageSuspect 只出徽标,绝不改写主数字(经验证 85.8% 就显示 85.8%)。
   // 数值取证内联(不引外 helper):卡头是 panel-trace-full 抽取集里被单独求值的函数,必须自足。
   const estOf = function (v) {
     if (v === undefined || v === null || v === "") return null;
@@ -6687,7 +6687,7 @@ function trajBoardCardHeadHtml(r, n, expanded) {
       ? "(缓存 " + fmtTokens(cachedRep) + ",命中 " + ((cachedRep / inRep) * 100).toFixed(1) + "%)" : "";
     toks.push("输入 " + fmtTokens(inRep) + " tok" + cacheTxt);
   } else {
-    // 缺值/0/非数 → 主数字「—」(用户口径:绝不写 0%,也不拿估算顶主位)。
+ // 缺值/0/非数 → 主数字「—」(绝不写 0%,也不拿估算顶主位)。
     toks.push("输入 —");
   }
   if (inEst !== null && inEst > 0) toks.push("估算 " + fmtTokens(inEst) + "(触发用)");
@@ -6779,7 +6779,7 @@ function trajBoardCardHtml(r, n, st) {
   if (s.trace) return html + '<div class="tb-c-body">' + trajBoardBodyHtml(r, s.trace, s.prevTrace) + "</div></div>";
   return html + '<div class="tb-c-body"><div class="tb-c-loading">正文未就绪</div></div></div>';
 }
-/** step-1027:从事件流取 context.prune(只有真剪枝事件才落卡;没有=空数组,不凭空多一张卡)。 */
+/** 从事件流取 context.prune(只有真剪枝事件才落卡;没有=空数组,不凭空多一张卡)。 */
 function trajPruneItems(events) {
   const evs = Array.isArray(events) ? events : [];
   const out = [];
@@ -6790,7 +6790,7 @@ function trajPruneItems(events) {
   return out;
 }
 /**
- * step-1027:context.prune 独立卡。剪枝不是 LLM 决策,不能伪装成决策卡(无干条 token/工具),
+ * context.prune 独立卡。剪枝不是 LLM 决策,不能伪装成决策卡(无干条 token/工具),
  * 只给:时间 / 压了几项 / 省多少 tok / 原因,payload 有 policy 才显示(当前 loop 不上报就省略,不造假)。
  */
 function trajBoardPruneCardHtml(ev, n) {
@@ -6817,7 +6817,7 @@ function trajBoardPruneCardHtml(ev, n) {
   return '<div class="tb-card tb-prune" data-prune-seq="' + Number(e.seq || 0) + '">'
     + '<div class="tb-c-head">' + bits.join("") + "</div></div>";
 }
-/** step-1029:从事件流取 context.intake(大结果入口闸门);没有=空数组,不凭空多卡。 */
+/** 从事件流取 context.intake(大结果入口闸门);没有=空数组,不凭空多卡。 */
 function trajIntakeItems(events) {
   const evs = Array.isArray(events) ? events : [];
   const out = [];
@@ -6828,7 +6828,7 @@ function trajIntakeItems(events) {
   return out;
 }
 /**
- * step-1029:context.intake 最小渲染(tip-line 形态,不抢决策卡的视觉权重)。
+ * context.intake 最小渲染(tip-line 形态,不抢决策卡的视觉权重)。
  * 只给用户点名要的四项:时间 / 工具 / 原量→入上下文量 / 策略(+落盘路径)。
  */
 function trajBoardIntakeCardHtml(ev, n) {
@@ -6865,7 +6865,7 @@ function trajBoardIntakeCardHtml(ev, n) {
   return '<details class="tip-line" data-intake-seq="' + Number(e.seq || 0) + '"><summary>' + bits.join("")
     + '</summary><div class="tl-body">' + esc(body) + "</div></details>";
 }
-/** 决策列表(轮分组头复用账本表口径)。step-1027:context.prune 按 seq 与决策卡合流成独立卡。 */
+/** 决策列表(轮分组头复用账本表口径)。context.prune 按 seq 与决策卡合流成独立卡。 */
 function trajBoardCardsHtml(rows) {
   const src = Array.isArray(rows) ? rows : [];
   const mode = trajBoardState.mode || "all";
@@ -6873,7 +6873,7 @@ function trajBoardCardsHtml(rows) {
   const prunes = sideFiltered
     ? [] : (Array.isArray(trajBoardState.prunes) ? trajBoardState.prunes.slice() : [])
       .sort(function (a, b) { return Number(a && a.seq || 0) - Number(b && b.seq || 0); });
-  // step-1029:context.intake 与 context.prune 同为旁路事件卡,合成一条按 seq 的流(不改各自渲染)。
+ // context.intake 与 context.prune 同为旁路事件卡,合成一条按 seq 的流(不改各自渲染)。
   const intakes = sideFiltered
     ? [] : (Array.isArray(trajBoardState.intakes) ? trajBoardState.intakes.slice() : [])
       .sort(function (a, b) { return Number(a && a.seq || 0) - Number(b && b.seq || 0); });
@@ -6909,7 +6909,7 @@ function trajBoardCardsHtml(rows) {
   flushPrunes(Infinity);
   return html;
 }
-// ===== 泳道 pane(step-1535:从 status-widget.js 移植为 PAGE 内纯函数,唯一数据源 = histEvents)=====
+// ===== 泳道 pane(从 status-widget.js 移植为 PAGE 内纯函数,唯一数据源 = histEvents)=====
 // 事件形状 { seq, kind, time, sessionId, payload };time 由 journal 落盘时补,老会话事件可能没有 time
 // → 坐标一律按 seq 兜底,绝不产出 NaN/空轴(退化路径有负面断言)。
 /** 工具失败归因中文标签(origin 由 loop 落账 tool.result.payload.error.origin)。 */
@@ -7237,7 +7237,7 @@ function trajBoardApplyRows(rows) {
   const turns = groupTrajTurns(src);
   trajBoardState.rows = src;
   trajBoardState.turns = turns;
-  // 决策卡顺序表(step-1026):全量 llm.trace 的文件序列 —— 卡号、上一条(前缀比较基准)、实时去重都用它。
+ // 决策卡顺序表:全量 llm.trace 的文件序列 —— 卡号、上一条(前缀比较基准)、实时去重都用它。
   const files = [], ord = {};
   let nth = 0;
   for (let i = 0; i < src.length; i++) {
@@ -7250,7 +7250,7 @@ function trajBoardApplyRows(rows) {
   trajBoardState.files = files;
   trajBoardState.ord = ord;
   trajBoardState.filesKey = files.join("|");
-  // 最新一次决策默认展开(用户口径「当前 turn 的最新卡片默认展开」);只在打开时做,不覆盖用户手动收起。
+ // 最新一次决策默认展开;只在打开时做,不覆盖用户手动收起。
   if (trajBoardState.pane !== "ledger" && files.length && !trajBoardInitDone) {
     trajExpanded.add(files[files.length - 1]);
     trajBoardInitDone = true;
@@ -7282,13 +7282,13 @@ function trajBoardSynthHeal(rows) {
   }).catch(function () { /* 静默:自愈失败不影响原有渲染 */ });
 }
 /** 进入轨迹视图后的补偿:停在最新决策(滚动位置;视图身份/显隐由 switchView 统一管)。
- *  step-1535:原全屏 overlay 的打开/关闭/Esc/遮罩关闭分支已删——视图常驻,
+ * 原全屏 overlay 的打开/关闭/Esc/遮罩关闭分支已删——视图常驻,
  *  「关闭」等价于切到别的视图,不再有 display 开关与 body 滚动锁。 */
 function trajViewFocusLatest() {
   const host = $("trajCardsHost");
   if (host && trajBoardState.pane === "decisions") host.scrollTop = host.scrollHeight;
 }
-// ---- 入口 1:composer「轨迹」pill(step-1535:改走视图路由,不再开浮层)----
+// ---- 入口 1:composer「轨迹」pill(改走视图路由,不再开浮层)----
 $("trajBoardBtn").onclick = () => { switchView("traj"); trajViewFocusLatest(); };
 // ---- 入口 2:轨迹卡 summary 的「看板」(capture 阶段拦下:不能触发 details 展开)----
 document.addEventListener("click", function (e) {
@@ -7327,7 +7327,7 @@ $("trajViewRefresh").onclick = () => trajBoardRefresh();
       toast("已复制会话 id:" + sid);
     } catch (e) { toast("复制失败:剪贴板不可用,手动选中会话 id", true); }
   };
-  // 视图切换(step-1026):逐次决策(默认) / 事件账本(原行表)
+ // 视图切换:逐次决策(默认) / 事件账本(原行表)
   const panes = document.querySelectorAll("[data-traj-pane]");
   for (let i = 0; i < panes.length; i++) {
     panes[i].onclick = function () {
@@ -7343,7 +7343,7 @@ $("trajViewRefresh").onclick = () => trajBoardRefresh();
   }
   const ea = $("trajExpandAll");
   if (ea) ea.onclick = function () { trajBoardExpandAll(); };
-  // 泳道三模式(step-1535 Q5:sequence|duration|time 全保留)——纯前端重渲,不吃服务端协议。
+ // 泳道三模式( Q5:sequence|duration|time 全保留)——纯前端重渲,不吃服务端协议。
   const lmodes = document.querySelectorAll("[data-traj-lmode]");
   for (let i = 0; i < lmodes.length; i++) {
     lmodes[i].onclick = function () {
@@ -7381,7 +7381,7 @@ $("trajRowsHost").onclick = function (e) {
   trajBoardState.sel = Number(el.getAttribute("data-idx"));
   trajBoardMarkSel();
 };
-// ===================== step-097:主题图标体系(线性 sprite)+ emoji 素描化 =====================
+// ===================== 主题图标体系(线性 sprite)+ emoji 素描化 =====================
 // chrome 符号字符形态(✓ ✕ ▶ ▼ ↖ ⇒ ↳ ▦ …)全部改为 path 描绘:stroke=currentColor 跟文字色,
 // 描边粗细走 --ic-sw;主题质感(ink 加粗/glass 半透)见样式区尾部 .icn/.emj 主题层。
 const ICONS = {
@@ -7505,7 +7505,7 @@ const SKETCH = {
 };
 // 常用 emoji→素描形映射表(语义归组共享形;title/aria-label 保留原字符=语义零丢失)。
 const EMOJI_SKETCH = (() => {
-  // step-126:键由码点构造(源文件零原始 emoji 字形——panel.test emoji 门对源 HTML 的扫描与 097 用户口径一致)
+ // 键由码点构造(源文件零原始 emoji 字形——panel.test emoji 门对源 HTML 的扫描与 097 一致)
   const cp = (...codes) => codes.map((c) => String.fromCodePoint(c)).join("");
   const m = new Map();
   m.set(cp(128512), "face");
@@ -7698,7 +7698,7 @@ function timeBucket(ts) { // 时间线桶(taskTimelineGroups 全桶对齐:今天
   return "更早";
 }
 // 复刻 deriveTaskLeadingIndicator 优先级: error红 > running转圈 > queued黄 > idle灰
-// interrupted(2026-11-05 状态机恢复):外因中断非取消——用 warn 色(可恢复的暂停,不是失败红)。
+// interrupted(状态机恢复):外因中断非取消——用 warn 色(可恢复的暂停,不是失败红)。
 // ---- 任务进度段(后端可选 task.progress = {phase?,step?,note?,at?}) ----
 // 任务对象来自 task.index(前端 tasks Map 无类型),一律防御式读取:任一段非法即跳过,全缺 → 空串零变化。
 const TP_STALL_MS = 3 * 60000; // 停滞判定阈值:3 分钟无进展
@@ -7754,7 +7754,7 @@ function stallAttr(t, now) {
   return ' title="' + txt + '" aria-label="' + txt + '"';
 }
 function indicator(t, now) {
-  // now 缺省取当前时刻(step-1020):旧调用点(7517/25673)只传 t,不得因缺参丢停滞提示或抛错
+ // now 缺省取当前时刻:旧调用点(7517/25673)只传 t,不得因缺参丢停滞提示或抛错
   if (now === undefined || !isFinite(Number(now))) now = Date.now();
   if (t.state === "failed" || t.state === "cancelled") return '<span class="t-dot failed"></span>';
   if (t.state === "running") return '<span class="t-dot running"' + stallAttr(t, now) + "></span>";
@@ -7762,7 +7762,7 @@ function indicator(t, now) {
   if (t.state === "interrupted") return '<span class="t-dot interrupted"></span>';
   return '<span class="t-dot done"></span>';
 }
-// ---- 项目区(step-035,ZCode workspace 移植):状态+渲染+交互 ----
+// ---- 项目区(ZCode workspace 移植):状态+渲染+交互 ----
 let projects = [];            // [{id,path,label,availability}]
 let srvPlatform = "";         // 服务端平台(hello.platform;WSL 连接向导按它区分 Windows 桌面壳/Linux 网关)
 // WSL UNC → 服务端 remote:wsl identity(服务端 project.add 自动转换;此处只用于「添加成功了吗」判定)。
@@ -7800,10 +7800,10 @@ function menuZoom() {
   const c = parseFloat(getComputedStyle(document.body).zoom || "");
   return c > 0 ? c : 1;
 }
-// ---- 通用右键/操作菜单(step-056):任务行/项目行/文件树共用 #taskMenu 载体 ----
+// ---- 通用右键/操作菜单:任务行/项目行/文件树共用 #taskMenu 载体 ----
 function openMenuAt(items, x, y) {
   const menu = $("taskMenu");
-  // step-165 gaps2.5:菜单项支持 hint(悬停 title)/dim(说明行不可点)——harness 根项目「不可移除」说明走此通道(ref 各 workspace 等权可移除是本仓有意分歧,补说明防误报 bug)。
+ // 菜单项支持 hint(悬停 title)/dim(说明行不可点)——harness 根项目「不可移除」说明走此通道(ref 各 workspace 等权可移除是本仓有意分歧,补说明防误报 bug)。
   menu.innerHTML = items.map((it, i) => '<div class="tm-item" data-i="' + i + '"' + (it.hint ? ' title="' + esc(it.hint) + '"' : "") + (it.dim ? ' style="opacity:.55;cursor:default"' : "") + ">" + esc(it.label) + "</div>").join("");
   for (const el of menu.querySelectorAll(".tm-item")) {
     const it = items[Number(el.dataset.i)];
@@ -7813,9 +7813,9 @@ function openMenuAt(items, x, y) {
   menu.style.left = "0px";
   menu.style.top = "0px";
   menu.style.display = "block";
-  // 实测尺寸后定位:默认锚在光标(左上对齐);越出视口才翻转(右→左对齐光标,下→底对齐光标),不再按项数估算高度
-  // step-166:body 有 CSS zoom 时 position:fixed 的 left/top 是「布局 px」,屏幕位置 = left*zoom,而 e.clientX/Y 是视口 px
-  // (不经 zoom)。实测(Chromium, zoom=1.25):left=100 → rect.left=125、rect.width=offsetWidth*1.25。
+ // 经验证尺寸后定位:默认锚在光标(左上对齐);越出视口才翻转(右→左对齐光标,下→底对齐光标),不再按项数估算高度
+ // body 有 CSS zoom 时 position:fixed 的 left/top 是「布局 px」,屏幕位置 = left*zoom,而 e.clientX/Y 是视口 px
+ // (不经 zoom)。经验证(Chromium, zoom=1.25):left=100 → rect.left=125、rect.width=offsetWidth*1.25。
   // 故光标与视口边界必须先除 zoom 换进菜单的布局坐标系,left/top 才与鼠标重合;否则菜单按 zoom 倍数朝右下漂移、
   // 且 125% 下靠近右下角照样出屏(越界判据与菜单宽高不在同一空间)。zoom=1 时下面 4 个变量与原式逐像素相同。
   const z = menuZoom();
@@ -7831,7 +7831,7 @@ function copyText(s) { if (navigator.clipboard) navigator.clipboard.writeText(s)
 
 function renderProjects() {
   const box = $("projList");
-  // 2026-10-26(ZCode onboarding):新用户列表为空(仅内部 conversation workspace)时给引导入口
+ // (ZCode onboarding):新用户列表为空(仅内部 conversation workspace)时给引导入口
   if (!projects.length) {
     box.innerHTML = '<div style="padding:8px 10px;color:var(--faint);font-size:11px;line-height:1.7">尚未打开项目。<br>点击下方「+ 添加项目」,或' +
       '<a href="javascript:void(0)" id="emptyBrowse" style="color:var(--bronze)">打开文件夹</a> / ' +
@@ -7873,7 +7873,7 @@ function renderProjects() {
 function projectRemoveConfirmed(id) {
   const running = [...tasks.values()].filter((t) => t.projectId === id && t.state === "running").length;
   const p = projectById(id);
-  // step-165 gaps2.3:运行中项目专用确认(ref WorkspaceSidebarItem.tsx:349-368 removeRunningWorkspace +
+ // 运行中项目专用确认(ref WorkspaceSidebarItem.tsx:349-368 removeRunningWorkspace +
   // zh-CN.ts:1523-1527):独立标题/描述/危险色确认钮,如实传达「历史任务不会被删除」。
   if (running > 0) {
     uiConfirm("该项目有 " + running + " 个运行中任务。移除项目会停止并释放相关运行状态,历史任务不会被删除;其会话转入「任 务」栏,运行中的任务将自动切回默认工作区。", {
@@ -7895,7 +7895,7 @@ function openProjectMenu(id, x, y) {
     { label: "重命名", act: () => { uiPrompt("项目显示名:", p.label).then((v) => { if (v !== null && v.trim()) wsSafeSend(JSON.stringify({ v: 1, type: "project.rename", projectId: id, label: v.trim() })); }); } },
     { label: "在文件管理器中显示", act: () => wsSafeSend(JSON.stringify({ v: 1, type: "fs.open", path: p.path, reveal: true })) },
     { label: "复制路径", act: () => copyText(p.path) },
-    // step-165 gaps2.5:根工作区不可移除说明(ref 各 workspace 等权 vs 本仓 __harness__ 保护=有意分歧;dim 行只说明不可点)
+ // 根工作区不可移除说明(ref 各 workspace 等权 vs 本仓 __harness__ 保护=有意分歧;dim 行只说明不可点)
     ...((p.path || "").indexOf("remote:") === 0 ? [
       { label: "优化远程连接", hint: "在远端安装轻量辅助组件,文件浏览与编辑更快更稳", act: () => { toast("正在配置远端环境…(自动上传并检测)"); wsSafeSend(JSON.stringify({ v: 1, type: "remote.deploy", projectId: id })); } },
       { label: "检查连接", hint: "重新测试这台服务器能否连通", act: () => { wsSafeSend(JSON.stringify({ v: 1, type: "project.add", path: p.path })); toast("正在检查连接…"); } },
@@ -7915,7 +7915,7 @@ function setupProjectAdd() {
     if (opening) { $("projPathInput").value = ""; $("projPathInput").focus(); }
   };
   $("projAddCancel").onclick = () => { $("projAdd").style.display = "none"; };
-  // step-056:打开文件夹 = 服务端目录浏览器(gateway 在 WSL,浏览真实 /home 路径);
+ // 打开文件夹 = 服务端目录浏览器(gateway 在 WSL,浏览真实 /home 路径);
   // 旧 webkitdirectory 选择器只能拿 Windows 侧相对路径,已删(视频问题 #2/#3 根治)。
   $("projBrowseBtn").onclick = () => { dbOpen(""); };
   $("projRemoteBtn").onclick = () => { prOpen(); };
@@ -7925,7 +7925,7 @@ function setupProjectAdd() {
     pendingAddPath = path;
     wsSafeSend(JSON.stringify({ v: 1, type: "project.add", path }));
     $("projAdd").style.display = "none";
-    // 2026-10-26 实锤修复:harness 本体/已在列表/校验失败时服务端幂等返回,面板无感知=「添加没反应」;
+ // 注意修复:harness 本体/已在列表/校验失败时服务端幂等返回,面板无感知=「添加没反应」;
     // 3s 后若列表仍无此 path 则明确告知(harness 本体按设计不进列表)
     setTimeout(() => {
       if (pendingAddPath !== path) return;
@@ -7939,7 +7939,7 @@ function setupProjectAdd() {
 }
 setupProjectAdd();
 
-// ---- 目录浏览器(step-056,T2/T3):服务端 fs.list 驱动,「选择此目录」直接 project.add ----
+// ---- 目录浏览器(T2/T3):服务端 fs.list 驱动,「选择此目录」直接 project.add ----
 let dbSelPath = null;
 let pendingAddPath = null; // 添加项目待验证(3s 未入列 → 明确提示,防「添加没反应」)
 let dbParent = null; // 服务端回的上级目录(根为 null)
@@ -7986,7 +7986,7 @@ function dbRender(m) {
   const rows = [];
   if (m.path === "") {
     rows.push('<div class="db-row" data-p="' + esc(anchors.home) + '"><span class="ic">' + ic("home") + '</span><span class="nm">主目录(' + esc(anchors.home) + ")</span></div>");
-    // 2026-10-27 连接向导口径:WSL/SSH 项目不再从本地目录选择器添加(避免绕过「先连接→装服务→
+ // 连接向导口径:WSL/SSH 项目不再从本地目录选择器添加(避免绕过「先连接→装服务→
     // 服务返回目录」流程),这里只给指路提示;本地选择器保持纯 Windows 路径语义。
     if ((anchors.wsl || []).length) {
       rows.push('<div class="db-row" style="opacity:.75;cursor:default" data-p=""><span class="ic">i</span><span class="nm">WSL 项目请用「远程连接 → WSL」:先连接并装好工作区服务,再由服务返回目录</span></div>');
@@ -8014,7 +8014,7 @@ function dbRender(m) {
   }
 }
 
-// ---- 远程连接向导(step-056,T4):SSH/WSL/Docker 三形态;命令复用 wizard.gen(节点注册) ----
+// ---- 远程连接向导(T4):SSH/WSL/Docker 三形态;命令复用 wizard.gen(节点注册) ----
 let wizOutTarget = "wizOut"; // wizard.gen.result 写入目标(节点页/添加项目向导二选一)
 function prOpen() { $("projRemote").classList.add("on"); prRenderBody(null); }
 $("prClose").onclick = () => $("projRemote").classList.remove("on");
@@ -8031,7 +8031,7 @@ function prRenderBody(kind) {
   const lbl = 'font-size:10px;color:var(--faint);margin:8px 0 3px';
   if (kind === "wsl") {
     imp.style.display = "none"; go.style.display = "none";
-    // 2026-10-27 连接向导(用户口径):先连接发行版 → 连接过程中安装工作区服务 → 验证可用 →
+ // 连接向导:先连接发行版 → 连接过程中安装工作区服务 → 验证可用 →
     // 由服务返回目录(不是 UNC 浏览) → 选一个项目目录添加。SSH 同一套。
     const winShell = srvPlatform === "win32";
     if (!winShell) {
@@ -8170,11 +8170,11 @@ function prPickProject() {
 for (const t of document.querySelectorAll(".pr-tab2")) t.onclick = () => prRenderBody(t.dataset.kind);
 $("prCancel").onclick = () => $("projRemote").classList.remove("on");
 // SSH config 列表回包 → 填充导入下拉
-// (2026-10-26 新建连接:prconn 全链 = 凭证→测试→加项目→部署;每步回包驱动下一)
+// (新建连接:prconn 全链 = 凭证→测试→加项目→部署;每步回包驱动下一)
 
 for (const c of document.querySelectorAll(".pr-card")) c.onclick = () => prRenderBody(c.dataset.kind);
 
-// ---- 项目文件树(step-056,T6/T1):fs.list 懒展开;右键 = 打开/复制路径/添加到聊天 ----
+// ---- 项目文件树(T6/T1):fs.list 懒展开;右键 = 打开/复制路径/添加到聊天 ----
 const dirCache = new Map();     // absPath -> entries[](fs.list.result 统一落这里;目录浏览器/文件树共用)
 const filesPending = new Set(); // 在飞 fs.list(防渲染循环重发)
 /** 目录缓存键失效集:rootAbs 自身 + 全部后代键(纯字符串前缀匹配;remote://<pid>[/rel] 伪根同样成立)。
@@ -8196,7 +8196,7 @@ function invalidateTreeCache(rootAbs) {
 let filesRootPath = null;
 const filesExpanded = new Set(JSON.parse(localStorage.getItem("zh:files-expand") || "[]"));
 function filesRootProject() { return projectById(activeProjectId); }
-// 远程项目文件树(2026-10-26,ZCode remote workspace UI 切片):remote:ssh 项目走 remote.ls/read;
+// 远程项目文件树(ZCode remote workspace UI 切片):remote:ssh 项目走 remote.ls/read;
 // 伪根键 remote://<projectId> 进 dirCache 同一缓存通道,walk/展开/渲染零分叉
 let remoteLsSink = null;
 let remoteReadSink = null;
@@ -8312,9 +8312,9 @@ $("filesRefresh").onclick = () => { dirCache.clear(); filesPending.clear(); file
 $("filesCollapse").onclick = () => { filesExpanded.clear(); localStorage.setItem("zh:files-expand", "[]"); filesRender(); };
 
 let archView = false, pendingRewind = null;
-function rowTitle(t) { if (!t) return ""; return t.title || t.instruction || String(t.id || "").slice(0, 8); } // step-169/169b:标题优先取索引 title(TaskIndex 必有;instruction 仅本地已缓存正文时才有)
+function rowTitle(t) { if (!t) return ""; return t.title || t.instruction || String(t.id || "").slice(0, 8); } // /169b:标题优先取索引 title(TaskIndex 必有;instruction 仅本地已缓存正文时才有)
 function openTaskMenu(t, x, y) {
-  // 2026-10-19「这些删不掉」：侧栏一行=一个会话（step-048 聚合），旧菜单只有「删除任务」且只发单条
+ // 「这些删不掉」：侧栏一行=一个会话（ 聚合），旧菜单只有「删除任务」且只发单条
   // taskId——同会话另外 N 条照旧撑住该行，看起来根本没删掉。拆成「删除本条 / 删除本会话全部 N 条」。
   const sessCount = [...tasks.values()].filter((x2) => x2.sessionId === t.sessionId).length;
   const items = [
@@ -8342,7 +8342,7 @@ function bindArchClear() {
     if (n) uiConfirm("清空全部 " + n + " 条归档任务?(不可恢复)", { tone: "danger" }).then((ok) => { if (ok) wsSafeSend(JSON.stringify({ v: 1, type: "archive.clear" })); });
   };
 }
-// ---- ZCode WorkspaceSidebar 深拷贝状态(purpose 分区/桶顺序/归档分页,2026-10-14) ----
+// ---- ZCode WorkspaceSidebar 深拷贝状态(purpose 分区/桶顺序/归档分页 ----
 // 偏好校验按 ZCode 同款逐字段验证,坏值重置;展开态缺省=true(workspaceExpansionPreference 语义)。
 function loadPurpose() {
   try {
@@ -8360,16 +8360,16 @@ let lastBucketKeys = []; // 全部展开/收起按钮的数据源(本次渲染�
 function persistPurpose() { localStorage.setItem("zh:sb-purpose", JSON.stringify(purpose)); }
 function persistProjectOrder() { localStorage.setItem("zh:sb-project-order", JSON.stringify(projectOrder)); }
 // ZCode taskListOrdering:运行中整体置顶(按创建时间降序;禁用 updatedAt——流式事件会让排序来回跳)。
-// J4(2026-11-05):非运行组与组内次序改按「会话最近活动时间」actOf = max(活动, updatedAt, createdAt)。
+// 非运行组与组内次序改按「会话最近活动时间」actOf = max(活动, updatedAt, createdAt)。
 // live 组仍按 createdAt 定序(流式期间不跳变),仅在活组内时间相同时回落活动时间。
 function runFirstCmp(a, b) {
-  const live = (x) => x.state === "running" || x.state === "queued"; // step-165 gaps3.1:queued 同 running 置顶口径(会话聚合 running=running|queued,cmp 需同口径,否则两行互换跳变)
+  const live = (x) => x.state === "running" || x.state === "queued"; // queued 同 running 置顶口径(会话聚合 running=running|queued,cmp 需同口径,否则两行互换跳变)
   const ar = live(a), br = live(b);
   if (ar !== br) return ar ? -1 : 1;
   if (settings.sortBy === "created") return (b.createdAt - a.createdAt) || 0;
   return (actOf(b) - actOf(a)) || (b.createdAt - a.createdAt) || 0;
 }
-// step-165 gaps3.2:会话行标题粘性(ref taskIndexRepo.ts:1328-1330 同步 snapshot 保留已覆盖标题 +
+// 会话行标题粘性(ref taskIndexRepo.ts:1328-1330 同步 snapshot 保留已覆盖标题 +
 // session-mgmt.ts:132-136 custom 粘性):用户 rename 置 titleCustom 后,会话行标题不再被
 // 后续新任务的 instruction 派生标题顶掉;取该会话内最新一条 custom 标题,无 custom 才回默认派生轨。
 function sessionRowTitle(ts) {
@@ -8404,7 +8404,7 @@ function renderSidebar() {
   // F3:归档视图=只看归档;默认视图=排除归档;置顶区恒在顶部(ZCode PinnedTasks 语义)。
   const pinned = archView ? [] : list.filter((t) => t.pinned && !t.archived);
   list = archView ? list.filter((t) => t.archived) : list.filter((t) => !t.archived && !t.pinned);
-  // step-048:会话唯一聚合——侧栏一栏 = 一个 session(此前按任务逐条渲染,一个 query 一栏)。
+ // 会话唯一聚合——侧栏一栏 = 一个 session(此前按任务逐条渲染,一个 query 一栏)。
   // 栏态=聚合态:任一子任务 running 即运行中;标题/时间取最新一条;角标=会话内任务数。
   {
     const pinnedSids = new Set(list.filter((t) => t.pinned).map((t) => t.sessionId));
@@ -8429,7 +8429,7 @@ function renderSidebar() {
   $("projCnt").textContent = activeProjectId && list.length ? String(list.length) : "";
   const buckets = [];
   if (organize === "project") {
-    // 按项目分桶(step-035,ZCode organizeByProject)。归属三分(2026-10-14 修正口径):
+ // 按项目分桶(ZCode organizeByProject)。归属三分(修正口径):
     // ①已注册项目(含 harness 本体=独立项目,与其它项目同权进「项 目」分区);
     // ②无 projectId 的会话→__unowned__(「任 务」分区);
     // ③projectId 指向已移除项目→同样归 __unowned__(不再渲染「已移除项目」幽灵桶;服务端 remove/启动 scrub 会先清干净)。
@@ -8492,10 +8492,10 @@ function renderSidebar() {
     if (currentSid) {
       for (const t of b.items) if (t.sessionId === currentSid && !shown.includes(t)) shown.push(t);
     }
-    // step-056:分桶折叠(项目内 session 可折叠;折叠态跨刷新持久)。折叠仍显示激活会话行(active-visible 语义)。
+ // 分桶折叠(项目内 session 可折叠;折叠态跨刷新持久)。折叠仍显示激活会话行(active-visible 语义)。
     const collapsed = bucketCollapsed.has(b.key);
     if (collapsed) shown = shown.filter((t) => t.sessionId === currentSid);
-    // J4(2026-11-05):折叠桶此前只留激活行、被吞掉的条数零提示 → 用户以为「session 漏了」。
+ // 折叠桶此前只留激活行、被吞掉的条数零提示 → 用户以为「session 漏了」。
     // 现在折叠态显式给出被隐藏条数(与桶头 bh-ct 总数并列),展开出口在桶头 chevron。
     const hiddenCt = collapsed ? Math.max(0, b.items.length - shown.length) : 0;
     let h = bucketHead(b, collapsed) + shown.map((t) =>
@@ -8515,7 +8515,7 @@ function renderSidebar() {
   let html = "";
   let shownAny = false;
   if (organize === "project" && !archView) {
-    // purpose 双分区(ZCode workspacePurpose 二分;2026-10-14 修正口径):「项 目」=按注册项目分桶,
+ // purpose 双分区(ZCode workspacePurpose 二分; 修正口径):「项 目」=按注册项目分桶,
     // harness 本体是独立项目(harness 桶在此区,与其它项目同权);「任 务」=无归属会话(无 projectId
     // 或项目已移除),分区头带 新建/文件树 动作,折叠态显 live 徽标。
     const uBucket = buckets.find((b) => b.pid === "__unowned__");
@@ -8577,7 +8577,7 @@ function renderSidebar() {
       });
     };
   }
-  // interrupted 一键续跑(2026-11-05 状态机恢复):服务端 resumeInterrupted 幂等重提
+ // interrupted 一键续跑(状态机恢复):服务端 resumeInterrupted 幂等重提
   // (idempotencyKey=resume:<原id>),双击/重连不双跑;原任务转 cancelled(被续跑替代)。
   for (const b2 of $("taskList").querySelectorAll("[data-resume]")) {
     b2.onclick = (e) => {
@@ -8590,7 +8590,7 @@ function renderSidebar() {
   if (pinned.length) {
     const seenSess = new Set();
     const pinnedRows = pinned.filter((t) => !seenSess.has(t.sessionId) && seenSess.add(t.sessionId)).map((t) =>
-      // step-165 gaps3.2:置顶区会话行同走 custom 粘性标题(与主列表同源,用户改名不被派生标题顶掉)
+ // 置顶区会话行同走 custom 粘性标题(与主列表同源,用户改名不被派生标题顶掉)
       '<div class="t-row' + (t.sessionId === currentSid ? " sel" : "") + '" data-sid="' + esc(t.sessionId) + '">' +
       indicator(t) + '<span class="t-title">' + esc(sessionRowTitle(pinned.filter((x) => x.sessionId === t.sessionId))) + '</span><span class="t-time">' + ago(t.updatedAt) + '</span></div>').join("");
     $("taskList").innerHTML = '<div class="t-bucket">置顶</div>' + pinnedRows + $("taskList").innerHTML;
@@ -8659,7 +8659,7 @@ function renderSidebar() {
       sbFtOpen(fb.closest(".t-bh").dataset.pid);
     };
   }
-  // 桶头「IDE」(step-141 B):激活项目 → 开 #view-ide(树根=该项目工作区)
+ // 桶头「IDE」( B):激活项目 → 开 #view-ide(树根=该项目工作区)
   for (const ib of $("taskList").querySelectorAll(".bh-ide[data-ide]")) {
     ib.onclick = (e) => {
       e.stopPropagation();
@@ -8686,7 +8686,7 @@ function renderSidebar() {
   if (addT) addT.onclick = (e) => { e.stopPropagation(); newDraft(); };
   const ftH = document.getElementById("secFtH");
   if (ftH) ftH.onclick = (e) => { e.stopPropagation(); sbFtOpen("__harness__"); };
-  // 「任 务」分区头「IDE」(step-141 B):harness 工作区 IDE
+ // 「任 务」分区头「IDE」( B):harness 工作区 IDE
   const ideH = document.getElementById("secIdeH");
   if (ideH) ideH.onclick = (e) => { e.stopPropagation(); ideOpen(); };
   // 拖拽把手:项目桶排序(vertical-only,只位移不缩放;顺序持久化 zh:sb-project-order)
@@ -8705,13 +8705,13 @@ function chip(name, args) {
   let a = ""; try { const o = JSON.parse(args); a = o.query || o.instructions || o.target || o.name || o.template || ""; } catch (e) { a = String(args); }
   return '<span class="ev-chip">» ' + esc(name) + '<span class="a"> ' + esc(String(a).slice(0, 60)) + '</span></span>';
 }
-// 轻量 markdown(step-037,ZCode streamdown 的零依赖裁剪):围栏/行内代码/粗体/标题/列表/链接。
+// 轻量 markdown(ZCode streamdown 的零依赖裁剪):围栏/行内代码/粗体/标题/列表/链接。
 // 模板字面量纪律:代码围栏字符用 fromCharCode(96) 构造,禁止反斜杠转义与反引号入 PAGE。
 const BT = String.fromCharCode(96);
 const FENCE = BT + BT + BT;
-/** 图片 src 归一(2026-11-06 md 可点击图片实修):\→/、剥 file:// 前缀、剥 <…> 包裹、
+/** 图片 src 归一( md 可点击图片实修):\→/、剥 file:// 前缀、剥 <…> 包裹、
  *  剥尾部 title(![a](x.png "标题") / '标题' 都只取 x.png)。入参可能是 esc() 后的形态
- *  (<→&lt;),两种形态都吃。归一结果只用于生成 asset URL/图片标签,不参与其它行内语法判定。 */
+ * (<→&lt,两种形态都吃。归一结果只用于生成 asset URL/图片标签,不参与其它行内语法判定。 */
 function mdImgSrc(raw) {
   const BS = String.fromCharCode(92); // 反斜杠走 fromCharCode:PAGE 是大模板串,字面反斜杠会被吃掉
   let s = String(raw == null ? "" : raw).trim();
@@ -8744,7 +8744,7 @@ function mdInline(t, io) {
   // 旧实现按「行内代码→粗体→斜体→图片→链接」分轮在已转义串上拼标签,嵌套/畸形标记会产出错配标签。
   // 现在:识别顺序 行内代码 > 图片/链接 > 粗体 > 删除线 > 斜体;匹配不到闭合标记=按字面输出原符号,
   // 绝不留半个标签。行内代码内不解析任何标记;粗体/删除线/斜体内部递归解析(粗体内允许行内代码)。
-  // io(2026-11-05 IDE md 预览):可选第 3 参 {img,media,link} 回调——不传或回调返回 null=落回本函数
+ // io( IDE md 预览):可选第 3 参 {img,media,link} 回调——不传或回调返回 null=落回本函数
   // 默认白名单(/uploads? 图、http 链接),聊天流等既有 mdToHtml 调用不传 io,行为逐字节不变。
   return citeText(mdInlineScan(esc(t), 0, io));
 }
@@ -8761,7 +8761,7 @@ function mdInlineScan(s, depth, io) {
       if (j > i + 1) { out += "<code>" + s.slice(i + 1, j) + "</code>"; i = j + 1; continue; }
       out += BT; i++; continue; // 无闭合:字面输出
     }
-    // 可点击图片 [![alt](src)](href)(2026-11-06):GitHub 文档标准写法(genie-memory 的 14 张流程图为它)。
+ // 可点击图片 [![alt](src)](href):GitHub 文档标准写法(docs 站点流程图文档全用它)。
     // 旧实现:下面的 "!" 分支从 "[" 起算 alt → 取到空 alt 不渲染,剩 "](" 尾巴当字面量,整张图消失。
     // 这里整体识别:内层走与单图完全相同的 media/img 通道(同 URL 生成),外层 http(s) 加
     // target/rel、项目内相对链接包 io.link(第三参 innerHtml 原样输出图片)。
@@ -8788,14 +8788,14 @@ function mdInlineScan(s, depth, io) {
       }
     }
     // 图片 ![alt](src):src 仅放行同源受控端点 /uploads?(白名单目录文件服务),外链/其它 src 不渲染。
-    // io.media/img(2026-11-05 IDE md 预览):视频扩展名先问 io.media、其余图先问 io.img;回调产 html 或
+ // io.media/img( IDE md 预览):视频扩展名先问 io.media、其余图先问 io.img;回调产 html 或
     // null(null=回退本分支默认白名单)。聊天流不传 io,此分支行为与旧版逐字节一致。
     if (c === "!" && s.charAt(i + 1) === "[") {
       const j = s.indexOf("](", i + 2);
       const k = j > i + 2 ? s.indexOf(")", j + 2) : -1;
       if (k > j + 2) {
         const alt = s.slice(i + 2, j);
-        const src = mdImgSrc(s.slice(j + 2, k)); // 归一(2026-11-06):\→/、file://、<…> 包裹、尾部 title
+        const src = mdImgSrc(s.slice(j + 2, k)); // 归一:\→/、file://、<…> 包裹、尾部 title
         if (io && typeof io.media === "function") {
           const mv = io.media(src, alt);
           if (typeof mv === "string") { out += mv; i = k + 1; continue; }
@@ -8868,16 +8868,16 @@ function hl(mark, q) {
   }
   return out + mark.slice(i);
 }
-// 代码块渲染(step-047):每行一个 span.cl,CSS 计数器出行为行号(body.lineno 开关);长行换行由 body.nowrapcode 控制。
-// mermaid 懒加载运行时(2026-10-29 消息流 mermaid 块):占位节点 .md-mermaid[data-mermaid-lazy]
+// 代码块渲染:每行一个 span.cl,CSS 计数器出行为行号(body.lineno 开关);长行换行由 body.nowrapcode 控制。
+// mermaid 懒加载运行时(消息流 mermaid 块):占位节点 .md-mermaid[data-mermaid-lazy]
 // 自携带源文本(data-src);渲染完成后 mmRenderIn 扫描→按需注入 /assets/mermaid.min.js(单例幂等)
 // → mermaid.run({nodes}) 出图;脚本加载失败/超时(5s)/语法错一律降级 <pre> 代码文本,不白屏不抛错。
 let MM_LIB_LOAD = null; // mermaid.min.js 懒加载单例(重复渲染不重复注入)
-/** 任务B(2026-10-29):mermaid 主题变量经 mermaid-theme-normalize 归一化后喂 mermaid——
+/** 任务B:mermaid 主题变量经 mermaid-theme-normalize 归一化后喂 mermaid——
  *  oklab/color-mix 等现代 CSS 颜色在旧内核/导出路径会褪色或解析失败,归一化成 rgb() 串;
  *  引擎缺席/归一化抛错一律静默回退原始值(渲染不能炸)。两个 initialize 调用点共用本函数。 */
 function mmThemeVars() {
-  // 任务B(2026-10-29):按当前主题基座取变量——旧实现写死深色底(#0b0806),浅主题(暖纸/砂陶…)下
+ // 任务B:按当前主题基座取变量——旧实现写死深色底(#0b0806),浅主题(暖纸/砂陶…)下
   // mermaid 图仍是深底,与页面冲突。isLightBase 缺席(极老壳/单测沙箱)时退回深色,不炸。
   const light = (function () { try { return typeof isLightBase === "function" ? isLightBase() : false; } catch (e) { return false; } })();
   const vars = light
@@ -8898,13 +8898,13 @@ function mmThemeVars() {
   } catch (e) { /* 归一化失败:静默回退原值,不炸渲染 */ }
   return vars;
 }
-/** 任务B(2026-10-29 取证):mermaid 主题**基座名**。实测本仓 mermaid 构建只有 theme:"base" 才吃
+/** 任务B(取证):mermaid 主题**基座名**。经验证本仓 mermaid 构建只有 theme:"base" 才吃
  *  themeVariables("dark"/"default" 一律用自身默认色板:浅主题下节点仍是被写死的 #1f2020 深卡,
  *  归一化后的浅变量进不去图)。故浅基座用 "base"(变量直接生效)、深基座保持 "dark"(现状零回归)。 */
 function mmBaseTheme() {
   try { return (typeof isLightBase === "function" && isLightBase()) ? "base" : "dark"; } catch (e) { return "dark"; }
 }
-/** 任务B(2026-10-29):主题切换后按当前基座用归一化变量重新 initialize mermaid。
+/** 任务B:主题切换后按当前基座用归一化变量重新 initialize mermaid。
  *  旧实现只在解析期/懒加载 onload 各 initialize 一次且写死 theme:"dark",切浅主题后 mermaid 仍吃深色变量
  *  (图底色仍是 #0b0806)。库还没加载时安全空转——懒加载 onload 用当时的 mmThemeVars() 兜住。 */
 var mmThemeSigApplied = ""; // 上次 initialize 用的主题签名(基座+主题类),避免每次 applySettings 都重 init
@@ -8963,7 +8963,7 @@ function mmRenderIn(root) { // 消息渲染完成钩子:扫描 root(缺省 docum
     }
   });
 }
-// ---- 2026-11-06 step-1024 富图形交付:围栏 html / svg → 可看图卡 ----
+// ---- 富图形交付:围栏 html / svg → 可看图卡 ----
 // 设计稿级布局/排版/标注不是 mermaid 能表达的形态(分层容器、斜向带、编号标注、逐点注解);
 // 这类图由 agent 用自包含 html(内联 CSS)/ svg 交付,面板把它渲染成图卡。
 // html: 沙箱 iframe(sandbox="" 禁脚本/表单/同源 + 注入 CSP default-src 'none',图/字体只放 data:);
@@ -9121,7 +9121,7 @@ function renderCodeBlock(lines, lang0) {
   if (!big && info.lang === "svg") return artSvgCard(srcText);
   const body = lines.map((l) => '<span class="cl">' + (esc(l) || "&nbsp;") + '</span>').join("");
   // 语言来自开围栏行(mdToHtml 记录到 preLang;围栏行本身不进 preBuf——旧实现期待它进 preBuf,
-  // 导致所有围栏语言丢失 + mermaid 永不进 md-mermaid,2026-10-17 step-118 修复)。
+ // 导致所有围栏语言丢失 + mermaid 永不进 md-mermaid, 修复)。
   const lang = String(lang0 || "").trim();
   if (lang === "mermaid") {
     // mermaid 围栏:占位节点自携带源文本(data-src,esc 已覆盖 &<>";单引号属性安全),
@@ -9129,8 +9129,8 @@ function renderCodeBlock(lines, lang0) {
     return '<div class="md-mermaid" data-mermaid-lazy="1" data-src="' + esc(lines.join(String.fromCharCode(10))) +
       '"><div class="cc-empty">mermaid 图渲染中…</div></div>';
   }
-  // (历史注:CODE_SRC Map 原为围栏原文暂存,2026-10-29 mermaid 懒加载改版后源文本由 data-src 自携带,Map 已移除)
-  // step-137:is-code 板色标记 + data-lang(同族 .code-wrap 靠类区分语种;终端/JSON 各自板色见 CSS)
+ // (历史注:CODE_SRC Map 原为围栏原文暂存, mermaid 懒加载改版后源文本由 data-src 自携带,Map 已移除)
+ // is-code 板色标记 + data-lang(同族 .code-wrap 靠类区分语种;终端/JSON 各自板色见 CSS)
   const over = big && (info.lang === "html" || info.lang === "svg")
     ? artFallbackNote("图卡源超出 512KB 上限,已回落为代码块") : "";
   return over + '<div class="code-wrap is-code" data-lang="' + esc(lang || "text") + '"><div class="code-bar"><span class="code-lang">' + esc(lang || "code") + '</span>' +
@@ -9141,9 +9141,9 @@ function mdToHtml(text, q, io) {
   const lines = String(text).split(String.fromCharCode(10));
   let html = "", inPre = false, preBuf = [], preLang = "", listOpen = false, olOpen = false, olStart = "1", quoteOpen = false;
   // subTag = 当前开启的子列表标签(null | "ul" | "ol"):ul/ol 嵌套对称,close 时按标签输出对应闭合
-  let liOpen = false, subTag = null; // 嵌套列表(2026-10-14 渲染二期):父 li 保持开启,子列表嵌在其中
+  let liOpen = false, subTag = null; // 嵌套列表(渲染二期):父 li 保持开启,子列表嵌在其中
   let tableBuf = [], tablePending = false;
-  let paraBuf = []; // 2026-11-05:连续正文行聚成 <p>(旧实现逐行 <br>,段距无从谈起=信息挤成一片)
+  let paraBuf = []; // :连续正文行聚成 <p>(旧实现逐行 <br>,段距无从谈起=信息挤成一片)
   const flushPara = () => {
     if (!paraBuf.length) return;
     html += "<p>" + paraBuf.join("<br>") + "</p>";
@@ -9195,8 +9195,8 @@ function mdToHtml(text, q, io) {
       html += "<li>" + content; liOpen = true; // 父 li 保持开启(子列表要嵌进来)
       continue;
     }
-    // 有序列表(2026-10-13 渲染修复):1. / 1、两种形态——此前不支持,整段摔成裸行(格式乱飞主源之一)
-    // 2026-11-06 嵌套对称:正则捕获缩进 om[1]、序号 om[2]、正文 om[3];父 li 保持开启以挂子 ol
+ // 有序列表(渲染修复):1. / 1、两种形态——此前不支持,整段摔成裸行(格式乱飞主源之一)
+ // 嵌套对称:正则捕获缩进 om[1]、序号 om[2]、正文 om[3];父 li 保持开启以挂子 ol
     const om = /^( *)([0123456789]+)[.] (.+)$/.exec(line) || /^( *)([0123456789]+)、(.+)$/.exec(line);
     if (om) {
       const oIndent = om[1].length, oContent = hl(mdInline(om[3], io), q);
@@ -9219,8 +9219,8 @@ function mdToHtml(text, q, io) {
     if (!inPre && line.startsWith("|")) {
       const isSep = /^[|][:| -]*[|]$/.test(line.trim());
       if (isSep) continue; // 分隔行不产内容
-      // 2026-10-20:先按 | 切,再丢首尾空段——旧口径 /^\||\|$/g 只能吃「正好一个」首尾竖线,
-      // 行尾竖线带空格或双竖线时留下空段 → 表头多一列「幻影空列」(实测表头 6 列数据 5 列)。
+ // 先按 | 切,再丢首尾空段——旧口径 /^\||\|$/g 只能吃「正好一个」首尾竖线,
+ // 行尾竖线带空格或双竖线时留下空段 → 表头多一列「幻影空列」(经验证表头 6 列数据 5 列)。
       const cells = line.split("|").map((c) => c.trim());
       if (cells.length && cells[0] === "") cells.shift();
       if (cells.length && cells[cells.length - 1] === "") cells.pop();
@@ -9258,12 +9258,12 @@ function mdToHtml(text, q, io) {
     html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' + head.map((c) => "<th>" + hl(mdInline(c, io), q) + "</th>").join("") + "</tr></thead><tbody>" +
       tableBuf.slice(1).map((r) => "<tr>" + head.map((_, ci) => "<td>" + hl(mdInline(r[ci] || "", io), q) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
   }
-  return sketchifyHtml(html); // step-097:内容层 emoji 素描化总出口(全量/增量 mfPatch 同链,确定性转换)
+  return sketchifyHtml(html); // 内容层 emoji 素描化总出口(全量/增量 mfPatch 同链,确定性转换)
 }
 // 工具调用卡(折叠+参数+结果;ZCode ToolCallBlocks 裁剪)
 // fixH16(渲染官 H):旧 toolCard(裸名+raw 参数 JSON+「tool」徽标)退役——非分组工具全部走
 // toolCallCard 统一合并卡(图标+动词+参数摘要+状态徽标+专属结果体);调用点:主循环/子代理工作区。
-// 工具结果正文渲染(2026-10-14 A:fc 返回乱码修复)。取证四源:①协议标签残留(只 esc 不清洗,闭合标签原样可见)
+// 工具结果正文渲染( A:fc 返回乱码修复)。取证四源:①协议标签残留(只 esc 不清洗,闭合标签原样可见)
 // ②终端控制字符(孤立 CR 进度覆盖行粘成一坨)③fc JSON 返回单行平铺不可读 ④超长 4000 硬截断无提示。
 // 修法:cleanToolText 清洗→JSON 探测美化(代码块呈现)→4000 预览+原生 details「展开全文」(免 JS、重渲染存活)。
 // (注释铁律再证:页面模板层注释里禁写反斜杠转义——本注释首版含 CR 转义符,被模板吃成真回车把注释截成裸语句。)
@@ -9296,7 +9296,7 @@ function toolResultCard(content, q, toks, name, argsRaw, detKey) {
   // 本仓工具真实错误都把标记放在结果开头(错误:…/[browser 失败]…),清洗后仍只看开头窗口。
   const isErr = name ? toolResIsErr(name, content) : /错误|失败|error/i.test(raw.trim().slice(0, 60));
   const m = name ? toolMetaOf(name) : null;
-  // 折叠态 key(2026-11-09):优先调用 id(跨重渲染稳定);无 id 退回「工具名+参数头」。
+ // 折叠态 key:优先调用 id(跨重渲染稳定);无 id 退回「工具名+参数头」。
   const detK = "tool-res:" + (String(detKey || "") || (name || "") + ":" + String(argsRaw || "").slice(0, 80));
   return '<details class="tool-card' + (isErr ? " tc-fail" : "") + '" data-det-key="' + esc(detK) + '"><summary>' +
     '<span>' + ic("sub") + (m ? " " + esc(m.v) : "") + ' 结果</span><span class="tc-args">' + hl(esc(raw.slice(0, 60)), q) + '</span>' +
@@ -9305,7 +9305,7 @@ function toolResultCard(content, q, toks, name, argsRaw, detKey) {
 }
 // fixH9:通用结果正文(原 toolResultCard 主体抽离,专属渲染的兜底共用)——
 // JSON 探测美化(代码块)/纯文本行块;超长 4000 预览+details 展开全文;read_file toks 语义着色保留。
-// step-137:JSON 分支独立板色(is-json)+ 键/字符串/数值/布尔分色(jsonLineHtml),不再黑白一片。
+// JSON 分支独立板色(is-json)+ 键/字符串/数值/布尔分色(jsonLineHtml),不再黑白一片。
 const JSON_BS = String.fromCharCode(92), JSON_DQ = String.fromCharCode(34);
 // 从起始引号位置找未转义的收尾引号(JSON.stringify 产物的 \" 转义要跳过)
 function jsonStrEnd(s, i) {
@@ -9365,15 +9365,15 @@ function trGenericBody(raw, q, toks) {
     const rest = txt.slice(TR_PREVIEW_CHARS, TR_CAP_CHARS);
     more = '<details class="tr-more"><summary>展开全文(共 ' + txt.length + " 字符" + (txt.length > TR_CAP_CHARS ? ",超出部分已截断" : "") + ')</summary><div class="tc-body tr-full">' + esc(rest) + "</div></details>";
   }
-  // step-087:纯文本正文统一代码块形态(与 JSON 分支/toolCard 同风格,不再裸 div)——
+ // 纯文本正文统一代码块形态(与 JSON 分支/toolCard 同风格,不再裸 div)——
   // code-bar 行数头 + .cl 逐行块;行间裸换行在 tr-lines 容器(white-space:normal)折叠,HTML 内保留真实换行。
-  // step-093:toks 在场=read_file 源码行块语义着色(JSON 美化分支不着色——美化文本非源码原文)。
+ // toks 在场=read_file 源码行块语义着色(JSON 美化分支不着色——美化文本非源码原文)。
   return pretty !== null
     ? jsonLinesBlock(txt)
     : citeText(codeLinesBlock(txt.slice(0, TR_PREVIEW_CHARS), q, 0, toks) + more);
 }
-// ---- fixH10:工具人话渲染层(2026-10-18 渲染官 H)----
-// 用户实报「终端/工具结果没渲染效果;read_file 调用与结果没渲染效果」。统一框架:
+// ---- fixH10:工具人话渲染层(渲染官 H)----
+// 用户用户反馈「终端/工具结果没渲染效果;read_file 调用与结果没渲染效果」。统一框架:
 // 调用卡=图标+人话动词+参数摘要+状态徽标(运行中/完成/失败·耗时);结果体=按工具专属结构呈现,
 // 不再黑底 JSON 墙/纯文本平铺。全部零反斜杠(页面模板层纪律),解析失败逐级回落 trGenericBody。
 const TOOL_META = {
@@ -9394,8 +9394,8 @@ function toolSoloOf(name) { return !!TOOL_SOLO[String(name || "").toLowerCase()]
 function parseArgs(raw) { try { return JSON.parse(String(raw || "{}")); } catch (e) { return null; } }
 function firstLineOf(s) { return String(s || "").split(String.fromCharCode(10))[0] || ""; }
 function clip(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; }
-/** 消息构型速览(2026-10-21 修复):llm.trace 行此前把 messageRoles 全量 join——一条 143 条消息的
- *  调用会渲成几十行 assistant→tool→…,整行被撑爆(用户实报「路径渲染全失效」)。这里只放构型:
+/** 消息构型速览(修复):llm.trace 行此前把 messageRoles 全量 join——一条 143 条消息的
+ * 调用会渲成几十行 assistant→tool→…,整行被撑爆(用户用户反馈「路径渲染全失效」)。这里只放构型:
  *  连续同角色压成 a×N;段数超限保留头尾、中间省略;附总条数。全量只进 title。 */
 function roleShape(arr, maxSeg) {
   const ab = { system: "s", user: "u", assistant: "a", tool: "t" };
@@ -9445,7 +9445,7 @@ function toolArgSum(name, argsRaw) {
   if (n === "web_fetch" || n === "web_search" || n === "browser") return clip(p("url") || p("query") || p("action"), 90);
   if (n === "code_review") return "本任务变更深审";
   if (n === "task_phase") {
-    // 2026-10-20:此前对话流只显「task_phase 完成」,阶段与 note 全丢——补成「进入阶段 · 规划 — xxx」。
+ // 此前对话流只显「task_phase 完成」,阶段与 note 全丢——补成「进入阶段 · 规划 — xxx」。
     // 卡头动词已是「进入阶段」(TOOL_META),摘要里不再重复该词,只留阶段名与 note。
     const ph = p("phase") || "?";
     if (o.skip === true) return "不涉及 · " + (PHASE_CN[ph] || ph) + (p("note") ? " — " + clip(p("note"), 70) : "");
@@ -9493,11 +9493,11 @@ function toolResIsErr(name, content) {
 function trChip(txt, cls, title) { return '<span class="tr-chip' + (cls ? " " + cls : "") + '"' + (title ? ' title="' + esc(title) + '"' : "") + ">" + txt + "</span>"; }
 function trChipB(label, val) { return trChip(esc(label) + " <b>" + esc(String(val)) + "</b>"); }
 // 行块预览+N 行截断(专属体通用):compact=组内 12 行,独立卡 40 行;超出走 tr-more 展开全文(免 JS)。
-// step-137:opts 透传 codeLinesBlock(终端类输出=kind:'term' → 独立板色 + 行级调子 + 失败红板)。
-/** 终端转轮动画帧折叠(2026-10-20):tqdm/npm/构建器在管道里会吐几十上百帧「⠋⠙⠹⠸」单字符行,
+// opts 透传 codeLinesBlock(终端类输出=kind:'term' → 独立板色 + 行级调子 + 失败红板)。
+/** 终端转轮动画帧折叠:tqdm/npm/构建器在管道里会吐几十上百帧「⠋⠙⠹⠸」单字符行,
  *  在聊天流里就是一片乱码点阵。连续 ≥3 帧折叠成一行注记(帧内容无信息量,只保留计数)。
  *  判定收窄:行首是盲文点阵字符(U+2800..U+28FF)且去掉盲文/空白后剩余 ≤4 字符(纯转轮帧)。
- *  2026-10-21 去重(实测缺陷:相邻行出现多个相同折叠注记,刷屏):
+ * 去重(经验证缺陷:相邻行出现多个相同折叠注记,刷屏):
  *  ① 空行分隔的帧流并段——转轮流里的空行无信息量,「帧-空行-帧」算同一段,不再各折各的;
  *  ② 连续两个注记(中间只隔空行)合并为一个、帧数累加;
  *  ③ 输入里已是注记的行同样走合并通道(重复折叠幂等:已折文本再折不增殖);
@@ -9639,7 +9639,7 @@ function trEditFile(argsRaw, txt, q, compact) {
   if (diag) diagHtml = diagRender(diag, q);
   return chips + diffHtml + (headline ? '<div class="tr-empty">' + hl(esc(headline), q) + "</div>" : "") + diagHtml;
 }
-// fixC-D2(2026-10-19 用户实报):<diagnostics> 块渲染——旧实现把 XML 标签行一起原样裸露
+// fixC-D2(用户用户反馈):<diagnostics> 块渲染——旧实现把 XML 标签行一起原样裸露
 // (<diagnostics file=...> 与 </diagnostics> 显示为文本)。剥离标签,file 属性行做标题,
 // 内容行(L1513:38 error TS2694 ...)按「行号+级别+码」着色。零正则转义(模板层纪律)。
 function diagRender(diag, q) {
@@ -9658,7 +9658,7 @@ function diagRender(diag, q) {
     rows.push('<div class="diag-row dg-' + m + '">' + hl(esc(l), q) + "</div>");
   }
   if (!rows.length) return "";
-  // step-137:诊断块走独立板(diag-box)——整块淡红底+左红条,与正文段落区分;硬编码 rgba 换 --surf-fail(浅色主题不再出暗块)
+ // 诊断块走独立板(diag-box)——整块淡红底+左红条,与正文段落区分;硬编码 rgba 换 --surf-fail(浅色主题不再出暗块)
   const hasErr = rows.join("").indexOf("dg-err") >= 0;
   return '<div class="diag-box' + (hasErr ? " has-err" : "") + '">' +
     (file ? '<div class="diag-hd">' + ic("warn") + " 诊断 " + esc(file) + "</div>" : "") +
@@ -9677,7 +9677,7 @@ function trWriteFile(argsRaw, txt, q, compact) {
     (diag ? trChip(ic("warn") + " 有诊断", "note") : "") + "</div>";
   let diagHtml = "";
   if (diag) diagHtml = diagRender(diag, q);
-  // fixC-D3:旧实现漏拼 diagHtml——write_file 的诊断块渲染出来就被丢弃(用户实报裸露的另一半根因)
+ // fixC-D3:旧实现漏拼 diagHtml——write_file 的诊断块渲染出来就被丢弃(用户用户反馈裸露的另一半根因)
   return chips + (headline ? '<div class="tr-empty">' + hl(esc(headline), q) + "</div>" : "") + diagHtml;
 }
 // grep 行解析:rel:LINE: text(第二冒号后跟空格;中段纯数字)。尾注行(已达上限/共 N 条)单独摘出。
@@ -9717,7 +9717,7 @@ function trGrep(argsRaw, txt, q, compact) {
     const perFile = compact ? 3 : 6;
     let rows = "";
     for (const g of byFile) {
-      // step-137:每文件成一块板(gr-blk),命中行在板内——搜索结果是「成组的证据」不是散句
+ // 每文件成一块板(gr-blk),命中行在板内——搜索结果是「成组的证据」不是散句
       let blk = '<div class="gr-file">' + ic("file") + " " + esc(g.f) + " <span style='color:var(--faint)'>· " + g.rows.length + " 处</span></div>";
       for (const h of g.rows.slice(0, perFile)) blk += '<div class="gr-hit"><span class="gr-ln">' + h.ln + '</span><span class="gr-tx">' + hl(esc(clip(h.t, 160)), q) + "</span></div>";
       if (g.rows.length > perFile) blk += '<div class="tr-empty" style="padding-left:36px">… 另 ' + (g.rows.length - perFile) + " 处(展开全文可见)</div>";
@@ -9787,7 +9787,7 @@ function trListDir(argsRaw, txt, q, compact) {
     (nd ? trChipB("目录", nd) : "") + (nf ? trChipB("文件", nf) : "") + "</div>" + rows;
 }
 // fixH10g:run_cmd——exit 徽标(非零红)+stdout/stderr 输出行块(长输出截断+展开)。
-// step-137:输出走终端板(is-term:独立底色+行级错误/警告/命令行调子;非零退出码整板红边)。
+// 输出走终端板(is-term:独立底色+行级错误/警告/命令行调子;非零退出码整板红边)。
 function trRunCmd(argsRaw, txt, q, compact) {
   const NL = String.fromCharCode(10);
   const o = parseArgs(argsRaw) || {};
@@ -9823,7 +9823,7 @@ function trTerminal(argsRaw, txt, q, compact) {
   if (o.sessionId) chips.push(trChip("会话 " + esc(String(o.sessionId).slice(-10))));
   const out = String(o.output || "");
   const ec2 = o.exitCode === undefined || o.exitCode === null ? 0 : Number(o.exitCode);
-  // step-137:终端会话输出同样走终端板(非零退出码=红板)
+ // 终端会话输出同样走终端板(非零退出码=红板)
   return '<div class="tr-chips">' + chips.join("") + "</div>" + (out ? trBlockPreview(out, q, compact, { kind: "term", fail: ec2 !== 0 }) : "");
 }
 // fixH10i:code_sense——首行画像 chips+grep 命中/降级注记结构化。
@@ -10057,7 +10057,7 @@ function toolCallCard(c, q, res, toks, opts) {
     if (d > 0) durTxt = " · " + (d >= 6000 ? fmtDur(d) : d + "ms");
   }
   const headName = m ? '<span class="tc-verb" title="' + esc(name) + '">' + esc(m.v) + "</span>" : '<span>» ' + hl(esc(name), q) + "</span>";
-  // 折叠态 key(2026-11-09):调用 id 跨重渲染稳定(轮询/流式回包都不会变);无 id 的旧形态退回「工具名+参数头」。
+ // 折叠态 key:调用 id 跨重渲染稳定(轮询/流式回包都不会变);无 id 的旧形态退回「工具名+参数头」。
   const detK = "tool-call:" + (String(c.id || "") || name + ":" + String(c.arguments || "").slice(0, 80));
   const bodyHtml = res
     ? (gate ? '<div class="tr-empty">被工具层拒绝,未执行。' + (gate.reason ? "<br>原因:" + esc(gate.reason) : "") + "</div>" : "") + toolResultBody(name, c.arguments, res.content, q, toks, !!(opts && opts.compact))
@@ -10069,7 +10069,7 @@ function toolCallCard(c, q, res, toks, opts) {
     '<span class="tc-state ' + stCls + '">' + stTxt + durTxt + "</span></summary>" +
     '<div class="tc-body">' + bodyHtml + "</div></details>";
 }
-// ---- step-093 语义着色(数据源=journal tool.tokens 事件,file-tools.ts read_file 旁路发射)----
+// ---- 语义着色(数据源=journal tool.tokens 事件,file-tools.ts read_file 旁路发射)----
 // tool.tokens 事件预扫:toolCallId → payload。histEvents 同会话只增(水位法增量扫描);
 // 会话切换/全量重放(首事件 seq 变化)/截断(长度小于水位)时重置重建。map 仅渲染面消费。
 let tokScanSid = null, tokScanN = 0, tokScanSeq0;
@@ -10167,11 +10167,11 @@ function tkRowHtml(l, tmap, q) {
   }
   return fallback;
 }
-// 工具结果行块(step-087):code-bar 行数头 + .cl 逐行 span(display:block 承担换行)。
+// 工具结果行块:code-bar 行数头 + .cl 逐行 span(display:block 承担换行)。
 // 行间以裸换行连接——容器 .tr-lines white-space:normal 折叠之(不进 pre,避免 pre 内文本节点再断行),
 // HTML 字符串保留真实换行(mdrender t2 的 CR 转行断言依赖)。totalLines>显示行数时头标注「前 N 行/共 M 行」。
-// step-093:toks(toolTokensOf 产物)在场=逐行语义切片+语言名入头;缺席=原形态零变化(优雅降级)。
-// step-137:opts.kind 决定板式与行级调子——term=终端输出(近黑板+绿调+exit 失败红板),
+// toks(toolTokensOf 产物)在场=逐行语义切片+语言名入头;缺席=原形态零变化(优雅降级)。
+// opts.kind 决定板式与行级调子——term=终端输出(近黑板+绿调+exit 失败红板),
 // code=源码,text=通用文本(零变化兜底)。行级调子只在无 toks 时挂(语义着色优先,防双色打架)。
 // (页面模板禁写含反斜杠的正则字面量,行调子判定一律走 indexOf,见 lineToneOf)
 function lineToneOf(l, kind) {
@@ -10210,8 +10210,8 @@ function codeLinesBlock(txt, q, totalLines, toks, opts) {
   return '<div class="' + wrapCls + '"><div class="code-bar"><span class="code-lang">' + esc(label) + '</span></div>' +
     '<div class="tc-body tr-lines">' + body + "</div></div>";
 }
-// 分组项结构化(step-087,截图红框主因):explore 组项预览原为 esc 平铺 div(.tg-args white-space:normal
-// =多行输出塌缩成一段流式裸文本;单条不成组时整段直接裸排消息流)。step-087 改为:工具名+参数行头 +
+// 分组项结构化(截图红框主因):explore 组项预览原为 esc 平铺 div(.tg-args white-space:normal
+// =多行输出塌缩成一段流式裸文本;单条不成组时整段直接裸排消息流)。 改为:工具名+参数行头 +
 // codeLinesBlock 行块。fixH15(渲染官 H):组项升级统一框架——图标+人话动词+参数摘要+完成/失败徽标 +
 // 按工具专属结果体(grep 命中分组/编辑 diff/终端 exit 徽标…),不再「raw 名+raw 参数+纯文本行块」。
 function tgResultItem(name, argsRaw, content, q, toks) {
@@ -10226,7 +10226,7 @@ function tgResultItem(name, argsRaw, content, q, toks) {
   return '<div class="tg-item' + (err ? " tc-fail" : "") + '">' + head + toolResultBody(name, argsRaw, content, q, toks, true) + "</div>";
 }
 
-// ---- 子代理过程卡(B 2026-10-14):spawn 处内联,任务书摘要/状态/耗时/实时尾随 ----
+// ---- 子代理过程卡(B):spawn 处内联,任务书摘要/状态/耗时/实时尾随 ----
 // 形态决策:内联卡而非聚合面板——spawn 点即用户注意力所在,聚合计数已有 statusbar「子代理 n(运行 m)」
 // chip 承担;数据通道=session.status 既有 3s 轮询的 subagentList(服务端读后台注册表+output.txt 尾部),
 // 不造新协议。角色提取用 indexOf(页面模板禁反斜杠,\w 形正则会被转义吃掉——旧 roleM 正则即此伤)。
@@ -10241,12 +10241,12 @@ function subagentRoleOf(instructions) {
   return /^[A-Za-z0-9_-]+$/.test(name) ? name : "worker";
 }
 function lines0Of(s) { return String(s || "").split(String.fromCharCode(10))[0] || ""; }
-// 角色身份色(step-060 提取共享:过程卡/等待聚合卡/子代理目录三处同源,免漂移)
+// 角色身份色(提取共享:过程卡/等待聚合卡/子代理目录三处同源,免漂移)
 function subagentRoleColor(role) { return { worker: "#6fae7a", explore: "#c9a25e", judge: "#7a9cc9", "test-analyst": "#c98f5e", planner: "#9b7ad9", "ppt-master": "#d98a5e" }[role] || "#8a8a8a"; }
-// 角色显示名(step-138):planner → 「规划」;2026-11-05:ppt-master → 「演示」;其余沿用英文名(不制造回归)。
+// 角色显示名:planner → 「规划」;:ppt-master → 「演示」;其余沿用英文名(不制造回归)。
 function subagentRoleName(role) { return role === "planner" ? "规划" : role === "ppt-master" ? "演示" : role; }
-// 摘要行(step-060 提取共享):title 参数优先;否则在【任务书】后找**含内容动词的行**(目标/负责/巡检…),
-// 跳过多份任务书共享的纪律前言(「只读…严禁…」)——并列子 agent 首行雷同=卡片无法区分(用户实测反馈)。
+// 摘要行(提取共享):title 参数优先;否则在【任务书】后找**含内容动词的行**(目标/负责/巡检…),
+// 跳过多份任务书共享的纪律前言(「只读…严禁…」)——并列子 agent 首行雷同=卡片无法区分(用户经验证反馈)。
 function subagentLabelOf(title, instructions) {
   const instr = String(instructions || "");
   const cardTitle = String(title || "");
@@ -10294,7 +10294,7 @@ function subagentCardHtml(ev, resByAgent, bgByAgent, q) {
   else if (cls !== "run") body += '<div class="sub-tail">(历史会话或服务已重启:实时过程不可回放,结果见 ' + ic("sub") + ' 结果卡)</div>';
   const pref = subCardUser.get(key);
   const openAttr = (pref !== undefined ? pref : cls === "run") ? " open" : "";
-  // step-062:过程卡「工作区」钮——消息流内就地开该子代理的工作区 tab(与目录条目行同一 data-subws 委托);
+ // 过程卡「工作区」钮——消息流内就地开该子代理的工作区 tab(与目录条目行同一 data-subws 委托);
   // agentId 缺席(异常态 key 回退)不渲染按钮,不造假入口。
   const cardWsBtn = agentId ? '<button class="sc-ws" data-subws="' + esc(agentId) + '" title="打开该子代理的工作区 tab(完整动作/消息流)">工作区</button>' : "";
   return '<details class="tool-card sub-card" data-agent="' + esc(key) + '"' + openAttr + "><summary>" +
@@ -10304,7 +10304,7 @@ function subagentCardHtml(ev, resByAgent, bgByAgent, q) {
     '<div class="tc-body">' + body + "</div></details>";
 }
 
-// task_output 轮询聚合卡(step-060 刷屏治理):主 agent 等子代理收割时,每对 task_output 调用+结果
+// task_output 轮询聚合卡(刷屏治理):主 agent 等子代理收割时,每对 task_output 调用+结果
 // 不再逐对出卡——同 agentId 全部对聚合成一张卡:运行中=「等待中 · 已工作 Xs · 轮询 N 次」+实时 tail;
 // 终态翻绿「完成 · 用时 Ns」。数据源=journal 事件对(历史会话重放同语义)+subagentLive(3s 注册表轮询)。
 function taskWaitCardHtml(agentId, info, resByAgent, bgByAgent, spawnInfo, q) {
@@ -10344,14 +10344,14 @@ function taskWaitCardHtml(agentId, info, resByAgent, bgByAgent, spawnInfo, q) {
     '<div class="tc-body">' + body + "</div></details>";
 }
 
-// 权限审批(step-037 B2):ask→对话框;倒计时到点自动拒(服务端同计时,fail-closed 兜底)
+// 权限审批( B2):ask→对话框;倒计时到点自动拒(服务端同计时,fail-closed 兜底)
 let permCurrent = null, permTimer = null;
 function permShow(m) {
   permCurrent = m;
   $("permTool").textContent = "工具:" + (m.tool || "?") + " · 风险:" + (m.risk || "medium");
   $("permSum").textContent = String(m.summary || "");
   const secs = Math.round((m.timeoutMs || 60000) / 1000);
-  // C 文案对齐(2026-10-14):落盘规则经 C9 归一(permission-store addAlwaysAllowRule 非 * pattern 一律存
+ // C 文案对齐:落盘规则经 C9 归一(permission-store addAlwaysAllowRule 非 * pattern 一律存
   // 工具级 "*"),摘要首词形态(如 subagent[safe-cmd])从未真实落盘——展示改成与实落一致的 tool[*]。
   // 只动展示;permAlways 的提交面(pattern=摘要首词,服务端归一)保持原语义不动。
   $("permMeta").textContent = secs + " 秒无应答自动拒绝 · 总是允许将写规则:" + (m.tool || "?") + "[*]";
@@ -10365,7 +10365,7 @@ function permShow(m) {
   }, 1000);
 }
 function permHide() { $("permDialog").classList.remove("on"); clearInterval(permTimer); permCurrent = null; }
-/** step-1042 统一应答口:发送+清 Gate 队列+关 modal+状态点;后续 permission.resolved 广播再把
+/** 统一应答口:发送+清 Gate 队列+关 modal+状态点;后续 permission.resolved 广播再把
  * 其它标签页/指挥台面收敛(旧实现 modal 应答不清 approvalQueue → Gate 残行点击报 UnknownAsk)。 */
 function permRespondUnified(requestId, decision, rule) {
   wsSafeSend(JSON.stringify({ v: 1, type: "permission.respond", requestId, decision, ...(rule ? { rule } : {}) }));
@@ -10389,7 +10389,7 @@ $("permAlways").onclick = () => {
 };
 
 let histLastHtml = null; // 上次写入的 chatBody HTML(T1 幂等:相同=跳过写入;直写 chatBody 的分支须置 null 失效;页面脚本禁 TS 标注)
-let histLastParts = null; // 上次写入的逐块 HTML(step-082 增量渲染:与本次 parts 做前缀+后缀匹配,只替换差异区间;任何绕过 renderHistory 的 chatBody 直写都必须置 null)
+let histLastParts = null; // 上次写入的逐块 HTML(增量渲染:与本次 parts 做前缀+后缀匹配,只替换差异区间;任何绕过 renderHistory 的 chatBody 直写都必须置 null)
 // fixE22:长会话顶窗渲染(T6 登记:auto-7fa17d29 kids=729 全量 innerHTML,首帧 1.1s+滚动 longtask)。
 // 语义:窗口只裁「上方更老的段」(<mfWinLo 的 parts 以零高占位渲染,journal 索引与事件遍历不变——
 // turnOutcome/预扫/分组状态机照常全量重放,只是不生成重型 HTML);尾部恒真(粘底追新天然成立)。
@@ -10398,7 +10398,7 @@ let histLastParts = null; // 上次写入的逐块 HTML(step-082 增量渲染:�
 let mfWinLo = 0;         // 顶窗下界(parts 索引;0=全量=旧行为,小会话零变化)
 let mfWinSk = false;     // 骨架态:大会话首帧先全占位趟计数(毫秒级),再按 n-N 定窗真渲染(openSession 置位)
 let mfWinShiftFrom = -1; // 扩展渲染的高度回补基准(winExtend 记 scrollHeight,写入后按差值回补;>=0=本帧走回补路径)
-const MF_WIN_N = 72;     // 初始窗口段数(产线大会话均块高 ~167px:≈13 屏;实测 96 段写入 310-470ms,72 段留足 <500ms 首帧余量)
+const MF_WIN_N = 72;     // 初始窗口段数(生产环境大会话均块高 ~167px:≈13 屏;实测 96 段写入 310-470ms,72 段留足 <500ms 首帧余量)
 const MF_WIN_STEP = 16;  // 上翻扩展步长(段数;96 段步进实测单次扩展 56-79ms 仍过 longtask 阈,16 段压入阈下)
 const MF_EVT_BIG = 600;  // 起窗事件阈值(会话事件数>此值才窗口化;以下全量渲染=完全旧路径)
 const MSG_PH = '<div class="msg-ph" hidden></div>';
@@ -10410,7 +10410,7 @@ let mfScanLen = -1;
 let mfScanData = null;
 let codeCopyDelegated = false; // code-copy 委托一次性守卫(此前每次渲染重复挂监听)
 let replyMoreDelegated = false; // fixT6:长汇报展开/收起委托一次性守卫(同 code-copy 语义)
-// ── 增量渲染工具(step-082 滚动稳定):parts 每项=单根元素,逐块对位后只动差异区间——
+// ── 增量渲染工具(滚动稳定):parts 每项=单根元素,逐块对位后只动差异区间——
 // 未变节点身份存活=展开态/滚动位置/已渲染内容不丢,消除整列 innerHTML 重建的抖动源。 ──
 function mfRoot(html) {
   const t = document.createElement("template");
@@ -10422,7 +10422,7 @@ function mfQA(roots, sel) { // 跨本次写入根集合的选择器(增量路径
   for (const r of roots) out.push(...r.querySelectorAll(sel));
   return out;
 }
-// 展开态兜底(2026-11-09):原先按「根序号 + 根内 details 序号」回放,parts 数量一变
+// 展开态兜底:原先按「根序号 + 根内 details 序号」回放,parts 数量一变
 // (加载更多历史/窗口哨兵/流式占位)序号即错位,用户刚点开的卡会被按别人的序号开合。
 // 现改为按 detOpen 的稳定 key 采集+回填(与序号解耦)。
 function openIdxOf(root) {
@@ -10468,11 +10468,11 @@ function mfCaptureOpenAll(body) {
   }
   return rec;
 }
-// 子代理过程卡(B 2026-10-14):live 状态/尾随来自 session.status 轮询的 subagentList(3s 既有轮询);
+// 子代理过程卡(B):live 状态/尾随来自 session.status 轮询的 subagentList(3s 既有轮询);
 // subCardUser=用户手动开合意图(优先于「运行中默认展开」),重渲染后状态存活。
 const subagentLive = {}; // agentId → { status, tail }
 const subCardUser = new Map(); // key → true/false(用户 toggle 过的展开意图)
-// ── 折叠态总账(2026-11-09「折叠自己开/关」根因修复)──
+// ── 折叠态总账(「折叠自己开/关」根因修复)──
 // 面板所有看板的可折叠区统一走一张总账:用户手动开合意图按稳定 key 存 detOpen,
 // 数据回包重渲染(innerHTML 整列重建 / 增量 patch / 新卡插入)后由 MutationObserver 对
 // 新插入的 details 按 key 回填 open。禁止再按 DOM 现值判定折叠态——那正是「点开它,
@@ -10533,7 +10533,7 @@ function detWatch() {
   mo.observe(document.body, { childList: true, subtree: true });
 }
 detWatch();
-// B3(2026-10-13 F1 面板侧缓解):模型偶发把上下文结构标签(</tool_result>/<tool_message> 等)整行驼出——
+// B3( F1 面板侧缓解):模型偶发把上下文结构标签(</tool_result>/<tool_message> 等)整行驼出——
 // 仅由协议标签开头的行不展示;上游内容清洗在各自域(子代理出口已做,主模型侧属提示词域)。
 // 实现零反斜杠:页面模板层连注释里的反斜杠转义都会被吃掉并把注释截成裸语句(PAGE 转义族,注释也不例外)。
 function scrubProtocolLines(t) {
@@ -10545,7 +10545,7 @@ function scrubProtocolLines(t) {
     for (var i = 0; i < tags.length; i++) if (s.indexOf(tags[i]) === 0) return false;
     return true;
   });
-  // 行中残留剥离(2026-10-13 渲染修复):协议标签嵌在行中(非整行)也驼出成乱码——整行过滤后,再把标签本体从行内移除。
+ // 行中残留剥离(渲染修复):协议标签嵌在行中(非整行)也驼出成乱码——整行过滤后,再把标签本体从行内移除。
   var stripped = lines.map(function (ln) {
     var s = ln;
     for (var i = 0; i < tags.length; i++) s = s.split(tags[i]).join("");
@@ -10570,9 +10570,9 @@ function stripAnsi(s) {
   }
   return out;
 }
-// ---- step-095:user 消息 slash chip 渲染(主会话 message.user 与子代理工作区 steer 共用) ----
+// ---- user 消息 slash chip 渲染(主会话 message.user 与子代理工作区 steer 共用) ----
 // 首行 "/name args" → .slash-chip(name)+sc-args;raw 前缀合流的模板 remainder 与当前注册表展开式逐字相等时
-// 隐藏(模板=面板自己合成的任务书,展示层只呈现用户所说的 raw 形态——step-052 display/text 分账同精神);
+// 隐藏(模板=面板自己合成的任务书,展示层只呈现用户所说的 raw 形态—— display/text 分账同精神);
 // 不相等(用户手打多行正文/注册表文本已改/自定义 body 已编辑)=原样呈现零丢失。非 "/" 文本=hl(esc) 原路。
 // 旧 journal 兼容:纯模板开头(非 "/")不进本分支;/goal 单行原文(无 remainder)形态不变。
 function userSlashTemplateOf(nm, args) {
@@ -10586,7 +10586,7 @@ function userSlashTemplateOf(nm, args) {
   if (custom) return cmdExpand(String(custom.body || ""), String(args || ""));
   return null;
 }
-// ---- 2026-10-29 文件引用(对齐 ref/zcode:mentionMarkdown 的 [label](./path) 载体 + FileDisplayInline chip)----
+// ---- 文件引用(对齐 ref/zcode:mentionMarkdown 的 [label](./path) 载体 + FileDisplayInline chip)----
 // 零反斜杠纪律:PAGE 是 TS 模板字符串,浏览器端脚本里所有正则/转义都会被模板层吃掉,故全部手工扫描。
 /** 仓内相对路径规范化:逐个剥 "./" 前缀(不用正则)。 */
 function relOfPath(p) {
@@ -10723,12 +10723,12 @@ document.addEventListener("click", (e) => {
 });
 function userSlashHtml(utext, q) {
   const s = String(utext || "");
-  // 2026-10-29:含文件引用的正文走 chip 还原(纯文本路径零改动,仍走原高亮链路)
+ // 含文件引用的正文走 chip 还原(纯文本路径零改动,仍走原高亮链路)
   if (!s.startsWith("/")) {
     if (s.indexOf("[") < 0 && s.indexOf("@") < 0) return sketchifyHtml(hl(esc(s), q));
     return fileMentionHtml(s, q);
   }
-  // (step-093 跨线修复:PAGE 模板字面量吃反斜杠转义——首版换行转义落在页面成真实换行,
+ // (跨线修复:PAGE 模板字面量吃反斜杠转义——首版换行转义落在页面成真实换行,
   //  字符串断行=整个脚本块 SyntaxError 全灭;fromCharCode(10) 是本文件既有约定)
   const nl = s.indexOf(String.fromCharCode(10));
   const first = nl === -1 ? s : s.slice(0, nl);
@@ -10739,7 +10739,7 @@ function userSlashHtml(utext, q) {
   let body = "";
   if (rest.trim()) {
     const tpl = name ? userSlashTemplateOf(name.toLowerCase(), args) : null;
-    // (step-093 跨线修复:首版正则的空白类+换行转义同被模板吃掉→正则跨行 SyntaxError;
+ // (跨线修复:首版正则的空白类+换行转义同被模板吃掉→正则跨行 SyntaxError;
     //  等价语义=剥前导空白再剥一个换行,字符类+fromCharCode 形态)
     const shown = tpl && rest.trim() === tpl ? "" : rest.replace(/^[\u0020\t]+/, "").replace(String.fromCharCode(10), "");
     if (shown) body = '<div class="u-slash-body">' + sketchifyHtml(hl(esc(shown), q)) + "</div>";
@@ -10760,7 +10760,7 @@ function replyKeyOf(ev, text) {
 function replyBlockHtml(ev, q) {
   const p = ev.payload || {}; // review nit:统一守卫(payload 缺席时下方 llmMs/text 取值不再互不一致)
   const text = String(scrubProtocolLines(p.text) || "");
-  // 元信息(fixT6 P2):时间戳/LLM 耗时以 title 承载——聊天流不该被元信息刷屏,但详情要可查(实测此前两者全不可见)
+ // 元信息(fixT6 P2):时间戳/LLM 耗时以 title 承载——聊天流不该被元信息刷屏,但详情要可查(经验证此前两者全不可见)
   const t0 = ev.time ? new Date(ev.time).toLocaleTimeString() : "";
   const ms = Number(p.llmMs || 0);
   const title = (t0 ? "回复时间 " + t0 : "") + (ms > 0 ? (t0 ? " · " : "") + "LLM " + Math.round(ms / 1000) + "s" : "");
@@ -10776,7 +10776,7 @@ function replyBlockHtml(ev, q) {
     '<button class="reply-more" data-reply-toggle="' + esc(k) + '">' + (isOpen ? "收起" : "展开全文") + "</button></div>";
 }
 /**
- * 首启引导卡(2026-11-08 新用户实测):空会话 + 缺模型/项目时,给两条直达路径。
+ * 首启引导卡(新用户经验证):空会话 + 缺模型/项目时,给两条直达路径。
  * 只缺什么显示什么;都齐了返回空串(纯「该会话暂无记录」)。
  */
 function firstRunCardHtml() {
@@ -10801,11 +10801,11 @@ function renderHistory() {
   // 子代理工作区 tab 激活:chatBody 归工作区渲染(完整动作/消息流回放),主历史挂起——切回「主会话」tab 即还原。
   if (subWsActive) { renderSubWorkspace(subWsActive); return; }
   turnOutcome = new Map(); // 每次全量重放重算轮次结局归属(时间轴进度着色的数据源)
-  toolTokensScan(); // step-093:tool.tokens 事件增量预扫(toolCallId→tokens,代码块语义着色数据源)
+  toolTokensScan(); // tool.tokens 事件增量预扫(toolCallId→tokens,代码块语义着色数据源)
   revSrcCache = {};        // 注入数据源随重放重建(防陈旧引用)
-  // 滚动位置管理(step-048):renderChat 每条 WS 更新都全量重建 innerHTML,不保存=滚动每次被打回。
+ // 滚动位置管理:renderChat 每条 WS 更新都全量重建 innerHTML,不保存=滚动每次被打回。
   // 语义:打开会话(histLanding)→落底显示最后消息;在底部→跟随最新;已上翻→保持原位自由查看。
-  // step-082:上翻时改元素锚(视口顶首个可见块)+相对偏移——整列重建后按锚回贴,上方高度变化不再平移内容。
+ // 上翻时改元素锚(视口顶首个可见块)+相对偏移——整列重建后按锚回贴,上方高度变化不再平移内容。
   const vt = $("view-tasks");
   const keepTop = vt ? vt.scrollTop : 0;
   const wasBottom = vt ? (vt.scrollHeight - vt.scrollTop - vt.clientHeight < 60) : true; // 粘底容差 60px(聊天常规:接近底部即跟随,防内容微增高脱钩)
@@ -10820,13 +10820,13 @@ function renderHistory() {
   const parts = [];
   // 错误横幅+重发(ZCode ChatErrorBanner/PendingCommandRecovery 裁剪)
   // fixT6 P1:原实现把横幅 push 到 parts 首位 = 恒为消息流第 0 个元素,长会话里它在视口外几万像素处
-  // (实测 bannerTop=-83516 / 视口 48~673 / visibleInViewport=false)= 失败原因与「重发」用户根本看不到。
+ // (经验证 bannerTop=-83516 / 视口 48~673 / visibleInViewport=false)= 失败原因与「重发」用户根本看不到。
   // 改为遍历结束后推入流尾(紧跟最新消息),按钮绑定仍按 .err-banner 选择器查,语义不变。
-  // 2026-10-21 修复:只认「最近一次任务失败」——旧实现取最新失败任务,失败后的成功轮次不会清掉横幅,
+ // 修复:只认「最近一次任务失败」——旧实现取最新失败任务,失败后的成功轮次不会清掉横幅,
   // 流尾会一直挂着上一轮的失败(与置顶失败 chip 同源问题)。新任务提交/成功即让位。
   const latestTask = latestTaskOf(currentSid);
   const failed = latestTask && latestTask.state === "failed" ? latestTask : undefined;
-  // fixT7:失败横幅人话化(用户实报:LLM 404 model_not_found 裸 JSON 且无引导)——
+ // fixT7:失败横幅人话化(用户用户反馈:LLM 404 model_not_found 裸 JSON 且无引导)——
   // 常见错误模式转人话+「去模型管理」直达;原文保留可复制。
   const failHumanize = (raw) => {
     const s = String(raw || "");
@@ -10836,7 +10836,7 @@ function renderHistory() {
     if (/MODEL_STREAM_IDLE_TIMEOUT|aborted/i.test(s)) return { text: "模型响应中断(空闲超时)——可重发;大上下文任务建议先整理会话。", mgmt: false };
     return { text: s.slice(0, 240), mgmt: false };
   };
-  // step-169:result 属正文(索引条目可能没有)→ 未加载时先触发按需拉,横幅先显「详情加载中…」。
+ // result 属正文(索引条目可能没有)→ 未加载时先触发按需拉,横幅先显「详情加载中…」。
   if (failed) ensureTaskDetail(failed.id);
   const failH = failed ? failHumanize(taskBodyIds.has(failed.id) ? String(failed.result || "") : "任务详情加载中…") : null;
   const errHtml = failed
@@ -10849,13 +10849,13 @@ function renderHistory() {
   if (mfScanRef !== histEvents || mfScanLen !== (histEvents ? histEvents.length : -1)) {
   // subagent.result 去重集(agent 路径同一结果会有 tool.result + subagent.result 双事件)
   const toolResultTexts = new Set(histEvents.filter((e) => e.kind === "tool.result").map((e) => String((e.payload || {}).content || "").trim()));
-  // 子代理过程卡预扫(B 2026-10-14):spawn 键集/终态/转后台——卡片状态判定与去重合一处。
+ // 子代理过程卡预扫(B):spawn 键集/终态/转后台——卡片状态判定与去重合一处。
   const subResByAgent = new Map(); // agentId → { ok, text, time }
   const subBgByAgent = new Set();
   const subSpawnKeys = new Set();
-  const subSpawnInfo = new Map(); // agentId → { title, instructions, time }(step-060:等待卡与目录的标题/任务书数据源)
+  const subSpawnInfo = new Map(); // agentId → { title, instructions, time }(等待卡与目录的标题/任务书数据源)
   const subAbsorbedCalls = new Set(); // 已被过程卡吸收的 spawn_subagent toolCallId(调用卡去重)
-  // task_output 轮询聚合预扫(step-060 刷屏治理):主 agent 等子代理时,同 agentId 的 task_output
+ // task_output 轮询聚合预扫(刷屏治理):主 agent 等子代理时,同 agentId 的 task_output
   // 调用+结果对会在消息流铺成几十行 raw JSON——聚合成一张「等待子代理」卡:首对渲染卡,
   // 后续同 agentId 对只并入该卡(轮询次数/已工作时长/终态翻绿)。历史会话重放同语义(全量重算)。
   const pollCallAgent = new Map(); // toolCallId → agentId(task_output 调用/结果吸收判据)
@@ -10913,14 +10913,14 @@ function renderHistory() {
   const { toolResultTexts, subResByAgent, subBgByAgent, subSpawnKeys, subSpawnInfo, subAbsorbedCalls, pollCallAgent, pollByAgent, resByCall, hasRevFindings } = mfScanData;
   // fixE22:窗口闸门——parts.length < wLo(更老的段)以零高占位替换。两种形态:gate(s)=串已廉价生成,
   // 直接换占位;gateL(fn)=惰性——重型生成器(mdToHtml/工具卡/子代理卡)只在窗口内才调用(串形式会把
-  // 实参先求值,门禁白设——首版实测教训)。wLo=0 时恒真(小会话/查找态=完全旧路径);骨架趟=+Infinity 全占位。
+ // 实参先求值,门禁白设——首版经验证教训)。wLo=0 时恒真(小会话/查找态=完全旧路径);骨架趟=+Infinity 全占位。
   let wLo = findQuery ? 0 : mfWinLo;
   const gate = (s) => (parts.length >= wLo ? s : MSG_PH);
   const gateL = (fn) => (parts.length >= wLo ? fn() : MSG_PH);
   const buildParts = () => {
-  let lastSkipShown = false; // 压缩跳过去重(2026-11-05):同一 episode 只渲染首条「无需压缩」
+  let lastSkipShown = false; // 压缩跳过去重:同一 episode 只渲染首条「无需压缩」
   const pollEmitted = new Set(); // 渲染期:同 agentId 首对出聚合卡,后续对吸收(fixE22:随趟重建——骨架趟不得提前标记)
-  // 工具分组(step-047,ZCode 分组搜索工具/终端命令/文件更改):连续同类 tool.result 聚合。
+ // 工具分组(ZCode 分组搜索工具/终端命令/文件更改):连续同类 tool.result 聚合。
   // 分类:explore(读取/搜索类)/changes(写入/编辑类)/terminal(命令类)/""(不分组)。
   const catOf = (name) => {
     const n = String(name || "").toLowerCase();
@@ -10939,7 +10939,7 @@ function renderHistory() {
   // 所以库里已有的轨迹事件每趟都会重新灌满——不需要额外持久化,也不会跨趟残留旧点。
   const trajSeries = [];
   let grp = null;
-  // ---- 调用轨迹聚合(2026-10-20 用户口径「llm-trace 行与 think 卡默认聚合为一张可展开卡」)----
+ // ---- 调用轨迹聚合----
   // 现状:每次 LLM 调用产生「一行 trace」+「一张思考卡」两个独立块,一轮下来十几块占满消息流。
   // 改为:同一次调用的 trace 行与其思考内容合成一张 details 卡(summary 带 roles 计数 [s×3 u×1 a×1 t×2]);
   // 无思考内容时仍是原来那一行(零变化),只压一次调用也不额外成卡。
@@ -10949,7 +10949,7 @@ function renderHistory() {
     if (!traceBuf.length) return;
     const items = traceBuf.slice();
     traceBuf = [];
-    // roles 构型:把连续相同角色压成 a×N(用户口径 [s→u→a→t×N])——逐条计数会得到 u×28/a×240,
+ // roles 构型:把连续相同角色压成 a×N([s→u→a→t×N])——逐条计数会得到 u×28/a×240,
     // 那是「消息条数」不是「构型」,读不出这轮对话长什么样。
     const compress = (arr) => {
       const segs = [];
@@ -10972,7 +10972,7 @@ function renderHistory() {
   };
   const flushGrp = () => {
     if (grp && grp.items.length > 1) {
-      // fixT6 P2:原条目数 ≤4 即 open — 真实大会话组内条目数分布 2×52/3×4/4×1(实测 57 组 100% 展开,
+ // fixT6 P2:原条目数 ≤4 即 open — 真实大会话组内条目数分布 2×52/3×4/4×1(经验证 57 组 100% 展开,
       // 占 40226px=消息流 49%),分组等于名义存在。改为默认闭合,summary 已写明「探索 · N 次」可点开。
       parts.push(gate('<details class="tool-group"><summary>' + grp.label + " · " + grp.items.length + " 次</summary>" + grp.items.join("") + "</details>"));
     } else if (grp && grp.items.length === 1) {
@@ -10980,8 +10980,8 @@ function renderHistory() {
     }
     grp = null;
   };
-  // 代码块复制按钮(2026-10-13,ZCode code-block 复制语义):委托取 .code 文本,免转义。
-  // 泄漏修复(2026-10-14):此前每次 renderHistory 都 document 挂一层——渲染百次=百个重复监听,一次性守卫。
+ // 代码块复制按钮(ZCode code-block 复制语义):委托取 .code 文本,免转义。
+ // 泄漏修复:此前每次 renderHistory 都 document 挂一层——渲染百次=百个重复监听,一次性守卫。
   if (!codeCopyDelegated) {
     codeCopyDelegated = true;
     document.addEventListener("click", (e) => {
@@ -11009,14 +11009,14 @@ function renderHistory() {
     });
   }
   // fixE23:预扫已上提记忆化(见上 mfScan 块);主循环直接消费解构结果。
-  // 2026-10-21 画布形态分身独立看板(用户口径:子代理消息不与 coding agent 混在一条流):
+ // 画布形态分身独立看板(子代理消息不与 coding agent 混在一条流):
   // 会话流不渲染任何子代理来源条目——spawn 过程卡/task_output 等待卡/answer_subagent 交互与回执/
   // subagent.spawn·result 终态卡,全部改由「分身 Agents」卡的消息流区分组承载。
   // 归属判定与既有通道同源(subagent.* 事件 kind + spawn/answer/task_output 工具名),不新造判据;
   // 经典布局 cvHideSub=false,渲染零变化。
   const cvHideSub = canvasActive();
   for (const ev of histEvents) {
-    // 子代理工作区专用事件(2026-10-16):主会话流一律不渲染——本 kind 的完整回放在子代理工作区 tab,
+ // 子代理工作区专用事件:主会话流一律不渲染——本 kind 的完整回放在子代理工作区 tab,
     // 这里显式跳过(防止任何分支把它当消息/工具渲染=双渲染;预扫段只认既有 kind,天然不中)。
     if (ev.kind === "subagent.event") continue;
     // 轨迹/思考的聚合缓冲:遇到任何「正文类」事件先落盘,保证消息流顺序不乱(缓冲只跨越连续调用段)
@@ -11024,8 +11024,8 @@ function renderHistory() {
     const t = ev.time ? '<span class="ev-time">' + new Date(ev.time).toLocaleTimeString() + '</span>' : "";
     if (ev.kind === "compact.done") {
       lastSkipShown = false; // 真边界:重置跳过去重(下一 episode 可再显示一条)
-      // 压缩边界行(step-048 追记十五,ZCode TimelineMarkerRow 对齐:全宽分隔线+居中 pill)
-      // 板 n3(2026-10-29):双文案(手动/自动,按 payload.trigger)+ pill 后「详情」展开区
+ // 压缩边界行(ZCode TimelineMarkerRow 对齐:全宽分隔线+居中 pill)
+ // 板 n3:双文案(手动/自动,按 payload.trigger)+ pill 后「详情」展开区
       // (摘要全文 / 压缩指示 chip / tokens 水位)。收起态与旧观感一致:仍只显示前 60 字摘要 pill。
       const cpd = ev.payload || {};
       const cpFull = String(cpd.summary || "");
@@ -11062,7 +11062,7 @@ function renderHistory() {
       continue;
     }
     if (ev.kind === "compact.skipped") {
-      // 2026-11-05 去重:骑线期每步一条跳过事件,连续渲染成「无需压缩」刷屏(实锤 15 连)。
+ // 去重:骑线期每步一条跳过事件,连续渲染成「无需压缩」刷屏(注意 15 连)。
       // 同一压缩 episode(两次 compact.done/start 之间)只显示第一条跳过。
       if (lastSkipShown) continue;
       lastSkipShown = true;
@@ -11083,7 +11083,7 @@ function renderHistory() {
       continue;
     }
     if (ev.kind === "tip.injected") {
-      // tips 注入留痕(2026-10-22 用户口径「触发了 tips 机制也要渲染出来,并显示 tips 了什么内容」):
+ // tips 注入留痕:
       // loop 每步把 ephemeral tip 注入 LLM 请求时旁路落一条本事件(deriveMessages 不读=上下文零变化)。
       // 渲染为可折叠提示行:首行「tips · 类别 + 第 N 步 + 字符数」,展开看完整注入内容。
       // 默认折叠——code-orient/history-align 块可达数千字,不占消息流;与 sys-line 同族淡底+左描边。
@@ -11113,7 +11113,7 @@ function renderHistory() {
       continue;
     }
     if (ev.kind === "message.user") {
-      // fixG1(2026-10-19 用户实报):display 为空串且 text 以 <system-reminder> 开头=系统注入给模型的
+ // fixG1(用户用户反馈):display 为空串且 text 以 <system-reminder> 开头=系统注入给模型的
       // 提醒块(子代理重操作审批等)——不是用户说的话,不再冒充用户气泡。独立渲染为「子代理→主代理」
       // 交互卡(谁请求/请求什么);主代理的应答=紧随的 answer_subagent 工具卡,视觉相邻即成对话对。
       if (!ev.payload.display && String(ev.payload.text || "").startsWith("<system-reminder>")) {
@@ -11124,9 +11124,9 @@ function renderHistory() {
       const attsHtml = (ev.payload.attachments || []).length
         ? attRowHtml(ev.payload.attachments)
         : "";
-      // step-052:display=原始输入(注入块只喂模型,不进用户消息展示);老事件无该字段回落 text。
+ // display=原始输入(注入块只喂模型,不进用户消息展示);老事件无该字段回落 text。
       const utext = ev.payload.display || ev.payload.text || "";
-      // step-048/095:slash 命令开头的用户消息渲染为 chip(name+参数),raw 前缀合流的模板 remainder 按注册表
+ // /095:slash 命令开头的用户消息渲染为 chip(name+参数),raw 前缀合流的模板 remainder 按注册表
       // 展开式等值隐藏(用户所说=raw,机器合成=任务书,展示分账);不识别的余文原样呈现零丢失,旧消息零影响。
       // fixE22:userSlashHtml 入 gateL 惰性——窗口外旧消息不再付 chip 解析+高亮成本。
       // fixT6 P2:用户消息时间戳以 .who 的 title 承载(气泡内不塞元信息,详情可悬浮查)
@@ -11135,10 +11135,10 @@ function renderHistory() {
       }
     }
     else if (ev.kind === "message.system") {
-      // 技能执行反馈闭环(step-056 视频 T3):goal 切换/续跑等系统通知此前只在 journal 里,聊天流完全不可见
+ // 技能执行反馈闭环(视频 T3):goal 切换/续跑等系统通知此前只在 journal 里,聊天流完全不可见
       // ——「技能用没上」的感知缺口之一。渲染为系统行。
       flushGrp();
-      // 板 n3(2026-10-29)双显治理:压缩后 runtime 会追一条 "[上下文已压缩]" 系统通知,摘要已由
+ // 板 n3双显治理:压缩后 runtime 会追一条 "[上下文已压缩]" 系统通知,摘要已由
       // compact.done 边界行承载——这条不再重复渲染(其它系统行照旧)。
       const sysText = String((ev.payload || {}).text || "");
       if (sysText.startsWith("[上下文已压缩]")) continue;
@@ -11147,8 +11147,8 @@ function renderHistory() {
     }
     else if (ev.kind === "message.agent") {
       flushGrp();
-      // 思考内容(step-046,ZCode ThinkingCard 对齐):provider reasoning_content 进 journal。
-      // 2026-10-20:不再独立成卡——挂到紧邻的调用轨迹条目上(同一次调用的 trace 行 + 思考合成一张卡)。
+ // 思考内容(ZCode ThinkingCard 对齐):provider reasoning_content 进 journal。
+ // 不再独立成卡——挂到紧邻的调用轨迹条目上(同一次调用的 trace 行 + 思考合成一张卡)。
       if (ev.payload.reasoning && settings.thinking === "on" && !office) {
         const thHtml = gateL(() => '<details class="think-card"><summary>思考 · ' + Math.max(1, Math.round(Number(ev.payload.llmMs || 0) / 1000)) + 's</summary><div class="th-body">' + sketchifyHtml(hl(esc(String(ev.payload.reasoning).slice(0, 4000)), q)) + "</div></details>");
         const lastTr = traceBuf.length ? traceBuf[traceBuf.length - 1] : null;
@@ -11158,10 +11158,10 @@ function renderHistory() {
       if (ev.payload.text) parts.push(gateL(() => replyBlockHtml(ev, q)));
       if (ev.payload.toolCalls) {
         for (const c of ev.payload.toolCalls) {
-          if (c.name === "spawn_subagent" && subAbsorbedCalls.has(String(c.id || ""))) continue; // 过程卡已承载(B 2026-10-14)
+          if (c.name === "spawn_subagent" && subAbsorbedCalls.has(String(c.id || ""))) continue; // 过程卡已承载(B )
           // 画布形态分身独立看板:spawn/answer/task_output 的调用回显不进会话流(子agent会话流卡承载)。
           if (cvHideSub && (c.name === "spawn_subagent" || c.name === "answer_subagent")) continue;
-          // task_output 轮询聚合(step-060):同 agentId 的调用对只在首对渲染一张「等待子代理」卡,
+ // task_output 轮询聚合:同 agentId 的调用对只在首对渲染一张「等待子代理」卡,
           // 后续对被吸收(卡的状态/次数/时长随 journal 增量与 3s 轮询重渲自动更新)。
           if (c.name === "task_output" && !office) {
             const aid = pollCallAgent.get(String(c.id || "")) || "";
@@ -11193,7 +11193,7 @@ function renderHistory() {
       // 画布形态分身独立看板:子代理三类工具的孤儿回执(被拒 spawn/answer 回执/孤儿 task_output)
       // 也不进会话流——与调用侧过滤同口径,经典布局零变化。
       if (cvHideSub && (ev.payload.name === "spawn_subagent" || ev.payload.name === "answer_subagent" || ev.payload.name === "task_output")) continue;
-      // plan-gate / 权限层拒绝(2026-10-20 用户实报「拒绝显示成绿色完成」):人话系统行带 hint,
+ // plan-gate / 权限层拒绝(用户用户反馈「拒绝显示成绿色完成」):人话系统行带 hint,
       // 卡片侧由 toolCallCard/toolResIsErr 统一红显「被拒」。两处都改=状态不再骗人。
       const gateRej = (office ? null : gateRejectOf(content));
       if (gateRej) {
@@ -11204,7 +11204,7 @@ function renderHistory() {
           esc(/plan-gate/i.test(gateRej.reason) ? "plan-gate" : "工具层") + " —— " + esc(clip(gateRej.reason, 120)) +
           "<span class='dim'>(未执行;按提示补齐前置后重试)</span></div>"));
       }
-      // B(2026-10-14):spawn_subagent 的回执(agentId 在场且过程卡已承载)不再重复出卡——
+ // B:spawn_subagent 的回执(agentId 在场且过程卡已承载)不再重复出卡——
       // 机械回执由过程卡的状态/tail 呈现;rejected/解析不出 agentId 的回执仍走原卡(诚实可见)。
       // fixH20:completed 回执同吸收(过程卡带终态文本,孤儿结果再出=与过程卡双份)。
       if (ev.payload.name === "spawn_subagent" && !office) {
@@ -11213,13 +11213,13 @@ function renderHistory() {
           if (o && o.agentId && subSpawnKeys.has(String(o.agentId))) continue;
         } catch (e) { /* 非 JSON=普通结果照旧 */ }
       }
-      // step-060:task_output 轮询结果对已被「等待子代理」聚合卡吸收(孤几结果/office 模式仍走原卡)
+ // task_output 轮询结果对已被「等待子代理」聚合卡吸收(孤几结果/office 模式仍走原卡)
       if (ev.payload.name === "task_output" && !office && pollCallAgent.has(String(ev.payload.toolCallId || ""))) continue;
       // fixH13:合并卡已承载的结果不再二次出卡(调用点即结果;孤儿结果走下方原卡路径诚实可见)
       if (!office && mergedCalls.has(String(ev.payload.toolCallId || ""))) continue;
       if (office) { flushGrp(); parts.push(gate('<span class="office-chip">' + ic("sub") + ' ' + esc(content.slice(0, 60)) + "</span>")); }
       else if (cat && catOn(cat)) {
-        // step-087:组项结构化(tgResultItem:名+参数头 + 行块代码形态;截断+tr-more 展开全文)
+ // 组项结构化(tgResultItem:名+参数头 + 行块代码形态;截断+tr-more 展开全文)
         const item = gateL(() => tgResultItem(String(ev.payload.name || ""), argsByCall.get(ev.payload.toolCallId) || "", content, q, toolTokensOf(ev)));
         if (grp && grp.cat === cat) {
           grp.items.push(item);
@@ -11233,7 +11233,7 @@ function renderHistory() {
       flushGrp();
       const fs2 = (ev.payload.findings || []).slice(0, 20);
       if (fs2.length) {
-        // step-074 一键回注:findings 入缓存(点击时按 rk+序号取回完整条目),卡上加「⇒修复」/组头加「全部注入」。
+ // 一键回注:findings 入缓存(点击时按 rk+序号取回完整条目),卡上加「⇒修复」/组头加「全部注入」。
         const rk = "g" + (ev.seq || ev.time || 0) + "-" + fs2.length;
         revSrcCache[rk] = {
           sid: ev.sessionId || currentSid || "",
@@ -11253,7 +11253,7 @@ function renderHistory() {
       }
     }
     else if (ev.kind === "subagent.spawn") {
-      // B(2026-10-14)子代理过程卡:取代纯参数 toolCard——状态(运行中/完成/失败/已结束)+耗时+实时 tail。
+ // B子代理过程卡:取代纯参数 toolCard——状态(运行中/完成/失败/已结束)+耗时+实时 tail。
       // 身份色沿用 ZCode 内置子代理显式身份色机制(避免按名称 hash 颜色漂移)。
       // 画布形态:不进会话流(子agent会话流卡以分组头承载任务书/状态)。
       if (cvHideSub) continue;
@@ -11270,24 +11270,24 @@ function renderHistory() {
     }
     else if (ev.kind === "review.inject") {
       flushGrp();
-      // 评审评论回注留痕(step-074):会话内可见「谁把哪些评论注进来交给了哪个任务」。
+ // 评审评论回注留痕:会话内可见「谁把哪些评论注进来交给了哪个任务」。
       const rp = ev.payload || {};
       parts.push(gate('<div class="task-sub">' + ic("inject") + ' 注入 ' + Number(rp.count || 0) + " 条评审评论(" + esc(String(rp.source || "")) + ")" +
         (rp.files && rp.files.length ? " · " + esc(rp.files.slice(0, 3).join(", ")) + (rp.files.length > 3 ? " …" : "") : "") + "</div>"));
     }
     else if (ev.kind === "board.update") {
       flushGrp();
-      // 设计白板更新(step-056):轻量行内 chip,点击直达板视图对应任务的板。
+ // 设计白板更新:轻量行内 chip,点击直达板视图对应任务的板。
       const bp = ev.payload || {};
       parts.push(gate('<div class="task-sub">' + ic("grid") + ' 设计白板' + (bp.status === "done" ? "已落实" : bp.status === "implementing" ? "更新(实施中)" : "草稿") +
         '「' + esc(String(bp.title || "").slice(0, 40)) + "」 · " + Number(bp.nodeCount || 0) + " 节点" +
         '<button class="board-chip" data-board-task="' + esc(String(bp.taskId || "")) + '">查看白板</button></div>'));
     }
     else if (ev.kind === "llm.trace") {
-      // step-132:LLM 调用速览行(2026-10-19 用户实报「journal 里看不到 system/构型」)——
+ // LLM 调用速览行(用户用户反馈「journal 里看不到 system/构型」)——
       // 每次调用一行:模型/轮步/耗时/token/消息构型/工具调用名;title=轨迹文件全路径,
       // 点击复制路径,system 提示词与请求/响应全文都在该文件(journal 只存指针+构型摘要)。
-      // 2026-10-20:改为进聚合缓冲(连续调用收一张可展开卡;单条自动还原原行,零丢失)。
+ // 改为进聚合缓冲(连续调用收一张可展开卡;单条自动还原原行,零丢失)。
       const tp = ev.payload || {};
       const roleArr = Array.isArray(tp.messageRoles) ? tp.messageRoles.map((r) => ROLE_ABBR[String(r)] || String(r)) : [];
       const roleFull = Array.isArray(tp.messageRoles) ? tp.messageRoles.join("→") : "";
@@ -11311,7 +11311,7 @@ function renderHistory() {
     }
     else if (ev.kind === "task.done" || ev.kind === "task.fail" || ev.kind === "task.cancel" || (ev.kind === "task.progress" && ev.payload && ev.payload.state === "cancelled")) {
       flushGrp();
-      // fixT6 P2:task.cancel 此前无渲染分支——取消的任务在聊天流里零痕迹(实测注入 task.cancel 后既无行也无横幅),
+ // fixT6 P2:task.cancel 此前无渲染分支——取消的任务在聊天流里零痕迹(经验证注入 task.cancel 后既无行也无横幅),
       // 用户看到脱队的最后一条回复、不知道任务已停。与完成/失败同语义出结算行(取消归 fail 色,与侧栏状态点一致)。
       // fixG4:journal 里取消终态的实际落盘 kind=task.progress(payload.state=cancelled,app.ts 状态映射)——
       // 老的 task.cancel 分支从未被生产事件命中过;两形态都认,重启收编/用户取消都能出结算行。
@@ -11326,7 +11326,7 @@ function renderHistory() {
       const tr = traceStats[currentSid];
       const dTask = tasks.get(String(ev.payload.id || ""));
       const durTxt = dTask && dTask.startedAt ? " · 用时 " + fmtDur(dTask.updatedAt - dTask.startedAt) : "";
-      // bq4(板质量遥测闭环,2026-11-06):结算卡显示规划质量。task.planQuality 由 agent-wiring 收尾挂上
+ // bq4(板质量遥测闭环:结算卡显示规划质量。task.planQuality 由 agent-wiring 收尾挂上
       // (task.quality 同源),task.detail.get 带出;索引条目(task.list)无此字段=旧任务/详情未拉,整行不渲染。
       if (dTask && dTask.id && !taskBodyIds.has(dTask.id)) ensureTaskDetail(dTask.id); // 详情未到位先补拉,回包后重渲出行
       const pqChip = (() => {
@@ -11340,19 +11340,19 @@ function renderHistory() {
         const sk = pq.skeleton && typeof pq.skeleton === "object" ? pq.skeleton : null;
         return ' · <span class="st-chip" title="规划质量(bq4 遥测:板型/内容节点/P0 覆盖/锚密度' + (sk ? "/骨架采纳率" : "") + ');数值缺失=-">规划质量 <b>' + esc(String(pq.boardType || "-")) + "</b> · 内容<b>" + s(pq.contentNodes) + "/" + s(pq.nodes) + "</b> · P0<b>" + s(p0.passed) + "/" + s(p0.total) + "·" + p0Pct + "</b> · 锚<b>" + pc(pq.anchorDensity) + "</b>" + (sk ? " · 骨架采纳<b>" + pc(sk.adoptionRate) + "</b>" : "") + "</span>";
       })();
-        // 五阶段轨迹条(2026-10-21 体验项):结算行旁回放本会话 task.phase(理解→…→完成,带 note title)
+ // 五阶段轨迹条(体验项):结算行旁回放本会话 task.phase(理解→…→完成,带 note title)
         const phEvts = histEvents.filter((x) => x.kind === "custom" && x.payload && x.payload.type === "task.phase");
         const phStrip = phEvts.length
           ? ' · <span class="st-chip" title="' + esc(phEvts.map((x) => x.payload.phase + (x.payload.skip ? "(跳)" : "") + (x.payload.auto ? "(自动推进:板含内容节点,阶段门 auto-advanced)" : "") + (x.payload.note ? ":" + String(x.payload.note).slice(0, 40) : "")).join(" → ")) + '">阶段<b>' + phEvts.map((x) => ({ understand: "理", plan: "规", implement: "施", verify: "验", close: "完" }[x.payload.phase] || "?") + (x.payload.skip ? "跳" : x.payload.auto ? "自" : "")).join("→") + '</b></span>'
           : "";
         parts.push(gate('<div class="task-sub">' + t + (ev.kind === "task.done" ? "完成" : isCancel ? "已取消" : "失败") + ' · ' + esc((ev.payload.id || "").slice(0, 8)) + phStrip +
         (tr ? ' · <span class="st-chip" title="累计=本会话全部 LLM 调用 in+out 求和(每轮历史重复计入),≠当前上下文容量(见输入区「上下文」pill)">轮<b>' + tr.turns + '</b>·LLM<b>' + tr.llmCalls + '</b>·工具<b>' + tr.toolCalls + '</b>·累计tok<b>' + tr.tokens.total + '</b>·' + Math.round(tr.llmMs / 1000) + 's</span>' : "") + durTxt + pqChip +
-        // 设计白板入口(step-056):该任务有 board.update 事件→chip 直达白板视图
+ // 设计白板入口:该任务有 board.update 事件→chip 直达白板视图
         (histEvents.some((x) => x.kind === "board.update" && x.payload && x.payload.taskId === ev.payload.id)
           ? '<button class="board-chip" data-board-task="' + esc(String(ev.payload.id || "")) + '">白板</button>' : "") + '</div>'));
       // fixG4:重启收编的取消任务出「因网关重启中断」系统行+「重发」按钮(复用 err-banner 通道形态;
       // 绑定在渲染尾部动作区,data-act=resend-cancel 按任务 id 取回原任务书回填重发)。老文案「gateway 重启中断(恢复收编)」同识别。
-      // 2026-11-05:新版清算= interrupted 态(task.progress payload.state=interrupted),
+ // 新版清算= interrupted 态(task.progress payload.state=interrupted),
       // 「续跑」直接走 task.resume 服务端幂等重提;legacy cancelled 仍走客户端回填重发。
       if (isCancel && ev.payload && /重启中断/.test(String(ev.payload.result || ""))) {
         const rid = String(ev.payload.id || "");
@@ -11362,7 +11362,7 @@ function renderHistory() {
         const rid = String(ev.payload.id || "");
         parts.push(gate('<div class="err-banner" style="border-color:var(--warn);color:var(--warn)">任务被网关重启打断(外因中断,非取消;回执:' + esc(String(ev.payload.result || "").slice(0, 120)) + ')。<div class="btns"><button data-act="resume-int" data-task="' + esc(rid) + '">续跑</button></div></div>'));
       }
-      // fixT7:失败原因可见化+人话(用户实报:LLM 404 model_not_found 裸 JSON 刷屏且无引导)。
+ // fixT7:失败原因可见化+人话(用户用户反馈:LLM 404 model_not_found 裸 JSON 刷屏且无引导)。
       // task.fail.result 承载错误全文;model_not_found/401/timeout 等转人话+一键跳模型管理。
       if (ev.kind === "task.fail" && ev.payload && ev.payload.result) {
         const ferr = String(ev.payload.result);
@@ -11374,13 +11374,13 @@ function renderHistory() {
         else if (/MODEL_STREAM_IDLE_TIMEOUT|aborted/i.test(ferr)) human = "模型响应中断(空闲超时/取消)——可重试;大上下文任务建议先整理会话。";
         parts.push(gate('<div class="task-sub" style="color:var(--red,#e08a7a)">失败原因:' + esc(human) + " " + action + "</div>"));
       }
-      // 内联变更条(step-046,ZCode change bar 对齐):diffstat 缓存命中才渲染;撤销走 checkpoint.rewind。
+ // 内联变更条(ZCode change bar 对齐):diffstat 缓存命中才渲染;撤销走 checkpoint.rewind。
       const ds = diffstats.get(String(ev.payload.id || ""));
       if (ds && ds.total && ds.total.files > 0) {
         const tid0 = String(ev.payload.id || "");
         parts.push(gate('<div class="diffbar" data-task="' + esc(tid0) + '"><span class="files-link" data-act="files">' + ds.total.files + ' 个文件已更改</span> <span class="da">+' + ds.total.add + '</span> <span class="dd">-' + ds.total.del + "</span>" +
           '<button data-act="undo" data-task="' + esc(tid0) + '">撤销</button></div>'));
-        // 内联文件清单(step-052 F1):点击「N 个文件已更改」就地展开,点文件→右侧抽屉出补丁。
+ // 内联文件清单( F1):点击「N 个文件已更改」就地展开,点文件→右侧抽屉出补丁。
         if (diffOpenTask === tid0) {
           parts.push(gate('<div class="filelist">' + ds.files.map((f) => '<div class="fl-row' + (ddSel && ddSel.taskId === tid0 && ddSel.file === f.path ? " on" : "") + '" data-task="' + esc(tid0) + '" data-file="' + esc(f.path) + '"><span class="fl-path">' + esc(f.path) + '</span><span class="da">+' + f.add + '</span><span class="dd">-' + f.del + "</span></div>").join("") + "</div>"));
         }
@@ -11412,7 +11412,7 @@ function renderHistory() {
       + '<div class="qm-acts"><button class="qm-now" data-act="now">立即发送</button><button data-act="edit">编辑</button><button data-act="del">删除</button></div>'
       + "</div></div>");
   }
-  // fixQ(2026-11-05 用户口径「发送的 query 要先渲染到聊天窗,带排队提示」):并发满时 TaskSupervisor 层
+ // fixQ:并发满时 TaskSupervisor 层
   // 的 queued 任务此前聊天窗零渲染——query 像是「消失/卡住」。渲染为用户消息形态的排队卡(复用
   // .qm-card 视觉);正文走 task.detail 按需拉(索引只有 40 字 title,回包后重渲全文;只在缺正文时
   // 挂 waiter,同步回调路径不触发=零重入)。与 fixI15 会话队列卡语义不同并存:那是「忙等自动发送」,
@@ -11447,21 +11447,21 @@ function renderHistory() {
   // 顶部哨兵(fixE22):上方还有更老的段——点击或滚动接近顶部自动扩展(winExtend);
   // 哨兵自身入 parts(占 DOM 第 0 位),文本含剩余段数=扩展时 mfPatch 自然替换。
   if (mfWinLo > 0) parts.unshift('<div class="win-sent" data-ws-top="1">↑ 加载更早 · 上方还有 ' + mfWinLo + ' 段(滚动到顶自动展开)</div>');
-  // 历史分页入口(2026-10-22):首屏只取了末 HIST_PAGE 条,更早事件在服务端 — 仅在 hasMore 时显示。
+ // 历史分页入口:首屏只取了末 HIST_PAGE 条,更早事件在服务端 — 仅在 hasMore 时显示。
   // 落 parts 第 0 位(历史最上方);「加载中…」文案防止连点重入,回包后由 renderHistory 恢复/隐藏。
   if (histHasMore === true) parts.unshift('<div class="hist-more" data-hist-more="1">' + (histPageLoading ? "加载中…" : "加载更多历史") + '</div>');
-  // 板 n3(2026-10-29)压缩进行时行:在途时流尾追加一条(带发起时刻),终态帧清标记后自然消失。
+ // 板 n3压缩进行时行:在途时流尾追加一条(带发起时刻),终态帧清标记后自然消失。
   if (compactInflight) {
     parts.push('<div class="sys-line compression-inflight">'
       + '<span class="ev-time">' + new Date(compactInflight.at).toLocaleTimeString() + "</span>"
       + "正在压缩上下文…</div>");
   }
-  // T1 幂等(2026-10-13 视频拆解):task.list 全量广播(含他山会话)每经 renderChat→renderHistory 都
-  // 全量重写 chatBody,单帧重绘=问候区「周期性跳动」(帧差实测 30s 抖 438 节点)。内容未变=不写。
+ // T1 幂等(视频拆解):task.list 全量广播(含他山会话)每经 renderChat→renderHistory 都
+ // 全量重写 chatBody,单帧重绘=问候区「周期性跳动」(帧差经验证 30s 抖 438 节点)。内容未变=不写。
   const html = parts.length ? parts.join("") : '<div class="empty-line">' + ic("inbox") + " 该会话暂无记录</div>" + firstRunCardHtml();
   if (html === histLastHtml) return;
   histLastHtml = html;
-  // 增量写入(2026-10-16 step-082 滚动稳定):与上一帧 parts 做公共前缀+后缀对位,只替换差异区间——
+ // 增量写入(滚动稳定):与上一帧 parts 做公共前缀+后缀对位,只替换差异区间——
   // 未变节点身份存活(展开态/滚动参照/已出图内容全保),整列 innerHTML 重建的抖动源消除;
   // 任何异常回落整列 innerHTML 写入(退化=旧行为,不劣化)。
   const mfBody = $("chatBody");
@@ -11482,13 +11482,13 @@ function renderHistory() {
     for (const r of mfRoots) detBindIn(r); // 重建后按总账回填 open(用户点开的卡不会自己关上)
   }
   histLastParts = parts.slice();
-  // step-129 M5:新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
+ // :新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
   // 全量重建(初开/回放)与替换区(流式改写)不加,防整列/连播闪烁;082 幂等早退在上,不受影响。
   if (mfAppendOnly) for (const el of mfRoots) el.classList.add("msg-in");
-  // mermaid 围栏懒加载出图(2026-10-29 改版):innerHTML 落位后 mmRenderIn 扫占位→按需注入脚本→run/降级
+ // mermaid 围栏懒加载出图(改版):innerHTML 落位后 mmRenderIn 扫占位→按需注入脚本→run/降级
   for (const root of mfRoots) mmRenderIn(root);
-  for (const root of mfRoots) artRenderIn(root); // step-1024:html/svg 图卡挂载(与 mermaid 同钩子)
-  // 子代理过程卡开合意图(B 2026-10-14):记录用户手动开合,轮询重渲染后据此恢复(运行中缺省展开在卡 HTML 生成侧)
+  for (const root of mfRoots) artRenderIn(root); // html/svg 图卡挂载(与 mermaid 同钩子)
+ // 子代理过程卡开合意图(B):记录用户手动开合,轮询重渲染后据此恢复(运行中缺省展开在卡 HTML 生成侧)
   for (const d of mfQA(mfRoots, "details.sub-card")) {
     const k = d.dataset.agent || "";
     d.addEventListener("toggle", () => { subCardUser.set(k, d.open); });
@@ -11497,7 +11497,7 @@ function renderHistory() {
   // 错误横幅动作
   const retryBtn = mfQA(mfRoots, ".err-banner button[data-act=retry]")[0];
   if (retryBtn) retryBtn.onclick = () => {
-    // step-169:索引条目无 instruction → 走 withTaskDetail 按需取正文(未到位先提示,不空提交)。
+ // 索引条目无 instruction → 走 withTaskDetail 按需取正文(未到位先提示,不空提交)。
     const fid = (failed && failed.id) || "";
     if (!fid) return;
     withTaskDetail(fid, (tk) => {
@@ -11508,7 +11508,7 @@ function renderHistory() {
   // fixG4:重启中断任务的「重发」——按 data-task 取回被收编任务的原任务书回填并提交(与 err-banner retry 同通道语义)。
   for (const rb of mfQA(mfRoots, '.err-banner button[data-act="resend-cancel"]')) {
     rb.onclick = () => {
-      // step-169:索引条目无正文 → 按需拉 task.detail(正文到位后回填并提交)。
+ // 索引条目无正文 → 按需拉 task.detail(正文到位后回填并提交)。
       const tid = String(rb.dataset.task || "");
       if (!tid) { toast("该任务没有可重发的内容", true); return; }
       withTaskDetail(tid, (tk) => {
@@ -11518,7 +11518,7 @@ function renderHistory() {
       });
     };
   }
-  // interrupted「续跑」(2026-11-05):服务端幂等重提(resume:<原id>),不回填 composer——同会话继续。
+ // interrupted「续跑」:服务端幂等重提(resume:<原id>),不回填 composer——同会话继续。
   for (const rb of mfQA(mfRoots, '.err-banner button[data-act="resume-int"]')) {
     rb.onclick = () => {
       const tid = String(rb.dataset.task || "");
@@ -11527,7 +11527,7 @@ function renderHistory() {
       toast("已发起续跑(同会话继续)");
     };
   }
-  // step-132:LLM 调用速览行——点击复制轨迹文件路径(system 提示词/请求响应全文在文件里)。
+ // LLM 调用速览行——点击复制轨迹文件路径(system 提示词/请求响应全文在文件里)。
   for (const tl of mfQA(mfRoots, ".llm-trace-line[data-trace-file]")) {
     tl.onclick = () => {
       const p = String(tl.dataset.traceFile || "");
@@ -11537,14 +11537,14 @@ function renderHistory() {
   }
   const copyBtn = mfQA(mfRoots, ".err-banner button[data-act=copy]")[0];
   if (copyBtn) copyBtn.onclick = () => {
-    // step-169:result 属正文,按需取;无正文时给空串兜底(不写 "undefined")。
+ // result 属正文,按需取;无正文时给空串兜底(不写 "undefined")。
     const fid = failed && failed.id;
     withTaskDetail(fid, (full) => { navigator.clipboard && navigator.clipboard.writeText(String((full && full.result) || "")); });
   };
   // fixT7:「去模型管理」直达(model_not_found/401 类错误的引导出口)
   const mgmtBtn = mfQA(mfRoots, ".err-banner button[data-act=modelmgmt]")[0];
   if (mgmtBtn) mgmtBtn.onclick = () => { switchView("sys"); setSection("model"); };
-  // 变更条动作(step-046):文件清单=alert;撤销=确认后 checkpoint.rewind(预览先行语义由 diffstat 清单承担)。
+ // 变更条动作:文件清单=alert;撤销=确认后 checkpoint.rewind(预览先行语义由 diffstat 清单承担)。
   for (const b of mfQA(mfRoots, ".diffbar [data-act]")) {
     b.onclick = () => {
       const barEl = b.closest(".diffbar");
@@ -11552,7 +11552,7 @@ function renderHistory() {
       const ds = diffstats.get(taskId);
       if (!ds) return;
       if (b.dataset.act === "files") {
-        // step-052 F1:不再弹窗——就地展开文件清单(点击某文件→右侧抽屉展示补丁)。
+ // F1:不再弹窗——就地展开文件清单(点击某文件→右侧抽屉展示补丁)。
         diffOpenTask = diffOpenTask === taskId ? null : taskId;
         renderHistory();
         return;
@@ -11563,12 +11563,12 @@ function renderHistory() {
       });
     };
   }
-  // 文件清单行点击 → 右侧 diff 抽屉(step-052 F1)。
+ // 文件清单行点击 → 右侧 diff 抽屉( F1)。
   for (const r of mfQA(mfRoots, ".fl-row")) {
     r.onclick = () => ddOpen(r.dataset.task, r.dataset.file);
   }
-  // 设计白板 chip(step-056):任务卡/白板更新行 → 直达白板视图对应任务的板。
-  // 2026-10-21:画布形态下走 boardEntryGo 分流——定位画布白板卡,不弹浮窗。
+ // 设计白板 chip:任务卡/白板更新行 → 直达白板视图对应任务的板。
+ // 画布形态下走 boardEntryGo 分流——定位画布白板卡,不弹浮窗。
   for (const bc of mfQA(mfRoots, ".board-chip")) {
     bc.onclick = () => {
       if (bc.dataset.act === "modelmgmt") { switchView("sys"); setSection("model"); return; } // fixT7:结算行里的模型管理直达
@@ -11607,7 +11607,7 @@ function renderHistory() {
     if (marks.length && findIdx >= marks.length) findIdx = 0;
     if (marks[findIdx]) marks[findIdx].scrollIntoView({ block: "center" });
   } else $("findCount").textContent = "";
-  // 滚动恢复(step-082 重构):①落底窗/贴底→跟随最新;②纯尾部追加→绝不触碰 scrollTop
+ // 滚动恢复(重构):①落底窗/贴底→跟随最新;②纯尾部追加→绝不触碰 scrollTop
   // (阅读位置与滚动手势神圣:向上翻阅后新消息只在底部追加,不拽不顶);③其余(中部/整列变化)→
   // 元素锚回贴(视口顶首个可见块的新位置-原相对偏移),上方高度增减不再平移可视内容。
   // fixE22:窗口扩展帧——上方占位换真内容,按扩展前后 scrollHeight 差回补 scrollTop(视口钉在原内容上,
@@ -11628,26 +11628,26 @@ function renderHistory() {
       } else vt.scrollTop = keepTop;
     }
   }
-  renderPendingSkills(); // 会话路径也要重挂(2026-10-14 审计 C5:此前只有草稿 renderChat 重挂,会话视图重建即丢占位)
+  renderPendingSkills(); // 会话路径也要重挂(审计 C5:此前只有草稿 renderChat 重挂,会话视图重建即丢占位)
 }
 
 function renderChat() {
   if (currentSid) { renderHistory(); return; }
   // 草稿态(ZCode startDraft: activeTaskId=null → 空会话+composer):中央不倒任务史,历史只活在侧栏
   histLastHtml = null; // 直写分支:缓存失效
-  histLastParts = null; // 直写分支:增量对位缓存一并失效(step-082)
-  // step-165(块4·4.2):时段问候档位边界 [5,9,12,14,18,23](5-9 早晨/9-12 上午/12-14 午间/14-18 下午/18-23 晚间)
+  histLastParts = null; // 直写分支:增量对位缓存一并失效
+ // (块4·4.2):时段问候档位边界 [5,9,12,14,18,23](5-9 早晨/9-12 上午/12-14 午间/14-18 下午/18-23 晚间)
   // (ref ConversationDraftEmptyState.tsx:14,26-34)——本仓原 22 点即进深夜,ref 18-23 都算「晚上」,
   // 23 点起才进深夜;文案按 ref zh-CN.ts:4221-4226 口语化风格重写六档(原「深夜/清晨/早上/…」单词式退役)。
   const _h = new Date().getHours();
   const _p = _h >= 5 && _h < 9 ? '早上好呀,新的一天开始啦' : _h >= 9 && _h < 12 ? '上午好呀,有什么想让我帮忙的吗'
     : _h >= 12 && _h < 14 ? '中午好呀,要不要先休息一下' : _h >= 14 && _h < 18 ? '下午好呀,接下来交给我吧'
     : _h >= 18 && _h < 23 ? '晚上好呀,今天辛苦啦' : '夜深啦,别忘了照顾好自己哦'; // >=23 或 <5 = 深夜档(ref 边界:23 点起)
-  // step-165(块4·4.3):「新会话」占位标题行(ref events.ts:624:标题生成前侧栏显 New session)——
+ // (块4·4.3):「新会话」占位标题行(ref events.ts:624:标题生成前侧栏显 New session)——
   // 本仓无 LLM 标题轨,占位只出现在草稿欢迎态头部(新会话尚未首发);首发即 deriveTitle 派生真标题
   // (renderHistory 整块替换本 HTML),占位随之消失,不存在「闪 New session」窗口。保留「说点什么」副行。
   $("chatBody").innerHTML = '<div class="draft-newtitle">新 会 话</div><div class="draft-greet">' + _p + '</div><div class="empty-line">说 点 什 么</div>';
-  renderPendingSkills(); // 草稿路径也要重挂(step-048)
+  renderPendingSkills(); // 草稿路径也要重挂
 }
 function render(chatTouched = true) {
   const list = [...tasks.values()];
@@ -11675,8 +11675,8 @@ $("expDistillBtn").onclick = () => {
 };
 // 会话状态条(B3:todo/子代理/workflow;session.status 轮询消费)
 /** 会话内最近一次任务(按创建时序;同刻回退 updatedAt)。
- *  2026-10-21 修复:失败 chip/横幅此前取「最新的失败任务」——失败后用户再发一轮并正常完成,
- *  找不到更新的失败任务,旧失败就永远命中,置顶条一直挂着「失败 · 详见流尾」(用户实报)。
+ * 修复:失败 chip/横幅此前取「最新的失败任务」——失败后用户再发一轮并正常完成,
+ * 找不到更新的失败任务,旧失败就永远命中,置顶条一直挂着「失败 · 详见流尾」(用户用户反馈)。
  *  失败提示应表达「最近一次任务失败了」,而非「历史上曾失败过」:新任务一提交即让位。 */
 function latestTaskOf(sessionId) {
   let best = null;
@@ -11688,7 +11688,7 @@ function latestTaskOf(sessionId) {
   }
   return best;
 }
-/** 重试条(batch1b,阈值门照抄 ZCode ConversationTurnGroup:前两次重试静默不打扰)。
+/** 重试条(batch1b,阈值门照设计参考 ZCode(致谢) ConversationTurnGroup:前两次重试静默不打扰)。
  * 数据源=apiRetryBySid(服务端 gateway 内存镜像经 session.status.result 回填)——切走会话再回来
  * 仍能恢复同一条,不从 1 重来也不消失。文案「重新连接中... {attempt}/{maxRetries}」+ 有 errorStatus
  * 时追加「· HTTP xxx」。attempt≤2 或字段缺失=不渲染。 */
@@ -11706,13 +11706,13 @@ function apiRetryChip(sid) {
 function renderStatusbar() {
   const bar = $("chatStatusbar");
   // fixT6 P1:失败提示钉在常驻状态条(footer .aff-strip,不随消息滚动)。
-  // 2026-10-28 用户口径:原置顶条(#chatTopbar)已删——它空着也占灰线、chips 一多就折行把消息顶得上下晃;
+ // 原置顶条(#chatTopbar)已删——它空着也占灰线、chips 一多就折行把消息顶得上下晃;
   // chips 迁 footer 后恒在视口、单行不折,失败/重试入口同样常驻。
   const failedChip = (() => {
     if (!currentSid) return "";
     const f = latestTaskOf(currentSid);
     if (!f || f.state !== "failed") return "";
-    // step-169:索引条目 result 需按需拉(task.detail.get);未到位时 tooltip 显示「加载中…
+ // 索引条目 result 需按需拉(task.detail.get);未到位时 tooltip 显示「加载中…
     ensureTaskDetail(f.id);
     const fRes = taskBodyIds.has(f.id) ? String(f.result || "") : "加载中…";
     return '<span class="st-chip st-err" id="errChip" title="' + esc("任务失败:" + fRes) + '">失败 <b>' + esc(String(f.id || "").slice(0, 8)) + " · 详见流尾</b></span>";
@@ -11732,7 +11732,7 @@ function renderStatusbar() {
   }
   if (st.subagents && st.subagents.spawnCount > 0) html += '<span class="st-chip">子代理 <b>' + st.subagents.spawnCount + "</b>(运行 " + st.subagents.running + ")</span>";
   if (st.compactions && st.compactions.length) {
-    // 板 n7(2026-10-29):压缩计数 chip 带 title —— 最近一次压缩的时间 + 摘要字数 + tokens 水位
+ // 板 n7:压缩计数 chip 带 title —— 最近一次压缩的时间 + 摘要字数 + tokens 水位
     // (投影 compactions 项为 {at,tokens?,summaryChars?};字段缺失则省略对应段,不写「undefined」)。
     const lc = st.compactions[st.compactions.length - 1] || {};
     const lcTk = function (n) { return (Math.round(Number(n) / 100) / 10).toFixed(1) + "k"; };
@@ -11759,7 +11759,7 @@ setInterval(() => {
   }
 }, 3000);
 
-// ── 子智能体目录(step-060,ZCode SubagentDirectory 对齐) ──
+// ── 子智能体目录(ZCode SubagentDirectory 对齐) ──
 // 两区(运行中/已结束)+条目下钻(任务书全文/实时 tail/当前模型)。数据源双轨:
 // ①journal 事件(subagent.spawn/result/backgrounded + task_output 轮询对)——全程可得,历史会话重放同源;
 // ②sessionStatus.subagentList(注册表在场时)——权威实时状态/tail/title/model。
@@ -11857,7 +11857,7 @@ function renderSubDir() {
       else if (en.stale) meta.push('<span class="sd-stale">心跳停滞</span>');
     }
     const cancelling = subCancelPending.has(en.agentId);
-    // step-062 收敛:条目主区域=一级入口(点击开/激活工作区 tab);「工作区」按钮被整行点击吸收删除,
+ // 收敛:条目主区域=一级入口(点击开/激活工作区 tab);「工作区」按钮被整行点击吸收删除,
     // 下钻(任务书全文/模型行/tail/终止原因)降级为「详情」轻展开钮——抽屉保留快速瞄一眼能力,不切走 tab。
     const moreBtn = '<button class="sd-open" data-submore="' + esc(en.agentId) + '" title="展开查看任务详情与实时输出">详情</button>';
     const cancelBtn = en.cls === "run"
@@ -11895,7 +11895,7 @@ function subResultFullText(en) {
   const rb = t.indexOf("] ", ri);
   return rb < 0 ? t.slice(ri) : t.slice(rb + 2);
 }
-// 「终止」按钮通路(2026-10-16):subagent.cancel 最小消息;服务端调注册表条目的 cancel 句柄,
+// 「终止」按钮通路:subagent.cancel 最小消息;服务端调注册表条目的 cancel 句柄,
 // 句柄缺席=ok:false 如实提示。pending 集合声明在 renderSubDir 上方(与其余目录状态同区)。
 document.addEventListener("click", (e) => {
   const btn = e.target && e.target.closest ? e.target.closest("[data-subcancel]") : null;
@@ -11909,8 +11909,8 @@ document.addEventListener("click", (e) => {
   toast("已发送终止指令:…" + esc(aid.slice(-8)));
 });
 
-// ── 子代理工作区 tab(2026-10-16 用户口径:「点击其中运行的一个智能体后,要弹出它的工作区tab页,
-// 显示它的所有动作和消息(就如vibe coding agent的工作区一样)」;step-062 收敛:目录抽屉=一级入口,
+// ── 子代理工作区 tab( 「点击其中运行的一个智能体后,要弹出它的工作区tab页,
+// 显示它的所有动作和消息(就如vibe coding agent的工作区一样)」; 收敛:目录抽屉=一级入口,
 // 点击条目主区域即开/激活本 tab,抽屉保留「详情」轻展开;过程卡「工作区」钮为消息流侧第二入口)──
 // 形态:中间工作区顶部 tab 条(#wsTabbar)=「主会话」恒第一位不可关+每个打开的子代理工作区(状态点+标题+关闭)。
 // tab 内全要素:头部=标题/状态/模型/任务书全文/journal 终态(运行中+注册表在场带「终止」),体=完整事件流+工具调用。
@@ -11994,7 +11994,7 @@ document.addEventListener("click", (e) => {
   const tab = e.target && e.target.closest ? e.target.closest("[data-wstab]") : null;
   if (tab) subWsActivate(tab.getAttribute("data-wstab") || "");
 });
-// 目录条目一级入口(step-062):点击条目主区域(summary,非按钮)=开/激活该子代理的工作区 tab 并 toast;
+// 目录条目一级入口:点击条目主区域(summary,非按钮)=开/激活该子代理的工作区 tab 并 toast;
 // 目录保持打开(目录=连续浏览多个子 agent 的索引,逐个点开不必重开抽屉);激活条目加 ws-open 描边。
 // 「详情」钮=条目内轻展开(任务书全文/模型/tail),与开 tab 互不牵动。data-subws(过程卡按钮)仍走下方委托。
 document.addEventListener("click", (e) => {
@@ -12006,7 +12006,7 @@ document.addEventListener("click", (e) => {
   const item = sum.closest("details.sd-item");
   const aid = (item && item.getAttribute("data-agent")) || "";
   if (!aid) return;
-  // 2026-10-21 画布形态:目录条目点击=定位分身卡消息分组(工作区 tab 渲染进 chatBody,画布下不再进入)
+ // 画布形态:目录条目点击=定位分身卡消息分组(工作区 tab 渲染进 chatBody,画布下不再进入)
   if (canvasActive() && subMsgLocate(aid)) return;
   subWsOpen(aid);
   toast("已打开子代理工作区:…" + esc(aid.slice(-8)));
@@ -12025,7 +12025,7 @@ document.addEventListener("click", (e) => {
   if (!btn) return;
   e.preventDefault(); // 按钮在 summary 内:拦掉 details 开合的默认动作
   const aid = btn.getAttribute("data-subws") || "";
-  // 2026-10-21 画布形态分身独立看板:条目点击=定位/展开子agent会话流卡里对应的消息分组(不开工作区 tab——
+ // 画布形态分身独立看板:条目点击=定位/展开子agent会话流卡里对应的消息分组(不开工作区 tab——
   // 工作区渲染进 chatBody,会把子代理内容又带回会话流卡,与独立看板口径冲突);经典布局保持开 tab。
   if (canvasActive() && subMsgLocate(aid)) return;
   subWsOpen(aid);
@@ -12049,7 +12049,7 @@ function renderSubWorkspace(agentId) {
   const finalTxt = lastRes && lastRes.event ? String(lastRes.event.finalText || lastRes.event.note || "") : "";
   parts.push('<div class="ws-head"><div class="ws-title"><span class="wt-dot ' + esc((en && en.cls) || "end") + '"></span><span>' + esc(title) +
     '</span><span class="sd-st ' + esc((en && en.cls) || "end") + '">' + esc(en ? (en.stTxt || "") + (en.durTxt || "") : "已结束 · 历史会话") + "</span>" +
-    // step-062:tab 完整性收口——终止按钮进工作区头部(运行中且注册表在场才渲染),复用 data-subcancel 全局委托
+ // tab 完整性——终止按钮进工作区头部(运行中且注册表在场才渲染),复用 data-subcancel 全局委托
     // 与 subCancelPending 防双击;历史/外部后端条目不渲染(无处可发,不造假按钮)。
     ((en && en.cls === "run" && en.registry) ? '<button class="sd-cancel" data-subcancel="' + esc(aid) + '" title="终止该子 agent(发送取消指令)"' + (subCancelPending.has(aid) ? " disabled" : "") + ">" + (subCancelPending.has(aid) ? "终止中…" : "终止") + "</button>" : "") +
     "</div>" +
@@ -12115,7 +12115,7 @@ function renderSubWorkspace(agentId) {
       } else if (p.kind === "permission.gate") {
         parts.push('<div class="ws-step">' + t + "<b>权限</b><span>" + esc(String(p.tool || "")) + " " + esc(String(p.effect || "")) + "(" + esc(String(p.by || "")) + ")</span></div>");
       } else if (p.kind === "llm.trace") {
-        // 2026-10-20 与主会话同构的轨迹速览行:模型/轮步/耗时/token/构型;点击复制轨迹文件路径
+ // 与主会话同构的轨迹速览行:模型/轮步/耗时/token/构型;点击复制轨迹文件路径
         // (system 提示词与请求/响应全文在 .genie/llm-trace/subagent-<taskId>*/call-*.json)。
         const roles2 = Array.isArray(p.messageRoles) ? roleShape(p.messageRoles, 6) : "";
         const roleFull2 = Array.isArray(p.messageRoles) ? p.messageRoles.join("→") : "";
@@ -12137,7 +12137,7 @@ function renderSubWorkspace(agentId) {
           '</span><span class="lt-copy">复制轨迹路径</span>' + sus2 + '</div>');
       } else if (p.kind === "message.user") {
         // 首条 message.user=任务书(头部 ws-task 已全文展示,不重复渲染);
-        // 只渲染 [steer] 中途转向(2026-10-20 修复:此前任务书也被当成「转向」渲染成 400 字截断行)。
+ // 只渲染 [steer] 中途转向(修复:此前任务书也被当成「转向」渲染成 400 字截断行)。
         if (String(p.text || "").indexOf("[steer]") === 0)
           parts.push('<div class="user-line"><span class="who">转向</span><span class="txt">' + userSlashHtml(String(p.text || ""), "") + "</span></div>");
       } else {
@@ -12145,7 +12145,7 @@ function renderSubWorkspace(agentId) {
       }
     }
     if (en && en.cls === "run") parts.push('<div class="task-sub"><span class="st run">running</span> 子代理运行中,实时刷新…</div>');
-    // 2026-10-20 实时流式尾块(与主会话 stStream 同渲染形态):该 agent 的活跃草稿按
+ // 实时流式尾块(与主会话 stStream 同渲染形态):该 agent 的活跃草稿按
     // sid(subagent-<taskId>)登记在 subStreams;真 subagent.event message.agent 到达即让位。
     const liveDraft = subAgentDraftOf(all);
     if (liveDraft) {
@@ -12170,10 +12170,10 @@ function renderSubWorkspace(agentId) {
     };
   }
   const html = parts.join("") || '<div class="empty-line">该子代理暂无记录</div>';
-  if (html !== subWsLastHtml) { subWsLastHtml = html; histLastParts = null; $("chatBody").innerHTML = html; } // histLastParts 失效(step-082):工作区直写共享容器后,主历史缓存与 DOM 不再对位
-  // mermaid 围栏懒加载出图(2026-10-29 改版;与主历史同语义,见 mmRenderIn)
+  if (html !== subWsLastHtml) { subWsLastHtml = html; histLastParts = null; $("chatBody").innerHTML = html; } // histLastParts 失效:工作区直写共享容器后,主历史缓存与 DOM 不再对位
+ // mermaid 围栏懒加载出图(改版;与主历史同语义,见 mmRenderIn)
   mmRenderIn($("chatBody"));
-  artRenderIn($("chatBody")); // step-1024:图卡挂载(与消息流同语义)
+  artRenderIn($("chatBody")); // 图卡挂载(与消息流同语义)
   renderSubDir(); // 工作区打开期间目录角标/状态照常跟进(journal 增量到达即刷新)
   if (vt) { if (wasBottom) vt.scrollTop = vt.scrollHeight; else vt.scrollTop = keepTop; }
 }
@@ -12192,13 +12192,13 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-let histLastSeq = -1, histSession = null; // 会话增量水位(step-044)
-// 历史分页(2026-10-22,接服务端 beforeSeq 契约):首屏只取末 200 条,更早的靠顶部「加载更多历史」回溯。
+let histLastSeq = -1, histSession = null; // 会话增量水位
+// 历史分页(接服务端 beforeSeq 契约):首屏只取末 200 条,更早的靠顶部「加载更多历史」回溯。
 let histHasMore = false;        // 首屏/翻页回包说「还有更早事件」才显示按钮
 let histNextBeforeSeq;          // 下一页游标(=本页最小 seq,服务端保证严格推进);hasMore=false 时清空
 let histPageLoading = false;    // 翻页请求在飞(按钮文案「加载中…」,防连点重入)
 const HIST_PAGE = 200;          // 历史每页条数(首屏与翻页同值)
-// ---- 右侧 diff 抽屉(step-052 F1):变更条文件清单点击→单文件补丁(取代旧 alert 清单) ----
+// ---- 右侧 diff 抽屉( F1):变更条文件清单点击→单文件补丁(取代旧 alert 清单) ----
 function ddOpen(taskId, file) {
   ddSel = { taskId: taskId, file: file };
   $("ddTitle").textContent = file;
@@ -12239,7 +12239,7 @@ function loadMoreHist() {
   wsSafeSend(JSON.stringify({ v: 1, type: "session.history", sessionId: currentSid, beforeSeq: histNextBeforeSeq, limit: HIST_PAGE }));
   renderHistory(); // 按钮切「加载中…」(parts 变了即重绘,mfPatch 只换该块)
 }
-/** 会话域 UI 归零(2026-11-09 用户实报「新建任务时聊天窗所有按钮/数据显示要重置」)。
+/** 会话域 UI 归零(用户用户反馈「新建任务时聊天窗所有按钮/数据显示要重置」)。
  *  openSession(切会话)与 newDraft(回草稿态)共用同一份清单——两处各写一份必然漂移
  *  (草稿态此前漏清:子代理流/未读、白板会话上下文、子代理徽标、上下文 pill、问答条、附件条)。
  *  只清「绑定某个会话的表现层状态」;localStorage/sessionStorage 的草稿与偏好键一律不碰
@@ -12277,13 +12277,13 @@ function openSession(sid) {
   saveDraft();
   currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid);
   navPush(sid);
-  resetSessionDomainUI(sid); // 会话域 UI 归零(与 newDraft 共用同一份清单):切会话→全量重载;null=加载中,先清旧内容再等重放(2026-10-16 step-072:histEvents=null 此前被并进注释从未执行——切会话闪旧会话内容);step-1036:同清该会话水位→首帧全量(旧水位+服务端另一份累积态会对不上)
+  resetSessionDomainUI(sid); // 会话域 UI 归零(与 newDraft 共用同一份清单):切会话→全量重载;null=加载中,先清旧内容再等重放( histEvents=null 此前被并进注释从未执行——切会话闪旧会话内容);同清该会话水位→首帧全量(旧水位+服务端另一份累积态会对不上)
   // batch1b 重试态跨会话保活:切会话**不清** apiRetryBySid,并立刻用缓存把重试条画回来
   // (上面刚清空了置顶条,resetSessionDomainUI 内已按 apiRetryBySid 缓存把重试条画回来)
   subWsRestore(sid); // 子代理工作区 tab 按会话恢复(localStorage 打开集;内容等 journal 重放),激活态归位主会话
   switchView("chat"); // 复刻 onNavigateToTask → setWorkspaceMainView("chat")
   renderHistory(); // 立即清旧会话内容,避免重放到达前闪上一个会话
-  histLanding = Date.now() + 1200; // 打开会话:1.2s 落底宽窗(自动显示最后的消息,step-048)
+  histLanding = Date.now() + 1200; // 打开会话:1.2s 落底宽窗(自动显示最后的消息
   refreshHist();
   renderSidebar();
   restoreDraft();
@@ -12291,10 +12291,10 @@ function openSession(sid) {
   renderSendBtn();
   // 已终态任务补拉变更条数据(历史会话打开即有 diffstat)。
   for (const t of tasks.values()) if (t.sessionId === sid && (t.state === "done" || t.state === "failed") && !diffstats.has(t.id)) wsSafeSend(JSON.stringify({ v: 1, type: "task.diffstat", taskId: t.id }));
-  // 容量分母(contextWindow)开会话即拉(step-057):ctxPill 的 % 不必等任务终态。
+ // 容量分母(contextWindow)开会话即拉:ctxPill 的 % 不必等任务终态。
   wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: sid }));
   ssSendStatus(sid); // batch1b:开会话即拉一次会话状态投影,顺带从服务端重试态镜像刷新重试条(权威值;切会话不清缓存)。
-  // step-1036:统一走 ssSendStatus——openSession 上面刚清 ssSeqBySid 水位 → 此处不带 sinceSeq,首拉全量。
+ // 统一走 ssSendStatus——openSession 上面刚清 ssSeqBySid 水位 → 此处不带 sinceSeq,首拉全量。
   // per-session 主模型:目标会话未初始化(Map 无条目=undefined)→发 session.model.get 拉取覆盖;
   // 已初始化(含 null=服务端确认无覆盖)→不重发,直接用缓存刷 pill(回包 session.model.result 再校正)。
   if (sessionModelOverride.has(sid)) renderModelPill(cfgView);
@@ -12302,11 +12302,11 @@ function openSession(sid) {
   // 跨会话板上下文清零已在 resetSessionDomainUI 内统一做(批注串台修复,不依赖浮窗开关)
   if (bfOpen) { boardRefresh(); renderBoard(); renderBoardPanel(); }
   // n6 画布看板跟随当前选中会话:统一出口(所有卡片按各自 session 维度重取数;
-  // 此前画布卡只有首次激活拉一次数,切 session 后白板/档案/追踪全停在上一会话的数据上——用户实报)。
+ // 此前画布卡只有首次激活拉一次数,切 session 后白板/档案/追踪全停在上一会话的数据上——用户用户反馈)。
   onSessionChange(sid);
 }
 /** n6 画布激活门(会话维度):键=sid|card(见 cvActKey),切会话后同一个 view 会按新 sid 重新激活。
- *  2026-10-22 前是 Set<view> 一次性门 → 切 session 后白板/档案/追踪卡全停在上一会话数据(用户实报)。
+ * 前是 Set<view> 一次性门 → 切 session 后白板/档案/追踪卡全停在上一会话数据(用户用户反馈)。
  *  声明位置前移到本段:openSession(含启动恢复)会经 onSessionChange 读写它,必须在脚本头部区已初始化(防 TDZ)。 */
 const cvActivated = new Set();
 /** n6 当前画布绑定的会话(与 currentSid 同步推进;onSessionChange 维护)。 */
@@ -12315,7 +12315,7 @@ let cvSessionSid = "";
  *  职责:①让画布每张「已激活过的卡」按新 sid 重取数(cvActivated 键=sid|card,一次性门按会话维度);
  *  ②登记 session→project 归属查询(session.owner.get,项目归属由服务端裁定,前端只按契约收发);
  *  ③不新造 session 级 WS——全部复用既有消息(track.view/board.list/profile.get/usage.view 等)。 */
-/** 2026-10-29 会话维度视图清单(唯一真相源):这些卡的数据/状态都必须跟着选中会话走。
+/** 会话维度视图清单(唯一真相源):这些卡的数据/状态都必须跟着选中会话走。
  *  全局设施(nodes/approvals/market/git/files/term/wf/exp/team/issues)不在此列——它们无 session 维度,
  *  卡头以 vw-scope 标注「作用域:全局」,避免用户误以为是当前会话的数据。 */
 const SESSION_VIEWS = ["board", "track", "usage", "subchat"];
@@ -12328,7 +12328,7 @@ function onSessionChange(sid) {
   // 「曾经激活过的卡」= 任意会话键里出现过的 view(cvActivated 键形态 sid|view)。
   const everViews = new Set();
   for (const key of cvActivated) { const cut = String(key).lastIndexOf("|"); if (cut > 0) everViews.add(String(key).slice(cut + 1)); }
-  // 2026-10-29 用户口径「所有看板内容要和选中的 session 挂钩」:会话维度视图无条件全部重载,
+ // 会话维度视图无条件全部重载,
   // 不再只认「曾经激活过的卡」——旧实现里经典布局首进会话/openSession 之外的建会话路径(新任务提交)
   // 一张卡都不重载,板/追踪/吞吐/子代理流停在上一个会话的快照。
   for (const v of SESSION_VIEWS) everViews.add(v);
@@ -12346,7 +12346,7 @@ function onSessionChange(sid) {
   // 看板会话档:数据是「全部」取回来的,切会话后重渲一次即按新 sid 过滤(项目档不受影响)
   try { if (viewLive("dash")) dashRender(); } catch (e) { /* 看板未加载/不可见时跳过 */ }
 }
-/** 2026-10-29 卡头作用域条:把「当前会话」从静态文字变成带会话短码的动态标注,
+/** 卡头作用域条:把「当前会话」从静态文字变成带会话短码的动态标注,
  *  让人一眼确认这张卡的数据属于哪个会话(全局设施保持「作用域:全局」不动)。 */
 function scopeBarRender(sid) {
   const s = String(sid === undefined ? currentSid : sid || "");
@@ -12356,7 +12356,7 @@ function scopeBarRender(sid) {
     if (el) el.textContent = id === "scopeUsage" ? tag + "(前端过滤)" : tag;
   }
 }
-/** 2026-10-29 新任务提交后统一刷新(用户口径「添加新任务时所有面板数据刷新,尤其会话流」)。
+/** 新任务提交后统一刷新。
  *  与 onSessionChange 的分工:本函数不重问归属项目、不重算导航态,只做「数据重取 + 会话流重放」;
  *  会话身份从无到有(草稿首条建 sid)才额外走 onSessionChange 打灰激活门。 */
 function refreshPanelsAfterSubmit(sid) {
@@ -12377,10 +12377,10 @@ function refreshPanelsAfterSubmit(sid) {
 }
 /** cvActivated 键:会话维度的一次性激活门(sid|card)。空会话=草稿态统一记 "_"。 */
 function cvActKey(sid, card) { return (sid || "_") + "|" + card; }
-// ---- 2026-10-20 无限画布外壳(用户口径:界面改为无限画布,模块=画布上的卡片,最左侧快速定位) ----
+// ---- 无限画布外壳(界面改为无限画布,模块=画布上的卡片,最左侧快速定位) ----
 // 分层:switchView(路由入口)→ ①switchViewActivate(视图自身的激活/拉数逻辑,零改写)
 //       ②画布形态下=聚焦对应卡片(assets/canvas-shell.js);经典布局下什么都不多做。
-// 卡片→视图 映射(唯一真相源,2026-10-20 收敛):CARD_OF_VIEW / 经典显隐清单 / 画布激活
+// 卡片→视图 映射(唯一真相源, 收敛):CARD_OF_VIEW / 经典显隐清单 / 画布激活
 // 三处全部由它派生。此前五份清单各自硬编码,新增 subagents/track/usage 后漏了三处,导致
 // 「画布切经典全屏黑」「回画布丢焦点」——新增卡片只改这一处。
 const CV_VIEW_OF_CARD = { chat: "chat", term: "term", git: "git", files: "files", ide: "ide", board: "board", project: "project", sense: "sense", wf: "wf", exp: "exp", team: "team", nodes: "nodes", approvals: "approvals", market: "market", browser: "browser", sys: "sys", subagents: "subagents", subchat: "subchat", track: "track", traj: "traj", usage: "usage", super: "super" };
@@ -12417,11 +12417,11 @@ function cvKeyCall(fn, fallback) {
   }
   if (fallback) fallback();
 }
-/** 连接状态下沉(2026-10-20 二期):画布形态下顶栏 header 隐藏,定位栏顶部圆点是唯一常驻连接指示。
+/** 连接状态下沉(二期):画布形态下顶栏 header 隐藏,定位栏顶部圆点是唯一常驻连接指示。
  *  经典布局仍由 header 的 #conn 文本负责(此函数在经典形态下什么都不做)。 */
 function cvConn(ok, text) {
   if (!canvasActive()) return;
-  // 2026-10-21 双导航融合:cvRail 退役,连接点下沉到托盘品牌点(经典布局仍走 header pill-conn)。
+ // 双导航融合:cvRail 退役,连接点下沉到托盘品牌点(经典布局仍走 header pill-conn)。
   const sb = $("sidebar");
   if (!sb) return;
   sb.classList.toggle("cv-conn-ok", ok === true);
@@ -12429,13 +12429,13 @@ function cvConn(ok, text) {
   const dot = sb.querySelector(".brand-dot");
   if (dot) dot.title = String(text || "连接中…");
 }
-/** 画布卡片 → 托盘按钮映射(2026-10-21 双导航融合):托盘 act-* 按钮承担画布卡的定位/唤回/状态点。
+/** 画布卡片 → 托盘按钮映射(双导航融合):托盘 act-* 按钮承担画布卡的定位/唤回/状态点。
  *  代码档案(project)与透镜(sense)共用 act-sense 入口;chat/term/files/sys 无托盘按钮;
  *  浏览器有 act-web(2026-11 人机随时可用轮:左栏「网页 Webview」恢复,托盘随之一致)。 */
 const CV_TRAY_ACT = { git: "act-git", board: "act-board", team: "act-team", nodes: "act-nodes", approvals: "act-approvals",
   wf: "act-wf", exp: "act-exp", market: "act-market", subchat: "act-subchat", track: "act-track", traj: "act-traj", usage: "act-usage",
   project: "act-sense", sense: "act-sense", browser: "act-web", super: "act-super" };
-/** 卡片状态点同步(2026-10-20 二期「红框条目与看板绑定」的可视化部分):
+/** 卡片状态点同步(二期「红框条目与看板绑定」的可视化部分):
  *  把面板手里的真实状态(待审批数/Git 变更数/跑着的任务数)推到卡片头 + 托盘按钮状态点。
  *  只推有真源的项,不猜——没数据就不亮灯(宁缺勿假)。画布形态外是空操作。 */
 function cvCardStatus(name, tone, text) {
@@ -12449,7 +12449,7 @@ function cvCardStatus(name, tone, text) {
     if (text) btn.title = String(text);
   }
 }
-/** 托盘按钮灰态同步(2026-10-21 双导航融合):画布卡片隐藏集合变化(cv-cards 事件,canvas-shell 派发)
+/** 托盘按钮灰态同步(双导航融合):画布卡片隐藏集合变化(cv-cards 事件,canvas-shell 派发)
  *  → 对应托盘按钮置灰;点击灰按钮走 switchView 分流=唤回+聚焦。经典布局无画布卡,恒为空操作。 */
 window.addEventListener("cv-cards", function (e) {
   const hidden = (e && e.detail && e.detail.hidden) || [];
@@ -12458,7 +12458,7 @@ window.addEventListener("cv-cards", function (e) {
     if (btn) btn.classList.toggle("cv-card-off", hidden.indexOf(card) >= 0);
   }
 });
-// 托盘自带最小化钮(2026-10-21 双导航融合:cvRail 退役后托盘收起不再依赖外部入口;
+// 托盘自带最小化钮(双导航融合:cvRail 退役后托盘收起不再依赖外部入口;
 // 收起形态=既有 #sbRail 细条,唤回=细轨 logo / Ctrl+B,与经典布局同源)。
 (() => {
   const sb = $("sidebar");
@@ -12478,7 +12478,7 @@ function cvStatusRefresh() {
   // Git:工作区变更文件数(数据源 git.status → gitChanges)
   const gc = Array.isArray(gitChanges) ? gitChanges.length : 0;
   cvCardStatus("git", gc > 0 ? "warn" : "", gc > 0 ? gc + " 个文件有变更" : "");
-  // 对话:本会话运行中的任务数(数据源 tasks/streamTasks)
+ // 对话:本会话运行中的任务数(数据源)
   let run = 0;
   try { for (const t of tasks.values()) if (t.state === "running") run++; } catch (e) { run = 0; }
   cvCardStatus("chat", run > 0 ? "run" : "", run > 0 ? run + " 个任务运行中" : "");
@@ -12489,7 +12489,7 @@ function cvStatusRefresh() {
  *  例外:team 卡的子标签(dash 看板 / issues)共用一块卡片面板、同时只显示一个子面板,
  *  故这类子标签除「卡片在视口内」还要求它就是当前激活的子标签。 */
 const CANVAS_SUBTAB = { dash: "team", issues: "team" };
-/* ── 双中心布局状态机(2026-10-25):会话流(chat)+IDE 右栏并列 ──
+/* ── 双中心布局状态机:会话流(chat)+IDE 右栏并列 ──
  * 状态源:localStorage dualCenter.open(开合)+ dualCenter.w(会话流宽 px,夹紧 360~视口-280)。
  * open=true 时 body.dual-center 类挂上,applyViewChrome 里 ide 与 chat 同 .on 常驻;.view CSS 零改动。
  * ≤1150px 视口禁用双栏(媒体查询把右栏 display:none,JS 侧 dualAllowed() 同口径兜底)。 */
@@ -12527,15 +12527,15 @@ function viewLive(n) {
       return false;
     } catch (e) { /* 落到经典判定 */ }
   }
-  // 双中心(2026-10-25):双栏开启时右栏 IDE 与当前视图两侧都算「活着」,
+ // 双中心:双栏开启时右栏 IDE 与当前视图两侧都算「活着」,
   // 否则焦点在会话流时 SCM/问题/诊断的 WS 回包会被判死静默停更(症状=Git 状态永远不动)。
   if (dualOpen && document.body.classList.contains("dual-center") && n === "ide") return true;
   return document.body.dataset.view === n;
 }
 // 复刻 ZCode workspaceMainView 切换: 点已在位的导航按钮=停留(不弹回);active 态挂在对应按钮
-// 2026-10-16:switchView("dash")=团队视图「看板」子标签的内部路由(view-team 点亮+成员面板收起)。
+// switchView("dash")=团队视图「看板」子标签的内部路由(view-team 点亮+成员面板收起)。
 function switchView(name) {
-  // 双中心(2026-10-25):双栏开启时切到 ide = 开/收右栏,不动视图身份(会话流仍是当前视图);
+ // 双中心:双栏开启时切到 ide = 开/收右栏,不动视图身份(会话流仍是当前视图);
   // 双栏收起时点 IDE 走经典互斥全屏。ideOpen() 仍直连此入口,无需单独改。
   if (name === "ide" && dualOpen) { dualToggle(); return; }
   switchViewActivate(name);
@@ -12553,15 +12553,15 @@ function lightNav(name) {
   $("act-board").classList.toggle("on", name === "board");
   $("act-wf").classList.toggle("on", name === "wf");
   $("act-exp").classList.toggle("on", name === "exp");
-  // 终端/文件左栏按钮已撤(2026-10-19):无按钮可点亮,视图仍可由快捷键/右键菜单进入,故不加守卫也不会 null 抛错——此处仅保留其余点亮
+ // 终端/文件左栏按钮已撤:无按钮可点亮,视图仍可由快捷键/右键菜单进入,故不加守卫也不会 null 抛错——此处仅保留其余点亮
   $("act-web").classList.toggle("on", name === "browser"); // 2026-11 浏览器入口恢复:进视图即点亮
   $("act-market").classList.toggle("on", name === "market");
   $("act-team").classList.toggle("on", name === "team" || name === "dash" || name === "issues"); // 看板/Issue 看板=团队子标签,侧栏点亮团队
   $("act-nodes").classList.toggle("on", name === "nodes");
   $("act-approvals").classList.toggle("on", name === "approvals");
   $("act-track").classList.toggle("on", name === "track");
-  $("act-traj").classList.toggle("on", name === "traj"); // step-1535:轨迹独立视图入口点亮
-  $("act-super").classList.toggle("on", name === "super"); // step-1041:指挥台独立视图入口点亮
+  $("act-traj").classList.toggle("on", name === "traj"); // 轨迹独立视图入口点亮
+  $("act-super").classList.toggle("on", name === "super"); // 指挥台独立视图入口点亮
   $("uGear").classList.toggle("on", name === "sys");
 }
 function switchViewActivate(name) {
@@ -12571,7 +12571,7 @@ function switchViewActivate(name) {
 }
 /** 视图身份切换(「当前在看哪个视图」):经典布局靠它决定哪一屏可见,也是「切回经典显示哪页」的依据。
  *  画布形态下只有焦点卡变化才改身份;卡片仅因进入视口而懒激活时不得改身份——
- *  否则身份会被改成最后进视口的那张(实测:焦点在代码档案,切经典却回到文件视图)。 */
+ * 否则身份会被改成最后进视口的那张(经验证:焦点在代码档案,切经典却回到文件视图)。 */
 function setViewIdentity(name) {
   mainView = name;
   try { sessionStorage.setItem("zh:view", name); localStorage.setItem("zh:view", name); } catch (e) { /* 隐私模式:忽略 */ }
@@ -12586,7 +12586,7 @@ function applyViewChrome(name) {
     const el = $("view-" + v);
     if (!el) continue; // 派生清单里可能的无宿主项(如子标签别名)不炸:跳过而非 null.classList
     let on = (name === "chat" && v === "tasks") || name === v || ((name === "dash" || name === "issues") && v === "team");
-    // 双中心(2026-10-25):右栏开启时 IDE 与当前视图并列常驻(任务流在左,IDE 在右)
+ // 双中心:右栏开启时 IDE 与当前视图并列常驻(任务流在左,IDE 在右)
     if (dualOpen && v === "ide" && name === "chat") on = true;
     el.classList.toggle("on", on);
   }
@@ -12597,7 +12597,7 @@ function applyViewChrome(name) {
   $("teamTabMembers").classList.toggle("on", name === "team");
   $("teamTabIssues").classList.toggle("on", name === "issues"); // fixD5
   $("teamTabDash").classList.toggle("on", name === "dash");
-  // wiki 并入代码档案(product decision 2026-10-17):tab 态决定指挥台让位
+ // wiki 并入代码档案(product decision):tab 态决定指挥台让位
   document.body.classList.toggle("pp-wiki-tab", name === "project" && projectTab === "wiki");
 }
 /** 视图数据拉取/渲染补位:画布形态的懒激活只走这一段(只拉数,不改身份、不动单屏显隐)。
@@ -12609,12 +12609,12 @@ function loadViewData(name, sid) {
   if (name === "dash") { dashLockScope(); dashLoad(); } // 看板子标签:进入即锁定当前项目+拉会话/趋势
   if (name === "board") { setTimeout(wbResize, 30); boardRefresh(s); overlayPull(s); } // 可见后再量尺寸(canvas 隐藏态 rect 为 0);拉板清单+会话批注
   if (name === "team") { wsSafeSend(JSON.stringify({ v: 1, type: "team.status" })); }
-  if (name === "approvals") { wsSafeSend(JSON.stringify({ v: 1, type: "permission.pending" })); wsSafeSend(JSON.stringify({ v: 1, type: "permission.history", limit: 20 })); } // step-1042:挂起+最近决定一起拉
+  if (name === "approvals") { wsSafeSend(JSON.stringify({ v: 1, type: "permission.pending" })); wsSafeSend(JSON.stringify({ v: 1, type: "permission.history", limit: 20 })); } // 挂起+最近决定一起拉
   if (name === "nodes") { wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); }
-  if (name === "super") superViewLoad(); // step-1041:指挥台(聊天回放+看板四区取数)
+  if (name === "super") superViewLoad(); // 指挥台(聊天回放+看板四区取数)
   if (name === "subchat") subMsgRender(); // 子agent会话流卡:进入即重渲(卡可见=分组已读,未读角标清零;含原分身卡的注册态/模型/reap)
   if (name === "track") trackPull(s);
-  // step-1535:轨迹视图数据全部来自 histEvents(前端已在场的会话重放事件),零额外请求;
+ // 轨迹视图数据全部来自 histEvents(前端已在场的会话重放事件),零额外请求;
   // 进入即重渲一次并自动展开最新决策卡;不锁 body 滚动、不改视图身份(身份由 class 显隐统一管)。
   if (name === "traj") { trajBoardInitDone = false; trajBoardRefresh(); }
   // usage.view 协议无 session 参数(服务端按 模型×会话 全量聚合,此次不改服务端):
@@ -12629,14 +12629,14 @@ function loadViewData(name, sid) {
   if (name === "files") filesLoad();
   if (name === "ide") ideLoad();
   if (name === "project" && projectTab === "wiki") wikiLoad();
-  if (name === "browser") { brMount(); brSubscribe(); } // 2026-10-21 内置浏览器:首次进入挂载视图资产 + 自动订阅一次截图流
+  if (name === "browser") { brMount(); brSubscribe(); } // 内置浏览器:首次进入挂载视图资产 + 自动订阅一次截图流
 }
 // 复刻 startNewTaskFromActiveWorkspace: activeTaskId=null → 草稿态 + 焦点 composer
 function newDraft() {
   currentSid = null; sessionStorage.removeItem("zh:sid"); localStorage.removeItem("zh:sid");
   // 会话域 UI 归零:与 openSession 共用同一份清单(resetSessionDomainUI)——草稿态此前只清了
   // chatStatusbar 与几处水位,子代理流/未读、白板会话上下文、徽标(子代理/上下文/目标)、
-  // 问答条、附件条、指令 chip 全残留上一会话(用户实报「新建任务时所有按钮/数据显示要重置」)。
+ // 问答条、附件条、指令 chip 全残留上一会话(用户用户反馈「新建任务时所有按钮/数据显示要重置」)。
   resetSessionDomainUI("");
   // 输入区会话域件归零(草稿文本本身由 restoreDraft 按 zh:draft:* 恢复,存储语义不变)
   askRenderBar();
@@ -12652,10 +12652,10 @@ function newDraft() {
   onSessionChange(""); // n6 草稿态=无会话:画布卡按空会话作用域重取数(白板/档案回退当前项目)
   $("instruction").focus();
 }
-// ---- 会话标签页(step-046)已删(2026-10-13 冗余收敛):用户明确不要 tab 条(CSS 硬隐藏),
+// ---- 会话标签页已删(冗余收敛):用户明确不要 tab 条(CSS 硬隐藏),
 // tabOpen/tabClose/openTabs/zh:tabs 五件套写 DOM+localStorage 永不可见=纯孤儿。会话切换走侧栏任务行/openSession。
-// renderTabs 已随 tabbar 五件套删除(冗余收敛 2026-10-13)
-// ---- 「已工作 X」运行计时(step-046,ZCode TimerBadge 对齐):footer 每 500ms 自更新,不触发重渲染 ----
+// renderTabs 已随 tabbar 五件套删除(冗余收敛)
+// ---- 「已工作 X」运行计时(ZCode TimerBadge 对齐):footer 每 500ms 自更新,不触发重渲染 ----
 function tickWorkTimer() {
   const el = $("workTimer");
   if (!el) return;
@@ -12667,11 +12667,11 @@ function tickWorkTimer() {
   el.textContent = "计时 " + fmtDur(Date.now() - mine.startedAt);
 }
 setInterval(() => { tickWorkTimer(); ctxPillRender(); }, 500);
-// ---- 权限模式/思考力度 pill(step-046,ZCode 输入区双下拉对齐;点击循环,cfg.set 热生效) ----
+// ---- 权限模式/思考力度 pill(ZCode 输入区双下拉对齐;点击循环,cfg.set 热生效) ----
 const PERM_MODES = [
   { v: "ask", label: "询问每次" },
   { v: "auto", label: "完全访问" },
-  { v: "workspace", label: "工作区内" }, // step-166 第五档:只读写当前项目,shell 仍按 ask 审批(与 auto 并列,不覆盖)
+  { v: "workspace", label: "工作区内" }, // 第五档:只读写当前项目,shell 仍按 ask 审批(与 auto 并列,不覆盖)
   { v: "readonly", label: "只读" },
   { v: "plan", label: "Plan" },
 ];
@@ -12683,14 +12683,14 @@ const EFFORTS = [
   { v: "xhigh", label: "思考:最高", menu: "最高" },
 ];
 let permModeV = localStorage.getItem("zh:perm-mode") || "ask";
-let permPriorMode = null; // 切模式前的原值(2026-10-14 审计 C10:plan-goal-mutex 拒绝时回滚 pill,防 UI/服务端分歧)
+let permPriorMode = null; // 切模式前的原值(审计 C10:plan-goal-mutex 拒绝时回滚 pill,防 UI/服务端分歧)
 let permPendingMode = null; // 在飞的权限翻转(cfg.set 已发未 ack;cfg-set-failed 时精确回滚,不误伤 effort 等其它补丁)
-// 首同步标记(2026-10-19 用户实报「每次询问和真实值对不上」):cfg.get 回包前 pill 显示的是
+// 首同步标记(用户用户反馈「每次询问和真实值对不上」):cfg.get 回包前 pill 显示的是
 // localStorage 种子(可能已被其他客户端改掉),渲染为半透明「同步中」态;首包到达即转实。
 // 若首包值≠种子=服务端被别的面板/测试改过——toast 说明,不再无声翻转让用户以为自己的选择丢了。
 let permSynced = false;
 const _effSaved = localStorage.getItem("zh:effort");
-let effortV = _effSaved === null ? "high" : _effSaved; // 默认高(2026-10-13 视频 2;与 schema default 对齐,显式关仍受尊重)
+let effortV = _effSaved === null ? "high" : _effSaved; // 默认高(视频 2;与 schema default 对齐,显式关仍受尊重)
 let pillTouched = false; // 用户本轮已手选 effort:cfg.get 回包不再回写显示(防竞态覆盖)
 /** u3 档位进度百分比(ZCode ThoughtLevelCycleControl:只算非「关闭」档;关闭/未选=0%)。 */
 function effortProgress() {
@@ -12715,7 +12715,7 @@ function pillRender() {
   if (eBtn) { eBtn.classList.toggle("on", !!effortV); eBtn.setAttribute("aria-label", "思考力度:" + e.menu); }
   renderEffortSeg();
 }
-/** step-112:设置页思考力度分段器与 composer pill 同源渲染(空串=关)。 */
+/** 设置页思考力度分段器与 composer pill 同源渲染(空串=关)。 */
 function renderEffortSeg() {
   const host = $("effortSeg");
   if (!host) return;
@@ -12731,7 +12731,7 @@ function pillSendPerm() {
   toast("权限模式 → " + (PERM_MODES.find((x) => x.v === permModeV) || PERM_MODES[0]).label + "(热生效)");
 }
 function pillSendEffort() {
-  // step-139 O2:主实施轨 effort 由 coding.llm.implementationEffort 控制(唯一权威;
+ // O2:主实施轨 effort 由 coding.llm.implementationEffort 控制(唯一权威;
   // 旧 reasoningEffort 对主轨不再生效)——pill 必须写这个字段,否则「最高/低」变成哑控件。
   // audio.chat 仍走 reasoningEffort(语音轨有自己的 effort 语义)。空串=关(provider.update 归 undefined)。
   wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { coding: { llm: { implementationEffort: effortV } }, audio: { chat: { reasoningEffort: effortV } } } }));
@@ -12739,7 +12739,7 @@ function pillSendEffort() {
   toast("思考力度 → " + ((EFFORTS.find((x) => x.v === effortV) || EFFORTS[0]).label) + "(热生效;主实施轨 implementationEffort)");
 }
 $("permPill").onclick = () => {
-  // 菜单化(2026-10-13 视频 2:「切换模式」要对齐 ZCode 的模式下拉,不再循环点击)
+ // 菜单化(视频 2:「切换模式」要对齐 ZCode 的模式下拉,不再循环点击)
   const cur = (PERM_MODES.find((x) => x.v === permModeV) || PERM_MODES[0]).label;
   pillMenuOpen($("permPill"), [{ items: PERM_MODES.map((x) => ({ value: x.label })) }], cur, (picked) => {
     const hit = PERM_MODES.find((x) => x.label === picked);
@@ -12761,10 +12761,10 @@ $("effortPill").onclick = () => {
     pillRender(); pillSendEffort();
   });
 };
-// 启动即渲染(2026-10-19 补):此前首帧只有静态 HTML 写死的「询问每次」在裸奔(不反映 localStorage,
+// 启动即渲染(补):此前首帧只有静态 HTML 写死的「询问每次」在裸奔(不反映 localStorage,
 // 也不带同步中态)——cfg.get 回包前用户看到的就是这个假默认。现在启动即按种子渲染+sync 态。
 pillRender();
-// step-112:设置页「思考力度」分段器——与 pill 同一 cfg 字段(coding.llm.reasoningEffort + audio.chat 同步)。
+// 设置页「思考力度」分段器——与 pill 同一 cfg 字段(coding.llm.reasoningEffort + audio.chat 同步)。
 $("effortSeg").onclick = (e) => {
   const b = e.target && e.target.closest ? e.target.closest("button[data-v]") : null;
   if (!b) return;
@@ -12773,10 +12773,10 @@ $("effortSeg").onclick = (e) => {
   effortV = v; pillTouched = true;
   pillRender(); pillSendEffort();
 };
-// ---- 上下文用量 pill(2026-10-13 视频 2,对齐 ZCode 上下文容量;数据源=当前会话事件流,粗估) ----
-// step-057 口径统一:估算器与服务端同尺(chars/4);三个数字各自标注口径——
-// 当前上下文=最近一次 LLM 调用实测输入;累计消耗=历史全部调用 in+out 求和(≠当前上下文,含每轮重计);
-// 字符粗估=chars/4,仅在无实测时作参考。
+// ---- 上下文用量 pill(视频 2,对齐 ZCode 上下文容量;数据源=当前会话事件流,粗估) ----
+// 口径统一:估算器与服务端同尺(chars/4);三个数字各自标注口径——
+// 当前上下文=最近一次 LLM 调用经验证输入;累计消耗=历史全部调用 in+out 求和(≠当前上下文,含每轮重计);
+// 字符粗估=chars/4,仅在无经验证时作参考。
 function ctxStats() {
   const evs = histEvents || [];
   let users = 0, agents = 0, tools = 0, chars = 0, realIn = 0, realOut = 0, cumIn = 0, cumOut = 0;
@@ -12785,7 +12785,7 @@ function ctxStats() {
     if (e.kind === "message.user") { users++; chars += String(p.text || "").length; }
     else if (e.kind === "message.agent") {
       agents++; chars += String(p.text || "").length + String((p.toolCalls || [])).length;
-      // 真实用量(数据同源 2026-10-14):loop 在 message.agent 记的 LLM usage,inputTokens=当次实际上下文
+ // 真实用量(数据同源):loop 在 message.agent 记的 LLM usage,inputTokens=当次实际上下文
       const u = p.usage || {};
       if (Number(u.inputTokens) > 0) {
         realIn = Number(u.inputTokens); realOut = Number(u.outputTokens || 0);
@@ -12796,7 +12796,7 @@ function ctxStats() {
   }
   return { users, agents, tools, chars, est: Math.round(chars / 4), realIn, realOut, cumIn, cumOut };
 }
-/** 上下文用量(主值 = trace.stats.contextTokens,即 LLM API usage.inputTokens 实测;本地估算只作次级)。
+/** 上下文用量(主值 = trace.stats.contextTokens,即 LLM API usage.inputTokens 经验证;本地估算只作次级)。
  *  contextTokensEst = 本地估算(「估算 Z(触发用)」);contextEstimated 仅在「压缩后无 API 值」时为真。
  *  旧会话/旧 trace 文件没有这些字段 → 返回 null,调用方逐字回退到 s.realIn 的旧形态(不出 undefined/NaN)。 */
 function ctxUsageNorm(sid) {
@@ -12824,8 +12824,8 @@ function ctxPillRender() {
   const win = Number((traceStats[currentSid] || {}).contextWindow) || 0;
   const winTxt = win ? "/" + (win >= 1e6 ? (Math.round(win / 1e5) / 10) + "M" : Math.round(win / 1000) + "k") : "";
   const u = ctxUsageNorm(currentSid);
-  // 主值 = API 实测 usage(contextTokens),文案不带「(估)」;本地估算另附「,估算 Z(触发用)」作次级。
-  // 完全没有实测/估算(旧会话)→ 逐字走旧回落文案。
+ // 主值 = API 经验证 usage(contextTokens),文案不带「(估)」;本地估算另附「,估算 Z(触发用)」作次级。
+ // 完全没有经验证/估算(旧会话)→ 逐字走旧回落文案。
   const mainTok = u.rep !== null ? u.rep : u.est;
   if (mainTok !== null) {
     const pct = win ? " · " + Math.min(100, Math.round((mainTok / win) * 100)) + "%" : "";
@@ -12837,7 +12837,7 @@ function ctxPillRender() {
   const pct = win && s.realIn ? " · " + Math.min(100, Math.round((s.realIn / win) * 100)) + "%" : "";
   el.textContent = "上下文 " + (s.users + s.agents) + " 条" + (tok ? " · " + tok + winTxt + " tok" + pct : "");
 }
-/** 上下文 pill 菜单内容(step-1027:当前上下文=估算/上报双值,上报值作副行;无归一数据时逐字等价旧文案)。 */
+/** 上下文 pill 菜单内容(当前上下文=估算/上报双值,上报值作副行;无归一数据时逐字等价旧文案)。 */
 function ctxPillMenuHtml(s) {
   const win = Number((traceStats[currentSid] || {}).contextWindow) || 0;
   const u = ctxUsageNorm(currentSid);
@@ -12876,7 +12876,7 @@ $("ctxPill").onclick = () => {
   el.onclick = () => el.remove();
   pillMenuEl = el;
 };
-// ---- 使用统计视图(step-046,ZCode UsageStatistics 对齐):卡片+趋势柱+热力图+会话表 ----
+// ---- 使用统计视图(ZCode UsageStatistics 对齐):卡片+趋势柱+热力图+会话表 ----
 function statsFetch(force) {
   if (!force && statsCache && Date.now() - statsCache.at < 60_000) return;
   sendOrQueue({ v: 1, type: "stats.summary" });
@@ -12967,7 +12967,7 @@ function renderStats() {
     for (const trow of d.byTool.slice(0, 15)) html += "<tr><td>" + esc(trow.name) + "</td><td>" + trow.calls + "</td></tr>";
     html += "</table>";
   }
-  // 用量仪表盘(step-049,refs: ZCode usage dashboard 语义移植):近 30 天逐日 token 条形+Top 任务表。
+ // 用量仪表盘(refs: ZCode usage dashboard 语义移植):近 30 天逐日 token 条形+Top 任务表。
   // usage 缺键(旧服务)=整区隐藏;数据形状来自 stats.summary.result.usage(computeUsageDashboard)。
   const usage = d.usage;
   if (usage && Array.isArray(usage.days)) {
@@ -13016,7 +13016,7 @@ function statsDownload(kind) {
 $("statsExportJson").onclick = () => statsDownload("json");
 $("statsExportCsv").onclick = () => statsDownload("csv");
 $("statsRefresh").onclick = () => { statsFetch(true); toast("统计刷新中…"); };
-// ===== step-112 Coding 模型设置:Provider 编辑 / 能力徽标 / 角色下拉 =====
+// ===== Coding 模型设置:Provider 编辑 / 能力徽标 / 角色下拉 =====
 let provDraft = null; // null=未加载
 let provTestState = {}; // id -> {ok,bad,msg} 测试连接状态(内存态,重绘不丢)
 let lastTestId = null;
@@ -13148,7 +13148,7 @@ function renderProviders() {
                 '<input class="num-in pv-mcw" placeholder="上下文" style="width:84px" value="' + (it.contextWindow || "") + '">' +
                 '<input class="num-in pv-mmt" placeholder="最大输出" style="width:84px" value="' + (it.maxTokens || "") + '">' +
                 '<button class="prov-act" data-a="mdel">删</button>' +
-                // 单价覆盖(2026-10-28,元/百万 token):内置默认价来自 model-prices.ts,这里填的优先。
+ // 单价覆盖(元/百万 token):内置默认价来自 model-prices.ts,这里填的优先。
                 // 留空=用内置表;填 0=确认免费;只看 authMode=api 的端点出金额(套餐不计费)。
                 '<div class="pv-prow" title="单价(元/百万 token);留空=用内置价目表。缓存写入多数厂商不单列,留空即可">' +
                   '<span class="pv-pl">单价</span>' +
@@ -13165,7 +13165,7 @@ function renderProviders() {
     '</div>';
   }).join("") : '<div class="cc-empty">还没有供应商 —— 点「+ 添加供应商」,从预设一键接入</div>';
 
-  // 模型行交互(step-048/step-112:元数据编辑/删除/能力徽标三态)
+ // 模型行交互(/元数据编辑/删除/能力徽标三态)
   for (const row of box.querySelectorAll(".pv-mrow")) {
     const pi = Number(row.dataset.p), mi = Number(row.dataset.m);
     const pv = provDraft[pi];
@@ -13177,7 +13177,7 @@ function renderProviders() {
     if (cw) cw.onchange = () => { const v = Number(cw.value); it.contextWindow = v > 0 ? v : undefined; sendProviders(); renderProviders(); };
     const mt = row.querySelector(".pv-mmt");
     if (mt) mt.onchange = () => { const v = Number(mt.value); it.maxTokens = v > 0 ? v : undefined; sendProviders(); renderProviders(); };
-    // 单价覆盖(2026-10-28):四个输入框任一改动即整组写回;全空=删掉 price(回落内置表)。
+ // 单价覆盖:四个输入框任一改动即整组写回;全空=删掉 price(回落内置表)。
     const priceInputs = { cacheRead: ".pv-pcr", cacheWrite: ".pv-pcw", inputMiss: ".pv-pim", output: ".pv-pou" };
     const priceEls = Object.entries(priceInputs).map(([k, sel]) => [k, row.querySelector(sel)]);
     const onPriceChange = () => {
@@ -13228,7 +13228,7 @@ function renderProviders() {
       lastTestId = pv.id;
       provTestState[lastTestId] = { ok: false, bad: false, msg: "测试中…" };
       renderProviders();
-      wsSafeSend(JSON.stringify({ v: 1, type: "models.list", providerId: lastTestId, probeOnly: true })); // step-128:只读探测,不合并目录
+      wsSafeSend(JSON.stringify({ v: 1, type: "models.list", providerId: lastTestId, probeOnly: true })); // 只读探测,不合并目录
     });
     bind("fetch", () => {
       lastTestId = pv.id;
@@ -13307,7 +13307,7 @@ $("prov-add").onclick = () => {
   sendProviders(); renderProviders(); closeProviderModal();
 };
 
-// 角色模型下拉(step-112):数据源=providers[].models ∪ 最近拉取列表 ∪ 当前值;写同一 cfg 字段
+// 角色模型下拉:数据源=providers[].models ∪ 最近拉取列表 ∪ 当前值;写同一 cfg 字段
 const ROLE_DEFS = [
   { id: "role-main", key: "main", badge: "role-main-badge", empty: "(未配置)", label: "主模型" },
   { id: "role-subagent", key: "subagent", badge: "role-subagent-badge", empty: "(默认使用主模型)", label: "子代理模型" },
@@ -13446,7 +13446,7 @@ function renderCfg() {
     ["压缩阈值 tokens", (ag.compactThresholdTokens ?? "-") + src("agent.compactThresholdTokens")],
   ];
   $("cfg-kv").innerHTML = rows.map((r) => '<span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(redactPaths(String(r[1]))) + '</span>').join(NL);
-  // 自动归档阈值(step-044):cfg.set tasks.autoArchiveDays(0=关)
+ // 自动归档阈值:cfg.set tasks.autoArchiveDays(0=关)
   const archRow = '<span class="k">自动归档(天)</span><span class="v"><input id="cfg-arch" style="width:60px;background:transparent;border:1px solid var(--border-soft);border-radius:6px;color:var(--text);font-size:10px;padding:2px 6px" value="' + ((cfgView && cfgView.config && cfgView.config.tasks && cfgView.config.tasks.autoArchiveDays) || 0) + '"></span>';
   $("cfg-kv").innerHTML += NL + archRow;
   const archEl = $("cfg-arch");
@@ -13458,7 +13458,7 @@ function renderCfg() {
   };
 }
 function bindCfgApply(inputId, btnId, badgeId, makePatch, allowEmpty) {
-  if (!$(inputId) || !$(btnId) || !$(badgeId)) return; // step-048:缺元素跳过该项(此前炸整面板初始化,所有交互全死)
+  if (!$(inputId) || !$(btnId) || !$(badgeId)) return; // 缺元素跳过该项(此前炸整面板初始化,所有交互全死)
   const run = () => {
     const v = $(inputId).value.trim();
     if (!v && !allowEmpty) return;
@@ -13487,8 +13487,8 @@ $("a-tts-apply").onclick = () => {
   wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { audio: { tts: { provider: $("a-tts-prov").value.trim(), model: $("a-tts-model").value.trim(), voice: $("a-tts-voice").value.trim() } } } }));
 };
 $("models-probe-all").onclick = () => {
-  // 全部检测(step-052 F4):队列并发 3 逐个真实探活;进度写按钮文字,徽标逐行落地。
-  // step-112:检测对象=模型目录(Provider 条目 ∪ 拉取列表),按条目归属 provider 探活。
+ // 全部检测( F4):队列并发 3 逐个真实探活;进度写按钮文字,徽标逐行落地。
+ // 检测对象=模型目录(Provider 条目 ∪ 拉取列表),按条目归属 provider 探活。
   const entries = modelCatalogEntries();
   if (!entries.length) { $("models-status").textContent = "模型目录为空"; return; }
   probeDone = 0; probeTotal = entries.length; probeActive = 0;
@@ -13500,7 +13500,7 @@ $("models-fetch").onclick = () => {
   $("models-status").textContent = "拉取中…";
   wsSafeSend(JSON.stringify({ v: 1, type: "models.list" }));
 };
-// step-112:添加自定义模型(写默认 Provider 的 models[];立即进入角色下拉与模型目录)
+// 添加自定义模型(写默认 Provider 的 models[];立即进入角色下拉与模型目录)
 $("cm-new-add").onclick = () => {
   const name = $("cm-new-name").value.trim();
   const status = $("cm-new-status");
@@ -13526,7 +13526,7 @@ function renderSys() {
       const up = Math.max(0, Math.floor((Date.now() - Number(v)) / 60000));
       rows.push('<span class="k">运行时长</span><span class="v">' + (up >= 60 ? Math.floor(up / 60) + " 小时 " + (up % 60) + " 分" : up + " 分钟") + '</span>');
     } else {
-      // step-125 隐私:路径类值只给末段/脱敏,不暴露本机绝对路径。
+ // 隐私:路径类值只给末段/脱敏,不暴露本机绝对路径。
       const val = k === "repoRoot" ? pathBasename(v) : redactPaths(String(v));
       rows.push('<span class="k">' + esc(k) + '</span><span class="v">' + esc(val) + '</span>');
     }
@@ -13541,7 +13541,7 @@ function renderSys() {
   $("sys-proj").textContent = "本机数据 · 模型服务" + (sysMeta.llm === "on" ? "正常" : "(" + (sysMeta.llm || "?") + ")");
   $("uSub").textContent = "已连接 · 模型服务 " + (sysMeta.llm === "on" ? "正常" : (sysMeta.llm || "?")) + " · " + (sysMeta.executor === "echo-child" ? "内置执行器" : (sysMeta.executor || "…"));
   const root = String(sysMeta.repoRoot || "").split("/").filter(Boolean);
-  // 项目清单已水化时以项目名为准(step-035);新用户没有可见项目时保持空态,不回显根目录名。
+ // 项目清单已水化时以项目名为准;新用户没有可见项目时保持空态,不回显根目录名。
   if (!projects.length) $("projName").textContent = "尚未打开项目";
 }
 let expDisabled = [];
@@ -13568,7 +13568,7 @@ function renderExp() {
       const x = expItems[Number(el.dataset.i)];
       wsSafeSend(JSON.stringify({ v: 1, type: "exp.view", category: x.category, name: x.name }));
     };
-    // 禁用按钮(step-044:禁用后不再注入新任务;恢复入口在底部)
+ // 禁用按钮(禁用后不再注入新任务;恢复入口在底部)
     const btn = document.createElement("button");
     btn.textContent = "禁用";
     btn.className = "tm-item";
@@ -13581,7 +13581,7 @@ function renderExp() {
       });
     };
     el.appendChild(btn);
-    // 删除按钮(2026-11-02「经验库应当可以删除」):物理删目录、不可逆,二次确认。
+ // 删除按钮(「经验库应当可以删除」):物理删目录、不可逆,二次确认。
     const del = document.createElement("button");
     del.textContent = "删除";
     del.className = "tm-item";
@@ -13597,7 +13597,7 @@ function renderExp() {
   }
 }
 function log() {}
-// ── 流式消息(step-050,ZCode 流式消息展示) ──
+// ── 流式消息(ZCode 流式消息展示) ──
 // 服务端旁路 stream 消息:llm-begin/delta(打字机)/end(终稿)+ tool-begin/end(执行中卡)。
 // 草稿块只存在于内存渲染;真 message.agent/tool.result 经增量拉取到达后让位(去重),终态由 journal 承接。
 let stStream = null; // {sid, text, reasoning, done, tools:[{callId,name,durationMs,running}]}
@@ -13616,7 +13616,7 @@ function stPullEnsure() {
   }, 3000);
 }
 function stReset(sid) { stStream = { sid: sid, text: "", reasoning: "", done: false, tools: [] }; }
-// ── 子代理流式(2026-10-20 子代理与 coding agent 同构)──
+// ── 子代理流式(子代理与 coding agent 同构)──
 // 子 loop 的 stream 事件 sid=subagent-<taskId>(与主 agent 同一 streamSink);按 sid 存草稿,
 // 子代理工作区渲染时经事件 taskId 归属到 agent。真 subagent.event message.agent 到达即让位。
 const subStreams = new Map(); // sid -> {text, reasoning, done, tools:[], startedAt}
@@ -13722,7 +13722,7 @@ function wsOnClose() {
   $("status").className = "d";
   if (rcTimer) { clearTimeout(rcTimer); rcTimer = 0; }
   if (rcAttempt >= RC_MAX) {
-    // 保底(step-056 语义不删):连续 N 次重连失败 → 探活等待+恢复后 reload。
+ // 保底(语义不删):连续 N 次重连失败 → 探活等待+恢复后 reload。
     svcWaitRestart(); return;
   }
   const base = Math.max(1, Number(settings.reconnect) || 3);
@@ -13731,25 +13731,25 @@ function wsOnClose() {
   $("conn").textContent = "重连中 · 第 " + rcAttempt + " 次(" + delay + "s 后)";
   cvConn(false, "重连中 · 第 " + rcAttempt + " 次");
   // 重连中角标:会话内容/DOM 原样保留,重连成功就地增量重放(替代 location.reload 整页刷新,
-  // step-070 R5-C6;step-056 的盲 reload 撞裸错误页问题随之消失——不再主动刷新)。
+ //; 的盲 reload 撞裸错误页问题随之消失——不再主动刷新)。
   svcBanner(true, "连接断开 · 自动重连中(第 " + rcAttempt + "/" + RC_MAX + " 次,约 " + delay + "s 后)——会话内容已保留");
   rcTimer = setTimeout(() => { rcTimer = 0; connectWs(); }, delay * 1000);
 }
 function wireWs() {
   if (!ws) return;
   ws.onopen = wsOnOpen; ws.onclose = wsOnClose; ws.onmessage = wsOnMessage;
-  ws.addEventListener("open", () => { const q = wsQueue.splice(0); for (const p of q) { try { ws.send(p); } catch (e) { /* 冲刷失败丢弃 */ } } }); // 队列在开连时冲刷(含重连冲刷;原版注册在 onopen 内=open 已过后注册,冲刷永不上板,step-070 顺修)
+  ws.addEventListener("open", () => { const q = wsQueue.splice(0); for (const p of q) { try { ws.send(p); } catch (e) { /* 冲刷失败丢弃 */ } } }); // 队列在开连时冲刷(含重连冲刷;原版注册在 onopen 内=open 已过后注册,冲刷永不上板, 顺修)
 }
 function wsOnMessage(e) {
   const m = JSON.parse(e.data);
   lastPong = Date.now(); // 任何入站帧都证明链路活着(pong 之外还有流式事件/广播)
   // 启动期守卫(用户报错三连):hello 可能在顶层声明(navHist/__restored 落位)前到达——
   // TDZ 异常会让 onmessage 直接抛、恢复流程全断。未就绪=缓存首帧,脚本尾部统一恢复。
-  // step-070:typeof navHist 对 let-TDZ 会抛 ReferenceError,改 __navReady 标志(navHist 声明处置位)。
-  if (!window.__navReady) { try { window.__pendingHello = m; } catch (_) {} return; } // 只查该标志(__restored 已随恢复流程收口移除;残留检查会永久丢消息,2026-10-14 审计实修)
+ // typeof navHist 对 let-TDZ 会抛 ReferenceError,改 __navReady 标志(navHist 声明处置位)。
+  if (!window.__navReady) { try { window.__pendingHello = m; } catch (_) {} return; } // 只查该标志(__restored 已随恢复流程移除;残留检查会永久丢消息, 审计实修)
   if (m.type === "stream") { onStreamEv(m); return; }
   if (m.type === "annotate.result") { if (window.__annResult) window.__annResult(m); return; } // 截图标注回执(独立脚本块)
-  // step-1041:指挥台帧(super.*)→ #view-super(独立聊天渲染区+看板);右下角 widget 有自己的 WS,两边各取所需互不干扰。
+ // 指挥台帧(super.*)→ #view-super(独立聊天渲染区+看板);右下角 widget 有自己的 WS,两边各取所需互不干扰。
   if (m.type === "super.history.result" || m.type === "super.turn.user" || m.type === "super.turn.done" ||
       m.type === "super.notice" || m.type === "super.relay" || m.type === "super.inbox.result" || m.type === "super.inbox.changed") { superOnMsg(m); return; }
   // 服务端 super 轮失败(error 只发发起 socket):清指挥台等待气泡并显式报错;其余 error 帧走既有通道。
@@ -13757,16 +13757,16 @@ function wsOnMessage(e) {
   if (m.type === "voice.draft.result") { voiceDraftResult(m); return; } // 语音任务书回执(解锁+回填/暂存)
   if (m.type === "hello") {
     (m.tasks || []).forEach((t) => mergeTaskIndex(t));
-    // J4:hello 带会话活动时间快照(独立字段,不在 TaskIndex 里)——首屏排序即按最近活动,
+ // hello 带会话活动时间快照(独立字段,不在 TaskIndex 里)——首屏排序即按最近活动,
     // 不必等第一个 session.status.changed 帧。键值形如 { sid: ms }。
     if (m.sessionActivity && typeof m.sessionActivity === "object") {
       for (const sid of Object.keys(m.sessionActivity)) noteSessionAct(sid, m.sessionActivity[sid]);
     }
     if (m.platform) srvPlatform = String(m.platform);
-    // 版本戳自愈(2026-10-22):窗口打开后永不重载 → gateway 重建重启后仍是旧 JS(表现:点文件空白/
+ // 版本戳自愈:窗口打开后永不重载 → gateway 重建重启后仍是旧 JS(表现:点文件空白/
     // 卡在读取中)。hello 带服务端戳,与页面自身戳不符即重载;sessionStorage 记戳防重载环。
     if (m.build) {
-      // 版本戳自愈(2026-10-22):窗口打开后永不重载 → gateway 重建重启后仍是旧 JS(实测表现:点文件
+ // 版本戳自愈:窗口打开后永不重载 → gateway 重建重启后仍是旧 JS(经验证表现:点文件
       // 标签卡在「读取 …」、编辑区空白)。三态判断:①本页无戳=页面早于本机制(必是旧版)→ 重载;
       // ②戳不符=旧版 → 重载;③相符 → 不动。sessionStorage 记服务端戳防重载环。
       var bkey = "zh:build";
@@ -13799,37 +13799,37 @@ function wsOnMessage(e) {
     if (m.sessionId === currentSid) { renderHistory(); renderSendBtn(); }
   }
   if (m.type === "task.list") {
-    // 整表替换(step-042):删除/清归档后列表收缩(合并式 set 永不删行)。
+ // 整表替换:删除/清归档后列表收缩(合并式 set 永不删行)。
     const next = new Map(); (m.tasks || []).forEach((t) => next.set(t.id, Object.assign({}, tasks.get(t.id) || {}, t)));
-    // step-165 gaps3.1:updatedAt 单调合并(ref taskIndexRepo.ts:1321 Math.max——snapshot 的旧时间戳
+ // updatedAt 单调合并(ref taskIndexRepo.ts:1321 Math.max——snapshot 的旧时间戳
     // 直接覆盖会把 applyAgentPatch 刚写的更新时间冲回旧值,新会话首 prompt 后被压回列表底部)。
     // 按 taskId 对已有值取 max;task.changed/task.submitted 的实时帧(updatedAt 新)不受影响。
     for (const t of [...next.values()]) {
       const prev = tasks.get(t.id);
       if (prev && typeof prev.updatedAt === "number" && typeof t.updatedAt === "number" && t.updatedAt < prev.updatedAt) {
-        // step-169:next 里已是「prev 正文 + 新索引」的合并值,这里不能再只 spread t(会把正文键冲掉)。
+ // next 里已是「prev 正文 + 新索引」的合并值,这里不能再只 spread t(会把正文键冲掉)。
         next.set(t.id, Object.assign({}, next.get(t.id) || {}, { updatedAt: Math.max(t.updatedAt, prev.updatedAt) }));
       }
     }
-    // T2(2026-10-13 视频拆解):task.list 全量广播(含他山会话)此前一律 renderChat→renderHistory
+ // T2(视频拆解):task.list 全量广播(含他山会话)此前一律 renderChat→renderHistory
     // 全量重写 chatBody=问候区闪烁根因之一。仅当当前会话相关条目有增减/状态变化才重建聊天区。
     let touched = !currentSid;
     if (!touched) {
-      const curNew = [...next.values()].filter((t) => t.sessionId === currentSid); // step-165:用单调合并后的值判 touched(与落表值同源,防合并差异误触重渲)
+      const curNew = [...next.values()].filter((t) => t.sessionId === currentSid); // 用单调合并后的值判 touched(与落表值同源,防合并差异误触重渲)
       const curOld = [...tasks.values()].filter((t) => t.sessionId === currentSid);
       if (curNew.length !== curOld.length) touched = true;
       else for (const nt of curNew) { const o = tasks.get(nt.id); if (!o || o.state !== nt.state || o.updatedAt !== nt.updatedAt) { touched = true; break; } }
     }
-    // step-165 gaps3.5:currentSid 不在新表内=会话已被删(ref WorkspaceShellLayout.tsx:1157「删除会话后回
+ // currentSid 不在新表内=会话已被删(ref WorkspaceShellLayout.tsx:1157「删除会话后回
     // draft」)→ 走 newDraft() 回草稿欢迎态,不停留在已删会话的旧渲染上。仅全量列表到达时判一次
     // (增量路径 task.changed 不会让会话消失),且草稿态(currentSid=null)不触发。
     const sidGone = !!currentSid && !(m.tasks || []).some((t) => t.sessionId === currentSid);
     tasks.clear(); for (const [k, v] of next) tasks.set(k, v);
-    if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 看板重渲失败不影响主链 */ } } // step-1041:指挥台看板吃 task.list 全量
+    if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 看板重渲失败不影响主链 */ } } // 指挥台看板吃 task.list 全量
     if (sidGone) { newDraft(); return; }
     render(touched);
   }
-  // step-169:任务正文按需回包(索引瘦身后 instruction/result 不在 task.list/task.changed 里)。
+ // 任务正文按需回包(索引瘦身后 instruction/result 不在 task.list/task.changed 里)。
   if (m.type === "task.detail.result") {
     taskDetailPending.delete(m.taskId);
     const waiters = taskDetailWaiters.get(m.taskId) || []; taskDetailWaiters.delete(m.taskId);
@@ -13843,7 +13843,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "checkpoint.preview.result") {
-    // 预览→确认清单→回滚(designs/21:预览先行红线)
+ // 预览→确认清单→回滚(预览先行红线)
     if (!m.sha || !m.files.length) { toast("该任务无可回滚变更(无快照或无差异)", true); return; }
     const NL3 = String.fromCharCode(10);
     uiConfirm("回滚到此任务前?将恢复 " + m.files.length + " 个文件:" + NL3 + m.files.slice(0, 8).join(NL3) + (m.files.length > 8 ? NL3 + "…" : "") + NL3 + "(快照后新增的未跟踪文件保留)", { tone: "danger" }).then((ok) => {
@@ -13869,21 +13869,21 @@ function wsOnMessage(e) {
     renderModelSwitch();
     // u6:目录拉取恢复 → 清掉触发器上的「模型加载失败,重试」红字态
     if (modelListFailed) { modelListFailed = false; renderModelPill(cfgView); }
-    // pill 就地下拉兜底(step-051):设置页 PROVIDER 未存模型时,端点拉取的清单进同一菜单(不再有居中弹窗)。
+ // pill 就地下拉兜底:设置页 PROVIDER 未存模型时,端点拉取的清单进同一菜单(不再有居中弹窗)。
     // 仅此分支 return——旧版此处无条件 return 曾把下方设置页 model-ids/renderModelList 处理变成死代码。
     if (modelMenuPending) {
       modelMenuPending = null;
       const off = disabledModels();
       const list = (m.ids || []).filter((x) => off.indexOf(x) < 0).slice(0, 60);
       if (!list.length) { toast("端点无模型清单(先在设置-Coding 模型页配置)", true); return; }
-      // step-132:兜底清单也走两级渲染器(同一套直展组/折叠组 + sticky footer 语义)
+ // 兜底清单也走两级渲染器(同一套直展组/折叠组 + sticky footer 语义)
       modelMenuOpen(list);
       return;
     }
     // 无 pending(设置页拉取):落到下方 model-ids/renderModelList 处理
   }
   if (m.type === "ask.user") {
-    // 2026-10-19 许愿式编程:agent 需求取舍问答——问答条(选项按钮+自由输入),作答即发回。
+ // 许愿式编程:agent 需求取舍问答——问答条(选项按钮+自由输入),作答即发回。
     askPending.push(m);
     askRenderBar();
     return;
@@ -13893,14 +13893,14 @@ function wsOnMessage(e) {
     wfRenderQuestions();
     return;
   }
-  if (m.type === "file.read.result") { if (ideRenderRead(m)) return; fvRender(m); return; } // step-141:full 回包先喂 IDE 标签(命中即止;#fileViewer 窗口语义零改)
-  if (m.type === "file.write.result") { if (ideNewFileResult(m)) return; ideSaveResult(m); return; } // step-142:新建/另存为命中先行;否则走保存链
-  if (m.type === "ide.office.edit.result") { ideOfficeEditResult(m); return; } // 2026-10-29 P2:Office 文本回写回执(ok/error 都在回包里,不走 error 帧)
-  // step-142 IDE 文件操作四通道回包(mkdir/remove/rename/grep;回包式 ok:false 不走 error 帧)
+  if (m.type === "file.read.result") { if (ideRenderRead(m)) return; fvRender(m); return; } // full 回包先喂 IDE 标签(命中即止;#fileViewer 窗口语义零改)
+  if (m.type === "file.write.result") { if (ideNewFileResult(m)) return; ideSaveResult(m); return; } // 新建/另存为命中先行;否则走保存链
+  if (m.type === "ide.office.edit.result") { ideOfficeEditResult(m); return; } // P2:Office 文本回写回执(ok/error 都在回包里,不走 error 帧)
+ // IDE 文件操作四通道回包(mkdir/remove/rename/grep;回包式 ok:false 不走 error 帧)
   if (m.type === "fs.mkdir.result" || m.type === "fs.remove.result" || m.type === "fs.rename.result" || m.type === "fs.grep.result") {
     if (ideFsResult(m)) return;
   }
-  if (m.type === "error" && m.code === "file-write-denied") { ideSaveDenied(m); return; } // step-141 C:server 沙箱拒绝(无 path 可回指→找 saving 中标签保脏)
+  if (m.type === "error" && m.code === "file-write-denied") { ideSaveDenied(m); return; } // C:server 沙箱拒绝(无 path 可回指→找 saving 中标签保脏)
   // 第二批(VSCode 对齐):requestId 路由(git.show / lsp.diagnostics / term.session.*;后端回显 requestId 时精准分发)
   if (m && m.requestId && ideReqMap.has(m.requestId)) {
     const fn = ideReqMap.get(m.requestId);
@@ -13912,16 +13912,16 @@ function wsOnMessage(e) {
   if (m.type === "git.show.result") { ideScmOnShow(m); return; }
   if (m.type === "term.session.open.result") { ideTermOnResult(m); return; }
   if (m.type === "term.session.read.result") { ideTermOnResult(m); return; }
-  // step-056:目录浏览结果——目录浏览器开着优先喂它;文件树缓存恒更新,视图可见即重渲
+ // 目录浏览结果——目录浏览器开着优先喂它;文件树缓存恒更新,视图可见即重渲
   if (m.type === "fs.list.result") {
     if (m.path === "") { if ($("dirBrowser").classList.contains("on")) dbRender(m); return; } // 锚点应答
     filesPending.delete(m.path);
     if ($("dirBrowser").classList.contains("on")) dbRender(m);
     dirCache.set(m.path, m.entries || []); // error 应答无 entries → 空数组,防渲染循环重发
-    if (cfProbeHit(m)) return; // step-1025:聊天路径点击的存在性探针(命中由本层决定开/拒)
+    if (cfProbeHit(m)) return; // 聊天路径点击的存在性探针(命中由本层决定开/拒)
     if (viewLive("files")) filesRender();
     if (sbFt) renderSbFt(); // 侧栏文件树滑入层开着:目录数据到达即重渲
-    if (ideRoot && ideExpanded && viewLive("ide")) ideTreeRender(); // step-141:IDE 树同源懒展开
+    if (ideRoot && ideExpanded && viewLive("ide")) ideTreeRender(); // IDE 树同源懒展开
     return;
   }
   if (m.type === "fs.open.result") { toast(m.ok ? "已打开(" + m.tool + ")" : "打开失败:" + (m.error || "未知"), !m.ok); return; }
@@ -13937,14 +13937,14 @@ function wsOnMessage(e) {
   }
   if (m.type === "session.search.result") { ccSessionRender(m); return; }
   if (m.type === "permission.ask") {
-    // 审批中心入队(step-010 收口)+原弹窗(高危即弹,批量面在审批视图)。
-    // step-1042:存 timeoutMs(Gate 行 TTL 倒计时;60s fail-closed 与服务端同钟)。
+ // 审批中心入队+原弹窗(高危即弹,批量面在审批视图)。
+ // 存 timeoutMs(Gate 行 TTL 倒计时;60s fail-closed 与服务端同钟)。
     approvalQueue.set(m.requestId, { requestId: m.requestId, sessionId: m.sessionId, tool: m.tool, summary: m.summary, risk: m.risk || "medium", since: Date.now(), timeoutMs: m.timeoutMs || 60000 });
     if (viewLive("approvals")) renderApprovals();
     try { cvStatusRefresh(); } catch (e) { /* 状态点失败不影响审批流 */ }
     permShow(m); return;
   }
-  // step-1042 关卡 Gate:决议广播(broker onSettle→server)——多端一致清理挂起行/modal,
+ // 关卡 Gate:决议广播(broker onSettle→server)——多端一致清理挂起行/modal,
   // 漏掉 ask 帧的标签页/别的面(指挥台)放行后,这里也能收敛(修 stale-row 点击报 UnknownAsk)。
   if (m.type === "permission.resolved") {
     approvalQueue.delete(m.requestId);
@@ -13954,7 +13954,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "permission.history.result") { approvalHistory = Array.isArray(m.items) ? m.items : []; if (viewLive("approvals")) renderApprovals(); return; }
-  // step-1042 节点 Fleet:注册/掉线/心跳翻转廉价广播 → 相关视图活着就重拉(负载细节在回包里)。
+ // 节点 Fleet:注册/掉线/心跳翻转廉价广播 → 相关视图活着就重拉(负载细节在回包里)。
   if (m.type === "nodes.changed") { if (viewLive("nodes") || viewLive("super") || viewLive("sys")) wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); return; }
   if (m.type === "node.exec.result") {
     // 「电脑控制」真路由回执:按节点记最近一次输出(Fleet 卡内展示;旧版只 toast 名不副实)。
@@ -13969,7 +13969,7 @@ function wsOnMessage(e) {
   // sense.review.result 已删(冗余收敛:评审走 code_review 工具)
 
   if (m.type === "review.store.result") { revStoreRender(m); return; }
-  // 评审评论回注成功回执(step-074):toast 明确注入到了哪个会话;异会话注入自动跳转过去(最强可见反馈)。
+ // 评审评论回注成功回执:toast 明确注入到了哪个会话;异会话注入自动跳转过去(最强可见反馈)。
   if (m.type === "review.inject.result") {
     const label = sidLabel(m.sessionId) || m.sessionId;
     toast("已注入 " + m.count + " 条评论 → 会话「" + label + "」(任务 …" + String(m.taskId).slice(-8) + ")");
@@ -13997,7 +13997,7 @@ function wsOnMessage(e) {
   if (m.type === "profile.file.result") { ppfOnData(m); return; }
   if (m.type === "profile.get.result") { if (m.profile && (!ppId || m.profile.projectId === ppId)) ppRender(m.profile); return; }
   if (m.type === "profile.sense.result") {
-    // 总路线 tab(step-131):回执复位生成按钮,渲染宗旨面
+ // 总路线 tab:回执复位生成按钮,渲染宗旨面
     rmBusy = false;
     const g = $("rmGen"); if (g) g.disabled = false;
     roadmapRender(m);
@@ -14076,7 +14076,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "ssh.test.result" && prConn && prConn.kind === "ssh") {
-    // 连接向导(2026-10-27):连接(含装服务并验证)→ 由服务返回目录 → 选目录加项目
+ // 连接向导:连接(含装服务并验证)→ 由服务返回目录 → 选目录加项目
     const out = $("prConnOut");
     if (m.ok) {
       const home = m.home || "/home/" + prConn.user;
@@ -14114,12 +14114,12 @@ function wsOnMessage(e) {
   if (m.type === "wsl.browse.result" && prBrowse && prBrowse.kind === "wsl") { prRenderBrowse(m); return; }
   if (m.type === "ssh.browse.result" && prBrowse && prBrowse.kind === "ssh") { prRenderBrowse(m); return; }
   if (m.type === "plugins.list.result") { mktCatalog = m.catalog || []; mktRender(); return; }
-  if (m.type === "nodes.list.result") { nodesRender(m); nodesViewRender(m); supState.nodes = m; if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 忽略 */ } } return; } // step-1041:指挥台④节点行共用此回包
+  if (m.type === "nodes.list.result") { nodesRender(m); nodesViewRender(m); supState.nodes = m; if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 忽略 */ } } return; } // 指挥台④节点行共用此回包
   if (m.type === "subagents.list.result") { subMsgRender(); return; } // n3 融合:分身目录卡已删,残留回包只触发子agent会话流重渲(旧客户端/在途请求安全)
   if (m.type === "track.view.result") { trackRender(m); return; }
   if (m.type === "usage.view.result") { usageRender(m); return; }
   if (m.type === "browser.view.subscribed") {
-    // 2026-10-21 内置浏览器截图流订阅回执(含 browser.enabled=false 的门禁拒绝文案)
+ // 内置浏览器截图流订阅回执(含 browser.enabled=false 的门禁拒绝文案)
     brMount();
     if (window.GenieBrowserView) window.GenieBrowserView.handleMessage(m);
     if ($("brNote")) $("brNote").textContent = m.ok ? "已连接:tab " + (m.tabId || "(等待 agent 打开页面)") : (m.message || "连接失败");
@@ -14141,7 +14141,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "plan.approval.request") {
-    // Plan 审批卡(step-053,ZCode ExitPlanMode「Review this implementation plan.」语义):
+ // Plan 审批卡(ZCode ExitPlanMode「Review this implementation plan.」语义):
     // 批准=切回+按计划实施;反馈=steered 修订(保持 plan 模式)。事件委托按钮(转义铁律)。
     planApproval = { sessionId: m.sessionId, taskId: m.taskId, planPath: m.planPath, excerpt: String(m.planExcerpt || "") };
     if (currentSid === m.sessionId) refreshHist();
@@ -14149,7 +14149,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "goal.result") {
-    // 目标回包(step-052):chip 展示+toast;active 恒显,pause 半透明,clear 隐藏。
+ // 目标回包:chip 展示+toast;active 恒显,pause 半透明,clear 隐藏。
     const chip = $("goalPill");
     if (chip) {
       if (m.goal) {
@@ -14178,7 +14178,7 @@ function wsOnMessage(e) {
         }));
         chatSysLine("目标已设置:" + String(d.goal).slice(0, 50) + " —— 已派给 coding agent");
       }
-      if (currentSid) refreshHist(); // 技能反馈闭环(step-056):服务端已落 message.user/system 行,立即拉取可见
+      if (currentSid) refreshHist(); // 技能反馈闭环:服务端已落 message.user/system 行,立即拉取可见
     }
     return;
   }
@@ -14186,7 +14186,7 @@ function wsOnMessage(e) {
   // 与 undefined=未初始化区分,避免切会话反复重发 session.model.get);校正缓存后刷新 pill。
   if (m.type === "session.model.result") {
     if (m.sessionId) {
-      // 2026-11-08 新用户实测:首开「模型设置」会先发 session.model.get,null 回包也走成功分支,
+ // 新用户经验证:首开「模型设置」会先发 session.model.get,null 回包也走成功分支,
       // 页面凭空出现「已切换为跟随全局」——用户什么都没做。只有本标签真正发过 set(staged 在飞)
       // 才展示结果态;get/跨会话广播只静默校正缓存。
       const wasStaged = sessionModelStaged.has(m.sessionId);
@@ -14194,10 +14194,10 @@ function wsOnMessage(e) {
       // routeError / ok:false → toast 报错 + pill 回滚到 effective(服务端给出实际生效模型)或上次已确认值;
       // ok 但带 warning → 黄色轻提示(可落盘但任务执行未必使用,如 config 未注入)。
       const failed = m.ok === false || !!m.routeError;
-      // m9(2026-10-22)回包是**广播**(多标签同会话都收):toast 只对「本标签该会话」或「命中本标签 pending」弹,
+ // m9回包是**广播**(多标签同会话都收):toast 只对「本标签该会话」或「命中本标签 pending」弹,
       // 别的标签在改别的会话时本标签不再弹失败提示(err/warn 都受约束;缓存照旧静默更新)。
       const pend = draftSubmitPending && draftSubmitPending.sid === m.sessionId ? draftSubmitPending : null;
-      // 2026-10-29:草稿预设会话的回包也判「本标签相关」(loud)——预设 sid 在本标签刚被操作过。
+ // 草稿预设会话的回包也判「本标签相关」(loud)——预设 sid 在本标签刚被操作过。
       const loud = m.sessionId === currentSid || !!pend || (draftSidStored() === m.sessionId && !!m.sessionId);
       if (failed) {
         sessionModelStaged.delete(m.sessionId);
@@ -14205,7 +14205,7 @@ function wsOnMessage(e) {
         if (m.modelOverride === null || m.modelOverride === undefined) sessionModelOverride.set(m.sessionId, null);
         else sessionModelOverride.set(m.sessionId, m.modelOverride);
         // 失败回滚只能用**已落盘**的旧覆盖(m.modelOverride);m.effective 是本次尝试的模型,
-        // routeError 时它仍指向不可用端点,拿它回滚会把 pill 钉在失败值上(2026-10-25 实测)。
+ // routeError 时它仍指向不可用端点,拿它回滚会把 pill 钉在失败值上(经验证)。
         const eff = m.modelOverride && m.modelOverride.model ? String(m.modelOverride.model) : "";
         const why = m.routeError || m.message || m.code || "服务端拒绝";
         if (m.revision !== undefined) sessionModelRev.set(m.sessionId, Number(m.revision)); // 失败也记账:下次 CAS 才对得上
@@ -14223,7 +14223,7 @@ function wsOnMessage(e) {
         sessionModelStaged.delete(m.sessionId);
         if (m.revision !== undefined) sessionModelRev.set(m.sessionId, Number(m.revision)); // CAS 基线
         // m7-front:effort 回包字段(file 口径 string|null)。顶层 m.effort 优先,其次 modelOverride.effort;
-        // 两者都没有(旧服务端)→ 保持既有缓存形状,不写空字段(避免 pill 出现「· 」尾巴)。
+ // 两者都没有(旧服务端)→ 保持既有缓存形状,不写空字段(避免 pill 出现「·」尾巴)。
         const ackedEffort = m.effort !== undefined ? m.effort : (m.modelOverride && m.modelOverride.effort !== undefined ? m.modelOverride.effort : undefined);
         if (ackedEffort !== undefined && m.modelOverride && m.modelOverride.model) {
           sessionModelOverride.set(m.sessionId, { model: m.modelOverride.model, ...(m.modelOverride.providerId ? { providerId: m.modelOverride.providerId } : {}), effort: ackedEffort === null ? null : String(ackedEffort) });
@@ -14265,7 +14265,7 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "session.compact.status") {
-    // 板 n3/n7(2026-10-29):压缩在途/终态帧(服务端旁路上报)。started=置忙+流尾进行时行;
+ // 板 n3/n7:压缩在途/终态帧(服务端旁路上报)。started=置忙+流尾进行时行;
     // 终态=清忙/清进行时行,当前会话刷新历史;failed/skipped 各自 toast,completed 不 toast(由 result 分支给口径,防双提示)。
     if (m.phase === "started") {
       if (m.sessionId === currentSid) { compactInflight = { at: Date.now() }; renderHistory(); }
@@ -14333,7 +14333,7 @@ function wsOnMessage(e) {
     renderApprovals(); return;
   }
   if (m.type === "wizard.gen.result") {
-    // step-056:wizOutTarget 路由(节点页 wizOut / 添加项目向导 prWizOut);用完复位,防串页
+ // wizOutTarget 路由(节点页 wizOut / 添加项目向导 prWizOut);用完复位,防串页
     const out = $(wizOutTarget) || $("wizOut");
     out.innerHTML = '<div class="wiz-cmd">' + esc(m.command) + '<button class="wiz-copy">复制</button></div><div class="br-note">' + esc(m.note) + "</div>";
     const cp = out.querySelector(".wiz-copy");
@@ -14360,9 +14360,9 @@ function wsOnMessage(e) {
   if (m.type === "error" && String(m.code || "").startsWith("term-")) { termBusy = false; termAppend("错误:" + errorText(m.code, m.message), "err"); return; }
   if (m.type === "trace.stats.result") { traceStats[m.sessionId] = m.stats; renderHistory(); return; }
   if (m.type === "session.status.result") {
-    // step-1036 ssc2:水位登记(下次请求带 sinceSeq)。Tolerant Reader:旧网关回包无 seq 时**不写**
+ // ssc2:水位登记(下次请求带 sinceSeq)。Tolerant Reader:旧网关回包无 seq 时**不写**
     // (否则下次发 sinceSeq:undefined);只记数字。回包 sessionId 缺失时退回当前会话(旧网关不回显
-    // sessionId —— 浏览器实测抓到:缺它则水位全落 undefined 键,请求永远不带宽水位)。
+ // sessionId —— 浏览器经验证抓到:缺它则水位全落 undefined 键,请求永远不带宽水位)。
     // 放在 wf 早退之前,确保所有回包都记水位。
     const ssSeq = m.status ? m.status.seq : undefined;
     const ssSid = m.sessionId || currentSid;
@@ -14371,8 +14371,8 @@ function wsOnMessage(e) {
     // 缺省=该会话无重试态(恢复/终态已在服务端清零),不留旧值。同样按会话落键(防 undefined 键)。
     if (ssSid) apiRetryBySid[ssSid] = (m.status && m.status.apiRetry) || null;
     if (viewLive("wf") && !(currentSid && m.sessionId === currentSid)) { wfStatus = m.status; wfRenderRuns(); return; }
-    // 子代理实时清单摄取(B 2026-10-14):过程卡的状态/tail 数据源;变化才重渲(T1 幂等挡住无变化重建)
-    // step-060:title/model 一并入册(子代理目录「当前模型」列与条目标题的数据源)。
+ // 子代理实时清单摄取(B):过程卡的状态/tail 数据源;变化才重渲(T1 幂等挡住无变化重建)
+ // title/model 一并入册(子代理目录「当前模型」列与条目标题的数据源)。
     const sl = m.status && m.status.subagentList;
     if (Array.isArray(sl)) {
       let subChanged = false;
@@ -14383,16 +14383,16 @@ function wsOnMessage(e) {
       }
       if (subChanged && currentSid && viewLive("chat")) { renderChat(); refreshHist(); renderSubDir(); } // 终态/进度变化:即时重渲+增量拉史(卡片终态文本来自 journal 的 subagent.result,不拉史会闪「历史会话」兜底);目录同步刷新
     }
-    // step-1036 ssc2:采纳语义——不做本地叠加。服务端 memo 累积、每次回包都是该会话**完整累积投影**
+ // ssc2:采纳语义——不做本地叠加。服务端 memo 累积、每次回包都是该会话**完整累积投影**
     // (无论是否带 sinceSeq),故整包采纳覆盖即可;切会话已清水位 → 首帧必全量,不带上一会话残影。
-    sessionStatus = m.status; renderStatusbar(); renderSubDir(); if (canvasActive() && viewLive("subchat")) subMsgRender(); // step-141:注册表状态/模型/tail 到达即刷新选中式消息流(左栏状态点/pane 派发卡元信息);视口外不重渲
+    sessionStatus = m.status; renderStatusbar(); renderSubDir(); if (canvasActive() && viewLive("subchat")) subMsgRender(); // 注册表状态/模型/tail 到达即刷新选中式消息流(左栏状态点/pane 派发卡元信息);视口外不重渲
     wfStatus = m.status; wfRenderRuns(); return;
   }
   if (m.type === "session.status.changed") {
-    // 推送化订阅(step-030 收口):服务端任务变化即拉一次,替代等 3s 轮询(轮询留作断线兜底)。
+ // 推送化订阅:服务端任务变化即拉一次,替代等 3s 轮询(轮询留作断线兜底)。
     // fixF2: debounce 150ms 再拉——服务端已 200ms 合并广播,这里再挡一层(多标签页各自回拉/直发
     // 残留),连发只落末次;会话切换后旧会话的定时器到点即自弃(再核 currentSid)。
-    // J4(2026-11-05):帧内 lastActivityAt = 该会话最近动作时间 → 任何人(不只是当前会话)的活动都
+ // 帧内 lastActivityAt = 该会话最近动作时间 → 任何人(不只是当前会话)的活动都
     // 更新侧栏排序/行时间,并只在活动时间真推进时重渲侧栏(不等下一次 task.list)。
     if (typeof m.lastActivityAt === "number") {
       const before = sessionActivity.get(m.sessionId) || 0;
@@ -14421,17 +14421,17 @@ function wsOnMessage(e) {
     const prevActive = activeProjectId;
     // 面向新用户:默认根项目 __harness__ 不作为可见项目;首启项目区保持空态。
     // 服务端注册表仍保留它做 workdir 回退,协议不变。
-    // 2026-10-26 定稿(ZCode WorkspacePurpose 语义):purpose="conversation"(harness 根,Agent cwd 兜底)
+ // 定稿(ZCode WorkspacePurpose 语义):purpose="conversation"(harness 根,Agent cwd 兜底)
     // 默认不显示为项目;用户显式「添加项目」该路径后服务端置 purpose="project" → 正常显示。
     // (上一版"恒显示 harness"过校正:ZCode 无 harness/默认项目概念,UI 无项目时列表为空并引导添加。)
     projects = (m.projects || []).filter((p) => p.purpose !== "conversation");
     if (pendingAddPath && projects.some((p) => p.path === pendingAddPath)) pendingAddPath = null; // 已入列=成功
-    // 2026-10-26 定稿:active 指向 conversation 型 workspace(未显式添加的 harness)时,可见列表无此项
+ // 定稿:active 指向 conversation 型 workspace(未显式添加的 harness)时,可见列表无此项
     // → 回落首项(ZCode:无项目时 UI 空态;有项目则激活之);显式添加后 purpose=project 进列表可激活。
     activeProjectId = projects.some((p) => p.id === m.activeProjectId)
       ? m.activeProjectId
       : (projects[0] ? projects[0].id : null);
-    // step-165 gaps2.4:active 回落的显式前端处理(ref WorkspaceSidebarItem.tsx:380 closeTab→壳层回落相邻 tab):
+ // active 回落的显式前端处理(ref WorkspaceSidebarItem.tsx:380 closeTab→壳层回落相邻 tab):
     // 服务端把 active 归回 __harness__ 时,若原 active 项目确被移除,则优先回落相邻项目(列表内最近的非根项目),
     // 表内无其它项目=保持服务端值(根),不留指向已删项目的死引用。
     if (prevActive && prevActive !== activeProjectId && !projectById(prevActive)) {
@@ -14439,7 +14439,7 @@ function wsOnMessage(e) {
       if (neighbor && neighbor.id !== activeProjectId) { activeProjectId = neighbor.id; wsSafeSend(JSON.stringify({ v: 1, type: "project.activate", projectId: neighbor.id })); }
     }
     renderProjects(); renderSidebar(); if (viewLive("files")) filesLoad(); if (viewLive("ide")) ideLoad(); if (viewLive("dash") && dashScopeAuto) { dashScope = activeProjectId || "all"; dashLoad(); }
-    if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 指挥台看板重渲失败不影响主链 */ } } // step-1041:项目/可用性变化 → 看板②④刷新
+    if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 指挥台看板重渲失败不影响主链 */ } } // 项目/可用性变化 → 看板②④刷新
     // 首启引导卡依赖 projects(添加项目后「2 添加项目」要变已完成)——空会话没有 task 事件回来重渲,这里补一拍。
     if (!histEvents || !histEvents.length) { try { renderHistory(); } catch (e) { /* 首帧未就绪:忽略 */ } }
     return; } // 侧栏重渲:分桶归类依赖项目注册表(先 tasks 后 projects 到达时不重渲会错桶);看板开着且自动挡=跟随当前项目重拉
@@ -14447,14 +14447,14 @@ function wsOnMessage(e) {
   if (m.type === "dashboard.sessions.result") { dashSessions = m.sessions || []; dashScopeLive = m.scope || "all"; dashRender(); return; }
   if (m.type === "dashboard.trends.result") { dashTrends = m; dashRender(); return; }
   if (m.type === "dashboard.changed") { dashPushAt = Date.now();
-    // 子代理工作区实时增量(2026-10-16):journal 广播(服务端 500ms 尾沿)到达且当前会话开着工作区 tab
+ // 子代理工作区实时增量:journal 广播(服务端 500ms 尾沿)到达且当前会话开着工作区 tab
     // → 节流拉 session.history 增量(subagent.event 随增量进 histEvents,激活中的 tab 即时重渲)。
     // 无 tab=零额外拉取,主会话行为不变(主流增量仍由 task.changed/子代理状态变化驱动)。
-    if (currentSid && ((subWsSid === currentSid && subWsTabs.size > 0) || (canvasActive() && viewLive("subchat")))) { // step-141:子agent会话流卡在场(选中式实时消息流)同样吃增量拉取,无卡=零额外拉取不变
+    if (currentSid && ((subWsSid === currentSid && subWsTabs.size > 0) || (canvasActive() && viewLive("subchat")))) { // 子agent会话流卡在场(选中式实时消息流)同样吃增量拉取,无卡=零额外拉取不变
       if (Date.now() - subWsPullAt > 1500) { subWsPullAt = Date.now(); refreshHist(); }
       else { clearTimeout(subWsPullTimer); subWsPullTimer = setTimeout(() => { subWsPullAt = Date.now(); refreshHist(); }, 1600); } // 节流窗内的广播不丢:尾沿补拉,最后一条消息也能上屏
     }
-    // n6 兜底重拉(2026-10-22 看板数据不更新):dashboard.changed 是「journal 有新事件」的通用推送,
+ // n6 兜底重拉(看板数据不更新):dashboard.changed 是「journal 有新事件」的通用推送,
     // 白板/任务追踪在场时也必须跟着重拉——否则只有 board.changed 一条道(board 广播一旦缺失,面板就
     // 永远定格)。这里复用既有 boardRefresh(清单+最近板)与 trackPull(追踪卡)链路,不新造取数通道;
     // 节流 1000ms + 尾沿补拉,防高频 dashboard.changed 打成板请求风暴。编辑态(在途/防抖保存)照旧拦截:
@@ -14469,17 +14469,17 @@ function wsOnMessage(e) {
     }
     if (viewLive("track")) { clearTimeout(trackDashTimer); trackDashTimer = setTimeout(() => { try { trackPull(); } catch (e) { /* 追踪卡不在场=跳过 */ } }, 800); } // 追踪卡:800ms 尾沿防抖重拉(既有 trackPull)
     if (viewLive("dash")) { clearTimeout(dashReloadTimer); dashReloadTimer = setTimeout(dashLoad, 300); } // journal 有新事件:节流重拉(推模型触发+拉模型取数)
-    // 轨迹看板(step-1026):每次 LLM 决策=journal 一条 llm.trace → dashboard.changed 到达时,看板开着就增量拉史
+ // 轨迹看板:每次 LLM 决策=journal 一条 llm.trace → dashboard.changed 到达时,看板开着就增量拉史
     // (session.history sinceSeq),让新卡及时上屏;1.2s 节流 + 尾沿补拉,不做整会话轮询。
     if (trajBoardOn() && currentSid) {
       if (Date.now() - trajDashPullAt > 1200) { trajDashPullAt = Date.now(); try { refreshHist(); } catch (e) { /* 拉史失败由常规通道兜底 */ } }
       else { clearTimeout(trajDashPullTimer); trajDashPullTimer = setTimeout(function () { trajDashPullAt = Date.now(); try { refreshHist(); } catch (e) { /* 同上 */ } }, 1250); }
     }
     return; } // journal 有新事件:节流重拉(推模型触发+拉模型取数)
-  if (m.type === "board.archive.result") { dashArchive = m.items || []; if (viewLive("dash")) dashRender(); } // C:沉淀索引→板角标;不 return——沉淀区(arcItems)在后面还有既有消费方,early-return 会把设计沉淀整区吃瞎(board.spec 实锤)
+  if (m.type === "board.archive.result") { dashArchive = m.items || []; if (viewLive("dash")) dashRender(); } // C:沉淀索引→板角标;不 return——沉淀区(arcItems)在后面还有既有消费方,early-return 会把设计沉淀整区吃瞎(board.spec 实测确认)
   if (m.type === "error" && String(m.code || "").startsWith("project-")) { uiAlert(errorText(m.code, m.message), { tone: "warning", title: "项目操作失败" }); return; }
   if (m.type === "task.diffstat.result") {
-    // 变更条数据(step-046):缓存后重渲染(仅当前会话;sha=null=无快照,记空防重复拉)。
+ // 变更条数据:缓存后重渲染(仅当前会话;sha=null=无快照,记空防重复拉)。
     diffstats.set(m.taskId, { files: m.files || [], total: m.total || { files: 0, add: 0, del: 0 }, sha: m.sha });
     if (histEvents && currentSid) { renderHistory(); renderSidebar(); }
     return;
@@ -14495,7 +14495,7 @@ function wsOnMessage(e) {
   if (m.type === "models.probe.result") {
     if (modelProbe[m.model] && modelProbe[m.model].pending) probeDone++;
     modelProbe[m.model] = { ok: !!m.ok, ms: Number(m.ms || 0), error: m.error || "" };
-    // step-112:单行探活也参与「全部检测」进度(按钮文案恢复)
+ // 单行探活也参与「全部检测」进度(按钮文案恢复)
     const probeBtn = $("models-probe-all");
     if (probeBtn && !probeQueue.length && !probeActive) probeBtn.textContent = "全部检测";
     probeActive = Math.max(0, probeActive - 1);
@@ -14504,20 +14504,20 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "stats.summary.result") {
-    // usage=用量仪表盘(step-049):服务端追加字段,旧服务无此键=undefined,仪表盘分区自动隐藏。
+ // usage=用量仪表盘:服务端追加字段,旧服务无此键=undefined,仪表盘分区自动隐藏。
     statsCache = { at: Date.now(), data: m.summary, usage: m.usage };
     renderStats();
     quotaRender();
     return;
   }
   if (m.type === "task.submitted" || m.type === "task.changed") {
-    // step-169:submitted 带全文 Task(正文进表 + 记 taskBodyIds);changed 只带 TaskIndex(合并 + 终态补拉正文)。
+ // submitted 带全文 Task(正文进表 + 记 taskBodyIds);changed 只带 TaskIndex(合并 + 终态补拉正文)。
     if (m.type === "task.submitted") { taskBodyIds.add(m.task.id); tasks.set(m.task.id, m.task); }
     else { mergeTaskIndex(m.task); if (["done", "failed", "cancelled"].includes(m.task.state)) ensureTaskDetail(m.task.id); }
     render();
     notifyTaskDone(m.task);
-    // 追踪卡即时回写(2026-10-22):任务状态一变就补拉一次,不等 4s 轮询拍点——
-    // 用户实报「任务都完成了,追踪卡却还停在 02 规划」。在场的卡才拉,视口外零额外开销。
+ // 追踪卡即时回写:任务状态一变就补拉一次,不等 4s 轮询拍点——
+ // 用户用户反馈「任务都完成了,追踪卡却还停在 02 规划」。在场的卡才拉,视口外零额外开销。
     try { if (viewLive("track")) trackPull(); } catch (e) { /* 追踪卡不在场/资产缺失=跳过 */ }
     // Plan 审批卡(C19② 修复):先走通用任务更新,再叠加卡片渲染(原 early-return 吞掉上方全部)
     if (planApproval && m.task.id === planApproval.taskId) renderPlanApproval();
@@ -14525,9 +14525,9 @@ function wsOnMessage(e) {
       refreshHist();
       renderSendBtn();
       if (m.task.state === "done" || m.task.state === "failed") {
-        stStream = null; // 流式尾块退役(step-050):终态后全部以 journal 渲染为准
+        stStream = null; // 流式尾块退役:终态后全部以 journal 渲染为准
         wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: currentSid }));
-        // 变更条(step-046):终态即拉本任务 diffstat(echo 后端无快照→空,条隐藏)。
+ // 变更条:终态即拉本任务 diffstat(echo 后端无快照→空,条隐藏)。
         wsSafeSend(JSON.stringify({ v: 1, type: "task.diffstat", taskId: m.task.id }));
       }
     }
@@ -14535,7 +14535,7 @@ function wsOnMessage(e) {
   if (m.type === "session.history.result") {
     const evs = m.events || [];
     const maxSeq = evs.length ? Math.max(...evs.map((e) => e.seq ?? 0)) : 0;
-    // 三类回包(2026-10-22 接 beforeSeq 分页契约,判据靠字段不靠猜):
+ // 三类回包(接 beforeSeq 分页契约,判据靠字段不靠猜):
     //  ①翻页=本端刚点「加载更多历史」(游标在飞 + hasMore/nextBeforeSeq 在场)→ 更早的一页,去重后前插;
     //  ②增量=sinceSeq 路径(无 hasMore)→ 追加尾部(运行中任务的新事件仍走这条,逐字保留);
     //  ③首屏=limit 尾页/全量重放(分页字段可有可无,游标不在飞)→ 替换整列并记游标。
@@ -14575,7 +14575,7 @@ function wsOnMessage(e) {
     }
     if (maxSeq > histLastSeq || histSession !== m.sessionId) histLastSeq = Math.max(histLastSeq, maxSeq);
     histSession = m.sessionId;
-    // 流式尾块让位(step-050):真 message.agent 覆盖终稿草稿→清草稿;真 tool.result 覆盖执行中行→逐行撤。
+ // 流式尾块让位:真 message.agent 覆盖终稿草稿→清草稿;真 tool.result 覆盖执行中行→逐行撤。
     if (stStream && m.sessionId === stStream.sid) {
       let covered = false;
       for (const e of evs) {
@@ -14588,7 +14588,7 @@ function wsOnMessage(e) {
       }
       if (covered) stStream = null;
     }
-    // 子代理流式草稿让位(2026-10-20):真 subagent.event message.agent 到达 → 该 agent 的
+ // 子代理流式草稿让位:真 subagent.event message.agent 到达 → 该 agent 的
     // 打字机草稿删除(journal 卡接管;工具行也一并让位给合并卡,同主会话语义)。
     for (const e of evs) {
       if (e.kind === "subagent.event" && e.payload && e.payload.kind === "message.agent") {
@@ -14598,7 +14598,7 @@ function wsOnMessage(e) {
     }
     renderHistory();
     subMsgSync(evs); // 画布形态分身独立看板:子代理消息增量到达 → 子agent会话流/未读同步(经典形态内空操作)
-    // 轨迹看板(step-1026):每次 LLM 决策=一次更新。看板开着时按 histEvents 新增的 llm.trace
+ // 轨迹看板:每次 LLM 决策=一次更新。看板开着时按 histEvents 新增的 llm.trace
     // 追加卡片(仅文件序列变化才重渲),并仅当用户已在底部才自动滚到底 —— 上滚阅读时不被抢走。
     try { trajBoardLiveSync(); } catch (e) { /* 看板不在场/渲染异常不扩散到会话增量主链 */ }
   }
@@ -14607,7 +14607,7 @@ function wsOnMessage(e) {
     if (window.__wsCfgHook) try { window.__wsCfgHook(m); } catch (e) {}
     cfgView = m;
     renderModelScoring();
-    // 双 pill 显示同步(step-046):服务端持久配置为准(多客户端不打架;localStorage 只做首屏种子)。
+ // 双 pill 显示同步:服务端持久配置为准(多客户端不打架;localStorage 只做首屏种子)。
     const cfgPerm = m.config && m.config.permissions && m.config.permissions.mode;
     if (cfgPerm && cfgPerm !== permModeV) {
       // 首同步就分叉=服务端真值与本机上次选择不同(其他面板/浏览器 e2e 改过全局配置)——
@@ -14641,7 +14641,7 @@ function wsOnMessage(e) {
   }
   if (m.type === "cfg.set.result") {
     permPendingMode = null; // ack:权限翻转落定(审计 C10/C11 在飞标记清零)
-    // 工具提供商保存回执(2026-10-28):按回包如实提示 + 重拉 cfg.get 刷新状态行/选中态。
+ // 工具提供商保存回执:按回包如实提示 + 重拉 cfg.get 刷新状态行/选中态。
     // 旧实现保存后不重拉配置,状态行停在旧值 —— 用户看到的就是「点了没反应」。
     const wsTouched = (m.applied || []).concat(m.needsRestart || []).some((p) => String(p).startsWith("web.search."));
     if (wsTouched || (wsSavePending && Date.now() - wsSavePending < 20000)) {
@@ -14650,7 +14650,7 @@ function wsOnMessage(e) {
       toast(hot ? "工具提供商配置已生效(下一次 web_search 使用)" : "工具提供商配置已写入(重启网关后生效)");
       try { wsSafeSend(JSON.stringify({ v: 1, type: "cfg.get" })); } catch (e) { console.warn("[ws-cfg] 重拉配置失败:", e && e.message); }
     }
-    // 按补丁归属分徽标:llm.*→主模型,llm.maxTokens→mt,models.*→对应角色(step-112 四角色)
+ // 按补丁归属分徽标:llm.*→主模型,llm.maxTokens→mt,models.*→对应角色(四角色)
     const applied = m.applied || [], nr = m.needsRestart || [];
     const badgeFor = (paths) => {
       const hot = paths.filter((p) => applied.includes(p)).length;
@@ -14664,7 +14664,7 @@ function wsOnMessage(e) {
     const setB = (id, txt, cls) => { const el = $(id); if (!el) return; el.textContent = txt || "—"; el.className = cls || "sd"; };
     const mainPaths = ["coding.llm.model", "coding.llm.providerId", "coding.llm.baseUrl", "coding.llm.apiKeyEnv", "coding.llm.timeoutMs"];
     let b = badgeFor(applied.concat(nr).filter((p) => mainPaths.includes(p)));
-    // env 占用升格(2026-10-19 模型切换失效实报):被 GENIE_LLM_* 压住的键,「重启生效」是假话——
+ // env 占用升格(模型切换失效用户反馈):被 GENIE_LLM_* 压住的键,「重启生效」是假话——
     // 徽标直接说「env 占用,重启也不生效」,并 toast 点名要清的变量(与 pillPickModel 的热生效话术互斥场景)。
     const envOcc = (m.envOccupied || []).filter((p) => mainPaths.includes(p) || p.startsWith("audio.chat."));
     if (envOcc.length) {
@@ -14672,7 +14672,7 @@ function wsOnMessage(e) {
       const vars = envOcc.map((p) => p.includes("audio") ? "GENIE_AUDIO_CHAT_*" : "GENIE_LLM_*").join(" ");
       toast("模型切换被环境变量压住(" + vars + ")——写进配置了但运行时/重启都不会用它;从网关启动环境清掉这些变量", true);
     } else if (m.routeError) {
-      // 2026-10-20:凭据不可解析/端点缺失=已写配置但没热切——旧实现只显示「已热应用」,用户要到下个任务才看见 401。
+ // 凭据不可解析/端点缺失=已写配置但没热切——旧实现只显示「已热应用」,用户要到下个任务才看见 401。
       setB("role-main-badge", "未热切 · " + String(m.routeError).slice(0, 60), "sd cfg-wait");
       toast("模型已写入但未热切:" + m.routeError, true);
     } else if (m.effective) {
@@ -14713,13 +14713,13 @@ function wsOnMessage(e) {
     lastModelIds = m.ids || [];
     renderModelList();
     if (m.probeOnly && m.providerId) {
-      // step-128:只读探测回包——仅报连通与可见模型数,不合并目录、不动 provDraft
+ // 只读探测回包——仅报连通与可见模型数,不合并目录、不动 provDraft
       provTestState[m.providerId] = { ok: true, msg: "连接成功 · 端点可见 " + (m.ids || []).length + " 个模型(目录未改动;要并入点「拉取目录」)" };
       renderProviders();
     } else if (m.providerId && provDraft) {
       const pv = provDraft.find((x) => x.id === m.providerId);
       if (pv) {
-        // step-112:测试连接/拉取只合并新增模型,保留既有元数据(上下文/最大输出/能力标记)与自定义条目。
+ // 测试连接/拉取只合并新增模型,保留既有元数据(上下文/最大输出/能力标记)与自定义条目。
         const existing = pv.models || [];
         const byName = new Map(existing.map((mm) => [modelNameOf(mm), mm]));
         const merged = existing.map((mm) => byName.get(modelNameOf(mm)));
@@ -14734,7 +14734,7 @@ function wsOnMessage(e) {
     modelSwitchNotice = { cls: "err", text: "模型目录拉取失败:" + redactPaths(errorText(m.code, m.message)).slice(0, 60) };
     renderModelSwitch();
     $("models-status").textContent = "失败:" + redactPaths(errorText(m.code, m.message)).slice(0, 60);
-    // step-101:pill 兜底拉取路径(modelMenuPending 在场=用户停在 chat 视图,状态行不可见)——
+ // pill 兜底拉取路径(modelMenuPending 在场=用户停在 chat 视图,状态行不可见)——
     // 清 pending 防陈旧,补 toast 保持 fail-visible;设置页路径走状态行不双报。
     // u6:兜底拉取失败 → 触发器位置转为红色「模型加载失败,重试」(点击重发 models.list)
     if (modelMenuPending) {
@@ -14749,7 +14749,7 @@ function wsOnMessage(e) {
     }
   }
   if (m.type === "error" && /cfg/.test(m.code || "")) {
-    // 工具提供商保存被拒(2026-10-28):此前只写 role-main-badge,用户在工具提供商区看不到任何原因。
+ // 工具提供商保存被拒:此前只写 role-main-badge,用户在工具提供商区看不到任何原因。
     if (/^cfg(-|\.)/.test(m.code || "") && wsSavePending) {
       wsSavePending = 0;
       toast("工具提供商配置保存失败:" + errorText(m.code, m.message).slice(0, 200), true);
@@ -14776,7 +14776,7 @@ function wsOnMessage(e) {
     wsSafeSend(JSON.stringify({ v: 1, type: "exp.list" }));
   }
   if (m.type === "exp.view.result") {
-    // teamai share 流程(designs/24):pendingShare 在场=读正文是为了推团队仓,不改写经验面板。
+ // teamai share 流程:pendingShare 在场=读正文是为了推团队仓,不改写经验面板。
     if (pendingShare && m.category === "coding" && m.name === pendingShare.name) {
       const body = String(m.body || "");
       if (!body) { toast("经验不存在,无法分享:" + m.name, true); pendingShare = null; return; }
@@ -14810,7 +14810,7 @@ function wsOnMessage(e) {
       nextPending[it.taskId] = { count: c, nodes: old && old.nodes ? old.nodes : [] };
     }
     boardListPending = nextPending;
-    boardListSkipped = Number(m.skipped || 0); // step-072:损坏/不可读板文件数(显式降级依据)
+    boardListSkipped = Number(m.skipped || 0); // 损坏/不可读板文件数(显式降级依据)
     if (boardItems.length) boardListRetry = 0;
     // n12 「待读评论」专用的轻量清单刷新(见 bdPendingRefresh):只更新 chip/高亮,不重钉选择、不重拉板——
     // 否则 board.doc → 拉 list → 回包再 boardGet → board.doc 无限回环。
@@ -14820,11 +14820,11 @@ function wsOnMessage(e) {
       if (viewLive("board")) renderBoard();
       return;
     }
-    // step-072 G1 修复:钉选板(chip 直达/选择器选中)不在清单=板上文件已删/损坏——
-    // 显式降级,绝不静默滑到别的板(此前回落 items[0],用户看到的不是她点的板,实测 hijack 实锤)。
+ // G1 修复:钉选板(chip 直达/选择器选中)不在清单=板上文件已删/损坏——
+ // 显式降级,绝不静默滑到别的板(此前回落 items[0],用户看到的不是她点的板,经验证 hijack 注意)。
     const pinnedMissing = boardTaskId && !boardItems.some((i) => i.taskId === boardTaskId);
     // 未指定任务=主设计板;有指定(任务卡 chip 直达)=保住选择
-    // 2026-11-05 同 session 多板:默认不再取「最新一块」——同一个 session 会先后落多块板
+ // 同 session 多板:默认不再取「最新一块」——同一个 session 会先后落多块板
     // (设计板/视图配置板/基线表板),最新那块常常只有 6~9 个节点,打开就看不到主设计。
     // 改为「节点数最多的一块」,并列时取列表更靠前者(列表按新→旧,即取最新);nodeCount 缺失按 0。
     const want = pinnedMissing ? "" : (boardTaskId || cvDefaultBoardId(boardItems));
@@ -14866,14 +14866,14 @@ function wsOnMessage(e) {
     if (m.sessionId !== currentSid || boardTaskId) return; // 语义板通道优先,不混淆
     sessionOverlayB64 = m.dataB64 || null;
     if (viewLive("board")) {
-      // 会话切换/无批注恢复(2026-10-14 串台修复):wbRestore 先清后画(无数据=白板);
+ // 会话切换/无批注恢复(串台修复):wbRestore 先清后画(无数据=白板);
       // 在途笔画不打断(这条只刷新会话批注缓存,不是换板上下文)。
       if (!wbDrawing) wbRestore();
     }
     return;
   }
   if (m.type === "board.diagram.result") {
-    // 2026-10-29 flowkit 单张 SVG 回包(请求在 cvSvgRequest):缓存 svg + 记签名 → 重渲整块。
+ // flowkit 单张 SVG 回包(请求在 cvSvgRequest):缓存 svg + 记签名 → 重渲整块。
     // 失败(ok=false / error / 空 svg)=保持卡片累加出来的世界尺寸与空 #cvSvgHost,不崩不白屏。
     const cvSvgReqSig = cvSvgPending; // 回包认领的是哪一版请求(先取再清)
     cvSvgPending = "";
@@ -14890,20 +14890,20 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "board.doc") {
-    // 设计沉淀只读画布分流(step-058):拉的是沉淀板(档案灯箱),渲染进灯箱宿主,不碰会话板全局
+ // 设计沉淀只读画布分流:拉的是沉淀板(档案灯箱),渲染进灯箱宿主,不碰会话板全局
     if (arcOpen && m.sessionId === arcSid) { arcOnDoc(m); return; }
     if (m.sessionId !== currentSid) return;
     // c2:评论写请求的成功回执(board.comment 服务端回 board.doc)——清掉在途标记,
     // 免得紧随其后的无关错误帧被误认领成「评论被拒」。
     if (bdLastCmtReq && (!m.taskId || m.taskId === boardTaskId)) bdLastCmtReq = null;
-    const wasLayoutInflight = bdLayoutInflight; // step-073 续作轮:先抓在途旗再解除
+    const wasLayoutInflight = bdLayoutInflight; // 续作轮:先抓在途旗再解除
     const hadPendingLayout = !!bdLayoutTimer; // 防抖挂起=本地有尚未发往服务器的新编辑(0-900ms 危险窗)
     bdLayoutInflight = false; // 直改板保存回执(十期:在途旗解除,下一笔可发)
-    // 2026-11-06 A2「在途不丢」:在途窗内又发生了结构变更(排了队)→ 本笔回执处理完(rev 已前移)再补发。
+ // A2「在途不丢」:在途窗内又发生了结构变更(排了队)→ 本笔回执处理完(rev 已前移)再补发。
     // 用 setTimeout(0) 是为了让 rev 前移/结构收编先落地,补发笔的 baseRev 才是新的。
     if (bdSaveQueued) setTimeout(() => { try { bdSaveFlushQueued(); } catch (e) { /* 补发失败不影响回执处理 */ } }, 0);
-    // step-073 续作轮:直改板编辑未落服务器前(在途或防抖挂起),任何 board.doc 回执都可能是旧快照——
-    // 整板回灌会把本地新编辑静默回滚。两类实锤:①在途窗内删边被回执「复活」;②整理布局后 900ms 内
+ // 续作轮:直改板编辑未落服务器前(在途或防抖挂起),任何 board.doc 回执都可能是旧快照——
+ // 整板回灌会把本地新编辑静默回滚。两类注意:①在途窗内删边被回执「复活」;②整理布局后 900ms 内
     // 迟到的刷新回执把 grid 冲回 fractional(随后的防抖保存把旧布局固化落盘)。
     // 处置=回执内容与本地现状不一致时只收编 rev/连接态/批注层,结构以本地为准;一致(=本在途笔自身回执)照常落地。
     if ((wasLayoutInflight || hadPendingLayout) && boardDoc && !boardEditOn && (!bdSentSig || bdSentStructSig(boardDoc) !== bdSentSig)) {
@@ -14914,7 +14914,7 @@ function wsOnMessage(e) {
         boardTaskId = m.taskId || boardTaskId;
         boardOverlayB64 = m.overlayB64 || boardOverlayB64;
         // 服务端合并权威字段照常收编:评论(board.comment 服务端合并)/done(评论带 done)/状态/对账回填——
-        // 否则评论回显等在防抖窗内被误丢(首版实测:浮窗评论回显 FAIL)
+ // 否则评论回显等在防抖窗内被误丢(首版经验证:浮窗评论回显 FAIL)
         const rnodes = new Map((m.doc.nodes || []).map((n) => [n.id, n]));
         for (const ln of boardDoc.nodes) {
           const rn = rnodes.get(ln.id);
@@ -14928,9 +14928,9 @@ function wsOnMessage(e) {
       return;
     }
     bdSentSig = "";
-    // step-073:编辑态下非本人保存回执的迟到 board.doc(历史 boardGet/广播重拉)——不更新 boardDoc
+ // 编辑态下非本人保存回执的迟到 board.doc(历史 boardGet/广播重拉)——不更新 boardDoc
     // 不重渲:保草稿基线(boardSave 的 baseRev 语义不被悄悄前移)+在填文本不被重渲冲掉
-    // (B6 只挡了 board.changed,board.doc 是漏网口,boardsense spec 实测表单被迟到回包冲掉)。
+ // (B6 只挡了 board.changed,board.doc 是漏网口,boardsense spec 经验证表单被迟到回包冲掉)。
     if (boardEditOn && boardDraft && m.taskId === boardTaskId && !boardSaveInflight) {
       toast("白板有新版本(rev " + (m.doc ? m.doc.rev : "?") + ")——你在编辑中;保存时按 rev 冲突处置", true);
       return;
@@ -14938,7 +14938,7 @@ function wsOnMessage(e) {
     boardDoc = m.doc || null;
     boardLinks = m.links || [];
     boardTaskId = m.taskId || boardTaskId;
-    // step-072:显式请求(taskId 非空)却 doc:null = 板上文件在拉取间隙被删/损坏——挂降级标记,
+ // 显式请求(taskId 非空)却 doc:null = 板上文件在拉取间隙被删/损坏——挂降级标记,
     // renderBoard 据此显示「不存在或损坏」而不是「还没有设计白板」(清单空态)或静默滑到别的板。
     boardMissing = !m.doc && m.taskId ? m.taskId : (m.doc ? "" : boardMissing);
     boardOverlayB64 = m.overlayB64 || null;
@@ -14946,11 +14946,11 @@ function wsOnMessage(e) {
     if (boardSaveInflight) {
       // 保存回执:退编辑态+重拉(拿新鲜连接三态)
       boardSaveInflight = false;
-      boardEditOn = false; boardDraft = null; boardConflict = null; // step-073:保存成功=冲突已解
+      boardEditOn = false; boardDraft = null; boardConflict = null; // 保存成功=冲突已解
       toast("白板已保存(rev " + (boardDoc ? boardDoc.rev : "?") + ")");
       if (boardDoc) boardGet(boardTaskId);
     }
-    // 批注层(2026-10-14 刷新/重登空白+串台修复):框开着立即按新语义恢复——先清后画,
+ // 批注层(刷新/重登空白+串台修复):框开着立即按新语义恢复——先清后画,
     // 有服务端图换服务端,没有=白板(空白是合法态,防残留上一板笔迹);在途笔画作废(半笔
     // 不允许混进换源后的画布)。框关着不画:数据已挂在 boardOverlayB64,toggle 展开时
     // wbResize→wbRestore 补恢复(刷新后批注框默认收起,board.doc 先到的场景靠这条兜住)。
@@ -14970,11 +14970,11 @@ function wsOnMessage(e) {
     return;
   }
   if (m.type === "board.conflict") {
-    // rev 乐观锁冲突(step-073 体验改造):不再直接弃草稿——草稿保留+明细区冲突条,
+ // rev 乐观锁冲突(体验改造):不再直接弃草稿——草稿保留+明细区冲突条,
     // 用户自选「拉取最新放弃草稿」或「继续编辑(可先把改动复制走)」。
     boardSaveInflight = false;
     bdLayoutInflight = false; // 直改板在途旗解除(十期)
-    // 2026-11-06 A2:冲突时排队的那一笔作废(它的 baseRev 已过期),别在冲突处置后再补发撞第二枪
+ // A2:冲突时排队的那一笔作废(它的 baseRev 已过期),别在冲突处置后再补发撞第二枪
     if (bdSaveQueued) { bdSaveQueued = false; if (bdLayoutTimer) { clearTimeout(bdLayoutTimer); bdLayoutTimer = null; } }
     if (boardEditOn && boardDraft) {
       boardConflict = { taskId: m.taskId, currentRev: m.currentRev };
@@ -15010,7 +15010,7 @@ function wsOnMessage(e) {
     errToast(m, "白板保存被拒");
     return;
   }
-  // step-121 工作流板:编译回包(编译预览+执行前奏)——脚本进明细区,错误 fail-visible 全列出
+ // 工作流板:编译回包(编译预览+执行前奏)——脚本进明细区,错误 fail-visible 全列出
   if (m.type === "board.workflow.compile.result") {
     if (m.sessionId !== currentSid || m.taskId !== boardTaskId) return;
     const box = bdDetailHost();
@@ -15031,7 +15031,7 @@ function wsOnMessage(e) {
     }
     return;
   }
-  // step-121 工作流板:运行进度(节点状态实时点亮——增量切类,不整板重渲)
+ // 工作流板:运行进度(节点状态实时点亮——增量切类,不整板重渲)
   if (m.type === "board.workflow.progress") {
     if (m.sessionId !== currentSid || m.taskId !== boardTaskId) return;
     const r = wfRuns[m.taskId] || (wfRuns[m.taskId] = { wfId: m.wfId, states: {}, done: false });
@@ -15041,7 +15041,7 @@ function wsOnMessage(e) {
     bdWfApplyStates(r.states);
     return;
   }
-  // step-121 工作流板:运行终态(编译失败 errors / 跑完 ok+items;states 全量落 wfRuns)
+ // 工作流板:运行终态(编译失败 errors / 跑完 ok+items;states 全量落 wfRuns)
   if (m.type === "board.workflow.result") {
     if (m.sessionId !== currentSid || m.taskId !== boardTaskId) return;
     const r = wfRuns[m.taskId] || (wfRuns[m.taskId] = { wfId: m.wfId, states: {}, done: false });
@@ -15079,7 +15079,7 @@ function wsOnMessage(e) {
     localStorage.setItem("zh:perm-mode", permModeV);
     pillRender();
   }
-  // repo wiki(step-118):列表/页/重建回执与错误内联显示(独立 code 前缀,防走通用 toast 丢上下文)
+ // repo wiki:列表/页/重建回执与错误内联显示(独立 code 前缀,防走通用 toast 丢上下文)
   if (m.type === "error" && /^wiki-/.test(String(m.code || ""))) {
     $("wikiRebuild").disabled = false;
     $("wikiForce").disabled = false;
@@ -15117,7 +15117,7 @@ function wsOnMessage(e) {
     toast(m.hit ? "Wiki 缓存命中:源码未变,零生成" : ("Wiki 已重建:" + m.rebuilt.length + " 页重建 / " + m.reused.length + " 页复用" + (m.llmCalls ? " · LLM " + m.llmCalls + " 次" : "")));
     return;
   }
-  // 协议版本错位识别(2026-10-23,session.owner.get 事故教训):invalid-message + zod 判别错误
+ // 协议版本错位识别(session.owner.get 事故教训):invalid-message + zod 判别错误
   // =运行中的网关不认识该消息类型(面板新半边已生效、网关旧半边未重启)——给可操作提示而非
   // 原样转贴 zod 原文;30s 同码去重,ownerPull 类逐 sid 重发不再刷屏。
   if (m.type === "error" && String(m.code || "") === "invalid-message") {
@@ -15131,7 +15131,7 @@ function wsOnMessage(e) {
     }
     return;
   }
-  // error 兜底(2026-10-14 审计 C9):此前 goal-invalid/goal-plan-mutex/skills-failed/exp-failed 等
+ // error 兜底(审计 C9):此前 goal-invalid/goal-plan-mutex/skills-failed/exp-failed 等
   // 无专属处理器的错误被静默丢弃——用户看不到任何失败痕迹。models/cfg/sense 已有内联状态显示,排除防双报。
   if (m.type === "error" && !/^(models|cfg|sense)/.test(String(m.code || ""))) {
     goalPendingDispatch = null; // goal.set 被拒:撤销待派任务
@@ -15155,7 +15155,7 @@ function wsOnMessage(e) {
     const r = m.result;
     const dec = r.autoDecision ? " · auto→" + r.autoDecision.picked + "(" + r.autoDecision.reason + ")" : "";
     $("sense-status").innerHTML = "剖面:<b>" + r.mode + "</b>" + esc(dec) + " · " + r.projectState + " · 缓存:" + (r.cache.hit ? "命中" : "重建");
-    // 图给人看(designs/16 §9 分工):debug 调用关系图(圆心高亮/未解析虚线)> 架构图 > 页面流;
+ // 图给人看( §9 分工):debug 调用关系图(圆心高亮/未解析虚线)> 架构图 > 页面流;
     // mermaid 缺席或渲染失败回落文字(不冒充图)
     const mer = (r.callchain && r.callchain.mermaid) || (r.architecture && r.architecture.mermaid) || (r.pageflow && r.pageflow.mermaid) || null;
     if (mer && window.mermaid) {
@@ -15202,7 +15202,7 @@ function wsOnMessage(e) {
     if (r.pageflow) r.pageflow.pages.slice(0, 10).forEach((p) => lines.push("页面 " + esc(p.route) + " (" + esc(p.file) + ")"));
     if (r.degraded) r.degraded.forEach((d) => lines.push("<span class='dim'>[降级] " + esc(d.layer) + ": " + esc(d.reason) + "</span>"));
     $("sense-detail").innerHTML = lines.join(NL);
-    // step-073:洞察产物→可编辑语义板入口(有在场产物且已进会话才亮)
+ // 洞察产物→可编辑语义板入口(有在场产物且已进会话才亮)
     senseLastResult = r;
     const sb = $("sense-boardbar");
     if (sb) {
@@ -15213,14 +15213,14 @@ function wsOnMessage(e) {
 }
 let lastSubmitText = "", lastSubmitAt = 0;
 function submit(overrideText, projectOverride) {
-  // 语音任务书锁(2026-11-08):本会话撰写中禁止提交(输入区只读;Enter/发送按钮/命令全走这里,统一守卫)。
+ // 语音任务书锁:本会话撰写中禁止提交(输入区只读;Enter/发送按钮/命令全走这里,统一守卫)。
   if (voiceLocked(currentSid)) { toast("任务书撰写中,请稍候…(完成后自动填入输入框)"); return; }
-  // step-095:overrideText(仅接受 string)=chip/typed 命令合成后的最终任务书(raw 行前缀+模板)——直提任务流,
+ // overrideText(仅接受 string)=chip/typed 命令合成后的最终任务书(raw 行前缀+模板)——直提任务流,
   // 不再走 slash 分派(合成文本以 "/" 开头,再进 slashTypedSubmit 会把模板吞进 args 无限膨胀)。
   // 只认 string:$("go").onclick = submit 直挂会把 click 事件对象传进来,必须回落读输入框。
   const fromInput = typeof overrideText !== "string";
-  // 项目归属(2026-10-22 漂移修复):重发/重试必须带**原任务的 projectId**,不能用 current active——
-  // 实测重启后点「重发」把 genie 会话的任务贴到了 harness。服务端已改为 owner 优先(双保险:
+ // 项目归属(漂移修复):重发/重试必须带**原任务的 projectId**,不能用 current active——
+ // 经验证重启后点「重发」把 genie 会话的任务贴到了 harness。服务端已改为 owner 优先(双保险:
   // 老会话任务被删、owner 证据缺失时,这里仍把任务送回原项目)。
   const submitProjectId = typeof projectOverride === "string" && projectOverride ? projectOverride : activeProjectId;
   const typedText = String(fromInput ? $("instruction").value : overrideText).trim();
@@ -15231,7 +15231,7 @@ function submit(overrideText, projectOverride) {
   // m4 防重复:草稿首发正在等 session.model.set 回包(draftSubmitPending 在飞)→ 再点发送/Enter 一律忽略,
   // 否则会再发一条 set(撞 revision-mismatch)并可能派出两个任务。
   if (draftSubmitPending) { toast("首轮消息正在等模型切换确认,请稍候…"); return; }
-  // 2026-10-29 重试料消费:上次模型切换被拒/超时(draftModelRetry 保留),本次发送先重发 session.model.set
+ // 重试料消费:上次模型切换被拒/超时(draftModelRetry 保留),本次发送先重发 session.model.set
   // 到预设会话再派任务(选择不变;新 set 仍走 staged→pending 等回包链,拒绝依旧不派单)。
   if (!currentSid && draftModelRetry && draftModelRetry.model && !sessionModelStaged.has(draftSidOf())) {
     const r = draftModelRetry;
@@ -15239,13 +15239,13 @@ function submit(overrideText, projectOverride) {
     if (r.effort !== undefined && typeof effortV !== "undefined") effortV = r.effort; // 档位一并复原
     draftModelRetry = null;
   }
-  // 发两遍防护(2026-10-13 视频 18:08 登记):同文本 3s 内重复提交=Enter 连击/双击,忽略
+ // 发两遍防护(视频 18:08 登记):同文本 3s 内重复提交=Enter 连击/双击,忽略
   // (草稿态首提交会新建 sid,sid 比对会漏——按文本+时间窗判定即可,3s 内同文本跨会话提交不成立)
   if (typedText && typedText === lastSubmitText && Date.now() - lastSubmitAt < 3000) { toast("该消息 3 秒内已提交过(防重复)"); return; }
   if (typedText) { lastSubmitText = typedText; lastSubmitAt = Date.now(); }
-  // 内置命令 typed 提交(step-052):"/goal x" "/compact 指示" 等直接执行,不入任务流。
+ // 内置命令 typed 提交:"/goal x" "/compact 指示" 等直接执行,不入任务流。
   if (fromInput && typedText.startsWith("/") && slashTypedSubmit(typedText)) {
-    // ZCode 内置命令确认行(step-048 追记十五):命令在聊天窗留下执行痕迹
+ // ZCode 内置命令确认行:命令在聊天窗留下执行痕迹
       chatSysLineIcon("check", typedText.slice(0, 80));
     $("instruction").value = "";
     autoGrow();
@@ -15253,17 +15253,17 @@ function submit(overrideText, projectOverride) {
     cmdChipFlash(typedText); // 真执行闪确认(仅 slashTypedSubmit 返回 true=确实执行了才闪)
     return;
   }
-  // 2026-10-29:草稿提交直接消费当前项目预设 sid(draftSidOf)——模型覆盖早已经 session.model.set
+ // 草稿提交直接消费当前项目预设 sid(draftSidOf)——模型覆盖早已经 session.model.set
   // 绑定到它,提交即派单到同一会话。预设被任务占用后下次草稿自动轮换出新 sid。
   const sid = currentSid || draftSidOf();
   const wasDraft = !currentSid;
   const wasDraftPending = wasDraft && sessionModelStaged.has(sid); // 预设会话的模型 set 还在等回包 → 任务体暂存
-  currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid); // 会话 id 持久化(2026-10-14 修复:#go 新建会话从不写 zh:sid→刷新后 savedSid 空→白板/会话视图全空,白板数据看似"刷新即丢")
+  currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid); // 会话 id 持久化(修复:#go 新建会话从不写 zh:sid→刷新后 savedSid 空→白板/会话视图全空,白板数据看似"刷新即丢")
   const atts = pendingAtts.slice(0, ATT_MAX_COUNT).map((a) => ({ name: a.name, path: a.path, mime: a.mime, size: a.size }));
   // 占位文案必须在清空 pendingAtts **之前**取(要读得到 pastedText 的行数)
   const text = typedText || attsPlaceholder(pendingAtts.slice(0, ATT_MAX_COUNT));
   pendingAtts = []; attRender();
-  // m4(2026-10-22)草稿首发**等 set 回包**:草稿预设会话的模型切换在飞(sessionModelStaged 命中)
+ // m4草稿首发**等 set 回包**:草稿预设会话的模型切换在飞(sessionModelStaged 命中)
   // 时先等 session.model.result,把任务体暂存成 pending(draftSubmitPending);收到 result ok 且无
   // routeError 才发 task.submit。旧实现按 draftModelPick 判定;现在 pillPickModel 在草稿态已直接发
   // session.model.set(绑定预设 sid),submit 只需识别「staged 在飞」。
@@ -15300,14 +15300,14 @@ function finishSubmit(sid, text, atts, wasDraft, sameView) {
   if (wasDraft) {
     // 草稿首条:乐观渲染用户消息(ZCode 乐观发送;附件卡同步带上),重放数据到达后替换
     histEvents = [{ kind: "message.user", payload: { text, ...(atts && atts.length ? { attachments: atts } : {}) } }];
-    stStream = null; // 新 turn:旧流式尾块退役(step-050)
+    stStream = null; // 新 turn:旧流式尾块退役
     renderHistory();
-    // 2026-10-29:会话身份从无到有(submit 直接改 currentSid,没经过 openSession)→ 打灰激活门,
+ // 会话身份从无到有(submit 直接改 currentSid,没经过 openSession)→ 打灰激活门,
     // 让白板/追踪/吞吐/子代理流按新 sid 走一遍 onSessionChange(归属项目/卡头状态点一并校正)。
     try { onSessionChange(sid); } catch (e) { console.warn("[panel] 新会话切换失败", e); }
   }
   render();
-  // 2026-10-29 用户口径「添加新任务时所有面板数据刷新,尤其会话流」:同 sid 追加任务也要重取一遍
+ // 同 sid 追加任务也要重取一遍
   refreshPanelsAfterSubmit(sid);
 }
 /** m4 回包确认成功 → 立即发暂存的 task.submit。先摘链再发:同一 pending 只会派单一次,
@@ -15328,7 +15328,7 @@ function draftModelAbort(why, effModel) {
   if (!p) return;
   draftSubmitPending = null;
   if (p.timer) { clearTimeout(p.timer); p.timer = null; }
-  // 2026-10-29:摘链前先把在飞的选择捞出来存成重试料(旧 draftModelPick=pick 语义等价迁移)。
+ // 摘链前先把在飞的选择捞出来存成重试料(旧 draftModelPick=pick 语义等价迁移)。
   const pickInFlight = sessionModelStaged.get(p.sid) || null;
   sessionModelStaged.delete(p.sid);
   const sameView = currentSid === p.sid;
@@ -15348,7 +15348,7 @@ function draftModelAbort(why, effModel) {
     renderSendBtn();
     render();
   }
-  // step-165(块4·4.6):pending 摘链即摘等待禁点——sameView 分支的 renderSendBtn 已覆盖,但用户
+ // (块4·4.6):pending 摘链即摘等待禁点——sameView 分支的 renderSendBtn 已覆盖,但用户
   // 已切走(非 sameView)时当前视图按钮还挂着 wait-ack 禁点,必须显式复位(否则按钮永久不可点)。
   else renderSendBtn();
   toast("会话模型未确认,任务未发送:" + String(why).slice(0, 80) + "(草稿与所选模型已保留,可直接重试)", true);
@@ -15370,7 +15370,7 @@ function sideToSuper(label, text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// step-1041:Super Agent 指挥台 view(#view-super)。
+// Super Agent 指挥台 view(#view-super)。
 // 左=持久聊天渲染区(journal 回放:super.history → message.user/message.agent/super.notice/
 //   super.relay;刷新/重启不丢,day 卷分隔),右=调度看板四区(借鉴 ref/dsh-superagent-prototype
 //   docs/005-panel.md「三问」看板与 src/core/stage.ts「人先行」阶段:待人工置顶、计数=清单长度、
@@ -15734,7 +15734,7 @@ function builtinFork(args) {
   // 该会话最近一条任务作指令与标题来源(无任务也允许 fork:空指令兜底,服务端按空 instruction 处理)
   const t = [...tasks.values()].filter((x) => x.sessionId === sid).sort((x, y) => y.updatedAt - x.updatedAt)[0];
   if (t) {
-    // step-169:instruction 属正文(索引条目没有)→ 按需拉;取不到正文时以空指令 fork 兜底(标题仍可用)。
+ // instruction 属正文(索引条目没有)→ 按需拉;取不到正文时以空指令 fork 兜底(标题仍可用)。
     withTaskDetail(t.id, (full) => {
       // 正文拉取失败(full=null)才提示;全程无 instruction(服务端按空指令处理)仍允许 fork。
       if (!full) { toast("任务正文加载中,请稍后再试 /fork", true); return; }
@@ -15777,7 +15777,7 @@ function forkTask(t) {
   // 全部上下文事件(剔除任务生命周期噪声)继承进新会话,拿到新 id 后再在新会话派原指令。
   // 旧行为=仅重派指令(无上下文继承)。结果经本函数自带的一次性 ws 监听接收(主 onmessage 不动)。
   // r3:实现体抽成 forkSessionAndSubmit(/fork 复用),本函数保留为任务菜单入口。
-  // step-169:instruction/title 正文按需拉(task.detail.get);无正文 → toast 提示,不空派。
+ // instruction/title 正文按需拉(task.detail.get);无正文 → toast 提示,不空派。
   withTaskDetail(t.id, (full) => {
     const ins = String((full && full.instruction) || "");
     if (!ins) { toast("任务正文加载中,请稍后再点分叉", true); return; }
@@ -15785,7 +15785,7 @@ function forkTask(t) {
   });
 }
 
-// ---- 划词菜单(step-042,ZCode SelectionActionMenu 移植):选中正文→侧聊/引用入输入框 ----
+// ---- 划词菜单(ZCode SelectionActionMenu 移植):选中正文→侧聊/引用入输入框 ----
 document.addEventListener("mouseup", (e) => {
   setTimeout(() => {
     const sel = window.getSelection && window.getSelection();
@@ -15805,14 +15805,14 @@ document.addEventListener("click", (e) => {
   m.style.display = "none";
 });
 
-// ---- 定时自动化管理(step-043,ZCode AutomationsSection 移植) ----
+// ---- 定时自动化管理(ZCode AutomationsSection 移植) ----
 let automations = [];
 function ago2(ts) { if (!ts) return "未跑"; const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? "刚刚" : m < 60 ? m + "分前" : Math.round(m / 60) + "时前"; }
 function untilStr(ts) { const m = Math.round((ts - Date.now()) / 60000); return m <= 0 ? "即将" : m + "分后"; }
 function renderAutomations() {
   const host = $("autoList");
   if (!host) return;
-  // scope 分栏(step-046,ZCode 全局/项目 tabs):project=scope 匹配激活项目;无 scope 视为 global。
+ // scope 分栏(ZCode 全局/项目 tabs):project=scope 匹配激活项目;无 scope 视为 global。
   const scopePid = activeProjectId || "__harness__";
   const shown = automations.filter((a) => (autoScope === "global" ? (a.scope || "global") === "global" : a.scope === scopePid));
   host.innerHTML = shown.length
@@ -15846,14 +15846,14 @@ $("autoAdd").onclick = () => {
   const instruction = sec.querySelector("input[name=instruction]").value.trim();
   const every = Number(sec.querySelector("input[name=every]").value);
   if (!name || !instruction || !every) { toast("名称/指令/间隔都必填", true); return; }
-  // scope 跟随当前分栏(step-046):本项目 tab 下创建=scope 激活项目;全局 tab=global。
+ // scope 跟随当前分栏:本项目 tab 下创建=scope 激活项目;全局 tab=global。
   const scope = autoScope === "project" ? (activeProjectId || "__harness__") : undefined;
   wsSafeSend(JSON.stringify({ v: 1, type: "automation.create", name, instruction, everyMinutes: every, ...(scope ? { scope } : {}) }));
   sec.querySelector("input[name=name]").value = "";
   sec.querySelector("input[name=instruction]").value = "";
   sec.querySelector("input[name=every]").value = "";
 };
-// ---- step-047 终端(本地工作区命令执行;输出走 WS 流式) ----
+// ---- 终端(本地工作区命令执行;输出走 WS 流式) ----
 let termBusy = false;
 function termSend(o) { if (ws.readyState === 1) wsSafeSend(JSON.stringify(Object.assign({ v: 1 }, o))); }
 function termAppend(text, cls) {
@@ -15875,7 +15875,7 @@ $("termInput").onkeydown = (e) => {
   termBusy = true;
   termSend({ type: "term.exec", command: cmd });
 };
-// ---- step-125 服务商预设目录(单一出处=provider-presets.ts;浏览器侧只读 JSON) ----
+// ---- 服务商预设目录(单一出处=provider-presets.ts;浏览器侧只读 JSON) ----
 const PROVIDER_PRESETS = ${PRESETS_JSON};
 // ---- 错误码 -> 人话文案表(单一出处=error-text.ts;ERR_TEXT/errorText/errorDiagnostic 由构建期注入)----
 ${ERROR_TEXT_JS}
@@ -15996,7 +15996,7 @@ function presetDialog(pp) {
       elUrl.textContent = md.baseUrl || "(在高级中手填 baseUrl)";
       elAdvUrl.value = md.baseUrl || "";
       elAdvType.value = md.apiType || "chat";
-      // 主题化 select 镜像:程序化改值不触发 change,镜像按钮会停留在旧协议文案(实测 Token 套餐仍显示 Chat)。
+ // 主题化 select 镜像:程序化改值不触发 change,镜像按钮会停留在旧协议文案(经验证 Token 套餐仍显示 Chat)。
       try { if (typeof beautifySelect === "function") beautifySelect(elAdvType); elAdvType.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
       elAdvKeyEnv.value = md.apiKeyEnv || (isLocal ? "" : "CUSTOM_API_KEY");
       elAdvId.value = elAdvId.value || uniqueProviderId(pp.id + (active.key === "token-plan" ? "-plan" : ""));
@@ -16113,7 +16113,7 @@ function renderProvPresets() {
     };
   }
 }
-// ---- step-047/step-112 模型目录(Provider 目录 ∪ 端点拉取 ∪ 自定义;能力徽标/元数据/设主模型/启停) ----
+// ---- / 模型目录(Provider 目录 ∪ 端点拉取 ∪ 自定义;能力徽标/元数据/设主模型/启停) ----
 let lastModelIds = [];
 function disabledModels() {
   const c = (cfgView && cfgView.config && cfgView.config.coding) || {};
@@ -16153,7 +16153,7 @@ function setMainModel(name, providerId) {
   if (badge) { badge.textContent = "应用中…"; badge.className = "sd cfg-wait"; }
   toast("主模型 → " + name + "(已提交,等待服务端确认…)");
 }
-// 模型逐一探活状态(step-052 F4):model → {pending} | {ok,ms,error};renderModelList 从这里渲染徽标。
+// 模型逐一探活状态( F4):model → {pending} | {ok,ms,error};renderModelList 从这里渲染徽标。
 const modelProbe = {};
 let probeQueue = [], probeActive = 0, probeDone = 0, probeTotal = 0;
 function probePump() {
@@ -16235,7 +16235,7 @@ function renderModelList() {
     };
   }
 }
-// ---- step-047 管理面渲染器(子智能体/技能/命令/钩子/MCP/记忆) ----
+// ---- 管理面渲染器(子智能体/技能/命令/钩子/MCP/记忆) ----
 let customCommands = [];
 function mgrRow(name, src, desc, meta, acts) {
   return '<div class="mgr-row"><span class="m-name">' + esc(name) + '</span>' +
@@ -16274,7 +16274,7 @@ function renderSkills(m) {
     b.onclick = () => {
       const name = b.dataset.name;
       const cat = b.dataset.cat || "builtin";
-// 乐观翻转(step-051 竞态修复):9p 慢写致 ack 可迟 >800ms(WSL 实测 860ms),按闭包旧态连点会发出同向值——
+// 乐观翻转(竞态修复):9p 慢写致 ack 可迟 >800ms(WSL 经验证 860ms),按闭包旧态连点会发出同向值——
         // 以按钮当前文字为准先翻,目标态由它推导;权威列表回来照常覆盖。
         const wasDisabled = b.textContent.includes("启用");
         b.textContent = wasDisabled ? "停用" : "启用";
@@ -16289,7 +16289,7 @@ function renderSkills(m) {
 function renderCmds(m) {
   const host = $("cmdsView");
   if (!host) return;
-  // 2026-10-23 修:commands.list.result 现为「内置 + 自定义」合并流(catalog 语义),
+ // 修:commands.list.result 现为「内置 + 自定义」合并流(catalog 语义),
   // 这里必须只收自定义项——否则设置页会把内置命令当用户命令列出(还带删除按钮),
   // 斜杠面板 custom 组也会重复一遍,且 /help 一类会误走 custom 模板展开路径。
   customCommands = ((m && m.commands) || []).filter((c) => c && c.source !== "builtin");
@@ -16316,7 +16316,7 @@ function renderHooks(m) {
     b.onclick = () => {
       const id = b.dataset.id;
       if (b.dataset.act === "del") { uiConfirm("删除该钩子?", { tone: "danger" }).then((ok) => { if (ok) wsSafeSend(JSON.stringify({ v: 1, type: "hooks.remove", id })); }); }
-      // 乐观翻转(step-051 同族竞态):按钮文字为准,慢 ack 期间连点不重发同向值。
+ // 乐观翻转(同族竞态):按钮文字为准,慢 ack 期间连点不重发同向值。
       else { const wasEnabled = b.textContent.includes("停用"); b.textContent = wasEnabled ? "启用" : "停用"; wsSafeSend(JSON.stringify({ v: 1, type: "hooks.update", id, enabled: !wasEnabled })); }
     };
   }
@@ -16362,9 +16362,9 @@ function renderProxyKv(m) {
   const px = (m && m.proxy) || {};
   host.innerHTML = [["HTTPS_PROXY", px.https], ["HTTP_PROXY", px.http], ["NO_PROXY", px.no]].map(([k, v]) => '<span class="k">' + k + '</span><span class="v">' + (v ? esc(String(v)) : "(未设置)") + "</span>").join("");
 }
-// ---- step-049:项目档案(架构图管线视图) ----
+// ---- 项目档案(架构图管线视图) ----
 let ppId = null, ppData = null, ppSel = null;
-// 代码档案 tab(step-118):结构(架构图/模块/演进)| 文件钻取 | Wiki 文档。
+// 代码档案 tab:结构(架构图/模块/演进)| 文件钻取 | Wiki 文档。
 // 默认结构;wiki tab 首次点击/切项目后进入时懒加载(只读 manifest,不自动生成)。
 function projectSetTab(tab, skipWikiLoad) {
   projectTab = tab === "files" || tab === "wiki" || tab === "roadmap" ? tab : "structure";
@@ -16393,11 +16393,11 @@ function openProfile(pid) {
   ppRender({ state: "pending", progress: 0, stage: "请求中", modules: [], edges: [], mermaid: "", stats: { files: 0, lines: 0, languages: {}, projectState: "" }, recentChanges: [], newModules: [] });
   ppOwnerNote(pid);
   wsSafeSend(JSON.stringify({ v: 1, type: "profile.get", projectId: pid }));
-  wsSafeSend(JSON.stringify({ v: 1, type: "profile.file", projectId: pid })); // 文件清单(step-048 追记八)
-  arcQuery(); // 设计沉淀索引(step-058):档案打开即拉,列表+反查角标数据源
+  wsSafeSend(JSON.stringify({ v: 1, type: "profile.file", projectId: pid })); // 文件清单
+  arcQuery(); // 设计沉淀索引:档案打开即拉,列表+反查角标数据源
 }
 /** n9 代码档案作用域说明:当前展示的是「会话归属项目」还是回退的 activeProjectId。
- *  用户实报「切了会话,档案还是上一个项目」——卡头必须写清来源,不能让人以为是当前会话数据。 */
+ * 用户用户反馈「切了会话,档案还是上一个项目」——卡头必须写清来源,不能让人以为是当前会话数据。 */
 function ppOwnerNote(pid) {
   const el = $("ppOwner");
   if (!el) return;
@@ -16446,7 +16446,7 @@ function ppRender(d) {
     mermaid.render("ppgraph", d.mermaid).then((o) => {
       g.innerHTML = '<div class="gv">' + (o && o.svg ? o.svg : o) + "</div>";
       bindZoomPan(g, g.querySelector(".gv"), g.querySelector("svg"));
-      // 节点点选=选中模块(金色高亮+邻接淡化,右侧详情展开;再点恢复)——用户口径:选中就是黄色高亮状态
+ // 节点点选=选中模块(金色高亮+邻接淡化,右侧详情展开;再点恢复)——选中就是黄色高亮状态
       const svg = g.querySelector("svg");
       if (svg) {
         svg.style.maxWidth = "none";
@@ -16488,8 +16488,8 @@ function ppRender(d) {
     : '<div class="cc-empty">暂无变更记录(任务完成即记录模块演进)</div>';
   planRender();
 }
-/** 图容器缩放/平移通用绑定(2026-10-13 质量轮:滚轮以鼠标为中心/空白拖拽/位移阈值兼容节点点选)
- *  2026-10-29 任务B:缩放/平移数学改走 diagram-viewport 引擎(window.DiagramViewport,资产缺席时
+/** 图容器缩放/平移通用绑定(质量轮:滚轮以鼠标为中心/空白拖拽/位移阈值兼容节点点选)
+ * 任务B:缩放/平移数学改走 diagram-viewport 引擎(window.DiagramViewport,资产缺席时
  *  就地内联同式兜底)——锚点缩放不变式「光标下内容点屏幕位移=0」由引擎保证;另挂双指捏合
  *  (pointer 距离→scale/中心移→pan,与 canvas-shell pinchToView 同口径)。每容器一份闭包状态,
  *  多查看器实例互不串扰。 */
@@ -16624,13 +16624,13 @@ function ppDetail(name) {
     '<br/>代表文件(点→函数级 code2flow 图):<div class=kd>' +
     (m.keyFiles || []).map((f) => '<span class="kf-link" data-f="' + esc(f) + '" style="cursor:pointer;text-decoration:underline dotted">' + esc(f) + '</span>').join('<br/>') + '</div></div>';
   for (const el of $("ppMods").querySelectorAll(".pp-mod")) el.classList.toggle("on", el.dataset.m === name);
-  // 单图同构下钻(2026-10-13):代表文件点击→ppf 函数级视图自动选中并拉取(code_index 同源数据)
+ // 单图同构下钻:代表文件点击→ppf 函数级视图自动选中并拉取(code_index 同源数据)
   for (const el of $("ppDetail").querySelectorAll(".kf-link")) {
     el.onclick = () => {
       const f = el.dataset.f;
       ppfCur = f;
       $("ppfGraphWrap").style.display = "none";
-      projectSetTab("files", true); // 结构→文件钻取(step-118 tab 化;原 scrollIntoView 在隐藏 pane 上无效)
+      projectSetTab("files", true); // 结构→文件钻取( tab 化;原 scrollIntoView 在隐藏 pane 上无效)
       wsSafeSend(JSON.stringify({ v: 1, type: "profile.file", projectId: ppId, file: f }));
       const box = $("ppf");
       if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -16639,7 +16639,7 @@ function ppDetail(name) {
 }
 $("ppSearch").oninput = () => ppRenderMods();
 $("ppRebuild").onclick = () => { if (ppId) { wsSafeSend(JSON.stringify({ v: 1, type: "profile.rebuild", projectId: ppId })); toast("重建启动(进度条刷新)"); } };
-// ---- 规划态(step-049 全量开发):图上编辑→任务书→执行 ----
+// ---- 规划态(全量开发):图上编辑→任务书→执行 ----
 function planRender() {
   if (!ppData) return;
   const plan = ppData.plan || [];
@@ -16692,7 +16692,7 @@ $("planApply").onclick = () => {
     planOpen = false;
   });
 };
-// ---- step-048 追记八:文件与函数钻取(每个文件的每个函数 + 调用关系图) ----
+// ---- 文件与函数钻取(每个文件的每个函数 + 调用关系图) ----
 let ppfFilesList = [];
 let ppfCur = null;
 function ppfEsc(x) { return String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -16727,7 +16727,7 @@ function ppfRenderFns(m) {
   const kinds = m.kinds || {};
   ppfModules = m.modules || null;
   const KD = { trunk: "入", leaf: "叶", regular: "fn" };
-  // step-058 反查角标:按 symbolRef.file 匹配沉淀索引(同文件的全部行共享文件级计数,入口轻)
+ // 反查角标:按 symbolRef.file 匹配沉淀索引(同文件的全部行共享文件级计数,入口轻)
   const bcnt = arcBadgeCount(m.file);
   const bBadge = bcnt ? '<span class="arc-badge" data-arcfile="' + ppfEsc(m.file) + '" title="' + bcnt + ' 块设计板碰过这个文件——点击在设计沉淀区反查">' + bcnt + " 设计</span>" : "";
   $("ppfHint").textContent = m.file + " · " + syms.length + " 个函数 · " + edges.length + " 条调用";
@@ -16814,7 +16814,7 @@ function ppfModuleCanvas(m) {
     toast("已生成任务草稿板,切到白板查看");
     switchView("board");
   };
-  // step-058 反查:模块卡角标 → 设计沉淀区按文件过滤
+ // 反查:模块卡角标 → 设计沉淀区按文件过滤
   for (const b of $("ppfMermaid").querySelectorAll(".arc-badge")) b.onclick = (e) => { e.stopPropagation(); arcFilterFile(b.dataset.arcfile); };
 }
 /** 关系图:聚焦函数=自身+文件内上下游(互调实线)+跨文件被调(虚线外部节点);null=整文件全部边。 */
@@ -16865,12 +16865,12 @@ function ppfDrawGraph(m, focusId) {
   if (trunkIds.length || leafIds.length) tail += NL + "  classDef c2fTrunk fill:#8a5a2a,stroke:#c98f45,color:#fff" + NL + "  classDef c2fLeaf fill:#3a5a3a,stroke:#7ec98f,color:#b8e0b8";
   mermaid.render("ppfm" + Date.now() % 1e6, tail).then((o) => {
     el.innerHTML = '<div class="gv">' + (o && o.svg ? o.svg : String(o)) + "</div>";
-    bindZoomPan(el, el.querySelector(".gv"), el.querySelector("svg")); // 文件级小图同享缩放/平移(2026-10-13 用户口径)
+    bindZoomPan(el, el.querySelector(".gv"), el.querySelector("svg")); // 文件级小图同享缩放/平移
   }).catch(() => { el.innerHTML = "<pre style='font-size:9px;color:var(--faint)'>" + ppfEsc(tail) + "</pre>"; });
 }
 $("ppfGClose").onclick = () => { if (arcOpen) { arcClose(); return; } $("ppfGraphWrap").style.display = "none"; };
 
-// ---- step-058:设计沉淀(done 板 → 项目级设计记忆) ----
+// ---- 设计沉淀(done 板 → 项目级设计记忆) ----
 // 定位口径:白板=一次代码改动的临时任务草图(动态);代码档案=项目静态基座知识。
 // 任务收官(done)时最终板承载的设计决策沉淀为项目级索引(board-archive.json,服务端 board-store),
 // 这里呈现:done 板列表(标题/日期/节点数/关联文件)→ 点击=只读 Dify 画布(泛化 renderBoardCanvas,
@@ -16886,7 +16886,7 @@ function arcBadgeCount(file) { return file ? arcItems.filter((e) => (e.files || 
 function arcFilterFile(file) {
   arcFileFilter = file;
   arcRender();
-  projectSetTab("structure", true); // step-118 tab 化:沉淀列表在结构 tab,反查后切过去(否则在隐藏 pane 里滚不到)
+  projectSetTab("structure", true); // tab 化:沉淀列表在结构 tab,反查后切过去(否则在隐藏 pane 里滚不到)
   const b = $("arcBody");
   if (b) b.scrollIntoView({ block: "nearest" });
 }
@@ -16912,7 +16912,7 @@ function arcRender() {
   }
 }
 /** 打开一块沉淀板:只读画布放进 ppf 灯箱;板全文走既有 board.get 通道(doc+连接三态一次拿全)。 */
-let arcPrevTab = ""; // step-118 tab 化:灯箱宿主在「文件钻取」pane,打开时临时切过去,关闭后回原 tab
+let arcPrevTab = ""; // tab 化:灯箱宿主在「文件钻取」pane,打开时临时切过去,关闭后回原 tab
 function arcOpenEntry(it) {
   if (bfOpen) bfToggle(false); // 画布全局单活:浮窗宿主先让位(内部把画布搬回大白板宿主)
   if (!arcOpen) arcPrevTab = projectTab;
@@ -16948,7 +16948,7 @@ $("ppfSearch").oninput = () => ppfRenderFiles();
 $("ppWindow").onclick = () => { if (ppId) window.open("/profile?p=" + encodeURIComponent(ppId), "_blank"); };
 $("projRow").title = "点击 → 新建任务(草稿);项目行「档案」→ 项目档案";
 
-// ---- step-048:插件市场 / 内嵌浏览器 / 账号额度 / 引导 / 附件 / 远程向导 ----
+// ---- 插件市场 / 内嵌浏览器 / 账号额度 / 引导 / 附件 / 远程向导 ----
 // ── 插件市场 ──
 let mktCatalog = [];
 const MKT_SOURCE_LABEL = { official: "官方", builtin: "内置", user: "自建" };
@@ -17031,7 +17031,7 @@ $("brGo").onclick = brGo;
 $("brUrl").onkeydown = (e) => { if (e.key === "Enter") brGo(); };
 $("brExt").onclick = () => { let u = $("brUrl").value.trim(); if (u) window.open(isHttpUrl(u) ? u : "https://" + u, "_blank"); };
 $("browser-open-view").onclick = () => switchView("browser");
-/* ---- 内置浏览器视图(2026-10-21 移植 ZCode UnifiedBrowserView;宿主只做 WS 桥 + 挂载) ---- */
+/* ---- 内置浏览器视图(移植 ZCode UnifiedBrowserView;宿主只做 WS 桥 + 挂载) ---- */
 let gbvMounted = false;
 function gbvSend(payload) { wsSafeSend(JSON.stringify({ v: 1, ...payload })); }
 function brMount() {
@@ -17120,7 +17120,7 @@ function wizGen(kind) {
   wsSafeSend(JSON.stringify({ v: 1, type: "wizard.gen", kind, host, user: $("wiz-user").value.trim() || "root", port: Number($("wiz-port").value) || 22, nodeId: $("wiz-nodeid").value.trim() || "remote-node" }));
 }
 $("wiz-ssh").onclick = () => wizGen("ssh");
-// SSH 凭证管理(2026-10-26):密码→secrets 精确键+一键连通测试;面板绝不回显密码
+// SSH 凭证管理:密码→secrets 精确键+一键连通测试;面板绝不回显密码
 $("sshcred-save").onclick = () => {
   const host = $("sshcred-host").value.trim();
   const user = $("sshcred-user").value.trim();
@@ -17135,10 +17135,10 @@ $("sshcred-save").onclick = () => {
 };
 let sshCredPending = null;
 $("wiz-docker").onclick = () => wizGen("docker");
-// ── 审批中心(step-010 二期收口,designs/03 §0「审批不阻断」整页形态;
-//    step-1042 丰满:风险标签/TTL 倒计时/会话链接/批量操作/最近决定/统一应答口) ──
+// ── 审批中心(二期, §0「审批不阻断」整页形态;
+// 丰满:风险标签/TTL 倒计时/会话链接/批量操作/最近决定/统一应答口) ──
 let approvalQueue = new Map();
-let approvalHistory = []; // step-1042:最近决定(broker 内存 ring 回包;重启即失,持久化登记后续)
+let approvalHistory = []; // 最近决定(broker 内存 ring 回包;重启即失,持久化登记后续)
 const GATE_RISK_ZH = { low: "低", medium: "中", high: "高" };
 /** 决议来源中文标签(permission.resolved.by / history.by)。 */
 function gateByZh(by) {
@@ -17177,7 +17177,7 @@ function renderApprovals() {
     ? asks.map(gateRowHtml).join("")
     : '<div class="sup-empty">没有挂起审批。coding agent 需要授权时,请求会实时出现在这里;' +
       Math.round(60000 / 1000) + ' 秒内未处理会被自动拒绝(fail-closed:宁拒不悬)。</div>');
-  // 最近决定(step-1042):本页生命周期内的真实收敛记录(broker 内存 ring;重启清零)。
+ // 最近决定:本页生命周期内的真实收敛记录(broker 内存 ring;重启清零)。
   parts.push('<details class="sup-sec" style="margin-top:8px"><summary class="sup-sec-h" style="cursor:pointer">最近决定(' + approvalHistory.length + ')</summary><div class="sup-list" style="margin-top:6px">' +
     (approvalHistory.length
       ? approvalHistory.slice().reverse().map((h) => '<div class="sup-row"><div class="sup-row-h">' +
@@ -17220,13 +17220,13 @@ document.addEventListener("click", (e) => {
   if (open) { const sid = open.getAttribute("data-apopen"); if (sid) openSession(sid); }
 });
 $("approvals-refresh").onclick = () => { wsSafeSend(JSON.stringify({ v: 1, type: "permission.pending" })); wsSafeSend(JSON.stringify({ v: 1, type: "permission.history", limit: 20 })); };
-// 三卡「刷新」:发出查询即垫 loading 态(2026-10-20 用户口径「查询发出垫 loading 态」)——
+// 三卡「刷新」:发出查询即垫 loading 态——
 // 此前点刷新后旧内容原样停着,用户无法判断是「没数据」还是「还没回来」。
 function bd3Loading(hostId, text) {
   const el = $(hostId);
   if (el) el.innerHTML = '<div class="cc-empty loading">' + esc(text) + "</div>";
 }
-$("subchat-refresh").onclick = () => subMsgRender(); // step-141 双栏骨架常驻:不垫 loading(会掀掉 #subchat-list/#subchat-pane 宿主),重渲本身即时;n3 融合后并承担原分身卡「刷新」职责(目录态随 session.status 轮询)
+$("subchat-refresh").onclick = () => subMsgRender(); // 双栏骨架常驻:不垫 loading(会掀掉 #subchat-list/#subchat-pane 宿主),重渲本身即时;n3 融合后并承担原分身卡「刷新」职责(目录态随 session.status 轮询)
 $("track-refresh").onclick = () => { bd3Loading("track-body", "读取任务追踪…"); trackPull(); };
 $("usage-refresh").onclick = () => { bd3Loading("usage-body", "读取用量统计…"); wsSafeSend(JSON.stringify({ v: 1, type: "usage.view" })); };
 
@@ -17234,7 +17234,7 @@ $("usage-refresh").onclick = () => { bd3Loading("usage-body", "读取用量统�
 // 数据源=journal(服务端 dashboard-collector/trends 纯函数折算);推送=WS dashboard.changed
 // (journal 订阅节流广播),取数=dashboard.sessions/trends 拉模型——ref 的独立 HTTP+SSE
 // server 与端口在此收编进既有 WS 总线,功能面 1:1。
-// 作用域(2026-10-16 每项目一块看板,用户口径「每个项目一个看板数据才对」):不再持久化——
+// 作用域(每项目一块看板:不再持久化——
 // 进看板子标签即锁定当前激活项目(dashLockScope);可临时切换全部/其他项目/未归属(手动选择后
 // 本页会话内保持);项目注册表变化时若仍在自动挡则跟随新项目。会话级内存态,刷新后重新锁定。
 let dashScope = "all";
@@ -17248,7 +17248,7 @@ let dashTrends = null;
 let dashArchive = [];      // C:设计沉淀索引(board.archive.list 全量;按 sessionId 数条目)
 let dashPushAt = 0;
 let dashReloadTimer = null;
-// n6 兜底重拉(2026-10-22):dashboard.changed 到达时白板/追踪视图在场也要跟着重拉(不只靠 board.changed)。
+// n6 兜底重拉:dashboard.changed 到达时白板/追踪视图在场也要跟着重拉(不只靠 board.changed)。
 // 白板侧 1000ms 节流水位 + 尾沿补拉(bdDashPullTimer);追踪卡 800ms 尾沿防抖(trackDashTimer)。
 let bdDashPullAt = 0;
 let bdDashPullTimer = null;
@@ -17256,19 +17256,19 @@ let trackDashTimer = null;
 // n7 手动压缩可见性:压缩请求在途标记(收到 session.compact.result 或 20s 超时清除)。
 let compactPending = false;
 let compactPendingTimer = null;
-// 板 n3(2026-10-29):压缩进行中标记(session.compact.status phase=started 置位,终态帧清除);
+// 板 n3:压缩进行中标记(session.compact.status phase=started 置位,终态帧清除);
 // 存在时 renderHistory 在流尾追加「正在压缩上下文…」行,压缩期间面板即时有反馈(不再只有按钮忙态)。
 let compactInflight = null;
 let dashSel = null;        // 详情抽屉当前会话
 let dashTrack = "";        // 轨道过滤(客户端;''=全部)
 let dashBarMode = localStorage.getItem("zh:dash-bar") || "tokens"; // 趋势柱:tokens|llm
 const DASH_STATUS = { running: ["运行中", "run"], waiting_for_input: ["等输入", "wait"], error: ["出错", "err"], idle: ["空闲", "idle"], stopped: ["已结束", "stop"] };
-/** 2026-10-29 看板「仅当前会话」档的哨兵值(与项目档互斥;项目 id 不会长成这个名字)。 */
+/** 看板「仅当前会话」档的哨兵值(与项目档互斥;项目 id 不会长成这个名字)。 */
 const SESSION_SCOPE = "__session__";
 function sessionScopeOn() { return dashScope === SESSION_SCOPE; }
 function dashWsSend(obj) { if (ws.readyState === 1) wsSafeSend(JSON.stringify(obj)); } // 重连窗(CONNECTING)静默跳过:看板是旁观面,丢了下个周期自愈
 function dashSend() {
-  // 2026-10-29 会话档:__session__ 不是项目 id(服务端只认 projectId),按「全部」取数后前端按 sid 过滤
+ // 会话档:__session__ 不是项目 id(服务端只认 projectId),按「全部」取数后前端按 sid 过滤
   const pid = dashScope === "all" || dashScope === SESSION_SCOPE ? null : dashScope;
   dashWsSend({ v: 1, type: "dashboard.sessions", projectId: pid });
   dashWsSend({ v: 1, type: "dashboard.trends", projectId: pid });
@@ -17351,7 +17351,7 @@ function dashRow(s) {
     "<td>" + dashNum(s.boards || 0) + (hasArc ? '<span class="dash-arc" title="有已沉淀板">沉</span>' : "") + "</td>" +
     '<td><button class="vw-act" data-dashdetail="' + esc(s.sessionId) + '">详情</button></td></tr>';
 }
-/** 2026-10-29 会话档(用户口径「看板内容要和选中的 session 挂钩」):起作用域=仅当前会话时
+/** 会话档:起作用域=仅当前会话时
  *  只留当前 sid 的行;无选中会话=空表(不回落显示别的会话,避免误读)。 */
 function dashScoped(list) {
   const all = list || [];
@@ -17468,14 +17468,14 @@ setInterval(() => { if (viewLive("dash") && !document.hidden) dashLoad(); }, 150
 // 实时徽标衰减(推送停了就从「实时」回落「轮询」,不撒谎)
 setInterval(() => { if (viewLive("dash")) { const el = $("dashLiveDot"); if (el) el.textContent = dashPushAt && Date.now() - dashPushAt < 15000 ? "实时" : "轮询"; } }, 5000);
 
-// ── 团队视图(step-032 收口,designs/04) ──
+// ── 团队视图 ──
 const TEAM_STATE_LABEL = { online: "在线", coding: "写码中", reviewing: "评审中", away: "离开", dnd: "勿扰", offline: "离线" };
 function renderTeam(orgs, projectTeam, projectTeams) {
   const host = $("team-orgs");
   if (!host) return;
   lastTeamOrgs = orgs;
-  // 项目绑定团队分区(designs/23:git remote ↔ roster projects.repo → 真成员在线态 + git 贡献者候选)
-  // 2026-10-27 扩全项目:projectTeams=全部可见项目各一份(此前只画激活项目=「团队页只有 harness」);
+ // 项目绑定团队分区(git remote ↔ roster projects.repo → 真成员在线态 + git 贡献者候选)
+ // 扩全项目:projectTeams=全部可见项目各一份(此前只画激活项目=「团队页只有 harness」);
   // 旧网关无 projectTeams 字段时回退激活项单卡。
   let projectHtml = "";
   {
@@ -17511,7 +17511,7 @@ function renderTeam(orgs, projectTeam, projectTeams) {
       }).join('<div style="height:8px"></div>');
     }
   }
-  // teamai 团队仓资产分区(designs/24:八类 Execution 资产计数+规则/技能索引;secrets 只显示 key 数)
+ // teamai 团队仓资产分区(八类 Execution 资产计数+规则/技能索引;secrets 只显示 key 数)
   let teamaiHtml = "";
   {
     const t = typeof lastTeamaiRaw === "object" && lastTeamaiRaw ? lastTeamaiRaw : null;
@@ -17529,7 +17529,7 @@ function renderTeam(orgs, projectTeam, projectTeams) {
         '<div class="mgr-row"><span class="m-name">' + esc(h.id) + '</span><span class="m-desc">' + esc(h.event) + " " + esc(h.matcher || "") + '</span><span class="m-meta">tools: ' + esc((h.tools || []).join(",")) + "</span></div>").join("");
       const learnRows = (t.learnings || []).map((l, i) =>
         '<div class="mgr-row"><span class="m-name">' + esc(l.title || l.path) + '</span><span class="m-desc">' + esc((l.author || "") + (l.date ? " · " + l.date : "")) + '</span><span class="m-meta">' + esc((l.tags || []).join(",")) + ' <button class="vw-act" data-learn="' + i + '">看</button></span></div>').join("");
-      // 角色卡(2026-11-05 teamai 移植):ref roles 语义 = 资源命名空间集合,与 member.role 权限位不同源
+ // 角色卡( teamai 移植):ref roles 语义 = 资源命名空间集合,与 member.role 权限位不同源
       const roleRows = (t.roles || []).map((r) =>
         '<div class="mgr-row"><span class="m-name">' + esc(r.id) + '</span><span class="m-desc">' + esc(r.name || "") + (r.description ? " · " + esc(String(r.description).slice(0, 40)) : "") + '</span><span class="m-meta">skills ' + ((r.skills || []).length) + " · rules " + ((r.rules || []).length) + "</span></div>").join("");
       // 成员→角色映射(relay digest.memberRoles;旧网关无此字段=不显示徽标,不报错)
@@ -17557,7 +17557,7 @@ function renderTeam(orgs, projectTeam, projectTeams) {
         const cards = (o.presence || []).map((p) => {
           const dot = { online: "#6fae7a", coding: "#6fae7a", reviewing: "#c9a25e", away: "#9a8f7a", dnd: "#c0564f", offline: "#555" }[p.state] || "#555";
           const taskLine = p.state === "coding" ? "在写代码" : p.state === "reviewing" ? "在评审" : "";
-          // 2026-11-05:角色徽标取自团队仓 roster roles(roleId),与权限位 role 分开显示,避免同名字段混淆
+ // 角色徽标取自团队仓 roster roles(roleId),与权限位 role 分开显示,避免同名字段混淆
           const rid = memberRoles[p.username];
           const roleChip = rid ? ' <span style="font-size:9px;padding:0 4px;border:1px solid var(--bronze);border-radius:3px;color:var(--bronze)">' + esc(String(rid)) + "</span>" : "";
           return '<div class="mgr-row"><span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>' +
@@ -17597,9 +17597,9 @@ document.addEventListener("click", (e) => {
     if (l) uiAlert(String(l.body || "").slice(0, 6000), { title: "【" + (l.title || l.path) + "】" + (l.author ? " · " + l.author + " · " + (l.date || "") : "") });
   }
 });
-// 邀请绑定激活项目(designs/23:兑换后的 roster 条目自动带 projects,不由兑换者申报)
+// 邀请绑定激活项目(兑换后的 roster 条目自动带 projects,不由兑换者申报)
 let lastProjectTeam = null;
-let lastProjectTeams = null; // 2026-10-27:全项目绑定切片(team.status.result.projectTeams)
+let lastProjectTeams = null; // :全项目绑定切片(team.status.result.projectTeams)
 let pendingShare = null;
 function lastTeamaiDigest() {
   return lastTeamOrgs && lastTeamaiRaw ? lastTeamaiRaw : null;
@@ -17807,14 +17807,14 @@ $("issueNewBtn").onclick = () => {
 };
 // fixD5 结束
 let lastGoalState = null;
-// /goal set 待派发任务(2026-10-14 审计:goal.set 必须等服务端 ack 再派任务——此前 fire-and-forget,
+// /goal set 待派发任务(审计:goal.set 必须等服务端 ack 再派任务——此前 fire-and-forget,
 // plan 互斥/超长被拒时任务照派成孤儿;且草稿态 goal.set 落 __new__ 幻影会话与任务会话错位)
 let goalPendingDispatch = null;
-// invalid-message 去重(2026-10-23,session.owner.get 版本错位事故教训):面板消息被旧网关拒收时
+// invalid-message 去重(session.owner.get 版本错位事故教训):面板消息被旧网关拒收时
 // 逐 sid/逐次重发都会回 error 帧——同码 30s 只 toast 一次,防刷屏。
 let invalidMsgToastAt = 0;
 
-// ── Plan 审批卡(step-053,ZCode ExitPlanMode 审批交互) ──
+// ── Plan 审批卡(ZCode ExitPlanMode 审批交互) ──
 let planApproval = null;
 function renderPlanApproval() {
   let host = $("planApprovalCard");
@@ -17850,7 +17850,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-// ── 总路线 tab(step-131:原侧栏「总线路」一级视图并入代码档案) ──
+// ── 总路线 tab(原侧栏「总线路」一级视图并入代码档案) ──
 // 定位:code-sense 的项目开发宗旨面(为什么存在/主线能力/偏离提示)+ 原总线路任务漏斗。
 // 数据源:sense 画像走 profile.sense.get(读/生成 .genie/sense-index/profile.json);漏斗走 tasks 内存表。
 let rmData = null, rmBusy = false;
@@ -17932,12 +17932,12 @@ function renderRoadmapFunnel() {
       '<div style="height:100%;width:' + donePct + '%;background:var(--bronze)"></div></div>';
     const chips = ["queued", "running", "blocked", "done", "failed", "cancelled"].filter((k2) => b[k2]).map((k2) =>
       '<span style="font-size:9.5px;margin-right:8px;color:var(--faint)">' + ({ queued: "排队", running: "在跑", blocked: "阻塞", done: "完成", failed: "失败", cancelled: "取消" }[k2]) + " <b style='color:var(--text)'>" + b[k2] + "</b></span>").join("");
-    const recentList = b.recent.map((t) => '<div style="font-size:10.5px;color:var(--faint);margin:2px 0;display:flex;align-items:center;gap:4px">' + (t.state === "running" ? ic("run", "ok") : t.state === "done" ? ic("check", "ok") : t.state === "failed" ? ic("x", "bad") : ic("dot", "mut")) + "<span>" + esc(t.title || String(t.instruction || "").slice(0, 50)) + "</span></div>").join(""); // step-169:tasks 是索引条目,instruction 可能缺席(无 title 时不得裸取)
+    const recentList = b.recent.map((t) => '<div style="font-size:10.5px;color:var(--faint);margin:2px 0;display:flex;align-items:center;gap:4px">' + (t.state === "running" ? ic("run", "ok") : t.state === "done" ? ic("check", "ok") : t.state === "failed" ? ic("x", "bad") : ic("dot", "mut")) + "<span>" + esc(t.title || String(t.instruction || "").slice(0, 50)) + "</span></div>").join(""); // tasks 是索引条目,instruction 可能缺席(无 title 时不得裸取)
     return '<div class="tcard" style="padding:10px 12px;background:rgba(255,255,255,.02)">' +
       '<div style="display:flex;align-items:center;gap:8px"><b style="font-size:12.5px">' + esc(pid) + '</b><span style="font-size:9.5px;color:var(--faint)">' + total + " 个任务 · " + donePct + "% 完成</span></div>" + bar +
       "<div style='margin:2px 0 4px'>" + chips + "</div>" + recentList + "</div>";
   }).join("");
-  host.innerHTML = rows || '<div class="cc-empty">暂无任务——总线路随任务创建实时点亮(designs/03:异步优先,提交即入队)</div>';
+  host.innerHTML = rows || '<div class="cc-empty">暂无任务——总线路随任务创建实时点亮(:异步优先,提交即入队)</div>';
 }
 $("rmFunnelRefresh").onclick = () => renderRoadmapFunnel();
 $("rmRefresh").onclick = () => { rmData = null; roadmapLoad(); };
@@ -17951,8 +17951,8 @@ $("rmGen").onclick = () => {
   setTimeout(() => { b.disabled = false; }, 60000);
 };
 
-// ── 节点视图(step-010 二期收口;数据同 nodes.list) ──
-// ── 节点 Fleet(step-1042 丰满:概要/真实负载/能力与可达性 chips/命令下发+输出回显/远程项目/接入指引;
+// ── 节点视图(二期;数据同 nodes.list) ──
+// ── 节点 Fleet(丰满:概要/真实负载/能力与可达性 chips/命令下发+输出回显/远程项目/接入指引;
 //    旧版=一列只读 mgr-row,负载恒零,命令要绕设置页)──
 const nodeExecOut = new Map(); // nodeId → 最近一次 node.exec 结果(卡内回显;重启即失)
 function nodeOutHtml(id) {
@@ -18047,7 +18047,7 @@ document.getElementById("nodes-body").addEventListener("keydown", (e) => {
 });
 $("nodes-refresh").onclick = () => wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" }));
 
-// ==================== 看板三件套渲染(2026-10-20) ====================
+// ==================== 看板三件套渲染 ====================
 const PHASE_CN = { understand: "理解", plan: "规划", implement: "实施", verify: "验收", close: "完成" };
 /** n3 看板融合:原「分身 Agents」卡的卡头状态点职责并入子agent会话流卡(同一份目录数据,不另开通道)。
  *  口径:有未读子代理消息=warn(新消息);否则有运行中=run;否则最近终态失败=fail;其余不亮灯。
@@ -18061,13 +18061,13 @@ function subCardStatus() {
   else if (lastPast && lastPast.ok === false) cvCardStatus("subchat", "fail", "最近一次子代理失败");
   else cvCardStatus("subchat", "", "");
 }
-// ---- 子agent会话流卡(2026-10-21 用户口径:分身消息独立一个看板,不与 coding agent 共用会话流)----
+// ---- 子agent会话流卡(分身消息独立一个看板,不与 coding agent 共用会话流)----
 // 数据源与归属判定全部复用既有通道:journal 的 subagent.event(payload.kind=message.agent)/
 // subagent.spawn/subagent.result 按 payload.agentId 归组(与子代理工作区/目录同一判据,不新造)。
 // 正文渲染直接走 Chat 卡的 replyBlockHtml(同款转轮折叠/超长折叠/折行);画布形态专属卡。
 let subMsgUnread = 0;             // 未读子代理消息数(卡状态点/托盘点共用;=非选中 agent 超水位消息之和)
 const subMsgSeen = new Map();     // agentId → 已读水位(journal 事件 time;切会话重置)
-let subSel = "";                  // step-141 选中式消息流:选中 agentId(内存态,不持久化;切会话随 subMsgReset 重置)
+let subSel = "";                  // 选中式消息流:选中 agentId(内存态,不持久化;切会话随 subMsgReset 重置)
 let subPaneSel = "";              // 上次渲进 pane 的选中(选中切换=pane 强制落底,不粘旧滚动位)
 function subMsgReset() { subMsgUnread = 0; subMsgSeen.clear(); subSel = ""; subPaneSel = ""; }
 /** 历史增量到达后的同步口(session.history.result 尾部调):含子代理事件或子agent会话流卡在场才重渲,历史包不白扫。 */
@@ -18076,7 +18076,7 @@ function subMsgSync(evs) {
   if (!hasSub && !viewLive("subchat")) return;
   subMsgRender();
 }
-/** 数据层(step-141 从渲染循环抽出,纯函数):subagent.spawn/event/result 按 agentId 归组——
+/** 数据层(从渲染循环抽出,纯函数):subagent.spawn/event/result 按 agentId 归组——
  *  evs=该 agent 全部 subagent.event(pane 消息流数据源),msgs=message.agent 文本(未读水位统计源),
  *  instructions/final/finalTime=任务书/终态。归属判据与目录/工作区同源(payload.agentId),不新造。 */
 function subChatGroups() {
@@ -18122,7 +18122,7 @@ function subSelDefault(list, dirBy) {
   }
   return best ? best.aid : "";
 }
-/** 子agent会话流渲染(step-141 选中式消息流):左栏=子代理选择器(运行中/已结束两区+未读角标),
+/** 子agent会话流渲染(选中式消息流):左栏=子代理选择器(运行中/已结束两区+未读角标),
  *  右 pane=选中者消息流(派发卡→assistant 文本→工具合并卡→终态卡),粘底跟随(距底<60px,套工作区模式)。
  *  选中=已读(水位 per-agent);未读总数=非选中 agent 超水位之和(cvCardStatus 同口径)。 */
 function subMsgRender() {
@@ -18175,7 +18175,7 @@ function subMsgRender() {
       (reapTxt ? ' · <span class="sl-reap" title="失败/收割原因">' + esc(reapTxt) + "</span>" : "") +
       "</div>" +
       // 零反斜杠纪律:PAGE 是 TS 模板字符串,\" 会在下发前被模板层吃掉 → 浏览器端整段脚本语法错误
-      // (sl-final-tx 实锤)。HTML 属性一律用单引号,不写反斜杠转义。
+ // (sl-final-tx 注意)。HTML 属性一律用单引号,不写反斜杠转义。
       // 左栏窄:摘要仍 200 字纯文本;超长时追加「全文」钮 —— 点=选中该 agent,右侧 pane 顶部终态卡(markdown,上限 20000 字)
       (finalTxt ? '<details class="sl-final"' + (isSel ? " open" : "") + ' data-subfinal="' + esc(g.aid) + '"><summary>详情 · 终态' + (en && en.ok === false ? "(失败)" : "") + "</summary><div class='sl-final-tx'>" + esc(finalTxt) + "</div>" +
         (finalAll.length > 200 ? '<button class="sl-final-more" data-subfull="' + esc(g.aid) + '" title="在右侧消息流查看终态全文">全文 · ' + finalAll.length + " 字</button>" : "") +
@@ -18308,7 +18308,7 @@ function subMsgRender() {
   if (selChanged || wasBottom) paneEl.scrollTop = paneEl.scrollHeight; // 粘底跟随;用户上滚(距底≥60px)回贴原位不抢
   else paneEl.scrollTop = keepTop;
 }
-/** 目录条目/过程卡→子agent会话流定位(step-141 选中式):目标 agent 有数据 → 唤回+聚焦卡,
+/** 目录条目/过程卡→子agent会话流定位(选中式):目标 agent 有数据 → 唤回+聚焦卡,
  *  设为选中并记已读(水位)后重渲 pane(切换选中=pane 落底);无数据返回 false(走工作区 tab 原通路)。 */
 function subMsgLocate(aid) {
   const host = $("subchat-body");
@@ -18323,7 +18323,7 @@ function subMsgLocate(aid) {
   subMsgRender();
   return true;
 }
-// step-141 交互钩子(事件委托):左栏条目点击=选中该子 agent(选中即清它的未读水位)→ 重渲双栏;
+// 交互钩子(事件委托):左栏条目点击=选中该子 agent(选中即清它的未读水位)→ 重渲双栏;
 // 「加载更早」(data-spmore)扩 subWsLimit 后只重渲本卡(与工作区同款按钮 data-wsmore 互不干扰)。
 document.addEventListener("click", (e) => {
   // 终态「全文」钮:选中该 agent(走既有通路:推已读水位+重渲 pane),pane 顶部终态卡即全文
@@ -18370,10 +18370,10 @@ setInterval(() => {
 // 任务追踪的状态过滤(全部/running/done/failed),跨刷新保持;running 恒置顶再按 updatedAt 降序
 let trackFilter = "all";
 function trackStateCn(s) { return s === "running" ? "运行中" : s === "done" ? "完成" : s === "failed" ? "失败" : s === "queued" ? "排队" : String(s || ""); }
-/** 任务追踪拉数(2026-10-21 融合板):只取当前选中会话;草稿态=空态提示。
+/** 任务追踪拉数(融合板):只取当前选中会话;草稿态=空态提示。
  *  在场 4s 活跃轮询(有数据渲染即续期;视图离场即停)。 */
 let trackTimer = null;
-/** 追踪卡会话选择(2026-10-21 用户实报:上面召回·审途有数据、下面却「未选中会话」)——
+/** 追踪卡会话选择(用户用户反馈:上面召回·审途有数据、下面却「未选中会话」)——
  *  与 status-widget 的 trackedSid 同源:优先当前选中会话;没有则回退「最近活动任务」的会话
  *  (运行中优先)。两个区必须看同一会话,否则一张卡里出现两套数据/空态自相矛盾。 */
 function trackSid(prefer) {
@@ -18414,7 +18414,7 @@ function trackRender(m) {
   // 轮询从未启动,之后建了任务也永不刷新(只能手动点「刷新」)。
   trackLiveTick();
   if (m.noSession) { el.innerHTML = '<div class="cc-empty">还没有会话——在对话卡提一个需求后,这里按 turn → 五阶段 → 阶段任务展开</div>'; return; }
-  // 2026-10-21 用户口径:追踪 Trace = turn 树(「计划」不再独立成块,全部并入 turn 节点)。
+ // 追踪 Trace = turn 树(「计划」不再独立成块,全部并入 turn 节点)。
   // 一级=turn / 二级=五阶段(恒定 5 个)/ 三级=该阶段 LLM 写的阶段任务(note)。
   const turns = Array.isArray(m.turns) ? m.turns.slice().reverse() : []; // 服务端按时间升序,卡上最新在上
   const states = m.taskStates || {};
@@ -18444,7 +18444,7 @@ function trackRender(m) {
     return;
   }
   const parts = [];
-  // 「任务」= 本卡最后一个数据块(2026-10-21 用户口径):一级 turn → 二级五阶段 → 三级阶段任务。
+ // 「任务」= 本卡最后一个数据块:一级 turn → 二级五阶段 → 三级阶段任务。
   parts.push('<div class="tk-hd"><span class="tk-hd-t">任 务</span></div>');
   parts.push('<div class="bd3-chips">' + chips + "</div>");
   list.forEach((t, ti) => {
@@ -18497,7 +18497,7 @@ document.addEventListener("click", (e) => {
   trackFilter = b.getAttribute("data-trackfilter") || "all";
   trackPull();
 });
-let usageSortKey = "tokens"; // 用量卡排序切换(2026-10-21):表头「调用/in tok」可点
+let usageSortKey = "tokens"; // 用量卡排序切换:表头「调用/in tok」可点
 let usageLastMsg = null;
 let usageScopeSid = null;       // n10 用量卡会话作用域:null=未绑定(显示全量),""=草稿态,其它=当前会话 id
 let usageScopeOnly = true;      // 卡内开关:只看当前会话(默认开;协议 usage.view 无 session 参数,前端过滤)
@@ -18609,7 +18609,7 @@ function guideRender() {
   host.innerHTML = GUIDE_STEPS.map((g) => '<div class="guide-item' + (done[g.k] ? " done" : "") + '"><span class="g-ck">' + (done[g.k] ? "已" : "待") + '</span><span><div class="g-t">' + esc(g.t) + '</div><div class="g-d">' + esc(g.d) + "</div></span></div>").join("");
 }
 const TOUR = [
-  // 2026-10-20:文案按真实界面口径改写(旧版写「中央是对话流」——现在是无限画布,对话只是其中一张卡)
+ // 文案按真实界面口径改写(旧版写「中央是对话流」——现在是无限画布,对话只是其中一张卡)
   { t: "欢迎使用 lampgenie-harness", p: "界面是无限画布:每个模块是一张卡片,可拖动/缩放;最左侧竖条是快速定位(点图标飞到对应卡)。底部输入框提交任务,Ctrl+K 随时打开命令中心。" },
   { t: "任务与项目", p: "左侧是任务与项目(经典布局);画布布局下它们在对话卡内。右键任务行有重命名/置顶/归档/分叉/回滚。点「添加项目」把其它仓库挂进来。" },
   { t: "能力入口", p: "定位栏/侧栏:Git · 代码档案 · 自动化 · 经验库 · 插件市场 · 白板 · 团队 · 节点 · 审批 · 子代理 · 任务追踪 · 用量。终端 Ctrl+J、内嵌浏览器 Ctrl+Alt+B、文件树走桶头/右键;设置(左下齿轮)里有子智能体/技能/命令/钩子/MCP/记忆/账号/远程连接。" },
@@ -18631,9 +18631,9 @@ $("guideTour").onclick = () => tourShow(0);
 // 自动导览:仅真人浏览器(无头测试 navigator.webdriver=true 不弹,防拦截 spec 交互);测试用 __tour.show 驱动。
 if (!localStorage.getItem("zh:toured") && !(navigator.webdriver)) setTimeout(() => tourShow(0), 1200);
 window.__tour = { show: tourShow };
-// 流式消息测试钩子(step-050):spec 直推 stream 事件序列,免起真 LLM。
+// 流式消息测试钩子:spec 直推 stream 事件序列,免起真 LLM。
 if (navigator.webdriver) window.__stPush = (sid, ev) => onStreamEv({ type: "stream", sessionId: sid, ev: ev });
-// ── 附件(2026-10-19 用户口径「聊天窗要预览贴的图片或者视频」:捕获→输入区真预览→发送→聊天流回看→旧会话读盘) ──
+// ── 附件(捕获→输入区真预览→发送→聊天流回看→旧会话读盘) ──
 let pendingAtts = [];
 // 类型白名单 + 分类型上限(客户端预检;服务端同口径二次判)。图片 8MB / 视频 50MB / 文本 8MB。
 const ATT_MAX_IMG = 8 * 1024 * 1024, ATT_MAX_VID = 50 * 1024 * 1024, ATT_MAX_TXT = 8 * 1024 * 1024;
@@ -18647,7 +18647,7 @@ const ATT_TEXT_EXT = [".md", ".markdown", ".txt", ".log", ".json", ".jsonc", ".t
 const ATT_TEXT_MIME = ["application/json", "application/javascript", "application/typescript", "application/xml", "application/x-yaml", "application/yaml", "application/toml"];
 const ATT_IMG_MIME = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/bmp", "image/svg+xml"];
 const ATT_VID_MIME = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
-// 文档扩展名白名单(2026-10-30 用户口径「ppt/docx/xlsx/pdf/zip 这些也要能传」):只做「能传进来」的放行,
+// 文档扩展名白名单:只做「能传进来」的放行,
 // 能不能解析出文本由服务端 doc-text 层如实判定(老式 OLE .doc/.ppt/.xls 与 .rar/.7z 能传但可能解析不了,前端不拦)。
 const ATT_DOC_EXT = [".docx", ".pptx", ".xlsx", ".pdf", ".zip", ".rtf", ".odt", ".odp", ".ods", ".epub",
   ".tar", ".gz", ".tgz", ".7z", ".rar", ".doc", ".ppt", ".xls", ".pages", ".numbers", ".key"];
@@ -18916,7 +18916,7 @@ function attPostUpload(file, sid, extra) {
     .catch((e) => { if (extra && extra.objectUrl) { try { URL.revokeObjectURL(extra.objectUrl); } catch (e2) { /* 已释放 */ } } toast("上传失败:" + String(e).slice(0, 80), true); });
 }
 $("attBtn").onclick = () => {
-  // 添加上下文聚合菜单(2026-10-13 视频 2,对齐 ZCode「+」入口;此前=直接开文件选择)
+ // 添加上下文聚合菜单(视频 2,对齐 ZCode「+」入口;此前=直接开文件选择)
   pillMenuOpen($("attBtn"), [{ items: [
     { value: "添加附件(文件/图片/文档)", sub: "图片进视觉通道;文本/代码/文档(pdf、word、ppt、excel、zip)由 agent 读取" },
     { value: "@ 引用文件(会话/文件检索)", sub: "命令中心文件域" },
@@ -18957,8 +18957,8 @@ $("instruction").addEventListener("paste", (e) => {
 });
 // ── 侧栏入口 ──
 $("act-market").onclick = () => { switchView("market"); wsSafeSend(JSON.stringify({ v: 1, type: "plugins.list" })); localStorage.setItem("zh:used-market", "1"); };
-// act-web(2026-11 browser-ux-redo):浏览器入口恢复到左栏一眼可见(用户实报「难用到爆」),
-// 原 2026-10-19「入口只留 Ctrl+Alt+B 与设置页」的口径作废;点击绑定见 act-web 段。
+// act-web(2026-11 browser-ux-redo):浏览器入口恢复到左栏一眼可见(用户用户反馈「难用到爆」),
+// 原 「入口只留 Ctrl+Alt+B 与设置页」的口径作废;点击绑定见 act-web 段。
 $("act-web") && ($("act-web").onclick = () => switchView("browser"));
 // ---- F6 白板:pointer 手绘 + 青铜四色 + 橡皮 + 线宽 + 清空/导出 + localStorage 自动保存 ----
 const WB_LS = "zh:whiteboard";
@@ -18966,8 +18966,8 @@ let wbColor = "#c98f45";
 let wbDrawing = false;
 function wbCtx() { const c = $("wbCanvas"); return c ? c.getContext("2d") : null; }
 function wbDpr() { return window.devicePixelRatio || 1; }
-// 草稿键按 (会话, 板) 隔离(2026-10-14 批注串台修复):全局单键会把 A 会话/A 板的笔迹带到
-// B 会话/B 板(用户口径「不能随便乱插」);__session__ 无语义板时的会话级草稿同样各占一键。
+// 草稿键按 (会话, 板) 隔离(批注串台修复):全局单键会把 A 会话/A 板的笔迹带到
+// B 会话/B 板;__session__ 无语义板时的会话级草稿同样各占一键。
 function wbKey() { return WB_LS + ":" + (currentSid || "_") + ":" + (boardTaskId || "__session__"); }
 function wbClearCanvas() { const c = $("wbCanvas"); const ctx = wbCtx(); if (c && ctx) ctx.clearRect(0, 0, c.width, c.height); }
 // 在途笔画作废(切板/换会话打断):半笔归属旧板,不允许落进新板(切板竞态防写错板)。
@@ -18995,7 +18995,7 @@ function wbResize() {
   wbRestore();
 }
 function wbRestore(prefer) {
-  // 批注层数据源优先级(2026-10-14 会话级落盘):显式传入 > 服务端 overlay(当前语义板/会话批注) >
+ // 批注层数据源优先级(会话级落盘):显式传入 > 服务端 overlay(当前语义板/会话批注) >
   // 本板 localStorage 离线草稿(键按 sid:taskId 隔离)。语义板在场时不回落 __session__/他板草稿(防串台)。
   // 无数据源=清空画布:空白是合法态(该板本就没有批注),残留上一板笔迹才是缺陷;先清后画,重复恢复不叠影。
   let data = prefer || null;
@@ -19028,7 +19028,7 @@ function wbSave() {
   const dataUrl = c.toDataURL("image/png");
   // 草稿落本板键(同步写,此刻 boardTaskId 即归属;切板打断走 wbAbortStroke 不进这里)
   try { localStorage.setItem(wbKey(), dataUrl); } catch (err) { /* 存储满:静默(草稿不致命) */ }
-  // 服务端批注层(2026-10-14 会话级落盘):开着语义板→随任务;没开板→__session__(笔迹跟会话走,
+ // 服务端批注层(会话级落盘):开着语义板→随任务;没开板→__session__(笔迹跟会话走,
   // 换浏览器/刷新不丢);localStorage 仅作离线兜底草稿。
   if (currentSid && ws && ws.readyState === 1) {
     const b64 = String(dataUrl.split(",")[1] || "");
@@ -19113,36 +19113,36 @@ wbWire();
 $("act-board").onclick = () => switchView("board");
 window.addEventListener("resize", () => { if (viewLive("board")) wbResize(); });
 
-// ---- 语义流程白板(step-057,designs/22):BoardDoc 渲染=mermaid 流程图 + 节点卡 + 明细卡 ----
+// ---- 语义流程白板:BoardDoc 渲染=mermaid 流程图 + 节点卡 + 明细卡 ----
 let boardDoc = null;      // 当前板(BoardDoc)
 let boardLinks = [];      // symbolRef 三态(服务端解析)
 let boardItems = [];      // 会话内板清单(选择器)
 let boardTaskId = "";     // 当前选中任务的板
-// step-121 工作流板运行态:taskId → { wfId, states: {nodeId→{state,ms?,detail?}}, done, ok, error?, items?, at }
+// 工作流板运行态:taskId → { wfId, states: {nodeId→{state,ms?,detail?}}, done, ok, error?, items?, at }
 // 会话内存态(刷新丢;journal workflow.node 有全痕);切换板不清理——按 taskId 键控,回切板状态还在。
 let wfRuns = {};
 let boardSelNode = null;  // 明细卡节点 id
-// n2 评论模式(2026-10-22 设计板 n1+n2):画布形态下评论入口原先只藏在明细卡里(必须先点中节点),
+// n2 评论模式(设计板 n1+n2):画布形态下评论入口原先只藏在明细卡里(必须先点中节点),
 // 打开后点任意节点/点节点卡「评 N」徽标即就地展开该节点评论框,不必先进明细卡。
 let boardCommentMode = false;
 // c2:最近一次评论写请求(update/delete/append)。服务端可能整笔拒收(board-store saveBoard 门禁:
 // status=done 且 P0 验收证据未覆盖全),旧实现乐观 toast「已修改」+ 静默吞掉错误帧 → 用户看到编辑框消失、
 // 评论还是原文,却不知道被拒了。这里记下在途请求,error 回执到达时给可读原因,并保持原文不改成已保存态。
 let bdLastCmtReq = null;
-let boardMissing = "";    // step-072:钉选但盘上失踪(删/坏)的板 taskId——显式降级渲染依据,空=正常
-let boardListSkipped = 0; // step-072:board.list.result 回带的损坏板文件数(区分「真无板」与「板损坏」)
-// n12 未处理评论(2026-10-22):board.list.result 的 items[].pendingComments 是「本会话内 agent 尚未读到」的
+let boardMissing = "";    // 钉选但盘上失踪(删/坏)的板 taskId——显式降级渲染依据,空=正常
+let boardListSkipped = 0; // board.list.result 回带的损坏板文件数(区分「真无板」与「板损坏」)
+// n12 未处理评论:board.list.result 的 items[].pendingComments 是「本会话内 agent 尚未读到」的
 // 评论数(服务端 peek board-comments 队列,按 taskId 聚合)。存成 taskId→节点 id 集合,让画布节点卡能直接高亮
 // 「哪几个节点上有没被读到的评论」;chip 只关心哪块板 >0。
 let boardListPending = {};  // taskId → { count:number, nodes:string[] }(服务端只给 count,节点集合本地按 doc 回填)
 // n12:board.list 的「只为刷新 pending 计数」标记——置位时回包只更新 chip/高亮,不重钉选择/不重拉板(防 doc↔list 回环)
 let boardListPendingOnly = false;
 let bdPendingPullAt = 0;    // n12:上一次为刷新待读计数发 board.list 的时刻(1500ms 节流)
-// n14 多板搜索/过滤(2026-10-22):查询词与类型筛选中放在模块级,重渲(board.changed/切板)不清空。
+// n14 多板搜索/过滤:查询词与类型筛选中放在模块级,重渲(board.changed/切板)不清空。
 let bfListQuery = "";
 let bfListKind = "";        // ""=全部,或 design/page/workflow(与 board.doc docKind 同词)
 const BD_CHANGE = { add: "新增", modify: "修改", delete: "删除", keep: "涉及" };
-// 2026-10-29 code flow 专用变更文案:流程卡上 keep 的语义是「复用现有函数/代码,不改」,
+// code flow 专用变更文案:流程卡上 keep 的语义是「复用现有函数/代码,不改」,
 // 通用面板的「涉及」读不出这层意思(用户看图说「看不懂」)。BD_CHANGE 不动——bd 列表/编辑下拉仍用它。
 const CV_CHG_LABEL = { add: "新增", modify: "改", delete: "删", keep: "复用" };
 const BD_CHANGE_ICON = { add: "+", modify: "Δ", delete: "×", keep: "○" }; // 面板 emoji 门禁(2700-27BF 段被拦):只用 ASCII/希腊字母/几何圈
@@ -19151,7 +19151,7 @@ function boardRefresh(sid) {
   const bs = sid === undefined ? currentSid : sid;
   if (!bs) { boardItems = []; boardDoc = null; boardTaskId = ""; boardOverlayB64 = null; sessionOverlayB64 = null; boardMissing = ""; boardListSkipped = 0; renderBoard(); return; } // B7:换/空会话清残留,防旧板 id 带过来
   // 启动 CONNECTING 窗守卫:刷新后启动视图还原(board)会在开连前走到这里,裸 send 抛
-  // InvalidStateError 且中断启动脚本尾部(board.spec 零 pageerror 检查间歇实锤)——defer 到开连重放。
+ // InvalidStateError 且中断启动脚本尾部(board.spec 零 pageerror 检查间歇注意)——defer 到开连重放。
   if (ws.readyState !== 1) {
     if (!boardRefresh.__queued) {
       boardRefresh.__queued = true;
@@ -19181,10 +19181,10 @@ function boardGet(taskId) {
   wsSafeSend(JSON.stringify({ v: 1, type: "board.get", sessionId: currentSid, ...(boardTaskId ? { taskId: boardTaskId } : {}) }));
 }
 function bdEscMm(s) { return String(s || "").replace(/"/g, "'").replace(/[\[\]]/g, (c) => (c === "[" ? "(" : ")")).replace(/\\n/g, " ").replace(/\\|/g, "/"); } // 反斜杠双写=模板层纪律;mermaid 边标签里 | 是终止符必须转(B4)
-// 2026-10-18 体验官A修复:边标签(管道 |...| 语法)里 ASCII 括号是非法字符——bdEscMm 把 [] 转成 ()
+// A修复:边标签(管道 |...| 语法)里 ASCII 括号是非法字符——bdEscMm 把 [] 转成 
 // 反而制造非法括号(「点笔记出处(书名+页码)」类标签必现 Parse error→简图碎成源码墙)。
 // 边标签专用:括号/方括号全转全角(mermaid 视为普通文本),裸 | 转走(管道标签终止符)。
-// 写法纪律:零正则转义(split/map/join)——panel 模板层会吃掉单反斜杠转义(实测 \[ 下发变 [、\| 变
+// 写法纪律:零正则转义(split/map/join)——panel 模板层会吃掉单反斜杠转义(经验证 \[ 下发变 [、\| 变
 // 空=每字符间插 /),regex 字符类转义在本文件一律不可靠(见 bdEscMm 注释「反斜杠双写」)。
 function bdEscMmEdge(s) {
   const M = { "[": "【", "]": "】", "(": "（", ")": "）", "|": "/", '"': "'" };
@@ -19213,7 +19213,7 @@ function boardMermaid(doc) {
   }
   for (const e of doc.edges) {
     if (!doc.nodes.some((n) => n.id === e.from) || !doc.nodes.some((n) => n.id === e.to)) continue;
-    // step-083:contains 边简图也无箭头(---),nav/call/data/verify 保持 -->
+ // contains 边简图也无箭头(---),nav/call/data/verify 保持 -->
     L.push("  " + nid(e.from) + (e.kind === "contains" ? " ---|" : " -->|") + bdEscMmEdge(e.label || (e.kind === "data" ? "数据" : e.kind === "verify" ? "验证" : e.kind === "nav" ? "跳转" : e.kind === "contains" ? "包含" : "调用")) + "| " + nid(e.to));
   }
   L.push("  classDef bdAdd fill:#1e3323,stroke:#5aa06a,color:#ece1d1;");
@@ -19239,7 +19239,7 @@ function bdFlowHtml(steps, depth) {
       if (s.else && s.else.length) h += '<div class="fl-sub"><span class="fl-cond">否则</span>' + bdFlowHtml(s.else, depth + 1) + "</div>";
       h += "</li>";
     } else if (s.type === "loop") {
-      h += '<li><span class="fl-cond">循环 ' + esc(String(s.over == null ? "" : String(s.over).trim() || "(集合略)")) + "</span>"; // 单引号外框:模板层吃 \" 转义(2026-10-13 实测),双引号嵌套会断串
+      h += '<li><span class="fl-cond">循环 ' + esc(String(s.over == null ? "" : String(s.over).trim() || "(集合略)")) + "</span>"; // 单引号外框:模板层吃 \" 转义(实测),双引号嵌套会断串
       if (s.body && s.body.length) h += '<div class="fl-sub">' + bdFlowHtml(s.body, depth + 1) + "</div>";
       h += "</li>";
     } else {
@@ -19248,7 +19248,7 @@ function bdFlowHtml(steps, depth) {
   }
   return h + "</ul>";
 }
-/** flow 树递归统计(2026-10-23 白板 flow 可见性):节点卡折叠态也要能看出「有没有分支/循环」——
+/** flow 树递归统计(白板 flow 可见性):节点卡折叠态也要能看出「有没有分支/循环」——
  *  旧版 flow 只藏在明细卡深处(必须先点中节点才看得到)。返回 {branch,loop,step,total}。 */
 function bdFlowStat(steps) {
   const st = { branch: 0, loop: 0, step: 0, total: 0 };
@@ -19275,7 +19275,7 @@ function bdFlowSumHtml(n) {
   return '<details class="bd-flowsum" data-flow="1" data-det-key="' + esc("flow:" + String(n.id || "")) + '"><summary title="点开看完整语义流程(条件/循环递归展开)">语义流程 ' +
     esc(bits.length ? bits.join(" / ") : st.total + " 步") + "</summary>" + bdFlowHtml(n.flow, 0) + "</details>";
 }
-// ---- 节点勾选派发(2026-10-23,纯 UI 态):勾选=模块级 Set(nodeId),不落盘、不进 board.save 的 nodes,
+// ---- 节点勾选派发(纯 UI 态):勾选=模块级 Set(nodeId),不落盘、不进 board.save 的 nodes,
 // 只决定「派发选中」这次 board.continue 带哪些 nodeIds;切板/重绘后按 data-node 从 Set 恢复勾选。 ----
 const bdSel = new Set();
 /** 勾选态变化后刷新工具条「已选 N 个」与「派发选中」按钮可用性(幂等,N 不依赖 DOM 是否在位)。 */
@@ -19340,7 +19340,7 @@ function bdSyncUnloadGuard() {
 }
 function renderBoard() {
   if (arcOpen) return; // 设计沉淀只读画布在位:不重渲会话板(cvActiveHost 让位给档案画布);arcClose 收尾时补渲
-  if (!boardEditOn) boardConflict = null; // step-073:冲突条只在编辑态存活(放弃/保存成功/切板即清)
+  if (!boardEditOn) boardConflict = null; // 冲突条只在编辑态存活(放弃/保存成功/切板即清)
   bdSyncUnloadGuard(); // fixD6
   bdSelRender(); // 勾选派发:重绘漏斗里先同步工具条(已选 N 个/按钮可用性;换板时清掉不存在的节点 id)
   const sel = $("boardTaskSel");
@@ -19358,7 +19358,7 @@ function renderBoard() {
   if (editBar) editBar.style.display = boardEditOn && boardDraft ? "flex" : "none";
   const editBtn = $("boardEditBtn");
   if (editBtn) editBtn.textContent = boardEditOn ? "退出编辑" : "编辑";
-  // step-121 工作流板件位:编译/执行/存自动化只在 docKind=workflow 板出现(编辑草稿也可编译预览)
+ // 工作流板件位:编译/执行/存自动化只在 docKind=workflow 板出现(编辑草稿也可编译预览)
   const isWfBoard = !!(doc && doc.docKind === "workflow");
   for (const bid of ["boardWfCompile", "boardWfRun", "boardWfAuto"]) {
     const b = $(bid);
@@ -19377,7 +19377,7 @@ function renderBoard() {
   }
   if (!g) return;
   if (!doc) {
-    // step-072 显式降级三态:钉选板失踪(删/坏)> 清单全坏 > 真无板——互不冒充(实测:删板曾静默滑到别的板,坏板曾冒充「还没有白板」)。
+ // 显式降级三态:钉选板失踪(删/坏)> 清单全坏 > 真无板——互不冒充(经验证:删板曾静默滑到别的板,坏板曾冒充「还没有白板」)。
     if (boardMissing) {
       g.innerHTML = '<div class="cc-empty">该白板已不存在或文件损坏(taskId ' + esc(boardMissing.slice(0, 24)) + ')——板上数据在 .genie/boards 下,可能被外部删除;从左侧清单/选择器另选一块板</div>';
       if (nb) nb.innerHTML = "";
@@ -19415,7 +19415,7 @@ function renderBoard() {
     mermaid.render("bdm" + Date.now() + Math.floor(Math.random() * 1e5), mer).then((o) => {
       g.innerHTML = (o && o.svg ? o.svg : String(o)) +
         '<div class="bd-meta">「' + esc(doc.title) + "」 " + (boardEditOn ? "编辑中(未保存)" : doc.status === "draft" ? "设计稿" : doc.status === "implementing" ? "实施中" : "已落实") + " · rev " + doc.rev + " · " + doc.nodes.length + " 节点/" + bdEdgeCountText(doc) + bdCountSeg(doc) + (doc.docKind === "page" ? ' · <span class="bd-tag lk-moved">页面结构板</span>' : doc.docKind === "workflow" ? ' · <span class="bd-tag lk-linked">工作流板</span>' : "") + recon + bdP0Tags(doc) + "</div>";
-    }).catch(() => { g.textContent = mer; toast("简图渲染失败,已显示源码(边标签含非法字符,已修转义;此为兜底)"); }); // 2026-10-18:静默回退改可感知(体验官A:用户面对源码墙不知所以)
+    }).catch(() => { g.textContent = mer; toast("简图渲染失败,已显示源码(边标签含非法字符,已修转义;此为兜底)"); }); // :静默回退改可感知(:用户面对源码墙不知所以)
   } else {
     g.textContent = mer;
   }
@@ -19579,7 +19579,7 @@ function renderBoardDetail() {
   if (boardEditOn && boardDraft) {
     const inp = 'style="width:100%;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);border-radius:8px;padding:4px 8px;font-size:12px;margin-top:4px"';
     const lab = (t) => '<div class="bd-meta" style="margin-top:8px">' + t + "</div>";
-    // step-073 rev 冲突条(草稿保留):拉取最新放弃草稿 / 继续编辑(改动可自行复制走)
+ // rev 冲突条(草稿保留):拉取最新放弃草稿 / 继续编辑(改动可自行复制走)
     const conflictBar = boardConflict
       ? '<div class="bd-conflict" style="border:1px solid #e08a7a;border-radius:8px;padding:6px 8px;font-size:11.5px;color:#e08a7a;margin-bottom:6px">草稿与并发版本冲突(当前 rev ' + boardConflict.currentRev + ')——' +
         '<button class="vw-act" id="bdcPull" style="margin-right:6px">拉取最新放弃草稿</button><button class="vw-act" id="bdcKeep">继续编辑</button></div>'
@@ -19629,7 +19629,7 @@ function renderBoardDetail() {
       '<input id="bdeSymFile" ' + inp + ' value="' + esc(dn.symbolRef && dn.symbolRef.file ? dn.symbolRef.file : "") + '" placeholder="如 apps/gateway/src/app.ts">';
     h += lab("语义流程(步骤: x / 如果 cond: / 否则: / 循环 x: ——嵌套用两空格缩进)") +
       '<textarea id="bdeFlow" ' + inp + ' rows="7" style="font-family:var(--mono)">' + esc(bdFlowToText(dn.flow, 0)) + "</textarea>";
-    // step-121 工作流板:类型化参数表单(配置抽屉;按 kind 渲染,双击画布节点即达)
+ // 工作流板:类型化参数表单(配置抽屉;按 kind 渲染,双击画布节点即达)
     if (String(dn.kind).indexOf("wf-") === 0) {
       const wf = dn.wf || {};
       const num = (id, v, ph) => '<input id="' + id + '" ' + inp + ' type="number" min="1000" max="600000" step="1000" value="' + esc(String(v ?? "")) + '" placeholder="' + ph + '">';
@@ -19662,9 +19662,9 @@ function renderBoardDetail() {
   if (!n) { box.innerHTML = '<div class="cc-empty">点节点看「干什么用」与语义流程</div>'; return; }
   const lk = bdLinkOf(n.id);
   let h = '<div class="bd-name" style="font-size:13px">' + (n.done ? '<span class="bf-done">' + ic("check") + " </span>" : "") + BD_CHANGE_ICON[n.change] + " " + esc(n.label) + "</div>";
-  h += '<div class="bd-meta">' + (n.kind === "module" ? "模块" : n.kind === "decision" ? "决策点" : n.kind === "note" ? "备注" : n.kind === "page" ? "页面" : n.kind === "section" ? "区块" : n.kind === "component" ? "组件" : n.kind === "nav" ? "导航" : String(n.kind).indexOf("wf-") === 0 ? "工作流步骤 · " + (CV_KIND_NAME[n.kind] || n.kind) : CV_KIND_NAME[n.kind] || "函数") + // 2026-10-18 体验官A:page/section/component 落「函数」兜底是误导;未列举 kind 走画布同名表
+  h += '<div class="bd-meta">' + (n.kind === "module" ? "模块" : n.kind === "decision" ? "决策点" : n.kind === "note" ? "备注" : n.kind === "page" ? "页面" : n.kind === "section" ? "区块" : n.kind === "component" ? "组件" : n.kind === "nav" ? "导航" : String(n.kind).indexOf("wf-") === 0 ? "工作流步骤 · " + (CV_KIND_NAME[n.kind] || n.kind) : CV_KIND_NAME[n.kind] || "函数") + // :page/section/component 落「函数」兜底是误导;未列举 kind 走画布同名表
     ' · <span class="bd-tag ' + n.change + '">' + BD_CHANGE[n.change] + "</span>" + (n.done ? ' · <span class="bf-done">已落实</span>' : "") + "</div>";
-  // step-121 工作流板:查看态参数回显 + 运行态(双击节点可进编辑改参数)
+ // 工作流板:查看态参数回显 + 运行态(双击节点可进编辑改参数)
   if (String(n.kind).indexOf("wf-") === 0) {
     const wf = n.wf || {};
     const wfCfg = n.kind === "wf-script" || n.kind === "wf-test"
@@ -19688,7 +19688,7 @@ function renderBoardDetail() {
   } else {
     h += '<div class="bd-meta" style="margin-top:8px">新模块(无既有代码连接)</div>';
   }
-  // step-073:纯文件链(模块/页面/架构节点)——明细卡展示入口文件,可点跳档案
+ // 纯文件链(模块/页面/架构节点)——明细卡展示入口文件,可点跳档案
   if (!n.symbolRef && n.fileRef) {
     h += '<div class="bd-meta" style="margin-top:8px">入口文件:<span class="cv-file" data-cvfile="' + esc(n.fileRef) + '" style="cursor:pointer;text-decoration:underline">' + esc(n.fileRef) + "</span></div>";
   }
@@ -19697,7 +19697,7 @@ function renderBoardDetail() {
   }
   // n2 白板可见化:验收契约逐条(command/expect/三态徽标)+ 证据输出摘要(明细卡是「白板在干什么活」的主面)
   h += bdAccDetailHtml(n);
-  // n10 关系段(2026-10-22):验收证据之后、评论区之前——出边/入边/孤立节点 + 推导徽标
+ // n10 关系段:验收证据之后、评论区之前——出边/入边/孤立节点 + 推导徽标
   h += bdRelHtml(boardDoc, n.id);
   // 评论区(五期):查看态直接评论,服务端追加免冲突;「按板续作」带进指令
   // c1(编辑/删除):每条评论带「改」「删」——index 即本渲染顺序(与服务端 node.comments 同序)
@@ -19706,7 +19706,7 @@ function renderBoardDetail() {
     (cs.length ? cs.map((c, ci) => bdCommentRowHtml(c, ci, n.id)).join("") : '<div class="bd-meta">还没有评论</div>') +
     '<div class="bf-cmt-input"><input id="bdCmtInput" placeholder="写评论(按板续作会带给 agent)" maxlength="500"><button class="vw-act" id="bdCmtSend">评论</button></div></div>';
   box.innerHTML = h;
-  // 入口文件链(step-073 fileRef):明细卡内可点跳代码档案(与画布 cv-file 同链)
+ // 入口文件链( fileRef):明细卡内可点跳代码档案(与画布 cv-file 同链)
   for (const fl2 of box.querySelectorAll(".cv-file")) {
     fl2.onclick = (e) => { e.stopPropagation(); bdOpenProfile(fl2.dataset.cvfile); };
   }
@@ -19722,7 +19722,7 @@ function renderBoardDetail() {
   };
 }
 $("boardRefresh").onclick = () => boardRefresh();
-// step-094:「更多」溢出菜单——菜单项转调原按钮(监听器/ID 单一出处,不重复绑定);点外面/选中后收起
+// 「更多」溢出菜单——菜单项转调原按钮(监听器/ID 单一出处,不重复绑定);点外面/选中后收起
 const bMore = $("boardMore");
 if (bMore) {
   bMore.addEventListener("click", (e) => {
@@ -19741,7 +19741,7 @@ $("boardTaskSel").onchange = (e) => {
   boardGet(e.target.value);
 };
 $("boardSketchBox").addEventListener("toggle", (e) => {
-  // 展开=批注层恢复时机(2026-10-14 刷新/重登空白修复):wbResize 内部走 wbRestore——
+ // 展开=批注层恢复时机(刷新/重登空白修复):wbResize 内部走 wbRestore——
   // 有服务端 overlay/本板草稿则画出,没有则清台(空白=该板确无批注,不是丢失)。
   // 慢盘/慢布局下 30ms 内 rect 可能还是 0(wbResize 静默早退),轮询几次直到量到尺寸。
   if (!e.target.open) return;
@@ -19755,7 +19755,7 @@ $("boardSketchBox").addEventListener("toggle", (e) => {
   };
   setTimeout(tick, 30);
 });
-// 任务卡白板 chip:会话重放里点「白板」直达该任务的板(入口统一 2026-10-14:开实时白板浮窗,不再切主视图)
+// 任务卡白板 chip:会话重放里点「白板」直达该任务的板(入口统一 :开实时白板浮窗,不再切主视图)
 function boardOpenTask(taskId) {
   // C5:编辑中跳另一块板=草稿丢失,先确认
   if (boardEditOn && taskId !== boardTaskId) {
@@ -19770,7 +19770,7 @@ function boardOpenTask(taskId) {
   boardSelNode = null;
   bfOpenBoard(taskId);
 }
-/** 白板入口画布分流(2026-10-21 用户口径:画布形态下点「白板」不要弹浮窗,直接定位画布上的白板卡):
+/** 白板入口画布分流(画布形态下点「白板」不要弹浮窗,直接定位画布上的白板卡):
  *  画布形态 → 钉住目标板(与浮窗入口同一套 wbSwitchTask 防护)+ 拉板 + CanvasShell.focus("board")
  *  平移取景到白板卡(卡内大白板视图与浮窗同一板状态,数据链零改动);经典布局 → 原 boardOpenTask
  *  浮窗行为不变(含 C5 编辑确认链)。编辑中切板回退原入口走确认,不静默丢草稿。
@@ -19791,7 +19791,7 @@ function boardEntryGo(taskId) {
   boardOpenTask(id);
 }
 
-// ---- 实时白板浮窗(2026-10-14 入口统一+升级):composer「白板」与任务卡「白板/查看白板」chip 都开这里;
+// ---- 实时白板浮窗(入口统一+升级):composer「白板」与任务卡「白板/查看白板」chip 都开这里;
 // 左=会话全部板清单,中=Dify 风画布(复用十期全套:直改板/连线/撤销…),右=节点明细+评论。
 // 状态机:浮窗与大白板是同一全局板状态(boardDoc/boardTaskId/boardEditOn)的两个视口——
 // 画布同一时刻只渲染在一个宿主(bdHome),保存链(bdSaveLayoutDebounced/boardSave)与撤销栈零改动生效。 ----
@@ -19825,7 +19825,7 @@ function bfToggle(force) {
   } else {
     bdHome = "board";
     // 清掉浮窗侧的画布与明细——cvHost/cvAddPanel/cvMini 等是全局单 id,残骸留着会跟主视图同名 id
-    // 抢 getElementById(实测:工具箱开面板被隐藏残骸的重复 id 搞乱)。浮窗再开时 renderBoard 会重画。
+ // 抢 getElementById(经验证:工具箱开面板被隐藏残骸的重复 id 搞乱)。浮窗再开时 renderBoard 会重画。
     const bfG = $("bfGraph");
     if (bfG) bfG.innerHTML = '<div class="cc-empty">当前会话暂无白板——代码改动任务开工后,agent 的设计草图会实时出现在这里;左侧是本会话触发过的全部白板</div>';
     const bfD = $("bfDetail");
@@ -19910,7 +19910,7 @@ function renderBfList() {
     };
   }
 }
-$("boardFloatBtn").onclick = () => boardEntryGo(""); // 画布形态=定位白板卡,经典=浮窗(2026-10-21 分流)
+$("boardFloatBtn").onclick = () => boardEntryGo(""); // 画布形态=定位白板卡,经典=浮窗(分流)
 // 画布形态显式切换按钮(composer 栏常驻):与 Ctrl+Shift+C 同源,都走 CanvasShell.toggleMode;
 // 资产未加载(404/被 SW 缓存坏)时不静默,toast 提示并留 console.warn 排障线索(与快捷键同口径)。
 $("cvToggleBtn").onclick = () => {
@@ -19937,7 +19937,7 @@ $("bfClose").onclick = () => bfToggle(false);
 $("bfEdit").onclick = () => boardEditToggle();
 $("bfOpenView").onclick = () => { bfToggle(false); switchView("board"); };
 $("bfContinue").onclick = () => boardContinue();
-/** n1 白板画布卡一级操作条接线(2026-10-22):把 bdCardActionsHtml() 注入 board 卡卡头(.cv-card-tools 之前),
+/** n1 白板画布卡一级操作条接线:把 bdCardActionsHtml 注入 board 卡卡头(.cv-card-tools 之前),
  *  并绑三个一级动作。画布外壳是独立资产(src/assets/canvas-shell.js,任务书禁改),卡头由它建,
  *  故面板侧按「幂等注入」接管:进画布/卡重建/重渲时都可安全重复调用(已存在则只刷新按钮态)。
  *  点击行为全部复用既有入口,零新协议:
@@ -20024,20 +20024,20 @@ let boardCanvasMode = true; // 默认画布;false=mermaid 简图
 const CV_KIND_ICON = { llm: "AI", tool: "工", io: "IO", decision: "判", function: "函", module: "块", note: "注", start: "起", end: "终", http: "HTTP", template: "版", aggregate: "聚", loop: "环", retrieval: "检", classifier: "类", agent: "代理", page: "页", section: "区", component: "件", nav: "航", "wf-script": "sh", "wf-test": "测", "wf-agent": "代", "wf-condition": "if", "wf-parallel": "∥", "wf-notify": "报" };
 const CV_KIND_NAME = { llm: "模型调用", tool: "工具", io: "输入/输出", decision: "判断分支", function: "函数", module: "模块", note: "备注", start: "开始", end: "结束/输出", http: "HTTP 请求", template: "模板转换", aggregate: "变量聚合", loop: "循环/迭代", retrieval: "知识检索", classifier: "问题分类", agent: "Agent", page: "页面", section: "区块", component: "组件", nav: "导航条", "wf-script": "脚本命令", "wf-test": "测试门", "wf-agent": "子代理", "wf-condition": "条件分支", "wf-parallel": "并发扇出", "wf-notify": "通知/成果" };
 let cvPan = { x: 30, y: 20, k: 1 };
-// step-058 画布宿主泛化(大白板/浮窗/档案只读三宿主,谁最后渲染谁在位):
+// 画布宿主泛化(大白板/浮窗/档案只读三宿主,谁最后渲染谁在位):
 // cvActiveHost/cvActiveDoc=最近一次 renderBoardCanvas 的 cvHost 与板(委托层与视图函数经它定位,
 // 不再全局 getElementById 摸 id——档案只读画布在场时同 id 元素有俩,裸查会摸错);
 // cvRo=只读旗(档案沉淀画布):编辑监听不绑、直改板落盘全禁。非只读渲染即自动复位。
 let cvActiveHost = null;
 let cvActiveDoc = null;
 let cvRo = false;
-// step-111 页面结构板语义布局信息(最近一次 renderBoardCanvas 的 page 板):null=非 page 板(旧路径)。
+// 页面结构板语义布局信息(最近一次 renderBoardCanvas 的 page 板):null=非 page 板(旧路径)。
 // 资产 board-page-layout.js 加载失败时恒为 null → 全部渲染/边/拖拽走旧行为,零回退风险。
 let cvPageInfo = null;
 // fixH2 设计板「一眼看懂」流程图布局信息(最近一次 renderBoardCanvas 的 非 page 有边板):null=旧路径。
 // 资产 board-flow-layout.js 加载失败/紧凑模式 → null → 回退 cvLayout 旧行为,零回退风险。
 let cvFlowInfo = null;
-// 2026-10-26 UI 交互流程板(docKind=page 且 ≥2 屏):多屏原型地图 + 元素锚点 + 彩色跳转流线。
+// UI 交互流程板(docKind=page 且 ≥2 屏):多屏原型地图 + 元素锚点 + 彩色跳转流线。
 // cvUiInfo=当前交互地图布局信息(mode=ui-flow;为空=页面结构板/加载失败);cvUiMode=用户视图选择
 // (interaction=交互地图,structure=原页面结构板);cvUiTask=当前选择归属的板(切板回默认交互)。
 // 拖动是视图微调:位置存 localStorage(不写 boardDoc,避免旧板 pos 把新网格打散);「整理」清空。
@@ -20351,7 +20351,7 @@ function cvUiHeadHtml(info) {
     '<div class="cv-ui-head-l"><div class="cv-ui-head-tt" title="' + esc(h.title) + '">' + esc(h.title) + '</div><div class="cv-ui-head-sum">' + esc(h.summary) + "</div></div>" +
     '<div class="cv-ui-legend">' + cvUiLegendHtml(info) + "</div></div>";
 }
-// 2026-10-25 白板「易读性」w1/w2(实测 60 节点板:适配 k=0.70 只能完整看到 2/60 节点,31/60 标题被
+// 白板「易读性」w1/w2(经验证 60 节点板:适配 k=0.70 只能完整看到 2/60 节点,31/60 标题被
 // ellipsis、52/60 摘要被裁、泳道 21 条平均 2.8 节点——病灶是「一个画布塞 10 个任务」而不是卡片本身)。
 // w1 写者过滤:节点 id 前缀(a1-/pqa6e-…)分组 chip,点选只**渲染**该写者节点(不动 boardDoc);
 //   过滤后布局按子集重算(BoardFlowLayout.layout(子集)),否则隐藏节点留出的空白把画面撑散。
@@ -20362,18 +20362,18 @@ let cvFoldGroups = false;     // svg 模式按 group 折叠大分组(≥5 节点
 let cvWriterAll = [];         // 最近一次渲染统计的写者清单 [{pfx,n}](chip 条数据源)
 let cvFoldOpen = new Set();   // 已展开的泳道 key(w2 点 +N 展开的那几条)
 let cvFoldMode = false;       // 本次渲染是否处于密度分层(cvFitNow 据此不把跨板泳道框算进适配)
-// 2026-11-05「白板看得懂」层高亮(纯 UI 态,不写板):"" = 不很高亮; "keep"/"chg" = 只高亮该层
+// 「白板看得懂」层高亮(纯 UI 态,不写板):"" = 不很高亮; "keep"/"chg" = 只高亮该层
 // (另一层加 .cv-layer-dim 降透明)。切板/重渲复位在 renderBoardCanvas 里做,不污染别的板。
 let cvLayerOn = "";
 let cvLayerTask = "";         // 层高亮归属的板(切板自动清)
-// 2026-10-25 B:research 板「决策矩阵」表格视图(纯 UI 态,不写板/不改 schema)。
+// B:research 板「决策矩阵」表格视图(纯 UI 态,不写板/不改 schema)。
 // cvMatrixOn=当前是否显示表格(仅 boardType=research);cvMatrixTask=当前表格态归属的板,
 // 切板自动回画布(不同板的表格没有延续意义);cvMatrixSel=表格内选中的单元格(节点+维度)。
 let cvMatrixOn = false;
 let cvMatrixTask = "";
 let cvMatrixSel = null;
 const CV_FOLD_THRESHOLD = 20; // 密度分层阈值:节点数 > 20 才收卡(小板全画,别平白藏东西)
-// 2026-10-26 视野归属(P0:「保存回执抢走用户视野」):全量渲染后那条自动 cvFitNow 原先无条件执行
+// 视野归属(P0:「保存回执抢走用户视野」):全量渲染后那条自动 cvFitNow 原先无条件执行
 // ——用户放大到 160% 看细部,只要发生一次保存回执(agent 回写/编辑保存/广播刷新都会走全量重渲),
 // 视野就被静默复位到自动适配值,零提示。这里记「用户已手动操作过视野」,自动适配仅在未被手动动过时执行;
 // 切板 / 点「适」/ 点「整理」都算「重新归系统管」→ 复位为 false(首次进板自动适配因此完整保留)。
@@ -20387,14 +20387,14 @@ function cvFlowOn() {
  *  ① 有边 → 流动 LR 流程图;
  *  ② 无边但含阶段卡(ph-*,task_phase 的「00 流程」泳道节点)→ 同样走流动引擎——
  *     旧口径要求 edges.length>0,纯阶段板(只有 5 张阶段卡)整板不走流动布局,阶段卡被旧分层
- *     当孤箱摆一堆,「00 流程」泳道永远不出现(用户实报)。 */
+ * 当孤箱摆一堆,「00 流程」泳道永远不出现(用户用户反馈)。 */
 function cvFlowEligible(doc) {
   if (!doc || typeof BoardFlowLayout === "undefined" || !cvFlowOn()) return false;
   if (doc.docKind === "page") return false; // page 板永远走 BoardPageLayout
   if (doc.edges && doc.edges.length > 0) return true;
   return (doc.nodes || []).some((n) => /^ph-/.test(String(n.id)));
 }
-/** 宽设计板列换行开关(2026-10-25 任务 A,面板侧裁决):
+/** 宽设计板列换行开关(任务 A,面板侧裁决):
  *  引擎只会「受控」折行——这里决定把哪些板交给 autoWrap(引擎再按主路径列数 > 4 二次裁决):
  *  · 只对非 page、节点 ≥6 的板开(小板横排本来读得下);
  *  · refactor 板**不折**:现状/目标双泳道并排是它的核心语义,折成网格会破坏对照关系;
@@ -20430,7 +20430,7 @@ function cvFlowClearMoved(taskId) {
 }
 /** w1 写者前缀:id 形如 a1-card / pqa6e-r3a1 → 取首个 "-" 前 1~7 位字母数字(首字符必须是字母);
  *  不符(如 plainnode、ph-understand)→ 返回空串(渲染成「其他」)。ph-* 是阶段卡,不是写者。
- *  模板层纪律:PAGE 是 TS 模板字符串,注释里的反引号会提前闭合它(实测 tsc TS1005)——本注释零反引号。 */
+ * 模板层纪律:PAGE 是 TS 模板字符串,注释里的反引号会提前闭合它(经验证 tsc TS1005)——本注释零反引号。 */
 function cvWriterOf(id) {
   const s = String(id || "");
   const k = s.indexOf("-");
@@ -20484,14 +20484,14 @@ function cvGroupCount(doc) { return cvGroupSplit(doc)[0]; }
  *  **改一处必须改两处**)。 */
 var SMALL_GROUP_MERGE_AT_UI = 12;
 /** 折叠可用性(与服务端 board-filter.ts 同口径):大分组 >= 1 组 **或** 小分组(组非空且 < foldMin)
- *  组数 >= 12(碎泳道兜底)。只数大分组会让 35 条碎泳道的真板永远看不到折叠入口(2026-11-04 实测)。 */
+ * 组数 >= 12(碎泳道兜底)。只数大分组会让 35 条碎泳道的真板永远看不到折叠入口(经验证)。 */
 function cvFoldAvailable(doc) {
   const s = cvGroupSplit(doc);
   return s[0] >= 1 || s[1] >= SMALL_GROUP_MERGE_AT_UI;
 }
 function cvHostEl() { return cvActiveHost && cvActiveHost.isConnected ? cvActiveHost : document.getElementById("cvHost"); }
 function cvScoped(id) { const h = cvHostEl(); return (h && h.querySelector("#" + id)) || document.getElementById(id); }
-// ---- 2026-10-29 白板渲染模式:flowkit 单张 SVG(默认) / 逐节点 DOM 卡片(回退) ----
+// ---- 白板渲染模式:flowkit 单张 SVG(默认) / 逐节点 DOM 卡片(回退) ----
 // 服务端能力在 src/board-diagram.ts(renderBoardSvg);面板在浏览器里不能直接调它,走 WS:
 //   请求 {type:"board.diagram", sessionId, taskId, theme} → 回包 {type:"board.diagram.result", ok, svg, ...}
 // 单点回滚开关:localStorage.cvRender = "cards" 即回老「逐节点 DOM 卡片」路径(其余一律 svg)。
@@ -20504,8 +20504,8 @@ function cvRenderMode() { try { return localStorage.getItem("cvRender") === "car
 function cvSvgNodeAt(ev) {
   try {
     if (cvRenderMode() !== "svg") return "";
-    // 2026-11-05 修断裂:flowkit 出的 <g data-node-id> 不止承载板节点——泳道/分组/矩阵单元格
-    // 也带同名属性(实测 svg 里除 f1..f8 还有 01/02/06/dsl-xxx 等分组 id)。旧实现只认属性存在,
+ // 修断裂:flowkit 出的 <g data-node-id> 不止承载板节点——泳道/分组/矩阵单元格
+ // 也带同名属性(经验证 svg 里除 f1..f8 还有 01/02/06/dsl-xxx 等分组 id)。旧实现只认属性存在,
     // 于是右键分组背景得到「编辑明细/删除」、点了对不存在的 id 操作 = 静默失败;双击分组也算命中节点,
     // 空白双击开不了工具箱。这里必须再校验该 id 真是板上的节点。
     const doc = (typeof cvTargetDoc === "function" ? cvTargetDoc() : null) || null;
@@ -20644,9 +20644,9 @@ function cvWorldBodyHtml(mode, p) {
   if (mode === "cards") return p.laneHtml + p.edgeSvg + p.popupMask + p.cards + p.anchors + p.fold;
   // data-sig 只承诺「DOM 里真装着的那一版 svg」:空壳帧(回包未到,svg 为空串)一律不写,
   // 否则回包后 cvSvgPatchPlan(now, domSig, true) 读到 domSig===now 恒判 keep → 注入分支永不可达
-  // (2026-11-03 实测 bug:回包 2496 字节 svg 到了,DOM 里 #cvSvgHost 恒 100 字节空壳、#cvWorld svg=0)。
+ // (经验证 bug:回包 2496 字节 svg 到了,DOM 里 #cvSvgHost 恒 100 字节空壳、#cvWorld svg=0)。
   const sigAttr = p.svg ? ' data-sig="' + esc(p.sig) + '"' : "";
-  // 2026-11-06 A1:上一版 svg 在等新图期间继续挂着(data-stale="1" 降透明度),不再把画布清空;
+ // A1:上一版 svg 在等新图期间继续挂着(data-stale="1" 降透明度),不再把画布清空;
   // data-sig 写的仍是**DOM 里真装着的那一版**(旧 sig),回包后 cvSvgPatchPlan 照样判 inject。
   const staleAttr = p.stale ? ' data-stale="1"' : "";
   return p.popupMask + '<div class="cv-svg-host" id="cvSvgHost" title="点节点看详情,空白拖拽平移,滚轮缩放"' + sigAttr + staleAttr + ">" + p.svg + "</div>" + p.anchors + p.fold;
@@ -20704,7 +20704,7 @@ function cvLayout(doc, force) {
   }
   return pos;
 }
-/** step-073 D2 增量渲染三件套:
+/** D2 增量渲染三件套:
  * cvStructSig=结构签名(节点 id/kind/label/change/代码连接键 + 边 from>to>kind>label>virtual + ro/编辑态)——
  *   签名不变说明结构没变,只可能是 done/摘要/评论/连接态/位置/rev 变 → 原位补丁,零 DOM 重建零闪烁;
  * cvMetaHtml=板头 meta 行(全量渲染与补丁共用同一实现,消灭双实现);
@@ -20718,7 +20718,7 @@ function cvAccSig(n) {
   for (const e of evs) if (e && e.ok === true) okN++;
   return "a" + accs.length + ":" + accs.map((a) => String((a && a.cmd) || "").slice(0, 24)).join("|") + "/e" + evs.length + ":" + okN;
 }
-/** n1 画布白板卡一级操作条(board 卡卡头,2026-10-22):此前白板卡卡头只有 聚焦/折叠/隐藏 三个通用件,
+/** n1 画布白板卡一级操作条(board 卡卡头:此前白板卡卡头只有 聚焦/折叠/隐藏 三个通用件,
  *  「编辑/评论」退到视图头(vw-head,#boardEditBtn)与浮窗头(#bfEdit)的次级位置 —— 进了画布形态用户
  *  找不到入口。这里在卡头给一排一级按钮,点击行为全部复用既有入口(boardEditToggle / 评论模式 / 按板续作),
  *  零新协议、零新状态机。第三个按钮「按板续作」仅在既有 boardContinueBtn 存在时给出(复用同名动作)。 */
@@ -20745,7 +20745,7 @@ function bdPendingOf(taskId) {
   const it = taskId ? p[taskId] : null;
   return it && it.count > 0 ? it : null;
 }
-/** 2026-11-05 无钉选时的默认板:节点数最多的一块(nodeCount),并列取列表更靠前者(最新)。
+/** 无钉选时的默认板:节点数最多的一块(nodeCount),并列取列表更靠前者(最新)。
  *  纯函数,不改钉选/降级语义(pinnedMissing 分支在外面逐字不动)。空清单返回 ""。 */
 function cvDefaultBoardId(items) {
   const list = Array.isArray(items) ? items : [];
@@ -20896,13 +20896,13 @@ function cvStructSig(doc, ro) {
   // w1/w2 视图态也进签名:写者过滤/泳道展开改变的是「画哪些节点 + 按哪个子集重排布局」,
   // 结构本身没变 → 不进签名就会被增量补丁当成同结构而**过滤不生效**(点了 chip 画面不动)。
   const wTag = (cvWriterOn ? "W" + [...cvWriterOn].sort().join(",") : "") + (cvFoldOpen.size ? "O" + [...cvFoldOpen].sort().join(",") : "");
-  // 2026-10-25 B:boardType 进签名——design↔research 切换会增删「矩阵」入口,补丁路径必须走全量重建
-  // 2026-10-26 UI 交互地图视图/标题进签名:切换交互↔结构、板标题/屏职责变化必须全量重建
+ // B:boardType 进签名——design↔research 切换会增删「矩阵」入口,补丁路径必须走全量重建
+ // UI 交互地图视图/标题进签名:切换交互↔结构、板标题/屏职责变化必须全量重建
   // (增量补丁只改卡片文本,不会换布局/换顶部图例)。
   let s = doc.taskId + "|" + (doc.docKind === "page" ? "P" : "") + (cvUiInfo ? "U" + cvUiMode : "u" + cvUiMode) + "|" + doc.title + "|" + flowTag + (ro ? "r" : "") + (boardEditOn ? "e" : "") + (boardCommentMode ? "m" : "") + "|" + (doc.boardType || "") + "|" + (doc.scale || "") + "|";
   // n2 评论徽标计数进签名:评论数变化必须走全量重建(增量补丁只改 .cv-cmts 文案不改处理器绑定,
   // 而「评 N」徽标现在是评论入口——徽标从隐藏变可见时必须有可点的 DOM 与处理器)。
-  // 2026-10-26 板型条:flow/before/targets 进签名——否则 agent 补分支/改前/目标后面板增量补丁不刷新节点条。
+ // 板型条:flow/before/targets 进签名——否则 agent 补分支/改前/目标后面板增量补丁不刷新节点条。
   for (const n of doc.nodes) s += n.id + "," + n.kind + "," + n.label + "," + n.change + "," + (n.group || "") + "," + (cvUiInfo ? (n.summary || "") : "") + "," + (n.symbolRef ? n.symbolRef.name : "") + "," + ((n.symbolRef && n.symbolRef.file) || n.fileRef || "") + "," + cvAccSig(n) + "," + (n.comments && n.comments.length ? n.comments.length : 0) + "," + JSON.stringify(n.flow || []) + "," + (n.before || "") + "," + ((n.targets || []).join("|")) + "," + JSON.stringify(n.accept || []) + ";";
   s += "#";
   for (const e of doc.edges) s += e.from + ">" + e.to + "," + e.kind + "," + (e.label || "") + (e.virtual ? ",v" : "") + ";";
@@ -20953,7 +20953,7 @@ function bdAccStats(n) {
   return st;
 }
 /** 板级 P0 覆盖:total=P0 节点数,passed=accept 全部通过的 P0 节点数,evidence=有 ok=true 证据的 accept 条数,
- *  failed=未通过的 P0 节点数。无 P0 节点时 total=0(不显示收口门,纯探索板不受罚)。 */
+ * failed=未通过的 P0 节点数。无 P0 节点时 total=0(不显示门,纯探索板不受罚)。 */
 function bdP0Stats(doc) {
   const nodes = (doc && Array.isArray(doc.nodes) ? doc.nodes : []).filter((n) => n && n.phase === "P0");
   let passed = 0, evidence = 0;
@@ -21059,8 +21059,8 @@ function bdAccDetailHtml(n) {
   }
   return h;
 }
-/** n10 明细卡「关系」段(2026-10-22):选中节点此前只看到自己的 summary/流程/验收,看不到它在板上的连线——
- *  用户口径「看不出有什么关系」。这里把 doc.edges 按 from(出边)/to(入边)两向列出来,每条给
+/** n10 明细卡「关系」段:选中节点此前只看到自己的 summary/流程/验收,看不到它在板上的连线——
+ *。这里把 doc.edges 按 from(出边)/to(入边)两向列出来,每条给
  *  目标节点名(kind 中文名)+ 边 label 小字 + virtual 边的「推导」徽标;孤立节点明说(有用信息,不隐藏)。
  *  注意:边的关系类型(call/data/verify/nav/contains)与节点 kind(CV_KIND_NAME)是两套词表,不许混用。 */
 const BD_REL_KIND_NAME = { call: "调用", data: "数据流", verify: "验收", nav: "次序", contains: "包含" };
@@ -21134,7 +21134,7 @@ function cvTypeNodeHtml(n, doc, info) {
   if (!chips && !flow) return "";
   return (chips ? '<div class="cv-type-line">' + chips + "</div>" : "") + flow;
 }
-/** 2026-10-26 工程师图形态:code 板节点按 C4 语义显示 [类型: 技术] + 职责。
+/** 工程师图形态:code 板节点按 C4 语义显示 [类型: 技术] + 职责。
  * summary 可用「[Component: TypeScript] 职责」显式声明;没写则按 kind 推断。
  * 零正则转义纪律:本文件在 PAGE 模板里,避免反斜杠转义被模板层吃掉。 */
 function cvC4Info(n) {
@@ -21172,7 +21172,7 @@ function cvC4Html(n) {
     '<span class="cv-c4-glyph">' + glyph + '</span><span class="cv-c4-type">' + esc(c.type) + "</span>" +
     (c.tech ? '<span class="cv-c4-tech">' + esc(c.tech) + "</span>" : "") + "</div>";
 }
-/** 2026-10-26 code flow 代码框:把 flow 步骤按行渲染(示例图的伪代码块)。
+/** code flow 代码框:把 flow 步骤按行渲染(示例图的伪代码块)。
  * 只取前 4 行、每行 58 字;branch 只展开 if(cond) + then 首行,else 详情交给菱形与边标签。 */
 function cvCodeLines(n) {
   const out = [];
@@ -21194,7 +21194,7 @@ function cvCodeLines(n) {
 }
 /** code flow 卡片正文:C4 类型行 + 代码级步骤;没有 flow 时退回 summary 一行。 */
 function cvCodeFlowBodyHtml(n, c4) {
-  // 2026-10-29:带 before 的卡多一行「现状」(见 cvBeforeHtml),代码行显示从 4 降到 3,
+ // 带 before 的卡多一行「现状」(见 cvBeforeHtml),代码行显示从 4 降到 3,
   // 代码框总高与卡高 176 都不变——before 不挤掉 flow 行,只是换一行的体积(cvCodeLines 的 4 行上限不动)。
   const lines = cvCodeLines(n).slice(0, cvBeforeHtml(n) ? 3 : 4);
   const c4h = c4 ? cvC4Html(n) : "";
@@ -21205,10 +21205,10 @@ function cvCodeFlowBodyHtml(n, c4) {
   return c4h + '<div class="cv-code-lines" title="' + esc(lines.join(" / ")) + '">' +
     lines.map((s) => '<div class="cv-cl">' + esc(s) + "</div>").join("") + "</div>";
 }
-/** 2026-10-29 code 板「想画流程图」判定(与 assets/board-type-profile.js 的 codeFlowWanted 同口径,
+/** code 板「想画流程图」判定(与 assets/board-type-profile.js 的 codeFlowWanted 同口径,
  * 两处必须一起改):①有 start/end(planner 明确画流程) ②有 decision 节点 ③步骤节点里 ≥50% 带 flow 行。
  * 变更契约板(基线容器+变更卡,flow 全空)三条都不满足 → 布局/画像行为逐字不变。
- * 2026-10-29 perf 板复用同一口径(性能优化板有 start/end/decision/带 flow 的步骤 → 同样进 code flow 布局与画像)。 */
+ * perf 板复用同一口径(性能优化板有 start/end/decision/带 flow 的步骤 → 同样进 code flow 布局与画像)。 */
 function cvCodeFlowWanted(nodes) {
   const ns = Array.isArray(nodes) ? nodes.filter((n) => !!n) : [];
   if (!ns.length) return false;
@@ -21219,7 +21219,7 @@ function cvCodeFlowWanted(nodes) {
   const withFlow = steps.filter((n) => Array.isArray(n.flow) && n.flow.length > 0).length;
   return withFlow * 2 >= steps.length;
 }
-/** 2026-10-29 仓库关系上屏:targets 里的文件路径压成可读短名(末尾两段),太长省略中间。 */
+/** 仓库关系上屏:targets 里的文件路径压成可读短名(末尾两段),太长省略中间。 */
 function cvFileNameOf(t) {
   var s = String(t == null ? "" : t);
   var BS = String.fromCharCode(92);
@@ -21232,7 +21232,7 @@ function cvFileNameOf(t) {
   if (short.length <= 34) return short;
   return short.slice(0, 12) + "…" + short.slice(-21);
 }
-/** 2026-10-29 用户口径「逻辑层为主 + 改动降级为徽标」:modify/delete 节点在 code flow 卡上
+/** modify/delete 节点在 code flow 卡上
  * 多出的一行「现状:<before>」——「改这里」而不是「计划」。只渲 1 行、≤48 字,超长省略;
  * keep/add 不显示(没有「现状」),无 before 返回空串。零正则转义:空白折叠走逐字符判断。 */
 function cvBeforeHtml(n) {
@@ -21250,16 +21250,16 @@ function cvBeforeHtml(n) {
   const cut = s.length > 48 ? s.slice(0, 47) + "…" : s;
   return '<div class="cv-before" title="现状:' + esc(s) + '">现状:' + esc(cut) + "</div>";
 }
-/** 2026-10-29 code flow 卡脚「与已有仓库代码的关系」:targets 文件名 + 变更徽标。
+/** code flow 卡脚「与已有仓库代码的关系」:targets 文件名 + 变更徽标。
  * 只出 2 个(176 高卡脚只有一行),余量给 +N;没有 targets 返回空串(调用方退回原有卡脚)。 */
 function cvFileFootHtml(n) {
   const ts = (Array.isArray(n && n.targets) ? n.targets : []).map((x) => String(x == null ? "" : x).trim()).filter((x) => !!x);
-  // 2026-11-05「看得懂」:只有 targets 文件名时读不出「改哪个符号、哪一行」——把结构化锚 symbolRef
+ // 「看得懂」:只有 targets 文件名时读不出「改哪个符号、哪一行」——把结构化锚 symbolRef
   // 也渲成 chip(name@basename:line)。targets 最多 2 个、symbolRef 最多 1 个,余量沿用 .cv-file-more。
   const sr = n && n.symbolRef && (n.symbolRef.name || n.symbolRef.file) ? n.symbolRef : null;
   if (!ts.length && !sr) return "";
   const shown = ts.slice(0, 2);
-  // 2026-10-29 可读性:两个文件名之间给可见分隔符(+ flex gap),原来两 chip 只有 5px 缝,实测读成「a.tsb.ts」
+ // 可读性:两个文件名之间给可见分隔符(+ flex gap),原来两 chip 只有 5px 缝,经验证读成「a.tsb.ts」
   const tChips = shown.map((t) => '<span class="cv-file-name" data-cvfile="' + esc(t) + '" title="' + esc(cvTargetTitle(t, n)) + '">' + esc(cvFileNameOf(t)) + "</span>").join('<i class="cv-file-sep">·</i>');
   let symChip = "";
   if (sr) {
@@ -21275,7 +21275,7 @@ function cvFileFootHtml(n) {
     (ts.length > shown.length ? '<em class="cv-file-more">+' + (ts.length - shown.length) + "</em>" : "") +
     cvChangeBadge(n, "cv-chg") + "</div>";
 }
-/** 2026-11-05 targets 条目的悬浮全文:带 # 符号的如实给「路径#符号」(不编造行号);与 symbolRef
+/** targets 条目的悬浮全文:带 # 符号的如实给「路径#符号」(不编造行号);与 symbolRef
  * 同文件时补「:行号」;两者都不适用就只给原路径。 */
 function cvTargetTitle(t, n) {
   const raw = String(t == null ? "" : t).trim();
@@ -21290,10 +21290,10 @@ function cvFileBaseOf(t) {
   const segs = s.split("/").filter((x) => !!x);
   return segs.length ? segs[segs.length - 1] : "";
 }
-/** 2026-10-29 code flow 卡上的变更徽标文案:用 CV_CHG_LABEL(keep=复用),不用面板通用的「涉及」。
+/** code flow 卡上的变更徽标文案:用 CV_CHG_LABEL(keep=复用),不用面板通用的「涉及」。
  * 只被 code flow 用(卡脚 .cv-file-foot / start-end 药丸 / decision 菱形),无其它调用方。
- * 2026-10-29 续:药丸/菱形代表流程控制点(触发/判断/出口),change=keep 的「复用」挂上去是纯噪音
- * (实测 start 药丸顶着「复用」,读者以为触发点被改动);这两处只在 add/modify/delete 时出徽标。 */
+ * 续:药丸/菱形代表流程控制点(触发/判断/出口),change=keep 的「复用」挂上去是纯噪音
+ * (经验证 start 药丸顶着「复用」,读者以为触发点被改动);这两处只在 add/modify/delete 时出徽标。 */
 function cvChangeBadge(n, extra, ctrlOnly) {
   const k = n && n.change && CV_CHG_LABEL[n.change] ? n.change : "";
   if (!k) return "";
@@ -21305,7 +21305,7 @@ function cvCodeSide(n) {
   const s = String((n && n.label) || "") + " " + String((n && n.group) || "") + " " + String((n && n.summary) || "");
   return ["根因", "影响面", "影响", "验收", "冒烟", "负面", "回归", "测试", "风险", "回滚", "accept", "smoke", "test", "risk", "rollback"].some((k) => s.indexOf(k) >= 0);
 }
-/** 2026-10-29 测试文件卡=关联测试锚点,不是控制流:targets/symbolRef.file/fileRef 任一路径落在
+/** 测试文件卡=关联测试锚点,不是控制流:targets/symbolRef.file/fileRef 任一路径落在
  * test|tests|__tests__ 目录或 *.test/*.spec.* 上,且本卡没有真实函数调用形(flow 空、或 flow 行
  * 都不是「裸调用标题」如 runSuite(name))=画的是「这条测试覆盖什么」而不是控制流本身 → 剥到右侧栏。
  * 断言式行(expect(a).toBe(1)/assert.ok(x))仍算锚点:那是测试自身口吻,不是被测函数的控制流。
@@ -21361,7 +21361,7 @@ function cvCodeFlowTestAnchor(n) {
 }
 /** flow 板的侧栏判定要更窄:start/end/decision 永远是流程节点(「安装回滚」end 不能被
  * 「回滚」字面剥离,否则 decision 的否分支会整条消失);只有 note/aggregate/io 且带侧栏词才剥离。
- * 2026-10-29 增:测试文件锚点(function/module/io/tool + 测试路径 + 无调用形 flow)也剥到侧栏。 */
+ * 增:测试文件锚点(function/module/io/tool + 测试路径 + 无调用形 flow)也剥到侧栏。 */
 function cvCodeFlowSide(n) {
   if (!n) return false;
   const k = n.kind;
@@ -21391,7 +21391,7 @@ function cvCodeSideHtml(nodes) {
   return '<details class="cv-code-side"><summary class="cv-code-side-title">侧栏明细 <b>' +
     nodes.length + '</b><span>根因 / 现状 / 验收</span></summary>' + body + "</details>";
 }
-/** 2026-11-05「白板看得懂」层/锚统计(纯函数,可单测):
+/** 「白板看得懂」层/锚统计(纯函数,可单测):
  *  口径(与产品口径一致,全在渲染层算,不读盘上任何字段):
  *   · 排除 ph-*(阶段卡)与 __cv_current(现状基线合成节点)——它们是渲染层产物,不是板上的设计节点;
  *   · 现状 N = change==="keep" 或 change 缺失;变更 M = change ∈ {add,modify,delete};
@@ -21419,7 +21419,7 @@ function cvLayerOf(n) {
   const c = String(n && n.change != null ? n.change : "");
   return c === "add" || c === "modify" || c === "delete" ? "chg" : "keep";
 }
-/** 2026-11-05 主题节点判定(id 以 theme 开头不区分大小写,或 group 含「主题」)。
+/** 主题节点判定(id 以 theme 开头不区分大小写,或 group 含「主题」)。
  *  只用于 code 系板(渲染层把主题渲染成横贯板首的横幅),不改板上任何数据。 */
 function cvThemeNodeOf(n) {
   if (!n) return false;
@@ -21492,9 +21492,9 @@ function cvMetaHtml(doc, ro) {
     : "";
   return "「" + esc(doc.title) + "」 " + (boardEditOn ? "编辑中(未保存)" : doc.status === "draft" ? "设计稿" : doc.status === "implementing" ? "实施中" : "已落实") + " · rev " + doc.rev + " · " + doc.nodes.length + " 节点/" + bdEdgeCountText(doc) + bdCountSeg(doc) + kindTag + recon + runTag + bdP0Tags(doc) + cvLayerMetaHtml(doc) + (boardItems.length >= 2 ? ' · <span class="bd-tag" title="本会话共有 ' + boardItems.length + ' 块白板;选择器里可切换">共 ' + boardItems.length + " 块板</span>" : "") + (ro ? ' · <span class="bd-tag lk-linked">设计沉淀 · 只读</span>' : "");
 }
-/** 板型头 + 主题横幅 + 写者条 + 层 chip 的纵向堆叠(2026-11-05 实测遮挡修复)。
+/** 板型头 + 主题横幅 + 写者条 + 层 chip 的纵向堆叠(经验证遮挡修复)。
  *  四者都是画布内的绝对定位浮层,高度随板型/内容变化(板型头 40~70px、主题横幅 30~40px、写者条 26px),
- *  写死像素必然在某些板上互相压住(实测 tasksm 板层 chip 压住板型头)。做法:按 DOM 顺序从 baseTop 起
+ * 写死像素必然在某些板上互相压住(经验证 tasksm 板层 chip 压住板型头)。做法:按 DOM 顺序从 baseTop 起
  *  逐条「量实际高 → 下一条 = 上一条底 + 6px」;display:none 的跳过。纯后置调整,不改任何布局/连线。 */
 function cvStackTopBars(host) {
   if (!host) return;
@@ -21561,7 +21561,7 @@ function cvPatchCanvas(host, doc, pos, ro, roLinks) {
   if (typeof cvDrawMini === "function") cvDrawMini(host, doc, pos);
   return true;
 }
-// ---- 2026-10-25 B:research 板「决策矩阵」视图(纯函数 + 表格渲染,零协议/零板数据改动) ----
+// ---- B:research 板「决策矩阵」视图(纯函数 + 表格渲染,零协议/零板数据改动) ----
 // 数据来源只读现有 BoardDoc:
 //   · 候选 = label 以「候选」开头 / group 含「候选」/ flow 步骤里带 ≥2 个维度前缀的节点(旧板兜底);
 //   · 维度 = 固定五维(成本/风险/可维护性/可测试性/证据),单元格文本优先取 flow 步骤「成本:…」式前缀,
@@ -21781,7 +21781,7 @@ function renderResearchMatrix(host, doc, info, ro) {
   });
 }
 
-/** 画布渲染(泛化宿主,step-058):doc=板;opts={host, readonly, links}——
+/** 画布渲染(泛化宿主:doc=板;opts={host, readonly, links}——
  * 缺省 host=bdGraphHost()(大白板/浮窗由 bdHome 决定);readonly=true 供档案「设计沉淀」只读画布:
  * 不渲添加工具箱、不绑编辑交互、拖拽与直改板落盘全禁;links 传入服务端解析的连接三态(只读时不用 boardLinks 全局)。 */
 function renderBoardCanvas(doc, opts) {
@@ -21791,20 +21791,20 @@ function renderBoardCanvas(doc, opts) {
   const host = (opts && opts.host) || bdGraphHost(); // 宿主泛化:大白板 #boardGraph / 浮窗 #bfGraph / 档案沉淀灯箱自备宿主
   if (!host) return;
   const roLinks = (opts && opts.links) || null;
-  // step-111 页面结构板(docKind=page)语义布局:容器化+层次流向+主线+页面内 UI 线框。
+ // 页面结构板(docKind=page)语义布局:容器化+层次流向+主线+页面内 UI 线框。
   // pos 尊重规则:全部节点有 pos(=用户拖拽/整理落盘后)→ 完全尊重现行为;否则(部分/全无)
   // → BoardPageLayout 语义布局(渲染层兜底,不写盘——存量旧板自动受益,不改盘上数据)。
   cvPageInfo = null;
   cvFlowInfo = null;
   cvUiInfo = null;
   cvFoldMode = false;
-  // 2026-10-26 UI 交互流程视图:切板回默认「交互」;结构视图保留原页面结构板。
+ // UI 交互流程视图:切板回默认「交互」;结构视图保留原页面结构板。
   if (cvUiTask !== doc.taskId) { cvUiTask = doc.taskId; cvUiMode = "interaction"; cvUiMovedCache = null; }
-  // 2026-11-05 层高亮是「这块板上的临时看法」——切板即复位(不把 A 板的只看变更带到 B 板)
+ // 层高亮是「这块板上的临时看法」——切板即复位(不把 A 板的只看变更带到 B 板)
   if (cvLayerTask !== doc.taskId) { cvLayerTask = doc.taskId; cvLayerOn = ""; }
   const uiAvail = cvUiAvailable(doc);
   const uiOn = uiAvail && cvUiMode === "interaction";
-  // 2026-10-25 B:research 板「矩阵」表格视图(纯 UI 态):切板自动回画布;只对 boardType=research 生效。
+ // B:research 板「矩阵」表格视图(纯 UI 态):切板自动回画布;只对 boardType=research 生效。
   // 早退分支不做布局(fit/泳道/边全不需要),表格容器进 cvActiveHost 保证后续交互/明细定位不摸错宿主。
   if (cvMatrixTask !== doc.taskId) {
     cvMatrixTask = doc.taskId; cvMatrixSel = null;
@@ -21829,7 +21829,7 @@ function renderBoardCanvas(doc, opts) {
   // 折叠态同构清理:新板没有可折叠内容(既无大组也无碎泳道)时回收(否则开关挂着但服务端折不了任何东西)
   if (cvFoldGroups && !cvFoldAvailable(doc)) cvFoldGroups = false;
   const isPageDoc = doc.docKind === "page" && typeof BoardPageLayout !== "undefined";
-  // 2026-10-26 docs 两层 PPT(用户口径:先大骨架→骨架再丰富成页):
+ // docs 两层 PPT(先大骨架→骨架再丰富成页):
   // docs 板有「章(section)contains→页(page)」结构时,用 BoardPageLayout 的容器语义渲染——
   // 章=容器卡(章节序号+断言标题),页=章内小卡;章间 data 推进边画主线。非 docs 板不受影响。
   const docChapterEdges = String(doc.boardType || "") === "docs"
@@ -21846,10 +21846,10 @@ function renderBoardCanvas(doc, opts) {
   const isComposeDoc = !isPageDoc && !isDocsDeck && String(doc.boardType || "") === "composition"
     && (doc.nodes || []).some((n) => n && n.kind === "section")
     && typeof BoardTypeProfile !== "undefined" && typeof BoardTypeProfile.composeLayout === "function";
-  // 2026-10-26 测试类型接入 code flow:测试任务与 code 同形态(纯 code flow,
+ // 测试类型接入 code flow:测试任务与 code 同形态(纯 code flow,
   // 被测链路逐函数展开)。test 板带 start/end 时复用 code 板的工程师 flow 渲染
   // (药丸/菱形/正交线/代码框/方法分组);test 契约板(无 start/end)渲染不变。
-  // 2026-10-29 perf 板纳入 code flow(用户:「性能优化的 flow 还差点意思」):perf 与 code/test 同列——
+ // perf 板纳入 code flow(用户:「性能优化的 flow 还差点意思」):perf 与 code/test 同列——
   // 板型进工程师 flow 渲染白名单 = cvBoardType === "code" || cvBoardType === "test" || cvBoardType === "perf";
   // 进门条件各自保持:code 恒进(自带变更契约分支)、test 仍要 start/end(逐字不变)、
   // perf 要么有 start/end/decision 要么 ≥50% 步骤带 flow 行(与 cvCodeFlowWanted 同口径)才进,
@@ -21888,7 +21888,7 @@ function renderBoardCanvas(doc, opts) {
       }
     }
   } else if (isPageDoc) {
-    // 2026-10-18 修复:布局引擎恒跑——size/roles/mainline/containers 是渲染层刚需(线框/金框/图例),
+ // 修复:布局引擎恒跑——size/roles/mainline/containers 是渲染层刚需(线框/金框/图例),
     // 旧实现 allPosed 时 cvPageInfo=null → 用户拖过一次(整板 pos 固化)后页面板永久退化成普通卡片。
     // 引擎纯函数幂等零副作用,多跑一次只为元数据;位置:全部有 pos=尊重用户拖拽,否则用引擎语义位。
     const pg = BoardPageLayout.layout(doc);
@@ -21909,10 +21909,10 @@ function renderBoardCanvas(doc, opts) {
     // w1:写者过滤后的**子集**重算布局(拿全量布局再藏节点会留一片空地,「过滤后重排」才是可读的);
     // w2:过滤态下不做密度收卡(用户已经在精确看某一路),阈值只在未过滤时生效。
     const fdoc0 = cvWriterFilterDoc(doc, cvWriterOn);
-    // code 板可读性(2026-10-26 用户口径「示例图能看懂」):
+ // code 板可读性:
     // - flow 板(有 start/end):主图直接是 start→steps→decision→end 的流程图;
     // - 变更契约板:主图 = 一个「现状基线」Container + 变更节点;现状细节/根因/验收/风险进右侧栏。
-    // 2026-10-29 放宽:planner 想画逻辑的 code 板不一定落 start/end。三种都算「想画流程图」:
+ // 放宽:planner 想画逻辑的 code 板不一定落 start/end。三种都算「想画流程图」:
     //   ①有 start/end(原有口径) ②有 decision 节点 ③步骤节点里 ≥50% 带 flow 行(代码级步骤)。
     // 只有这样,正交连线/代码框/药丸菱形才会出现(否则一张 模块+decision 的板完全退化成普通卡)。
     const cvCodeFlowMode = !!cvCodeInfo && cvCodeFlowWanted(fdoc0.nodes);
@@ -21940,11 +21940,11 @@ function renderBoardCanvas(doc, opts) {
         : fdoc0;
     }
     // 密度分层模式用 compact 布局:非主干卡会被收成 +N,此时若仍做 7c 整框纵向让位,
-    // 仅剩的几张主干卡会被沿纵向拉开几千 px(实测 y 跨 2072px),适配 k 永远撞 0.7 可读下限。
+ // 仅剩的几张主干卡会被沿纵向拉开几千 px(经验证 y 跨 2072px),适配 k 永远撞 0.7 可读下限。
     // compact 下跳过让位与碎泳道合并,主干按层横排;非分层路径(小/中等板)行为逐字不变。
     const foldPreview = !cvWriterOn && fdoc.nodes.length > CV_FOLD_THRESHOLD;
-    // 2026-10-25 A:宽设计板受控列换行(引擎再按主路径列数 > 4 裁决);refactor 双泳道不强扭
-    // 2026-10-26 板型画布:code 板主图卡更大(工程师图),其它板型沿用 228/150。
+ // A:宽设计板受控列换行(引擎再按主路径列数 > 4 裁决);refactor 双泳道不强扭
+ // 板型画布:code 板主图卡更大(工程师图),其它板型沿用 228/150。
     const tprof = cvTypeProfileOf(doc);
     const typedHasFlow = !!(tprof && (fdoc.nodes || []).some((n) => Array.isArray(n.flow) && n.flow.length));
     const fl = BoardFlowLayout.layout(fdoc, {
@@ -21955,7 +21955,7 @@ function renderBoardCanvas(doc, opts) {
       nodeW: tprof ? (cvCodeInfo ? 260 : 228) : undefined,
       // code flow 卡里要放 3~4 行代码级步骤(示例图的代码框),比变更契约卡再高 14px
       nodeH: tprof ? (cvCodeInfo ? (cvCodeFlowMode ? 176 : (typedHasFlow ? 162 : 150)) : (typedHasFlow ? 150 : 136)) : undefined,
-      // code flow 的方法分组必须一色一框:禁止 7b/7d 把相邻小组并成一条(实测标题拼成
+ // code flow 的方法分组必须一色一框:禁止 7b/7d 把相邻小组并成一条(经验证标题拼成
       // 「registerPluginSkills()slashCandidates()」,方法边界丢失)
       preserveLanes: doc.boardType === "refactor" || cvCodeFlowMode,
     });
@@ -21982,7 +21982,7 @@ function renderBoardCanvas(doc, opts) {
       for (const lane of lanes) {
         if (lane.isPhase || cvFoldOpen.has(lane.key)) for (const id of lane.nodes) keep.add(id);
       }
-      // 2026-10-26 缺陷修复(P0:「+N 展开后无法收起」):toggle 逻辑本来就是双向的
+ // 缺陷修复(P0:「+N 展开后无法收起」):toggle 逻辑本来就是双向的
       // (cvFoldOpen 有则删/无则加),唯一入口却是 +N 块——泳道一旦展开,它的节点全进 keep,
       // hidden 变空 → 该泳道不再出块 → 用户再也点不到收起,只能刷新页面重来。
       // 修法:已展开的泳道也出一个反向块(dir:"close",文案「−N 收起」,data-fold 用**同一个** lane.key),
@@ -22006,9 +22006,9 @@ function renderBoardCanvas(doc, opts) {
         cvFoldHtml = (function () {
           // 计数块摆放:摆在**主干卡下方成网格**——横向从主干最小 x 起,每行 8 个,列距 160px;
           // 纵向从主干最大 y + 40 起,行距 40px。
-          // 历史教训(两次实测):①固定 y=40 + 主干 y≈1426 → 1300px 空白把适配 k 压到下限;
+ // 历史教训(两次经验证):①固定 y=40 + 主干 y≈1426 → 1300px 空白把适配 k 压到下限;
           // ②改「主干右缘 +260、与主干同高」→ 60 节点板主干 x 跨到 1982,计数块落在 x=2034..2194,
-          // 而 k=0.7 的可见世界只到 x≈1592 → 20 个计数块**全部**在视野外(实测可见 0/20)。
+ // 而 k=0.7 的可见世界只到 x≈1592 → 20 个计数块**全部**在视野外(经验证可见 0/20)。
           // 摆到主干正下方:只往下多出几行 40px,横向不越过主干右缘,适配框不被推宽。
           let minX = Infinity;
           let maxY = 0;
@@ -22044,15 +22044,15 @@ function renderBoardCanvas(doc, opts) {
     }
   } else if (bdLaneEligible(doc)) {
     // n1/A3 无边板泳道回退:零边设计板不再退回旧分层孤箱堆——按 group/kind 成泳道,
-    // 声明顺序编号 01..N,泳道框/编号角标/图例全部复用流动渲染件(用户实报「无边板看不出结构」)。
+ // 声明顺序编号 01..N,泳道框/编号角标/图例全部复用流动渲染件(用户用户反馈「无边板看不出结构」)。
     cvFlowInfo = bdFallbackLanes(doc);
     pos = new Map(cvFlowInfo.pos);
   } else {
     pos = cvLayout(doc);
   }
-  // 2026-10-22 关系图例开关:设计板/流动板有边时才显示(page 板有自己的语义图例)
+ // 关系图例开关:设计板/流动板有边时才显示(page 板有自己的语义图例)
   const relLegend = !cvPageInfo && Array.isArray(cvRenderDoc.edges) && cvRenderDoc.edges.length > 0;
-  // 2026-10-29 flowkit 单张 SVG:svg 模式下卡片 DOM 不存在,结构签名与「逐节点补丁」都不适用。
+ // flowkit 单张 SVG:svg 模式下卡片 DOM 不存在,结构签名与「逐节点补丁」都不适用。
   // 增量口径只认「svg 内容是否变了」:签名(doc.rev + 模式)未变且 svg 已缓存 → 直接 return(不重注入、
   // 不碰 cvPan——「保存回执抢走用户视野」是既有 P0,这里绝不调 cvApplyTf/cvFitNow 重置视野)。
   const cvMode = cvRenderMode();
@@ -22075,7 +22075,7 @@ function renderBoardCanvas(doc, opts) {
     }
     if (!svgNow) cvSvgRequest(doc); // 等回包:board.diagram.result 到达后重渲整块
   }
-  // step-073 D2 增量渲染:结构签名(节点 id/kind/label/change/代码连接+边集+ro/编辑态)不变 → 原位补丁
+ // D2 增量渲染:结构签名(节点 id/kind/label/change/代码连接+边集+ro/编辑态)不变 → 原位补丁
   // (done 勾/摘要/评论徽标/连接点/位置/meta 行/边几何),不再整板 innerHTML 重建——agent 连续
   // board_upsert 时用户看到的是丝滑增量更新,不是整板闪烁重绘;DOM 引用/交互绑定/在途 hover 全保留。
   const sig = cvStructSig(doc, ro);
@@ -22095,7 +22095,7 @@ function renderBoardCanvas(doc, opts) {
   } else {
     for (const p of pos.values()) { maxX = Math.max(maxX, p.x + 200); maxY = Math.max(maxY, p.y + 120); }
   }
-  // 2026-10-29 svg 模式世界尺寸:直接用回包 SVG 的 viewBox 宽高 + 60 留白(既有口径),不再累加卡片包围盒。
+ // svg 模式世界尺寸:直接用回包 SVG 的 viewBox 宽高 + 60 留白(既有口径),不再累加卡片包围盒。
   // 解析失败(+60 兜底也不需要)/svg 还没回来 → 保持上面的 cards 累加结果(=回退,不崩)。
   const cvSvgBoxNow = cvMode === "svg" ? cvSvgWorldSize(cvSvgCacheSig === cvSvgSigNow ? cvSvgCacheHtml : "") : null;
   if (cvSvgBoxNow) { maxX = cvSvgBoxNow.w; maxY = cvSvgBoxNow.h; }
@@ -22103,8 +22103,8 @@ function renderBoardCanvas(doc, opts) {
   edgeSvg += cvEdgeInner(cvRenderDoc, pos, cvPageInfo || cvFlowInfo);
   edgeSvg += cvEdgeDefs() + cvUiFlowDefs(cvUiInfo) + '</svg>';
   const nodePos = (id) => pos.get(id) || { x: 0, y: 0 }; // 节点卡定位仍需(十期重构后保留此局部量)
-  // step-111 分区底色:page 容器按板内序 5 色循环(暗调色相区分,主线容器另加金框)
-  const PG_HUES = [  // 色相走 --bcv-lane-N / --bcv-page-N-bg 令牌(var() 兜底=原写死值):浅色主题自动转浅板
+ // 分区底色:page 容器按板内序 5 色循环(暗调色相区分,主线容器另加金框)
+  const PG_HUES = [  // 色相走 --bcv-lane-N / --bcv-page-N-bg 令牌(var 兜底=原写死值):浅色主题自动转浅板
     // 白板修复:首色相弃金(#c9a25e 与主线金 #e0b46a 视觉撞色,评审"金框不突出"根因)→石板灰蓝;
     // 全表无金色系后,亮金=主线专属语义,对比度由色彩唯一性保证
     { bd: "var(--bcv-lane-2,#7e8ba0)", bg: "var(--bcv-page-1-bg,rgba(20,24,32,.93))", tint: "var(--bcv-lane-2-bg,rgba(126,139,160,.08))" },
@@ -22115,7 +22115,7 @@ function renderBoardCanvas(doc, opts) {
   ];
   const pgOrder = cvPageInfo ? Array.from((cvPageInfo.containers || new Map()).keys()) : [];
   const hueOf = (id) => PG_HUES[Math.max(0, pgOrder.indexOf(id)) % PG_HUES.length] || PG_HUES[0];
-  // step-1012 docs 章号:此前取 PG_HUES[i].tag(该字段在色相表里根本不存在)→ 章号渲染成字面量 "undefined",
+ // docs 章号:此前取 PG_HUES[i].tag(该字段在色相表里根本不存在)→ 章号渲染成字面量 "undefined",
   // 且浅底主题下是 #fffdf8 白字压浅卡(1.08:1)。改为按章(section)在板内的声明序取两位序号 01/02…;
   // 只影响 docs 章卡头那个 <b>,默认主题其余色相/布局逐字不变。
   const cvDocSecIds = (isDocsDeck && Array.isArray(doc.nodes) ? doc.nodes : []).filter((x) => x && x.kind === "section").map((x) => x.id);
@@ -22131,7 +22131,7 @@ function renderBoardCanvas(doc, opts) {
     { bd: "var(--bcv-lane-1,#b08a5a)", bg: "var(--bcv-lane-1-bg,rgba(180,140,90,.05))", tag: "var(--bcv-lane-1-fg-strong,var(--bcv-lane-1-fg,#e0c08f))" },
     { bd: "var(--bcv-lane-6,#5aa8b8)", bg: "var(--bcv-lane-6-bg,rgba(80,170,190,.05))", tag: "var(--bcv-lane-6-fg-strong,var(--bcv-lane-6-fg,#96d8e4))" },
   ];
-  // 2026-10-26 code flow 方法/阶段分组:示例图的实色分区(黄/蓝/绿/粉/紫),不是虚线泳道
+ // code flow 方法/阶段分组:示例图的实色分区(黄/蓝/绿/粉/紫),不是虚线泳道
   const CV_CODE_LANE_HUES = [
     { bd: "var(--bcv-lane-1,#c9a35e)", bg: "var(--bcv-lane-1-bg,rgba(201,163,94,.10))", tag: "var(--bcv-lane-1-fg-strong,var(--bcv-lane-1-fg,#f0d39a))" },
     { bd: "var(--bcv-lane-2,#5b8ec9)", bg: "var(--bcv-lane-2-bg,rgba(91,142,201,.10))", tag: "var(--bcv-lane-2-fg-strong,var(--bcv-lane-2-fg,#b8d4ff))" },
@@ -22143,7 +22143,7 @@ function renderBoardCanvas(doc, opts) {
   // 这里跳过画框——21 框 vs 7 卡(3:1)的空壳虚框互相重叠糊画面,归属信息已由计数块表达
   // (计数块 title=「编号 泳道名 里的 N 个节点」)。lanes 数组不删数据(计数块要靠 key→label 算)。
   const codeLane = !!(cvFlowInfo && cvFlowInfo.codeFlow);
-  // 单写者板不显示 [writer] 前缀(planner 独立板实测标题变成「[pdhay] 面板刷新时机」,纯噪声)
+ // 单写者板不显示 [writer] 前缀(planner 独立板经验证标题变成「[pdhay] 面板刷新时机」,纯噪声)
   const onlyWriter = cvWriterAll.length === 1 && cvWriterAll[0].pfx ? cvWriterAll[0].pfx : "";
   const laneLabelOf = (label) => {
     const s = String(label || "");
@@ -22156,7 +22156,7 @@ function renderBoardCanvas(doc, opts) {
     const bdC = lane.isolated ? "var(--bcv-lane-orphan-bd,#6b5c4a)" : h.bd;
     const bgC = lane.isolated ? "var(--bcv-lane-orphan-bg,rgba(90,83,70,.05))" : h.bg;
     const tagC = lane.isolated ? "var(--bcv-lane-h-fg,#c4b494)" : h.tag;
-    // 2026-10-25 A:宽板折行时一条泳道可能按行拆成多段(boxes)——逐段画框,段头都带编号/标题,
+ // A:宽板折行时一条泳道可能按行拆成多段(boxes)——逐段画框,段头都带编号/标题,
     // 读图时每行都知道「这行属于哪条泳道」;无 boxes 的既有路径逐字不变。
     const segs = lane.boxes && lane.boxes.length ? lane.boxes : [lane];
     return segs.map((sg, si) => '<div class="cv-lane' + (codeLane ? " cv-code-lane" : "") + (lane.isolated ? " cv-lane-orphan" : "") + '" data-lane="' + esc(lane.key) + '"' +
@@ -22175,11 +22175,11 @@ function renderBoardCanvas(doc, opts) {
     const codeCls = c4 ? " cv-code-node" : "";
     // n12:该节点上有 agent 还没读到的评论 → cmt-pending 高亮(数据源 boardListPending,只读画布不挂)
     const selCls = (ro ? "" : (cvSelected.has(n.id) ? " selected" : (n.id === boardSelNode ? " on" : ""))) + (boardCommentMode && !ro ? " cmt-on" : "") + (!ro && bdNodePending(doc.taskId, n.id) ? " cmt-pending" : "");
-    // 2026-11-05 层高亮:只在该层板型(code/test/perf/refactor)且点过层 chip 时生效——
+ // 层高亮:只在该层板型(code/test/perf/refactor)且点过层 chip 时生效——
     // 命中的层加 .cv-layer-on,另一层加 .cv-layer-dim(opacity .35);两卡都不改任何布局量。
     const layCls = cvLayerAvail(doc) && cvLayerOn ? (cvLayerOf(n) === cvLayerOn ? " cv-layer-on" : " cv-layer-dim") : "";
     if (cvUiInfo) {
-      // ---- 2026-10-26 UI 交互地图:屏卡(字幕带+手机/浏览器 chrome+tab 条)/区块/元素行/辅助带 ----
+ // ---- UI 交互地图:屏卡(字幕带+手机/浏览器 chrome+tab 条)/区块/元素行/辅助带 ----
       if (n.kind === "page") {
         const pm = cvUiInfo.pages.find((x) => x.id === n.id) || null;
         if (pm) return cvUiScreenHtml(n, pm, selCls + layCls);
@@ -22189,7 +22189,7 @@ function renderBoardCanvas(doc, opts) {
       return cvUiRowHtml(n, selCls + layCls); // component / function 等页内交互元素
     }
     if (isDocsDeck && (n.kind === "page" || n.kind === "section" || n.kind === "aggregate")) {
-      // ---- 2026-10-26 docs 两层 PPT 渲染:aggregate=结论根(全宽横幅),section=章容器卡
+ // ---- docs 两层 PPT 渲染:aggregate=结论根(全宽横幅),section=章容器卡
       // (章号+断言标题+页数),page=章内页卡(页断言标题+要点)。线由 cvEdgeInner(data/contains)。 ----
       const sz = cvSizeOf(n.id);
       const hue = hueOf(n.id);
@@ -22216,7 +22216,7 @@ function renderBoardCanvas(doc, opts) {
         "</div>";
     }
     if (cvPageInfo && (n.kind === "page" || n.kind === "section" || n.kind === "component")) {
-      // ---- step-111 页面结构板线框渲染:page=浏览器窗容器(三点头+地址条+分区底色+主线金框);
+ // ---- 页面结构板线框渲染:page=浏览器窗容器(三点头+地址条+分区底色+主线金框);
       // section/component=容器内线框小卡(role 类定质感:顶栏横条/侧栏/主区/底栏/浮层/未归属) ----
       const sz = cvSizeOf(n.id);
       const hue = hueOf(n.id);
@@ -22249,7 +22249,7 @@ function renderBoardCanvas(doc, opts) {
         '<span class="cv-dot ' + lkCls + '" title="' + (lk ? (lk.state === "linked" ? "已连接" : lk.state === "moved" ? "漂移" : "断链") : "无代码连接") + '"></span></div>';
     }
     const f = n.symbolRef && n.symbolRef.file ? String(n.symbolRef.file).split("/").slice(-1)[0] : "";
-    // step-121 工作流板运行态类+角标(全量渲染路径;增量路径走 bdWfApplyStates 原位切类)
+ // 工作流板运行态类+角标(全量渲染路径;增量路径走 bdWfApplyStates 原位切类)
     const wfRun = boardTaskId && wfRuns[boardTaskId];
     const wfSt = wfRun && wfRun.states ? wfRun.states[n.id] : null;
     const wfCls = wfSt ? " wf-" + wfSt.state : "";
@@ -22276,8 +22276,8 @@ function renderBoardCanvas(doc, opts) {
     const phCur = isPh && String(n.label || "").indexOf("◀") >= 0;
     const phSkip = isPh && (String(n.label || "").indexOf("(不涉及)") >= 0 || String(n.summary || "").indexOf("不涉及") === 0);
     const phCls = isPh ? " cv-ph" + (phCur ? " cv-ph-cur" : "") + (phSkip ? " cv-ph-skip" : "") : "";
-    // 2026-10-26 工程师流程图形态:start/end 药丸、decision 菱形。flow 板由 planner 用 start/decision/end 触发。
-    // 2026-10-29 药丸/菱形补 change 徽标(绝对定位,不参与胶囊/菱形的列布局预算 → 220×64 与 132×132 不撑破)。
+ // 工程师流程图形态:start/end 药丸、decision 菱形。flow 板由 planner 用 start/decision/end 触发。
+ // 药丸/菱形补 change 徽标(绝对定位,不参与胶囊/菱形的列布局预算 → 220×64 与 132×132 不撑破)。
     const chgPill = cvChangeBadge(n, "cv-chg", true);
     if (cvCodeInfo && (n.kind === "start" || n.kind === "end")) {
       return '<div class="cv-node k-' + esc(n.kind) + ' cv-code-node cv-code-pill' + selCls + layCls + '" data-cv="' + esc(n.id) +
@@ -22303,7 +22303,7 @@ function renderBoardCanvas(doc, opts) {
       '<span class="cv-title" title="' + esc(n.label) + '"><span class="cv-done bf-done">' + (n.done ? ic("check") + " " : "") + "</span>" + esc(n.label) + "</span>" +
       wfBadge +
       bdAccInline(n) +
-      // 2026-10-29 code flow 卡头不再重复渲 change(同一信息已在卡脚 .cv-file-foot / 药丸 / 菱形徽标上),
+ // code flow 卡头不再重复渲 change(同一信息已在卡脚 .cv-file-foot / 药丸 / 菱形徽标上),
       // 省出的标题槽给 .cv-title;通用卡(非 code flow)逐字不变。字面串保留(测试按源码序断言)。
       (isPh || (cvCodeInfo && cvFlowInfo && cvFlowInfo.codeFlow) ? "" : '<span class="bd-tag ' + n.change + '">' + BD_CHANGE[n.change] + "</span>") + "</div>" +
       (cvCodeInfo && cvFlowInfo && cvFlowInfo.codeFlow
@@ -22311,17 +22311,17 @@ function renderBoardCanvas(doc, opts) {
         : ((c4 ? cvC4Html(n) : "") +
           '<div class="cv-sum" title="' + esc(String(c4 ? c4.desc : n.summary || "")) + '">' + esc(String(c4 ? c4.desc : n.summary || "").slice(0, c4 ? 96 : 64)) + "</div>" +
           cvTypeNodeHtml(n, doc, cvFlowInfo))) +
-      // 2026-10-29 逻辑层口径:modify/delete 卡在代码框下方补一行「现状:<before>」(keep/add 不出)
+ // 逻辑层口径:modify/delete 卡在代码框下方补一行「现状:<before>」(keep/add 不出)
       (cvCodeInfo && cvFlowInfo && cvFlowInfo.codeFlow ? cvBeforeHtml(n) : "") +
-      // 2026-10-29 仓库关系上屏(code flow 卡):targets 文件名 + 变更徽标,贴在正文与页脚之间的一行
+ // 仓库关系上屏(code flow 卡):targets 文件名 + 变更徽标,贴在正文与页脚之间的一行
       (cvCodeInfo && cvFlowInfo && cvFlowInfo.codeFlow ? cvFileFootHtml(n) : "") +
       // 阶段卡(ph-*)不是工作流模块:页脚不挂代码连接点/「新模块」/评论徽标(无意义噪音),只留摘要
       (isPh ? "" : (n.id === "__cv_current"
         ? '<div class="cv-foot"><span class="cv-code-baseline-tag">现状基线 · 细节见右侧栏</span></div>'
         : '<div class="cv-foot"><span class="cv-dot ' + lkCls + '" title="' + (lk ? (lk.state === "linked" ? "已连接" : lk.state === "moved" ? "漂移" : "断链") : "无代码连接") + '"></span>' +
           (n.symbolRef && n.symbolRef.file ? '<span class="cv-file" data-cvfile="' + esc(n.symbolRef.file) + '" title="' + esc("打开代码档案 · " + n.symbolRef.file + (n.symbolRef.line != null ? ":" + n.symbolRef.line : "") + (n.symbolRef.name ? " · " + n.symbolRef.name : "")) + '">' + esc(f) + (() => { const ln = lk && lk.line ? lk.line : n.symbolRef.line; return ln != null && ln !== "" ? ":" + ln : ""; })() + "</span>" : (n.fileRef ? '<span class="cv-file" data-cvfile="' + esc(n.fileRef) + '" title="打开代码档案">' + esc(String(n.fileRef).split("/").slice(-1)[0]) + "</span>"
-            // 2026-10-29 续:卡脚已出 targets 文件名(code flow 的 .cv-file-foot)时,底栏再说「新模块」
-            // 会与「改/复用某个已存在文件」直接矛盾(实测截图里同一张卡既有 src/panel.ts 又写新模块)。
+ // 续:卡脚已出 targets 文件名(code flow 的 .cv-file-foot)时,底栏再说「新模块」
+ // 会与「改/复用某个已存在文件」直接矛盾(经验证截图里同一张卡既有 src/panel.ts 又写新模块)。
             : ((cvCodeInfo && cvFlowInfo && cvFlowInfo.codeFlow && Array.isArray(n.targets) && n.targets.length)
               ? '<span class="cv-file" data-cvfile="' + esc(String(n.targets[0])) + '" title="打开代码档案">' + esc(String(String(n.targets[0]).split("#")[0]).split("/").slice(-1)[0]) + "</span>"
               : "<span>新模块</span>"))) +
@@ -22349,18 +22349,18 @@ function renderBoardCanvas(doc, opts) {
       : "";
     wbarHtml = '<div class="cv-wbar" id="cvWbar" style="' + (cvTypeProfileOf(doc) ? "top:100px;z-index:6;max-width:calc(100% - 24px)" : "") + '">' + chips + foldChip + hint + "</div>";
   }
-  // 2026-11-05「看得懂」层 chip(现状层 N / 变更层 M):与写者 chip 条紧邻一行(不塞进 .cv-wbar,
+ // 「看得懂」层 chip(现状层 N / 变更层 M):与写者 chip 条紧邻一行(不塞进 .cv-wbar,
   // 那条有自己的「≥2 写者才出」条件);点击=只高亮该层(见 cvLayerPaint),再点取消。
   // 只在 code/test/perf/refactor 板出——其它板型的「现状/变更」两组标签会被误读。
   const layChips = cvPageInfo || cvUiInfo ? "" : cvLayerChipsHtml(doc);
   let lbarHtml = "";
   if (layChips && !ro) {
-    // 2026-11-05 修实测遮挡:原先按写者条/板头写死 30/58/100/128px 推断,截图里层 chip 直接压在板型头
+ // 修经验证遮挡:原先按写者条/板头写死 30/58/100/128px 推断,截图里层 chip 直接压在板型头
     // (.cv-type-head,高约 69px)与主题横幅(.cv-theme-band,top 44 起约 34px)上。改为**先按 0 定位渲染**,
-    // 由 cvStackTopBars() 在渲染尾部量实测矩形后逐条下推(见 renderBoardCanvas 末尾调用)。
+ // 由 cvStackTopBars 在渲染尾部量经验证矩形后逐条下推(见 renderBoardCanvas 末尾调用)。
     lbarHtml = '<div class="cv-wbar cv-lbar" id="cvLbar" style="top:0px;z-index:8">' + layChips + "</div>";
   }
-  // step-1010 K:图例/工具条不再覆盖画布内容——统一放画布外的底部占位条 #cvRail(.cv-rail)。
+ // K:图例/工具条不再覆盖画布内容——统一放画布外的底部占位条 #cvRail(.cv-rail)。
   // 原理:#cvHost 在 .board-graph / .bf-graph 的 flex 列里 flex:1,占位条占高后画布自然收缩,
   // 卡片永不被图例条压住(cvFitNow 也因此不必再 legendReserve 重复预留);只读画布(R/O)无工具条。
   const cvRailLegends =
@@ -22371,28 +22371,28 @@ function renderBoardCanvas(doc, opts) {
     (cvFlowInfo && !cvCodeInfo && cvFlowInfo.compose ? '<div class="cv-legend cv-legend-flow" title="作业思路板图例"><span class="lg-main"></span>章节主线(入口→出口)<span class="lg-branch"></span>章间关系边<span class="lg-entry"></span>开篇<span class="lg-exit"></span>收尾<span class="lg-lane"></span>主题带/章节/属性卡区<span class="lg-tag">边标签=章间关系(承接/递进/并列/对照/因果)· 属性卡=受众/结构</span></div>' : "") +
     (cvFlowInfo && !cvCodeInfo && !cvFlowInfo.compose ? '<div class="cv-legend cv-legend-flow" title="图例"><span class="lg-main"></span>主线(入口→出口)<span class="lg-branch"></span>分支/其他<span class="lg-entry"></span>入口<span class="lg-exit"></span>出口<span class="lg-lane"></span>泳道(阶段分组)<span class="lg-tag">边标签=数据格式/触发条件</span>' +
       (cvFlowInfo.wrap && cvFlowInfo.wrap.active ? '<span class="lg-wrap" title="主路径超过 4 列:按 4 列折行,行内仍是左→右;点「全」可全览">宽板折行 ' + cvFlowInfo.wrap.cols + " 列×" + cvFlowInfo.wrap.rows + " 行</span>" : "") + "</div>" : "") +
-    // 2026-10-26 工程师图形态(code):C4 元素类型 + 关系线型;code 板只出这一条图例,避免多条图例叠底。
+ // 工程师图形态(code):C4 元素类型 + 关系线型;code 板只出这一条图例,避免多条图例叠底。
     (cvCodeInfo ? '<div class="cv-legend cv-legend-code" title="C4/数据流图例">' +
       '<span class="lg-c4 c4-person"></span>Person<span class="lg-c4 c4-system"></span>System<span class="lg-c4 c4-container"></span>Container<span class="lg-c4 c4-component"></span>Component<span class="lg-c4 c4-store"></span>Store<span class="lg-c4 c4-decision"></span>Decision<span class="lg-ccall"></span>call<span class="lg-cdata"></span>data<span class="lg-cverify"></span>verify<span class="lg-tag">边标签=动作 [协议/数据]</span></div>' : "") +
-    // 2026-10-22 关系图例(用户口径「看不出有什么关系」):设计板在有边时给出
+ // 关系图例:设计板在有边时给出
     // 「按关系类型分色 + 虚线=自动推导待核实」说明,让人知道连线含义而不只是看到一堆线。
     (relLegend && !cvCodeInfo ? '<div class="cv-legend" title="关系图例"><span class="lg-call"></span>调用<span class="lg-data"></span>数据流<span class="lg-verify"></span>验收<span class="lg-nav"></span>次序/导航<span class="lg-virtual"></span>推导边(待核实)<span class="lg-tag">点节点看来源</span></div>' : "");
   const cvRailHtml = !cvRailLegends && ro ? "" : '<div class="cv-rail" id="cvRail">' + cvRailLegends +
     (ro ? "" : cvRailAddbarHtml(cvMode)) + "</div>";
-  // 2026-10-29 flowkit 单张 SVG(默认)/ 逐节点卡片(回滚)双路拼串:
+ // flowkit 单张 SVG(默认)/ 逐节点卡片(回滚)双路拼串:
   //  · svg 模式:laneHtml + edgeSvg + cards 三块整体换成 #cvSvgHost 里的那张 SVG(回包前为空壳);
   //    浮层/图例(cvUiHeadHtml/cvUiPopupMaskHtml/cvUiAnchorOverlay/cvFoldHtml/cvTypeHeadHtml)保持原样。
   //  · cards 模式:与改造前逐字相同(localStorage.cvRender="cards" 单点回滚)。
-  // 2026-11-03 P0 修复(实测:回包到了但画布空):①此前此处拼的是**又一个** #cvSvgHost 外壳,而
+ // P0 修复(经验证:回包到了但画布空):①此前此处拼的是**又一个** #cvSvgHost 外壳,而
   // cvWorldBodyHtml 已经用 p.svg 包了一层主机 → DOM 里出现两层同名 #cvSvgHost(外层空壳套内层),
   // querySelector("#cvSvgHost") 拿到外层,"#cvSvgHost > svg" 永远落空;此处改为只传**裸 svg 文本**。
   // ②更致命的是 data-sig:空壳帧(回包未到)也把 data-sig 写成**当前** sig,回包后
-  // cvSvgPatchPlan(now, domSig, true) 读到 domSig===now → 恒判 "keep" → 注入分支永不可达(实测
+ // cvSvgPatchPlan(now, domSig, true) 读到 domSig===now → 恒判 "keep" → 注入分支永不可达(经验证
   // innerHTML 恒 100 字节空壳、#cvWorld svg=0)。data-sig 的语义必须是「DOM 里真装着的那一版」:
   // 只有内容真在(zip 命中且非空)才写 sig,否则留空 → 决策走 wait/inject。
   const cvSvgHasNow = cvMode === "svg" && cvSvgCacheSig === cvSvgSigNow && !!cvSvgCacheHtml;
   const cvSvgBodyHtml = cvMode === "svg" ? (cvSvgHasNow ? cvSvgCacheHtml : "") : "";
-  // 2026-11-06 A1(实测:点「添加模块」后 2.5~3.4s 窗口 #cvSvgHost [data-node-id]=0、画布全空 = 用户眼里
+ // A1(经验证:点「添加模块」后 2.5~3.4s 窗口 #cvSvgHost [data-node-id]=0、画布全空 = 用户眼里
   // 「点了没反应」):新图的 rev 一到,缓存签名就对不上 → 旧实现把 body 置空 = 白屏。改为**继续显示上一版 svg**,
   // 只打 data-stale="1"(CSS 降透明度)表示「还在出图」;data-sig 与 body 用同一版(旧 sig),故
   // cvSvgPatchPlan 仍判 inject,回包后 cvSvgTryPatch 整块换图并抹掉 data-stale。
@@ -22400,41 +22400,41 @@ function renderBoardCanvas(doc, opts) {
   const cvSvgBodyOut = cvSvgStale ? cvSvgCacheHtml : cvSvgBodyHtml;
   const cvSvgBodySig = cvSvgStale ? cvSvgCacheSig : cvSvgSigNow;
   host.innerHTML = '<div class="bf-canvas" id="cvHost"><div class="bf-cv-world' + (cvFlowInfo ? " cv-flow-world" : "") + (cvCodeInfo ? " cv-code-world" : "") + (cvUiInfo ? " cv-ui-world" : "") + (cvFlowInfo && cvFlowInfo.wrap && cvFlowInfo.wrap.active ? " cv-flow-wrap" : "") + '" id="cvWorld">' + cvUiHeadHtml(cvUiInfo) + cvWorldBodyHtml(cvMode, { laneHtml: laneHtml, edgeSvg: edgeSvg, popupMask: cvUiPopupMaskHtml(cvUiInfo), cards: cards, anchors: cvUiAnchorOverlay(cvUiInfo, Math.max(maxX + 60, 600), Math.max(maxY + 60, 400)), fold: cvFoldHtml, svg: cvSvgBodyOut, sig: cvSvgBodySig, stale: cvSvgStale }) + "</div>" + cvTypeHeadHtml(doc, cvFlowInfo) + (cvCodeInfo && cvCodeSideNodes.length ? cvCodeSideHtml(cvCodeSideNodes) : "") +
-    // 十期:画布直操作件——「添加模块/整理」按钮已挪到画布外底部占位条(cvRailHtml,step-1010 K:原为右上浮层压卡);
+ // 十期:画布直操作件——「添加模块/整理」按钮已挪到画布外底部占位条(cvRailHtml, K:原为右上浮层压卡);
     // 工具箱面板 .cv-addpanel 仍留在 cvHost 内(绝对定位在画布上,点击落点/关闭判定都按画布坐标)。
     (ro ? "" : '<div class="cv-addpanel" id="cvAddPanel" style="display:none"></div>') +
     // 九期:缩放控件(±/百分比/适配)+小地图(只读画布保留=视图交互,非编辑件)
     '<div class="bf-zoombar" id="cvZoom"><button id="cvZin" title="放大">+</button><span class="bf-zpct" id="cvZpct">100%</span><button id="cvZout" title="缩小">−</button><button id="cvZfit" title="适配全部" style="font-size:10px">适</button><button id="cvZall" title="全览:缩到能看全整块板(标签可能变小,可再放大)" style="font-size:10px">全</button></div>' +
     '<canvas class="bf-minimap" id="cvMini" width="148" height="96" title="小地图(点按跳转;盖住节点时点按=操作节点)"></canvas>' +
-    // step-1010 K:四条图例(页面/流/代码/关系)已全部挪到画布外的底部占位条(cvRailHtml),
+ // K:四条图例(页面/流/代码/关系)已全部挪到画布外的底部占位条(cvRailHtml),
     // 不再作为画布底部绝对定位浮层盖住卡片;画布高度由 .cv-rail 自然扣减。
     "<div class='bd-meta bd-meta-canvas'>" + cvMetaHtml(doc, ro) + "</div>" +
-    // 2026-11-05 主题横幅:横贯板首,浮在画布顶部(绝对定位 + pointer-events:none)、不占 flow 布局位、
+ // 主题横幅:横贯板首,浮在画布顶部(绝对定位 + pointer-events:none)、不占 flow 布局位、
     // 不参与连线/小地图;板上无主题节点时返回空串(旧板逐字不变)。cvFitNow 会为它多预留顶部高度,
-    // 所以首帧适配后卡片不会落到横幅下面(实测口径:code 板 topReserve 88px 已含该条)。
+ // 所以首帧适配后卡片不会落到横幅下面(经验证口径:code 板 topReserve 88px 已含该条)。
     (cvCodeInfo ? cvThemeBandHtml(doc) : "") +
     (mxBoard && !ro ? '<button class="cv-matrix-btn" id="cvMatrixBtn" title="research 板:切换到「候选 × 维度」决策矩阵表格(点单元格看节点/证据全文)">矩阵</button>' : "") +
     (uiAvail && !ro ? '<button class="cv-ui-mode-btn" id="cvUiModeBtn" title="' + (uiOn ? "切回页面结构板(容器/区块层级视图)" : "切到交互流程图(多屏原型+元素级跳转+彩色流线)") + '">' + (uiOn ? "结构" : "交互") + "</button>" : "") +
     wbarHtml + lbarHtml + "</div>" + cvRailHtml;
-  host.__cvSig = cvMode === "svg" ? cvSvgSigNow : sig; // 增量渲染锚:svg 模式=rev+模式;cards 模式=结构签名(step-073)
+  host.__cvSig = cvMode === "svg" ? cvSvgSigNow : sig; // 增量渲染锚:svg 模式=rev+模式;cards 模式=结构签名
   cvSvgApplySel(host.querySelector("#cvSvgHost")); // 首帧就把选中态回放到 svg 上(boardSelNode 可能来自上一版)
-  // 2026-11-05 层高亮首帧:cards 路径已在 layCls 里带类;svg 路径的 <g> 不是 .cv-node,这里补一次。
+ // 层高亮首帧:cards 路径已在 layCls 里带类;svg 路径的 <g> 不是 .cv-node,这里补一次。
   try { cvLayerPaint(); } catch (e) { /* 高亮失败不影响画布 */ }
-  // 2026-11-05 顶部浮层纵向堆叠(板型头/主题横幅/写者条/层 chip 实测高度后逐条下推,防互相压住)
+ // 顶部浮层纵向堆叠(板型头/主题横幅/写者条/层 chip 经验证高度后逐条下推,防互相压住)
   try { cvStackTopBars(host); } catch (e) { /* 堆叠失败不影响画布 */ }
   // 注:cvSvgCacheSig 由 board.diagram.result 分发处回填(只有真拿到某 rev 的 svg 才算缓存),此处不改。
   const mxBtnEl = host.querySelector("#cvMatrixBtn"); // B:research 板矩阵切换(全量重建后重绑;补丁路径沿用旧 handler)
   if (mxBtnEl) mxBtnEl.onclick = () => { cvMatrixOn = true; cvMatrixSel = null; renderBoard(); };
   const uiModeBtnEl = host.querySelector("#cvUiModeBtn");
   if (uiModeBtnEl) uiModeBtnEl.onclick = () => { cvUiMode = cvUiMode === "interaction" ? "structure" : "interaction"; cvViewTouched = false; renderBoard(); };
-  // step-111/fixH2 大板缩放适配:page 板容器化世界宽(45 节点≈7 层横贯)/流动板 12 节点横贯,
+ // /fixH2 大板缩放适配:page 板容器化世界宽(45 节点≈7 层横贯)/流动板 12 节点横贯,
   // 全量渲染后自动适配视野,不让用户面对一片空白自己找图(增量补丁路径不 fit,不打断用户 pan/zoom)
-  // 2026-10-26:仅在「用户还没手动动过视野」时自动适配——否则保存回执/agent 回写的全量重渲
+ // 仅在「用户还没手动动过视野」时自动适配——否则保存回执/agent 回写的全量重渲
   // 会把用户正在看的细部(如 k=1.6)静默复位到适配值,零提示且连低倍率 toast 都不触发。
-  // 2026-10-29 J:门槛从 8 降到 4——7 节点的 contract/design 类板同样走布局引擎(世界高 500+px),
-  // 不 fit 就停在 k=1,实测 5/7 张卡有大半落到 420px 画布可视区外(隐藏 31%),且底排被图例压住。
+ // J:门槛从 8 降到 4——7 节点的 contract/design 类板同样走布局引擎(世界高 500+px),
+ // 不 fit 就停在 k=1,经验证 5/7 张卡有大半落到 420px 画布可视区外(隐藏 31%),且底排被图例压住。
   if ((cvPageInfo || cvFlowInfo) && doc.nodes.length >= 4 && !cvViewTouched) setTimeout(() => { try { cvFitNow(); } catch (e) { /* 忽略 */ } }, 40);
-  cvActiveHost = host.querySelector("#cvHost"); // 全局单活:后续 cvHostEl()/cvScoped() 都定位到这里(档案画布在场时裸 getElementById 会摸错)
+  cvActiveHost = host.querySelector("#cvHost"); // 全局单活:后续 cvHostEl/cvScoped 都定位到这里(档案画布在场时裸 getElementById 会摸错)
   const apply = () => {
     cvApplyTf(); // 世界变换+缩放百分比+点阵网格随缩放/平移(十期)
     drawMini(); // 平移/缩放同步小地图视口框
@@ -22445,7 +22445,7 @@ function renderBoardCanvas(doc, opts) {
   // 画布平移(空白处)+缩放
   const cvHost = cvActiveHost;
   let panning = null;
-  // 2026-11-06 B(实测:真鼠标在节点中心拖 120px → cvPan 位移 0,用户以为「画布拖不动」):
+ // B(经验证:真鼠标在节点中心拖 120px → cvPan 位移 0,用户以为「画布拖不动」):
   // 默认**任何位置**(含节点/边/分组)左键拖动 = 平移整张图;节点「点选」不在 pointerdown 里做,
   // 挪到 pointerup 且位移 <4px 才结算为点击。节点自己接管只在编辑态(boardEditOn)。
   // 必须在平移监听**之前**注册(同元素监听按注册序触发)。
@@ -22464,13 +22464,13 @@ function renderBoardCanvas(doc, opts) {
     cvSvgDown = id ? { id: id, sx: e.clientX, sy: e.clientY } : null;
   });
   cvHost.addEventListener("pointerdown", (e) => {
-    // 2026-11-06 B:默认拖动=平移整图。svg 视图**没有**节点拖拽实现(坐标由服务端布局决定,
+ // B:默认拖动=平移整图。svg 视图**没有**节点拖拽实现(坐标由服务端布局决定,
     // 前端拖了也存不住),所以编辑态也照常平移 —— 旧口径编辑态早退会造出一块
     // 「既不平移、也拖不动节点」的死区(用户报「鼠标滑到图内就移动不了整张图」的残留一半)。
     if (cvMode === "svg" && cvLinkFrom) return; // 连线态:点目标=收线,不起平移
     if (e.target.closest(".cv-node") || e.target.closest(".cv-file")) return;
     // 十期:浮层可交互件不启平移——setPointerCapture 会把后续 pointer 事件拽到 cvHost,
-    // 浮层按钮的 click 事件就此蒸发(右键菜单项实测点不动)
+ // 浮层按钮的 click 事件就此蒸发(右键菜单项经验证点不动)
     if (e.target.closest(".cv-ctx") || e.target.closest(".cv-addpanel") || e.target.closest(".cv-addbar") || e.target.closest(".cv-link-word") || e.target.closest(".bf-zoombar") || e.target.closest(".bf-minimap") || e.target.closest(".cv-matrix-btn") || e.target.closest(".cv-ui-mode-btn")) return;
     // w1/w2:写者 chip 条与 +N 计数块是交互件(setPointerCapture 会吞掉它们的 click,且不该起平移)
     if (e.target.closest(".cv-wbar") || e.target.closest(".cv-fold")) return;
@@ -22487,7 +22487,7 @@ function renderBoardCanvas(doc, opts) {
   });
   const pend = (e) => {
     panning = null; cvHost.classList.remove("panning");
-    // 2026-11-06 B:节点点选在 pointerup 结算——位移 <4px 才算「点击」,否则这一下就是平移过。
+ // B:节点点选在 pointerup 结算——位移 <4px 才算「点击」,否则这一下就是平移过。
     // 注:平移分支 setPointerCapture(cvHost) 会把 pointerup 的 target 重定向到 cvHost,
     // 所以这里**只能**按按下时记录的命中 id + 位移判定,不能再拿 e.target 反查节点。
     const d = cvSvgDown; cvSvgDown = null;
@@ -22533,13 +22533,13 @@ function renderBoardCanvas(doc, opts) {
     renderBoardCanvas(doc, opts); // 重渲染(过滤/展开后按新子集重排布局)
   });
   cvHost.addEventListener("wheel", (e) => {
-    // 2026-10-21 滚轮作用域分流(用户实报:画布滚轮把容器/浮层一起滚):
+ // 滚轮作用域分流(用户用户反馈:画布滚轮把容器/浮层一起滚):
     //  · 画布内自带可滚浮层(添加模块工具箱 .cv-addpanel{max-height:308px;overflow-y:auto},及任何
     //    overflow-y:auto/scroll 且真的溢出的子层)上滚轮=滚它自己的列表,交给浏览器默认行为
     //    (既不缩放也不拦默认滚动)——与 canvas-shell 的 scrollableUnder 同一口径。
     //  · 其余区域(节点/泳道/空白)=缩放画布,preventDefault+stopPropagation:不许页面/祖先容器
     //    (.board-graph{overflow:auto}、body)跟着滚,也不给外层 wheel 监听(旧 SVG 图视图)二次处理。
-    // 清单(#boardNodes)/明细(#boardDetail)在 cvHost 之外,天然只滚自己(探针实测见 boardscroll.spec)。
+ // 清单(#boardNodes)/明细(#boardDetail)在 cvHost 之外,天然只滚自己(探针经验证见 boardscroll.spec)。
     const scrollHost = (() => {
       for (let n = e.target; n && n !== cvHost; n = n.parentElement) {
         if (!n.classList) continue;
@@ -22568,7 +22568,7 @@ function renderBoardCanvas(doc, opts) {
     el.addEventListener("pointerdown", (e) => {
       if (ro || e.target.closest(".cv-file")) return;
       const p = pos.get(el.dataset.cv) || { x: 0, y: 0 };
-      // step-073 续作轮:基位取 doc 现值(增量补丁路径不重建卡片,闭包 pos 可能落后于 doc——拖拽起跳跳回旧位的根治)
+ // 续作轮:基位取 doc 现值(增量补丁路径不重建卡片,闭包 pos 可能落后于 doc——拖拽起跳跳回旧位的根治)
       const curDoc = boardEditOn && boardDraft ? boardDraft : boardDoc;
       const curNode = curDoc && curDoc.nodes.find((x) => x.id === el.dataset.cv);
       // 交互地图不读盘上 pos(旧页面板固化位会把新网格打散),基位取当前引擎位
@@ -22582,8 +22582,8 @@ function renderBoardCanvas(doc, opts) {
       if (!dragNode) return;
       if (!dragNode.moved) {
         dragNode.moved = true;
-        // step-111:容器拖拽收集 contains 子节点原位(容器与内容一体,整体平移)。
-        // 2026-10-18 用户实报修复:①弃 cvPageInfo 全局量做条件——整板 pos 固化后它为 null,
+ // 容器拖拽收集 contains 子节点原位(容器与内容一体,整体平移)。
+ // 用户用户反馈修复:①弃 cvPageInfo 全局量做条件——整板 pos 固化后它为 null,
         //   第二次拖拽起子节点全不跟随(用户 repro 的根因);②直接子→contains 传递闭包
         //   (section 下的 component 漏收);③基位取 doc 现值优先(闭包 pos 增量补丁后可能落后,同 dragNode p0 纪律)。
         // 节点定位走 dataset 全扫(不拼选择器——agent 板节点 id 可含选择器特殊字符,同 cvPatchCanvas 纪律)
@@ -22601,7 +22601,7 @@ function renderBoardCanvas(doc, opts) {
             const all = host.querySelectorAll(".cv-node");
             dragNode.kids = [];
             for (const kid of kidIds) {
-              const kn = doc.nodes.find((x) => x.id === kid); // 闭包 doc=本画布渲染文档(编辑态=草稿);curDoc 是 pointerdown 作用域量,此处引用=ReferenceError(插桩实锤)
+              const kn = doc.nodes.find((x) => x.id === kid); // 闭包 doc=本画布渲染文档(编辑态=草稿);curDoc 是 pointerdown 作用域量,此处引用=ReferenceError(插桩实测确认)
               const kp = (cvUiInfo ? pos.get(kid) : (kn && kn.pos && isFinite(kn.pos.x)) ? kn.pos : pos.get(kid));
               let kel = null;
               for (const x of all) if (x.dataset.cv === kid) { kel = x; break; }
@@ -22632,9 +22632,9 @@ function renderBoardCanvas(doc, opts) {
     });
     const up = () => {
       if (dragNode) {
-        // step-073 续作轮:未移动(纯选中点击)不写 pos 不落盘——增量补丁后渲染闭包 pos 已不可靠,
+ // 续作轮:未移动(纯选中点击)不写 pos 不落盘——增量补丁后渲染闭包 pos 已不可靠,
         // 旧实现无条件把闭包位写回 doc:整理布局后每点一次卡片就被回滚一节点、防抖保存再把回滚落盘
-        // (实锤:整理布局落盘后,悬停删除的打空点击全部打在卡片上=逐节点回滚)。
+ // (注意:整理布局落盘后,悬停删除的打空点击全部打在卡片上=逐节点回滚)。
         if (dragNode.moved) {
           // UI 交互地图:拖动只是视图微调,位置写 localStorage(不写 boardDoc/不进撤销/不触发落盘),
           // 「整理」清空回自动网格;页面拖动带动子孙的当前位置一并记下。
@@ -22665,7 +22665,7 @@ function renderBoardCanvas(doc, opts) {
             // fixH2:流动模式下手动拖过的节点记微调(重渲/刷新后保留用户手排;「整理」清空回自动流动)
             if (cvFlowInfo) cvFlowMarkMoved(dragNode.id);
           }
-          // 2026-10-18 修复:随动子节点的落盘——bdSaveLayoutDebounced 只序列化 boardDoc(不读 DOM),
+ // 修复:随动子节点的落盘——bdSaveLayoutDebounced 只序列化 boardDoc(不读 DOM),
           // 旧实现只写容器自身 pos,子节点 doc 位不更新→保存后刷新子节点弹回原位(视觉跟随了但持久化丢)
           if (dragNode.kids && target) {
             for (const k of dragNode.kids) {
@@ -22674,7 +22674,7 @@ function renderBoardCanvas(doc, opts) {
               if (kn && isFinite(kx) && isFinite(ky)) kn.pos = { x: kx, y: ky };
             }
           }
-          // step-111:page 板整板 pos 补全落盘——语义布局位(渲染层兜底)与容器子节点随动一并固化,
+ // page 板整板 pos 补全落盘——语义布局位(渲染层兜底)与容器子节点随动一并固化,
           // 「用户动过之后」全部节点有 pos,刷新后走「完全尊重」分支不再自动重排(旧板仍不改盘)
           if (target && target.docKind === "page") {
             for (const n of target.nodes) {
@@ -22683,7 +22683,7 @@ function renderBoardCanvas(doc, opts) {
               if (pn) n.pos = { x: pn.x, y: pn.y };
             }
           }
-          // 2026-10-18 用户口径(重试轮,最小改动):done 板拖拽守卫——落盘前的唯一闸门。
+ // (重试轮,最小改动):done 板拖拽守卫——落盘前的唯一闸门。
           // 拦截时返回 true:本次不落盘,由确认条决定「允许编辑(补落盘)」或「取消(位置回滚)」。
           if (!boardEditOn && !bdDoneDragGuard(target, el, dragNode, pos, host, doc)) bdSaveLayoutDebounced();
         }
@@ -22725,7 +22725,7 @@ function renderBoardCanvas(doc, opts) {
         for (const x of host.querySelectorAll(".cv-node")) x.classList.toggle("on", x.dataset.cv === boardSelNode);
       };
     }
-    // step-121 工作流板:双击节点=开配置抽屉(未编辑先入编辑态——复用草稿/保存/冲突链),选中并出类型化参数表单
+ // 工作流板:双击节点=开配置抽屉(未编辑先入编辑态——复用草稿/保存/冲突链),选中并出类型化参数表单
     el.addEventListener("dblclick", (e) => {
       if (ro || e.target.closest(".cv-file")) return;
       const d = boardDoc || doc;
@@ -22757,13 +22757,13 @@ function renderBoardCanvas(doc, opts) {
 // 缩放控件(±/百分比/适配 0.25-2)/小地图(视口框+点按居中跳转)/
 // 对齐吸附(±6px 贴线+辅助线,仅非编辑拖拽中)。
 const CV_MIN_ZOOM = 0.25, CV_MAX_ZOOM = 2;
-/** f5 适配可读下限:适配(fit)时最小缩放。再小标签就低于 8px 有效字号(实测 22 节点板 fit 得 k=0.53
+/** f5 适配可读下限:适配(fit)时最小缩放。再小标签就低于 8px 有效字号(经验证 22 节点板 fit 得 k=0.53
  *  → 12px 标签只剩 6.4px 人眼读不了),宁可溢出让人平移,也不要「全塞进视野但全是糊字」。
  *  仅约束 cvFitNow(自动/fit 按钮);手动缩小仍可到 CV_MIN_ZOOM。 */
 const CV_FIT_READABLE_MIN = 0.7;
 let cvSelected = new Set();
 let cvHelplines = [];
-/** 边标签隐藏门槛(唯一出处,2026-11-06 C):cvApplyTf 的 z-low 切换与 cvFitNow 的低倍率提示共用这一口径。
+/** 边标签隐藏门槛(唯一出处, C):cvApplyTf 的 z-low 切换与 cvFitNow 的低倍率提示共用这一口径。
  *  历史:两处各写一份(cvApplyTf 0.38/0.42/0.55,cvFitNow 同值复制),一改就分叉。
  *  取值:UI 交互图 0.38(元素触点标签更密);其余板(含 code/flow)一律 0.4——「适」(k≈0.9)与常规
  *  阅读距离下边关系词常显,只有真的缩到 <40%(字已糊)才让位。 */
@@ -22773,7 +22773,7 @@ function cvApplyTf() {
   if (world) {
     world.style.transform = "translate(" + cvPan.x + "px," + cvPan.y + "px) scale(" + cvPan.k + ")";
     // 白板修复:低缩放下边标签(9px 字)已缩成 2-4px 噪声且互相重叠,隐藏之(hover 边仍有 title)
-    // 2026-11-06 C:门槛收口到 cvLabelHideK()(默认 40%),与 cvFitNow 提示文案同源,不再各写一份。
+ // C:门槛到 cvLabelHideK(默认 40%),与 cvFitNow 提示文案同源,不再各写一份。
     world.classList.toggle("z-low", cvPan.k < cvLabelHideK());
   }
   const pct = cvScoped("cvZpct");
@@ -22800,12 +22800,12 @@ function cvSetZoom(nk, anchorHost) {
 }
 function cvMiniMapping(pos) {
   let minX = 1e9, minY = 1e9, maxX = 0, maxY = 0;
-  // 2026-10-29 svg 模式:世界框取 #cvSvgHost>svg 的 viewBox 宽高(卡片 pos 在 svg 模式下不代表真实布点)
+ // svg 模式:世界框取 #cvSvgHost>svg 的 viewBox 宽高(卡片 pos 在 svg 模式下不代表真实布点)
   const sbMini = cvRenderMode() === "svg" ? cvSvgContentBox(null) : null;
   if (sbMini) { minX = 0; minY = 0; maxX = sbMini.w; maxY = sbMini.h; }
   else
   for (const [id, p] of pos) {
-    const s = (cvPageInfo && cvPageInfo.size.get(id)) || (cvFlowInfo && cvFlowInfo.size.get(id)) || { w: 220, h: 110 }; // step-111/fixH2:容器/流动卡尺寸实测进小地图
+    const s = (cvPageInfo && cvPageInfo.size.get(id)) || (cvFlowInfo && cvFlowInfo.size.get(id)) || { w: 220, h: 110 }; // /fixH2:容器/流动卡尺寸实测进小地图
     minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
   }
   const pad = 10;
@@ -22819,7 +22819,7 @@ function cvDrawMini(host, doc, pos) {
   if (!mini) return;
   const ctx = mini.getContext("2d");
   const { minX, minY, maxX: mapMaxX, maxY: mapMaxY, k, pad } = cvMiniMapping(pos);
-  // 2026-11-05 修断裂:此前 cvDrawMini 直接引用 maxX/maxY,而它们只存在于 cvMiniMapping 的局部作用域
+ // 修断裂:此前 cvDrawMini 直接引用 maxX/maxY,而它们只存在于 cvMiniMapping 的局部作用域
   // (重构遗留)→ 每次渲染 drawMini() 抛 ReferenceError,小地图永不绘制,且异常沿 apply()→
   // renderBoardCanvas 上抛,把画布后续绑定/状态更新一并打断。改为由 cvMiniMapping 一并返回。
   const maxX = mapMaxX, maxY = mapMaxY;
@@ -22828,7 +22828,7 @@ function cvDrawMini(host, doc, pos) {
   const info = cvPageInfo || cvFlowInfo;
   ctx.clearRect(0, 0, mini.width, mini.height);
   ctx.lineWidth = 1;
-  // 2026-10-29 svg 模式:没有 .cv-node 坐标可画 → 按 viewBox 画一个等比矩形占位 + 视口框(不留空白),
+ // svg 模式:没有 .cv-node 坐标可画 → 按 viewBox 画一个等比矩形占位 + 视口框(不留空白),
   // 视口框逻辑与下方共用;节点/边都跳过(doc.nodes 的 pos 与 svg 实际布点无关)。
   const svgMiniOn = cvRenderMode() === "svg" && !!cvSvgContentBox(host);
   if (svgMiniOn) {
@@ -22897,7 +22897,7 @@ function cvFitView(host, pos) {
 function cvSaveAllPos(pos) {
   const target = (boardEditOn && boardDraft ? boardDraft : boardDoc);
   if (!target) return;
-  // step-073 续作轮:以 DOM style 为准(增量补丁后闭包 pos 可能落后于 doc/样式——整组回滚的根治)
+ // 续作轮:以 DOM style 为准(增量补丁后闭包 pos 可能落后于 doc/样式——整组回滚的根治)
   const els = cvActiveHost ? cvActiveHost.querySelectorAll(".cv-node") : [];
   const byId = new Map();
   for (const el2 of els) byId.set(el2.dataset.cv, el2);
@@ -22908,10 +22908,10 @@ function cvSaveAllPos(pos) {
   }
   if (!boardEditOn) bdSaveLayoutDebounced();
 }
-/** svg 模式(flowkit 单张 SVG)里「与卡片几何无关」的直操作层(2026-11-05 flowkit 断裂修复)。
+/** svg 模式(flowkit 单张 SVG)里「与卡片几何无关」的直操作层( flowkit 断裂修复)。
  *  背景:cvBindInteractions 在 svg 模式首行整体早退(卡片 DOM 全空,免得 el.dataset.cv 读到 null),
  *  连带把**只依赖 BoardDoc、不依赖 .cv-node/.cv-port** 的入口一起掐死——右键菜单、双击空白添加模块、
- *  键盘快捷键在默认渲染模式下点了完全没反应(实测:面板白板区这些按钮/手势全部断裂)。
+ * 键盘快捷键在默认渲染模式下点了完全没反应(经验证:面板白板区这些按钮/手势全部断裂)。
  *  这里按 svg 自己的节点命中口径(cvSvgNodeAt 读 [data-node-id])重绑三组:
  *   · 右键:节点=编辑明细/复制/创建副本/删除;空白=粘贴/添加模块/适配全部(「整理布局」在 svg 下无效,置灰说明)
  *   · 双击空白:在落点打开添加模块工具箱
@@ -22928,7 +22928,7 @@ function cvBindSvgOps() {
   cvHost.addEventListener("contextmenu", (e) => {
     if (e.target.closest && (e.target.closest(".bf-zoombar") || e.target.closest(".bf-minimap") || e.target.closest(".cv-addbar") || e.target.closest(".cv-addpanel") || e.target.closest(".cv-wbar") || e.target.closest(".cv-rail"))) return;
     e.preventDefault();
-    // 2026-11-05 实测:canvas-shell(canvas-shell.js bindCtxMenu)在 #boardGraph 上另有一份
+ // 经验证:canvas-shell(canvas-shell.js bindCtxMenu)在 #boardGraph 上另有一份
     // contextmenu 监听,会**再建一个 id 完全相同的 #cvCtx**(挂在 body 上,菜单项是 .cv-ctx-it 的
     // 「全部入画/按网格重新排布/切回经典单视图布局」= 经典视图壳的菜单)。两个 #cvCtx 抢同一个 id,
     // 用户看到的就成了那张旧菜单。这里在 cvHost 冒泡阶段拦断,绝不让事件爬到 shell。
@@ -22950,7 +22950,7 @@ function cvBindSvgOps() {
     };
     if (hit) {
       mk("编辑明细", () => { boardSelNode = hit; cvSvgApplySel(cvHost); renderBoardDetail(); });
-      mk("连线到…", () => { boardSelNode = hit; cvSvgApplySel(cvHost); cvLinkStart(hit); }); // 2026-11-06 A5:svg 无端口,drag 连不了 → 菜单入口
+      mk("连线到…", () => { boardSelNode = hit; cvSvgApplySel(cvHost); cvLinkStart(hit); }); // A5:svg 无端口,drag 连不了 → 菜单入口
       mk("复制", () => cvCopySel([hit]));
       mk("创建副本", () => { cvCopySel([hit]); cvPaste(); });
       mk("删除", () => { cvDelNodes([hit]); if (boardSelNode === hit) { boardSelNode = null; cvSvgApplySel(cvHost); } });
@@ -22968,7 +22968,7 @@ function cvBindSvgOps() {
     const r = cvHost.getBoundingClientRect();
     cvOpenAddPanel({ x: (e.clientX - r.left - cvPan.x) / cvPan.k, y: (e.clientY - r.top - cvPan.y) / cvPan.k });
   });
-  // 2026-11-05 实测:canvas-shell(canvas-shell.js bindCanvasKeys)在 **document** 上另有 keydown:
+ // 经验证:canvas-shell(canvas-shell.js bindCanvasKeys)在 **document** 上另有 keydown:
   // Delete/Backspace 会 hideCard(「已隐藏 N 张卡片(侧栏托盘同名按钮可唤回)」)、Ctrl+A 全选卡片、
   // 方向键挪卡片。它绑在 document 上,cvHost 上的监听虽先触发,但一旦我们没有处理(如选中态为空)
   // 事件继续冒泡,用户按 Delete 删的是经典壳的卡片、不是板上节点 —— 表现就是「点了没反应/提示很奇怪」。
@@ -22998,7 +22998,7 @@ function cvBindSvgOps() {
       cvSvgApplySel(cvHost);
       return;
     }
-    // 2026-11-06 A5:连线入口 —— 选中节点按 L 进连线态(旧口径 svg 里没有 .cv-port,无从连线)
+ // A5:连线入口 —— 选中节点按 L 进连线态(旧口径 svg 里没有 .cv-port,无从连线)
     if (!mod && k === "l" && !e.shiftKey && !e.altKey) {
       if (!boardSelNode) return; // 没选中就不认(别吞掉输入框外的普通按键)
       eat();
@@ -23015,7 +23015,7 @@ function cvBindSvgOps() {
 function cvBindInteractions(host, doc, pos, apply, drawMini) {
   const cvHost = cvActiveHost;
   ensureCvDelegation();
-  // 2026-10-29 svg 模式(flowkit 单张 SVG):画布上只有一张 svg,没有卡片 DOM——
+ // svg 模式(flowkit 单张 SVG):画布上只有一张 svg,没有卡片 DOM——
   // .cv-node/.cv-file/.cv-fold/.cv-wbar/[data-wpfx]/[data-wall]/.cv-ui-cap 全为空。
   // 这些编辑交互(节点拖拽/点击选中/连线/框选/吸附/写者过滤/折叠块)一律不绑,免得 el.dataset.cv 读到 null 抛错。
   // svg 模式的**节点点击选中 + 右侧详情卡**在 renderBoardCanvas 的 svg 交互委托里(cvSvgNodeAt),本函数不绑卡片编辑交互。
@@ -23036,16 +23036,16 @@ function cvBindInteractions(host, doc, pos, apply, drawMini) {
     }
   };
   // ---- 缩放控件+小地图:事件委托绑在 document 上(九期竞态修复:
-  // renderBoard 每次重建 cvHost,逐元素 onclick 会绑在被替换的旧 DOM 上——spec 100%→100% 实锤;
-  // 委托宿主 #boardGraph 不被重建,委托永活)。pos 由各 handler 从 boardDoc 不可达——用 DOM style 实测。
-  // step-058:提为 ensureCvDelegation(只读画布也要缩放/小地图);cvHost 定位走 cvHostEl()(活动宿主),
+ // renderBoard 每次重建 cvHost,逐元素 onclick 会绑在被替换的旧 DOM 上——spec 100%→100% 注意;
+ // 委托宿主 #boardGraph 不被重建,委托永活)。pos 由各 handler 从 boardDoc 不可达——用 DOM style 经验证。
+ // 提为 ensureCvDelegation(只读画布也要缩放/小地图);cvHost 定位走 cvHostEl(活动宿主),
   // 小地图重绘走 cvActiveDoc(档案画布在场时不摸会话板全局 boardDoc)。 ----
   function ensureCvDelegation() {
     if (window.__cvDelegated) return;
     window.__cvDelegated = true;
     // pointerdown 触发(非 click):renderBoard 重建会吞掉 mouseup 后的 click——重建间
     // mousedown/up 落在不同元素,click 的 target=共同祖先 cvHost,委托 closest 落空。
-    // pointerdown 在按下瞬间到达,免疫重建竞态(九期 FIT TELEMETRY 实锤)。
+ // pointerdown 在按下瞬间到达,免疫重建竞态(九期 FIT TELEMETRY 注意)。
     document.addEventListener("pointerdown", (e) => {
       const t = e.target && e.target.closest ? e.target.closest("#cvZin,#cvZout,#cvZfit,#cvZall,#cvMini,#cvAddBtn,#cvArrangeBtn,.cv-aitem") : null;
       if (!t) return;
@@ -23376,9 +23376,9 @@ const CV_KIND_GROUPS = [
   ["代码与集成", ["function", "module", "http", "template"]],
   ["起止与辅助", ["start", "end", "io", "note"]],
   ["页面结构", ["page", "section", "component", "nav"]],
-  ["工作流执行(step-121:docKind=workflow 板专用,可编译执行)", ["wf-script", "wf-test", "wf-agent", "wf-condition", "wf-parallel", "wf-notify"]],
+  ["工作流执行(docKind=workflow 板专用,可编译执行)", ["wf-script", "wf-test", "wf-agent", "wf-condition", "wf-parallel", "wf-notify"]],
 ];
-/** 2026-11-06 A4:工具箱按板型给推荐项(置顶 + 「推荐」徽标)。旧实现 26 个类型平铺,用户不知道该点哪个
+/** A4:工具箱按板型给推荐项(置顶 + 「推荐」徽标)。旧实现 26 个类型平铺,用户不知道该点哪个
  *  (code 板上「模型调用/知识检索」都排在「函数/模块」前面)。键先按 boardType、再按 docKind 兜底,都没命中=不推荐。 */
 const CV_ADD_RECO = {
   code: ["function", "module", "decision"],
@@ -23430,7 +23430,7 @@ function cvRedo() {
 }
 function cvAfterStruct() {
   // 结构变化后:重渲(编辑态渲草稿/查看态渲板)。
-  // 2026-11-06 A2(实测:点「添加模块」→ board.save 要 +1.5s,窗口内切板/刷新即丢):**结构变更立即落盘**,
+ // A2(经验证:点「添加模块」→ board.save 要 +1.5s,窗口内切板/刷新即丢):**结构变更立即落盘**,
   // 不再走 900ms 防抖。拖布局仍是 bdSaveLayoutDebounced(高频可丢帧),两者共用 bdLayoutInflight 闸门。
   renderBoard();
   if (!boardEditOn) bdSaveNow();
@@ -23440,7 +23440,7 @@ function cvNewNodeId(t) {
   while (t.nodes.some((n) => n.id === "n" + seq)) seq++;
   return "n" + seq;
 }
-// step-121:wf-* 节点缺省参数(按类型给可用初值,编译必填项在抽屉里改)。
+// wf-* 节点缺省参数(按类型给可用初值,编译必填项在抽屉里改)。
 const WF_DEFAULTS = {
   "wf-script": { command: "ls packages", summary: "确定性命令(world.run 白名单:测试运行器/node/git 只读/ls/cat/grep/tail)" },
   "wf-test": { command: "npx vitest run packages/core/test/journal.test.ts", summary: "测试门:命令退出码非 0 即失败,后续节点不跑" },
@@ -23455,10 +23455,10 @@ function cvAddNode(kind, wx, wy) {
   if (!t) { toast("当前没有白板", true); return; }
   if (t.nodes.length >= 60) { toast("节点数已达上限(60)", true); return; }
   const wfDef = WF_DEFAULTS[kind];
-  // step-121:wf-* 节点落到 design/page 板=类型混板(编译会拒),当场拦住
+ // wf-* 节点落到 design/page 板=类型混板(编译会拒),当场拦住
   if (wfDef && t.docKind && t.docKind !== "workflow") { toast("wf-* 可执行节点只能放「工作流板」(当前板 docKind=" + (t.docKind || "design") + ")——用「新建工作流板」开一块", true); return; }
   const baseName = CV_KIND_NAME[kind] || "新模块";
-  // 2026-11-06 A4:同类型多个节点不再全叫「函数」——按已有同 kind 节点数带序号(函数 → 函数 2 → 函数 3)
+ // A4:同类型多个节点不再全叫「函数」——按已有同 kind 节点数带序号(函数 → 函数 2 → 函数 3)
   let sameKind = 0;
   for (const x of t.nodes) if (x && x.kind === (kind || "module")) sameKind++;
   const n = { id: cvNewNodeId(t), kind: kind || "module", label: sameKind ? baseName + " " + (sameKind + 1) : baseName, summary: wfDef ? wfDef.summary : "(写清这个模块干什么用)", change: "add", flow: [],
@@ -23476,13 +23476,13 @@ function cvAddNode(kind, wx, wy) {
   t.nodes.push(n);
   boardSelNode = n.id;
   cvSelected.clear();
-  // 2026-11-06 A3(实测:点完工具箱 2.5~3.4s 才出图,期间旧实现**零反馈** = 用户眼里「点了没反应」):
+ // A3(经验证:点完工具箱 2.5~3.4s 才出图,期间旧实现**零反馈** = 用户眼里「点了没反应」):
   // 立即回执「已添加 …· 正在出图…」,并保持新节点选中(右栏明细卡随 renderBoard 带出来)。
   toast("已添加 " + baseName + "「" + n.label + "」· 正在出图…");
   cvAfterStruct(); // renderBoard 会带出明细卡(boardSelNode 已指向新节点)
   try { renderBoardDetail(); } catch (err) { /* 右栏明细卡失败不影响已落的结构变更 */ }
 }
-// ---- 2026-11-06 A5:svg 视图的连线入口(补实现) -----------------------------
+// ---- A5:svg 视图的连线入口(补实现) -----------------------------
 // 旧口径只有卡片模式的「出端口拖拽」(.cv-port.out),svg 单张图里没有端口节点,选中模块后无从连线。
 // 两条入口:选中节点按 L / 右键「连线到…」→ 进连线态(cvLinkFrom) → 点目标模块 → 填关系词 → 落边。
 // cvLinkFrom 为 null=不在连线态;命中目标后由 cvLinkAskWord 收线(Enter 落边 / Esc 取消)。
@@ -23565,7 +23565,7 @@ function cvAddEdge(from, to, label) {
   if (t.edges.some((x) => x.from === from && x.to === to)) { toast("两模块间已有连线", true); return; }
   if (t.edges.length >= 120) { toast("连线数已达上限", true); return; }
   cvPushUndo();
-  // step-121 工作流板:wf-condition 出边自动配分支 label(第一条=真,已有真=假)——编译要求恰两条一真一假
+ // 工作流板:wf-condition 出边自动配分支 label(第一条=真,已有真=假)——编译要求恰两条一真一假
   let wfLabel;
   if (t.docKind === "workflow") {
     const src = t.nodes.find((n) => n.id === from);
@@ -23576,9 +23576,9 @@ function cvAddEdge(from, to, label) {
       if (outs >= 2) { toast("wf-condition 只能有两条出边(真/假)——先删一条再加", true); cvUndoStack.pop(); return; }
     }
   }
-  const rel = String(label == null ? "" : label).trim().slice(0, 24); // 2026-11-06 A5:人工连线关系词(留空=不写 label)
+  const rel = String(label == null ? "" : label).trim().slice(0, 24); // A5:人工连线关系词(留空=不写 label)
   const lbl = wfLabel || rel;
-  t.edges.push({ from, to, kind: "call", virtual: true, ...(lbl ? { label: lbl } : {}) }); // step-073:人工连线=虚拟边(与 agent code_index 实证边显式区分)
+  t.edges.push({ from, to, kind: "call", virtual: true, ...(lbl ? { label: lbl } : {}) }); // 人工连线=虚拟边(与 agent code_index 验证边显式区分)
   cvAfterStruct();
   toast(wfLabel ? "已连线(wf-condition " + wfLabel + " 分支)" : rel ? "已连线「" + rel + "」(虚拟边:人工标注,非代码索引实证)" : "已连线(虚拟边:人工标注,非代码索引实证)");
 }
@@ -23636,7 +23636,7 @@ function cvArrangeAll() {
   const t = cvTargetDoc();
   if (!t) return;
   cvPushUndo();
-  // step-111:页面结构板「整理」=语义布局整板落盘(容器化+主线+UI 线框);design 板沿旧分层
+ // 页面结构板「整理」=语义布局整板落盘(容器化+主线+UI 线框);design 板沿旧分层
   if (t.docKind === "page" && typeof BoardPageLayout !== "undefined") {
     if (cvUiAvailable(t) && cvUiMode === "interaction") {
       // 交互地图:布局位是视图真相,「整理」= 清掉本地拖动微调回到自动网格(不写板 pos)
@@ -23653,7 +23653,7 @@ function cvArrangeAll() {
     cvFlowClearMoved(t.taskId);
   } else if (cvFlowEligible(t)) {
     // fixH2:流动布局「整理」=按入口→主线→出口重新流动排布,并清掉手动微调(回到自动流动)
-    // 2026-10-25 A:整理与渲染同口径(宽板折行也参与),否则用户点整理会得到另一种排布
+ // A:整理与渲染同口径(宽板折行也参与),否则用户点整理会得到另一种排布
     const laid = BoardFlowLayout.layout(t, { autoWrap: cvFlowWrapWanted(t, t), preserveLanes: t.boardType === "refactor" });
     for (const n of t.nodes) { const p = laid.pos.get(n.id); if (p) n.pos = { x: p.x, y: p.y }; }
     cvFlowClearMoved(t.taskId);
@@ -23668,14 +23668,14 @@ function cvArrangeAll() {
 function cvFitNow(forceAll) {
   const cvH = cvHostEl();
   if (!cvH) return;
-  // 2026-10-29 svg 模式:内容包围盒直接取 #cvSvgHost > svg 的 viewBox 宽高(jsdom 里没有 getBBox,
+ // svg 模式:内容包围盒直接取 #cvSvgHost > svg 的 viewBox 宽高(jsdom 里没有 getBBox,
   // 所以只认属性),再叠既有 +60 留白;下面 .cv-node/.cv-ui-cap/.cv-lane 三处 querySelectorAll
   // 在 svg 模式下天然返回空 → 对应分支自然跳过(代码保留,cards 路径逐字不动)。
-  // 2026-10-29 任务B:「适」改紧凑 fit——优先 diagram-viewport.resolveSvgBoundsFromDom(排除 defs/
+ // 任务B:「适」改紧凑 fit——优先 diagram-viewport.resolveSvgBoundsFromDom(排除 defs/
   // mask/clipPath/画布背景 rect,只并集可见图形),空白多的 viewBox 大图不再缩成蚂蚁;引擎缺席/
   // 空结果(如 jsdom 无 getBBox)回退 viewBox 口径,行为不劣化。
   const cvFitMode = cvRenderMode();
-  // 2026-10-29 取证口径开关(默认=紧凑 fit):window.__cvFitBasis==="viewbox" 强制走 viewBox 口径
+ // 取证口径开关(默认=紧凑 fit):window.__cvFitBasis==="viewbox" 强制走 viewBox 口径
   // (即旧「适」:内容框=svg viewBox 宽高),用于「同一板/同一 viewport」下新旧口径前后对照截图;
   // 生产路径不设该开关=紧凑口径(curTightSvgBounds),行为与改动前一致。
   const cvFitOldBasis = (typeof window !== "undefined" && window.__cvFitBasis === "viewbox");
@@ -23685,7 +23685,7 @@ function cvFitNow(forceAll) {
   // w2 密度分层:计数块(.cv-fold)也是要看的东西,一并进适配视野(svg 模式该选择器为空=自动跳过)
   for (const el of cvH.querySelectorAll(".cv-node,.cv-fold")) {
     const x = parseFloat(el.style.left) || 0, y = parseFloat(el.style.top) || 0;
-    // step-111:尺寸取 DOM 实测(page 容器宽高可变,旧 220/110 估值会把大容器裁出视野)
+ // 尺寸取 DOM 经验证(page 容器宽高可变,旧 220/110 估值会把大容器裁出视野)
     const w = el.offsetWidth || 220, h = el.offsetHeight || 110;
     minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
   }
@@ -23693,14 +23693,14 @@ function cvFitNow(forceAll) {
   if (cvFitMode === "svg" && !cvSvgB) return;
   // cards 模式:一个节点都没有(空板/未渲染)时照旧直接返回(不改视野)
   if (cvFitMode !== "svg" && !cvH.querySelectorAll(".cv-node").length) return;
-  // 2026-10-26 UI 交互地图:屏外字幕带与顶部摘要/图例也是内容,不能适配时裁掉(独立循环保留旧断言串)
+ // UI 交互地图:屏外字幕带与顶部摘要/图例也是内容,不能适配时裁掉(独立循环保留旧断言串)
   for (const el of cvH.querySelectorAll(".cv-ui-cap,.cv-ui-head")) {
     const x = parseFloat(el.style.left) || 0, y = parseFloat(el.style.top) || 0;
     const w = el.offsetWidth || 220, h = el.offsetHeight || 40;
     minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
   }
   // fixH2:泳道虚线框(标题条/内边距)一并进适配视野,不让框被裁边。
-  // w2 例外:密度分层时泳道框可跨全板(实测 60 节点板合并后单框高可达 8000px),把整框算进适配
+ // w2 例外:密度分层时泳道框可跨全板(经验证 60 节点板合并后单框高可达 8000px),把整框算进适配
   // 会把 k 压到 0.1 以下(等于没适配)——分层模式下只按「看得见的卡 + 计数块」适配。
   for (const el of cvH.querySelectorAll(".cv-lane")) {
     if (cvFoldMode) continue;
@@ -23708,18 +23708,18 @@ function cvFitNow(forceAll) {
     minX = Math.min(minX, x); minY = Math.min(minY, y);
     maxX = Math.max(maxX, x + (el.offsetWidth || 0)); maxY = Math.max(maxY, y + (el.offsetHeight || 0));
   }
-  // step-1010 K:图例不再是画布底部浮层,改到画布外底部占位条(.cv-rail)——#cvHost 的 rect 已自然
-  // 扣掉图例高度,原先在这里按图例实测高度预留 legendReserve 的做法必须删除,否则白压 24~50px。
+ // K:图例不再是画布底部浮层,改到画布外底部占位条(.cv-rail)——#cvHost 的 rect 已自然
+ // 扣掉图例高度,原先在这里按图例经验证高度预留 legendReserve 的做法必须删除,否则白压 24~50px。
   const r = cvH.getBoundingClientRect();
   // f5:适配 k 再夹一个可读下限(CV_FIT_READABLE_MIN)——宁可溢出让人平移,也不要标签缩成 6px 糊字。
-  // 2026-10-25:旧实现给底部图例浮层量高预留(legendReserve);step-1010 K 把图例移到画布外
+ // 旧实现给底部图例浮层量高预留(legendReserve); K 把图例移到画布外
   // .cv-rail 后，画布 rect 已不含图例,这里**不再预留**(否则重复扣一遍 24~50px 白压内容)。
   // 页面板顶部有浮动板头(标题/P0 标签),页容器贴顶会压住页标题;预留顶部条高,并把放得下的
   // 内容居中(旧版左对齐贴边,右侧大片空白)。
-  // 2026-10-29 J:原按板型写死 68/88/36px。实测 UI 结构图根本没有顶部浮层(无 .cv-type-head/.cv-ui-head),
+ // J:原按板型写死 68/88/36px。经验证 UI 结构图根本没有顶部浮层(无 .cv-type-head/.cv-ui-head),
   // 却白留 68px(420px 画布的 16%)——底排卡因此挤进底部图例带。改为「有浮层才留」:浮层存在时
-  // 沿用原值(实测 cv-type-head 高 69px,要留 88),不存在只留 8px。
-  // 2026-10-29:面板是纯 JS(整段塞进浏览器 <script>),这里绝不能留 TS 泛型/类型标注——否则整段脚本语法错、
+ // 沿用原值(经验证 cv-type-head 高 69px,要留 88),不存在只留 8px。
+ // 面板是纯 JS(整段塞进浏览器 <script>),这里绝不能留 TS 泛型/类型标注——否则整段脚本语法错、
   // 面板全白(fit 也一起没了)。类型信息在 JSDoc 里表达,不影响运行。
   /** @type {HTMLElement | null} */
   const headEl = document.querySelector("#boardGraph .cv-type-head, #boardGraph .cv-ui-head");
@@ -23727,10 +23727,10 @@ function cvFitNow(forceAll) {
   const pageBoard = !!(typeof boardDoc !== "undefined" && boardDoc && boardDoc.docKind === "page");
   const typeBoard = !cvUiInfo && !!(typeof cvTypeProfileOf === "function" && cvTypeProfileOf(cvActiveDoc || (typeof boardDoc !== "undefined" ? boardDoc : null)));
   const baseReserve = cvUiInfo ? (hasHead ? 68 : 8) : typeBoard ? 88 : pageBoard ? 36 : 8;
-  // 2026-11-05 主题横幅(.cv-theme-band,浮在板头下方 44px 起、约 34px 高):在场时顶部再让一段,
+ // 主题横幅(.cv-theme-band,浮在板头下方 44px 起、约 34px 高):在场时顶部再让一段,
   // 保证自动适配后第一排卡不出现在横幅下方被压住。无横幅的板 topReserve 逐字不变。
   const bandOn = !!(cvH.querySelector(".cv-theme-band") || (cvActiveHost && cvActiveHost.querySelector && cvActiveHost.querySelector(".cv-theme-band")));
-  // 2026-11-05:层 chip 条(.cv-lbar)也是顶部浮层,同样要让出高度——按实测底边算,而不是再猜一个像素值。
+ // 层 chip 条(.cv-lbar)也是顶部浮层,同样要让出高度——按经验证底边算,而不是再猜一个像素值。
   const lbarEl = document.querySelector("#boardGraph .cv-lbar");
   const stackBottom = lbarEl && lbarEl.offsetHeight ? (parseFloat(lbarEl.style.top || "0") || 0) + lbarEl.offsetHeight + 8 : 0;
   const topReserve = Math.max(baseReserve + (bandOn ? 40 : 0), stackBottom);
@@ -23778,7 +23778,7 @@ function cvFitNow(forceAll) {
   } catch (err) { /* sessionStorage 不可用环境静默忽略 */ }
   }
 }
-/** 画布底部工具条的「添加模块/整理」两钮(2026-11-05)。
+/** 画布底部工具条的「添加模块/整理」两钮。
  *  svg 模式(flowkit 单张图)的布局由服务端 ELK 决定,panel 侧改 pos 不改图 → 「整理」点了只会静默空转,
  *  故在 svg 模式下置灰并写明原因(三态处置:修复/移除/标记 —— 这里取「标记」,功能待重做)。
  *  cards 模式逐字保持旧串(既有测试按源码序断言)。 */
@@ -23794,7 +23794,7 @@ function cvOpenAddPanel(pt) {
   const p = $("cvAddPanel");
   if (!p) return;
   p.style.display = "block";
-  // 2026-11-06 A4:按当前板型把推荐类型置顶并标「推荐」(code 板=函数/模块/决策),其余分组原样跟在后面。
+ // A4:按当前板型把推荐类型置顶并标「推荐」(code 板=函数/模块/决策),其余分组原样跟在后面。
   const reco = (() => { try { return cvAddRecoKinds(cvTargetDoc()); } catch (e) { return []; } })();
   const itemHtml = (k) => '<div class="cv-aitem' + (reco.indexOf(k) >= 0 ? " cv-reco-on" : "") + '" data-kind="' + k + '">' +
     '<span class="cv-kind cv-k-' + k + '">' + (CV_KIND_ICON[k] || "?") + "</span>" + (CV_KIND_NAME[k] || k) +
@@ -23921,7 +23921,7 @@ function cvUiAnchorOverlay(info, W, H) {
   }
   return out + "</svg>";
 }
-/** 2026-10-26 工程师流程图:code flow 板连线横平竖直(示例图风格)。
+/** 工程师流程图:code flow 板连线横平竖直(示例图风格)。
  * 端口:目标在右=右中→左中;正下/正上=中下/中上;回边=绕世界底部。
  * decision 的端口必须落菱形顶点(卡片外框比菱形大 64px,落外框箭头会悬空)。
  * 返回 {d,lx,ly}:d 只含 M/L 段;标签/删除钮锚在最长的横/竖段中点。 */
@@ -23993,7 +23993,7 @@ function cvEdgeDefs() {
 }
 /** 十期:边 SVG 内部构造(首渲与拖拽重绘共用一份;含命中热区+悬停删除钮)。
  * data-eidx=doc.edges 真实下标(悬空边跳过渲染但下标不连续——删除按下标 splice 对齐真相)。
- * step-111:pgInfo(页面结构板布局信息)非空时——contains 不画线(容器框已表达包含)、
+ * pgInfo(页面结构板布局信息)非空时——contains 不画线(容器框已表达包含)、
  * 端点按容器 size、主线边 bfe-main(粗金)、回边 bfe-back(虚线灰)、自环画容器顶小回环弧、
  * 标签放宽至 16 字(触发动作是语义主信息);pgInfo=null(design 板/资产加载失败)行为与旧版逐字节一致。
  * fixH2:pgInfo.mode=flow(流动布局)——普通边细灰(bfe-flow)、主线粗绿(bfe-main+绿箭头)、
@@ -24001,9 +24001,9 @@ function cvEdgeDefs() {
 function cvEdgeInner(doc, pos, pgInfo) {
   if (pgInfo && pgInfo.mode === "ui-flow") return cvUiFlowEdgeInner(doc, pgInfo);
   const isFlow = !!(pgInfo && pgInfo.mode === "flow");
-  // 2026-10-26 docs 两层 PPT:contains(章→页)无线(归属由章容器表达);data(章间推进)画正交竖折线
+ // docs 两层 PPT:contains(章→页)无线(归属由章容器表达);data(章间推进)画正交竖折线
   const isDocsDeckEdges = !!(pgInfo && pgInfo.docsDeck);
-  // 2026-10-26 工程师 flow:code 板横平竖直正交连线(其它板型保持原贝塞尔)
+ // 工程师 flow:code 板横平竖直正交连线(其它板型保持原贝塞尔)
   const ortho = isDocsDeckEdges || !!(pgInfo && pgInfo.codeFlow && isFlow);
   const kindById = new Map(((doc && doc.nodes) || []).map((n) => [n.id, n.kind]));
   const nodePos = (id) => pos.get(id) || { x: 0, y: 0 };
@@ -24011,7 +24011,7 @@ function cvEdgeInner(doc, pos, pgInfo) {
   let out = "";
   doc.edges.forEach((e, ei) => {
     if (!doc.nodes.some((n) => n.id === e.from) || !doc.nodes.some((n) => n.id === e.to)) return;
-    if (pgInfo && !isFlow && (e.kind || "") === "contains" && !isDocsDeckEdges) return; // step-111:容器语义已由容器框表达
+    if (pgInfo && !isFlow && (e.kind || "") === "contains" && !isDocsDeckEdges) return; // 容器语义已由容器框表达
     if (String(e.label || "") === "同组次序") return; // 系统推导边=布局辅助,不是设计关系;上画布会把页面结构画成顺序链
     const a = nodePos(e.from), b = nodePos(e.to);
     if (selfSet.has(ei)) {
@@ -24056,8 +24056,8 @@ function cvEdgeInner(doc, pos, pgInfo) {
     }
     const marker = isMain ? "url(#cvarrowmain)" : "url(#cvarrow)";
     out += '<g class="cv-edge" data-eidx="' + ei + '"><path class="bfe-hit" d="' + d + '"/>' +
-      // step-073:虚拟边(人工标注)叠 bfe-virtual 虚线样式,title 如实标注「非代码索引实证」
-      // step-083:contains 边无线头(包含语义),其余 kind 保留箭头
+ // 虚拟边(人工标注)叠 bfe-virtual 虚线样式,title 如实标注「非代码索引验证」
+ // contains 边无线头(包含语义),其余 kind 保留箭头
       '<path class="' + ecl + '" d="' + d + '"' + (e.kind === "contains" && !isFlow ? "" : ' marker-end="' + marker + '"') + '>' + (e.virtual ? "<title>虚拟边:人工标注,待代码索引核实</title>" : (e.label ? "<title>" + esc(e.label) + "</title>" : "")) + "</path>";
     if (e.label) {
       if (isFlow) {
@@ -24083,22 +24083,22 @@ function cvRedrawEdges(host, doc, pos) {
   const svg = host.querySelector(".bf-cv-edges");
   if (!svg) return;
   // 重建全部边(节点量 ≤60,直接重建最快;与首渲共用 cvEdgeInner,拖拽中删除钮/标签不掉)
-  // step-111/fixH2:布局信息取全局 page 优先、flow 次之(=本 host 最近一次 renderBoardCanvas 的引擎信息)
+ // /fixH2:布局信息取全局 page 优先、flow 次之(=本 host 最近一次 renderBoardCanvas 的引擎信息)
   svg.innerHTML = cvEdgeDefs() + cvUiFlowDefs(cvUiInfo) + cvEdgeInner(doc, pos, cvPageInfo || cvFlowInfo);
   const anchors = host.querySelector(".bf-cv-ui-anchors");
   if (anchors && cvUiInfo) anchors.outerHTML = cvUiAnchorOverlay(cvUiInfo, anchors.getAttribute("width"), anchors.getAttribute("height"));
 }
 let bdLayoutTimer = null;
 let bdLayoutInflight = false; // 直改板保存在途(十期):回执/冲突前不再发下一笔,防 baseRev 竞态把结构改动打进 conflict 丢掉
-let bdSentSig = ""; // step-073 续作轮:在途笔发出时的结构签名(含 pos;回执落地时比对,识别「在途窗内用户又改了结构/位置」)
+let bdSentSig = ""; // 续作轮:在途笔发出时的结构签名(含 pos;回执落地时比对,识别「在途窗内用户又改了结构/位置」)
 /** 直改板在途笔回执比对签名:cvStructSig(结构)+节点 pos(拖拽也是直改板,回执同样不得回灌)。 */
 function bdSentStructSig(doc) {
   let s = cvStructSig(doc, false);
   for (const n of doc.nodes) s += (n.pos && isFinite(n.pos.x) ? Math.round(n.pos.x) + "," + Math.round(n.pos.y) : "np") + ";";
   return s;
 }
-/** 结构变更(增/删/连线/粘贴)立即落盘(2026-11-06 A2)。
- *  旧实现只走 bdSaveLayoutDebounced 的 900ms 防抖 → 实测「添加模块」到 board.save 有 1.5s 空窗,
+/** 结构变更(增/删/连线/粘贴)立即落盘( A2)。
+ * 旧实现只走 bdSaveLayoutDebounced 的 900ms 防抖 → 经验证「添加模块」到 board.save 有 1.5s 空窗,
  *  用户中途切板/刷新就把这次结构变更丢了(画布上看得见、服务器上没有)。
  *  · 复用 bdLayoutInflight 闸门(防 baseRev 竞态把改动打进 conflict);
  *  · **在途不丢**:置 bdSaveQueued,回执落地后由 bdSaveFlushQueued() 补发一笔(不是丢弃重排);
@@ -24138,7 +24138,7 @@ function bdSaveLayoutDebounced() {
     // 静默保存:回执 board.doc 会走 boardSaveInflight=false 分支正常刷新(不退编辑态——本来就不在编辑态)
   }, 900);
 }
-/* 2026-10-18 用户口径(重试轮,最小改动面):done 板拖拽守卫——落盘前的唯一闸门。
+/* (重试轮,最小改动面):done 板拖拽守卫——落盘前的唯一闸门。
  * 命中条件:非编辑态 + 板 status==="done" + 本会话未授权。命中时弹一条 toast 风格自绘确认条
  * (两个按钮「允许编辑/取消」):允许→sessionStorage 记住本会话 + 补落盘;取消→位置回滚为拖拽前值。
  * 返回 true=本次已拦截(调用方不得落盘);false=放行,既有落盘行为一字不动。
@@ -24226,7 +24226,7 @@ function bdOpenProfile(file) {
   if (!file) return;
   const pid = ppId || activeProjectId;
   switchView("project");
-  projectSetTab("files", true); // step-118 tab 化:文件钻取 pane 默认隐藏,跳转前必须切 tab(否则 #ppfFns 不可见)
+  projectSetTab("files", true); // tab 化:文件钻取 pane 默认隐藏,跳转前必须切 tab(否则 #ppfFns 不可见)
   ppfCur = file;
   wsSafeSend(JSON.stringify({ v: 1, type: "profile.file", projectId: pid, file }));
   arcQuery(); // 白板画布跳档案的入口也要沉淀索引(反查角标数据源;openProfile 之外的第二入口)
@@ -24264,7 +24264,7 @@ $("boardFromCode").onclick = () => {
     toast("生成中…(大文件稍候)");
   });
 };
-// 从洞察生成语义板(step-073):四源——模块依赖(全仓聚合)/架构图(LLM)/符号时序/页面流
+// 从洞察生成语义板:四源——模块依赖(全仓聚合)/架构图(LLM)/符号时序/页面流
 $("boardFromSense").onclick = () => {
   if (!currentSid) { toast("先进入一个会话", true); return; }
   const NL0 = String.fromCharCode(10);
@@ -24288,7 +24288,7 @@ $("boardFromSense").onclick = () => {
   });
 };
 
-// ---- P3 人参与编辑(designs/22 §8):查看/编辑双态;人改板=改设计不改码 ----
+// ---- P3 人参与编辑( §8):查看/编辑双态;人改板=改设计不改码 ----
 let boardEditOn = false;
 let boardDraft = null;      // 编辑草稿(深拷贝;结构操作即时重渲图,文本输入只写草稿防焦点丢失)
 let boardOverlayB64 = null; // 服务端批注层(board.doc 下发;优先于 localStorage 草稿)
@@ -24302,7 +24302,7 @@ function overlayPull(sid) {
   wsSafeSend(JSON.stringify({ v: 1, type: "board.get", sessionId: os, taskId: "__session__" }));
 }
 let boardSaveInflight = false; // board.save 已发等回执(回执才退编辑态)
-let boardConflict = null; // step-073:rev 冲突保留草稿({taskId,currentRev};冲突条出示处置)
+let boardConflict = null; // rev 冲突保留草稿({taskId,currentRev};冲突条出示处置)
 let boardListRetry = 0; // drvfs 假阴性窗 list 空的自动重拉计数(九期)
 const BD_NL = String.fromCharCode(10);
 
@@ -24386,7 +24386,7 @@ function bdAddEdge() {
   if (boardSelNode && !bdSyncDraftFromForm()) return;
   const from = $("bdeEdgeFrom").value, to = $("bdeEdgeTo").value;
   if (!from || !to || from === to) { toast("连线需要两个不同节点", true); return; }
-  boardDraft.edges.push({ from, to, kind: $("bdeEdgeKind").value || "call", label: $("bdeEdgeLabel").value.trim(), virtual: true }); // step-073:编辑态人工连线=虚拟边
+  boardDraft.edges.push({ from, to, kind: $("bdeEdgeKind").value || "call", label: $("bdeEdgeLabel").value.trim(), virtual: true }); // 编辑态人工连线=虚拟边
   bdStructChanged();
 }
 function bdDelEdge(i) {
@@ -24414,7 +24414,7 @@ function bdSyncDraftFromForm() {
     const parsed = bdFlowFromText($("bdeFlow").value);
     if (parsed.error) { toast(parsed.error, true); return false; }
     n.flow = parsed.flow;
-    // step-121 工作流板参数表单(配置抽屉在填即收编;timeout 非法静默丢=回退缺省;字段不在场=该 kind 无此参数)
+ // 工作流板参数表单(配置抽屉在填即收编;timeout 非法静默丢=回退缺省;字段不在场=该 kind 无此参数)
     if (String(n.kind).indexOf("wf-") === 0) {
       n.wf = { ...(n.wf || {}) };
       if ($("bdeWfCommand")) n.wf.command = $("bdeWfCommand").value.trim() || undefined;
@@ -24469,7 +24469,7 @@ function bdFlowToMd(steps, indent) {
   return out;
 }
 function boardExportMd() {
-  if (!boardDoc) { toast("没有可导出的图"); return; } // 2026-10-18 体验官A:与导出 PNG 的空板反馈对齐(此前完全静默)
+  if (!boardDoc) { toast("没有可导出的图"); return; } // :与导出 PNG 的空板反馈对齐(此前完全静默)
   const d = boardDoc;
   const L = ["# 设计白板:" + d.title, "", "状态: " + d.status + " · rev " + d.rev + " · 节点 " + d.nodes.length + " · 边 " + d.edges.length, ""];
   for (const n of d.nodes) {
@@ -24495,7 +24495,7 @@ function boardExportMd() {
 }
 /** svg 模式导出 PNG 的尺寸计划(纯函数,可单测)。
  *  尺寸优先级:viewBox 宽高(cvSvgBox 口径)> <svg width/height> 属性;都拿不到 → null(调用方回退卡片路线)。
- *  倍数:2x 常规,但**像素总量超 400 万即降 1x**——大板实测 viewBox 7261×2942(step-1033),2x = 14522×5884
+ * 倍数:2x 常规,但**像素总量超 400 万即降 1x**——大板经验证 viewBox 7261×2942,2x = 14522×5884
  *  ≈341MB RGBA,浏览器直接 OOM;这是按面积夹上限,不是写死倍数。 */
 /** 取 svg 根元素上的数值属性(width/height)。**不用正则**:panel 模板串会吃掉单反斜杠(\\s/\\d 变 s/d)。 */
 function svgAttrNum(s, name) {
@@ -24526,7 +24526,7 @@ function cvSvgPngPlan(svgText) {
   const scale = w * h * 4 > 4000000 ? 1 : 2;
   return { w: w, h: h, scale: scale, outW: Math.round(w * scale), outH: Math.round(h * scale) };
 }
-/** svg 模式(flowkit 单张图)导出 PNG(2026-11-05 修断裂)。
+/** svg 模式(flowkit 单张图)导出 PNG(修断裂)。
  *  旧链路 cvExportWorldPng 读的是 .bf-cv-edges 宽高 + .cv-node 卡片,svg 模式两者都不存在 → W/H=0 →
  *  「没有可导出的图」,导出按钮 100% 失效。这里直接序列化 #cvSvgHost > svg(内联样式由 flowkit 自带)
  *  → Image → canvas → PNG。返回 true=已接管(异步出图);false=没拿到 svg/尺寸,调用方按旧路线回退。 */
@@ -24567,7 +24567,7 @@ function cvExportSvgPng(host) {
 }
 /** fixE1:画布模式整卡导出——克隆 .bf-cv-world(DIV 节点卡+边 SVG)进 <svg><foreignObject>,
  * 逐元素内联 computed style(主题 CSS 变量随 computed 值一并展开,导出图与当前主题一致)→
- * XMLSerializer → blob → Image → canvas → PNG。≤100 节点一次性成本可接受(41 节点板实测亚秒级)。
+ * XMLSerializer → blob → Image → canvas → PNG。≤100 节点一次性成本可接受(41 节点板经验证亚秒级)。
  * 已知取舍:伪元素装饰不入图(仅 .k-page 卡头三点点装饰一处,纯装饰);画布点阵网格背景取平色
  * (radial 网格是交互参照,非语义内容)。快照失败退回旧连线层导出并如实 toast(诚实降级)。 */
 function cvExportWorldPng(host, world) {
@@ -24622,7 +24622,7 @@ function cvExportWorldPng(host, world) {
   fo.appendChild(wrap);
   root.appendChild(fo);
   const xml = new XMLSerializer().serializeToString(root);
-  // fixE1 实证坑:blob: URL 的 foreignObject SVG 进 <img> 后画布必染(空 DIV 也染,Chrome 149 实测;
+ // fixE1 验证坑:blob: URL 的 foreignObject SVG 进 <img> 后画布必染(空 DIV 也染,Chrome 149 经验证;
   // data: URL 同一份 XML 干净可导出)——恒走 data URL(encodeURIComponent),不用 blob。
   const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
   const nodeCount = world.querySelectorAll(".cv-node").length;
@@ -24668,7 +24668,7 @@ function boardExportPng() {
   // fixE1:画布模式导出必须含节点卡——旧实现只序列化 #boardGraph 里的 svg(=连线层;节点是 DIV
   // 天生不在 svg 内),导出 PNG 只有贝塞尔边+边标签。画布模式走 cvExportWorldPng 整卡路线;
   // 简图(mermaid)模式沿旧 svg 路线(那层本就是 SVG,无 DIV 卡问题);宿主取 bdGraphHost()(浮窗画布同权)。
-  // 2026-11-05 修断裂:默认渲染已是 flowkit 单张 SVG(没有 .bf-cv-world 卡片世界),先试 svg 直出;
+ // 修断裂:默认渲染已是 flowkit 单张 SVG(没有 .bf-cv-world 卡片世界),先试 svg 直出;
   // 拿不到才回退旧两条路线(cards 回滚态/简图态)。
   const host = bdGraphHost();
   if (boardCanvasMode && cvExportSvgPng(host)) return;
@@ -24696,7 +24696,7 @@ function boardExportPng() {
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
 }
 $("boardEditBtn").onclick = () => boardEditToggle();
-// ---- step-121 工作流板:新建 / 编译预览 / 编译执行 / 存为自动化 ----
+// ---- 工作流板:新建 / 编译预览 / 编译执行 / 存为自动化 ----
 let wfCompilePreview = ""; // 最近一次编译产物(存自动化用;编译失败清空)
 /** 运行态增量上屏:对活动画布宿主的节点元素原位切类+角标(不整板重渲,进度不打断拖拽/在途交互)。 */
 function bdWfApplyStates(states) {
@@ -24785,7 +24785,7 @@ $("boardWfAuto").onclick = () => bdWfSaveAutomation();
 $("boardSaveBtn").onclick = () => boardSave();
 $("boardCancelBtn").onclick = () => { boardEditOn = false; boardDraft = null; renderBoard(); };
 $("boardContinueBtn").onclick = () => boardContinue();
-// 勾选派发(2026-10-23):工具条按钮 → bdDispatchSel();首屏也刷一次计数(空集=按钮 disabled)
+// 勾选派发:工具条按钮 → bdDispatchSel;首屏也刷一次计数(空集=按钮 disabled)
 if ($("bdDispatchSel")) $("bdDispatchSel").onclick = () => bdDispatchSel();
 bdSelRender();
 $("boardExpMd").onclick = () => boardExportMd();
@@ -24793,7 +24793,7 @@ $("boardExpPng").onclick = () => boardExportPng();
 // 使用标记(引导清单)
 document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") localStorage.setItem("zh:used-term", "1"); });
 
-// ---- step-047 管理面表单提交 ----
+// ---- 管理面表单提交 ----
 $("cmdSave").onclick = () => {
   const name = $("cmdForm").querySelector("input[name=cname]").value.trim();
   const body = $("cmdForm").querySelector("input[name=cbody]").value.trim();
@@ -24822,10 +24822,10 @@ $("mcpSave").onclick = () => {
   $("mcpForm").querySelector("input[name=margs]").value = "";
 };
 $("mcpRefresh").onclick = () => sendOrQueue({ v: 1, type: "mcp.list", refresh: true });
-// ---- 工具提供商设置(2026-10-28 用户口径:并入「模型设置」页;默认 DeepSeek)----
+// ---- 工具提供商设置(并入「模型设置」页;默认 DeepSeek)----
 // 保存链:API Key → cfg.secret.set(写 .genie/secrets.json,值不进配置/日志);provider/endpoint/model
 // → cfg.set web.search.*(热生效:工具每次查询现读配置)。Key 留空=沿用已存密钥(只改 provider)。
-let wsSavePending = 0; // 工具提供商保存/清除在飞时间戳(2026-10-28:回包确认后再刷新状态行与提示)
+let wsSavePending = 0; // 工具提供商保存/清除在飞时间戳(:回包确认后再刷新状态行与提示)
 function wsSearchStateRender() {
   const w = cfgView && cfgView.config && cfgView.config.web && cfgView.config.web.search ? cfgView.config.web.search : {};
   // UI 档位:default(provider 空,按 DeepSeek 解析)/ off(显式关闭走 curl·browser)/ 具体 provider
@@ -24838,7 +24838,7 @@ function wsSearchStateRender() {
   else text = "当前:" + cur + (w.endpoint ? " · " + w.endpoint : "") + " · 密钥(" + keyName + ",保存时可留空沿用)";
   $("wsState").textContent = text;
 }
-// 分段点击绑定(2026-10-28 故障修复):此前 #ws-provider 没有任何 click 监听——点 DeepSeek/关闭
+// 分段点击绑定(故障修复):此前 #ws-provider 没有任何 click 监听——点 DeepSeek/关闭
 // 既不变选中态,保存时读到的永远是渲染时的旧 .on,表现为「无法设置也无法关闭」。
 $("ws-provider").onclick = (e) => {
   const b = e.target && e.target.closest ? e.target.closest("button") : null;
@@ -24887,7 +24887,7 @@ $("wsClear").onclick = () => {
 ws.sendWhenOpen = ws.sendWhenOpen || [];
 function sendOrQueue(obj) { if (ws.readyState === 1) wsSafeSend(JSON.stringify(obj)); }
 
-// ---- step-088:主题化模态(alert/confirm/prompt 全替换;Promise 化;危险/警告/信息三态) ----
+// ---- 主题化模态(alert/confirm/prompt 全替换;Promise 化;危险/警告/信息三态) ----
 // 契约:uiAlert(msg[,o])→Promise<void>;uiConfirm(msg[,o])→Promise<boolean>;uiPrompt(msg[,def][,o])→Promise<string|null>(取消=null)。
 // o:{title, ok, cancel, tone:"danger"|"warning"|"info", placeholder, allowEmpty, kicker};Enter=确认/Esc=取消;焦点落主按钮/输入框。
 function uiDialog(opts) {
@@ -24904,7 +24904,7 @@ function uiDialog(opts) {
       (opts.msg ? '<div class="uid-msg">' + esc(opts.msg) + "</div>" : "") +
       '<div class="uid-btns">' +
       (opts.cancel !== null ? '<button class="uid-cancel">' + esc(opts.cancel || "取消") + "</button>" : "") +
-      // step-165 danger 确认钮变体(ref confirmDialog confirmVariant:"destructive"):运行中项目移除等场景
+ // danger 确认钮变体(ref confirmDialog confirmVariant:"destructive"):运行中项目移除等场景
       '<button class="uid-ok' + (opts.okClass ? " " + esc(opts.okClass) : "") + '">' + esc(opts.ok || "确定") + "</button></div></div>";
     const done = (v) => { mask.remove(); document.removeEventListener("keydown", onKey, true); resolve(v); };
     const okBtn = mask.querySelector(".uid-ok");
@@ -24925,10 +24925,10 @@ function uiDialog(opts) {
   });
 }
 function uiAlert(msg, o) { o = Object.assign({}, o || {}); o.msg = msg; o.cancel = null; return uiDialog(o).then(() => {}); }
-function uiConfirm(msg, o) { o = Object.assign({}, o || {}); o.msg = msg; if (o.okClass === "danger") o.tone = o.tone || "danger"; return uiDialog(o).then((v) => v === true); } // step-165:danger 确认钮联动 danger tone(标题红点/文案分级随钮)
+function uiConfirm(msg, o) { o = Object.assign({}, o || {}); o.msg = msg; if (o.okClass === "danger") o.tone = o.tone || "danger"; return uiDialog(o).then((v) => v === true); } // danger 确认钮联动 danger tone(标题红点/文案分级随钮)
 function uiPrompt(msg, def, o) { o = Object.assign({}, o || {}); o.msg = msg; o.input = true; o.def = def; o.tone = o.tone || "info"; return uiDialog(o); }
 
-// ---- step-088:原生 select 镜像式接管(原生 select 保留为数据源;主题化按钮+弹层双向同步;键盘 ↑↓/Enter/Esc) ----
+// ---- 原生 select 镜像式接管(原生 select 保留为数据源;主题化按钮+弹层双向同步;键盘 ↑↓/Enter/Esc) ----
 function uiSelLabel(sel) {
   const o = sel.selectedOptions && sel.selectedOptions[0];
   return o ? (o.textContent || "").trim() || "(空)" : (sel.value || "(空)");
@@ -24949,7 +24949,7 @@ function beautifySelect(sel) {
   lab.className = "ui-sel-label";
   const chev = document.createElement("span");
   chev.className = "ui-sel-chev";
-  chev.innerHTML = '<svg class="icn" viewBox="0 0 24 24"><path d="M5.5 9.5l6.5 6.5 6.5-6.5"/></svg>'; // step-097:下拉指示改素描描绘
+  chev.innerHTML = '<svg class="icn" viewBox="0 0 24 24"><path d="M5.5 9.5l6.5 6.5 6.5-6.5"/></svg>'; // 下拉指示改素描描绘
   btn.append(lab, chev);
   const pop = document.createElement("div");
   pop.className = "ui-sel-pop";
@@ -25026,14 +25026,14 @@ try {
   new MutationObserver(() => beautifyAllSelects(document)).observe(document.documentElement, { childList: true, subtree: true });
 } catch (e) { /* 无 MutationObserver 环境忽略 */ }
 
-// ---- toast+未读徽标(step-043,ZCode toast/unreadBadge 裁剪) ----
+// ---- toast+未读徽标(ZCode toast/unreadBadge 裁剪) ----
 function toast(text, isErr) {
   const host = $("toastHost");
   const el = document.createElement("div");
   // n8 三档语气:true/err=红(失败)、"warn"=黄(成功但有前提/可能不生效)、缺省=常色(信息)。
   // 「轻提示」不能冒充失败:否则用户看到红色 toast 会以为会话模型没切成功。
   el.className = "toast" + (isErr === "warn" ? " warn" : isErr ? " err" : "");
-  // step-125 隐私:错误提示不回家路径(服务端原始错误统一脱敏)。
+ // 隐私:错误提示不回家路径(服务端原始错误统一脱敏)。
   el.textContent = isErr ? redactPaths(text) : text;
   host.appendChild(el);
   setTimeout(() => el.remove(), 4200);
@@ -25073,10 +25073,10 @@ function bumpUnread(n) {
   document.title = (unread > 0 ? "(" + unread + ") " : "") + "lampgenie-harness · 控制台";
 }
 // 任务终态通知的唯一定义在任务通知段(终态跃迁守卫 + 桌面原生通知);这里不再重复声明,
-// 否则函数声明提升会让后一份覆盖前一份(2026-11-09 修复的重复实现)。
+// 否则函数声明提升会让后一份覆盖前一份(修复的重复实现)。
 
-// ---- composer 模型快切(step-043,ZCode ModelConfigSelect 裁剪;热生效 cfg.set) ----
-// step-051(ZCode 参考界面直接下拉移植):①主模型=web coding 执行模型(coding.llm,只列已配置模型)
+// ---- composer 模型快切(ZCode ModelConfigSelect 裁剪;热生效 cfg.set) ----
+// (ZCode 参考界面直接下拉移植):①主模型=web coding 执行模型(coding.llm,只列已配置模型)
 // ②chat audio=语音轨模型(audio.chat:ASR 与 coding 未配置时的回退,独立 pill 置于右侧)③选择交互=锚点上方就地下拉,无居中弹窗。
 function refreshModelPill() {
   wsSafeSend(JSON.stringify({ v: 1, type: "cfg.get" }));
@@ -25102,7 +25102,7 @@ document.addEventListener("mousedown", (e) => {
   pillMenuClose();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") pillMenuClose(); });
-// ---- ask_user 问答条(2026-10-19 许愿式编程) ----
+// ---- ask_user 问答条(许愿式编程) ----
 let askPending = [];
 function askRenderBar() {
   const bar = $("askBar");
@@ -25296,7 +25296,7 @@ function pillMenuOpen(anchor, groups, current, onPick, footLabel, footGo) {
   if (!q) { el.tabIndex = -1; setTimeout(() => { try { el.focus(); } catch (e) { /* 忽略 */ } }, 30); }
   pillMenuEl = el;
 }
-// ---- step-132 模型快切菜单:provider 两层分组(ZCode ModelConfigSelect 语义) ----
+// ---- 模型快切菜单:provider 两层分组(ZCode ModelConfigSelect 语义) ----
 // 真源:ZCode/packages/ui/src/ModelConfigSelect.tsx(directItems 组一级平铺 / 其它组二级 SubContent)。
 // 命名推断白名单:只在名字明确属视觉族时命中(零反斜杠纪律,判断用 includes)。
 const MODEL_VISION_NAME_HINTS = ["-vl", "-vision", "-omni", "glm-4v", "glm-5v", "glm-4.6v", "glm-4.1v", "gpt-4o"];
@@ -25534,7 +25534,7 @@ function endpointModelGroup(list, cur) {
       return { value: v, name: v, sub: "", providerId: "", vision: vc.vision, visionInferred: vc.inferred, unverified: false };
     }) };
 }
-/** 模型菜单入口(step-132,替代 pillOpenMenu 的一层渲染):直展组/折叠组混排;无组→端点拉取兜底。 */
+/** 模型菜单入口(替代 pillOpenMenu 的一层渲染):直展组/折叠组混排;无组→端点拉取兜底。 */
 function modelMenuOpen(fallbackIds) {
   if (pillMenuEl) { pillMenuClose(); return; } // 二点=收起
   const cfg = cfgView && cfgView.config ? cfgView.config : null;
@@ -25557,9 +25557,9 @@ function modelMenuOpen(fallbackIds) {
   pillMenuEl = el;
 }
 
-// 候选模型聚合(step-051):来源=设置页已配置的模型(PROVIDER 列表 models;禁用项剔除),按 provider 分组。
+// 候选模型聚合:来源=设置页已配置的模型(PROVIDER 列表 models;禁用项剔除),按 provider 分组。
 // fixT7:verifiedModels=端点实拉(models.list 成功回包)验证过的模型集合——手填目录里未验证的
-// 模型在快切菜单标注「未验证」并尾置(用户实报:选了目录里的模型名→404 model_not_found,
+// 模型在快切菜单标注「未验证」并尾置(用户用户反馈:选了目录里的模型名→404 model_not_found,
 // 因为目录是手填的、端点不一定提供)。零反斜杠纪律:判断用 includes。
 const verifiedModels = new Set();
 function pillMenuModelGroups(current) {
@@ -25613,13 +25613,13 @@ function pillMenuModelGroups(current) {
 /** n8 菜单「跟随全局」勾选判定:当前会话是否已有生效的模型覆盖。
  *  抽成纯读取函数,供 modelMenuHtml 调用(该函数会被纯函数级单测独立抽取执行,不能在体内裸读面板状态)。 */
 function sessionModelHasOverride() {
-  // 2026-10-29:草稿态认当前项目预设 sid(预设会话已有覆盖 → 「跟随全局」不勾选)。
+ // 草稿态认当前项目预设 sid(预设会话已有覆盖 → 「跟随全局」不勾选)。
   const sid = (typeof currentSid !== "undefined" && currentSid) ? currentSid : (typeof draftSidStored === "function" ? draftSidStored() : "");
   if (!sid) return false;
   const ov = sessionModelOverride.get(sid);
   return !!(ov && ov.model);
 }
-/** m7-front(2026-10-22)推理档位透传:session.model.set 的 effort 字段(string|null)。
+/** m7-front推理档位透传:session.model.set 的 effort 字段(string|null)。
  *  取值权威=composer 的思考力度 pill(effortV;""=关→null)。后端未启用该字段时它是**可选字段**,
  *  不带也不影响既有语义(协议不做必填约束)。
  *  本函数只做透传,不新增任何模型菜单 UI(档位菜单仍在 effortPill)。 */
@@ -25634,10 +25634,10 @@ function pillPickModel(v, providerId) {
   if (v && verifiedModels.size > 0 && !verifiedModels.has(v)) toast("注意:" + v + " 未经过端点验证(手填目录)——若端点不提供该模型将 404", true);
   // u6 反馈:记录切换前的显示值(成功后 toast「已从 X 切换至 Y」用;rollback 场景不弹)
   modelSwitchFrom = modelDisplayText;
-  // m9(2026-10-22)staged 有效期内**禁止重复 set**:连点会连发多条各带同一 expectedRevision,
+ // m9staged 有效期内**禁止重复 set**:连点会连发多条各带同一 expectedRevision,
   // 第二条必撞 revision-mismatch(第一条已把 revision +1)→ 用户看到「切换失败」但其实早切好了。
   // 同值再点=完全静默;换成别的模型才给一次黄色轻提示(不弹红,不冒充失败)。
-  // 2026-10-29:判定键统一为 targetSid(currentSid || 草稿预设 sid),草稿态连点同样被拦。
+ // 判定键统一为 targetSid(currentSid || 草稿预设 sid),草稿态连点同样被拦。
   const m9Sid = currentSid || draftSidStored();
   if (m9Sid) {
     const prev = sessionModelStaged.get(m9Sid);
@@ -25650,7 +25650,7 @@ function pillPickModel(v, providerId) {
     }
   }
   const eff = sessionModelEffort(); // m7-front:随 set 透传的推理档位(string|null)
-  // per-session 主模型(2026-10-29 收口):会话态→只改本会话;草稿态→绑定到当前项目的预设会话 id
+ // per-session 主模型:会话态→只改本会话;草稿态→绑定到当前项目的预设会话 id
   // (draftSidOf),同样走 session.model.set。全局 coding.llm 不再被快切菜单触碰(改全局只能去设置页),
   // 根治「草稿态换模型 → 其余所有 session 跟随全局一起变」的污染。
   const targetSid = currentSid || draftSidOf();
@@ -25662,7 +25662,7 @@ function pillPickModel(v, providerId) {
   toast(v ? (currentSid ? "本会话模型 → " : "新任务模型(预设会话)→ ") + v + (providerId ? "(端点 " + providerId + ")" : "") + (eff ? "(推理档位 " + eff + ")" : "") + "(已提交,等待服务端确认…)" : "已请求跟随全局模型(等待服务端确认…)");
   setTimeout(refreshModelPill, 400);
 }
-/** step-132:一层渲染已迁到 modelMenuOpen(直展组/折叠组 + 二级原位切换);入口保持同名以便既有调用点不变。 */
+/** 一层渲染已迁到 modelMenuOpen(直展组/折叠组 + 二级原位切换);入口保持同名以便既有调用点不变。 */
 function pillOpenMenu() { modelMenuOpen(); }
 /** u1/u2 触发器文案:providerName/ 前缀(独立 span,空间不足先隐藏)+ 模型名(truncate)。
  *  u2 滚动切换用纯 CSS transition:新节点自 translateY(0.75em) 滑入,旧节点反向退出(0.2s)。
@@ -25702,8 +25702,8 @@ function modelProviderPrefix(providerId, baseUrl) {
   return p ? String(p.name || p.id || "") : "";
 }
 function renderModelPill(cfgView_) {
-  // step-051 语义修正(用户口径):主模型=web coding 执行模型(coding.llm)。
-  // chat audio 快切已迁入右侧 companion 聊天窗 widget(2026-10-13 视频 2 后续口径),面板不再陈列。
+ // 语义修正:主模型=web coding 执行模型(coding.llm)。
+ // chat audio 快切已迁入右侧 companion 聊天窗 widget(视频 2 后续口径),面板不再陈列。
   // per-session 主模型:当前会话有覆盖(sessionModelOverride 命中且非 null)→优先显示该 model(尾标「·会话」);
   // null=已确认无覆盖 / 未初始化 / 草稿态 → 回退全局 coding.llm.model。
   // n8 staged 态优先:有未确认选择 → 显示 staged 值 + 转轮(mt-spin 替代 chevron),回包确认才落定。
@@ -25711,7 +25711,7 @@ function renderModelPill(cfgView_) {
   const cLlm = (cfg && cfg.coding && cfg.coding.llm) || {};
   const codingM = (cfg && cfg.coding && cfg.coding.llm ? cfg.coding.llm.model : null) || null;
   const pill = $("modelPill");
-  // 2026-10-29:草稿态键认当前项目预设 sid(draftSidStored;null 返回值时仍回落 "_draft" 兜底),
+ // 草稿态键认当前项目预设 sid(draftSidStored;null 返回值时仍回落 "_draft" 兜底),
   // 预设会话的 staged/覆盖照常驱动 pill 显示「·会话」。
   const draftSid = draftSidStored();
   const stKey = currentSid || draftSid || "_draft";
@@ -25769,7 +25769,7 @@ function modelPillRollback(sid, effectiveModel) {
   pill.classList.add("staged-err");
   setTimeout(() => { const p = $("modelPill"); if (p) p.classList.remove("staged-err"); }, 1800);
 }
-// ---- step-997 设置页「生效模型」区块(复用 pill 的 staged/CAS/回滚语义,不造第二套状态机) ----
+// ---- 设置页「生效模型」区块(复用 pill 的 staged/CAS/回滚语义,不造第二套状态机) ----
 let modelSwitchPick = null; // 用户在下拉里暂存的选择 {model,providerId};确认前不发 WS
 let modelSwitchNotice = null; // {cls,text}:最近一次操作结果(red/warn/ok)
 let secretKeyState = {}; // apiKeyEnv → 是否存在(只存布尔,不存值)
@@ -25956,7 +25956,7 @@ function modelSwitchConfirm() {
 })();
 
 $("modelPill").onclick = () => {
-  // 2026-11-08 新用户实测:未接入任何供应商时点「无可用模型」= 发一条注定失败的 models.list,
+ // 新用户经验证:未接入任何供应商时点「无可用模型」= 发一条注定失败的 models.list,
   // 只弹「到设置页…」的错误 toast 却没有入口,新用户直接卡死(设置入口只是底部 8px 齿轮)。
   // 没有 provider 且没有主模型 → 直达设置页「模型设置」,不再空转重试。
   const providerCount = ((cfgView && cfgView.config && cfgView.config.providers) || []).length;
@@ -25979,7 +25979,7 @@ document.addEventListener("click", (e) => {
   else if (act === "project") { try { dbOpen(""); } catch (err) { /* 目录浏览器未装配 */ } }
   else if (act === "task") { const ta = $("instruction"); if (ta) { ta.focus(); } }
 });
-// 桌面壳桥(2026-11-09 移植 ZCode 菜单/通知语义):
+// 桌面壳桥(移植 ZCode 菜单/通知语义):
 // - 文件→新建任务/设置:主进程角色菜单发命令,面板按现有控件执行(不造第二套入口);
 // - 点系统通知:主进程已恢复窗口,这里把对应任务所在会话切出来。
 (function bindDesktopShellBridge() {
@@ -25998,7 +25998,7 @@ document.addEventListener("click", (e) => {
       if (t && t.sessionId && t.sessionId !== currentSid) openSession(t.sessionId);
     });
   }
-  // genie:// 深链(2026-11-09):设置/新建任务/会话/项目;未知动作只提示已唤起。
+ // genie:// 深链:设置/新建任务/会话/项目;未知动作只提示已唤起。
   if (typeof bridge.onDeepLink === "function") {
     bridge.onDeepLink((d) => {
       try { window.__lastDeepLink = d; } catch (e) { /* 仅诊断用 */ }
@@ -26013,7 +26013,7 @@ document.addEventListener("click", (e) => {
     });
   }
 })();
-// 版本检查/应用内更新(2026-11-09):主进程持有状态机(自动 6h/手动菜单/托盘),面板只渲染状态与发动作。
+// 版本检查/应用内更新:主进程持有状态机(自动 6h/手动菜单/托盘),面板只渲染状态与发动作。
 // 状态机在 update-check.js;这里不重复业务判断,避免「面板说能装、壳说没下载」两套真相。
 (function bindUpdateBridge() {
   const bridge = window.genieWindow;
@@ -26201,10 +26201,10 @@ document.addEventListener("click", (e) => {
     });
   }
 })();
-// ---- 跳轮导航(step-043,ZCode TurnNavigator 简化:跳用户消息) ----
-// 完整版轮次导航器(step-045,ZCode ConversationTurnNavigator 裁剪):
+// ---- 跳轮导航(ZCode TurnNavigator 简化:跳用户消息) ----
+// 完整版轮次导航器(ZCode ConversationTurnNavigator 裁剪):
 // 条目=用户消息轮次;点击滚动定位;滚动反向驱动当前轮高亮。
-// 2026-10-14 用户口径:#turnNav 自右缘浮层迁入 footer——横向时间轴形态(刻度高度=问句长度),
+// #turnNav 自右缘浮层迁入 footer——横向时间轴形态(刻度高度=问句长度),
 // 进度三态:金=当前轮,亮=该轮任务完成,呼吸=执行中未决,红=该轮含失败(归属由 renderHistory 按 journal 事件序算)。
 let turnOutcome = new Map(); // 轮次号(字符串)→"done"|"fail";fail 优先(同轮后到失败覆盖已完成)
 function sessionActiveCount() { // 当前会话运行/排队任务数(时间轴呼吸态数据源;footer 计数是全局口径,勿混)
@@ -26266,9 +26266,9 @@ function markTurn(turnNo) {
     el.classList.toggle("cur", el.dataset.turn === String(cur));
   }
   const curEl = nav.querySelector(".tn-item.cur");
-  // step-048:高亮滚动只动 nav 自身,不用 scrollIntoView——nav 无溢出时会冒泡到 #view-tasks,
+ // 高亮滚动只动 nav 自身,不用 scrollIntoView——nav 无溢出时会冒泡到 #view-tasks,
   // 每次渲染把会话视口拽回导航项位置(「锁定在最开始」的最终真凶,rAF+400ms 轮询反复触发)。
-  // 横向轴形态(2026-10-14):同理只动 scrollLeft,把当前刻度滚进轴视口中部。
+ // 横向轴形态:同理只动 scrollLeft,把当前刻度滚进轴视口中部。
   if (curEl) nav.scrollLeft = Math.max(0, curEl.offsetLeft - nav.clientWidth / 2);
 }
 // 滚动驱动高亮(rAF 节流)+400ms 兜底轮询(确定性优先)
@@ -26297,7 +26297,7 @@ if (!winSentDelegated) {
     if (t) winExtend();
   });
 }
-// 历史分页按钮点击(2026-10-22):一次性文档委托——按钮随 mfPatch 局部换节点,委托绑定不会随重建丢失。
+// 历史分页按钮点击:一次性文档委托——按钮随 mfPatch 局部换节点,委托绑定不会随重建丢失。
 let histMoreDelegated = false;
 if (!histMoreDelegated) {
   histMoreDelegated = true;
@@ -26316,14 +26316,14 @@ $("view-tasks").addEventListener("scroll", () => {
   });
 });
 window.__tnav = { mark: () => markTurn(null) }; // 测试钩子(原子验证滚动→高亮;事件路径由点击/回顶用例覆盖)
-window.__mature = { // 测试钩子(step-046):spec 注入 diffstats/histEvents 后重渲染,验证变更条/思考卡/标签页。
+window.__mature = { // 测试钩子:spec 注入 diffstats/histEvents 后重渲染,验证变更条/思考卡/标签页。
   diffstats, tasks,
   renderHistory: () => renderHistory(),
   openSession: (sid) => openSession(sid),
   state: () => ({ currentSid, openTabs: [], tabCount: 0 }), // tabbar 五件套已删(冗余收敛)
   hist: () => histEvents,
   setHist: (evs) => { histEvents = evs; },
-  // 子代理工作区(2026-10-16):spec 断言激活态/打开集/事件入流量(渲染断言仍走 DOM)
+ // 子代理工作区:spec 断言激活态/打开集/事件入流量(渲染断言仍走 DOM)
   subws: () => ({ active: subWsActive, tabs: [...subWsTabs.keys()], sid: subWsSid,
     events: (Array.isArray(histEvents) ? histEvents : []).filter((e) => e.kind === "subagent.event").length }),
   subwsOpen: (aid) => subWsOpen(aid),
@@ -26339,7 +26339,7 @@ function jumpTurn(dir) {
 $("turnPrev").onclick = () => jumpTurn(-1);
 $("turnNext").onclick = () => jumpTurn(1);
 
-// ---- F6 workflow ask 面板应答(designs/20;问题广播→直答/超时引擎自回退) ----
+// ---- F6 workflow ask 面板应答(问题广播→直答/超时引擎自回退) ----
 let wfQuestions = []; // {wfId, cacheKey, instructions, at}
 function wfRenderQuestions() {
   // 过期隐藏(服务端超时后不再有意义)
@@ -26397,7 +26397,7 @@ setInterval(() => {
   if (act) ssSendStatus(act.sessionId);
 }, 3000);
 
-// ---- Git 面板(step-037 批C) ----
+// ---- Git 面板(批C) ----
 let gitChanges = [], gitCurrentFile = "";
 function gitLoad() {
   if (!viewLive("git")) return;
@@ -26429,7 +26429,7 @@ function gitRenderStatus(m) {
   }
   gitCommitLabel();
 }
-// 勾选文件提交(2026-10-27):有勾选=只提交选中(服务端 git.commit files 参数),无勾选=全部(add -A)。
+// 勾选文件提交:有勾选=只提交选中(服务端 git.commit files 参数),无勾选=全部(add -A)。
 function gitPickedFiles() {
   return [...$("gitChanges").querySelectorAll(".git-pick")].filter((b) => b.checked).map((b) => gitChanges[Number(b.dataset.i)].file);
 }
@@ -26486,7 +26486,7 @@ $("gitPushBtn").onclick = () => {
   wsSafeSend(JSON.stringify({ v: 1, type: "git.push" }));
   toast("推送 origin(当前分支)…");
 };
-// ---- F1 多快照浏览(designs/21):checkpoint.list → 清单(时间+任务+sha 短)→ 预览/恢复 ----
+// ---- F1 多快照浏览:checkpoint.list → 清单(时间+任务+sha 短)→ 预览/恢复 ----
 let snapshots = [];
 function snapRender() {
   const host = $("snapList");
@@ -26507,7 +26507,7 @@ function snapRender() {
         pendingRewind = s.taskId;
         wsSafeSend(JSON.stringify({ v: 1, type: "checkpoint.preview", taskId: s.taskId }));
       } else {
-        // step-088:原生 confirm → uiConfirm(恢复快照;确认后才发 restore)
+ // 原生 confirm → uiConfirm(恢复快照;确认后才发 restore)
         uiConfirm("恢复快照 " + String(s.sha || "").slice(0, 8) + "?工作区将回到该任务前(快照后新增的未跟踪文件保留)", { tone: "danger" }).then((ok2) => {
           if (ok2) wsSafeSend(JSON.stringify({ v: 1, type: "checkpoint.restore", sha: String(s.sha || "") }));
         });
@@ -26521,9 +26521,9 @@ $("snapLoad").onclick = () => {
 };
 setInterval(gitLoad, 8000);
 // 心跳+假死检测:每 30s ping;75s 内零入站帧=半开 TCP(send 本地成功对端收不到)——主动断开触发重连,
-// 否则「已连接」陈旧绿字常驻、发送无痕丢失(2026-10-12 视频「111 无响应」根因之一)。
+// 否则「已连接」陈旧绿字常驻、发送无痕丢失(视频「111 无响应」根因之一)。
 setInterval(() => {
-  if (!ws || ws.readyState !== 1) return; // step-070:ws 降为可换槽位,构造失败(null)时跳过防 TypeError 空转
+  if (!ws || ws.readyState !== 1) return; // ws 降为可换槽位,构造失败(null)时跳过防 TypeError 空转
   wsSafeSend(JSON.stringify({ v: 1, type: "ping" }));
   if (lastPong && Date.now() - lastPong > 75_000) {
     $("conn").textContent = "连接假死 · 重连中…";
@@ -26587,7 +26587,7 @@ function cmdExpand(tpl, args) {
   if (a && !used) body = body.trimEnd() + String.fromCharCode(10) + String.fromCharCode(10) + "User arguments:" + String.fromCharCode(10) + a;
   return body;
 }
-/** 历史回填(↑)的 args 尾带旧模板:剥离后再合成,防 round-trip 膨胀(step-095 既有语义,n3 沿用并扩到展开式)。
+/** 历史回填(↑)的 args 尾带旧模板:剥离后再合成,防 round-trip 膨胀(既有语义,n3 沿用并扩到展开式)。
  *  tails 传候选尾串(原文模板、空参展开式),命中最长者剥一次。 */
 function cmdStripTail(args, tails) {
   let a = String(args == null ? "" : args);
@@ -26610,7 +26610,7 @@ function cmdTemplateOf(c, args) {
   return cmdExpand(String(c.body || ""), args);
 }
 
-// ---- 斜杠指令(step-036,ZCode SlashCommandPlugin/AppSlashCommand 语义移植) ----
+// ---- 斜杠指令(ZCode SlashCommandPlugin/AppSlashCommand 语义移植) ----
 // 两类:ui=选中即执行 UI 行为(不发送,ZCode AppSlashCommand);send=展开填回输入待确认(ZCode 插入 mention 再发送)。
 const SLASH_COMMANDS = [
   { value: "newtask", desc: "新建任务(草稿)", kw: ["新建", "new", "draft", "任务"], kind: "ui", run: () => newDraft() },
@@ -26625,21 +26625,21 @@ const SLASH_COMMANDS = [
   { value: "side", desc: "侧聊 Super Agent(焦点移到指挥台命令框)", kw: ["侧聊", "侧边", "side", "super", "指挥台"], kind: "ui", run: () => { const i = document.getElementById("sc-input"); if (i && !i.disabled) i.focus(); else toast("Super Agent 指挥台未就绪", true); } },
   { value: "light", desc: "切换浅色主题(暖纸)", kw: ["浅色", "主题", "theme", "亮"], kind: "ui", run: () => setTheme("light") },
   { value: "dark", desc: "切换深色主题(鎏金夜,默认)", kw: ["深色", "主题", "theme", "暗"], kind: "ui", run: () => setTheme("dark") },
-  // step-088:新主题直达(/theme 无参=循环下一套)
+ // 新主题直达(/theme 无参=循环下一套)
   { value: "theme", desc: "循环切换主题(鎏金夜/暖纸/砂陶松影/流光玻璃/橄榄赤陶/蓝调梅影/薄墨/跟随系统)", kw: ["主题", "theme", "换肤", "皮肤"], kind: "ui", run: () => cycleTheme() },
   { value: "theme-sand", desc: "主题 → 砂陶松影(暖砂/陶土/松绿)", kw: ["砂陶", "松影", "陶土", "sand", "松林"], kind: "ui", run: () => setTheme("sand") },
   { value: "theme-glass", desc: "主题 → 流光玻璃(玻璃拟态)", kw: ["玻璃", "glass", "毛玻璃"], kind: "ui", run: () => setTheme("glass") },
   { value: "theme-olive", desc: "主题 → 橄榄赤陶(灰紫/赤陶/橄榄)", kw: ["橄榄", "赤陶", "olive", "陶土"], kind: "ui", run: () => setTheme("olive") },
   { value: "theme-plum", desc: "主题 → 蓝调梅影(奶油/梅紫/板岩蓝)", kw: ["蓝调", "梅影", "梅紫", "plum", "紫"], kind: "ui", run: () => setTheme("plum") },
   { value: "theme-ink", desc: "主题 → 薄墨(极简高对比)", kw: ["薄墨", "墨", "极简", "ink"], kind: "ui", run: () => setTheme("ink") },
-  // ---- ZCode 内置命令对齐(step-052:语义照搬 zcode-slash-command-help,参数走 typed 提交) ----
-  // step-095:hint=chip 态参数占位提示;goal/workflow/compact/init/plan/team 为参数类(回车进 chip,发送才执行)。
+ // ---- ZCode 内置命令对齐(语义照搬 zcode-slash-command-help,参数走 typed 提交) ----
+ // hint=chip 态参数占位提示;goal/workflow/compact/init/plan/team 为参数类(回车进 chip,发送才执行)。
   { value: "goal", desc: "查看/设置会话目标(/goal <目标>|clear|pause|resume)", kw: ["目标", "goal", "objective"], kind: "ui", hint: "目标内容(或 clear / pause / replace <新目标>)…", run: () => builtinGoal("") },
   { value: "workflow", desc: "设计并启动工作流(/workflow <要完成的事>;无参开自动化视图)", kw: ["工作流", "workflow", "编排", "动态"], kind: "ui", hint: "要完成的事(空=打开自动化视图)…", run: () => builtinWorkflow("") },
   { value: "compact", desc: "压缩当前会话(/compact [摘要指示])", kw: ["压缩", "compact", "上下文", "摘要"], kind: "ui", hint: "压缩指示(可空)…", run: () => builtinCompact("") },
   { value: "init", desc: "创建/更新工作区 AGENTS.md(/init [补充说明])", kw: ["init", "agents", "初始化", "说明"], kind: "ui", hint: "补充说明(可空)…", run: () => builtinInit("") },
   { value: "plan", desc: "切换 Plan 规划模式(/plan [顺带派的任务])", kw: ["plan", "规划", "模式", "mode"], kind: "ui", hint: "顺带要派的任务(空=仅切 Plan 模式)…", run: () => builtinPlan("") },
-  // teamai-cli /teamai 语义映射(step-053 追记:members/sync/share→harness 等价面;doctor 无对应不硬造)
+ // teamai-cli /teamai 语义映射( members/sync/share→harness 等价面;doctor 无对应不硬造)
   { value: "team", desc: "团队(/team [invite <名>|sync|share [心得>|status])", kw: ["团队", "team", "成员", "invite", "同步"], kind: "ui", hint: "invite <名> | sync | share [名] | status…", run: () => builtinTeam("") },
   // ---- n8:补齐 ZCode 缺失内置命令语义(help/skill/model/new/resume)----
   // help:取「最简单的实现」=toast 一段简短帮助文本(全量列表面板需另造渲染通道,收益低);
@@ -26663,9 +26663,9 @@ function setTheme(t) {
   localStorage.setItem("zh:theme", t);
   applySettings();
 }
-// ---- step-095:斜杠指令 chip 占位符(输入态) ----
+// ---- 斜杠指令 chip 占位符(输入态) ----
 // 分类:send/custom=模板合流类,goal/workflow/compact/init/plan/team=参数类 → 回车进 chip 态(发送才执行);
-// 其余 ui 纯动作 → 回车即执行(不进 chip,step-036 D2 语义保住)。typed 全量 "/cmd args" 直发不受影响(step-056)。
+// 其余 ui 纯动作 → 回车即执行(不进 chip, D2 语义保住)。typed 全量 "/cmd args" 直发不受影响。
 const CHIP_PARAM_NAMES = ["goal", "workflow", "compact", "init", "plan", "team", "skill", "model", "resume", "teamai", "rewind", "fork", "mode"];
 function slashChipKind(c) {
   if (!c) return null;
@@ -26674,7 +26674,7 @@ function slashChipKind(c) {
   return null;
 }
 let inChip = null; // {name, kind:"send"|"param", hint, expand?, body?}
-let inChipHint = ""; // chip 激活前的原生 placeholder(step-088 主题化 placeholder,恢复用)
+let inChipHint = ""; // chip 激活前的原生 placeholder(主题化 placeholder,恢复用)
 function chipMount(c, kind, args, doFocus) {
   const el = $("instruction");
   if (!inChipHint) inChipHint = el.placeholder;
@@ -26707,14 +26707,14 @@ function chipUnmount(keepArgs) {
   chipPaint();
   saveDraft();
   cmdChipUpdate();
-  renderSendBtn(); // step-165:占位符从 chip hint 复位回空闲/busy 双态(inChipHint 快照里可能是旧 busy 文案)
+  renderSendBtn(); // 占位符从 chip hint 复位回空闲/busy 双态(inChipHint 快照里可能是旧 busy 文案)
 }
 function chipSubmit() {
   const c = inChip;
   if (!c) return;
   const args = $("instruction").value.trim();
   const raw = "/" + c.name + (args ? " " + args : "");
-  markSkillPending(c.name, args); // 与 typed 同源占位(step-048 追记十四)
+  markSkillPending(c.name, args); // 与 typed 同源占位
   chipUnmount(false);
   localStorage.removeItem("zh:draft:" + (currentSid || "__new__"));
   if (currentSid) localStorage.removeItem("zh:draft:" + currentSid);
@@ -26733,16 +26733,16 @@ function chipSubmit() {
     else if (c.name === "fork") builtinFork(args);
     else if (c.name === "mode") builtinMode(args);
   } else {
-    // send/custom:raw 行前缀合流(step-095 journal 契约:首行=用户所说的 raw 形态,渲染层成 chip;
+ // send/custom:raw 行前缀合流( journal 契约:首行=用户所说的 raw 形态,渲染层成 chip;
     // 模板体跟后=模型任务书,展示层隐藏)。override 直提,防 slash 分派递归吞模板进 args。
     // n3:模板体走 cmdExpand 语义(custom 全量 $ARGUMENTS/$N/User arguments;send 无占位符时原样)。
     const tpl = c.kind === "send" ? (cmdTemplateOf(c, args) || (c.expand ? c.expand() : "")) : cmdExpand(String(c.body || ""), args);
-    submit(raw + (tpl ? NL + NL + tpl : "")); // step-093 跨线修复:模板吃反斜杠转义,fromCharCode 形态(NL=页面全局)
+    submit(raw + (tpl ? NL + NL + tpl : "")); // 跨线修复:模板吃反斜杠转义,fromCharCode 形态(NL=页面全局)
   }
   chatSysLineIcon("check", raw.slice(0, 80));
   cmdChipFlash(raw);
 }
-// ---- ZCode 内置命令处理(step-052;参数来自 typed 提交 /cmd args) ----
+// ---- ZCode 内置命令处理(参数来自 typed 提交 /cmd args) ----
 function goalSid() { return currentSid || "__new__"; }
 function chatSysLine(text, cls) {
   const body = $("chatBody");
@@ -26750,7 +26750,7 @@ function chatSysLine(text, cls) {
   body.insertAdjacentHTML("beforeend", '<div class="' + (cls || "sys-line") + '">' + sketchifyHtml(esc(text)) + "</div>");
   body.scrollTop = body.scrollHeight;
 }
-// step-097:带图标系统行(chrome 语义符号→素描描绘;文本照旧转义)
+// 带图标系统行(chrome 语义符号→素描描绘;文本照旧转义)
 function chatSysLineIcon(icon, text, cls) {
   const body = $("chatBody");
   if (!body) return;
@@ -26783,7 +26783,7 @@ function builtinGoal(args) {
   const goalText = low.startsWith("replace ") ? a.slice(8).trim() : a;
   if (!goalText) { toast("用法:/goal <目标> 或 /goal replace <新目标>", true); return; }
   if (low.startsWith("replace ") && !currentSid) { toast("replace 需在活动会话内使用", true); return; }
-  // plain set:检查覆盖(step-088:确认后继续走 goalDispatch)
+ // plain set:检查覆盖(确认后继续走 goalDispatch)
   const needOverwriteCheck = !low.startsWith("replace ") && lastGoalState && lastGoalState.goal;
   const goalDispatch = () => {
   const taskSid = currentSid || ("web-goal-" + Date.now());
@@ -26798,7 +26798,7 @@ function builtinGoal(args) {
     uiConfirm("A goal already exists. Confirm replacement to overwrite it?\\n\\n当前:" + lastGoalState.goal, { tone: "warning", ok: "覆盖" }).then((ok) => { if (ok) goalDispatch(); });
   } else goalDispatch();
 }
-// step-095:workflow 任务书模板提取(纯函数;面板 raw 行前缀合流后,渲染层据此隐藏模板 remainder)。
+// workflow 任务书模板提取(纯函数;面板 raw 行前缀合流后,渲染层据此隐藏模板 remainder)。
 function workflowBody(a) {
   return [
     "Use the workflow engine to design and launch a dynamic workflow for this request:",
@@ -26816,13 +26816,13 @@ function builtinWorkflow(args) {
   const sid = currentSid || ("web-" + Date.now());
   currentSid = sid;
   // 逐字移植(ZCode builtin-workflow-command.ts 命令体;CreateWorkflow→run_workflow 适配)
-  // step-095:raw 行前缀合流——首行 "/workflow <a>"=用户所说形态(journal 渲染成 chip),模板体跟后。
-  const instruction = "/workflow " + a + NL + NL + workflowBody(a); // step-093 跨线修复同上
+ // raw 行前缀合流——首行 "/workflow <a>"=用户所说形态(journal 渲染成 chip),模板体跟后。
+  const instruction = "/workflow " + a + NL + NL + workflowBody(a); // 跨线修复同上
   wsSafeSend(JSON.stringify({ v: 1, type: "task.submit", sessionId: sid, idempotencyKey: "wf-" + Date.now(), ...(activeProjectId ? { projectId: activeProjectId } : {}), instruction, title: "[工作流] " + a.slice(0, 30) }));
   switchView("chat");
   toast("工作流任务已提交(run_workflow 的 ask 在面板应答=先确认后执行)");
 }
-// n7 手动压缩可见性(2026-10-22):压缩是在途异步操作(服务端可能跑数秒),此前只有一句 toast,
+// n7 手动压缩可见性:压缩是在途异步操作(服务端可能跑数秒),此前只有一句 toast,
 // 用户容易以为点了没反应。置 compactPending:发送按钮 disabled + aria-busy,收到
 // session.compact.result 或 20s 超时清除(超时也如实 toast,不装作还在跑)。
 function compactSetPending(on, note) {
@@ -26855,7 +26855,7 @@ function builtinCompact(args) {
   compactSetPending(true);
   toast("正在压缩上下文…" + (args ? "(指示:" + args.slice(0, 30) + ")" : ""));
 }
-// step-095:init 任务书模板提取(纯函数;渲染层据此隐藏 raw 前缀合流后的模板 remainder)。
+// init 任务书模板提取(纯函数;渲染层据此隐藏 raw 前缀合流后的模板 remainder)。
 function initBody(notes) {
   const additional = notes ? (String.fromCharCode(10) + String.fromCharCode(10) + "Additional user instructions supplied with /init:" + String.fromCharCode(10) + "\`\`\`text" + String.fromCharCode(10) + notes + String.fromCharCode(10) + "\`\`\`" + String.fromCharCode(10)) : "";
   return [
@@ -26895,8 +26895,8 @@ function builtinInit(args) {
   currentSid = sid;
   const notes = String(args || "").trim();
   // 逐字移植(ZCode builtin-prompt-command.ts buildInitAgentsPrompt;路径语义原样保留)
-  // step-095:raw 行前缀合流——首行 "/init [notes]"=用户所说形态(journal 渲染成 chip),模板体跟后。
-  const instruction = "/init" + (notes ? " " + notes : "") + NL + NL + initBody(notes); // step-093 跨线修复同上
+ // raw 行前缀合流——首行 "/init [notes]"=用户所说形态(journal 渲染成 chip),模板体跟后。
+  const instruction = "/init" + (notes ? " " + notes : "") + NL + NL + initBody(notes); // 跨线修复同上
   wsSafeSend(JSON.stringify({ v: 1, type: "task.submit", sessionId: sid, idempotencyKey: "init-" + Date.now(), ...(activeProjectId ? { projectId: activeProjectId } : {}), instruction, title: "[init] AGENTS.md" }));
   switchView("chat");
   toast("AGENTS.md 初始化任务已提交");
@@ -26909,14 +26909,14 @@ function builtinPlan(args) {
   pillRender(); pillSendPerm();
   if (!a) { toast("已切换 Plan 规划模式(只读+规划提示;再点权限 pill 可切回)"); return; }
   // ZCode:「切 Plan 模式并可选带任务」——带上任务一起派
-  // step-095:instruction=raw 形态("/plan <a>"),journal 渲染成 chip;模型侧多一个命令前缀 token,语义无损。
+ // instruction=raw 形态("/plan <a>"),journal 渲染成 chip;模型侧多一个命令前缀 token,语义无损。
   const sid = currentSid || ("web-" + Date.now());
   currentSid = sid;
   wsSafeSend(JSON.stringify({ v: 1, type: "task.submit", sessionId: sid, idempotencyKey: "plan-" + Date.now(), ...(activeProjectId ? { projectId: activeProjectId } : {}), instruction: "/plan " + a, title: "[plan] " + a.slice(0, 30) }));
   switchView("chat");
   toast("Plan 模式已生效,任务已派(只读+规划提示)");
 }
-// /team(teamai-cli /teamai 语义映射,step-053 追记):无参=团队视图;子命令映射 harness 等价面。
+// /team(teamai-cli /teamai 语义映射:无参=团队视图;子命令映射 harness 等价面。
 function builtinTeam(args) {
   const a = String(args || "").trim();
   const sp2 = a.indexOf(" ");
@@ -26935,7 +26935,7 @@ function builtinTeam(args) {
     return;
   }
   if (sub === "sync") {
-    // teamai push/pull 同步 → harness git.push+git.pull(激活项目,step-053 已接)
+ // teamai push/pull 同步 → harness git.push+git.pull(激活项目, 已接)
     wsSafeSend(JSON.stringify({ v: 1, type: "git.push" }));
     wsSafeSend(JSON.stringify({ v: 1, type: "git.pull" }));
     switchView("git");
@@ -26960,7 +26960,7 @@ function builtinTeam(args) {
   }
   toast("用法:/team [invite <名>|sync|share [心得]|status]", true);
 }
-// ---- teamai 兼容(designs/24):团队仓资产的状态/拉取/查看/分享 ----
+// ---- teamai 兼容:团队仓资产的状态/拉取/查看/分享 ----
 function builtinTeamai(args) {
   const a = String(args || "").trim();
   const sp2 = a.indexOf(" ");
@@ -27068,7 +27068,7 @@ function builtinResumeCmd(args) {
   ccRender();
 }
 // typed 提交分发:submit() 里 "/cmd args" 形态优先命中内置/自定义命令(ZCode 直接提交命令语义)。
-// ---- 技能/命令占位(step-048 追记十四,ZCode optimistic command overlay 拉模型适配):
+// ---- 技能/命令占位(ZCode optimistic command overlay 拉模型适配):
 // 命令上行即占位(「执行中…」),完成转「完成」,数秒后退场;renderHistory 重建时重挂,不丢。
 let pendingSkills = [];
 function skillInvHtml(ps) {
@@ -27102,7 +27102,7 @@ function renderPendingSkills() {
   body.scrollTop = body.scrollHeight;
 }
 
-// ---- 回底圆钮(step-048,ZCode 回底按钮对齐) ----
+// ---- 回底圆钮(ZCode 回底按钮对齐) ----
 {
   const vt = document.getElementById("view-tasks");
   const btn = document.getElementById("scrollBottom");
@@ -27138,7 +27138,7 @@ function slashTypedSubmit(text) {
   if (c && c.value === "rewind") { builtinRewind(args); return true; } // r3:typed 直发同源
   if (c && c.value === "fork") { builtinFork(args); return true; }
   if (c && c.value === "mode") { builtinMode(args); return true; }
-  // 自定义命令 typed 直发(step-095:raw 行前缀合流,首行=用户所说形态,渲染层成 chip;占位已由上方统一登记)
+ // 自定义命令 typed 直发(raw 行前缀合流,首行=用户所说形态,渲染层成 chip;占位已由上方统一登记)
   const custom = customCommands.find((x) => x.name.toLowerCase() === name);
   if (custom) {
     const body2 = String(custom.body || "");
@@ -27146,18 +27146,18 @@ function slashTypedSubmit(text) {
     // 替换原先「args 拼尾」的裸拼接。防膨胀:先剥历史回填(↑)带回来的旧模板(原文或展开式)再展开。
     const a0 = cmdStripTail(args, [body2, cmdExpand(body2, "")]);
     const expanded = cmdExpand(body2, a0);
-    submit("/" + custom.name + (a0 ? " " + a0 : "") + (expanded ? NL + NL + expanded : "")); // step-093 跨线修复同上
+    submit("/" + custom.name + (a0 ? " " + a0 : "") + (expanded ? NL + NL + expanded : "")); // 跨线修复同上
     return true;
   }
-  // 内置命令 typed 全量执行(step-056 视频四诉「技能没有被用上」):此前 /sense /exp /sys 等在 typed 提交里
+ // 内置命令 typed 全量执行(视频四诉「技能没有被用上」):此前 /sense /exp /sys 等在 typed 提交里
   // 不命中→整段文本被当普通消息发给 agent,技能从未执行。对齐 ZCode:typed 命令回车=真实执行。
   if (c) {
-    markSkillPending(name, args); // 技能占位(step-048 追记十四)
+    markSkillPending(name, args); // 技能占位
     $("instruction").value = "";
     localStorage.removeItem("zh:draft:" + (currentSid || "__new__"));
     if (currentSid) localStorage.removeItem("zh:draft:" + currentSid);
     if (c.kind === "ui") { c.run(); return true; }
-    // step-095:发送类=raw 行前缀合流(首行 /cmd args,模板体跟后=模型任务书),override 直提防递归。
+ // 发送类=raw 行前缀合流(首行 /cmd args,模板体跟后=模型任务书),override 直提防递归。
     // 历史回填(↑)的 args 尾带旧模板:剥离后再合成,防 round-trip 膨胀。
     if (c.kind === "send") {
       const ex = c.expand ? c.expand() : "";
@@ -27165,13 +27165,13 @@ function slashTypedSubmit(text) {
       // 与 custom 命令不同——首行 raw 已带 args,不再追加 User arguments 段,避免同一句话出现两遍)。
       const a2 = cmdStripTail(args, [ex, cmdExpand(ex, "")]);
       const body3 = cmdTemplateOf(c, a2) || ex;
-      submit("/" + c.value + (a2 ? " " + a2 : "") + (body3 ? NL + NL + body3 : "")); // step-093 跨线修复同上
+      submit("/" + c.value + (a2 ? " " + a2 : "") + (body3 ? NL + NL + body3 : "")); // 跨线修复同上
       return true;
     }
   }
   return false;
 }
-// ---- 命令「真执行」标识(step-056 视频):与 slashTypedSubmit 同一判定源——徽标亮=回车必然真实执行。----
+// ---- 命令「真执行」标识(视频):与 slashTypedSubmit 同一判定源——徽标亮=回车必然真实执行。----
 function slashTypedMatch(text) {
   if (!text.startsWith("/")) return null;
   const sp = text.indexOf(" ");
@@ -27186,7 +27186,7 @@ function slashTypedMatch(text) {
 function cmdChipUpdate() {
   const chip = $("cmdChip");
   if (!chip || chip.dataset.done === "1") return;
-  // step-095:chip 态=装填指示(参数输入中,Enter 发送/Backspace 摘除/Esc 取消)。
+ // chip 态=装填指示(参数输入中,Enter 发送/Backspace 摘除/Esc 取消)。
   if (inChip) {
     chip.style.display = "";
     chip.className = "cmd-chip";
@@ -27211,12 +27211,12 @@ function cmdChipFlash(text) {
   chip.innerHTML = ic("check", "ok") + " 已执行 <b>/" + esc(m ? m.value : text.slice(1, 14)) + "</b>";
   setTimeout(() => { delete chip.dataset.done; chip.style.display = "none"; }, 1800);
 }
-// ---- 服务重启降级(step-056 视频 T1):停机窗口内探活等待+横幅,恢复后自动刷新;不再盲 reload 撞裸错误页。----
+// ---- 服务重启降级(视频 T1):停机窗口内探活等待+横幅,恢复后自动刷新;不再盲 reload 撞裸错误页。----
 function svcBanner(show, text) {
   let b = $("svcBanner");
   if (!b) { b = document.createElement("div"); b.id = "svcBanner"; document.body.appendChild(b); }
-  // step-070 续作轮修复:样式表 #svcBanner{display:none} 是初始隐藏,show 分支置 "" 会回落到
-  // 样式表的 none=角标永不可见(step-056 起潜伏;重连角标 R5-C6 验收时按 isVisible 实测抓出)。
+ // 续作轮修复:样式表 #svcBanner{display:none} 是初始隐藏,show 分支置 "" 会回落到
+ // 样式表的 none=角标永不可见(起潜伏;重连角标 验收时按 isVisible 经验证抓出)。
   if (show) { b.textContent = text || ""; b.style.display = "block"; } else b.style.display = "none";
 }
 function svcWaitRestart() {
@@ -27323,7 +27323,7 @@ function slashExec(i) {
   if (!c) return;
   slashClose();
   localStorage.setItem("zh:used-slash", "1");
-  // step-095:发送类/自定义/参数类 → 输入框 chip 占位(允许续输参数,发送才执行);ui 纯动作保持回车即执行。
+ // 发送类/自定义/参数类 → 输入框 chip 占位(允许续输参数,发送才执行);ui 纯动作保持回车即执行。
   const ck = slashChipKind(c);
   if (ck) { $("instruction").value = ""; chipMount(c, ck, ""); return; }
   if (c.kind === "ui") {
@@ -27334,7 +27334,7 @@ function slashExec(i) {
     c.run();
   } else {
     // 发送类:展开模板填回输入,待用户补参/确认(ZCode 插入 mention 不直接发送的同语义)。
-    // (step-095 后此分支仅剩未知 kind 兜底;send/custom 已在上方进 chip 态。)
+ // (后此分支仅剩未知 kind 兜底;send/custom 已在上方进 chip 态。)
     $("instruction").value = c.expand ? c.expand() : String(c.body || "");
     $("instruction").focus();
   }
@@ -27357,22 +27357,22 @@ function autoGrow() {
 function draftKey() { return "zh:draft:" + (currentSid || "__new__"); }
 function saveDraft() {
   // 双写:会话键+草稿镜像(__new__)——重载丢失会话上下文时草稿文本仍存活(ZCode workspace transfer 裁剪)。
-  // step-095:chip 态存逻辑形态 "/cmd args"(重载后 restoreDraft 恢复 chip;恢复不出=raw 文本,typed 路径仍可执行)。
+ // chip 态存逻辑形态 "/cmd args"(重载后 restoreDraft 恢复 chip;恢复不出=raw 文本,typed 路径仍可执行)。
   const v = inChip ? "/" + inChip.name + (($("instruction").value) ? " " + $("instruction").value : "") : $("instruction").value;
   localStorage.setItem(draftKey(), v);
   if (currentSid) localStorage.setItem("zh:draft:__new__", v);
 }
 function restoreDraft() {
   // fixT6 P1:草稿串台修复——原实现 recoverDraft 无条件回落读 __new__ 镜像,导致「草稿态输入的文本」
-  // 在切到任意无草稿的会话后原样冒进输入框(实测:空态输入 DRAFT_A → openSession → 输入框仍是 DRAFT_A)。
+ // 在切到任意无草稿的会话后原样冒进输入框(经验证:空态输入 DRAFT_A → openSession → 输入框仍是 DRAFT_A)。
   // 镜像只服务于「无会话的草稿态」;会话态只认自己的键,查无则清空(不把别处的草稿搬过来)。
   const v = currentSid
     ? (localStorage.getItem(draftKey()) || "")
     : (localStorage.getItem(draftKey()) || localStorage.getItem("zh:draft:__new__") || "");
   $("instruction").value = v; autoGrow();
   try { fileRefRender(); } catch (e) { /* 引用条刷新失败不影响草稿恢复 */ }
-  // step-095:chip 逻辑态草稿恢复(仅内置注册表名;自定义命令名恢复为 raw 文本,typed 路径仍等价执行)。
-  if (v.startsWith("/") && v.indexOf(NL) === -1) { // step-093 跨线修复同上
+ // chip 逻辑态草稿恢复(仅内置注册表名;自定义命令名恢复为 raw 文本,typed 路径仍等价执行)。
+  if (v.startsWith("/") && v.indexOf(NL) === -1) { // 跨线修复同上
     const sp2 = v.indexOf(" ");
     const nm = (sp2 === -1 ? v.slice(1) : v.slice(1, sp2)).toLowerCase();
     const c = SLASH_COMMANDS.find((x) => x.value.toLowerCase() === nm);
@@ -27381,7 +27381,7 @@ function restoreDraft() {
   }
 }
 function activeTaskOf(sid) { return [...tasks.values()].find((x) => x.sessionId === sid && ["queued", "running"].includes(x.state)) || null; }
-// 会话切换/打开即拉目标 chip(step-052);无会话=隐藏。
+// 会话切换/打开即拉目标 chip;无会话=隐藏。
 setInterval(() => { if (ws.readyState === 1 && currentSid) wsSafeSend(JSON.stringify({ v: 1, type: "goal.get", sessionId: currentSid })); }, 15000);
 // 会话 steerability(ZCode types.ts:661 语义投影):queued=已派单但尚无在跑 turn,
 // = ref 的 no_active_turn/turn_not_steerable 场景——没有「可转向的 turn」,按钮不得进
@@ -27390,7 +27390,7 @@ function steerableTaskOf(sid) {
   const cur = sid ? activeTaskOf(sid) : null;
   return cur && cur.state === "running" ? cur : null; // queued → 无可转向任务
 }
-/* 语音任务书状态(2026-11-08;声明前置:renderSendBtn 全程会调 renderVoiceState,
+/* 语音任务书状态(声明前置:renderSendBtn 全程会调 renderVoiceState,
    let/const 在脚本求值期有 TDZ,这里必须用 var + 立即赋值,防 boot 早期调用炸面板)。 */
 var voiceRec = null;                    // 录音态:{mr,chunks,mime,stream,startedAt,timer,seconds,sid}
 var voiceDraftBySid = new Map();        // lockKey(sid) -> true:撰写中(输入锁,按会话绑定)
@@ -27399,7 +27399,7 @@ var voiceDraftTimer = null;             // 撰写回执兜底闹钟(掉线丢帧
 function renderSendBtn() {
   // 发送按钮状态机:fixI17——忙碌且有输入文本→「排」(排队发送,不打断当前任务);
   // 忙碌且输入空→「停」(取消);空闲→「发」。旧「忙碌一律停」会让想发消息的用户误取消在跑任务。
-  // step-165:「停/排」busy 态只对确有在跑 turn(running)的会话生效。
+ // 「停/排」busy 态只对确有在跑 turn(running)的会话生效。
   const cur = currentSid ? activeTaskOf(currentSid) : activeTaskOf("__none__");
   const busy = !!(currentSid ? steerableTaskOf(currentSid) : steerableTaskOf("__none__"));
   const hasText = !!$("instruction").value.trim();
@@ -27409,7 +27409,7 @@ function renderSendBtn() {
   $("go").classList.toggle("stop", stop);
   $("go").classList.toggle("queue-mode", queue);
   $("go").title = stop ? "停止当前任务" : queue ? "排队发送:等当前任务完成后自动发送(不打断);排队中的消息可立即发送/编辑/删除" : "发送(Enter)";
-  // step-165 占位符双态(ref i18n zh-CN.ts:85-86:busyPlaceholder「输入内容会排队」/placeholder 空闲文案):
+ // 占位符双态(ref i18n zh-CN.ts:85-86:busyPlaceholder「输入内容会排队」/placeholder 空闲文案):
   // 会话有任何在办任务(activeTaskOf=queued/running)即 busy 态;chip 态占位符由 chipMount/chipUnmount
   // 自管(inChipHint 快照),不在此切。紧凑字面量形态=placeholder= 可被源码面 grep/测试锁定。
   const el = $("instruction");
@@ -27417,7 +27417,7 @@ function renderSendBtn() {
   if (!inChip) { if (!cur) el.placeholder="说点什么…(Enter 发送,Shift+Enter 换行;/ 打开指令;可拖文件/贴图)"; else el.placeholder="任务运行中,输入内容会排队(不打断;等当前任务完成后自动发送)"; }
   const cmp = document.querySelector(".composer");
   if (cmp) cmp.classList.toggle("busy", !!cur); // busy 视觉态=有在办任务(ref:busy 期间输入不禁用、转入排队语义)
-  // step-165(块4·4.6):draftSubmitPending 在飞=显式等待态——发送按钮禁点(disabled+aria-busy+
+ // (块4·4.6):draftSubmitPending 在飞=显式等待态——发送按钮禁点(disabled+aria-busy+
   // wait-ack 呼吸点)防重复点击(ref useDraftSessionPrewarm.ts:33 创建在飞等待语义);set 被拒/超时走
   // draftModelAbort → 其尾部 renderSendBtn() 走本块摘禁点,恢复可点。submit() 入口本就有 pending 防重
   // (m4),这里是视觉/可达性层(A11y)双保险。compact 等待态与它互斥:compactPending=true 时由
@@ -27433,15 +27433,15 @@ function renderSendBtn() {
   renderVoiceState(); // 语音任务书三态(空闲/录音中/撰写锁)与发送按钮同源刷新
 }
 $("go").onclick = () => {
-  // step-165:停止分支同 renderSendBtn 口径——只对确有在跑 turn(running)的任务发 cancel;
+ // 停止分支同 renderSendBtn 口径——只对确有在跑 turn(running)的任务发 cancel;
   // queued(无可转向任务)时按钮已回落「发」,点击不得暗中取消排队任务(ref no_active_turn:输入口不转向不打断)。
   const cur = currentSid ? steerableTaskOf(currentSid) : null;
   if (cur && !$("instruction").value.trim()) { wsSafeSend(JSON.stringify({ v: 1, type: "task.cancel", taskId: cur.id })); return; } // fixI17:仅无文本时=停止意图
-  if (inChip) { chipSubmit(); return; } // step-095:chip 态点发=执行指令逻辑(与 Enter 同义)
+  if (inChip) { chipSubmit(); return; } // chip 态点发=执行指令逻辑(与 Enter 同义)
   submit();
 };
-// ---- 语音任务书(2026-11-08):🎤 录音 → voice.draft → coding.models.voice 整理 → 回填输入区 ----
-// 会话绑定语义(用户口径):撰写锁按 sessionId 存Map;A 会话撰写中,A 的输入区只读+「任务书撰写中」,
+// ---- 语音任务书:🎤 录音 → voice.draft → coding.models.voice 整理 → 回填输入区 ----
+// 会话绑定语义:撰写锁按 sessionId 存Map;A 会话撰写中,A 的输入区只读+「任务书撰写中」,
 // 切到 B 可正常输入,切回 A 仍未完成则继续锁;结果到达时 A 不在前台→暂存,openSession 回 A 时自动填入。
 // 未配置 coding.models.voice=功能不可用(点击指路模型设置,不静默降级)。
 const VOICE_REC_MAX_MS = 120 * 1000;   // 单条录音上限 120s,到点自动 stop(与截图标注录音同口径)
@@ -27525,7 +27525,7 @@ function voiceRecFinish() {
     const dataUrl = String(reader.result || "");
     if (dataUrl.indexOf("data:audio/") !== 0) { toast("录音编码异常,再试一次", 1); return; }
     const lockKey = voiceLockKey(R.sid);
-    // 跨会话草稿归位(2026-11-10 体验实测修复):录音期间切到别的会话再点停止,输入框是
+ // 跨会话草稿归位(体验经验证修复):录音期间切到别的会话再点停止,输入框是
     // 别会话的草稿——并进任务书的文字必须取录音所属会话自己的草稿(localStorage draftKey,
     // openSession 切走时 saveDraft 已落),不能读当前输入框(会串话)。
     let draftText = "";
@@ -27606,7 +27606,7 @@ function fvOpen(path, line) {
   fvTargetLine = line || 1;
   $("fvPath").textContent = path + ":" + fvTargetLine;
   $("fvBody").innerHTML = '<div style="padding:14px;color:var(--faint)">读取中…</div>';
-  // 引用→代码档案文件钻取跳转链(step-118):档案视图内才露出(其它视图保留纯预览)
+ // 引用→代码档案文件钻取跳转链:档案视图内才露出(其它视图保留纯预览)
   $("fvDrill").style.display = (ppId && viewLive("project")) ? "" : "none";
   $("fileViewer").classList.add("on");
   wsSafeSend(JSON.stringify({ v: 1, type: "file.read", path: path, line: fvTargetLine }));
@@ -27625,7 +27625,7 @@ $("fvDrill").onclick = function() {
 };
 $("fileViewer").onclick = (e) => { if (e.target === $("fileViewer")) $("fileViewer").classList.remove("on"); };
 document.addEventListener("click", (e) => {
-  // step-1025:聊天正文里的文件路径(裸路径/markdown 相对链接)→ IDE;其它视图行为不变
+ // 聊天正文里的文件路径(裸路径/markdown 相对链接)→ IDE;其它视图行为不变
   const cfA = e.target.closest ? e.target.closest("a.chat-file") : null;
   if (cfA) { e.preventDefault(); openPathInIde(cfA.dataset.path, Number(cfA.dataset.line) || 0); return; }
   const a = e.target.closest ? e.target.closest("a.cite") : null;
@@ -27635,7 +27635,7 @@ document.addEventListener("click", (e) => {
     if (a.closest && a.closest("#chatBody")) { openPathInIde(a.dataset.path, Number(a.dataset.line) || 0); return; }
     fvOpen(a.dataset.path, Number(a.dataset.line)); return;
   }
-  // 评审注入钮(step-074):必须在 .rev-card 分支之前拦截(钮在卡内,closest 会命中卡而误开文件查看器);
+ // 评审注入钮:必须在 .rev-card 分支之前拦截(钮在卡内,closest 会命中卡而误开文件查看器);
   // summary 内的「全部注入」还要 preventDefault 阻止 details 折叠。
   const inj = e.target.closest ? e.target.closest(".rev-inj,.rev-inj-all") : null;
   if (inj) { e.preventDefault(); revInjectFromBtn(inj); return; }
@@ -27644,7 +27644,7 @@ document.addEventListener("click", (e) => {
   const card = e.target.closest ? e.target.closest(".rev-card") : null;
   if (card) fvOpen(card.dataset.file, Number(card.dataset.line));
 });
-// ---- step-1025:聊天正文里的文件路径 → IDE 打开(后置 DOM 链接化;PAGE 零反斜杠纪律) ----
+// ---- 聊天正文里的文件路径 → IDE 打开(后置 DOM 链接化;PAGE 零反斜杠纪律) ----
 // 只做「渲染后补锚」:mdToHtml / mdInlineScan / renderCodeBlock / 代码围栏分支零改动。
 // 锚 = <a class="chat-file" data-path data-line>,点击委托见上方 document click → openPathInIde。
 const CF_BS = String.fromCharCode(92), CF_BT = String.fromCharCode(96);
@@ -27749,7 +27749,7 @@ function cfScanText(text, noMd) {
       const prev = i > 0 ? s.charAt(i - 1) : "";
       const prev2 = i > 1 ? s.slice(i - 2, i) : "";
       const dotOk = ch !== "." || s.charAt(i + 1) === "/";
-      // 左边界排除:URL 片段(//)、协议尾(:/)、markdown 链接目标字面(](;中文冒号“改这里:apps/x.ts”仍可链
+ // 左边界排除:URL 片段(//)、协议尾(/)、markdown 链接目标字面(](中文冒号“改这里:apps/x.ts”仍可链
       if ((!prev || !cfIsPathChar(prev)) && prev2 !== "//" && prev2 !== ":/" && prev2 !== "](" && dotOk) {
         let j = i;
         while (j < s.length && cfIsPathChar(s.charAt(j))) j++;
@@ -27997,7 +27997,7 @@ function fvRender(m) {
   if (hl) hl.scrollIntoView({ block: "center" });
 }
 
-// ---- @ 文件提及(step-039,ZCode fileMentionProvider 移植) ----
+// ---- @ 文件提及(ZCode fileMentionProvider 移植) ----
 let mentionOpen = false, mentionItems = [], mentionHot = 0, mentionTokenStart = -1, mentionQuerySeq = 0, mentionDebounce = null, mentionTrigger = "@";
 let mentionMeta = []; // #/$ 触发符的元数据(任务/经验对象),@ 为纯路径串
 const MENTION_TRIGGERS = "@#$";
@@ -28032,7 +28032,7 @@ function mentionRender() {
 function mentionExec(i) {
   const item = mentionItems[i];
   if (!item) return;
-  // 插入体:@=文件引用载体 [文件名](./路径)(2026-10-29:与 skill 一样做特殊渲染,气泡里还原成 chip);
+ // 插入体:@=文件引用载体 [文件名](./路径)(与 skill 一样做特殊渲染,气泡里还原成 chip);
   //       #=会话参考(指令摘要);$=经验参考(category/name)。
   const f = typeof item === "string" ? buildFileMention(item, item.slice(-1) === "/" ? "dir" : "file")
     : mentionTrigger === "#" ? "(参考会话:" + (item.label || "").slice(0, 40) + ")"
@@ -28086,11 +28086,11 @@ function mentionUpdate() {
 
 $("instruction").addEventListener("input", () => { if (inChip) { saveDraft(); autoGrow(); renderSendBtn(); return; } slashUpdate(); saveDraft(); autoGrow(); mentionUpdate(); cmdChipUpdate(); renderSendBtn(); fileRefRender(); });
 $("instruction").onkeydown = (e) => {
-  // step-165 IME 守卫(ref app-input-pane.tsx:35-38 键绑定语义):中文输入法组词期间 Enter 是「选词/确认候选」,
+ // IME 守卫(ref app-input-pane.tsx:35-38 键绑定语义):中文输入法组词期间 Enter 是「选词/确认候选」,
   // 不是提交——isComposing(或老口径 keyCode===229)时提前放行,覆盖 chip/mention/slash/主提交全部 Enter 路径,
   // 防选词回车误发送。Shift+Enter 换行保持既有(textarea 默认行为,无需处理)。
   if (e.isComposing || e.keyCode === 229) return;
-  // step-095:chip 态优先——Enter 发送(执行指令逻辑)/Backspace 空参摘 chip/Esc 取消;
+ // chip 态优先——Enter 发送(执行指令逻辑)/Backspace 空参摘 chip/Esc 取消;
   // 其余按键不进 palette/历史导航/@mention 分派(chip 态输入框承载的是参数,不是命令文本)。
   if (inChip) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chipSubmit(); return; }
@@ -28108,7 +28108,7 @@ $("instruction").onkeydown = (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); slashHot = (slashHot + 1) % slashItems.length; slashRender(); return; }
     if (e.key === "ArrowUp") { e.preventDefault(); slashHot = (slashHot - 1 + slashItems.length) % slashItems.length; slashRender(); return; }
     if (e.key === "Enter") {
-      // step-056 视频:输入已完整命中命令且带参数时,Enter 走 typed 提交(参数直达处理函数)——
+ // 视频:输入已完整命中命令且带参数时,Enter 走 typed 提交(参数直达处理函数)——
       // 原先菜单无条件吞 Enter,「/goal 修好X」被 slashExec 降级成无参查询且静默=「技能没有被用上」的直接体感。
       const v0 = $("instruction").value.trim();
       if (v0 === "/") { e.preventDefault(); return; } // 裸斜杠不执行首项(审计 C7:此前 "/" + Enter 误触 newtask)
@@ -28144,7 +28144,7 @@ renderSendBtn();
 const startViewPending = savedView || null;
 if (savedView) { document.body.dataset.view = savedView; }
 // 导航按钮: 点已在位的=停留(ZCode workspaceMainView 语义,不弹回)
-// 合一入口(step-048 追记七,用户口径「代码洞察就是代码档案」):侧栏入口直达项目档案视图。
+// 合一入口(侧栏入口直达项目档案视图。
 function openProfileEntry() {
   // n9/B7 作用域:有会话时**优先会话归属项目**(session.owner.get → session.owner.result 缓存的 sid→projectId);
   // 归属未知=先按 activeProjectId 渲染并置 arcOwnerPending(回包到达后自动按归属项目重取);
@@ -28163,8 +28163,8 @@ $("act-exp").onclick = () => switchView("exp");
 $("act-team").onclick = () => switchView("team");
 $("teamTabMembers").onclick = () => switchView("team");
 $("teamTabIssues").onclick = () => switchView("issues"); // fixD5:Issue 看板子标签(三列拖拽+筛选+确认派发)
-$("teamTabDash").onclick = () => switchView("dash"); // 看板子标签(运行看板收编;2026-10-16)
-$("act-super").onclick = () => superOpen(); // step-1041:指挥台(画布态自动退经典后进视图)
+$("teamTabDash").onclick = () => switchView("dash"); // 看板子标签(运行看板收编
+$("act-super").onclick = () => superOpen(); // 指挥台(画布态自动退经典后进视图)
 $("act-nodes").onclick = () => switchView("nodes");
 $("act-approvals").onclick = () => switchView("approvals");
 $("act-subchat").onclick = () => switchView("subchat"); // 画布形态专属(经典 CSS 隐藏按钮);switchView 聚焦对应卡;n3 融合后原「分身 Agents」入口并入此卡
@@ -28175,9 +28175,9 @@ $("act-usage").onclick = () => switchView("usage");
 $("uGear").onclick = () => switchView("sys");
 $("uAva").onclick = () => switchView("sys");
 $("act-new").onclick = newDraft;
-// act-term / act-files 左栏按钮已撤(2026-10-19):终端走 Ctrl+J(KEYMAP open-terminal);文件走侧栏桶头「文件树」滑入层与项目右键「查看文件」
+// act-term / act-files 左栏按钮已撤:终端走 Ctrl+J(KEYMAP open-terminal);文件走侧栏桶头「文件树」滑入层与项目右键「查看文件」
 $("projRow").onclick = newDraft; // ZCode 项目头点击=草稿导航(handleWorkspaceOpenChange)
-// quick-row 快捷卡已移除(2026-10-13 视频用户口径:与侧栏入口重复,没有必要)——经验库/自动化走侧栏 act-exp/act-wf。
+// quick-row 快捷卡已移除(视频与侧栏入口重复,没有必要)——经验库/自动化走侧栏 act-exp/act-wf。
 // 复刻 ZCode 命令中心
 let ccHist = JSON.parse(localStorage.getItem("zh:cc-hist") || "[]");
 function ccOpen() { $("cc").classList.add("on"); $("cc-q").value = ""; ccRender(); $("cc-q").focus(); }
@@ -28189,7 +28189,7 @@ function ccPushHist(q) {
 }
 function ccClose() { ccPushHist($("cc-q").value.trim()); $("cc").classList.remove("on"); }
 let ccScope = "all"; // all | cmd | file | session(ZCode >命令/#会话/@文件;#并入 all 主域)
-/** 会话搜索结果渲染(step-115):服务端 session.search.result;«» 转高亮,点行进会话。 */
+/** 会话搜索结果渲染:服务端 session.search.result;«» 转高亮,点行进会话。 */
 function ccSessionRender(m) {
   if (!$("cc").classList.contains("on") || !$("cc-q").value.trim().startsWith("#")) return;
   // 迟到回包守卫:查询已变成别的词时丢弃(连续输入时旧响应不覆盖新结果)。
@@ -28222,7 +28222,7 @@ function ccRender() {
   const q = (ccScope === "all" ? raw : raw.slice(1)).trim().toLowerCase();
   ccHot = 0;
   let html = "";
-  // 画布形态:命令中心兼「模块跳转」——输入模块名/关键词直接飞到对应卡片(2026-10-20 无限画布)
+ // 画布形态:命令中心兼「模块跳转」——输入模块名/关键词直接飞到对应卡片(无限画布)
   const cardHits = (ccScope === "all" && q && canvasActive() && window.CanvasShell && CanvasShell.titles)
     ? CanvasShell.titles().filter((t) => String(t.title).toLowerCase().indexOf(q) >= 0 || String(t.name).toLowerCase().indexOf(q) >= 0)
     : [];
@@ -28265,7 +28265,7 @@ function ccRender() {
       }
       if (el.dataset.cmd) { // >命令域:等价选中斜杠指令
         ws.send === undefined; const c = SLASH_COMMANDS.find((x) => x.value === el.dataset.cmd);
-        // step-095:参数/发送类与 palette 同语义——进输入框 chip 占位;ui 纯动作=即执行。
+ // 参数/发送类与 palette 同语义——进输入框 chip 占位;ui 纯动作=即执行。
         const ck = slashChipKind(c);
         if (c && ck) { switchView("chat"); $("instruction").value = ""; chipMount(c, ck, ""); }
         else if (c && c.kind === "ui") c.run();
@@ -28294,7 +28294,7 @@ const KEY_DEFAULTS = {
   "model-menu": "ctrl+m",
   "open-terminal": "ctrl+j",
   "open-browser": "ctrl+alt+b",
-  // step-142 IDE 域快捷键(仅 #view-ide 内由 IDE capture 监听拦截;非 IDE 视图仍按原键位走上面的全局动作)
+ // IDE 域快捷键(仅 #view-ide 内由 IDE capture 监听拦截;非 IDE 视图仍按原键位走上面的全局动作)
   "ide-command-palette": "ctrl+shift+p",
   "ide-goto-file": "ctrl+p",
   "ide-search": "ctrl+shift+f",
@@ -28315,7 +28315,7 @@ const KEY_ACTIONS = [
   { id: "model-menu", desc: "打开模型菜单(快切主模型)" },
   { id: "open-terminal", desc: "切换终端(浏览器占用时 Alt J)" },
   { id: "open-browser", desc: "打开内嵌浏览器" },
-  // step-142:IDE 域动作(仅 #view-ide 内生效,由 IDE capture 监听拦截;非 IDE 视图不劫持原键位)
+ // IDE 域动作(仅 #view-ide 内生效,由 IDE capture 监听拦截;非 IDE 视图不劫持原键位)
   { id: "ide-command-palette", desc: "IDE:命令面板(转到文件 / IDE 命令)" },
   { id: "ide-goto-file", desc: "IDE:快速转到文件" },
   { id: "ide-search", desc: "IDE:全项目内容搜索(替换)" },
@@ -28419,7 +28419,7 @@ document.addEventListener("keydown", (e) => {
   if ((ctrl && key === "t") || (e.altKey && key === "t")) { e.preventDefault(); $("effortPill").click(); return; }
   if (hitKey(e, "open-terminal", "j")) { e.preventDefault(); switchView(viewLive("term") ? "chat" : "term"); return; }
   if (hitKey(e, "open-browser", "b")) { e.preventDefault(); switchView("browser"); return; }
-  // Ctrl+W 关标签已随 tabbar 五件套删除(冗余收敛 2026-10-13)
+ // Ctrl+W 关标签已随 tabbar 五件套删除(冗余收敛)
   if (ctrl && key === "o") { e.preventDefault(); ccOpenProjects(); return; }
   if (ctrl && e.shiftKey && (e.key === "[" || e.key === "{")) { e.preventDefault(); cycleSession(-1); return; }
   if (ctrl && e.shiftKey && (e.key === "]" || e.key === "}")) { e.preventDefault(); cycleSession(1); return; }
@@ -28450,9 +28450,9 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); items[ccHot].click(); }
   }
 });
-// ---- step-047 快捷键实现(Ctrl+Shift+L 主题 / Ctrl+Shift+[ ] 任务轮换 / Ctrl+[ ] 导航历史 / Ctrl+±/0 缩放) ----
+// ---- 快捷键实现(Ctrl+Shift+L 主题 / Ctrl+Shift+[ ] 任务轮换 / Ctrl+[ ] 导航历史 / Ctrl+±/0 缩放) ----
 function cycleTheme() {
-  // step-088:全主题循环(dark→light→sand→glass→olive→plum→ink→system→dark)
+ // 全主题循环(dark→light→sand→glass→olive→plum→ink→system→dark)
   const order = ["dark", "light", "sand", "glass", "olive", "plum", "ink", "system"];
   const i = Math.max(0, order.indexOf(settings.theme));
   settings.theme = order[(i + 1) % order.length];
@@ -28461,12 +28461,12 @@ function cycleTheme() {
   const th = THEMES.find((t) => t.key === settings.theme);
   toast("主题 → " + (th ? th.name : settings.theme === "system" ? "跟随系统" : settings.theme));
 }
-// 启动恢复收口在 navHist 声明后统一执行(见 navHist 上方块)——此处原裸调 switchView 已上移收口。
+// 启动恢复在 navHist 声明后统一执行(见 navHist 上方块)——此处原裸调 switchView 已上移。
 let navHist = [], navIdx = -1;
-window.__navReady = true; // step-070:启动期守卫标志(顶层声明全部落位;wsOnMessage 用它替代 typeof navHist——let-TDZ 上 typeof 会抛)
-// 启动恢复收口(2026-10-27 挪到块尾):原位置在 navHist 之后、但 IDE 模块(ideRoot 等
+window.__navReady = true; // 启动期守卫标志(顶层声明全部落位;wsOnMessage 用它替代 typeof navHist——let-TDZ 上 typeof 会抛)
+// 启动恢复(挪到块尾):原位置在 navHist 之后、但 IDE 模块(ideRoot 等
 // 顶层 let,约 290 行后)之前——恢复视图=ide 时 ideLoad 读 ideRoot 命中 let-TDZ,
-// 实报「Cannot access 'ideRoot' before initialization」。整块后移,保证块内全部
+// 用户反馈「Cannot access 'ideRoot' before initialization」。整块后移,保证块内全部
 // 顶层声明落位后才恢复视图;navReady 标志仍在此处先置(wsOnMessage 早到帧守卫只认它)。
 function navPush(sid) {
   // 导航历史(后退/前进):连续相同不重复入栈;截断前进分支。
@@ -28490,7 +28490,7 @@ function navForward() {
 }
 function cycleSession(dir) {
   // 上一个/下一个任务:按最近更新排序的任务会话轮换。
-  // step-165 gaps3.6:轮换复用 runFirstCmp(3.1 单调时间线:running 置顶+createdAt 稳定层,
+ // 轮换复用 runFirstCmp(3.1 单调时间线:running 置顶+createdAt 稳定层,
   // 非 running 按 updatedAt)——旧实现裸按 updatedAt 排序,流式事件刷 updatedAt 会让轮换顺序跳变。
   const sids = [];
   const bySess = new Map();
@@ -28690,7 +28690,7 @@ $("tt-fold").onclick = () => {
   renderSidebar();
 };
 $("taskList").addEventListener("scroll", applyTaskMask, { passive: true });
-// ---- 侧栏文件树滑入层(ZCode WorkspaceFileTree 深拷贝,2026-10-14 用户口径) ----
+// ---- 侧栏文件树滑入层(ZCode WorkspaceFileTree 深拷贝 ----
 // 桶头「文件树」→ project.activate(fvOpen 沙箱=激活项目根)→ 树层自右滑入;目录懒加载走 fs.list/dirCache;
 // 文件点击 fvOpen 预览、右键 filesMenu;Esc/返回关闭;刷新清该根缓存。
 let sbFt = null; // {pid,label,path,expanded:Set<abs>}
@@ -28743,7 +28743,7 @@ function renderSbFt() {
 $("sbFtBack").onclick = sbFtClose;
 $("sbFtRefresh").onclick = () => { if (sbFt) { invalidateTreeCache(sbFt.path); renderSbFt(); } };
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && sbFt) sbFtClose(); });
-// ---- step-141 B/C:#view-ide 编辑器视图(树 + 多标签 + Monaco 编辑区 + 保存流) ----
+// ---- B/C:#view-ide 编辑器视图(树 + 多标签 + Monaco 编辑区 + 保存流) ----
 // 文件树复用 #sbFt 的懒展开(dirCache + fs.list,filesPending 防重发),根=活动项目工作区;
 // 文件点击发 file.read {path:相对路径, full:true} 开标签(binary/tooLarge/missing 守卫不建编辑模型)。
 // C 部分:首次打开文本文件才动态注入 vs/loader.js(AMD)挂 Monaco,一文件一 model(monaco.Uri.file);
@@ -28765,7 +28765,7 @@ function ideIsImg(rel) {
   if (i < 0 || i === nm.length - 1) return false;
   return IMG_EXT.has(nm.slice(i + 1).toLowerCase());
 }
-// Office 预览扩展名(与服务端 OFFICE_DOC_EXT 同源口径;2026-10-29 板 ide-o1/o2)。
+// Office 预览扩展名(与服务端 OFFICE_DOC_EXT 同源口径; 板 ide-o1/o2)。
 // 命中即不走 file.read(zip 二进制必回 binary),改挂 #ideOffice 层,AST 由 /ide/office 现场解析。
 const OFFICE_EXT = new Set(["pptx", "docx"]);
 function ideIsOffice(rel) {
@@ -28782,7 +28782,7 @@ function ideOfficeKind(rel) {
   const ext = nm.slice(i + 1).toLowerCase();
   return OFFICE_EXT.has(ext) ? ext : "";
 }
-// 媒体层扩展名白名单(与服务端 ideAssetKind 同源口径;2026-10-28 媒体地基)。
+// 媒体层扩展名白名单(与服务端 ideAssetKind 同源口径; 媒体地基)。
 // 命中即不走 file.read(二进制嗅探必回 binary、>2MB 必回 tooLarge,极小 mp3 首 8KB 无 NUL 还会被当文本塞 Monaco),
 // 改挂 #ideMedia 层 <video>/<audio> 直连 /ide/asset(字节走 HTTP Range)。
 const MEDIA_VID_EXT = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
@@ -28797,7 +28797,7 @@ function ideMediaKind(rel) {
   return "";
 }
 function ideNorm(p) { let s = String(p || ""); while (s.endsWith("/")) s = s.slice(0, -1); return s; }
-/** step-1024(板 5a7bb5d2):HTML 文件判定(.html/.htm)——只有这类标签有「编辑|预览」双态。 */
+/** (板 5a7bb5d2):HTML 文件判定(.html/.htm)——只有这类标签有「编辑|预览」双态。 */
 function ideIsHtml(rel) {
   const nm = String(rel || "").split("/").pop() || "";
   const i = nm.lastIndexOf(".");
@@ -28805,7 +28805,7 @@ function ideIsHtml(rel) {
   const ext = nm.slice(i + 1).toLowerCase();
   return ext === "html" || ext === "htm";
 }
-/** step-166:Markdown 文件判定(.md/.markdown);只有这类标签有「预览|源码」概念。 */
+/** Markdown 文件判定(.md/.markdown);只有这类标签有「预览|源码」概念。 */
 function ideIsMd(rel) {
   const ext = (String(rel || "").split(".").pop() || "").toLowerCase();
   return ext === "md" || ext === "markdown";
@@ -28820,12 +28820,12 @@ function ideMdSegSync(t) {
   const v = t.mdView === "source" ? "source" : "preview";
   for (const b of seg.querySelectorAll("button")) b.classList.toggle("on", b.dataset.md === v);
 }
-/** IDE md 预览 io(2026-11-05):相对路径按 md 文件目录折疓 ../. → /ide/asset?path=&pid=(项目根沙箱;
+/** IDE md 预览 io:相对路径按 md 文件目录折疓 ../. → /ide/asset?path=&pid=(项目根沙箱;
  *  越出项目根=拒绝渲染);http(s) 原样放行;视频扩展名产 <video controls>;相对 .md 链接产
  *  data-ide-mdlink 由 #ideMdHost 事件委托 ideOpenFile 开新标签。仅 md 预览传此 io——聊天流
  *  mdToHtml 默认通道零变(仍仅 /uploads? 图与 http 链接)。 */
 function ideMdAssetUrl(raw, mdPath) {
-  // 2026-11-06:不再在客户端预折叠 ../(裸相对路径同目录图会被折成根相对 → 打到项目根,404)。
+ // 不再在客户端预折叠 ../(裸相对路径同目录图会被折成根相对 → 打到项目根,404)。
   // 现在原样带 path + from=<md 相对路径>,服务端 /ide/asset 按「from 目录 → 项目根 → 绝对(根内)」
   // 候选链解析;沙箱/越界判定也收到服务端(realpath + isPathInside),前端只做协议过滤。
   const r = String(raw || "");
@@ -28836,7 +28836,7 @@ function ideMdAssetUrl(raw, mdPath) {
   return "/ide/asset?path=" + encodeURIComponent(p) + "&from=" + encodeURIComponent(from) + "&pid=" + encodeURIComponent(ideRoot ? ideRoot.pid : "");
 }
 /** 相对 md 目录折叠 ../. 得到项目内相对路径(越出项目根=null);外链/锚点/内联返回 null。
- *  2026-11-06 起**不再**用于图片 asset URL(那条已改 from= 服务端候选链);
+ * 起**不再**用于图片 asset URL(那条已改 from= 服务端候选链);
  *  仍被 io.link 的项目内 .md 链接解析复用,故保留。 */
 function ideMdRelPath(raw, mdPath) {
   const r = String(raw || "");
@@ -28875,7 +28875,7 @@ link: (urlRaw, text, innerHtml) => {
     },
   };
 }
-/** 头部「编辑|预览」分段钮同步(step-1024 板 5a7bb5d2):仅 html 编辑标签显示,并标亮该标签自己的 pvView。 */
+/** 头部「编辑|预览」分段钮同步(板 5a7bb5d2):仅 html 编辑标签显示,并标亮该标签自己的 pvView。 */
 function idePvSegSync(t) {
   const seg = $("idePvSeg");
   if (!seg) return;
@@ -28887,7 +28887,7 @@ function idePvSegSync(t) {
 }
 function ideRel(abs) { return ideRoot && abs.startsWith(ideRoot.path + "/") ? abs.slice(ideRoot.path.length + 1) : abs; }
 function ideAbsOf(rel) { if (!ideRoot) return String(rel || ""); return ideRoot.path + "/" + String(rel || "").replace(/^\\/+/, ""); }
-/** 状态条主文本(旧语义:单文本写入;step-142 起落到 #ideStMain 段,其余分段由 ideStatusSet 渲染)。 */
+/** 状态条主文本(旧语义:单文本写入; 起落到 #ideStMain 段,其余分段由 ideStatusSet 渲染)。 */
 function ideStatus(t) {
   const el = $("ideStMain");
   if (el) el.textContent = t;
@@ -28970,7 +28970,7 @@ function ideMonacoLoad() {
           fontFamily: getComputedStyle(document.body).getPropertyValue("--mono") || "ui-monospace, monospace",
           fontSize: 12.5, lineHeight: 20, letterSpacing: 0, tabSize: 4, readOnly: true, automaticLayout: true,
           minimap: { enabled: ideMinimapOn }, scrollBeyondLastLine: false, renderWhitespace: "selection",
-          // step-142 查找/替换:find widget 预填选区、多行选区范围内查找;wrap/minimap 受命令面板开关控制
+ // 查找/替换:find widget 预填选区、多行选区范围内查找;wrap/minimap 受命令面板开关控制
           wordWrap: ideWordWrap ? "on" : "off",
           find: { seedSearchStringFromSelection: "always", autoFindInSelection: "multiline" },
           suggestOnTriggerCharacters: true, multiCursorModifier: "alt", formatOnPaste: false, tabCompletion: "off",
@@ -29060,13 +29060,13 @@ function ideBodySkeleton() {
     ideSaveSync();
     ideStatus(cur.path + " ● 未保存");
   });
-  $("ideMdHost").addEventListener("click", (e) => { // 2026-11-05:预览内项目相对链接(data-ide-mdlink)→开 IDE 标签;外链/锚点走默认行为
+  $("ideMdHost").addEventListener("click", (e) => { // :预览内项目相对链接(data-ide-mdlink)→开 IDE 标签;外链/锚点走默认行为
     const a = e.target && e.target.closest ? e.target.closest("[data-ide-mdlink]") : null;
     if (!a) return;
     e.preventDefault();
     ideOpenFile(a.getAttribute("data-ide-mdlink") || "");
   });
-  ideOfficeWire(); // 2026-10-29 P2:office 工具条按钮(骨架内动态创建,只能在这里绑)
+  ideOfficeWire(); // P2:office 工具条按钮(骨架内动态创建,只能在这里绑)
 }
 /** 只显一层(welcome/ro/monaco/md/diff/ta/img/media/office),其余隐藏。
  *  office 显的是 wrap(工具条 + 预览层),#ideOffice 仍是渲染 host(U+工具条同进退)。 */
@@ -29128,7 +29128,7 @@ function ideImgScreenScale() {
   return ideScreenScaleOf($("ideImgEl"));
 }
 /** 以视口内某点(clientX/Y)为锚缩放:保持光标下的图片内容不动;不传锚点=只改尺寸。
- *  2026-10-29 任务B:锚点数学改走 diagram-viewport 引擎(window.DiagramViewport.zoomAtPoint,
+ * 任务B:锚点数学改走 diagram-viewport 引擎(window.DiagramViewport.zoomAtPoint,
  *  资产缺席时 dvZoomAtPoint 就地兜底同式)——「光标下内容点屏幕位移=0」不变式与画布/图容器同一口径。
  *  引擎返回的落点只用于倍率守卫(next 值),滚动位置换算仍走本容器的 scroll 模型(k=画布缩放系数)。 */
 function ideImgZoomTo(scale, clientX, clientY) {
@@ -29244,7 +29244,7 @@ function ideImgWire() {
     else ideImgFitNow();
   });
 }
-// ---- IDE 媒体层(第六层,2026-10-28):<video>/<audio> 直连 /ide/asset(Range);音频附「频谱」canvas(assets/ide-spectrum.js) ----
+// ---- IDE 媒体层(第六层:<video>/<audio> 直连 /ide/asset(Range);音频附「频谱」canvas(assets/ide-spectrum.js) ----
 function ideMediaActive() {
   const t = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
   const box = $("ideMedia");
@@ -29404,7 +29404,7 @@ function ideBodyRender() {
     }
     ideStatus(t.path + " · 图片预览"); ideSaveSync(); return;
   }
-  if (t.mode === "media") { // 媒体层(2026-10-28):<video>/<audio> 直连 /ide/asset(Range 拖进度条);音频附频谱 canvas
+  if (t.mode === "media") { // 媒体层:<video>/<audio> 直连 /ide/asset(Range 拖进度条);音频附频谱 canvas
     const host = $("ideMedia");
     ideBodyShow("media");
     if (host) {
@@ -29428,7 +29428,7 @@ function ideBodyRender() {
     ideSaveSync();
     return;
   }
-  if (t.mode === "office") { // Office 预览(2026-10-29 板 ide-o1/o2):AST 由 /ide/office 现场解析,渲染交 assets/ide-office.js
+  if (t.mode === "office") { // Office 预览(板 ide-o1/o2):AST 由 /ide/office 现场解析,渲染交 assets/ide-office.js
     const host = $("ideOffice");
     ideBodyShow("office");
     if (host) {
@@ -29473,18 +29473,18 @@ function ideBodyRender() {
     return;
   }
   if (t.mode === "diff") { ideDiffRender(); ideSaveSync(); return; } // diff 标签:双栏 DiffEditor(不可用回退 +/-着色)
-  // step-1024(板 5a7bb5d2)HTML 预览态:mode 仍是 "edit"(保存链照旧取 t.content,Ctrl+S 可用),
+ // (板 5a7bb5d2)HTML 预览态:mode 仍是 "edit"(保存链照旧取 t.content,Ctrl+S 可用),
   // Monaco 层换 iframe 直连 /ide/preview/<pid>/<rel>(pid 在路径段=子资源相对引用天然带回项目沙箱)。
   if (ideIsHtml(t.path) && t.pvView === "preview") { idePreviewRender(); return; }
-  // step-166 markdown 预览:mode 仍是 "edit"(保存链 ideSaveNow 照旧按 t.mode==="edit" 取 t.content,预览态 Ctrl+S 不受影响),
+ // markdown 预览:mode 仍是 "edit"(保存链 ideSaveNow 照旧按 t.mode==="edit" 取 t.content,预览态 Ctrl+S 不受影响),
   // 只把 Monaco 层 display:none(模型不 dispose、不 setValue),渲染进 #ideMdHost;切回源码由下面 monaco 分支 setModel 恢复。
   if (ideIsMd(t.path) && t.mdView !== "source") {
     const host = $("ideMdHost");
     if (host) {
       if (t.model && t.dirty) { try { t.content = t.model.getValue(); } catch (e) { /* 模型已释放:沿用 t.content */ } } // 源码刚改过→取模型现值,预览不吃旧内容
-      host.innerHTML = mdToHtml(t.content, "", ideMdIo(t)); // q=""=不做搜索命中高亮(聊天侧用法;预览无命中词);io=相对图/视频/链接重写(2026-11-05)
+      host.innerHTML = mdToHtml(t.content, "", ideMdIo(t)); // q=""=不做搜索命中高亮(聊天侧用法;预览无命中词);io=相对图/视频/链接重写
       mmRenderIn(host); // mermaid 围栏懒加载出图(与消息流 :8876 / wiki :25598 同语义;漏调=占位卡永久卡「渲染中…」)
-      artRenderIn(host); // step-1024:html/svg 图卡挂载(同一钩子位置)
+      artRenderIn(host); // html/svg 图卡挂载(同一钩子位置)
     }
     ideBodyShow("md");
     ideStatus(t.path + (t.dirty ? " ● 未保存" : "") + " · Markdown 预览 · " + String(t.content).length + " 字符");
@@ -29558,7 +29558,7 @@ function ideOpenFile(rel, opts2) {
   }
   const nm = rel.split("/").pop() || rel;
   const mk = ideMediaKind(rel);
-  if (mk) { // 媒体(2026-10-28):file.read 必回 binary/tooLarge(极小 mp3 首 8KB 无 NUL 还会被当文本塞 Monaco),
+  if (mk) { // 媒体:file.read 必回 binary/tooLarge(极小 mp3 首 8KB 无 NUL 还会被当文本塞 Monaco),
     // 一律不发 —— 直接建 media 标签,字节由 #ideMedia 里 <video>/<audio> 走 /ide/asset HTTP(Range)取。
     ideTabs.push({ path: rel, name: nm, content: "", orig: "", dirty: false, saving: false, mode: "media", mediaKind: mk, roReason: "" });
     ideActivate(ideTabs.length - 1);
@@ -29571,7 +29571,7 @@ function ideOpenFile(rel, opts2) {
     ideStatus(rel + " · 图片预览");
     return;
   }
-  if (ideIsOffice(rel)) { // Office(2026-10-29):pptx/docx 是 zip 二进制,file.read 必回 binary——不发,建 office 标签,
+  if (ideIsOffice(rel)) { // Office:pptx/docx 是 zip 二进制,file.read 必回 binary——不发,建 office 标签,
     // AST 由 /ide/office 现场解析后交 assets/ide-office.js 渲染(window.IdeOffice 缺失→层内降级文案)。
     const ok = ideOfficeKind(rel);
     ideTabs.push({ path: rel, name: nm, content: "", orig: "", dirty: false, saving: false, mode: "office", officeKind: ok, roReason: "", officeEdit: false, officeSaving: false, officeAst: null });
@@ -29632,12 +29632,12 @@ function ideTreeRender() {
   tree.innerHTML = rows.join("") || '<div class="cc-empty">(空目录)</div>';
   for (const el of tree.querySelectorAll(".ft-row.dir")) {
     el.onclick = () => { const a = el.dataset.abs; if (ideExpanded.has(a)) ideExpanded.delete(a); else ideExpanded.add(a); ideTreeRender(); };
-    // step-142 右键:目录=新建文件/新建文件夹/重命名/删除/刷新此目录
+ // 右键:目录=新建文件/新建文件夹/重命名/删除/刷新此目录
     el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); ideRowMenu(el.dataset.abs, ideRel(el.dataset.abs), true, e.clientX, e.clientY); };
   }
   for (const el of tree.querySelectorAll(".ft-row.file")) {
     el.onclick = () => ideOpenFile(el.dataset.rel);
-    // step-142 右键:文件=打开/重命名/删除/复制路径
+ // 右键:文件=打开/重命名/删除/复制路径
     el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); ideRowMenu(el.dataset.abs, el.dataset.rel, false, e.clientX, e.clientY); };
   }
 }
@@ -29686,7 +29686,7 @@ function ideSaveNow() {
   t.saving = true;
   ideSaveSync();
   ideStatus("保存 " + t.path + "…");
-  // 2026-10-26:ideRoot 无 pid(异常态)时用活动项目兜底——远程项目保存绝不能回落本地路径
+ // ideRoot 无 pid(异常态)时用活动项目兜底——远程项目保存绝不能回落本地路径
   const pid0 = (ideRoot && ideRoot.pid) || activeProjectId;
   wsSafeSend(JSON.stringify({ v: 1, type: "file.write", path: t.path, content: t.content, ...(pid0 ? { projectId: pid0 } : {}) }));
 }
@@ -29705,7 +29705,7 @@ function ideSaveResult(m) {
     ideStatus("已保存 " + rel + (m.bytes ? "(" + m.bytes + " bytes)" : ""));
     ideScmRefresh(); // 保存成功 → 拉最新 SCM 状态(改动列表/树角标)
     ideDiagRequest([rel]); // Ctrl+S 保存成功 → 刷新该文件诊断
-    idePreviewKick(t); // step-1024:html 预览态保存成功 → iframe 换 r=Date.now() 重载(板节点 03)
+    idePreviewKick(t); // html 预览态保存成功 → iframe 换 r=Date.now 重载(板节点 03)
   } else {
     toast("保存失败:" + rel + " — " + String(m.reason || m.error || "未知原因").slice(0, 90), true);
     ideStatus("保存失败 " + rel + " ● 未保存保留");
@@ -29725,7 +29725,7 @@ function ideSaveDenied(m) {
   ideTabsRender();
 }
 $("ideSave").onclick = () => ideSaveNow();
-// ── Office 文本回写 P2(2026-10-29 板节点「OOXML 文本回写」):编辑态 UI ──
+// ── Office 文本回写 P2(板节点「OOXML 文本回写」):编辑态 UI ──
 /** 保存路径选择:**服务端处理**(发 ide.office.edit 让服务端读原文件 → rewriteOfficeText → 写回)。
  *  理由:浏览器端要自己拼 zip 得先经 /ide/asset 拿 10MB 级原始字节(该路由走 Range/200 全量),
  *  再在页面里引 zip 库 + XML 重打包 —— 内存翻倍且 Range 拼字节易错;服务端一行 readFileSync 就够。 */
@@ -29846,20 +29846,20 @@ function ideOfficeWire() {
     });
   }
 }
-// step-166 markdown「预览|源码」分段钮(仅 md 标签可见;切回源码不重建编辑器,只让 ideBodyRender 走 monaco 分支)
+// markdown「预览|源码」分段钮(仅 md 标签可见;切回源码不重建编辑器,只让 ideBodyRender 走 monaco 分支)
 for (const b of $("ideMdSeg").querySelectorAll("button")) b.onclick = () => {
   const t = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
   if (!t || t.mode !== "edit" || !ideIsMd(t.path)) return;
   t.mdView = b.dataset.md === "source" ? "source" : "preview";
   ideBodyRender();
 };
-// step-1024(板 5a7bb5d2)HTML「编辑|预览」分段钮(仅 html 编辑标签可见;切预览不销毁 Monaco 模型,切回恢复)
+// (板 5a7bb5d2)HTML「编辑|预览」分段钮(仅 html 编辑标签可见;切预览不销毁 Monaco 模型,切回恢复)
 for (const b of $("idePvSeg").querySelectorAll("button")) b.onclick = () => {
   const t = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
   if (!t || t.mode !== "edit" || !ideIsHtml(t.path)) return;
   idePvSet(t, b.dataset.pv === "preview" ? "preview" : "edit");
 };
-/** step-1024:切 html 标签显示态(编辑|预览)。切走预览前把 Monaco 模型现值收回 t.content(保脏判定/保存链吃最新文本)。 */
+/** 切 html 标签显示态(编辑|预览)。切走预览前把 Monaco 模型现值收回 t.content(保脏判定/保存链吃最新文本)。 */
 function idePvSet(t, view) {
   if (!t || !ideIsHtml(t.path) || t.mode !== "edit") return;
   const to = view === "preview" ? "preview" : "edit";
@@ -29867,7 +29867,7 @@ function idePvSet(t, view) {
   t.pvView = to;
   ideBodyRender();
 }
-/** step-1024:HTML 预览层渲染。iframe.src=/ide/preview/<pid>/<rel>?r=<戳> —— pid 放路径段是关键:
+/** HTML 预览层渲染。iframe.src=/ide/preview/<pid>/<rel>?r=<戳> —— pid 放路径段是关键:
  *  相对引用(style.css/app.js)按文档 URL 解析不继承 query,pid 在路径段才能让子资源请求仍带回项目沙箱;
  *  r=时间戳 + 服务端 no-store 保证每次都是磁盘最新字节(保存后重载即出新内容)。 */
 function idePreviewRender() {
@@ -29885,7 +29885,7 @@ function idePreviewRender() {
   ideStatus(t.path + (t.dirty ? " ● 未保存" : "") + " · HTML 预览 · 保存后自动刷新");
   ideSaveSync();
 }
-/** step-1024:保存成功后预览刷新(板节点 03):当前标签是 html 且预览态开 → iframe 同 URL 换 r=Date.now() 重载。 */
+/** 保存成功后预览刷新(板节点 03):当前标签是 html 且预览态开 → iframe 同 URL 换 r=Date.now 重载。 */
 function idePreviewKick(t) {
   if (!t || t.mode !== "edit" || !ideIsHtml(t.path) || t.pvView !== "preview") return;
   if (ideTabs[ideActive] !== t) return; // 只刷当前可见的预览标签
@@ -29895,7 +29895,7 @@ function idePreviewKick(t) {
   fr.setAttribute("data-src", q);
   fr.src = q;
 }
-// ── 双中心布局(2026-10-25):拖拽条 + Monaco 重排 + 刷新还原 + 入口按钮 ──
+// ── 双中心布局:拖拽条 + Monaco 重排 + 刷新还原 + 入口按钮 ──
 /** 右栏尺寸变化后踹一脚 Monaco editor.layout()(automaticLayout 对 display:none→flex 的折叠恢复有盲区)。 */
 function ideLayoutKick() {
   try { if (ideMonaco && ideMonaco.editor) ideMonaco.editor.layout(); } catch (e) { /* 编辑器未就绪:忽略 */ }
@@ -29946,7 +29946,7 @@ function ideLayoutKick() {
   const body = $("ideBody");
   if (body && window.ResizeObserver) new ResizeObserver(() => ideLayoutKick()).observe(body);
 })();
-// ---- step-142 IDE 深化(VSCode P0):命令面板 / 查找替换 / 面包屑 / IDE 快捷键 / 文件操作 / 状态栏 ----
+// ---- IDE 深化(VSCode P0):命令面板 / 查找替换 / 面包屑 / IDE 快捷键 / 文件操作 / 状态栏 ----
 // 全部收敛在 #view-ide 域内:快捷键走独立 capture 监听 + dataset.view!=="ide" 守卫,
 // 非 IDE 视图的 Ctrl+Shift+P(ccOpen)/Ctrl+Shift+F(fitAll)语义零改。
 let ideCursor = { line: 1, col: 1, sel: 0 };
@@ -30066,7 +30066,7 @@ function ideInvalidateParent(rel) {
   ideInvalidate(seg.length ? ideAbsOf(seg.join("/")) : (ideRoot ? ideRoot.path : ""));
 }
 /** 行定位(t.line):revealLineInCenter + 选中整行 + 整行高亮装饰。 */
-const cfRevealLog = []; // step-1025:行号定位留痕(标签路径 + 请求行),供浏览器实测断言
+const cfRevealLog = []; // 行号定位留痕(标签路径 + 请求行),供浏览器实测断言
 function ideRevealLine(t) {
   if (t && t.revealLine) cfRevealLog.push({ path: t.path, line: Number(t.revealLine), monaco: !!ideMonaco });
   if (!ideMonaco || !t || !t.model || !t.revealLine) return;
@@ -30103,7 +30103,7 @@ const IDE_COMMANDS = [
   { id: "view-problems", title: "切换到问题", key: "", group: "视图", run: () => ideActSwitch("problems") },
   { id: "view-terminal", title: "切换到终端", key: "Ctrl+\`", group: "视图", run: () => ideTermToggle() },
   { id: "view-outline", title: "切换到大纲", key: "Ctrl+Shift+O", group: "视图", run: () => ideActSwitch("outline") },
-  // step-1024(板 5a7bb5d2):HTML 双态预览直达——当前标签非 html 时 toast 提示不切换
+ // (板 5a7bb5d2):HTML 双态预览直达——当前标签非 html 时 toast 提示不切换
   { id: "ide.preview", title: "预览当前 HTML", key: "", group: "视图", run: () => {
       const t = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
       if (!t || t.mode !== "edit" || !ideIsHtml(t.path)) { toast("仅 .html/.htm 文件支持预览"); return; }
@@ -30895,11 +30895,11 @@ $("tt-sort").onclick = () => {
 };
 renderSortBtn();
 applySettings();
-beautifyAllSelects(); // step-088:全量原生 select 镜像接管(动态注入走 MutationObserver)
+beautifyAllSelects(); // 全量原生 select 镜像接管(动态注入走 MutationObserver)
 wireSettings();
 setSection(settingsSection);
 switchView("chat");
-// ---- 仓库 Wiki(step-118):左页导航 + 右 markdown(引用可点回源)+ 页内 mermaid ----
+// ---- 仓库 Wiki:左页导航 + 右 markdown(引用可点回源)+ 页内 mermaid ----
 let wikiManifest = null, wikiCurrentPage = "";
 const WIKI_GROUPS = [["overview", "概览"], ["flow", "全仓流程"], ["structure", "结构"], ["modules", "模块"], ["entrypoints", "入口"], ["graph", "依赖图"], ["guide", "语义指南"], ["features", "功能拆解"], ["algo", "关键流程"]];
 function wikiLoad() {
@@ -30950,8 +30950,8 @@ function wikiRenderManifest(m) {
 function wikiRenderMarkdown(md) {
   const host = $("wikiMd");
   host.innerHTML = mdToHtml(md || "", "");
-  mmRenderIn(host); // mermaid 围栏懒加载出图(2026-10-29 改版,与消息流同语义)
-  artRenderIn(host); // step-1024:html/svg 图卡挂载(同一钩子位置)
+  mmRenderIn(host); // mermaid 围栏懒加载出图(改版,与消息流同语义)
+  artRenderIn(host); // html/svg 图卡挂载(同一钩子位置)
   host.scrollTop = 0;
 }
 function wikiOpenFirst() {
@@ -31004,7 +31004,7 @@ async function senseRun() {
   wsSafeSend(JSON.stringify({ v: 1, type: "sense.query", query: q, mode: $("sense-mode").value, ...(activeProjectId ? { projectId: activeProjectId } : {}) }));
 }
 $("sense-go").onclick = senseRun;
-// ---- step-073:洞察产物带入白板(可编辑语义板;服务端 board.fromsense 重新按源生成) ----
+// ---- 洞察产物带入白板(可编辑语义板;服务端 board.fromsense 重新按源生成) ----
 let senseLastResult = null;
 $("senseToBoard").onclick = () => {
   if (!currentSid) { toast("先进入一个会话", true); return; }
@@ -31019,7 +31019,7 @@ $("senseToBoard").onclick = () => {
   wsSafeSend(JSON.stringify({ v: 1, type: "board.fromsense", sessionId: currentSid, source, ...(query ? { query } : {}), ...(activeProjectId ? { projectId: activeProjectId } : {}) }));
   toast("生成语义板中…");
 };
-// ---- 评审遗留(行级回写店,2026-10-13):sticky 跨轮消费视图 ----
+// ---- 评审遗留(行级回写店:sticky 跨轮消费视图 ----
 function revStoreLoad() {
   wsSafeSend(JSON.stringify({ v: 1, type: "review.store.get", ...(activeProjectId ? { projectId: activeProjectId } : {}) }));
 }
@@ -31054,7 +31054,7 @@ function revStoreRender(m) {
   if (selBtn) selBtn.onclick = () => revInjectStoreSelected();
   if (allBtn) allBtn.onclick = () => revInjectOpen(revStoreData.open.map(revStoreItem), "回写店全部开放评论", null);
 }
-// ---- 评审评论一键回注聊天窗(step-074) ----
+// ---- 评审评论一键回注聊天窗 ----
 // 店条目 → 注入载荷形态(message 同时承载 title;rule 保留)
 function revStoreItem(c) {
   return { file: String(c.path || ""), line: Number(c.line || 1), severity: String(c.severity || "info"), title: String(c.message || "").slice(0, 140), detail: "", rule: c.rule ? String(c.rule) : "" };
@@ -31128,7 +31128,7 @@ $("revInjCancel").onclick = () => { $("revInjMask").classList.remove("on"); revI
 $("revInjMask").onclick = (e) => { if (e.target === $("revInjMask")) { $("revInjMask").classList.remove("on"); revInjPending = null; } };
 $("revStoreRefresh").onclick = () => revStoreLoad();
 $("sense-q").onkeydown = (e) => { if (e.key === "Enter") senseRun(); };
-// 关系图节点点击下钻(designs/16 v4:点节点=以该节点为新 query 的 debug 剖面)——
+// 关系图节点点击下钻( v4:点节点=以该节点为新 query 的 debug 剖面)——
 // mermaid securityLevel 保持 strict(archmap 的 LLM 产物不可放宽),经 g 元素 id 对照结果内 nodes 表
 function bindSenseDrill(host, nodes) {
   const byId = {};
@@ -31177,11 +31177,11 @@ $("wf-algo").onclick = () => {
   else $("wf-algo-args").focus();
 };
 
-// ==================== 无限画布外壳接线(2026-10-20) ====================
-// 用户口径:界面改成无限画布,各模块=画布上的卡片,最左侧=快速定位栏,卡片可自由移动/缩放。
+// ==================== 无限画布外壳接线 ====================
+// 界面改成无限画布,各模块=画布上的卡片,最左侧=快速定位栏,卡片可自由移动/缩放。
 // 本段只做「桥接」:卡片规格(对应 #view-* 节点)+ 激活(复用 switchViewActivate)+ 尺寸重算
 // (白板/对话等「可见即量尺寸」类补偿)+ 形态切换收尾。视图内部逻辑零改写。
-// 命名约定(2026-10-21 质感轮):title = 「中文意象 + 英文锚点」——中文保语义一眼可辨,英文锚一两个字收气质;
+// 命名约定(质感轮):title = 「中文意象 + 英文锚点」——中文保语义一眼可辨,英文锚一两个字收气质;
 // tag = 卡片副标,「·」分隔的职能词。侧栏按钮/各视图 vw-title/经典态 header(VIEW_NAMES)都以本表为单一来源,
 // 防回归守卫在 test/panel-card-naming.test.ts(改这里必须同步那三处,漏一处测试红)。
 const CV_CARDS = [
@@ -31201,22 +31201,22 @@ const CV_CARDS = [
   { name: "market", node: "view-market", title: "插件市场 Market", tag: "资产包 · 安装即接线", x: 2760, y: 1540, w: 720, h: 520 },
   { name: "browser", node: "view-browser", title: "网页 Webview", tag: "面板内嵌 · 新窗口兜底", x: 3660, y: 0, w: 820, h: 560 },
   { name: "sys", node: "view-sys", title: "配置台 Config", tag: "模型 · 主题 · 快捷键", x: 3660, y: 600, w: 820, h: 720 },
-  // n3 看板融合(2026-10-22):「分身 Agents」卡已删——注册/运行态/终态/失败原因(reap)/模型/会话短码
-  // 全部并入「子agent会话流」左栏条目(同一对象 agentId,两块看板数据 100% 重合,用户实报「重复」)。
+ // n3 看板融合:「分身 Agents」卡已删——注册/运行态/终态/失败原因(reap)/模型/会话短码
+ // 全部并入「子agent会话流」左栏条目(同一对象 agentId,两块看板数据 100% 重合,用户用户反馈「重复」)。
   { name: "subchat", node: "view-subchat", title: "子代理会话流", tag: "分身注册 · 消息流", x: 4520, y: 0, w: 780, h: 900 },
   { name: "track", node: "view-track", title: "追踪 Trace", tag: "召回审途 · 五阶段", x: 4520, y: 520, w: 760, h: 900 },
-  // step-1535:轨迹拆成独立看板视图(逐次决策 + 事件账本 + 泳道,数据源 = histEvents)。
+ // 轨迹拆成独立看板视图(逐次决策 + 事件账本 + 泳道,数据源 = histEvents)。
   // 坐标紧邻 track 卡右移一格(y 同排);世界边界见 canvas-shell.js 缩放下限注释。
   { name: "traj", node: "view-traj", title: "轨迹 Trail", tag: "决策 · 账本 · 泳道", x: 5320, y: 520, w: 900, h: 900 },
   { name: "usage", node: "view-usage", title: "吞吐 Telemetry", tag: "token · 调用 · 缓存", x: 4520, y: 1180, w: 720, h: 460 },
-  // step-1041:Super Agent 指挥台(独立画布卡:持久聊天渲染区+调度看板四区;经典侧栏 act-super 同名同串)。
+ // Super Agent 指挥台(独立画布卡:持久聊天渲染区+调度看板四区;经典侧栏 act-super 同名同串)。
   { name: "super", node: "view-super", title: "指挥台 Super", tag: "调度 · 看板 · 联调", x: 5320, y: 1460, w: 900, h: 760 },
 ];
 // CV_VIEW_OF_CARD 已在文件上方(画布外壳段落,7182)统一定义——本段复用,不再重复声明(重复 const 会抛 SyntaxError)。
 // cvActivated / cvSessionSid 同理由上段(onSessionChange 区)声明:openSession 启动恢复会先用到,此处不再重复声明。
 /** 卡片第一次进入视口/被聚焦时激活对应视图:只拉数据(loadViewData),**不改视图身份**。
  *  身份由「焦点卡」(onFocus)改,否则多卡并行进入视口时身份会被后进视口的那张改掉,
- *  切回经典布局就会显示错的页面(实测:焦点在代码档案,切经典却回到文件视图)。 */
+ * 切回经典布局就会显示错的页面(经验证:焦点在代码档案,切经典却回到文件视图)。 */
 function canvasActivateCard(card) {
   const name = cvCardName(card); // n3 别名回退:旧卡名 subagents/agents → subchat
   const view = CV_VIEW_OF_CARD[name];
@@ -31248,7 +31248,7 @@ function canvasAfterResize(name) {
   if (name === "approvals") { try { renderApprovals(); } catch (e) { console.warn("[canvas] 审批重排失败", e); } return; }
   if (name === "team") { try { if (viewLive("dash")) dashRender(); else renderP2pStrip(); } catch (e) { console.warn("[canvas] 团队重排失败", e); } return; }
   if (name === "exp") { try { renderExp(); } catch (e) { console.warn("[canvas] 经验库重排失败", e); } return; }
-  if (name === "super") { try { supRenderBoard(); } catch (e) { console.warn("[canvas] 指挥台重排失败", e); } return; } // step-1041:卡内重排后看板四区重渲(聊天区 flex 自适应无需补偿)
+  if (name === "super") { try { supRenderBoard(); } catch (e) { console.warn("[canvas] 指挥台重排失败", e); } return; } // 卡内重排后看板四区重渲(聊天区 flex 自适应无需补偿)
 }
 const CV_BRIDGE = {
   specs: CV_CARDS,
@@ -31259,7 +31259,7 @@ const CV_BRIDGE = {
   onFocus(card) {
     const view = CV_VIEW_OF_CARD[card];
     if (!view || view === mainView) return;
-    // 子标签身份保护(2026-10-27「看板呢」实锤):team 卡承载 team/dash/issues 三子标签,
+ // 子标签身份保护(「看板呢」注意):team 卡承载 team/dash/issues 三子标签,
     // 焦点落在 team 卡≠用户点了「成员」——切子标签后 showCard→focus 回调会把身份洗回 team,
     // viewLive("dash") 恒假 → 看板数据到了也被渲染守卫全吞(永久空板)。dash/issues 身份只随子标签点击切换。
     if (view === "team" && (mainView === "dash" || mainView === "issues")) return;
@@ -31291,7 +31291,7 @@ const CV_BRIDGE = {
     }, 60);
   },
 };
-// 无边框桌面窗口控制(2026-10-25):只认 preload 注入的 genieWindow;浏览器里整块不显示。
+// 无边框桌面窗口控制:只认 preload 注入的 genieWindow;浏览器里整块不显示。
 (function initDesktopWindowChrome() {
   const api = window.genieWindow;
   if (!api || !api.isDesktop) return;
@@ -31316,7 +31316,7 @@ const CV_BRIDGE = {
   if (api.onMaximizeChange) api.onMaximizeChange(paintMax);
 })();
 
-// ---- 启动恢复收口(块尾执行;原位置见 navHist 上方注释)----
+// ---- 启动恢复(块尾执行;原位置见 navHist 上方注释)----
 // ①补放启动视图(savedView 当时只置 dataset 不发消息,避免 CONNECTING 期 send 抛);
 // ②重放早到缓存的 hello 帧(onmessage 守卫缓存),走正常 hello 恢复(openSession 里的
 //   refreshHist/导航此时全部安全)。WS 未开时 onopen 的 hello 会自然兜底,此处仅处理早到帧。
@@ -31337,7 +31337,7 @@ window.__cvToast = function (text) { try { toast(String(text)); } catch (e) { co
 if (window.CanvasShell && window.CanvasShell.init) {
   try { window.CanvasShell.init(CV_BRIDGE); } catch (e) { console.warn("[canvas] init 失败,退回经典布局", e); }
   // 启动取景交给画布自己(首屏恒落对话卡:freshStart 后用户第一眼必须有输入框);
-  // 这里若再按 mainView 聚焦回去,会把画布刚摆好的对话卡取景顶掉(实测首屏 chat 卡仍在视口外)。
+ // 这里若再按 mainView 聚焦回去,会把画布刚摆好的对话卡取景顶掉(经验证首屏 chat 卡仍在视口外)。
 } else {
   // 资产未加载(404/旧缓存):留在经典布局,面板功能不受影响
   document.body.classList.remove("cv-shell");
@@ -31507,7 +31507,7 @@ if (window.CanvasShell && window.CanvasShell.init) {
   }
   // 桌面桥:整窗全屏进出(等视口真正变大再回调,避免遮罩按旧尺寸取景)
   // 回调参数=是否真的进了全屏:浏览器/无桥时恒 false,覆盖层必须走 contain(否则取景被 cover 裁掉边界,
-  // 表现为「框到的位置不是鼠标点的位置」——E2E 实测:浏览器路径误用 cover,选区整体偏移)。
+ // 表现为「框到的位置不是鼠标点的位置」——E2E 经验证:浏览器路径误用 cover,选区整体偏移)。
   function enterCaptureFullscreen(done) {
     var bridge = window.genieWindow;
     if (!(bridge && bridge.captureEnter)) { done(false); return; }
@@ -31547,7 +31547,7 @@ if (window.CanvasShell && window.CanvasShell.init) {
   /** 取屏覆盖层的换算盒(布局空间:cap.ox/oy/scale/选区全部用「布局 CSS px」,与 capPaint 同一坐标)。
    * 注意:这里必须 offset=0/scale=1——若把 cap.scale 与 cap.ox 一起塞进来,clientToImage 会额外
    * 除以 cap.scale 得到「图像原生像素」,而 cap.sel/cap.ox 的消费方(capPaint/confirmCapture)按
-   * 布局 px 解释它,结果就是「框的位置与鼠标落点成比例偏移」(E2E 实测:350×280 的拖框被算成
+ * 布局 px 解释它,结果就是「框的位置与鼠标落点成比例偏移」(E2E 经验证:350×280 的拖框被算成
    * 300×400 的选区)。图像像素换算只在 confirmCapture 里做一次((x-ox)/scale)。 */
   function capBox(r) {
     return { left: r.left, top: r.top, width: r.width, height: r.height,
@@ -31826,7 +31826,7 @@ if (window.CanvasShell && window.CanvasShell.init) {
     img.onerror = function () { toast("图片解码失败", 1); };
     img.src = dataUrl;
   }
-  /* ---------- 录音评论(2026-10-29):MediaRecorder → Blob → dataURL 随 annotate.submit 的 audioUrl 上行 ---------- */
+ /* ---------- 录音评论:MediaRecorder → Blob → dataURL 随 annotate.submit 的 audioUrl 上行 ---------- */
   var REC_MAX_MS = 120 * 1000;          // 单条录音上限 120s,到点自动 stop
   var REC_MAX_BYTES = 8 * 1024 * 1024;  // 超 8MB 拒发(WS 帧承受不了),不静默丢弃
   function annRecSupported() { return !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
@@ -32561,7 +32561,7 @@ if (window.CanvasShell && window.CanvasShell.init) {
       else if (n.kind === "point") notes.push({ kind: "point", point: { x: n.point.x, y: n.point.y }, text: text });
       else notes.push({ kind: "global", text: text });
     }
-    // 录音(2026-10-29):纯口述也允许提交(自动补一条覆盖全图的 region 文本,服务端 region text 非空即通过);
+ // 录音:纯口述也允许提交(自动补一条覆盖全图的 region 文本,服务端 region text 非空即通过);
     // 超 8MB 直接拦下并告知(不静默丢弃)
     var recBlob = ann.rec && ann.rec.blob && ann.rec.blob.size > 0 ? ann.rec.blob : null;
     if (recBlob && recBlob.size > 8 * 1024 * 1024) { toast("录音过大(>8MB),请缩短或重录", 1); return; }
@@ -32758,15 +32758,15 @@ if (window.CanvasShell && window.CanvasShell.init) {
 </body></html>`;
 
 /** 在同一端口同时挂 WS 与 HTTP(静态面板)。 */
-// mermaid vendored 本地资产(designs/16 §10:禁 CDN)——由调用方注入内容,防路径读取。
-/** 项目档案独立窗口页(step-049,用户口径「单独一个窗口」):只读视图,复用 /assets/mermaid 与 WS 档案消息。 */
+// mermaid vendored 本地资产( §10:禁 CDN)——由调用方注入内容,防路径读取。
+/** 项目档案独立窗口页:只读视图,复用 /assets/mermaid 与 WS 档案消息。 */
 const PROFILE_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>项目档案 · 架构图</title>
 <style>
   :root{--bg:#060403;--text:#ece1d1;--muted:#97836a;--faint:#6b5c4a;--bronze:#c98f45;--border:rgba(200,143,69,.28);--green:#9dc08b;--red:#e08a7a}
   *{box-sizing:border-box;margin:0;padding:0}
-  #tabbar{display:none !important} /* step-048 追记五:用户明确不要会话标签条;即使 renderTabs 被恢复也硬隐藏 */
+  #tabbar{display:none !important} /* 用户明确不要会话标签条;即使 renderTabs 被恢复也硬隐藏 */
   body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;padding:14px 18px}
   .hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px}
   .t{font-size:16px}
@@ -32808,7 +32808,7 @@ const PROFILE_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8"
   .git{font-size:10px;color:var(--faint);margin-top:2px}
   .h2{font-size:10px;color:var(--faint);letter-spacing:2px;margin:6px 0 2px}
   .empty{color:var(--faint);font-size:12px;padding:20px;text-align:center}
-  /* step-088:主题继承(zh:theme 与主面板同源)+ 二级变量 + 组件化(模态/镜像下拉/按钮四态/键盘可达) */
+ /* 主题继承(zh:theme 与主面板同源)+ 二级变量 + 组件化(模态/镜像下拉/按钮四态/键盘可达) */
   :root{--hover-bg:rgba(255,255,255,.05);--on-accent:#0b0806;--input-bg:rgba(0,0,0,.3);--input-border:var(--border);
     --sunken:rgba(0,0,0,.18);--overlay:rgba(0,0,0,.55);--solid:#141009;--scrollbar:rgba(201,143,69,.32);
     --focus-ring:rgba(201,143,69,.65);--accent2:#e08a7a;--grad-a:#d8a354;--grad-b:#a96f2b;--brand:#e9dcc6;--warn:#d9b36c}
@@ -32887,7 +32887,7 @@ const PROFILE_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8"
   </div>
 </div>
 <script src="/assets/mermaid.min.js"></script>
-<script src="/assets/input-policy.js"></script> <!-- step-124 独立档案页同样分区接管(图容器 #g) -->
+<script src="/assets/input-policy.js"></script> <!-- 独立档案页同样分区接管(图容器 #g) -->
 <script>
 var pid = new URLSearchParams(location.search).get("p") || "";
 var data = null, sel = null;
@@ -32970,8 +32970,7 @@ function planR() {
     el.onclick = function () { ws.send(JSON.stringify({ v: 1, type: "profile.plan.remove", projectId: pid, id: el.getAttribute("data-id") })); };
   });
 }
-// 图交互:缩放(滚轮/按钮)+拖拽平移+节点点选(选中模块→右侧详情联动+邻接高亮,再点恢复)——2026-10-13 用户口径
-var zScale = 1, zTx = 0, zTy = 0;
+// 图交互:缩放(滚轮/按钮)+拖拽平移+节点点选(选中模块→右侧详情联动+邻接高亮,再点恢复)—— var zScale = 1, zTx = 0, zTy = 0;
 function applyZ() { gv.style.transform = "translate(" + zTx + "px," + zTy + "px) scale(" + zScale + ")"; document.getElementById("zs").textContent = Math.round(zScale * 100) + "%"; }
 function bindGraph(view, svg, d) {
   if (!svg) return;
@@ -33055,7 +33054,7 @@ pApply.onclick = function () {
     if (ok) ws.send(JSON.stringify({ v: 1, type: "profile.plan.apply", projectId: pid }));
   });
 };
-// ---- step-088:主题继承 + 主题化模态 + 原生 select 镜像接管(与主面板同语义;ES5 形态随本页) ----
+// ---- 主题继承 + 主题化模态 + 原生 select 镜像接管(与主面板同语义;ES5 形态随本页) ----
 try {
   var __t = localStorage.getItem("zh:theme") || "dark";
   var __legacy = { neon: "sand", crt: "olive", aurora: "plum" };
@@ -33171,7 +33170,7 @@ function attMimeByName(p: string): string {
 }
 // ---- IDE 图片/媒体预览路由(G /ide/asset):扩展名白名单(无点小写,与浏览器侧 IMG_EXT/MEDIA_*_EXT 同源口径) + 大小上限 ----
 const IDE_ASSET_IMG_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "ico"]);
-// 2026-10-28 媒体地基:视频/音频同走 /ide/asset(<video>/<audio> 直连,支持 Range 拖进度条);
+// 媒体地基:视频/音频同走 /ide/asset(<video>/<audio> 直连,支持 Range 拖进度条);
 // 值=content-type(浏览器可解的容器/编码;mkv/hevc 等不在表内→403,不静默塞文本层)。
 const IDE_ASSET_VIDEO_EXT: Record<string, string> = {
   mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", m4v: "video/x-m4v", ogv: "video/ogg",
@@ -33180,7 +33179,7 @@ const IDE_ASSET_AUDIO_EXT: Record<string, string> = {
   mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac",
   ogg: "audio/ogg", oga: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
 };
-// 体积上限分级(2026-10-29):图片远小于音视频,统一 16MB 会直接卡死正常视频预览。
+// 体积上限分级:图片远小于音视频,统一 16MB 会直接卡死正常视频预览。
 // 图片 32MB / 音频 128MB / 视频 512MB——<video> 走 Range 分段读,不必整段进内存,上限可以放宽。
 const IDE_ASSET_IMG_MAX_BYTES = 32 * 1024 * 1024;
 const IDE_ASSET_AUDIO_MAX_BYTES = 128 * 1024 * 1024;
@@ -33214,14 +33213,14 @@ function ideAssetMime(p: string): string {
   const ext = ideAssetExt(p);
   return IDE_ASSET_VIDEO_EXT[ext] || IDE_ASSET_AUDIO_EXT[ext] || attMimeByName(p);
 }
-/** Windows 盘符形态归一(2026-11-06 md 内嵌图):`E:/x/y.png`、`E:\x\y.png` → `/mnt/e/x/y.png`(WSL);
+/** Windows 盘符形态归一( md 内嵌图):`E:/x/y.png`、`E:\x\y.png` → `/mnt/e/x/y.png`(WSL);
  *  非盘符形态原样返回(在 Windows 本机 realpath 能直接吃 `E:\…`)。 */
 export function ideAssetWinPath(p: string): string {
   const m = /^([A-Za-z]):[\\/](.*)$/.exec(String(p || ""));
   if (!m) return p;
   return "/mnt/" + (m[1] || "c").toLowerCase() + "/" + (m[2] || "").split("\\").join("/");
 }
-/** /ide/asset 本地候选链解析(2026-11-06 from=<md 相对路径>):md 里的相对图既能按 md 同目录找,
+/** /ide/asset 本地候选链解析( from=<md 相对路径>):md 里的相对图既能按 md 同目录找,
  *  也能按项目根找,还能给绝对路径。候选顺序:
  *    ①from 所在目录 + path ②项目根 + path(原样相对) ③path 本身是绝对路径(仅根内)。
  *  每个候选先 realpath 再 isPathInside(root, real);越界候选**跳过**并记账(第一个候选越界不得
@@ -33253,7 +33252,7 @@ export function ideAssetResolveLocal(root: string, rel: string, from: string): {
   if (outside > 0 && other === 0) return { code: 403, msg: "拒绝:路径在项目根之外" };
   return { code: 404, msg: "图片不存在" };
 }
-// ---- IDE Office 只读预览路由(2026-10-29 板 ide-o1/o2):/ide/office(AST JSON)+ /ide/office/media(zip 内媒体 part) ----
+// ---- IDE Office 只读预览路由(板 ide-o1/o2):/ide/office(AST JSON)+ /ide/office/media(zip 内媒体 part) ----
 /** Office 媒体 part 白名单前缀(防路径穿越):只放 zip 里这两棵媒体树,且不许多级/隐藏段。 */
 const IDE_OFFICE_PART_RE = /^(?:ppt|word)\/media\/[A-Za-z0-9._-]+$/;
 /** part 后缀 → content-type(未知回 application/octet-stream,不猜)。 */
@@ -33267,7 +33266,7 @@ function ideOfficePartMime(part: string): string {
   };
   return m[ext] || "application/octet-stream";
 }
-// ---- IDE HTML 预览静态路由(2026-10-29 板 5a7bb5d2):/ide/preview/<项目内相对路径>?pid=<项目> ----
+// ---- IDE HTML 预览静态路由(板 5a7bb5d2):/ide/preview/<项目内相对路径>?pid=<项目> ----
 /** 预览白名单:后缀 → content-type(html/css/js/图片/字体/数据;板节点 01 口径,未知后缀 → 415)。 */
 const IDE_PREVIEW_MIME: Record<string, string> = {
   html: "text/html; charset=utf-8", htm: "text/html; charset=utf-8", css: "text/css; charset=utf-8",
@@ -33279,7 +33278,7 @@ const IDE_PREVIEW_MIME: Record<string, string> = {
 };
 /** 预览单文件上限(与 file.read 同限 2MB;超出 413)。 */
 const IDE_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
-/** LLM 轨迹全文单文件上限(step-1026:实测最大 2.6MB;8MB 留余量,超出 413)。 */
+/** LLM 轨迹全文单文件上限(经验证最大 2.6MB;8MB 留余量,超出 413)。 */
 const LLM_TRACE_MAX_BYTES = 8 * 1024 * 1024;
 /** 沙箱共用的路径规范形:统一成 "/" 分隔后按段判定(拒 .. 段/整段与拒 .git 段;Windows 下也生效)。 */
 function ideOfficeRelSegs(rel: string): string[] {
@@ -33287,14 +33286,14 @@ function ideOfficeRelSegs(rel: string): string[] {
 }
 
 export function servePanel(port: number, attachWs: (server: Server) => void, opts?: {
-  /** 会话完整导出钩子(2026-10-19 用户口径「日志下载就应该下载完全的内容」):由 main 注入
+ /** 会话完整导出钩子:由 main 注入
    * journal+轨迹文件读取;GET /api/session-export?sid=<会话> 触发浏览器原生下载。 */
   sessionExport?: (sid: string) => { filename: string; body: string };
-  /** IDE 图片预览取数(2026-10-22):/ide/asset 路由按 pid 解析项目根(main 注入闭包延迟取,
+ /** IDE 图片预览取数:/ide/asset 路由按 pid 解析项目根(main 注入闭包延迟取,
    *  同 sessionExport 模式——servePanel 先于 app 创建)。返回 '' = 项目不存在/无活动项目。 */
   ideProjectRoot?: (pid?: string) => string | undefined;
 }): { close: () => Promise<void> } {
-  /** Office 预览共用沙箱(2026-10-29):与 /ide/asset 同口径 —— pid 显式优先、缺省活动项目;
+ /** Office 预览共用沙箱:与 /ide/asset 同口径 —— pid 显式优先、缺省活动项目;
    *  拒 ".." 段、拒 ".git" 段(导出类文件没必要从版本库里取,也不许拿它当读取后门);
    *  项目根 realpath + isPathInside(防软链逃逸)。返回 {abs} 或 {code,msg}(由路由落状态码)。
    *  远程项目(SSH/WSL)不走本地 realpath → 明确 501(V1 不做远端 Office 解析)。 */
@@ -33325,7 +33324,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       return;
     }
     if (req.url !== undefined && (req.url === "/" || req.url.indexOf("/?b=") === 0 || req.url === "/index.html")) {
-      // no-store(2026-10-22):面板页面必须每次取最新——曾因浏览器/桌面壳缓存旧页,
+ // no-store:面板页面必须每次取最新——曾因浏览器/桌面壳缓存旧页,
       // gateway 重建重启后窗口仍跑旧 JS(IDE 点文件空白)。带 ?b=<戳> 的自愈重载也走这里。
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, must-revalidate" });
       res.end(PAGE);
@@ -33333,7 +33332,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
     }
     const { readFile } = nodeFsPromises;
     const here = dirname(fileURLToPath(import.meta.url));
-    // 官方市场插件图标(2026-10-25:assets/official-market/icons/<name>.png;名字白名单防穿越)
+ // 官方市场插件图标(assets/official-market/icons/<name>.png;名字白名单防穿越)
     if (req.url !== undefined && req.url.startsWith("/assets/official-market/icons/")) {
       const iconFile = req.url.slice("/assets/official-market/icons/".length);
       if (/^[a-z0-9][a-z0-9._-]*\.png$/.test(iconFile)) {
@@ -33357,31 +33356,31 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/annotate-coords.js") { // 2026-10-29 截图标注坐标换算层(资产同源;缺失→404,面板内联兜底)
+    if (req.url === "/assets/annotate-coords.js") { // 截图标注坐标换算层(资产同源;缺失→404,面板内联兜底)
       readFile(join(here, "assets", "annotate-coords.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/ide-spectrum.js") { // 2026-10-28 音频频谱分析件(资产同源;未创建/未构建→404,媒体层降级仅播放)
+    if (req.url === "/assets/ide-spectrum.js") { // 音频频谱分析件(资产同源;未创建/未构建→404,媒体层降级仅播放)
       readFile(join(here, "assets", "ide-spectrum.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/ide-office.js") { // 2026-10-29 Office 文档渲染件(pptx 幻灯片/DOCX 文档流;缺失→404,IDE 落降级文案)
+    if (req.url === "/assets/ide-office.js") { // Office 文档渲染件(pptx 幻灯片/DOCX 文档流;缺失→404,IDE 落降级文案)
       readFile(join(here, "assets", "ide-office.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/board-page-layout.js") { // step-111 页面结构板语义布局引擎(资产同源)
+    if (req.url === "/assets/board-page-layout.js") { // 页面结构板语义布局引擎(资产同源)
       readFile(join(here, "assets", "board-page-layout.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/board-ui-flow-layout.js") { // 2026-10-26 UI 交互流程布局引擎(资产同源)
+    if (req.url === "/assets/board-ui-flow-layout.js") { // UI 交互流程布局引擎(资产同源)
       readFile(join(here, "assets", "board-ui-flow-layout.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
@@ -33393,43 +33392,43 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/board-type-profile.js") { // 2026-10-26 13 类板型画像(资产同源)
+    if (req.url === "/assets/board-type-profile.js") { // 13 类板型画像(资产同源)
       readFile(join(here, "assets", "board-type-profile.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/input-policy.js") { // step-124 网页版输入交互策略(分区接管;文本区例外)
+    if (req.url === "/assets/input-policy.js") { // 网页版输入交互策略(分区接管;文本区例外)
       readFile(join(here, "assets", "input-policy.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/canvas-shell.js") { // 2026-10-20 无限画布外壳(视图=卡片/定位栏/平移缩放/布局持久化)
+    if (req.url === "/assets/canvas-shell.js") { // 无限画布外壳(视图=卡片/定位栏/平移缩放/布局持久化)
       readFile(join(here, "assets", "canvas-shell.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/diagram-viewport.js") { // 2026-10-29 任务B:图视口引擎(锚点缩放/捏合/紧凑 fit)
+    if (req.url === "/assets/diagram-viewport.js") { // 任务B:图视口引擎(锚点缩放/捏合/紧凑 fit)
       readFile(join(here, "assets", "diagram-viewport.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/mermaid-theme-normalize.js") { // 2026-10-29 任务B:mermaid 主题色归一化(oklab/color-mix→rgb)
+    if (req.url === "/assets/mermaid-theme-normalize.js") { // 任务B:mermaid 主题色归一化(oklab/color-mix→rgb)
       readFile(join(here, "assets", "mermaid-theme-normalize.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/browser-view.js") { // 2026-10-21 内置浏览器视图(截图流画布+工具栏+视口拖拽;零构建资产)
+    if (req.url === "/assets/browser-view.js") { // 内置浏览器视图(截图流画布+工具栏+视口拖拽;零构建资产)
       readFile(join(here, "assets", "browser-view.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/super-console.js") { // step-1033 Super Agent 指挥台(自包含资产)
+    if (req.url === "/assets/super-console.js") { // Super Agent 指挥台(自包含资产)
       readFile(join(here, "assets", "super-console.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
@@ -33441,7 +33440,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    // step-141 C:Monaco vendored(vs/loader.js AMD + 按需 chunk + base/worker/workerMain.js,同源静态)。
+ // C:Monaco vendored(vs/loader.js AMD + 按需 chunk + base/worker/workerMain.js,同源静态)。
     // MIME 只放编辑器所需三型(js/css/ttf);路径含 ../ 或反斜杠直接拒(目录穿越兜底)。
     if (req.url !== undefined && req.url.startsWith("/assets/vendor/monaco/vs/")) {
       let rel = "";
@@ -33456,7 +33455,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    // 服务重启降级壳(step-056 视频 T1):SW 缓存面板壳,停机窗口刷新不再裸错误页
+ // 服务重启降级壳(视频 T1):SW 缓存面板壳,停机窗口刷新不再裸错误页
     if (req.url === "/assets/sw.js") {
       readFile(join(here, "assets", "sw.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
@@ -33468,13 +33467,13 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       res.end();
       return;
     }
-    // 项目档案独立窗口页(step-049):/profile?p=<projectId>。
+ // 项目档案独立窗口页:/profile?p=<projectId>。
     if (req.url !== undefined && req.url.split("?")[0] === "/profile") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PROFILE_PAGE);
       return;
     }
-    // 会话完整导出(2026-10-19):journal 全事件 + 每次 LLM 调用全量轨迹 + 子代理轨迹,单文件 jsonl。
+ // 会话完整导出:journal 全事件 + 每次 LLM 调用全量轨迹 + 子代理轨迹,单文件 jsonl。
     // 浏览器原生下载(Content-Disposition),不受 WS 单帧体积约束;未装配导出钩子=503 显式(不静默降级)。
     if (req.method === "GET" && req.url !== undefined && req.url.split("?")[0] === "/api/session-export") {
       const u = new URL(req.url, "http://local");
@@ -33494,7 +33493,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       }
       return;
     }
-    // LLM 轨迹全文(step-1026):GET /api/llm-trace?path=<绝对路径> —— 轨迹看板「逐次决策」卡体的
+ // LLM 轨迹全文:GET /api/llm-trace?path=<绝对路径> —— 轨迹看板「逐次决策」卡体的
     // 懒加载数据源。安全口径:realpath 后必须落在 <repo>/.genie/llm-trace 内(realpath 先于归属判定,
     // 否则软链可跳出);只允许 .json;单文件 >8MB → 413;不存在 404。不做任意文件读。
     if (req.method === "GET" && req.url !== undefined && req.url.split("?")[0] === "/api/llm-trace") {
@@ -33582,8 +33581,8 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       sendJson(200, { ok: true, sid: sidRaw, count: files.length, files: files });
       return;
     }
-    // 附件上传(step-048):POST /upload?sid=<会话>&name=<文件名>;落 .genie/uploads/<sid>/。
-    // 限额(2026-10-19 放宽,按类型判):视频 ≤50MB,其余(图片/文本/代码/未知) ≤8MB —— 仍留硬上限防滥用。
+ // 附件上传:POST /upload?sid=<会话>&name=<文件名>;落 .genie/uploads/<sid>/。
+ // 限额(放宽,按类型判):视频 ≤50MB,其余(图片/文本/代码/未知) ≤8MB —— 仍留硬上限防滥用。
     // 注意:此处是 POST /upload;GET /uploads(读盘回看)是另一条路由,靠 method + 精确路径区分,前缀重叠不打歪。
     if (req.method === "POST" && (req.url === "/upload" || (req.url !== undefined && req.url.indexOf("/upload?") === 0))) {
       const u = new URL(req.url, "http://local");
@@ -33601,7 +33600,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         if (aborted) return; // 已超限:后续数据直接丢弃(drain),不 buffer 也不断连
         size += d.length;
         // 413 必须让客户端读得到:早断 socket(req.pause + destroy)会让仍在写 body 的客户端先吃
-        // "write ECONNRESET",拿不到 413 正文(实测间歇性失败)。故超限只置位 + 丢数据,等 req "end"
+ // "write ECONNRESET",拿不到 413 正文(经验证间歇性失败)。故超限只置位 + 丢数据,等 req "end"
         // (客户端写完)再回 413 —— 内存有界(chunks 已清空),状态码可读。
         // 仅防御真滥用:远超上限(>8×)时硬断,不陪着把数据收完。
         if (size > limit) {
@@ -33635,10 +33634,10 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       });
       return;
     }
-    // 附件回看读盘(2026-10-19):GET /uploads?path=<绝对路径> —— journal 只存绝对路径,浏览器读不到,
+ // 附件回看读盘:GET /uploads?path=<绝对路径> —— journal 只存绝对路径,浏览器读不到,
     // 聊天流/旧会话回看必须由服务端按需回读。安全红线:规范化后必须落在白名单根之内
     // (拒 .. 穿越 / 拒符号链接逃逸 / 拒目录外一切路径 → 403);类型按后缀判,不信任 query 里的 mime。
-    // 白名单根(2026-10-19 截图预览):.genie/uploads(附件)+ .genie/browser-shots(browser 工具截图,
+ // 白名单根(截图预览):.genie/uploads(附件)+ .genie/browser-shots(browser 工具截图,
     // mdToHtml 的 ![...](/uploads?path=…) 内嵌预览数据源)。
     if (req.method === "GET" && req.url !== undefined && (req.url === "/uploads" || req.url.indexOf("/uploads?") === 0)) {
       const allowRoots = [join(repoRootDir(), ".genie", "uploads"), join(repoRootDir(), ".genie", "browser-shots")];
@@ -33702,7 +33701,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       rs.pipe(res);
       return;
     }
-    // IDE 图片预览取数(2026-10-22):GET /ide/asset?pid=<项目>&path=<项目内相对路径>。
+ // IDE 图片预览取数:GET /ide/asset?pid=<项目>&path=<项目内相对路径>。
     // 守卫口径同 file.read(项目根 realpath+startsWith 沙箱,pid 显式优先、缺省 active、都无→400)
     // + /uploads 同款拒 .. /防软链逃逸;扩展名白名单只放行图片类(IDE_ASSET_IMG_EXT);>16MB→413。
     // svg 经 <img> 展示本身不执行脚本,CSP default-src 'none' + nosniff 兜住直接导航打开面。
@@ -33710,7 +33709,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       const u = new URL(req.url, "http://local");
       const pid = u.searchParams.get("pid") || undefined;
       const rel = u.searchParams.get("path") || "";
-      const from = u.searchParams.get("from") || ""; // md 相对路径(2026-11-06):图片按 md 同目录优先解析
+      const from = u.searchParams.get("from") || ""; // md 相对路径:图片按 md 同目录优先解析
       if (rel.indexOf("..") >= 0) { res.writeHead(403, { "content-type": "text/plain; charset=utf-8" }); res.end("越界路径"); return; }
       if (!rel) { res.writeHead(400, { "content-type": "text/plain; charset=utf-8" }); res.end("缺 path"); return; }
       const kind = ideAssetKind(rel);
@@ -33718,7 +33717,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       const maxBytes = ideAssetMaxBytes(kind);
       const root = opts?.ideProjectRoot ? opts.ideProjectRoot(pid) : repoRootDir();
       if (!root) { res.writeHead(400, { "content-type": "text/plain; charset=utf-8" }); res.end("项目不存在或无活动项目"); return; }
-      // 远程项目(SSH/WSL,2026-10-27):图片经远端工作区服务读(通道 base64 / 远端 base64 回退),
+ // 远程项目(SSH/WSL:图片经远端工作区服务读(通道 base64 / 远端 base64 回退),
       // 不再走本地 realpath(远程 identity 不是本地路径,旧实现恒 404)。
       {
         const remoteRoot = parseRemoteProject(root);
@@ -33738,7 +33737,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
           return;
         }
       }
-      // 候选链解析(2026-11-06 `from=`):①from 目录+path ②项目根+path ③绝对(仅根内,含 E:/ 盘符
+ // 候选链解析( `from=`):①from 目录+path ②项目根+path ③绝对(仅根内,含 E:/ 盘符
       // WSL 映射);每个候选先 realpath 再 isPathInside,越界/不存在的候选跳过,全失败才落 403/404。
       const hit = ideAssetResolveLocal(root, rel, from);
       if ("code" in hit) { res.writeHead(hit.code, { "content-type": "text/plain; charset=utf-8" }); res.end(hit.msg); return; }
@@ -33749,7 +33748,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       if (st.size > maxBytes) { res.writeHead(413, { "content-type": "text/plain; charset=utf-8" }); res.end("文件过大(>" + ideAssetMaxMB(kind) + "MB)"); return; }
       const mime = ideAssetMime(abs);
       const total = st.size;
-      // HTTP Range(2026-10-28 媒体地基,逻辑同 GET /uploads):<video>/<audio> 拖进度条必须 206+content-range。
+ // HTTP Range(媒体地基,逻辑同 GET /uploads):<video>/<audio> 拖进度条必须 206+content-range。
       // 单段 bytes=a-b / bytes=a- / bytes=-n;多段(逗号)不解析 → 落下面 200 全量(浏览器自行退让)。
       const range = typeof req.headers.range === "string" ? req.headers.range : "";
       if (range && range.indexOf("bytes=") === 0 && range.indexOf(",") < 0) {
@@ -33788,7 +33787,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       rs2.pipe(res);
       return;
     }
-    // IDE Office 预览(2026-10-29 板 ide-o1/o2):GET /ide/office?path=<项目内相对路径>&pid=<项目>
+ // IDE Office 预览(板 ide-o1/o2):GET /ide/office?path=<项目内相对路径>&pid=<项目>
     // → 解析后的 AST JSON(pptx: slides / docx: blocks),前端 assets/ide-office.js 负责渲染。
     // 守卫口径同 /ide/asset(ideOfficeResolve:项目根 realpath + isPathInside)+ 扩展名白名单 + >OFFICE_MAX_BYTES→413(文案由常量推导)。
     if (req.method === "GET" && req.url !== undefined && (req.url === "/ide/office" || req.url.indexOf("/ide/office?") === 0)) {
@@ -33812,7 +33811,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch((e) => { try { res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }); res.end("解析失败:" + String((e as Error)?.message ?? e)); } catch (e2) { /* 已断开 */ } });
       return;
     }
-    // IDE Office 媒体(2026-10-29 板 ide-o1):GET /ide/office/media?path=<源文件>&part=<zip 内 part>&pid=<项目>
+ // IDE Office 媒体(板 ide-o1):GET /ide/office/media?path=<源文件>&part=<zip 内 part>&pid=<项目>
     // → zip 内媒体 part 原始字节(图片/音视频)。part 白名单 IDE_OFFICE_PART_RE(防包内穿越),
     // 源文件沙箱与 /ide/office 同口径;源文件扩展名不是 .pptx/.docx → 403。
     if (req.method === "GET" && req.url !== undefined && (req.url === "/ide/office/media" || req.url.indexOf("/ide/office/media?") === 0)) {
@@ -33842,7 +33841,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch((e) => { try { res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }); res.end("解析失败:" + String((e as Error)?.message ?? e)); } catch (e2) { /* 已断开 */ } });
       return;
     }
-    // IDE HTML 预览静态路由(2026-10-29 板 5a7bb5d2 节点 01):GET /ide/preview/<pid>/<项目内相对路径>
+ // IDE HTML 预览静态路由(板 5a7bb5d2 节点 01):GET /ide/preview/<pid>/<项目内相对路径>
     // pid 放路径段是刻意的(板风险 4 闭环):iframe 文档内 style.css/app.js 相对引用按文档 URL 解析时
     // **不继承 query**,query 形 pid 会在子资源请求里丢失;路径前缀 /ide/preview/<pid>/ 则天然保留。
     // 守卫:仅 GET(其余落 404 空体)+ 沙箱口径同 /ide/office(realpath + isPathInside;越界/.git/不存在统一 404 不泄漏细节)
@@ -33854,7 +33853,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       const qp = u.searchParams.get("path") || "";
       const rel = qp ? qp : pathSegs.slice(1).join("/");
       const pid = (pathSegs[0] && pathSegs[0] !== "" ? pathSegs[0] : undefined) || u.searchParams.get("pid") || undefined;
-      // 沙箱先行(板节点 01 验收口径:越界 → 404,与后缀无关;不泄漏判定细节)
+ // 沙箱先行(板节点 01 验径:越界 → 404,与后缀无关;不泄漏判定细节)
       const rr = ideOfficeResolve(rel, pid); // 沙箱与 /ide/office 同口径(403/404/400/501 统一落 404)
       if ("code" in rr) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("文件不存在或不可预览"); return; }
       const extLow = ideAssetExt(rel);
@@ -33872,7 +33871,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { try { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("文件不存在或不可预览"); } catch (e) { /* 已断开 */ } });
       return;
     }
-    // node-agent 单文件分发(step-048 远程向导):dist/downloads/node-agent.mjs(构建期 bundle)。
+ // node-agent 单文件分发(远程向导):dist/downloads/node-agent.mjs(构建期 bundle)。
     if (req.url === "/downloads/node-agent.mjs") {
       readFile(join(here, "downloads", "node-agent.mjs"))
         .then((buf) => { res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }); res.end(buf); })
@@ -33883,7 +33882,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
     res.end();
   });
   attachWs(server);
-  // 端口占用/监听失败不许静默(step-136 K3):日志给人话处置建议 + 非零退出码,桌面壳据此显示错误页。
+ // 端口占用/监听失败不许静默( K3):日志给人话处置建议 + 非零退出码,桌面壳据此显示错误页。
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") console.error("[gateway] 端口 " + port + " 已被占用——换端口:GENIE_GATEWAY_PORT=7701 或改 genie.config.json gateway.port");
     else console.error("[gateway] 面板监听失败(" + port + "):" + String(err?.message ?? err));

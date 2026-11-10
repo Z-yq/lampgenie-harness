@@ -248,8 +248,7 @@ describe("matchSignature", () => {
 
   it("近似模式:providerVersion 不同仍判 not-matched", () => {
     expect(matchSignature(sig(), sig({ providerVersion: "p2" }), { strict: false }).matched).toBe(
-      false,
-    );
+      false);
   });
 
   it("requireExact 可自定义:把 taskClass 列为强一致维", () => {
@@ -625,8 +624,7 @@ describe("survivorBias", () => {
     expect(
       survivorBias([sample({ id: "s1" }), sample({ id: "s2", status: "cancelled" })], {
         excludedCount: 4,
-      }).excludedCount,
-    ).toBe(5);
+      }).excludedCount).toBe(5);
     expect(survivorBias([]).biased).toBe(false);
   });
 });

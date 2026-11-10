@@ -1,6 +1,5 @@
 /**
  * wire:WS 消息协议表面(确定性行/结构扫描,不依赖索引、不调 LLM)。
- *
  * 本仓真正的对外接口是 WS 消息协议:一条消息要同时出现在
  *   ① packages/protocol/src/index.ts 的 discriminatedUnion
  *   ② apps/gateway/src/server.ts 的 switch(msg.type) case

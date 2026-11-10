@@ -1,13 +1,12 @@
 /**
  * 音频频谱视图(assets/ide-spectrum.js,板节点 ide-m5)契约测试。
- *
  * 本仓 vitest 是 node 环境(无 DOM / 无 WebAudio),不造 jsdom,分三层:
  *  ①源码契约(读文件文本):导出面四键 + RED、信号链关键字(createMediaElementSource /
  *    AnalyserNode / destination 防静音)、WeakMap 防二次 source、离线红线(禁 url 协议)、
  *    禁整段解码大文件、禁 console.log 噪声;
  *  ②纯函数层(__test):对数频率轴 → bin 反函数、dpr 适配夹紧、区间峰值电平、模式归一化;
  *  ③降级层:无 window / 无 AudioContext 时 attach 返回 {ok:false},detach 幂等不抛。
- * 真实绘制与媒体联动不做单测(DOM/WebAudio 交互验收走浏览器实测)。
+ * 真实绘制与媒体联动不做单测(DOM/WebAudio 交互验收走浏览器经验证)。
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -52,7 +51,7 @@ function fakeCanvas() {
 const fakeMedia = () => ({ paused: true, addEventListener() {}, removeEventListener() {} });
 
 describe("ide-spectrum 源码契约", () => {
-  it("可被 JS 引擎解析(资产无 TS 护栏,坏文件会直进产线)", () => {
+  it("可被 JS 引擎解析(资产无 TS 护栏,坏文件会直进生产环境)", () => {
     expect(() => new Function(source)).not.toThrow();
   });
 

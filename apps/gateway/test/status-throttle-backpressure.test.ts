@@ -1,5 +1,5 @@
 /**
- * fixF2/F3(2026-10-19 面板卡+重连风暴)单测:
+ * fixF2/F3(面板卡+重连风暴)单测:
  * ①wsSendPolicy——safeSend 背压丢行策略(纯函数):超 2MB 丢 stream llm-delta(打字机帧可丢,
  *   终稿由 journal 承接),状态/任务类必发+限速告警。
  * ②session.status.changed 广播 per-session 200ms 合并(前沿立即+尾沿补发,异会话不互并)。

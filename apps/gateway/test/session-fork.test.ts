@@ -10,7 +10,7 @@ import { createGatewayApp, type GatewayApp } from "../src/app.js";
 import { EchoChildBackend } from "@lampgenie/executors";
 
 // journal 确定性:关掉任务链旁路写入(执行前快照),fork 复制数才可精确断言。
-// (终态评审钩子已下线 step-083,原 GENIE_REVIEW_HOOK=off 行随之移除。)
+// (终态评审钩子已下线,原 GENIE_REVIEW_HOOK=off 行随之移除。)
 process.env.GENIE_CHECKPOINT = "off";
 
 // 随机高位端口(避开 7700 常用段;本仓测试串行跑)
@@ -38,8 +38,7 @@ function connect(port: number): Promise<WebSocket> {
 function waitMatch(
   ws: WebSocket,
   pred: (m: Record<string, unknown>) => boolean,
-  ms = 8000,
-): Promise<Record<string, unknown>> {
+  ms = 8000): Promise<Record<string, unknown>> {
   const inbox = (ws as unknown as { __inbox: Record<string, unknown>[] }).__inbox;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("等待消息超时")), ms);

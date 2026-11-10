@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
@@ -9,7 +10,7 @@ import { normalizeQuery, extractIdentifiers, sandboxResolve, SandboxError } from
 import { scanProject } from "../src/project";
 import { buildCallGraph, subgraph } from "../src/callgraph/engine";
 
-const REPO = "/mnt/e/workship/genie/lampgenie-harness";
+const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("D1 调用图:本仓真实链", () => {
   it("createGatewayApp 下游含 startGatewayServer,file:line 真实", async (t) => {
@@ -26,10 +27,10 @@ describe("D1 调用图:本仓真实链", () => {
     if (!r.callchain) return;
     expect(r.callchain).toBeTruthy();
     // 链存在性在引擎层断言(subgraph depth=2,不受结果预算 40 边截断——
-    // step-030 修正:createGatewayApp 体内调用随 config 观察器代码增长,
+ // 修正:createGatewayApp 体内调用随 config 观察器代码增长,
     // startGatewayServer(尾部的 ensureServer 闭包)曾跌出 40 边切片造成假红)
     const { buildCallGraphFromFiles, subgraph } = await import("../src/callgraph/engine");
-    // 套件并行重载下 ts-morph 偶发解析空结果(step-031~034 四见,单测恒绿)——三次递增退避重试
+ // 套件并行重载下 ts-morph 偶发解析空结果(~034 四见,单测恒绿)——三次递增退避重试
     let center: { id: string } | undefined;
     let g: import("../src/callgraph/engine").CallGraph | undefined;
     for (let attempt = 0; attempt < 3 && !center; attempt++) {
@@ -38,7 +39,7 @@ describe("D1 调用图:本仓真实链", () => {
       center = [...g.symbols.values()].find((x) => x.name === "createGatewayApp");
     }
     if (!center || !g) {
-      // 资源饥饿(并发会话 build/test 抢 CPU,ts-morph 持续空解析;step-034 实证根因)——
+ // 资源饥饿(并发会话 build/test 抢 CPU,ts-morph 持续空解析; 验证根因)——
       // 显式 SKIP 而非假红;功能由单跑与生产冒烟证实,低负载窗口复验即绿。
       t.skip("ts-morph 资源饥饿:符号解析持续为空,请低负载窗口复跑");
     }
@@ -163,7 +164,7 @@ describe("D10 结果预算", () => {
   }, 120_000);
 });
 
-describe("R4-C9 回归:obj.method 形态 query", () => {
+describe(" 回归:obj.method 形态 query", () => {
   it("带点符号不截断崩溃,末段变体可定位", async (t) => {
     // ZC-10 修复后:容器.方法真解析(append 在基类 BaseJournal 上,journal.ts 文件名↔类名互含回退)
     let r = await codeSense(REPO, "MemoryJournal.append", { mode: "debug", depth: 1 });
@@ -298,7 +299,7 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
   // 注意 retry 只对本测试生效,不掩盖其它真实失败。
   }, { retry: 2, timeout: 120_000 });
 
-  it("ZC-12 预算裁剪序覆盖新字段:最坏组合(45 边+80 引用)结果 ≤16KB(审计 R1-C25 回归)", async () => {
+  it("ZC-12 预算裁剪序覆盖新字段:最坏组合(45 边+80 引用)结果 ≤16KB(审计  回归)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-cs-zc12-"));
     let hub = "export interface HubOptions { alpha: number; beta: string; gamma: boolean; delta: number[]; epsilon: Record<string, number> }\nexport function hubCenter(opts: HubOptions): number {\n";
     for (let i = 0; i < 45; i++) hub += `  const step${i} = opts.alpha + ${i}; console.log("step", ${i}); JSON.stringify(opts); Number(step${i}).toFixed(2);\n`;
@@ -317,7 +318,7 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
     rmSync(dir, { recursive: true, force: true });
   }, 120_000);
 
-  it("ZC-14 文档提及符号快速降级:不付 3 次重试的 15s(审计 R1-C27 回归)", async () => {
+  it("ZC-14 文档提及符号快速降级:不付 3 次重试的 15s(审计  回归)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-cs-zc14-"));
     writeFileSync(join(dir, "notes.md"), "# 设计笔记\n优化 ghostMentionFn 的路径:见后续迭代。\n");
     writeFileSync(join(dir, "code.ts"), "export function realWork(): number {\n  return 1;\n}\n");
@@ -328,8 +329,8 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
     const r = await codeSense(dir, "ghostMentionFn", { mode: "debug" });
     const ms = Date.now() - t0;
     expect(r.degraded?.[0]?.reason).toContain("未找到符号");
-    // 基线含 ts-morph 首次类型检查器初始化(~3.1s 空闲机)。2026-10-15 复测:共享机 4 常驻
-    // chrome 进程 load 9-10 时,单次查询固定成本实测 ~9s 且缓存命中同价(环境绑定);文档提及
+ // 基线含 ts-morph 首次类型检查器初始化(~3.1s 空闲机)。 复测:共享机 4 常驻
+ // chrome 进程 load 9-10 时,单次查询固定成本经验证 ~9s 且缓存命中同价(环境绑定);文档提及
     // 现已不触发重试(md 不算证据),旧 bug 形态(3 重建+2.8s 退避)同负载下 ≈25s+——阈值
     // 15000 仍保持两态判别力
     expect(ms).toBeLessThan(20_000); // 套件并行再叠加 ~5s(实测 15.2s);旧 bug 形态 ≈25s+ 仍可判别
@@ -337,7 +338,7 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
   }, 60_000);
 });
 
-describe("ZC-13 双 scan 消除的操作级证据(审计 R1-C4 补)", () => {
+describe("ZC-13 双 scan 消除的操作级证据(审计  补)", () => {
   it("debug 查询内 scanProject 恰好执行一次", async () => {
     const { vi } = await import("vitest");
     const projectMod = await import("../src/project");
@@ -355,7 +356,7 @@ describe("ZC-13 双 scan 消除的操作级证据(审计 R1-C4 补)", () => {
   }, 60_000);
 });
 
-// 2026-10-18 中文功能词扩展(用户实报:查「总路线」explore 只回 1 条文档命中,agent 被迫 grep×18)
+// 中文功能词扩展(用户用户反馈:查「总路线」explore 只回 1 条文档命中,agent 被迫 grep×18)
 describe("explore 中文查询扩展", () => {
   it("normalizeQuery:中文功能词映射英文词根(逐词变体,不合并正则)", () => {
     const v = normalizeQuery("总路线");

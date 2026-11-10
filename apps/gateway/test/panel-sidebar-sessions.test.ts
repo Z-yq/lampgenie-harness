@@ -1,14 +1,12 @@
 /**
- * J4 侧栏会话完整性与活动时间排序(面板侧契约,2026-11-05 用户口径):
+ * J4 侧栏会话完整性与活动时间排序(面板侧契约:
  *  「有的时候会展示不全,时不时漏掉一些最近的执行 session;排序要按 session 有动作更新时间」
- *
  * 口径:
  *  ①列表行集合不静默丢:桶内有「显示更多(还有 N 条)」,折叠桶显式给「已折叠 N 条」;
  *  ②排序键 = max(会话最近活动时间, 任务 updatedAt):会话有动作(消息/工具/白板/子代理)即上浮,
  *    与 Task.updatedAt 是否刷新无关;活动时间缺失时逐字回落旧行为(不排错);
  *  ③hello 带 sessionActivity 快照、session.status.changed 带 lastActivityAt 时写入本地索引并重渲侧栏;
  *  ④活动时间只用于比较/展示,绝不回写进任务对象 updatedAt(时间戳是事实)。
- *
  * 做法:从 servePanel 的 HTML 里抽出真实函数源码(不是抄一份),在最小沙箱里真跑排序;
  * 其余用字面断言(零反斜杠纪律)。
  */
@@ -84,7 +82,7 @@ describe("侧栏会话排序与完整性(J4)", () => {
       rows.push({ sessionId: "s-ide", state: "done", updatedAt: T0, createdAt: T0 });
       sb.noteSessionAct("s-ide", T0 + 60_000);
       const sorted = rows.slice().sort(sb.runFirstCmp).map((r) => r.sessionId);
-      expect(sorted[0]).toBe("s-ide"); // 用户口径:最近有动作的会话置顶
+      expect(sorted[0]).toBe("s-ide"); // 最近有动作的会话置顶
       // 活动时间不进 updatedAt:actOf 是纯计算,行对象未被改写
       expect(rows[12]!.updatedAt).toBe(T0);
       expect(sb.actOf(rows[12]!)).toBe(T0 + 60_000);

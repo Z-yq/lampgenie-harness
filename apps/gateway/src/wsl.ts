@@ -1,11 +1,9 @@
 /**
- * WSL 项目桥(2026-10-27,Windows 桌面壳专用)。
- *
+ * WSL 项目桥(Windows 桌面壳专用)。
  * 背景:Windows 桌面端把 WSL 发行版里的项目登记为 UNC 路径
  * (`\\wsl.localhost\<发行版>\home\...` 或旧式 `\\wsl$\...`)。文件读写走 UNC 由 Windows 直读 9p,
  * 但**命令执行必须回到 WSL 内**:否则 Git-Bash 只是隔着共享目录跑 Windows 工具链
  * (node/python/git 全是 Windows 版,权限/换行/符号链接语义都对不上)。
- *
  * 本模块只做三件事:
  * ① 纯函数:UNC ↔ (发行版, POSIX 路径) 互转、wsl.exe 调用参数拼装(可单测,零 IO);
  * ② 发行版枚举/主目录探测(异步,60s 缓存;非 Windows 平台直接空);

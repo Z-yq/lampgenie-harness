@@ -1,13 +1,11 @@
 /**
  * Source Registry:邮件/IM/日历这类「外部事件源」的登记簿与事件流水(纯逻辑零 IO)。
- *
  * 为什么需要它:agent 要消费外部事件源,但「源」有三件事必须先与具体连接实现解耦,才谈得上可测与可持久化:
  *   1) 形状(kind)——字段契约(必填/类型/归属 event 还是 config)、事实、权限策略、
  *      线程与频道寻址方式、健康键,先登记再谈连接;
  *   2) 实例(instance)——某个 kind 的一份具体配置:是否启用、占用了哪些全局声明(claims);
  *   3) 事件流(events)——写面只允许走 createSourceContext().write,统一校验后落 seq 递增的流水;
  *      重启后靠 registry 的 JSON 快照重放,seq 从 nextSeq 续上,不重复不跳号。
- *
  * 怎么做:
  *   - registerKind / registerInstance 全量校验通过才改 registry(「非法输入零变更」是硬约束),
  *     非法输入只返回稳定码、绝不 throw;保留名(core / system / reserved:*)不给外部占用;
@@ -20,7 +18,6 @@
  *   - sourceScope 是只读视图:频道地址、线程寻址(payload 字段优先,回退 kind.find)、
  *     facts/policy/environment 透传,供连接层查表;
  *   - createSourceContext 把写面收成一个对象,调用方拿不到裸 registry 的写入口。
- *
  * 依赖纪律:本文件零外部依赖(无 import),不读写文件/网络/环境;时间一律由调用方传入
  * (input.at,其次 event.at),缺省 0,绝不读 Date.now,保证同一输入永远同一输出。
  * 所有函数输入非法只返回稳定码、绝不 throw,且不改入参(只把入参复制进 registry)。
@@ -296,8 +293,7 @@ export function createRegistry(): SourceRegistry {
 /** 登记一个 kind:全量校验 → 保留名 → 重复 → 落库;任一步失败 registry 零变更。 */
 export function registerKind(
   registry: SourceRegistry,
-  kind: unknown,
-): { ok: boolean; code: SourceCode; codes: SourceCode[]; kind?: SourceKind; reason?: string } {
+  kind: unknown): { ok: boolean; code: SourceCode; codes: SourceCode[]; kind?: SourceKind; reason?: string } {
   if (isPlainObject(kind) && isNonEmptyString(kind["kind"]) && isReservedKind(kind["kind"])) {
     return {
       ok: false,
@@ -568,8 +564,7 @@ export function healthClaim(
 /** 让实例失效:enabled:false + 归还它占的 claim;之后写入一律 SOURCE_DISABLED。 */
 export function invalidateInstance(
   registry: SourceRegistry,
-  id: string,
-): { ok: boolean; code: SourceCode; instance?: SourceInstance; reason?: string } {
+  id: string): { ok: boolean; code: SourceCode; instance?: SourceInstance; reason?: string } {
   if (!isNonEmptyString(id)) {
     return { ok: false, code: "SOURCE_INVALID", reason: "id 必须是非空字符串" };
   }

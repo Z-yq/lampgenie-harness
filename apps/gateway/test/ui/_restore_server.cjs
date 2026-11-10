@@ -1,4 +1,4 @@
-/** step-072 白板恢复闭环实测:gateway 子进程(可被 runner 杀/重启,测「重启后恢复」场景)。
+/** 白板恢复闭环经验证:gateway 子进程(可被 runner 杀/重启,测「重启后恢复」场景)。
  * 形态学 _board_selfhost.cjs:tsx 加载 src,useExternalHttp + servePanel;executor=秒回桩(任务即 done)。
  * 差异:journalDir 固定(默认 /tmp/j-s072)——重启后 journal 仍在,验证「跨进程恢复」;
  * 板文件在 repoRoot()/.genie/boards(不随 journalDir),重启后靠盘上读取(boardMemIndex 清空)。 */

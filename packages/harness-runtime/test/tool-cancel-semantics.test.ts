@@ -1,5 +1,5 @@
 /**
- * M34 用户停止语义专项(2026-11-07)。
+ *  用户停止语义专项。
  * 锚定:
  * ① 用户停止(task.cancel / user-stop)→ 工具结果固定文案「[用户已停止]…」,模型不再收到 [aborted];
  * ② 内部取消/测试 cancel/超时 → 旧 [aborted] / 超时错误框语义一字不变;
@@ -41,7 +41,7 @@ function llmOnce(calls: ToolCall[]): LlmProvider {
   };
 }
 
-describe("M34 isUserStopAbort(取消原因判定)", () => {
+describe(" isUserStopAbort(取消原因判定)", () => {
   it("task.cancel / user-stop 判为用户停止;测试 cancel / 内部 abort 不算", () => {
     const a = new AbortController();
     a.abort(new Error("cancelled:task.cancel"));
@@ -59,7 +59,7 @@ describe("M34 isUserStopAbort(取消原因判定)", () => {
   });
 });
 
-describe("M34 工具结果文案", () => {
+describe(" 工具结果文案", () => {
   it("用户停止(task.cancel):tool.result 固定停止文案,origin 仍 aborted", async () => {
     const journal = new MemoryJournal();
     let started!: () => void;

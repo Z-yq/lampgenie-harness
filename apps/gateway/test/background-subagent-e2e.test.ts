@@ -7,7 +7,7 @@ import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 
 it("后台子代理:async_launched→output.txt→注册表 complete", async () => {
@@ -102,7 +102,7 @@ it("task_output waitSec:阻塞等待后台子代理终态(2026-10-14 等待语�
 }, 40_000);
 // afterEach 清理由各用例尾部完成(进程级 env,同文件顺序执行)
 
-it("后台回执把「等还是继续」的决策权交给主 agent(2026-10-20 用户口径)", async () => {
+it("后台回执把「等还是继续」的决策权交给主 agent(2026-10-20 )", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }]);
   const seen: string[] = [];
   let spawnReceipt = "";
@@ -116,8 +116,8 @@ it("后台回执把「等还是继续」的决策权交给主 agent(2026-10-20 �
       seen.push("capture");
       // 第二步:从上下文里截获第一步 spawn 的工具回执(async_launched JSON)
       const m = JSON.stringify(_m);
-      // 锚用 note 独有串(「已后台启动(异步)」):2026-10-20 起历史任务档案块会被注入上下文,
-      // 旧锚「async_launched」可能先命中历史块里的结果文本(实测污染)。
+ // 锚用 note 独有串(「已后台启动(异步)」): 起历史任务档案块会被注入上下文,
+ // 旧锚「async_launched」可能先命中历史块里的结果文本(经验证污染)。
       const i = m.indexOf("已后台启动(异步)");
       if (i >= 0) spawnReceipt = m.slice(Math.max(0, i - 80), i + 760);
       return { content: "收执" };

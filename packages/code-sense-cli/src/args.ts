@@ -33,7 +33,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-/** 波浪号展开(step-092):`~`/`~/x` → 用户主目录。CLI 常经 execFile/引号包裹等非 shell 路径
+/** 波浪号展开:`~`/`~/x` → 用户主目录。CLI 常经 execFile/引号包裹等非 shell 路径
  * 调用,shell 不代展开——参数面统一自展,`--root '~/x'` 与 `--root ~/x` 同语义。其余原样返回。 */
 export function expandTilde(p: string): string {
   if (p === "~") return homedir();

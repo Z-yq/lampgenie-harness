@@ -64,7 +64,7 @@ describe("D12/D20 Python structural(轻量解析器)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("多行签名 def(tree-sitter 补盲):不误归前一个兄弟函数(2026-10-14 实仓实锤 render_memory_block)", async () => {
+  it("多行签名 def(tree-sitter 补盲):不误归前一个兄弟函数(2026-10-14 实仓实测确认 render_memory_block)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py3-"));
     const rel = "render.py";
     writeFileSync(join(dir, rel), [
@@ -109,8 +109,9 @@ describe("D12/D20 Python structural(轻量解析器)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("genie 真实仓冒烟:能解析出符号(self 归属)", async () => {
-    const GENIE = "/mnt/e/workship/genie/genie-voice/src";
+  it("真实 Python 仓冒烟:能解析出符号(self 归属);设 CODESENSE_PY_CORPUS 指向任一 py 仓即可跑", async () => {
+    const GENIE = process.env.CODESENSE_PY_CORPUS || "";
+    if (!GENIE) return; // 未提供语料目录时跳过(不造假)
     // 选一个存在的 py 文件
     const { readdirSync, statSync } = await import("node:fs");
     const find = (d: string): string | null => {
@@ -130,7 +131,7 @@ describe("D12/D20 Python structural(轻量解析器)", () => {
   }, 30_000);
 });
 
-describe("多行签名函数体+跨文件候选(2026-10-14 校验轮实仓实锤)", () => {
+describe("多行签名函数体+跨文件候选(2026-10-14 校验轮实仓实测确认)", () => {
   it("多行签名 def 的函数体也扫调用边(build_evidence_pack 形态:此前调用边全 0)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-ml-"));
     const rel = "adapter.py";
@@ -185,7 +186,7 @@ describe("多行签名函数体+跨文件候选(2026-10-14 校验轮实仓实锤
   });
 });
 
-describe("容器修复+括号多行 import(2026-10-14 校验轮二批实锤)", () => {
+describe("容器修复+括号多行 import(2026-10-14 校验轮二批实测确认)", () => {
   it("三引号字符串内容弹掉缩进栈后,AST 修复 container/id/kind(self 边恢复)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-cls-"));
     const rel = "agent.py";
@@ -233,7 +234,7 @@ describe("容器修复+括号多行 import(2026-10-14 校验轮二批实锤)", (
       const r = await parsePythonFile(dir, rel);
       const names = (r.crossFileCandidates ?? []).map((c) => c.toName).sort();
       expect(names).toContain("render_block");
-      // step-085 RC-O:别名 import 的候选 toName 回落原名(render_title)——merge 层按
+ // RC-O:别名 import 的候选 toName 回落原名(render_title)——merge 层按
       // 目标符号名解析;旧语义 toName=绑定名 rt 必失配丢边(正是 redash 丢失形态)
       expect(names).toContain("render_title");
       expect(names).not.toContain("rt");

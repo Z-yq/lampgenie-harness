@@ -1,7 +1,6 @@
 // wiring 集成面测试:桶导出可解析、contextBlock 渲染语义、会话关闭钩子
 // (无 LLM no-op / 抽取器落盘 / 最少用户消息门 / 观察器证据守卫 / 两会话晋升),
 // 以及 MarkdownDocumentStore 的精确编辑契约(stale/ambiguous/owner 隔离)。
-//
 // 运行方式与包脚本一致:NODE_OPTIONS=--conditions=development npx vitest run
 // (带 @lampgenie/memory 名称导入的用例依赖 development 条件解析到 src)。
 
@@ -375,8 +374,7 @@ describe('onSessionClose', () => {
     expect(promoted[0]?.label).toBe('职业：高中语文老师')
     expect(wiring.candidatePool.list('u_manual')[0]?.state).toBe('active')
     expect(
-      wiring.provider.list('u_manual').find(document => document.scope === 'user')?.content,
-    ).toContain('- 职业：高中语文老师')
+      wiring.provider.list('u_manual').find(document => document.scope === 'user')?.content).toContain('- 职业：高中语文老师')
   })
 
   it('学习链路抛错不冒泡:audit 记 error,onSessionClose 照常 resolve', async () => {

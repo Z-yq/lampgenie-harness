@@ -1,7 +1,6 @@
 /**
  * tool-settlement 测试:fork 调度 / 并发上限 / run-once / 观察标记 / drain 诊断 / 不产生 unhandledRejection
  * / raceSettle / withTimeout / settleBatch / abort 传播与 cancelAll。
- *
  * 口径:确定性优先——真实定时器 + 5~20ms 小延迟(不用 fake timers),时间戳走注入 env.now;
  * 并发峰值用任务体内的在飞计数器测量(与实现的槽位计数无关,是外部观测)。
  */
@@ -177,26 +176,22 @@ describe("eagerFork:句柄生成与并发上限", () => {
 describe("非法 env", () => {
   it("maxConcurrency=0 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: 0 } })).code).toBe(
-      SETTLE_CODES.INVALID,
-    );
+      SETTLE_CODES.INVALID);
   });
 
   it("maxConcurrency=-1 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: -1 } })).code).toBe(
-      SETTLE_CODES.INVALID,
-    );
+      SETTLE_CODES.INVALID);
   });
 
   it("maxConcurrency=1.5 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: 1.5 } })).code).toBe(
-      SETTLE_CODES.INVALID,
-    );
+      SETTLE_CODES.INVALID);
   });
 
   it("maxConcurrency=NaN → 同步抛 SETTLE_INVALID(不是死锁)", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: Number.NaN } })).code).toBe(
-      SETTLE_CODES.INVALID,
-    );
+      SETTLE_CODES.INVALID);
   });
 
   it("maxConcurrency=1 合法,正常调度", async () => {

@@ -1,5 +1,5 @@
 /**
- * 项目↔团队绑定(designs/23):「每个项目一个 team,有 git 就有 team」。
+ * 项目↔团队绑定:「每个项目一个 team,有 git 就有 team」。
  * 绑定键 = 激活项目的 git origin remote ↔ roster projects.yaml 的 repo 字段
  * (协议/凭据/尾斜杠/.git 后缀不敏感);无 remote 回退项目 label 与 projects key 直配。
  * 纯函数无 IO——绑定决策可单测锚定。
@@ -32,8 +32,7 @@ export function normalizeRepoUrl(raw: string): string {
 export function matchProjectId(
   projects: Record<string, ProjectRegistryEntry>,
   remoteUrl: string | null,
-  label: string,
-): string | null {
+  label: string): string | null {
   if (remoteUrl) {
     const want = normalizeRepoUrl(remoteUrl);
     if (want) {

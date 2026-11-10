@@ -1,12 +1,10 @@
 /**
- * 扫描根预算闸 + 多仓工作区感知(2026-10-21 立闸,2026-10-30 自 sense-root-gate 独立成模块并接全
+ * 扫描根预算闸 + 多仓工作区感知(立闸, 自 sense-root-gate 独立成模块并接全
  * 自动路径)。守护面:code_sense 工具(结构+语义)/warmIndex/**ensureIndex 自动构建**。
- *
- * 实锤史:画布 session 把工作区根 /mnt/e/workship/genie(巨型非 git 目录,9p 挂载,≥7000 文件
- * /4GB+)当 taskRoot——①主进程全量扫描 D 态饱和 libuv 线程池拖死网关(2026-10-21,立闸);
+ * 已知问题:把巨型非 git 目录(9p 挂载,≥7000 文件)当工作区根
+ * /4GB+)当 taskRoot——①主进程全量扫描 D 态饱和 libuv 线程池拖死网关(立闸);
  * ②结构面 action=impact 绕过闸直通 ensureIndex → risk 档采样重建(5160 文件)压垮 9p,收割两个
- * worker + 网关 session.status 3-9s(2026-10-30,闸接全自动路径)。
- *
+ * worker + 网关 session.status 3-9s(闸接全自动路径)。
  * 闸语义:超预算根**自动路径一律不扫不建**(人类显式 CLI `codesense index --force` 仍可);工作区
  * 根(多个子仓的直接父目录)给「子仓收窄」出路——显式 root 参数 / target 路径前缀自动收窄 /
  * symbol·impact 在已建索引的子仓内扇出。原则:**拒绝必须带路,死路即缺陷**。
@@ -24,18 +22,18 @@ export interface RootScanVerdict {
   bytesMb: number;
   /** ok=false 时的原因(日志/journal 观测面)。 */
   reason?: string;
-  /** 判定来源(2026-11-08):walk=有界遍历;index-meta=读构建产物身份短路(免 9p 全仓 walk)。 */
+ /** 判定来源:walk=有界遍历;index-meta=读构建产物身份短路(免 9p 全仓 walk)。 */
   source?: "walk" | "index-meta";
 }
 
 const SCAN_GATE_SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "vendor", "ref", "coverage", ".zcode", "docs",
   "venv", "__pycache__", "site-packages", ".genie", ".agents", ".next", "out", "target", "bin", "obj",
-  // 2026-11-02:本仓实测大目录(资产/日志/评测草稿),跳过省 walk;计费本就只算源码,这里是省时
+ // 本仓经验证大目录(资产/日志/评测草稿),跳过省 walk;计费本就只算源码,这里是省时
   "assets", "devlog", "eval-scratch", ".pytest_cache", ".r4", "zz-wslcheck-dir"]);
 
 /**
- * 源码扩展名(2026-11-02 计费口径修复):与 packages/code-sense GRAPH_SOURCE_EXT 同源
- * (callgraph/engine.ts:156;增语言时两处同步)。实锤:此前计所有非点文件字节,assets 二进制、
+ * 源码扩展名(计费口径修复):与 packages/code-sense GRAPH_SOURCE_EXT 同源
+ * (callgraph/engine.ts:156;增语言时两处同步)。注意:此前计所有非点文件字节,assets 二进制、
  * md 文档、pnpm-lock 把 lampgenie-harness 记成「2484 文件/880MB」假巨仓 → code_sense 全线拒答。
  */
 const SOURCE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
@@ -59,14 +57,14 @@ function scanGateTtlMs(): number {
   const n = Number(process.env.GENIE_SENSE_GATE_TTL_MS);
   return Number.isFinite(n) && n >= 0 ? n : 300_000; // 测试可置 0 强制每次重算
 }
-/** 有界 walk 的软 deadline(2026-11-08:15s → 30s)。9p 慢盘上 lampgenie-harness 实测 10.0s(空载),
- *  负载下会越过 15s → 正常 monorepo 被误判「巨根」降级成工作区扇出(7700 启动日志实锤)。
+/** 有界 walk 的软 deadline(15s → 30s)。9p 慢盘上 lampgenie-harness 经验证 10.0s(空载),
+ * 负载下会越过 15s → 正常 monorepo 被误判「巨根」降级成工作区扇出(7700 启动日志注意)。
  *  真正的巨根仍由 maxFiles/maxMb/条目上限拦;这里只是给慢盘留余量。 */
 function scanGateDeadlineMs(): number {
   const n = Number(process.env.GENIE_SENSE_GATE_DEADLINE_MS);
   return Number.isFinite(n) && n >= 1000 ? n : 30_000;
 }
-/** index-meta 短路的可信期(2026-11-08):构建产物身份(srcCount)在期内可直接判「已知小仓」,
+/** index-meta 短路的可信期:构建产物身份(srcCount)在期内可直接判「已知小仓」,
  *  免全仓 walk。默认 24h;过期后走一次真实 walk 复核(不会永久信任旧 meta)。 */
 function metaTrustMs(): number {
   const n = Number(process.env.GENIE_SENSE_GATE_META_TRUST_MS);
@@ -82,7 +80,7 @@ export async function rootScanVerdict(root: string): Promise<RootScanVerdict> {
   if (memo && Date.now() - memo.at < ttl) return memo.v;
   const maxFiles = scanGateMaxFiles();
   const maxMb = scanGateMaxMb();
-  // 2026-11-08 快路:已有构建产物的 meta(srcCount)=「这个根曾经完整扫过且不大」的确定性证据,
+ // 快路:已有构建产物的 meta(srcCount)=「这个根曾经完整扫过且不大」的确定性证据,
   // 免掉 9p 上每次冷启动 10-20s 的全仓 walk(7700 启动日志:walk 15s 超时→正常仓被当巨根)。
   // 只在 meta 可信期内生效;过期仍走真实 walk 复核,不永久信任旧 meta。
   const meta = readIndexMeta(root);
@@ -101,7 +99,7 @@ export async function rootScanVerdict(root: string): Promise<RootScanVerdict> {
     if (stop) return;
     if (files >= maxFiles) { stop = `文件数达上限 ${maxFiles}`; return; }
     if (entries >= 40_000) { stop = "目录条目达上限 40000"; return; }
-    // 2026-11-02:源码文件硬帽(目录自指/真实巨仓兜底)——skip 名单外的目录最多贡献 2 万个源文件
+ // 源码文件硬帽(目录自指/真实巨仓兜底)——skip 名单外的目录最多贡献 2 万个源文件
     if (files >= 20_000) { stop = "源码文件数达硬上限 20000(真实巨仓/目录自指兜底)"; return; }
     if (depth > 16) return;
     if (Date.now() > deadline) { stop = `有界 walk 超时(${Math.round(deadlineMs / 1000)}s)`; return; }
@@ -123,7 +121,7 @@ export async function rootScanVerdict(root: string): Promise<RootScanVerdict> {
     }
   };
   try {
-    // 外层 race 兜底(2026-10-21):9p 单个 readdir 若真 D 态挂住,walk 内部的逐目录 deadline
+ // 外层 race 兜底:9p 单个 readdir 若真 D 态挂住,walk 内部的逐目录 deadline
     // 检查到不了——整体 deadline+5s 未决=按超预算拒绝(fail-safe),悬挂的残余 walk 有界。
     const hardMs = deadlineMs + 5_000;
     await Promise.race([
@@ -145,7 +143,7 @@ export async function rootScanVerdict(root: string): Promise<RootScanVerdict> {
   return v;
 }
 
-// ---- 多仓工作区感知(2026-10-30:拒绝必须带路)----
+// ---- 多仓工作区感知(拒绝必须带路)----
 
 /** 子仓标记文件:任一在场即认作仓(.git 目录优先,但非 git 的包根也算——工作区里常见混布)。 */
 const REPO_MARKERS = [".git", "package.json", "pyproject.toml", "setup.py", "go.mod", "Cargo.toml"] as const;
@@ -159,18 +157,18 @@ export interface WorkspaceRepo {
   indexed: boolean;
 }
 
-/** 探测子仓:直接子目录带仓标记即收;无标记的目录**下探一层**再收(2026-11-02:pnpm monorepo
+/** 探测子仓:直接子目录带仓标记即收;无标记的目录**下探一层**再收(pnpm monorepo
  * 的 apps/ 与 packages/ 下两层深子仓,一层探测返回空清单 → 拒绝文案成死路)。已确认是仓的目录
  * 不再下探;重目录(node_modules/vendor 等)不下探。 */
-/** 探测子仓:直接子目录带仓标记即收;无标记的目录**下探一层**再收(2026-11-02:pnpm monorepo
+/** 探测子仓:直接子目录带仓标记即收;无标记的目录**下探一层**再收(pnpm monorepo
  * 的 apps/ 与 packages/ 下两层深子仓,一层探测返回空清单 → 拒绝文案成死路)。已确认是仓的目录
  * 不再下探;重目录(node_modules/vendor 等)不下探。
- * 2026-11-04:async IO(readdir/stat/readFile 全 fs/promises,9p 病态不再阻塞事件循环)+
+ * async IO(readdir/stat/readFile 全 fs/promises,9p 病态不再阻塞事件循环)+
  * per-root TTL 缓存(缺省 60s,GENIE_SENSE_REPOS_TTL_MS 可调;拒绝路径每次 code_sense 高频复用)。 */
 async function detectWorkspaceReposFresh(root: string): Promise<WorkspaceRepo[]> {
-  // 2026-11-08:根自身是 git 仓 = 单一扫描单元。此前按 package.json 把 lampgenie-harness 的
+ // 根自身是 git 仓 = 单一扫描单元。此前按 package.json 把 lampgenie-harness 的
   // apps/* + packages/* 全认成「子仓」(17 个),各自建索引(28MB)、跨包 impact 被切断、
-  // warm 汇总报「17 已新鲜」;而工作区(非 git 根,如 /mnt/e/workship/genie)仍按下探逻辑工作。
+  // warm 汇总报「17 已新鲜」;而工作区(非 git 巨根)仍按下探逻辑工作。
   if (await isGitRepoRoot(root)) return [];
   let names: Dirent[];
   try { names = await readdir(root, { withFileTypes: true }); } catch { return []; }
@@ -248,7 +246,7 @@ async function repoDescription(repoPath: string): Promise<string> {
 
 /**
  * target(文件路径/scope 前缀)是否落在某个子仓内 → 收窄到该子仓根。
- * 接受:相对路径以子仓名开头(`genie-voice/genie/x.py` 或恰为子仓名)或绝对路径在子仓下;
+ * 接受:相对路径以子仓名开头(`services/genie/x.py` 或恰为子仓名)或绝对路径在子仓下;
  * 越界(../)不收。不校验文件存在——查询面自己有「缺文件」提示,这里只做根归属判定。
  */
 export function refineRootForTarget(root: string, repos: WorkspaceRepo[], target: string): string | null {
@@ -279,7 +277,7 @@ export function workspaceRefusalText(root: string, verdict: RootScanVerdict, rep
   ];
   if (repos.length) {
     lines.push(
-      "这是多仓工作区根——整根索引会压垮慢盘(实锤:采样重建 5160 文件把 9p 拖到全系统停顿)。子仓都是小根,可安全查询/建索引:",
+      "这是多仓工作区根——整根索引会压垮慢盘(实测确认:采样重建 5160 文件把 9p 拖到全系统停顿)。子仓都是小根,可安全查询/建索引:",
       renderWorkspaceRepos(repos),
       "出路(任选):",
       `① 显式收窄:本调用加 root="<子仓名>"(如 root="${repos[0]!.name}")后重查;`,

@@ -1,5 +1,5 @@
 /**
- * 项目档案管线(step-049,用户口径「项目一添加就异步检索,进度条,做完静态显示 graph,团队关键视图」):
+ * 项目档案管线:
  * 纯静态零 LLM 的模块级架构图管线——扫描→模块聚类→import 依赖边→mermaid。
  * 纪律:分批 setImmediate 让步(不阻塞任务执行);进度经 WS 广播;产物持久化 .genie/profiles/<id>.json;
  * 任务终态钩子记录 recentChanges(模块命中)+ 防抖自动重建(agent 加了模块→图上出现,新模块打 🆕)。
@@ -23,7 +23,7 @@ export interface ProfileModule {
   descHasAi?: boolean;
 }
 
-/** 规划项(step-049 全量开发,用户口径「规划驱动开发不分期」):图上规划态的原子操作。 */
+/** 规划项(全量开发:图上规划态的原子操作。 */
 export type PlanItem =
   | { id: string; kind: "add-module"; name: string; note: string; createdAt: number }
   | { id: string; kind: "remove-module"; name: string; reason: string; createdAt: number }
@@ -156,7 +156,7 @@ function mermaidOf(modules: ProfileModule[], edges: { from: string; to: string }
   }
 }
 
-/** 规划 → 结构化任务书(用户口径「规划出来之后才开始行动」)。 */
+/** 规划 → 结构化任务书。 */
 export function planToInstruction(plan: PlanItem[]): string {
   if (!plan.length) return "";
   const adds = plan.filter((x) => x.kind === "add-module") as { name: string; note: string }[];
@@ -224,7 +224,7 @@ export class ProjectProfileIndex {
   }
 
   /** 移除项目时清除其档案产物(内存登记+落盘文件;不存在=幂等 no-op)。
-   * 2026-10-14「已移除项目」残留根治:项目删除不再遗留 <pid>.json 死数据。 */
+ * 「已移除项目」残留根治:项目删除不再遗留 <pid>.json 死数据。 */
   purge(projectId: string): void {
     this.profiles.delete(projectId);
     this.rebuildTimers.delete(projectId);
@@ -299,8 +299,8 @@ export class ProjectProfileIndex {
       p.stats.files = scan.files.length;
       await tick(12, `扫描完成:${scan.files.length} 个源文件`);
 
-      // 单图同构(2026-10-13 用户口径「档案就是 c2f,c2f 就是档案」)。
-      // 2026-10-26 修复(对比 ZCode startup「只预热 active、避免重复重活」;AGENTS 主进程假死实锤):
+ // 单图同构。
+ // 修复(对比 ZCode startup「只预热 active、避免重复重活」;AGENTS 主进程假死注意):
       // 旧实现在索引过期时直接 void c2f.buildC2fIndex(root) = **主进程**全仓 ts-morph 扫描,
       // 每添加一个项目触发一次,连续添加多项目=主进程卡死(添加风暴时「列表滞后/添加没反应」的另一真因)。
       // 改走 sense-index-manager:有索引(即使过期)先用快路径;缺/过期交给 worker 子进程后台重建
@@ -404,7 +404,7 @@ export class ProjectProfileIndex {
     return p;
   }
 
-  /** 单图同构路径(2026-10-13):从 c2f 静态索引聚合档案——模块=目录聚类(函数级节点),
+ /** 单图同构路径:从 c2f 静态索引聚合档案——模块=目录聚类(函数级节点),
    * 边=跨模块函数调用聚合(比 import 静态扫描更真实:运行可达的调用面);
    * 类/方法进 keyFiles;行数仍逐文件(索引无行数字段)。 */
   private async buildFromC2f(
@@ -412,8 +412,7 @@ export class ProjectProfileIndex {
     root: string,
     idx: import("@lampgenie/code-sense").C2fIndex,
     tick: (progress: number, stage: string) => Promise<void>,
-    prev?: ProjectProfileData,
-  ): Promise<void> {
+    prev?: ProjectProfileData): Promise<void> {
     const { queryEntryPoints } = await import("@lampgenie/code-sense");
     const modOfFn = moduleOf;
     await tick(30, "从调用索引聚合模块");

@@ -1,17 +1,14 @@
 /**
- * 大结果「智能入上下文」闸门(step-1029,2026-11-06)。
- *
+ * 大结果「智能入上下文」闸门。
  * 与 microcompact 的「入口控增量」是同一根问题的两半:那一半治**读侧**每步改写前缀,
  * 这一半治**入口**——工具结果进来时就压到本步预算内,而不是先全量塞进上下文再靠 prune 减回去
  * (那正是用户点名的 250k→160k→240k 震荡形态)。
- *
  * 三级策略(按量级选,便宜的先上):
  * ① **直通**:est 未同时越过「本步预算」与绝对下限(4k tok)→ 原样返回,零变化。
  * ② **chunk-select**:按行切成 ~1-1.5k tok 的块(保留原始行号),交给本地 8105 `/decide`
  *    判「这块对当前任务还有用吗」,选高相关块 + 头尾保底,压回预算;放不下的列「筛掉清单」。
  * ③ **digest**:选块后仍超摘要线,或结果本身超大 → 小模型按任务目标出四段摘要
  *    (关键结论 / 精确锚点 / 异常与风险 / 下一步);**未配小模型就不硬造摘要**,只拼装选块。
- *
  * 保真红线(与既有 spill 纪律同源):
  * - 全文永远落盘 `.genie/tool-dumps/<callId>.txt`(逐字节等于原文,行号对齐);
  *   进上下文的是「选块/摘要 + 一行全文已落盘指针」,读侧不会再改写它(标记复用
@@ -500,7 +497,7 @@ function collectStringLeaves(value: unknown, out: string[], depth: number): void
 }
 
 /**
- * 识别 git diff 结果(2026-11-06,diff 专用提炼轨):
+ * 识别 git diff 结果(diff 专用提炼轨):
  * ① 直接文本:`diff --git ` 文件头(或 `--- a/` + `+++ b/` 成对)且含 hunk 头才算;
  * ② JSON 包裹(压缩单行 `{...}` / `[...]`,如 `{"stdout":["..."],...}`):解包所有 string leaf
  *    用换行拼回后按 ① 再判,命中即返回**解包后**的文本(mtime/转义换行都被还原)。
@@ -654,8 +651,7 @@ export function compressDiffForDigest(diffText: string, maxChars = DIGEST_INPUT_
   // 头行 + 元信息成本(每行 +1 = join 的换行;轻微高估是安全的)。
   const headsCost = groups.reduce(
     (n, g) => n + [g.head, ...g.meta].reduce((m, l) => m + l.length + 1, 0),
-    0,
-  );
+    0);
   if (headsCost > maxChars) {
     // 极端:头行/元信息本身就超预算 → 头行优先,元信息按顺序裁,不保 hunk。
     const out: string[] = [];
@@ -917,7 +913,7 @@ export function assembleIntake(opts: {
     ? `,未切块(无可切边界),超出本步预算${opts.dumpPath ? ",全文在 dump" : ""}`
     : "";
   // digest(diff) 的输入不是「选中的块」而是整份 diff 的压缩体:账目必须换成精炼口径,
-  // 否则「切 N 块保留 M 块」+「筛掉清单」会把两套路径的账混在一起(实测误导 60 倍)。
+ // 否则「切 N 块保留 M 块」+「筛掉清单」会把两套路径的账混在一起(经验证误导 60 倍)。
   const digestDiff = opts.policy === "digest" && opts.digestDiff !== undefined;
   const lineLabel = opts.digestDiff?.jsonWrapped ? "单行 JSON" : `${opts.totalLines} 行`;
   const baseHead = digestDiff
@@ -982,8 +978,7 @@ export interface IntakeOutcome {
 function locateTruncatedRange(
   chunks: readonly IntakeChunk[],
   kept: readonly number[],
-  included: number,
-): { start: number; end: number } | undefined {
+  included: number): { start: number; end: number } | undefined {
   let pos = 0;
   for (let k = 0; k < kept.length; k++) {
     const chunk = chunks[kept[k]!];
@@ -1025,7 +1020,7 @@ export async function intakeToolResult(opts: {
     const isDiff = diff !== undefined;
     const diffStatsInfo = isDiff ? diffStats(diff!.text) : undefined;
     const level = isDiff && config?.digest ? "digest" : intakeLevel(tokens, config);
-    // 自适应块大小(2026-11-06):头尾两块是硬保底,块太大会让「保底两块」自己就超预算。
+ // 自适应块大小:头尾两块是硬保底,块太大会让「保底两块」自己就超预算。
     // 取 min(配置块, 预算的 35%) ⇒ 头尾合计约 70% 预算,余下再填高相关块。
     const autoChunk = Math.max(150, Math.floor(opts.budgetTokens * 0.35));
     const chunkTokens = Math.min(config?.chunkTokens ?? CHUNK_TARGET_TOKENS, autoChunk);

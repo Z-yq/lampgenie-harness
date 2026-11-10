@@ -1,11 +1,9 @@
 /**
  * 白板广播 worker→gateway 中继(n5「看板数据不更新」根治)契约测试。
- *
  * 根因:生产默认 agent.sessionWorker=true,agent loop 跑在 session-worker **子进程**,那里的 bus 是
  * 独立实例——agent-wiring 落账后的 bus.emit("board.changed") 只在子进程空转,gateway(server.ts:535
  * 订阅的是自己进程的 bus)收不到 → 面板白板视图永不刷新。修法:host 在 journal.appendMany 落账
  * 成功后按 kind 前缀 board. 中继 board.changed(relayBoardChanged)。
- *
  * 两个层次各钉一遍:
  *  ①纯函数层:relayBoardChanged 的映射/过滤语义(不 fork 进程,毫秒级);
  *  ②真 IPC 层:stub worker(STUB_MODE=board)上行 board.update/board.comment + 一条非 board 事件,

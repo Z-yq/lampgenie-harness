@@ -1,16 +1,14 @@
 /**
- * 附件文档解析器(2026-10-29 附件链路第一步)。
- *
+ * 附件文档解析器(附件链路第一步)。
  * 为什么单独一层:附件(用户在会话里贴进来的 docx/pptx/xlsx/pdf/zip/文本)要走「先变成纯文本 →
  * 再注入上下文」这条路,而不是把二进制塞给模型。这里只负责**文件 → 文本**,不做决策、不做路由
  * (panel / agent-wiring 侧怎么用由各自模块接)。
- *
  * 设计取舍:
  *  - docx/pptx 复用 ./office-ooxml.js 的 parseOffice(已有 AST,不重复解 zip/XML);
  *  - xlsx 走最小可用版(jsszip + 手写 XML 树),不引新依赖;
  *  - pdf 自研最小解压(Flate / ASCII85)+ Tj/TJ 抽取,字符串支持 `(...)` 与 `<...>` 两种写法,
  *    `<...>` 十六进制串按「ToUnicode CMap → UTF-16BE → latin1」顺序解码;拿不到可见正文时
- *    如实报「无文本层/正文过少」,绝不编造内容;
+ * 如用户反馈「无文本层/正文过少」,绝不编造内容;
  *  - 任何输入都必须返回 DocParseResult,**绝不抛错**(上层是会话主链路,一抛整轮挂)。
  */
 import { readFile } from "node:fs/promises";
@@ -358,7 +356,6 @@ async function readSheetNames(zip: JSZip): Promise<string[]> {
  *  - 单 CMap ≤ 8192 条映射、总 CMap ≤ 32 个,超限截断(防恶意超大 CMap 撑爆内存);
  *  - 可见字符 < 8 一律判 ok:false(「正文过少」):3 个字符不算抽取成功;
  *  - 不引外部依赖:Flate 走 node:zlib,ASCII85 自研,CMap 手工解析。
- *
  * 注意(不要「优化」掉):`/F9 9 Tf … (F0 STSong-Light UniGB-UCS2-H) Tj` 这类**字体标注行是页面
  * 上真实印出来的字**,是正文的一部分,必须照抽。别为了「看起来更像正文」把它过滤掉。
  */

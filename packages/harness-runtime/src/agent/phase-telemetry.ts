@@ -1,11 +1,9 @@
 /**
- * M81 阶段遥测合同:turn 内各阶段(llm / tools)的 span 记录 + 单条 turn 级汇总。
- *
+ *  阶段遥测合同:turn 内各阶段(llm / tools)的 span 记录 + 单条 turn 级汇总。
  * 纯逻辑:**无 IO**(不碰 journal / 文件 / 网络);时间只经注入的 TelemetryClock 读取,
  * 因此整个模块可用假时钟确定性测试。接线方(loop.ts)只负责 begin/end 与落一条
  * `custom` + `payload.what === "telemetry.phase"` 事件。
- *
- * 口径要点(与 M81 合同逐条对应):
+ * 口径要点(与  合同逐条对应):
  * - 时钟单调性:一次回退/抛错/非法读数即把该实例**永久**置为不可靠;不可靠时**不得钳零**
  *   (unattributedMs 如实给 null,而不是把负数抹成 0)。
  * - span:同一时刻只允许一个 open span;被新 begin 顶掉的旧 span 记 "unclosed",
@@ -195,7 +193,7 @@ function unionLength(spans: readonly PhaseSpan[]): number {
 }
 
 /**
- * 阶段记录器:begin/end 成对收口,异常路径用 closeAll 兜底。
+ * 阶段记录器:begin/end 成对,异常路径用 closeAll 兜底。
  * 只用传入时钟读数,不落任何账——spans() 是唯一读数面。
  */
 export class PhaseRecorder {

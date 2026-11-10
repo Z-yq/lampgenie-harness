@@ -1,5 +1,5 @@
 /**
- * fixF1(2026-10-19 面板卡+重连风暴):journal per-session 事件索引正确性。
+ * fixF1(面板卡+重连风暴):journal per-session 事件索引正确性。
  * 高频读路径(session.status)从 readAll 全量扫改为 readSession 索引切片——
  * 这里锁死索引与全量口径的一致性:多会话混合 append/appendMany、sinceSeq 增量、
  * 文件版重放挂链、seq 断档降级(正确优先于二分)。

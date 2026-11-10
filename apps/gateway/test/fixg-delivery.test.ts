@@ -1,5 +1,5 @@
 /**
- * fixG(交付过程优化官 G,2026-10-18)四件的单测面:
+ * fixG(交付过程优化官 G四件的单测面:
  * G1 codeReviewTool checkpoint 基线接线——任务带 checkpoint 时 review 只审本任务变更集
  *    (diff 无别人的在途改动),checkpoint 缺席回退全仓;fast:true 只跑确定性层(零 LLM)。
  * G2/G3 提示词纪律在场断言(派发与等待/验证轮次自省)+ task_output waitSec 语义。
@@ -17,7 +17,7 @@ import type { Task } from "@lampgenie/core";
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 
 /** 共享工作区双改动现场:b.ts=开工前已在途(别人的),a.ts/mine-new.ts=本任务开工后改的。
- * 快照形态与产线 checkpointCreate 一致(git stash create 悬空 commit,不动工作区)。 */
+ * 快照形态与生产环境 checkpointCreate 一致(git stash create 悬空 commit,不动工作区)。 */
 function dualChangeRepo(): { dir: string; base: string } {
   const dir = mkdtempSync(join(tmpdir(), "gh-fixg1-"));
   const g = (cmd: string) => execSync(`git ${cmd}`, { cwd: dir });
@@ -95,7 +95,7 @@ describe("fixG2/G3 提示词纪律与工具语义在场", () => {
     expect(src).toContain("fixG2 派发与等待纪律");
     expect(src).toContain("同一条消息里并行派");
     expect(src).toContain("12 连空轮询");
-    // 2026-10-20:等待通道升级为 wait:true / waitFor:"result"(挂起零 LLM);waitSec 保留快照/短等
+ // 等待通道升级为 wait:true / waitFor:"result"(挂起零 LLM);waitSec 保留快照/短等
     expect(src).toContain("spawn(wait:true)");
     expect(src).toContain('waitFor:\"result\"');
   });
@@ -137,11 +137,11 @@ describe("fixG4 重启收编文案与面板渲染", () => {
     const collected = tm.restore([t]);
     expect(collected).toHaveLength(1);
     const after = collected[0]!;
-    expect(after.state).toBe("interrupted"); // 2026-11-05:外因中断≠人为取消
+    expect(after.state).toBe("interrupted"); // :外因中断≠人为取消
     expect(after.result).toContain("网关重启中断");
     expect(after.result).toContain("fixg4-t1"); // 回执带原任务书 id
     expect(after.updatedAt).toBe(1700000005000); // 时间是事实,收编不篡改
-    // 终态任务原样保留(不重复收编);queued 原样重排队(2026-11-05)
+ // 终态任务原样保留(不重复收编);queued 原样重排队
     const done: Task = { ...t, id: "fixg4-t2", state: "done", result: "ok" };
     expect(tm.restore([done])).toHaveLength(0);
     const queued: Task = { ...t, id: "fixg4-t3", state: "queued" };
@@ -162,7 +162,7 @@ describe("fixG4 重启收编文案与面板渲染", () => {
   });
 });
 
-describe("上下文卫生纪律(2026-10-20 用户口径:繁重 coding 拆子任务,主上下文只进结论)", () => {
+describe("上下文卫生纪律(2026-10-20 繁重 coding 拆子任务,主上下文只进结论)", () => {
   const aw = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf-8");
   it("系统提示含拆派纪律与子代理返回要求", () => {
     expect(aw).toContain("上下文卫生纪律");

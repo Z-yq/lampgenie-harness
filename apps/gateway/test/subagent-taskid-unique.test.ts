@@ -1,5 +1,5 @@
 /**
- * 子代理 taskId 唯一性(2026-10-19 实锤):同一父任务并行派两个 explore,旧实现两者都拿
+ * 子代理 taskId 唯一性(注意):同一父任务并行派两个 explore,旧实现两者都拿
  * `${task.id}-sub` → 子 loop sessionId / 轨迹目录 subagent-<taskId>-sub / subagent.event.taskId
  * 全撞在一起(159 次调用混在一个目录,无法按子代理排障)。源结构锁:派发唯一化 + 父 id 留痕。
  */

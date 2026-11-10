@@ -1,5 +1,5 @@
 /**
- * audio.chat 形态分派直测(2026-10-21 音频链路优化,genie-voice 两口径):
+ * audio.chat 形态分派直测(两接口口径,协议参考 qwen-audio-agent,致谢):
  * - resolveAudioChatMode:显式 chatMode > 显式 protocol > 模型名推断(qwen3.8-omni*→omni-query;
  *   qwen-audio-3.1-realtime*→realtime-plus);
  * - omni-query 装配面:一次 query 里音频作为输入内容(input_audio 内容件,pcm16 自动包 WAV data URL);
@@ -56,7 +56,7 @@ describe("buildAudioChatFromConfig 形态分派", () => {
     const r = await llm.chat([{ role: "user", content: "(语音输入)", audio: { data: Buffer.from("pcm16!").toString("base64"), format: "pcm16" } }], []);
     expect(r.content).toBe("ok");
     expect(st.url).toBe("https://llm.test/v1/chat/completions");
-    // 内容件:text + input_audio(pcm16 裸流自动包 WAV 容器,genie-voice omni 实证形态)
+ // 内容件:text + input_audio(pcm16 裸流自动包 WAV 容器,omni 接口经验证验证形态)
     const content = (st.body.messages as { content: unknown }[])[0]!.content as { type: string; input_audio?: { data: string; format: string } }[];
     expect(content[0]).toEqual({ type: "text", text: "(语音输入)" });
     expect(content[1]!.type).toBe("input_audio");

@@ -1,6 +1,5 @@
 /**
- * safe-restart-gateway.cjs(step-1002B):活跃任务门 + 探测失败门 + dry-run。
- *
+ * safe-restart-gateway.cjs:活跃任务门 + 探测失败门 + dry-run。
  * 纪律:本文件只跑「拒绝/只读探测」路径与纯函数;绝不触发真实的 stop/start(7700 在跑)。
  * 子进程用例全部带 --dry-run 或走「有活跃任务→非零退出」的分支。
  */
@@ -98,7 +97,7 @@ function startHelloGateway(frame: unknown = { v: 1, type: "hello" }): Promise<{ 
 
 /**
  * 「端口先就绪、装配中」的网关:任何请求(含 WS upgrade)都回 HTTP 200 且不接 upgrade,
- * ws 客户端会得到 `Unexpected server response: 200`(2026-11-09 实测形态)。
+ * ws 客户端会得到 `Unexpected server response: 200`(经验证形态)。
  */
 function startHttpOnlyGateway(): Promise<{ port: number; close: () => Promise<void> }> {
   return new Promise((resolve, reject) => {
@@ -250,7 +249,7 @@ describe("safe-restart-gateway 纯函数", () => {
     expect(o.dryRun).toBe(true);
     expect(o.pid).toBe(9);
     expect(o.wsReadyMs).toBe(1234);
-    // 2026-11-09:9p 缓存冷启动 journal 722495 行/314832ms,180s 不够 → 缺省 300000。
+ // 9p 缓存冷启动 journal 722495 行/314832ms,180s 不够 → 缺省 300000。
     expect((safe.parseArgs([]) as { wsReadyMs: number }).wsReadyMs).toBe(300000);
     expect(() => safe.parseArgs(["--port", "abc"])).toThrow();
     expect(() => safe.parseArgs(["--ws-ready-ms", "0"])).toThrow();

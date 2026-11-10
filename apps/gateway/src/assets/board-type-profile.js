@@ -1,11 +1,10 @@
-/** 板型画像引擎(2026-10-26,非 page 板画布专用):
+/** 板型画像引擎(非 page 板画布专用):
  * 把「13 类板型该怎么画」从纯提示词变成画布可见的结构:
  *  - 每类有固定阶段(stage)清单与顺序:code=现状/变更/影响/验收,test=数据/执行/被测/判定/断言/回归,
- *    fault=复现/异常/假设/根因/修复/防复发,refactor=现状/目标/展开/迁移/收口/回滚,…
+ * fault=复现/异常/假设/根因/修复/防复发,refactor=现状/目标/展开/迁移//回滚,…
  *  - 节点按 group/label 归到阶段,画布顶部出「板型 + 规模 + 阶段覆盖」头,缺段可见;
  *  - 节点卡出角色 chip、硬规则徽标(改前/目标/验收/证据/分支/P0)与 flow 关键步骤/if-else;
  *  - 调研板额外给矩阵权重/未知/置信信息(表格视图消费)。
- *
  * 纯函数零 IO/零 DOM;浏览器挂 BoardTypeProfile,panel.ts 调用;vitest 直接 module.exports 单测。
  * 不改板数据:未知板型返回 null,旧板走原渲染(零回退风险)。
  */
@@ -18,7 +17,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  // step-1010:板型强调色改读主题令牌 var(--bcv-lane-N),colorHex 保留原色值给
+ // 板型强调色改读主题令牌 var(--bcv-lane-N),colorHex 保留原色值给
   // 需要拼透明度的消费点(panel.ts cvTypeHeadHtml 的 border-color + "55")。
   var PROFILES = {
     code: {
@@ -188,7 +187,7 @@
   };
   function arr(x) { return Array.isArray(x) ? x : []; }
   function txt(x) { return String(x == null ? "" : x); }
-  // test flow(2026-10-26 测试类型接入 code flow):主线=测试执行流,被测链路逐函数展开,
+ // test flow( 测试类型接入 code flow):主线=测试执行流,被测链路逐函数展开,
   // 断言 decision 是/否,失败定位+回归锚收尾。阶段对齐 test/draw 技能,防六段画像误报缺段。
   var TEST_FLOW_PROFILE = {
     label: "测试流程", short: "TESTFLOW", icon: "✓", color: "var(--bcv-lane-6, #6fd6d6)", colorHex: "#6fd6d6",
@@ -203,7 +202,7 @@
     ],
     kindMap: { start: "fixture", end: "judge", decision: "judge", function: "code", io: "code", tool: "code", http: "code", note: "reg" },
   };
-  // perf flow(2026-10-29 性能优化板接入 code flow):用户口径「性能优化的 flow 还差点意思」——
+ // perf flow( 性能优化板接入 code flow):——
   // 有 start/end/decision/带 flow 的步骤时,perf 板与 code 板同形态渲染(药丸/菱形/代码框/正交线),
   // 阶段随之换成工程流程:触发→采样基线→定位瓶颈→改动→复测→判定,不再套「基线/瓶颈/改动/目标/门禁」契约画像
   // (否则布局是流程图、顶部却误报缺段)。旧的纯模块卡 perf 板(无流程语义)仍走 PROFILES.perf,逐字不变。
@@ -223,11 +222,11 @@
   };
   function profileOf(doc) {
     var t = txt(doc && doc.boardType);
-    // 2026-10-29 与 panel.ts 的 cvCodeFlowWanted 同口径(两处必须一起改):code 板只要
+ // 与 panel.ts 的 cvCodeFlowWanted 同口径(两处必须一起改):code 板只要
     // ①有 start/end ②有 decision ③步骤节点 ≥50% 带 flow 行,就切 CODE_FLOW_PROFILE;
     // 否则「布局进了 flow 形态、画像还是现状层/变更层」→ 顶部误报缺段。
     if (t === "code" && codeFlowWanted(doc)) return CODE_FLOW_PROFILE;
-    // 2026-10-29 perf 与 code 同口径(panel.ts 的 cvCodeInfo/wantPerfFlow 必须一起改):
+ // perf 与 code 同口径(panel.ts 的 cvCodeInfo/wantPerfFlow 必须一起改):
     // perf 板有流程语义 → PERFFLOW_PROFILE(触发/采样基线/定位瓶颈/改动/复测/判定);
     // 无 start/end/decision/带 flow 步骤的旧 perf 板 → 仍 PROFILES.perf(基线→瓶颈→改动→目标→门禁)。
     if (t === "perf" && codeFlowWanted(doc)) return PERF_FLOW_PROFILE;

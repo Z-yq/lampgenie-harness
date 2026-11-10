@@ -1,13 +1,11 @@
 /**
- * step-125 Coding 模型产品化:服务商预设目录(单一出处,UI 通过 JSON 注入到面板)。
- *
+ * Coding 模型产品化:服务商预设目录(单一出处,UI 通过 JSON 注入到面板)。
  * 真源:
  * - ZCode/config/provider/zcode-builtin.json(providerConfigRules.templateRules:真实 baseUrl/模型 ID)
  * - ZCode/config/provider/zcode-builtin.json(modelConfigRules.modelRules:contextWindow/maxTokens)
  * - 仓内 genie.config.json(qwen3-coder-flash 等既有模型 ID)
  * - SiliconFlow 官方端点 https://api.siliconflow.cn/v1(官方模型目录 vendor/model 格式)
  * - 本地服务官方默认端口(Ollama 11434 / LM Studio 1234 / vLLM 8000)
- *
  * 红线:这里只放服务商公开 URL/公开模型 ID/本地凭证引用名,不放任何 Key 值。
  * 模型条目:有 contextWindow 元数据的用对象形态,没有规则的保持字符串(不编造)。
  */

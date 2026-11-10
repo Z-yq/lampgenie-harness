@@ -150,7 +150,7 @@ pnpm gate:creds      # 凭证红线扫描(提交前建议跑一次)
 
 ## 兼容性
 
-Windows(实机)与 Linux/WSL 上开发与实测;macOS 理论可运行但未验证,欢迎反馈。
+Windows(实机)与 Linux/WSL 上开发经验证;macOS 理论可运行但未验证,欢迎反馈。
 
 ## 致谢
 

@@ -1,11 +1,9 @@
 /**
  * genie:// 深链解析(提取语义设计参考 ZCode 项目,致谢;本仓独立实现)。
- *
  * 覆盖三条到达路径:
  *   ① Windows/Linux 冷启动:协议 URL 在 process.argv;
  *   ② Windows/Linux 二次启动:second-instance 的 argv / additionalData.deepLinkUrl;
  *   ③ macOS:open-url 事件。
- *
  * 支持的路由:
  *   genie://settings            → 打开配置台
  *   genie://new-task            → 新建任务草稿
@@ -13,7 +11,6 @@
  *   genie://session/<id>        → 同上
  *   genie://project?path=...    → 添加/激活项目
  *   其它/未知                    → open(仅唤起窗口)
- *
  * 纯函数,不依赖 electron,可 node --test 单测。
  */
 const DEEP_LINK_SCHEME = "genie";

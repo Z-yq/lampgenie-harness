@@ -1,5 +1,5 @@
 /**
- * relay.teamai.push 多类型(designs/30 §2.2):kind=skill|rule|doc 三个落点路径,
+ * relay.teamai.push 多类型( §2.2):kind=skill|rule|doc 三个落点路径,
  * 以及空 body 的可诊断拒绝(code=invalid,且不产生新分支)。
  * 手法:mkdtemp 临时 bare 团队仓 + 真 TeamRelay + 裸 WS 客户端(dev1 真密钥签名)。
  */

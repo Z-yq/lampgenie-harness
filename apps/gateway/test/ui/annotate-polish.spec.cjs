@@ -2,7 +2,6 @@
  * 覆盖:①取屏画框坐标(原生像素换算,DPR=2 + contain 取景)②标注编辑器框选坐标
  * ③录音评论(假 MediaRecorder)④提交 → 盘上四件套(png/preview/feedback/webm)
  * ⑤任务书经小模型整理(假 OpenAI 兼容端点)含五小节 + 语音转写 ⑥journal 事件 ⑦0 pageerror。
- *
  * 跑法:cd apps/gateway && node test/ui/annotate-polish.spec.cjs
  * 依赖:playwright-core + /usr/bin/google-chrome(缺失 → SKIP,退出码 0)。
  */

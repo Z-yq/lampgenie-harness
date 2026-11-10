@@ -1,9 +1,7 @@
 /**
- * 工具入参归一与校验诊断(机制 M150)。
- *
+ * 工具入参归一与校验诊断(机制)。
  * 病根:模型把参数写成「JSON 字符串里再套一层」「"42" / "true" / 裸标量当数组」等形态时,
  * 旧链路要么整轮重派、要么把 ajv/Zod 的原始 dump 丢给模型(它读不懂),要么静默强转污染数据。
- *
  * 本模块只做三件无歧义的事:
  *   1) JSON-string 归一:raw 是字符串就按文本形态解析一次(解不出/不是对象才报 issue);
  *   2) 无歧义 coercion:仅当 schema **声明**了该字段类型,且转换结果唯一(数字串→数字、
@@ -11,7 +9,6 @@
  *      不确定(空串、混合、解析失败)一律**保留原值**交给工具,绝不猜;
  *   3) 结构化 issue(path/expected/got/message)+ 固定错误框,作为**工具结果**回给模型
  *      (不是 turn 失败,也不重派整轮)。
- *
  * 零回归:工具没有 parameters 或 schema 不是 object → 原样透传,连拷贝都不做。
  */
 
@@ -156,14 +153,12 @@ function coerceValue(v: unknown, declared: string): CoercionOutcome {
 
 /**
  * 归一 + 校验工具入参。
- *
  * @param raw    provider 送来的参数(通常已是 JSON.parse 后的值;也接受原始 JSON 字符串)
  * @param schema 工具的 JSON Schema;缺席或 type≠object → 原样透传(零回归)
  */
 export function normalizeToolArgs(
   raw: unknown,
-  schema?: Record<string, unknown> | null,
-): ToolArgNormalizeResult {
+  schema?: Record<string, unknown> | null): ToolArgNormalizeResult {
   const passthrough: ToolArgNormalizeResult = { ok: true, value: raw, issues: [], renamed: [], coerced: [] };
   if (!isPlainObject(schema) || schema["type"] !== "object") return passthrough;
 

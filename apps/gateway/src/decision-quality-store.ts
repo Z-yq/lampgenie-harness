@@ -1,22 +1,18 @@
 /**
  * 决策质量样本的持久层(RSI 模式库):把 decision-quality 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:一条决策是「当时为什么这么选」的审计事实,事后的人工纠正也必须留痕——
  * 纠正不原地改写历史行,而是追加一条覆盖行,投影时按行序折叠。这样「版本切换/口径变化后
  * 同一个 id 读出来是什么」永远可复核(重放同一文件即可复算)。
  * 单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言(而不是信任 append 没抛)。
- *
  * 数据面:
  * - `<root>/.genie/rsi/decisions.jsonl`
  *   decision   {record}                        一条决策(DecisionRecord)
  *   correction {targetId, record, by, note}     人工纠正的覆盖行(同 id 后写为准)
  * - `<root>/.genie/rsi/patterns.jsonl`
  *   pattern    {pattern}                       一次模式快照(同 patternId 后写为准)
- *
  * 投影语义:按行序读全部行;坏行(JSON 坏 / v 不是 1 / type 未知 / 载荷不合法 / correction 指向
  * 不存在的决策)只计入 badLines 并跳过:一行坏不整文件失效、不 throw。
  * patterns 折叠后不倒退:aggregate 重算出的低级别快照不会把已升阶/已入库的状态打回去。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 cohort-signature-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -205,8 +201,7 @@ async function loadDecisionRuntime(): Promise<DecisionQualityRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/decision-quality.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     decisionRuntime = (await import(srcUrl)) as DecisionQualityRuntime;
   }
   return decisionRuntime;
@@ -609,8 +604,7 @@ export function counterfactual(root: string, decisionId: string): DecisionCounte
 export function humanCorrect(
   root: string,
   decisionId: string,
-  opts: DecisionHumanCorrectOptions,
-): DecisionHumanCorrectStoreResult {
+  opts: DecisionHumanCorrectOptions): DecisionHumanCorrectStoreResult {
   const base = assertRoot(root);
   const id = textOf(decisionId);
   const by = textOf(opts?.by);

@@ -1,6 +1,5 @@
 /**
  * 字面量引用面(refs):删除/修改一个「字符串标识」时的确定性引用清单。
- *
  * 背景(验收盲区):删除 `action === "graph"` 这类字符串标识时,symbol/impact 全空
  * (它不是符号)、review --scan 0 条、explore 不命中——只能手工 grep。本模块把这件事
  * 做成一等能力:
@@ -8,7 +7,6 @@
  *   每条命中按语境分类:case-literal / eq-literal / z-literal / object-key /
  *   string-literal / doc,带 file:line 与所属符号(静态索引在场时,取最近前置声明);
  *   末尾给代码/测试/文档统计与可复制的下一步(impact <所属符号>)。
- *
  * 实现纪律:
  *  - 纯分类函数(classifyLiteralOccurrences)可单测;扫描引擎优先复用 search.ts 的
  *    rg/grep 通道,不可用时回退本文件自实现的文件遍历(不加依赖);
@@ -62,7 +60,7 @@ export interface LiteralRefHit {
   text: string;
   /** 所属符号(静态索引中该文件内最近的前置声明);拿不到=缺省。 */
   symbol?: string;
-  /** 最内层决策点(if/elif/else/while/for/switch/case;2026-10-21)——条件键落在哪个分支体。 */
+ /** 最内层决策点(if/elif/else/while/for/switch/case——条件键落在哪个分支体。 */
   decision?: { kind: string; condition?: string; line: number };
   /** ±2 行源码预览(仅结构位点且代码命中 ≤40 时;行格式 `>N | text`)。 */
   preview?: string[];
@@ -74,7 +72,7 @@ export interface LiteralRefsTotals {
   code: number;
   test: number;
   doc: number;
-  /** 构建文件命中(CMake/Make/meson/bazel;2026-10-22 新增)。 */
+ /** 构建文件命中(CMake/Make/meson/bazel; 新增)。 */
   build: number;
   byContext: Record<LiteralRefContext, number>;
 }
@@ -163,7 +161,7 @@ function isCandidateFile(name: string): boolean {
   return CODE_EXTS.has(ext) || DOC_EXTS.has(ext);
 }
 
-/** 构建文件判定(2026-10-22):CMakeLists.txt / Makefile 等此前被归进 doc(.txt)或直接不扫,
+/** 构建文件判定:CMakeLists.txt / Makefile 等此前被归进 doc(.txt)或直接不扫,
  *  导致 refs 查模块名时看不到 add_library/add_subdirectory 的接线点。 */
 const BUILD_FILE_RE = /(^|\/)(CMakeLists\.txt|Makefile|makefile|GNUmakefile|meson\.build|BUILD|BUILD\.bazel|WORKSPACE)(\/|$)|\.(cmake|mk|bazel)$/;
 function isBuildFileName(name: string): boolean {
@@ -242,11 +240,11 @@ function containsLiteralText(haystack: string, literal: string): boolean {
 function objectKeyContext(pre: string, after: string, prevLine: string): boolean {
   if (!/^\s*:/.test(after)) return false;
   if (/[{,]\s*$/.test(pre)) return true;
-  // 多行对象:`"graph": ...` 单独一行,上一非空行以 { 或 , 结尾
+ // 多行对象:`"graph": ...` 单独一行,上一非空行以 { 或, 结尾
   return /^\s*$/.test(pre) && /[{,]\s*$/.test(prevLine);
 }
 
-/** 未加引号键的值若是单个 PascalCase 标识符并以 , ; } ) 收尾,多半是 TS 类型注解
+/** 未加引号键的值若是单个 PascalCase 标识符并以,; }) 收尾,多半是 TS 类型注解
  * (`graph: CallGraph`)而不是运行时对象字面量——不计 object-key,减少变量名/类型名噪声。 */
 function valueLooksLikeType(afterColon: string): boolean {
   return /^\s*[A-Z][A-Za-z0-9_$]*\s*(?:[,;}\)]|$)/.test(afterColon);
@@ -258,7 +256,7 @@ function hasUnquotedKey(line: string, literal: string, prevLine: string): boolea
   const inline = new RegExp(`\\{\\s*${esc}(?![\\w$])\\s*:`);
   const im = inline.exec(line);
   if (im && !valueLooksLikeType(line.slice(im.index + im[0].length))) return true;
-  // 多行对象:`graph: ...` 单独一行,上一非空行以 { 或 , 结尾。
+ // 多行对象:`graph: ...` 单独一行,上一非空行以 { 或, 结尾。
   const lineStart = new RegExp(`^\\s*${esc}(?![\\w$])\\s*:`);
   const sm = lineStart.exec(line);
   if (sm && /[{,]\s*$/.test(prevLine) && !valueLooksLikeType(line.slice(sm[0].length))) return true;
@@ -299,7 +297,7 @@ export function classifyLiteralOccurrences(line: string, literal: string, prevLi
   if (!commentOnly && isIdentifier(literal) && !out.has("object-key") && hasUnquotedKey(line, literal, prevLine)) {
     out.add("object-key");
   }
-  // 2026-10-22 P0:C/C++ 预处理宏引用(#ifdef USE_FIXED / #if defined(X) / #define X ...)。
+ // P0:C/C++ 预处理宏引用(#ifdef USE_FIXED / #if defined(X) / #define X ...)。
   // 旧语境表只认引号字面量,构建开关/条件编译的引用整片漏掉——删宏时无法判断哪些实现被条件包裹。
   if (!commentOnly && isIdentifier(literal) && /^\s*#\s*(?:if|ifdef|ifndef|elif|define|undef)\b/.test(line)) {
     const words: string[] = line.replace(/^\s*#\s*\w+\s*/, "").match(/[A-Za-z_]\w*/g) ?? [];
@@ -540,7 +538,7 @@ export async function scanLiteralRefs(
         ? ["doc"]
         : classifyLiteralOccurrences(lineText, literal, prevText);
 
-    // 2026-11-06:概念足迹(surface)要的是「概念出现在哪」,不是「是不是字面量」。
+ // 概念足迹(surface)要的是「概念出现在哪」,不是「是不是字面量」。
     // 旧口径只保留 classifyLiteralOccurrences 认得的引号语境行,未加引号的标识符出现
     // (类型名/函数名/import/使用点)contexts=[] → 整行被丢弃,symbol 面对「替换一个符号」
     // 是瞎的、链路图的 call 边也永远触发不了。includeBare 缺省 false,refs 工具行为逐字不变。
@@ -579,7 +577,7 @@ export async function scanLiteralRefs(
     byContext,
   };
 
-  // 2026-10-21 决策点标注(ASR 考题盲区修复):代码命中挂「最内层决策点」——
+ // 决策点标注(ASR 考题盲区修复):代码命中挂「最内层决策点」——
   // 条件键落在哪个 if/while/for 分支体直接可见,分支语义不用再回源码;
   // 结构位点(case/eq/object-key/cpp-macro)在代码命中 ≤40 时附 ±2 行预览。
   {

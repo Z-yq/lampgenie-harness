@@ -1,5 +1,5 @@
 /**
- * 壳日志(step-136 P1-4):<logsDir>/desktop.log,单文件超 5MB 滚动为 .1~.3 链式。
+ * 壳日志( P1-4):<logsDir>/desktop.log,单文件超 5MB 滚动为 .1~.3 链式。
  * 纯 node 内置模块,无 electron 依赖;每行 `ISO 时间 level msg`。
  */
 const { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } = require("node:fs");

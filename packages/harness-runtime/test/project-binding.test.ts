@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-describe("normalizeRepoUrl(designs/23 绑定键归一化)", () => {
+describe("normalizeRepoUrl(绑定键归一化)", () => {
   it("协议/凭据/scp/尾斜杠/.git 后缀/大小写全部归一", () => {
     const want = normalizeRepoUrl("https://codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness.git");
     expect(normalizeRepoUrl("https://codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness")).toBe(want);
@@ -23,7 +23,7 @@ describe("normalizeRepoUrl(designs/23 绑定键归一化)", () => {
   });
 });
 
-describe("matchProjectId(designs/23 绑定解析)", () => {
+describe("matchProjectId(绑定解析)", () => {
   const registry = {
     "lampgenie-harness": { type: "team", repo: "https://codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness.git" },
     "teamai": { type: "team", repo: "https://codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/genie-teamai.git" },
@@ -46,7 +46,7 @@ describe("matchProjectId(designs/23 绑定解析)", () => {
   });
 });
 
-describe("InviteRecord.projects(designs/23 邀请绑定项目)", () => {
+describe("InviteRecord.projects(邀请绑定项目)", () => {
   it("issue 带项目→兑换记录携带;旧记录缺字段归一空数组", () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-invproj-"));
     const file = join(dir, "invites.jsonl");

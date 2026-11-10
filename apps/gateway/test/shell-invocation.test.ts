@@ -1,5 +1,5 @@
 /**
- * shell 抽象(step-136 K4 / P1-6)单测:命令原文 → (可执行文件, 参数) 的纯函数决策面。
+ * shell 抽象( K4 / P1-6)单测:命令原文 → (可执行文件, 参数) 的纯函数决策面。
  * 锚点:win32 默认降级 cmd.exe /d /s /c;POSIX 默认 bash -lc;GENIE_SHELL_BIN 覆盖语义
  * (bash 类走 -lc、cmd 类走 /d /s /c);带空格/引号的命令原样透传;shell 缺位有可读提示。
  */

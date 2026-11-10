@@ -176,8 +176,7 @@ describe("cohort-metrics-store 报表与复审", () => {
       delivery("d-3", T0 + 2 * DAY, { module: "mod-a" }),
     ]);
     expect(
-      recordFix(root, fixRecord("f-1", T0 + 2 * DAY + 60_000, { module: "mod-a", relatedDeliveryId: "d-1", defectClass: "plan-coverage" })).ok,
-    ).toBe(true);
+      recordFix(root, fixRecord("f-1", T0 + 2 * DAY + 60_000, { module: "mod-a", relatedDeliveryId: "d-1", defectClass: "plan-coverage" })).ok).toBe(true);
 
     const report = reportCohorts(root);
     expect(report.ok).toBe(true);
@@ -214,8 +213,7 @@ describe("cohort-metrics-store 报表与复审", () => {
       delivery("s-2", T0 + 4 * DAY, { signature: "prevent-x" }),
     ]);
     expect(
-      recordFix(root, fixRecord("f-1", T0 + 4 * DAY + 60_000, { relatedDeliveryId: "s-2" })).ok,
-    ).toBe(true);
+      recordFix(root, fixRecord("f-1", T0 + 4 * DAY + 60_000, { relatedDeliveryId: "s-2" })).ok).toBe(true);
 
     const result = review(root);
     expect(result.ok).toBe(true);
@@ -243,8 +241,7 @@ describe("cohort-metrics-store 报表与复审", () => {
       delivery("s-4", T0 + DAY + 3_600_000, { signature: "shared-sig" }),
     ]);
     expect(recordFix(root, fixRecord("f-1", T0 + DAY + 7_200_000, { relatedDeliveryId: "s-1" })).ok).toBe(
-      true,
-    );
+      true);
 
     const result = review(root, { beforeSignatures: ["shared-sig"], afterSignatures: ["shared-sig"] });
     expect(result.ok).toBe(true);
@@ -271,8 +268,7 @@ describe("cohort-metrics-store 报表与复审", () => {
       delivery("a-2", T0 + DAY + 3_600_000, { signature: "win-after" }),
     ]);
     expect(recordFix(root, fixRecord("f-1", T0 + DAY + 7_200_000, { relatedDeliveryId: "a-1" })).ok).toBe(
-      true,
-    );
+      true);
 
     const result = review(root, { beforeSignatures: ["win-before"], afterSignatures: ["win-after"] });
     expect(result.ok).toBe(true);

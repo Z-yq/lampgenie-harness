@@ -1,4 +1,4 @@
-/** 板型画像引擎单测(2026-10-26):13 类非 page 板型的阶段/角色/硬规则徽标/flow 分支。
+/** 板型画像引擎单测:13 类非 page 板型的阶段/角色/硬规则徽标/flow 分支。
  * 纯函数零 IO;不依赖盘上板文件。 */
 import { describe, it, expect } from "vitest";
 import BTP from "../src/assets/board-type-profile.js";

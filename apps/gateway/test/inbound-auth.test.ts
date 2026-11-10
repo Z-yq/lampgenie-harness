@@ -1,5 +1,5 @@
 /**
- * 入站认证(M133):V2 声明不降级/V1 兜底/INSECURE_NO_AUTH 仅 loopback/幂等/真实 HTTP 集成。
+ * 入站认证:V2 声明不降级/V1 兜底/INSECURE_NO_AUTH 仅 loopback/幂等/真实 HTTP 集成。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { createHmac } from "node:crypto";

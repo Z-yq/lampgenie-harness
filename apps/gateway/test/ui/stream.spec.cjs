@@ -1,4 +1,4 @@
-/** step-050 UI 实测:流式消息展示(ZCode 模式移植)——打字光标/文本增长/工具执行中卡/终稿收尾/真事件让位。
+/** UI 经验证:流式消息展示(ZCode 模式移植)——打字光标/文本增长/工具执行中卡/终稿收尾/真事件让位。
  * 全部走页面真实渲染路径:__stPush 驱动 stream 状态机(与 ws 消息同入口),session.history.result 用 ws.onmessage 直注(真事件让位分支)。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
@@ -22,7 +22,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1000);
 
-  // ---- 前置:直设会话态(不开真任务——产线 7700 挂真 LLM,真流式事件会与本 spec 推送互相复位)----
+ // ---- 前置:直设会话态(不开真任务——生产环境 7700 挂真 LLM,真流式事件会与本 spec 推送互相复位)----
   await page.evaluate(() => { currentSid = "spec-stream"; histEvents = []; renderHistory(); });
   check("会话就绪(currentSid 在位)", (await page.evaluate(() => currentSid)) === "spec-stream");
 

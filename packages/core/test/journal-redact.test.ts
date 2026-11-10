@@ -1,6 +1,5 @@
 /**
  * 凭证脱敏(journal 脱敏 P1-B)。
- *
  * 为什么这样测:脱敏是本仓唯一的「明文出厂闸门」——漏一个形态,会话导出/轨迹文件就把
  * 用户的 key 带出去;多改一点(把 arguments 变成对象、动 idempotencyKey)就会打断
  * trace-query 的 string 截断契约与 journal 重放去重。三条不变量必须钉死:

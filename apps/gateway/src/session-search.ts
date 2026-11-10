@@ -1,6 +1,5 @@
 /**
- * gateway 侧会话检索适配(step-115):journal 级单例索引 + `session_search` 工具。
- *
+ * gateway 侧会话检索适配:journal 级单例索引 + `session_search` 工具。
  * 索引本体在 @lampgenie/runtime/session/search(纯 TS,不依赖 gateway)。
  * 单例按 Journal 对象隔离(WeakMap):同一 gateway 的 agent 工具与面板 WS 共用一份索引;
  * 测试临时 journal 不会串到生产实例。configure 只登记缓存路径,首次查询才构建。
@@ -116,8 +115,8 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
     async execute(args: unknown): Promise<string> {
       const a = (args ?? {}) as SessionSearchArgs;
       const action = a.action === "scroll" || a.action === "read" ? a.action : "discover";
-      // session-worker 进程(step-166):ProxyJournal 只含本会话副本,历史会话全部不可见
-      // (实锤 stats docs=2/lastSeq=414263)。经既有 IPC RPC 代理到 gateway 真 journal 只读执行,
+ // session-worker 进程:ProxyJournal 只含本会话副本,历史会话全部不可见
+ // (注意 stats docs=2/lastSeq=414263)。经既有 IPC RPC 代理到 gateway 真 journal 只读执行,
       // 零写冲突;host 缺席(单跑 worker 调试)=fail-soft 错误文本。
       if (journal instanceof ProxyJournal) {
         try {
@@ -151,8 +150,7 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
           return JSON.stringify(result);
         }
         const exclude = [...(Array.isArray(a.excludeSessionIds) ? a.excludeSessionIds : [])].filter(
-          (id): id is string => typeof id === "string" && id.length > 0,
-        );
+          (id): id is string => typeof id === "string" && id.length > 0);
         if (currentSessionId && !a.includeCurrent) exclude.push(currentSessionId);
         const result = index.discover(String(a.query ?? ""), {
           limit: clampInt(a.limit, 5, 1, 20),

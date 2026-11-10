@@ -1,6 +1,6 @@
 /**
- * WSL 桥单测(2026-10-27):UNC 解析 / 命令形态拼装(纯函数面)。
- * 真机(WSL 发行版)行为由 tasks/step-1007-wsl-connection/evidence 下的 Windows 实测覆盖。
+ * WSL 桥单测:UNC 解析 / 命令形态拼装(纯函数面)。
+ * 真机(WSL 发行版)行为由 下的 Windows 经验证覆盖。
  */
 import { describe, it, expect } from "vitest";
 import {

@@ -1,11 +1,9 @@
 /**
  * 任务书整理(小模型 refine,2026-11 新增)。
- *
  * 截图标注链原先把 instruction 固定成模板(buildInstruction:只指路三件套文件)。
  * 这里让**小模型**(生产口径 = models.compact ?? auxLlm,走 compact 轨,不是 realtime 主轨)
  * 把「图注 + 录音转写 + 页面说明」整理成一份结构化任务书,同时用程序侧校验守住底线:
  * 用户原话必须逐字出现在输出里,否则视为整理失败、回落模板任务书(refined:false)。
- *
  * 全链路 fail-soft:未注入 llm / 抛错 / 超时 / 丢原话 / 超长 → 回落 buildInstruction。
  */
 import type { VoiceSegment } from "./annotate-voice.js";
@@ -47,8 +45,7 @@ export type RefineResult = { instruction: string; refined: boolean; reason?: str
 export function noteWhere(
   note: { kind: string; source?: { x1: number; y1: number; x2: number; y2: number }; point?: { x: number; y: number } },
   w: number,
-  h: number,
-): string {
+  h: number): string {
   if (note.kind === "global") return "全图(整体意见)";
   const cx = note.kind === "region" && note.source ? (note.source.x1 + note.source.x2) / 2 : note.point?.x ?? 0;
   const cy = note.kind === "region" && note.source ? (note.source.y1 + note.source.y2) / 2 : note.point?.y ?? 0;

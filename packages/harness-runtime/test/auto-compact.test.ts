@@ -43,7 +43,7 @@ describe("auto-compact + DevLog", () => {
 });
 
 /**
- * 2026-10-22 修「主动 /compact 感觉没运行」(板节点 n1/n2):
+ * 修「主动 /compact 感觉没运行」(板节点 n1/n2):
  * ①消息数 ≤ keepRecentMessages 时 head 为空 → 旧实现只把 system 提示喂模型、摘要空串,
  *   仍写 compact.done 且 summary="";loop 的边界判定(summary 非空才截断)忽略它 → 上下文
  *   一条没减,前端却报「已压缩(摘要 0 字)」。现在必须诚实返回 + 不留假压缩痕迹。
@@ -295,7 +295,7 @@ describe("Phase 0:摘要前 microcompact + 关键事实台账", () => {
 });
 
 /**
- * 2026-11-04 强压守卫(压缩死亡螺旋根治,web-1793696471953 实锤):
+ * 强压守卫(压缩死亡螺旋根治,web-1793696471953 注意):
  * gate 的 hardOver force 在「对话史估算已低于阈值」时,压缩只能把已缩小的对话史反复重压
  * (60 次连环强压,每次仅 12 条消息、est 6~17K,摘要套摘要,原始用户消息全丢)。
  * 守卫:trigger=auto + force + est < 阈值 → 跳过并落 compact.skipped(guard=force-vs-est);
@@ -307,7 +307,7 @@ describe("auto-compact 强压守卫(force-vs-est,2026-11-04)", () => {
     for (let i = 0; i < 12; i++) j.append({ kind: "message.user", sessionId: "s", payload: { text: `第${i}轮短消息` } });
     let called = 0;
     const llm: LlmProvider = { async chat() { called += 1; return { content: "不该被调用" }; } };
-    // 螺旋实测形态:阈值 300000(窗口口径),est≈数百,force=true(hardOver)
+ // 螺旋经验证形态:阈值 300000(窗口口径),est≈数百,force=true(hardOver)
     const r = await autoCompact(j, "s", { thresholdTokens: 300_000, keepRecentMessages: 5, compactLlm: llm, devlogDir: "/tmp/x", force: true, trigger: "auto" });
     expect(r.compacted).toBe(false);
     expect(String(r.reason ?? "")).toContain("强压守卫");
@@ -349,9 +349,9 @@ describe("auto-compact 强压守卫(force-vs-est,2026-11-04)", () => {
 });
 
 /**
- * 2026-11-05 骑线修复:阈值附近的真实大历史(≥50% 阈值)的 auto 强压必须真压——
+ * 骑线修复:阈值附近的真实大历史(≥50% 阈值)的 auto 强压必须真压——
  * 闸门按真实 input 测(含系统/工具面),est 常停在阈下 90%+,旧守卫「est<阈即拒」会把
- * 「每步喊压/每步拒」打成空转(web-1793790405127 实锤:293K est vs 300K 阈,15 连 skip)。
+ * 「每步喊压/每步拒」打成空转(web-1793790405127 注意:293K est vs 300K 阈,15 连 skip)。
  */
 describe("auto-compact 骑线守卫比例(2026-11-05)", () => {
   it("est 达阈值 50% 以上的大历史:auto 强压真压(不再空转)", async () => {

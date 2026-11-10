@@ -1,10 +1,10 @@
 /**
- * step-066 A1:Python 接收者形态跨文件方法调用(obj.method())召回修复。
+ * A1:Python 接收者形态跨文件方法调用(obj.method)召回修复。
  * 旧形态:RECEIVER 形态整体不发射 + 跨文件候选「全图唯一名」闸对必然同名的方法名静默弃边
- * (step-065 三仓评测 R=0/20 实锤)。修复后:
- * - self.attr.method(:`self.attr = SomeClass(...)` 赋值类型 → Class.method 候选集;
- * - local.method(:`svc = ChatService(...)` 函数局部赋值类型(同函数作用域);
- * - 模块别名 mod.func(:`import a.b as z` → 文件路径提示收窄;
+ * (三仓评测 R=0/20 注意)。修复后:
+ * - self.attr.method(`self.attr = SomeClass(...)` 赋值类型 → Class.method 候选集;
+ * - local.method(`svc = ChatService(...)` 函数局部赋值类型(同函数作用域);
+ * - 模块别名 mod.func(`import a.b as z` → 文件路径提示收窄;
  * - self.x() 兄弟失败:带 receiverType=所在类(跨文件同类方法/继承形态);
  * - 无类型证据不猜(宁缺勿错);歧义(多类同名方法且无 hint)不解析。
  */
@@ -27,7 +27,7 @@ async function callerIdsOf(dir: string, targetName: string): Promise<Map<string,
   return out;
 }
 
-describe("step-066 A1:Python 接收者形态跨文件召回", () => {
+describe(" A1:Python 接收者形态跨文件召回", () => {
   it("self.attr.method(:__init__ 赋值类型 → Class.method 候选集解析", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-py-recv1-"));
     mkdirSync(join(dir, "core"), { recursive: true });
@@ -165,7 +165,7 @@ describe("step-066 A1:Python 接收者形态跨文件召回", () => {
       "        return 'b'",
       "",
     ].join("\n"));
-    // 调用方拿不到类型证据(参数透传形态):x = make(); x.run( 无赋值构造
+ // 调用方拿不到类型证据(参数透传形态):x = make; x.run(无赋值构造
     writeFileSync(join(dir, "c.py"), [
       "def drive(x):",
       "    return x.run()",

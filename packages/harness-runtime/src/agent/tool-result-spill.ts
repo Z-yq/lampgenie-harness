@@ -1,17 +1,14 @@
 /**
  * 写时定形(write-time shaping)工具结果 spill —— 对齐 deepseek-harness `spill/spill-policy`:
  * 工具结果**进历史之前**就定形成「头 + 单行标记 + 尾 + 落盘路径 + 回读指引」,之后**永不改写**。
- *
- * 为什么要写时定形(2026-11 token 优化轮 02,实测代价见 designs/token-opt-round2.md):
+ * 为什么要写时定形(2026-11 token 优化轮 02,经验证代价见 designs/token-opt-round2.md):
  * 旧口径是**读时改写**——journal 全量落账,microcompact 每步 derive 后把超阈 tool content 改成
  * head/tail。同一 toolCallId 的 content 每步重算 → messages 前缀逐字变化 → prompt cache 全量失效
- * (实测 uncached 单价 = 命中的 50 倍)。改在入口定形一次,此后请求前缀逐字节稳定。
- *
+ * (经验证 uncached 单价 = 命中的 50 倍)。改在入口定形一次,此后请求前缀逐字节稳定。
  * 零改动约束:本模块**不改** microcompact.ts / compact-gate.ts。读侧之所以不会二次改写,靠的是
  * 下面这条设计:预览里的单行标记复用读侧既有的「已是占位内容」前缀(`[工具结果已精炼:`),读侧
  * `isPlaceholderContent()` 命中即跳过(路径①超大精炼/路径②组清理/dedup-supersede 三处同判)。
  * 另外预览总长(head+标记+尾)恒 < 8192,天然低于读侧 HUGE_RESULT_CHARS=8000 之上不会有二次剪。
- *
  * fail-open 纪律:落盘失败(权限/磁盘/路径非法)一律返回原文——spill 是省 token 的优化,
  * 绝不能因为它失败而丢掉工具结果(丢结果=模型失忆,比多花 token 严重得多)。
  */
@@ -29,14 +26,13 @@ export const SPILL_TAIL_CHARS = 1024;
  * 排除名单:这些工具的结果**不做** spill。
  * - 认知类(code_sense/code_index/tool_view/board_read):结构化浓缩结果,外置后模型还得回读,纯亏;
  * - 回执类(edit_file/write_file/todo_write/task_phase/board_upsert):「动作已发生」的账,不能只剩摘要。
- *
- * read_file **已移出**名单(2026-10-29 token 轮 04):旧注释理由是「防 read-spill 循环」——
+ * read_file **已移出**名单( token 轮 04):旧注释理由是「防 read-spill 循环」——
  * 把 read_file 结果外置等于逼模型再 read_file 那个 spill 文件。但这个顾虑的前提是「占位里只告诉
- * 模型去看 spill 文件」;实测代价是单次 read_file 峰值 **71,967 字符**全量进历史(227 次调用共
+ * 模型去看 spill 文件」;经验证代价是单次 read_file 峰值 **71,967 字符**全量进历史(227 次调用共
  * 88 万字符),而 read_file 的原始文件本来就在磁盘上、路径已知。
  * 现改法:read_file 走**独立高阈值**(READ_FILE_SPILL_THRESHOLD_CHARS=32000,远超全局 8192),
  * 且占位提示改为「回读原文件 offset/limit」——循环风险由提示语消解,而不是靠不外置。
- * 32000 的取法:实测 read_file p50=2,659 / p90=6,450,即 99% 的常规读根本不触发;
+ * 32000 的取法:经验证 read_file p50=2,659 / p90=6,450,即 99% 的常规读根本不触发;
  * 只有真正整读大文件(如 panel.ts 整篇)才外置。
  */
 export const SPILL_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
@@ -104,9 +100,8 @@ export function shouldSpill(
 
 function buildMarker(
   originalChars: number, prunedChars: number, absolutePath: string, headChars: number, tailChars: number,
-  toolName?: string,
-): string {
-  // read_file 的定制指引(2026-10-29 token 轮 04):回读目标是**原文件**而不是 spill 副本。
+  toolName?: string): string {
+ // read_file 的定制指引( token 轮 04):回读目标是**原文件**而不是 spill 副本。
   // 这是把 read_file 移出排除名单的前提——旧口径的「防 read-spill 循环」靠不外置实现,
   // 现改成靠提示语实现(副本没有行号语义,指回副本才是真循环)。
   const hint = toolName === "read_file"

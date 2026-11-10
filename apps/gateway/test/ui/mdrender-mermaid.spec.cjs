@@ -1,4 +1,4 @@
-/** 消息流 mermaid 懒加载渲染探针(2026-10-29):占位节点→svg 出图;坏语法→降级 <pre> 保留源文本。
+/** 消息流 mermaid 懒加载渲染探针:占位节点→svg 出图;坏语法→降级 <pre> 保留源文本。
  * 语义与 test/ui/mdrender.spec.cjs 同源:直接驱动真实面板页的全局渲染函数与懒加载运行时;
  * PANEL_BASE 缺席(非 selfhost 形态)或无 chrome 时整文件 skip,不误报失败。 */
 const fs = require("node:fs");

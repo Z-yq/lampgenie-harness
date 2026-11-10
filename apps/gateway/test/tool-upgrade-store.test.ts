@@ -308,8 +308,7 @@ describe("tool-upgrade-store 落盘与投影", () => {
 
     // 还在 shadow 就想 switch:协议允许 shadow→switch,所以先验证 switch 前的 canary 缺失分支
     expect(promoteCanary(root, { name: "svc", version: "1.1.0", canary: { scope: "session", sessions: ["s1"] } }).ok).toBe(
-      true,
-    );
+      true);
     expect(promoteCanary(root, { name: "svc", version: "1.1.0", canary: { scope: "session" } }).codes).toEqual([
       TOOL_UP_STAGE_ORDER,
     ]);

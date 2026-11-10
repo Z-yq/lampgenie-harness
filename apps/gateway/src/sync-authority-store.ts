@@ -1,7 +1,6 @@
 /**
  * 同步权威协议的持久层:把 runtime 的纯逻辑(packages/harness-runtime 的 agent/sync-authority)落到
  * `<root>/.genie/rsi/sync.json`。
- *
  * 为什么需要这一层:sync-authority 是纯函数,状态在内存里;而「会话迁移后谁是权威」这件事
  * 一旦重启就丢,等于没协议。落盘面必须同时满足四条:
  * ① **原子写**(tmp + rename):读到半个文件 = 读出一份不存在的历史。rename 在同一文件系统上
@@ -12,7 +11,6 @@
  *    accept 丢更新」正是这类事故的典型现场。这里用 promise 链把同一 root 的操作排队。
  * ④ **拒收不落盘**:NOOP / CONFLICT_DIE / DROPPED_OWNER / INVALID 一律不写文件,连 mtime
  *    都不动,便于用「文件内容不变」复核「拒收确实零副作用」。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 cohort-signature-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -185,8 +183,7 @@ function runExclusive<T>(key: string, task: () => T): Promise<T> {
     key,
     next.then(
       () => undefined,
-      () => undefined,
-    ),
+      () => undefined),
   );
   return next;
 }

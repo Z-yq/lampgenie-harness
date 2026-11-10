@@ -1,5 +1,5 @@
 /**
- * teamai-roles:roster/roles.yaml 解析(designs/30 §2.1/§2.7)。
+ * teamai-roles:roster/roles.yaml 解析( §2.1/§2.7)。
  */
 import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

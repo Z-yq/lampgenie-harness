@@ -240,8 +240,7 @@ describe("driveParentDecision 决策泵(D3/D4 父 LLM 两分支+幻觉重试)", 
     const { broker, askPromise } = brokerWithOneAsk(journal);
     let calls = 0;
     const llm = scriptedLlm([
-      () => { calls++; return { content: "我觉得可以" }; }, // 幻觉:无工具调用
-      () => { calls++; return { content: "", toolCalls: [{ id: "a1", name: "answer_subagent", arguments: JSON.stringify({ requestId: broker.pending()[0]?.requestId ?? "gone", approved: true }) }] }; },
+      () => { calls++; return { content: "我觉得可以" }; }, // 幻觉:无工具调用 => { calls++; return { content: "", toolCalls: [{ id: "a1", name: "answer_subagent", arguments: JSON.stringify({ requestId: broker.pending()[0]?.requestId ?? "gone", approved: true }) }] }; },
     ]);
     const r = await driveParentDecision(broker, llm);
     expect(calls).toBe(2);

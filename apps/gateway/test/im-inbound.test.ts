@@ -1,5 +1,5 @@
 /**
- * 飞书 IM 入站(step-013 二期收口):URL 校验 challenge/token 门/加密解密/归属规则/HTTP 面。
+ * 飞书 IM 入站(二期):URL 校验 challenge/token 门/加密解密/归属规则/HTTP 面。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { createHash, createCipheriv, randomBytes } from "node:crypto";
@@ -60,7 +60,7 @@ describe("parseFeishuCallback", () => {
   });
 });
 
-describe("routeInboundMessage(归属规则,designs/08 §2.2)", () => {
+describe("routeInboundMessage(归属规则, §2.2)", () => {
   const dm = { kind: "message" as const, chatType: "p2p", senderId: "ou_u1", text: "查天气", mentionsBot: false, chatId: "oc_dm" };
   it("私聊→成员会话任务(im-<open_id>)", () => {
     expect(routeInboundMessage(dm, { groupBindings: {} })).toEqual({ target: "task", scope: "dm", sessionId: "im-ou_u1", title: "[IM] 查天气" });
@@ -104,7 +104,7 @@ describe("startInboundServer(HTTP 面)", () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0]!.sessionId).toBe("im-ou_u1");
 
-    // M133:认证在解析前完成(V1 token 不匹配)→ 403 forbidden,不再是 400
+ // 认证在解析前完成(V1 token 不匹配)→ 403 forbidden,不再是 400
     const bad = await fetch(`${base}/webhook/feishu`, { method: "POST", body: JSON.stringify({ type: "url_check", challenge: "x", token: "nope" }) });
     expect(bad.status).toBe(403);
     expect(await bad.text()).toBe("forbidden");

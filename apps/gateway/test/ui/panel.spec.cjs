@@ -1,4 +1,4 @@
-/** UI 实测:面板交互(任务提交/状态流转/代码洞察 Tab)——真实 chromium 无头。
+/** UI 经验证:面板交互(任务提交/状态流转/代码洞察 Tab)——真实 chromium 无头。
  * 面板地址默认 7700,可用 PANEL_BASE 覆盖(避免与并发会话的常驻实例撞端口)。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
@@ -56,14 +56,14 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
 
   await page.screenshot({ path: "/tmp/ui-tasks.png" });
 
-  // 3. 侧栏动作位 act-sense:代码档案合一入口(2026-10-14 取证:该按钮现走 openProfileEntry→view-project,
+ // 3. 侧栏动作位 act-sense:代码档案合一入口(取证:该按钮现走 openProfileEntry→view-project,
   // 旧「点开代码洞察」断言随合一改版失效——此处按真实现断言;查询面仍在 view-sense,经 switchView 直驱覆盖)
   await page.click("#act-sense");
   await page.waitForTimeout(500);
   check("代码档案视图显示(合一入口)", await page.locator("#view-project").isVisible());
   check("任务视图隐藏", !(await page.locator("#view-tasks").isVisible()));
 
-  // 4. 洞察查询(debug 剖面:符号)——关系图(mermaid)面向人渲染(designs/16 §9 分工)
+ // 4. 洞察查询(debug 剖面:符号)——关系图(mermaid)面向人渲染( §9 分工)
   // 入口注:代码洞察视图在合一改版后暂无按钮入口(view-sense 保留),switchView 直驱保查询面回归覆盖
   await page.evaluate(() => switchView("sense"));
   await page.waitForTimeout(300);
@@ -79,7 +79,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
     check("关系图含圆心节点标签", svgText.includes("createGatewayApp"), "svg len=" + svgText.length);
     const detail = await page.locator("#sense-detail").textContent();
     check("明细含圆心行与下游链", detail.includes("圆心") && detail.includes("createGatewayApp") && detail.includes("下游"), detail.slice(0, 80));
-    // 审计 R1-C26 补:时序图区块(第二段 mermaid 渲染)必须有 UI 级断言。
+ // 审计 补:时序图区块(第二段 mermaid 渲染)必须有 UI 级断言。
     // 用小符号查询:createGatewayApp 图过大时 sequence 会被预算裁掉(15.9KB 兜底),
     // sandboxResolve(16 步时序,10.6KB)才带 sequence
     await page.fill("#sense-q", "sandboxResolve");

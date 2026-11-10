@@ -1,4 +1,4 @@
-/* 会话进度小窗(step-030,ZCode ConversationStatusPanel 对应物)
+/* 会话进度小窗(ZCode ConversationStatusPanel 对应物)
  * 形态:当前会话对话视图(#view-tasks)右上角胶囊簇 + 点按展开明细卡;会话空闲自动隐藏
  * (ZCode「无活动内容不渲染」同款纪律)。
  * 自包含:自挂载、自有 WS 连接(不碰面板内部 ws/currentSid 状态,只读全局 currentSid 若可见);
@@ -41,7 +41,7 @@
       ".sw-cap-track i{display:block;height:100%;background:var(--bronze,#c9a25e);transition:width .5s}",
       ".sw-cap-track i.hot{background:var(--red,#e08a7a)}",
       ".sw-hit{display:flex;justify-content:space-between;font-size:10px;color:var(--muted,#8d8272);margin-top:4px}",
-      /* 召回·审途重设计(2026-10-21):分组标题 + 指标瓦片 + 任务条 */
+ /* 召回·审途重设计:分组标题 + 指标瓦片 + 任务条 */
       ".sw-hd{display:flex;align-items:center;gap:8px;margin:13px 0 8px}",
       ".sw-hd:first-child{margin-top:0}",
       ".sw-hd-t{font-family:var(--mono,monospace);font-size:9px;letter-spacing:2.6px;color:var(--faint,#a3937a)}",
@@ -74,7 +74,7 @@
       ".sw-task .tx{font-size:11px;line-height:1.45;color:var(--text,#e8dcc6);min-width:0;overflow-wrap:anywhere}",
       ".sw-sa-fold{margin-top:5px;font-size:9px;letter-spacing:.8px;color:var(--faint,#a3937a);border:1px dashed rgba(201,162,94,.25);border-radius:8px;padding:4px 9px;cursor:pointer;text-align:center}",
       ".sw-sa-fold:hover{color:var(--bronze,#c9a25e);border-color:var(--bronze,#c9a25e)}",
-      /* 卡宿主形态(2026-10-21 用户口径:召回·审途独立看板卡,与对话卡同列)——
+ /* 卡宿主形态( 召回·审途独立看板卡,与对话卡同列)——
          画布形态挂 #recap-body:静态布局常显详情卡;经典布局维持原视口悬浮。 */
       "#sw-root.in-card{position:static;align-items:stretch;pointer-events:auto;width:100%}",
       "#sw-root.in-card #sw-bar{display:none!important}",
@@ -88,9 +88,9 @@
     var bar = root.querySelector("#sw-bar");
     var card = root.querySelector("#sw-card");
     bar.addEventListener("click", function () { card.classList.toggle("on"); });
-    // 自愈挂载:面板重渲染会 innerHTML 重建 #view-tasks(实测挂上即被抹)——
+ // 自愈挂载:面板重渲染会 innerHTML 重建 #view-tasks(经验证挂上即被抹)——
     // 观察宿主 childList,丢失立即重挂;宿主本身被换则 body 级观察兜底 + tick 内 2s 兜底。
-    // 视口钉住(2026-10-13 视频:胶囊簇随消息滚走+滚动途中滑过内容=「置顶消失/重叠」主诉)——
+ // 视口钉住( 视频:胶囊簇随消息滚走+滚动途中滑过内容=「置顶消失/重叠」主诉)——
     // absolute 的 top 按宿主 scrollTop 实时回写(rAF 节流),视觉等同 sticky 且不改面板布局流。
     var hostRef = null;
     var pinRaf = 0;
@@ -104,7 +104,7 @@
       pinRaf = requestAnimationFrame(pinToViewport);
     }
     function mount() {
-      // 宿主选择(2026-10-21 融合板):优先「任务追踪」卡的召回·审途区(sw-slot);
+ // 宿主选择( 融合板):优先「任务追踪」卡的召回·审途区(sw-slot);
       // 不在场(异常/旧页面)兜底对话视图悬浮。
       var h = document.getElementById("sw-slot") || document.getElementById("view-tasks");
       if (!h) return false;
@@ -163,7 +163,7 @@
       ws.onclose = function () { if (tickTimer) clearInterval(tickTimer); setTimeout(connect, 3000); };
     }
     function trackedSid() {
-      // step-048:严格跟随当前选中会话(每个 session 独立一份,草稿态隐藏)——不做「最近任务」全局回退
+ // 严格跟随当前选中会话(每个 session 独立一份,草稿态隐藏)——不做「最近任务」全局回退
       try { if (typeof currentSid !== "undefined") return currentSid || null; } catch (_) { /* 面板变量不可见 */ }
       var running = latest.tasks.filter(function (t) { return t.state === "running" || t.state === "queued"; });
       return running.length ? running[0].sessionId : null; // 兜底:仅运行中任务
@@ -173,7 +173,7 @@
       send({ v: 1, type: "task.list" });
       var sid = trackedSid();
       if (sid) { send({ v: 1, type: "session.status", sessionId: sid }); send({ v: 1, type: "trace.stats", sessionId: sid }); }
-      else { latest.status = null; latest.trace = null; } // 草稿态/无选中:清数据→render 隐藏(step-048)
+      else { latest.status = null; latest.trace = null; } // 草稿态/无选中:清数据→render 隐藏
     }
 
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -181,7 +181,7 @@
     function syncHostClass(on) {
       try { if (hostRef) hostRef.classList.toggle("sw-active", !!on); } catch (_) { /* 宿主不可见 */ }
     }
-    // token 数字单位(2026-10-28 用户口径「满足 M 的单位要换成 M,避免我还要数一下」):
+ // token 数字单位:
     // 1e9→B / 1e6→M / 1e3→K,小于千给原数;不再用「万/亿」。
     function fmtTok(n) {
       var v = Number(n) || 0;
@@ -203,9 +203,9 @@
 
     var saFoldAll = false, saFoldAllNext = false; // 子代理折叠态:next=用户意图,render 时前移(防 2s 重渲回跳)
     function render() {
-      // 子代理列表折叠态(2026-10-24):跨 2s 轮询重渲保持,「只看最近 3 条↔展开全部」
+ // 子代理列表折叠态:跨 2s 轮询重渲保持,「只看最近 3 条↔展开全部」
       saFoldAll = saFoldAllNext;
-      // 防御(2026-10-21 重设计):只有轨迹、status 尚未到达时也不崩(旧代码在 hasTrace 分支
+ // 防御( 重设计):只有轨迹、status 尚未到达时也不崩(旧代码在 hasTrace 分支
       // 已隐含要求 st 非空;卡片区新增字段引用后显式归一)。
       var st = latest.status || { task: null, todo: { completed: 0, total: 0, items: [] }, subagents: { spawnCount: 0, resultCount: 0, running: 0 }, workflows: [] };
       var tr0 = latest.trace;
@@ -223,7 +223,7 @@
       bar.classList.add("on");
       syncHostClass(true);
       var pills = [];
-      // 「计划」胶囊已撤(2026-10-21 用户口径:追踪 Trace 里的计划全部并入 turn 树,
+ // 「计划」胶囊已撤( 追踪 Trace 里的计划全部并入 turn 树,
       // 一级 turn → 二级五阶段 → 三级阶段任务;todo 不再单独展示)。hasTodo 仍参与下方空态判定,
       // 防止「只有 todo 在跑」时整个胶囊条误隐藏。
       if (st.subagents.running > 0) pills.push('<span class="sw-pill" title="运行中子代理"><svg class="icn" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="10" height="10" rx="1.5"/><path d="M9 19.5h10.5V9"/><path d="M14.5 19.5v-5h5.5"/></svg> <b>' + st.subagents.running + "</b></span>");
@@ -232,8 +232,8 @@
         pills.push('<span class="sw-pill" title="workflow 已派发"><svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3"/><path d="M12 18.2v3"/><path d="M2.8 12h3"/><path d="M18.2 12h3"/><path d="M5.5 5.5l2.1 2.1"/><path d="M16.4 16.4l2.1 2.1"/><path d="M18.5 5.5l-2.1 2.1"/><path d="M7.6 16.4l-2.1 2.1"/></svg> <b>' + asks + "</b></span>");
       }
       var tr = latest.trace;
-      // 估算标记(2026-10-30):/compact 后 contextTokens 是按「摘要+台账+tail」估算的(压缩当下没有
-      // 真实调用可测),下一次 LLM 调用才会用实测覆盖。这里加「≈」前缀,不把估算当实测展示。
+ // 估算标记:/compact 后 contextTokens 是按「摘要+台账+tail」估算的(压缩当下没有
+ // 真实调用可测),下一次 LLM 调用才会用经验证覆盖。这里加「≈」前缀,不把估算当经验证展示。
       var cpApprox = tr && tr.contextEstimated ? "≈" : "";
       if (tr && (tr.contextTokens ?? 0) > 0 && (tr.contextWindow ?? 0) > 0) {
         var cpPct = Math.min(99, Math.round((tr.contextTokens / tr.contextWindow) * 100));
@@ -255,7 +255,7 @@
 
       var c = [];
       var tr2 = latest.trace;
-      // 2026-10-21 重设计(用户口径「上面那些追踪的数据要好看一点」):
+ // 重设计:
       // 标题行 + 上下文主视觉 + 指标瓦片网格(2×3);「计划」列表整体撤除(已并入追踪卡的 turn 树)。
       function tile(k, v, sub, cls) {
         return '<div class="sw-tile' + (cls ? " " + cls : "") + '"><div class="k">' + esc(k) + "</div>" +
@@ -286,7 +286,7 @@
           tile("输入 tok", fmtTok(tr2.tokens.input), tr2.tokens.cached > 0 ? "缓存 " + fmtTok(tr2.tokens.cached) : "") +
           tile("输出 tok", fmtTok(tr2.tokens.output), "合计 " + fmtTok(tr2.tokens.total)) +
           "</div>");
-        // ②b 成本(2026-10-28 用户口径「显示成本消耗了多少元,缓存多少、未命中多少、输出多少」):
+ // ②b 成本:
         // 数据源=trace.stats.costModels(服务端按模型用量 × 该模型单价算的四段成本)。
         // 计费门:只有 authMode=api 的端点出金额——token-plan(套餐)已包月,再算「花了多少钱」是假账,
         // 只如实标「套餐 · 不计费」。单价缺失的段显示「未配单价」,绝不按 0 元冒充真账。
@@ -321,7 +321,7 @@
               c.push('<div class="sw-kv">' + s[1] + " <b>" + (missSeg[s[0]] ? "未配单价" : "¥" + fmtYuan(amt[s[0]])) + "</b>" +
                 " · " + fmtTok(tk[s[0]]) + " tok</div>");
             });
-            // 逐模型列出(2026-11 用户口径「面板上看得见用了什么模型」:单模型也要列,
+ // 逐模型列出(2026-11 单模型也要列,
             // 否则单模型会话根本看不到模型名;多模型时各自单价算的金额也在此分清谁花的)。
             if (billed.length) {
               billed.forEach(function (x) {
@@ -342,7 +342,7 @@
         tile("完成", st.subagents.resultCount, "") +
         tile("运行中", st.subagents.running, "", st.subagents.running > 0 ? "run" : "") +
         "</div>");
-      // ③b 子代理 token 消耗(2026-10-22 用户口径:单独一窗,不并入上方主会话 token 瓦片)
+ // ③b 子代理 token 消耗( 单独一窗,不并入上方主会话 token 瓦片)
       // 数据源=trace.stats.subagents(deriveTraceStats 按 agentId 聚合 subagent.event 的内层 usage)。
       var sa = tr2 && tr2.subagents;
       if (sa && sa.agents && sa.agents.length > 0) {
@@ -354,7 +354,7 @@
           tile("输出 tok", fmtTok(st2.output), "合计 " + fmtTok(st2.total)) +
           tile("命中率", stHit + "%", st2.calls + " 次调用") +
           "</div>");
-        // 2026-10-24 用户口径:子代理只列最近 3 条(按 lastAt 活动时间),其余折叠;点折叠条展开全部。
+ // 子代理只列最近 3 条(按 lastAt 活动时间),其余折叠;点折叠条展开全部。
         var saSorted = sa.agents.slice().sort(function (x, y) { return (y.lastAt || 0) - (x.lastAt || 0); });
         var saShow = saFoldAll ? saSorted : saSorted.slice(0, 3);
         saShow.forEach(function (a) {
@@ -383,7 +383,7 @@
             '<span class="tx">' + esc(w.wfId) + " · 已派发 " + w.asks + "</span></div>");
         });
       }
-      // ⑤ 任务区已撤(2026-10-21 用户口径:「任务」应是最后一个数据窗口,由下方 turn 树承担——
+ // ⑤ 任务区已撤( 「任务」应是最后一个数据窗口,由下方 turn 树承担——
       // 统计区再列一条 task 状态/指令会与 turn 一级节点重复)。
       card.innerHTML = c.join("");
     }

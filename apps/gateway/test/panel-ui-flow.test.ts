@@ -1,4 +1,4 @@
-/** UI 交互流程图面板契约(2026-10-26):
+/** UI 交互流程图面板契约:
  * 资产加载/交互↔结构切换/屏卡+元素行+触点/流线层/图例/拖动微调/整理清除。
  * 面板函数从真实 HTML 提取后 new Function 执行(与 panel-board-live 同构),不启浏览器。 */
 import { describe, it, expect } from "vitest";

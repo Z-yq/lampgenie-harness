@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { servePanel } from "../src/panel.js";
 
-/** 附件端到端(2026-10-19 用户口径「coding agent 的聊天窗要预览贴的图片或者视频」)的结构+行为回归。
+/** 附件端到端的结构+行为回归。
  * 真 UI 在 panel.ts 模板字符串内(浏览器侧脚本,code_index/code_sense 不可见),这里锁关键面:
  * 输入区真预览(图片缩略图/视频首帧 chip)/聊天流回看(媒体卡走 /uploads 读盘)/lightbox 三路关闭/
  * GET /uploads 的 Range + 越界防护/POST /upload 与 GET /uploads 前缀不互相打歪。
@@ -69,7 +69,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
       "src.focus()", 'box.setAttribute("aria-hidden", "true")',
       // 共用点击委托(同一点击语义覆盖输入区与聊天流两处)
       't.closest("[data-alb]")',
-      // 附件数量上限 + 长文本粘贴转临时附件(2026-10-28,对齐 ZCode)
+ // 附件数量上限 + 长文本粘贴转临时附件(对齐 ZCode)
       "const ATT_MAX_COUNT = 8",
       "const ATT_PASTE_TEXT_MIN_CHARS = 15 * 1024",
       "function attPasteTextAsFile(text)",
@@ -147,7 +147,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
       'if (req.method === "GET" && req.url !== undefined && (req.url === "/uploads" || req.url.indexOf("/uploads?") === 0))',
       // 越界防护:规范化 + realpath + 相对根判定 + 拒 ..
       "const normAbs = (p: string): string =>",
-      // 2026-10-28 对齐现状实现(原 marker 是 upRoot/realRoot 旧形态,源码已改为 realRoots + lex 归一化;
+ // 对齐现状实现(原 marker 是 upRoot/realRoot 旧形态,源码已改为 realRoots + lex 归一化;
       //   旧断言自 c0e13fa 起就一直红着,与本轮改动无关,此处只把 marker 校正到当前真源)
       "const realRoots = allowRoots.map((r) => { try { return nodeFsAll.realpathSync(r); }",
       "relative(rr, p)",
@@ -216,7 +216,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     expect(att.attKind("c.py", "")).toBe("text");
     expect(att.attKind("d.csv", "")).toBe("text");
     expect(att.attKind("x.yaml", "application/octet-stream")).toBe("text");
-    // 文档类(2026-10-30 用户口径:ppt/docx/xlsx/pdf/zip 都要能传):mime 或后缀任一命中即 doc
+ // 文档类( ppt/docx/xlsx/pdf/zip 都要能传):mime 或后缀任一命中即 doc
     expect(att.attKind("spec.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("doc");
     expect(att.attKind("spec.docx", "application/octet-stream")).toBe("doc");
     expect(att.attKind("deck.pptx", "")).toBe("doc");
@@ -370,8 +370,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     const toasts: string[] = [];
     const f = new Function("toast", "esc", "$", "URL", "pendingAtts", "attRender", src + "\nreturn { attDrop, attLightboxOpen, attLightboxClose };") as (
       toast: (t: string, e?: boolean) => void, esc: (s: unknown) => string, sel: (id: string) => unknown,
-      URLx: unknown, pend: unknown[], render: () => void,
-    ) => { attDrop: (i: number) => void; attLightboxOpen: (s: string, k: string, n: string, m: string, from: unknown) => void; attLightboxClose: () => void };
+      URLx: unknown, pend: unknown[], render: () => void) => { attDrop: (i: number) => void; attLightboxOpen: (s: string, k: string, n: string, m: string, from: unknown) => void; attLightboxClose: () => void };
     const esc = (s: unknown) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const revoked: string[] = [];
     const sel = (id: string) => {
@@ -527,7 +526,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     expect(r2.status).toBe(413);
     const j2 = await r2.json() as { error: string };
     expect(j2.error).toContain("8MB");
-    // 10MB 的 .docx → 200(文档 64MB 档,不能被 8MB 其它档打回;2026-10-30 ppt/docx/xlsx/pdf/zip 放行)
+ // 10MB 的 .docx → 200(文档 64MB 档,不能被 8MB 其它档打回; ppt/docx/xlsx/pdf/zip 放行)
     const docxBytes = Buffer.alloc(10 * 1024 * 1024, 68);
     const r4 = await fetch(BASE + "/upload?sid=vitest-att&name=" + encodeURIComponent("deck.docx"), { method: "POST", body: docxBytes });
     expect(r4.status).toBe(200);

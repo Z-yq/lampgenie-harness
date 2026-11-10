@@ -1,7 +1,6 @@
 /**
- * 全链路闭环变更硬门(2026-11-06 用户口径:「用户只描述意图,harness 自动找出该意图涉及的
+ * 全链路闭环变更硬门( 「用户只描述意图,harness 自动找出该意图涉及的
  * 所有链路节点…一次性全部改到一致,并证明没有残留、没有孤儿、没有只改一半」)。
- *
  * 覆盖:
  * - 替换/迁移类指令 + 无盘点清单 → 写操作被拒且指路 change_surface;
  * - 有盘点清单 → 放行(spawn 真派发);
@@ -9,7 +8,6 @@
  * - normal 指令(新建/小修)→ 不误拦;
  * - 收尾:surface 任务没有 passed 的 change.audit → 终稿带「未通过全链路审计」且不硬杀;
  * - task.context 记 changeScope / surfaceItems(开工一条 + 收尾刷新一条)。
- *
  * 断言口径:拒绝话术与子代理回显都进**模型上下文**(不在 task.result 里),故按 plan-gate.test.ts
  * 的既有写法抓最后一次 chat 的 messages。
  */
@@ -166,7 +164,7 @@ describe("全链路硬门:替换类指令必须先盘点", () => {
     const gates = r.app.journal.readAll()
       .filter((e: Ev) => e.kind === "permission.gate" && (e.payload as Payload).reason === "no-chain-map");
     expect(gates.length, "缺链路图必须留 gate 痕").toBeGreaterThanOrEqual(1);
-    // rule 字段:链路图轮由 agent-wiring 接线改成 plan-gate/change-chain;当前实测仍是
+ // rule 字段:链路图轮由 agent-wiring 接线改成 plan-gate/change-chain;当前经验证仍是
     // plan-gate/change-surface(同一处硬门),故按「reason 为准 + rule 二选一」断言,不锁死接线细节。
     expect(["plan-gate/change-chain", "plan-gate/change-surface"]).toContain((gates[0]!.payload as Payload).rule);
     // 未真派发:任务书只出现在未执行的 tool_call 参数里(同 deny 用例口径)。

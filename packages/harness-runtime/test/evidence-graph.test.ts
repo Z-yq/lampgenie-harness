@@ -34,8 +34,7 @@ const MODULE = [{ type: "module", ref: "src/a.ts" }] as const;
 function seed(
   statement = "retry hint cuts retries",
   partial: Partial<{ kind: EvidenceNodeKind; associations: { type: "module" | "tool" | "tip" | "task"; ref: string; label?: string }[]; confidence: number; projectId: string; modelVersion: string; observedAt: number; validFrom: number }> = {},
-  at = T0,
-): { graph: EvidenceGraph; node: EvidenceNode } {
+  at = T0): { graph: EvidenceGraph; node: EvidenceNode } {
   const res = addEvidence(
     createEvidenceGraph(),
     {

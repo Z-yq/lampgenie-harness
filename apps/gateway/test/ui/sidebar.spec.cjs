@@ -1,4 +1,4 @@
-/** UI 实测:侧栏 workspace 逻辑深拷贝(step-059,2026-10-14 用户口径:深拷贝 ref/zcode WorkspaceSidebar)。
+/** UI 经验证:侧栏 workspace 逻辑深拷贝(深拷贝 ref/zcode WorkspaceSidebar)。
  *  覆盖:细轨折叠/全部展开收起/桶头语义(收起态点击=展开+激活项目草稿;展开态=仅折叠)/行内 + 与 … /
  *  收起桶 live 徽标/运行置顶排序/purpose 双分区折叠与持久化/桶拖拽排序持久化/滚动 mask/归档分页。 */
 process.env.GENIE_CHECKPOINT = "off";
@@ -24,7 +24,7 @@ const { join } = require("node:path");
   page.on("pageerror", (e) => errs.push(String(e).slice(0, 120)));
   const results = [];
   const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS" : "FAIL") + " " + name + (detail ? " — " + detail : "")); };
-  // step-090:合成项目在服务端无注册,project.activate 回 error→uiAlert 页内模态(原生 alert 时代由
+ // 合成项目在服务端无注册,project.activate 回 error→uiAlert 页内模态(原生 alert 时代由
   // playwright 默认 auto-dismiss,无感)。此处显式关闭模态复刻旧行为,防 uid-mask 拦截后续真实点击;
   // 模态可能叠层(多次 activate 各弹一枚),循环关到净(z 序:后弹者在上,取 last)。
   const dismissUid = async () => {
@@ -76,7 +76,7 @@ const { join } = require("node:path");
   const raw = await page.content();
   check("/init 提示词与路径无外部品牌", raw.includes("lampgenie-harness's built-in /init") && !raw.includes("ZCode's built-in") && !raw.includes(".zcode/AGENTS.md"), "");
 
-  // purpose 双分区(2026-10-14 修正口径:harness=独立项目桶进「项 目」;「任 务」=无归属/项目已移除)
+ // purpose 双分区(修正口径:harness=独立项目桶进「项 目」;「任 务」=无归属/项目已移除)
   const sec = await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".sb-sec[data-sec=\"tasks\"] ~ .t-row")].map((x) => x.dataset.sid);
     const sids = new Set(rows);
@@ -277,7 +277,7 @@ const { join } = require("node:path");
   const ftClosed = await page.evaluate(() => !document.getElementById("sidebar").classList.contains("ft-open"));
   check("Esc 关闭文件树层", ftClosed);
 
-  // 右键菜单锚定光标(openMenuAt 实测尺寸+翻转):中列=左上对齐光标;近底=翻转后底边贴光标;桶头右键=项目菜单
+ // 右键菜单锚定光标(openMenuAt 经验证尺寸+翻转):中列=左上对齐光标;近底=翻转后底边贴光标;桶头右键=项目菜单
   await page.evaluate(() => { setOrganize("project"); });
   await page.waitForTimeout(200);
   const mid = await page.evaluate(() => {

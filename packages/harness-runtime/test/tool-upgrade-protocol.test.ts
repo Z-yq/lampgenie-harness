@@ -287,8 +287,7 @@ describe("canary 分流", () => {
       TOOL_UP_NOT_FOUND,
     ]);
     expect(
-      promoteCanary(canaryState({ scope: "session" }), { version: "v2", canary: { scope: "session" }, at: AT }).codes,
-    ).toEqual([TOOL_UP_STAGE_ORDER]);
+      promoteCanary(canaryState({ scope: "session" }), { version: "v2", canary: { scope: "session" }, at: AT }).codes).toEqual([TOOL_UP_STAGE_ORDER]);
   });
 
   it("percent=0 恒不命中(全部落 current)", () => {
@@ -340,8 +339,7 @@ describe("canary 分流", () => {
     );
     const ids = ["x1", "x2", "x3", "x4", "x5", "x6"];
     const differ = ids.some(
-      (sessionId) => resolveForCall(alphaCanary, { sessionId }).source !== resolveForCall(betaCanary, { sessionId }).source,
-    );
+      (sessionId) => resolveForCall(alphaCanary, { sessionId }).source !== resolveForCall(betaCanary, { sessionId }).source);
     expect(differ).toBe(true);
   });
 

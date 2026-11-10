@@ -1,19 +1,15 @@
 /**
  * 团队功能多成员端到端模拟(team-sim harness)。
- *
  * 目的:用两个真实隔离实例(不是单测桩)验证 P2P 通道 + issue 双通道 + 看板全链,
  * 每类断言都拿三类证据:WS/REST 回包、journal 事件、磁盘文件。
- *
  * 隔离纪律(硬约束):
  *  - 端口只走 SELF_PORT → 7781/7782;绝不 cfg.set gateway.port、绝不碰 7700;
  *  - GENIE_JOURNAL_DIR=/tmp/team-sim-A|B(实例事实源互不共享);
  *  - GENIE_REPO_ROOT=/tmp/team-sim/members(成员目录/密钥/issue 文件的共享根,
  *    不碰真实仓 .genie —— 7700 上的任务正在用);
  *  - 收尾按落盘 PID 杀进程组 + 删 /tmp 临时目录。
- *
  * 签名测试:harness 直接从共享成员根读成员的 ed25519 私钥自行签名,用来模拟
  * 「对端时钟偏移」「同 id 重发」「篡改 body」三类恶意/异常输入(这是真实对端能做的事)。
- *
  * 跑法:cd apps/gateway && npx tsx test/ui/_team_sim_mainlink.cjs
  */
 if (!String(process.env.NODE_OPTIONS || "").includes("--conditions=development")) {

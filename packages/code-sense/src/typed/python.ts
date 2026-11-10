@@ -1,5 +1,5 @@
 /**
- * typed/python(step-089 P1 / designs/26 §2.2):Python 逐文件 typed 提取——
+ * typed/python( P1 / §2.2):Python 逐文件 typed 提取——
  * 注解赋值(模块/类级,structural)+字面量推断(lexical 如实)+def/class token。
  * 与 adapters/python.ts 的关系:索引档只收模块级注解变量;本档补类属性/字面量推断/span。
  */
@@ -12,8 +12,8 @@ const CLASS_RE = /^(\s*)class\s+([A-Za-z_]\w*)/;
 const ANNOT_RE = /^(\s*)([A-Za-z_]\w*)\s*:\s*([^\n=#]+?)\s*(?:=\s*(.+))?$/;
 const ASSIGN_RE = /^(\s*)([A-Za-z_]\w*)\s*=\s*(.+)$/;
 
-/** 行级词法状态(2026-10-21 D 修复):三引号字符串跨行跟踪。
- * 实锤现场(py-mmdetection mmdet/apis/inference.py):docstring 的 Returns 段
+/** 行级词法状态( D 修复):三引号字符串跨行跟踪。
+ * 注意现场(py-mmdetection mmdet/apis/inference.py):docstring 的 Returns 段
  * (`ConfigType: new test_pipeline`)与多行 def 签名续行(`video_len: int) -> SampleList:`)
  * 曾被 ANNOT_RE 当注解赋值收进 vars——注解解析必须跳过字符串块内与括号续行。 */
 interface PyLexState { triple: string | null }
@@ -92,7 +92,7 @@ export function inferLiteralType(value: string): string | undefined {
 /** def 签名形参注解解析(F 批 --locals / G 批 tokens):`name: type` / `name: type = default` 形态。
  * 逗号切分只认括号深度 0(类型内的 `dict[str, int]` 逗号不切);每段返回 code 内 0-based 列。
  * 字符串内容已被 scanPyLine 原文保留(带引号),不干扰切分;括号不闭合(多行签名首行)→
- * 返回空——续行由「括号续行不解析」守门统一挡下(与 2026-10-21 D 同一防线,不为收形参放开)。
+ * 返回空——续行由「括号续行不解析」守门统一挡下(与 D 同一防线,不为收形参放开)。
  * 无注解形参如实不猜(self/cls 自然跳过)。 */
 function parseDefParams(code: string): { name: string; type: string; col: number }[] {
   const open = code.indexOf("(");
@@ -155,7 +155,7 @@ export async function extractPythonTyped(root: string, relFile: string): Promise
     const indent = code.match(/^\s*/)?.[0].replace(/\t/g, "    ").length ?? 0;
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop();
     // 函数体内(本行缩进深于任一 def 帧):局部变量不入 vars 清单(注解/推断两径同口径,
-    // 2026-10-21 D——vars 面是文件级模块/类变量清单)
+ // D——vars 面是文件级模块/类变量清单)
     const inDefBody = stack.some((fr) => fr.kind === "def" && fr.indent < indent);
     const clsM = CLASS_RE.exec(code);
     const defM = !clsM && DEF_RE.exec(code);

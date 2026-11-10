@@ -1,11 +1,9 @@
 /**
- * 会话 worker 入口(2026-10-21 抄 ZCode:一会话一进程)。argv[2]=描述符文件路径。
- *
+ * 会话 worker 入口(设计参考 ZCode(致谢):一会话一进程)。argv[2]=描述符文件路径。
  * 进程内自建完整 agent 栈(loadConfig+factory 纯函数:LLM/executor/项目表/记忆;文件态凭证
  * .genie/secrets.json+env 均可直接读),journal/权限/MCP/面板问答经 IPC 代理到 gateway;
  * 子代理(递归 LlmLoopBackend)、terminal PTY、文件工具、sense-index 在本进程内跑——
  * 重活不落 gateway 事件循环,会话间进程隔离。
- *
  * 生命周期工程学抄 sense-index-worker:ppid 看门狗 + disconnect 自退双保险;任务终态即退出。
  * IPC 基座/ProxyJournal/代理工厂在 session-worker-lib.ts(可单测)。
  */
@@ -43,13 +41,13 @@ const exitParentLost = (): void => {
 };
 process.on("disconnect", exitParentLost);
 setInterval(() => { if (!parentAlive()) exitParentLost(); }, 2000).unref();
-// 心跳(2026-10-29 冻结治理,协议 v2):30s 一跳,只证「事件循环活着」——与工具/LLM 忙闲无关
+// 心跳(冻结治理,协议 v2):30s 一跳,只证「事件循环活着」——与工具/LLM 忙闲无关
 // (长 LLM 调用/长命令/等待人工都是异步 await,心跳照发)。host 侧冻结探针
 // (GENIE_SESSION_WORKER_FREEZE_MS,缺省 180s)无心跳+无任何上行 → 判事件循环冻结(典型:
 // 9p 同步 IO 停顿)→ SIGTERM→SIGKILL 收割 + 任务翻 failed 可续——防四 loop 同冻 35 分钟无人收。
 // 放 crashGuards 之前:装配期(loadConfig 读文件)的停顿同样被覆盖。
 setInterval(() => { try { notify({ t: "hb", pid: process.pid }); } catch { /* IPC 断=disconnect 兜底 */ } }, 30_000).unref();
-// 进程级崩溃保活(2026-10-28):worker 早先只挂 unhandledRejection,任何一个漏网的
+// 进程级崩溃保活:worker 早先只挂 unhandledRejection,任何一个漏网的
 // uncaughtException(典型:工具层 socket 'error' 无人监听)都会让整个 worker code=1 退出,
 // 同 worker 下的主 agent 与所有在跑子代理一起被收尸。与 gateway 主进程(main.ts)同纪律:
 // 响亮记录后保活,业务错误仍在各自工具返回里 fail-visible。
@@ -107,14 +105,14 @@ async function main(): Promise<void> {
 
   const loaded = loadConfig({ repoRoot: root });
   const config = loaded.config;
-  // 权限模式装载(2026-10-21 复审 P1:main.ts 同款——缺这行 worker 恒 ask,
+ // 权限模式装载(复审 P1:main.ts 同款——缺这行 worker 恒 ask,
   // 配置 auto/readonly/plan 的用户在 worker 任务上语义漂移)
   setPermissionMode(config.permissions?.mode);
   const executor = buildExecutorFromConfig(config);
   const modelProviders = buildModelProviders(config, root, loaded.sources);
   const audioChat = buildAudioChatFromConfig(config, root, loaded.sources);
   let llm = modelProviders.main ?? audioChat;
-  // per-session 主模型覆盖(用户实报「会话内模型切换没生效」根因修复:进程内模式 runWithAgent
+ // per-session 主模型覆盖(用户用户反馈「会话内模型切换没生效」根因修复:进程内模式 runWithAgent
   // 已接 sessionModels,本 worker 子进程只读全局配置、不读 session-models.json——会话覆盖在 fork
   // 时整体丢失)。装配期按 spec.task.sessionId 派生独立 provider,语义与 agent-wiring runWithAgent 一致:
   // worker 单任务生命周期,捕获启动时引用=该任务全程模型(运行中切模型不热切当前任务,新任务重 fork 读最新);
@@ -144,8 +142,8 @@ async function main(): Promise<void> {
   } catch (err) {
     console.warn(`[session-worker] per-session 覆盖读取异常(回退全局 llm):`, String(err).slice(0, 160));
   }
-  // 2026-11-04 压缩阈值口径自证(死亡螺旋复盘用):contextWindow 在此丢失会退化到
-  // compactThresholdTokens 兜底(实测 24000),配合 floor 护栏已无螺旋风险,但口径必须可见。
+ // 压缩阈值口径自证(死亡螺旋复盘用):contextWindow 在此丢失会退化到
+ // compactThresholdTokens 兜底(经验证 24000),配合 floor 护栏已无螺旋风险,但口径必须可见。
   console.log(`[session-worker] 压缩口径: spec.contextWindow=${spec.contextWindow} 生效=${contextWindow}`);
   if (!llm || !executor) {
     notify({ t: "task.state", taskId: spec.task.id, state: "failed", error: `worker 装配失败(llm=${llm ? "on" : "off"},executor=${executor?.kind ?? "off"})——检查 genie.config.json` });
@@ -158,7 +156,7 @@ async function main(): Promise<void> {
 
   // 本地 TaskSupervisor:单一任务;onChange 镜像上行(终态)/驱动 wireAgentLoop。
   // 注入:TaskSupervisor.inject 原样入表(restore 会把非终态强翻 cancelled,且状态机禁 done→queued
-  // 迁移——线上冒烟实证);随后 drain() 走 queued→running 正常状态机触发 wireAgentLoop。
+ // 迁移——线上冒烟验证);随后 drain 走 queued→running 正常状态机触发 wireAgentLoop。
   const tm = new TaskSupervisor();
   ownTmRef = tm;
   let task: Task;
@@ -173,7 +171,7 @@ async function main(): Promise<void> {
   tm.onChange((t) => {
     notify({ t: "task.state", taskId: t.id, state: t.state, result: t.result });
     if (["done", "failed", "cancelled"].includes(t.state)) {
-      // 终态落盘对账(2026-10-29 晚间事故:gateway 消息处理被巨型会话轮询饿死 200s+,
+ // 终态落盘对账(晚间事故:gateway 消息处理被巨型会话轮询饿死 200s+,
       // worker 正常交稿 exit(0) 时在途 IPC 消息随通道关闭丢失→exit 收割把已完成任务误判
       // 「异常退出」。终态同时落盘,host 侧 exit/freeze 收割前回读——完成的就按完成记)。
       try {
@@ -186,7 +184,7 @@ async function main(): Promise<void> {
       scheduleExit();
     }
   });
-  /** 退出策略(2026-10-21 P0 修复;三轮复审 ① 补后台子代理):等 ①tm 空闲 ②终态收尾
+ /** 退出策略( P0 修复;三轮复审 ① 补后台子代理):等 ①tm 空闲 ②终态收尾
    *  (distill/记忆学习/goal 判定)落定 ③本会话子代理全部终态——三者齐备才退。
    *  ZCode 铁律「父终态不终止子代理」:进程内模式后台子代理可跨任务存活,worker 必须等它们
    *  真终态;收尾悬挂仍走 180s 兜底,但子代理在跑时不强退(它们是真工作,不是悬挂)。 */
@@ -215,8 +213,8 @@ async function main(): Promise<void> {
     },
   });
 
-  // R5(2026-10-30 ready 超时实锤):boot 曾硬等 mcp.tools IPC 往返——网关事件循环停顿时(索引重建
-  // 压 9p,实测 session.status 3-9s × 90s)这个 await 等不到应答,worker 30s ready 超时被判死。
+ // R5( ready 超时注意):boot 曾硬等 mcp.tools IPC 往返——网关事件循环停顿时(索引重建
+ // 压 9p,经验证 session.status 3-9s × 90s)这个 await 等不到应答,worker 30s ready 超时被判死。
   // 改 5s 竞速:等不到=无 MCP 工具降级启动(mcp 代理对缺工具本就 fail-visible),不把生死押在
   // 网关的响应能力上。
   const mcpTools = await Promise.race([
@@ -242,8 +240,7 @@ async function main(): Promise<void> {
     memoryWiring as never,
     undefined, // auxLlm:gateway 的辅助轨实例不可跨进程;worker 内 wiring 回退主轨(与未配置同行为)
     config as never,
-    contextWindow,
-  );
+    contextWindow);
 
   // R4-2(四轮复审):远程节点任务在 worker 模式 fail-visible——nodes 表是网关权威,worker
   // 无表会静默跳过分派守卫(错执行位置);不假装已派,显式失败指路。

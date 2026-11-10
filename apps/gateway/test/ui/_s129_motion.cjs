@@ -1,11 +1,11 @@
-/** step-129 UI 动效验收探针:连已起的 7818 实例(不自起服务;产线 7700 不碰;单 chromium 跑完即退)。
+/** UI 动效验收探针:连已起的 7818 实例(不自起服务;生产环境 7700 不碰;单 chromium 跑完即退)。
  * 采集:A) 0 pageerror  B) 七主题截图+装饰动画在跑  C) 动效帧序列(视图切换/主题切换)与机制激活
  *       (getAnimations)  D) 性能两臂对照(动画开 vs 关:longTask/滚动 rAF 帧间隔)  E) reduced-motion 降级。
  * 跑法:node --max-old-space-size=1024 test/ui/_s129_motion.cjs(等待 121 的 chromium 释放后单跑)。 */
 const { chromium } = require("playwright-core");
 const fs = require("node:fs");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7818";
-const SHOTS = "/mnt/e/workship/genie/lampgenie-harness/tasks/step-129-ui-motion/shots";
+const SHOTS = require("node:path").join(__dirname, "shots-motion");
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS" : "FAIL") + " " + name + (detail ? " — " + detail : "")); };
 
@@ -182,7 +182,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); c
   const armNoAvatar = await perfArm("noavatar");
   const armOnlyMine = await perfArm("onlymine");
   await page.screenshot({ path: SHOTS + "/perf-final-dark.png" });
-  const deg = (armOn.longTasks > armOff.longTasks + 1) && (armOn.med > armOff.med + 2); // 验收口径:帧率或 longTask 任一不劣化即达标(两维度同时劣化才 FAIL)
+  const deg = (armOn.longTasks > armOff.longTasks + 1) && (armOn.med > armOff.med + 2); // 验径:帧率或 longTask 任一不劣化即达标(两维度同时劣化才 FAIL)
   results.push({ name: "D 性能明细(off/on/noloop/noavatar/onlymine)", ok: true, detail: JSON.stringify({ off: armOff, on: armOn, noloop: armNoloop, noavatar: armNoAvatar, onlymine: armOnlyMine, idleOn, runningAnims }) });
   const mineClean = armOnlyMine.med <= armOff.med + 2;
   check("D 性能不劣化(滚动帧间隔 on vs off)", !deg, "off=" + JSON.stringify(armOff) + " on=" + JSON.stringify(armOn) + " onlymine=" + JSON.stringify(armOnlyMine) + " idleOn=" + JSON.stringify(idleOn));

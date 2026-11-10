@@ -1,12 +1,10 @@
 /**
  * module-brief-store(IO 层)单测:全部用 /tmp 临时 workspace 夹具,不碰仓内 .genie。
- *
  * 夹具:root=/tmp/module-brief-store-XXXX(临时目录),内含 packages/a、packages/b、packages/noentry、apps/app 与 .genie/arch-policy.json
  * - packages/a:CONTRACT.md + README.md + src/index.ts(各种 export 形态)+ 1 个工作区 dep + 1 个外部 dep
  * - packages/b:只有 README.md;policy root 为其子目录(packages/b/src)且无 owner
  * - packages/noentry:无契约、无 index.ts、不在 policy 内
  * - apps/app:无契约、无 index.ts、dep 指向无契约的 noentry
- *
  * 覆盖:定位三态(相对/绝对/包名)、越界拒绝、包名不存在、managed+owner 缺失、UNMANAGED、
  * CONTRACT.md 优先 / 只有 README / 两契约都缺、deps 过滤与 dep 契约缺失码、entries 名字+行号(不含实现)、
  * 无 index 的 missing 文本、arch-policy 缺失、chars 一致性、CLI 参数错/--help/--json/--out/exit 码。

@@ -1,6 +1,5 @@
 /**
- * 输入边界防御(M136):read guard 顺序 + 单行 2000 clamp + 编辑比例守卫。
- *
+ * 输入边界防御:read guard 顺序 + 单行 2000 clamp + 编辑比例守卫。
  * 覆盖(机制口径:「输入边界防御」):
  * ①/proc/self/environ 泄密路径被拒;②/dev/zero 设备路径被拒;③symlink 指向 /proc 被 realpath 归一后拒;
  * ④FIFO 在 open 前被 stat special 拒(不挂死);⑤600KB 单行 clamp 到 ≤2000 且带「…(+N 字符已截断)」;

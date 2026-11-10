@@ -1,6 +1,5 @@
 /**
  * RSI #194 方向总览(Direction Atlas,纯逻辑零 IO,2026-11)。
- *
  * 为什么需要它:RSI 各机制各自落盘(缺陷谱系 defects.jsonl、证据图、决策质量…),但没有一份
  * 跨机制的「这个项目现在到底朝哪走」视图 —— 于是目标漂移(做久了却早偏离原目标)、
  * 未裁决的需求冲突、以及反复复发的缺陷类别都没人汇总。本模块把五个来源
@@ -10,7 +9,6 @@
  * - 冲突带上裁决状态,并把裁决结果反射回目标(superseded);
  * - 缺陷基因按 defectClass 聚合出 top5,让「同一个类反复犯错」可见;
  * - driftFlags 三条规则直接点出漂移信号,交给上层决定告警还是降频。
- *
  * 依赖纪律(为什么零 import):本文件必须可被任意宿主(store / CLI / 未来的 web 面板)复用,
  * 且测试必须是确定性的 —— 因此
  * 1) 不 import 任何模块(尤其 node:fs / node:path / node:os / child_process),不读写文件与环境;
@@ -18,7 +16,6 @@
  *    绝不用 `Date.now()` —— 否则同一输入在不同机器/时刻会给出不同的 driftFlags,快照与断言不可复现;
  * 3) 全部函数不 throw:非法条目跳过并记 ATLAS_INVALID,其余照常构建(上游是 append-only 日志,
  *    坏行是常态,不能让一条坏行炸掉整份总览)。
- *
  * 码表顺序固定(便于自动化按码断言):INVALID 在最前,BUILT 紧随其后,动作码在后。
  */
 
@@ -226,8 +223,7 @@ function hasEvidence(refs: readonly string[]): boolean {
 /** 通用条目读取:非数组整段记 notArray;单条读不出来记 invalid(计数,不抛)。 */
 function readList<T>(
   raw: unknown,
-  read: (item: unknown) => T | undefined,
-): { items: T[]; invalid: number; notArray: boolean } {
+  read: (item: unknown) => T | undefined): { items: T[]; invalid: number; notArray: boolean } {
   if (!Array.isArray(raw)) return { items: [], invalid: 0, notArray: true };
   const items: T[] = [];
   let invalid = 0;
@@ -482,7 +478,6 @@ function cloneAtlas(atlas: DirectionAtlas): DirectionAtlas {
 
 /**
  * 构建方向总览。
- *
  * 口径(与用例一一对应):
  * - goals 按 since 升序(同 since 保持入参顺序,Array#sort 稳定),计数 active/achieved/abandoned;
  * - timeline = changes 按 at 升序;from/to 命中 goal id 就保留 id,不命中保留原文本(绝不因解析失败丢历史);
@@ -640,7 +635,6 @@ export function buildAtlas(input: AtlasInput, opts?: AtlasBuildOptions): AtlasRe
 
 /**
  * 裁决一个需求冲突:chosenGoalId 胜出,另一侧目标转 superseded(until=opts.at,supersededBy=chosen)。
- *
  * 幂等性(store 的 resolve 可能被重复调用):已 resolved 的冲突再裁决一次,返回**结构等价**的副本,
  * 不再改任何 goal 的 until/supersededBy —— 否则 at 会沿着重复调用漂移,R3 风险就是这么来的。
  * 入参 atlas 永不被修改(全程在深拷贝上操作)。
@@ -648,8 +642,7 @@ export function buildAtlas(input: AtlasInput, opts?: AtlasBuildOptions): AtlasRe
 export function resolveConflict(
   atlas: DirectionAtlas,
   conflictId: string,
-  opts: ConflictResolution,
-): AtlasResult {
+  opts: ConflictResolution): AtlasResult {
   const next = cloneAtlas(atlas);
   const codes = new Set<AtlasCode>();
   const conflict = next.conflicts.find((item) => item.id === conflictId);

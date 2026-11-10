@@ -1,5 +1,5 @@
 /**
- * M25 崩溃尾部修复(机制 #25)单测:
+ * 崩溃尾部修复(机制 #25)单测:
  * journal 尾部「有 tool.call 无 tool.result / 有 step.start 无 step.end」时,resume 前补合成终态。
  * 覆盖:计划形状与顺序 / time 复用会话末事件 / seq 连续 / 幂等 / 已闭合不动 /
  *       未开始执行不伪造工具结果 / 续跑文案注入 / 跨 session 不混入。
@@ -52,7 +52,7 @@ function buildJournal(opts: {
   return j;
 }
 
-describe("M25 planTailRepair:未闭合 turn/step/tool.call", () => {
+describe(" planTailRepair:未闭合 turn/step/tool.call", () => {
   it("未闭合三件套 → 1 tool.result + 1 step.end + 1 turn.end,顺序与文案正确", () => {
     const j = buildJournal();
     const events = j.readSession(SID);
@@ -130,7 +130,7 @@ describe("M25 planTailRepair:未闭合 turn/step/tool.call", () => {
   });
 });
 
-describe("M25 applyTailRepair:落账与幂等", () => {
+describe(" applyTailRepair:落账与幂等", () => {
   it("append 后 seq 连续、二次调用全 0", () => {
     const j = buildJournal();
     const before: JournalEvent[] = j.readSession(SID);
@@ -158,7 +158,7 @@ describe("M25 applyTailRepair:落账与幂等", () => {
   });
 });
 
-describe("M25 续跑口径:修复计数注入指令", () => {
+describe(" 续跑口径:修复计数注入指令", () => {
   it("buildInstruction 文案带修复计数(tailRepairNote)", () => {
     const note = tailRepairNote(2);
     expect(note).toContain("[尾部修复]");

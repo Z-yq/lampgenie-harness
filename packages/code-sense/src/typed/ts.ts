@@ -1,8 +1,8 @@
 /**
- * typed/ts(step-089 P1 / designs/26 §2.2):TS/JS 逐文件 typed 提取(ts-morph 纯语法档,
+ * typed/ts( P1 / §2.2):TS/JS 逐文件 typed 提取(ts-morph 纯语法档,
  * 不触 typechecker——编译器初始化 3.1s 是已知固定成本,语法查询不受影响)。
  * 与 engine.ts 语义档的关系:索引档收模块级注解变量+类属性;本档补字面量推断(lexical)与
- * 泛型/联合注解的 span 面(designs/26 §2.2「TS 原生+泛型+联合」)。
+ * 泛型/联合注解的 span 面( §2.2「TS 原生+泛型+联合」)。
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -55,7 +55,7 @@ export async function extractTsTyped(root: string, relFile: string): Promise<Typ
   } catch (err) {
     return { file: relFile, language: "typescript", symbols: [], degraded: { reason: `读取失败: ${readFailReason(err)}` } };
   }
-  // overwrite+用后即删(step-093 真发现):模块级 syntax-only Project 常驻,首版 createSourceFile
+ // overwrite+用后即删(真发现):模块级 syntax-only Project 常驻,首版 createSourceFile
   // 无 overwrite——同一路径第二次提取直接抛 InvalidOperationError(CLI 一次性进程掩盖,长驻
   // gateway 进程必踩);且不同路径只增不删=无界累积。改为 overwrite 创建+提取完即 removeSourceFile。
   const proj = syntaxOnlyProject();
@@ -66,9 +66,9 @@ export async function extractTsTyped(root: string, relFile: string): Promise<Typ
     symbols.push(s);
   };
   const lineOf = (n: Node): number => n.getStartLineNumber();
-  // 名标识符在声明文本内的首个独立词出现位(step-093 真发现②修正):getStart() 返回的是
+ // 名标识符在声明文本内的首个独立词出现位(真发现②修正):getStart 返回的是
   // 声明起点(export/function/class/const 等关键字位),不是名字位——首版 span 对关键字前缀
-  // 声明全部偏移(query.ts 实测 32 token 错 23;C/Py 提取器各自从名字定位无此问题)。
+ // 声明全部偏移(query.ts 经验证 32 token 错 23;C/Py 提取器各自从名字定位无此问题)。
   // 修=声明文本内做词边界搜索取名的首个独立出现(变量名先于类型注解出现,首中即名)。
   const isWordCh = (ch: string): boolean => /[A-Za-z0-9_$]/.test(ch);
   const nameOffsetIn = (declText: string, name: string): number => {
@@ -163,13 +163,13 @@ export async function extractTsTyped(root: string, relFile: string): Promise<Typ
       push({ name, kind: "variable", dataType: t2, file: relFile, line: lineOf(decl), span: spanOf(decl, name), tier: "lexical" });
     }
   }
-  // F/G 批(2026-10-21 收尾批):函数内形参与局部变量——tokens 默认可见(span 面),
+ // F/G 批(收尾批):函数内形参与局部变量——tokens 默认可见(span 面),
   // vars 面 --locals 扩入(varsOf 过滤)。单遍 descendant 收集,有界:
   //  - ParameterDeclaration:带类型注解 → kind=parameter/structural;无注解不猜。
   //  - VariableDeclaration:函数体内(非顶层 const/let——上面语句级循环已收顶层)带注解 →
   //    kind=local/structural;无注解+字面量 → 不收(推断型局部=旧噪声源)。
   // 性能纪律:span 用 nameNode.getStart() 直接定位(循环外取一次全文),不走
-  // spanOf/getText(每节点整子树拷贝——server.ts 实测 2670 行 O(节点×文件) 退化 2.8s)。
+ // spanOf/getText(每节点整子树拷贝——server.ts 经验证 2670 行 O(节点×文件) 退化 2.8s)。
   const fullText = sf.getFullText();
   const colOf = (pos: number): number => pos - (fullText.lastIndexOf("\n", Math.max(0, pos - 1)) + 1);
   sf.forEachDescendant((node) => {

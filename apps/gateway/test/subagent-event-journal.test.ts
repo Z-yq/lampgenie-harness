@@ -1,5 +1,5 @@
 /**
- * 子代理工作区入账(2026-10-16 用户口径:点开子代理要看到它的全部动作/消息流):
+ * 子代理工作区入账(点开子代理要看到它的全部动作/消息流):
  * ①trimSubLoopEvent 裁剪契约(各 kind 字段保留/截断边界/未知 kind 兜底);
  * ②LlmLoopBackend onLoopEvent 同挂点回调(心跳机制不回退,事件序列完整);
  * ③真实链路 e2e:spawn_subagent(进程内后端)→ 主 journal 出现 subagent.event(agentId/taskId/kind 正确),
@@ -13,7 +13,7 @@ import { LlmLoopBackend, trimSubLoopEvent } from "../src/llm-loop-backend.js";
 import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("subagent-event-journal"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -33,8 +33,8 @@ describe("trimSubLoopEvent:工作区入账裁剪契约", () => {
       text: "z".repeat(9000), reasoning: "r".repeat(5000), llmMs: 1234, turn: 3, step: 2,
       toolCalls: calls, usage: { total: 9 },
     });
-    expect((p.text as string).length).toBe(8000); // 2026-10-21 对齐实现(text 8000;输入 9000 触发截断)
-    expect((p.reasoning as string).length).toBe(4000); // 2026-10-21 对齐实现(reasoning 4000;输入 5000 触发截断)
+    expect((p.text as string).length).toBe(8000); // 对齐实现(text 8000;输入 9000 触发截断)
+    expect((p.reasoning as string).length).toBe(4000); // 对齐实现(reasoning 4000;输入 5000 触发截断)
     expect(p.turn).toBe(3);
     expect((p.toolCalls as unknown[]).length).toBe(12);
     expect((p.toolCalls as { arguments: string }[])[0]!.arguments.length).toBeLessThanOrEqual(200);

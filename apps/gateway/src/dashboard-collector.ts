@@ -1,8 +1,7 @@
 /**
  * 运行看板数据核心(参考项目 dashboard-collector 的 journal 原生重写,功能面 1:1):
  * 事件源折算重建会话状态 + 每会话指标聚合。
- *
- * 数据源映射(ref 概念 → journal 事件,详见 tasks/designs):
+ * 数据源映射(ref 概念 → journal 事件,详见):
  *  - session_start   → 会话首个事件(任意 kind 首现即建卡)
  *  - prompt_submit   → message.user
  *  - tool_use        → tool.call
@@ -12,7 +11,6 @@
  *  - interrupt       → turn.end reason=cancelled
  *  - toolReject      → permission.gate effect=denied
  *  - tokens          → message.agent payload.usage(诚实子集:无 cache 字段不造数)
- *
  * 纯函数无 IO:同一份事件重放结果恒定(测试可锚定);时间由调用方注入(now),
  * 单时钟纪律与 @lampgenie/runtime projection 同拍。
  */
@@ -93,7 +91,7 @@ export const DASH_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 /** idle 超过此时长从看板移除(ref stale 30min)。 */
 export const DASH_STALE_TIMEOUT_MS = 30 * 60 * 1000;
 /** 停止会话在板上的保留窗。ref 是 30s,但本产品任务是「跑几分钟即终态」的离散形态,
- *  30s=看板在两个任务之间恒空(2026-10-27 用户「看板呢」实锤)——改 24h,当天工作留在板上。 */
+ * 30s=看板在两个任务之间恒空(用户「看板呢」注意)——改 24h,当天工作留在板上。 */
 export const DASH_STOPPED_DISPLAY_MS = 24 * 60 * 60 * 1000;
 /** turn 结束后到下一条消息可计纠正的窗口。 */
 export const CORRECTION_WINDOW_MS = 60 * 1000;
@@ -317,7 +315,7 @@ export function rebuildDashboardSessions(
         break;
       }
       case "custom": {
-        // B2(2026-11-05):板含内容节点→阶段门自动推进——正常放行口径,与 denied(人工干预)分桶,
+ // B2:板含内容节点→阶段门自动推进——正常放行口径,与 denied(人工干预)分桶,
         // 消费面(运行看板)把零 denied 读作「无异常」而非「闸门失灵」。
         const pl = p as { type?: string; effect?: string };
         if (pl.type === "plan.gate" && pl.effect === "phase-auto-advanced") f.phaseAutoAdvanced++;

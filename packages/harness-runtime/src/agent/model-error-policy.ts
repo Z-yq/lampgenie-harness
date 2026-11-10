@@ -1,9 +1,7 @@
 /**
- * 模型错误策略表(M33,对齐 docs/mechanisms.md #33)。
- *
+ * 模型错误策略表(,对齐 docs/mechanisms.md #33)。
  * 要治的病:永久错误(鉴权/配额/模型未配置)被当限流无限重试;quota 429 被当 throttle
  * 冻结共享桶;未知 provider code 无限重试;全部子代理 backoff 时 run 无进展也无提示。
- *
  * 本模块是纯函数层(无 IO、无状态副作用),两件事:
  *  1) classifyModelError 把 {status, body, err, signalAborted, headers} 归类成
  *     cancelled/quota/auth/not_configured/model_unavailable/context_exceeded/

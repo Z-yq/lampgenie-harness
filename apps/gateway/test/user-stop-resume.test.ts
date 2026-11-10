@@ -1,5 +1,5 @@
 /**
- * M34 用户停止 → 不复活专项(2026-11-07)。
+ * 用户停止 → 不复活专项。
  * 锚定:
  * ① 取消落 journal custom `task.user_stopped`(先落标记再 abort;标记写失败只告警,不改取消结果);
  * ② WS `task.resume` 命中标记 → error code=task-stopped-by-user;

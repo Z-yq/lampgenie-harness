@@ -1,10 +1,8 @@
 import type { BoardAccept } from "@lampgenie/protocol";
 
 /** 紧凑白板 DSL → BoardDoc 片段(step:LLM 落板省字节)。
- *
  * 背景:agent 落板时要逐节点写全字段 JSON(40164 字节的板 ≈ 1.2 万 token),其中大半是重复键名。
- * 本解析器只吃「行式 DSL」,把键名压成行首关键字,字段用 `|` 分隔,实测同板 ≈34% 字节。
- *
+ * 本解析器只吃「行式 DSL」,把键名压成行首关键字,字段用 `|` 分隔,经验证同板 ≈34% 字节。
  * 语法(稳定版,可直接写进文档/提示词):
  * ```
  * %% board v1
@@ -12,9 +10,7 @@ import type { BoardAccept } from "@lampgenie/protocol";
  * type: code            # → meta.boardType
  * scale: M              # → meta.scale
  * kind: design          # → meta.docKind
- *
  * lane <泳道名> : <id> <id> <id>        # 声明泳道成员与板上顺序(→ node.group)
- *
  * node <id> <kind> <change> [<phase>] "<label>" | <summary> [| <before>]
  *   accept: [<type>] <cmd> => <expect> [| <note>]   # 可重复;type 省略则不写 type 字段
  *   targets: <file1>, <file2>
@@ -22,7 +18,6 @@ import type { BoardAccept } from "@lampgenie/protocol";
  *   flow: step <text>                             # 可重复,顺序即数组顺序
  *   flow: branch <cond> ? <thenText> : <elseText> # elseText 可省
  *   flow: loop over <expr> | body <t1>; <t2>
- *
  * edge <from> -> <to> : <label>         # -> call / ->> data / ~> verify / => nav / =>> contains
  * ```
  * accept 的 `<type>` ∈ command|browser|manual|negative(非法值 → W_ACCEPT_TYPE_UNKNOWN 并省略);
@@ -30,7 +25,6 @@ import type { BoardAccept } from "@lampgenie/protocol";
  * 所以 cmd 里本身带箭头也不会切错。
  * 细节:`%%` 版本行、空行、`#` 开头行忽略;缩进(2 空格)的附属行作用于最近一个 node 行;
  * 文本里要写 `|` 请转义成 `\|`;未知行记 E_UNKNOWN_LINE 并跳过(不抛错)。
- *
  * 长度的校验:超出 zod 上限(label ≤160/summary,before ≤500/accept.cmd ≤500/targets 每项 ≤400…)
  * 一律 warn + 截断,避免「解析成功但落盘被 zod 拒」。
  */
@@ -242,8 +236,7 @@ const MERGE_FILL_KEYS = ["flow", "evidence", "comments", "wf", "fileRef", "done"
 
 export function mergeDslWithNodes(
   dslNodes: BoardDslNode[],
-  jsonNodes: unknown,
-): { nodes: Record<string, unknown>[]; filled: number } {
+  jsonNodes: unknown): { nodes: Record<string, unknown>[]; filled: number } {
   const list = Array.isArray(jsonNodes) ? jsonNodes : [];
   const byId = new Map<string, Record<string, unknown>>();
   for (const raw of list) {
@@ -556,7 +549,7 @@ export function parseBoardDsl(text: string): BoardDslResult {
     if (group !== undefined) node.group = group;
   }
 
-  // 边收口:悬空丢弃 + 上限
+ // 边:悬空丢弃 + 上限
   const edges: BoardDslEdge[] = [];
   for (const e of pending) {
     if (!declared.has(e.from) || !declared.has(e.to)) {

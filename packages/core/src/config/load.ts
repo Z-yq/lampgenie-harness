@@ -136,7 +136,7 @@ export function loadConfig(opts: LoadOptions): LoadedConfig {
 /** 轨内端点解析(providerId 继承,ZCode defaultModelSelection 语义):
  * endpoint.baseUrl/apiKeyEnv 未显式给出时从 providers[id] 继承;apiKeyEnv 兜底名按轨区分
  * (coding=GENIE_LLM_API_KEY,audio.chat=GENIE_AUDIO_API_KEY)——双轨凭证命名空间不串。
- * apiType(step-127 运行时适配):同样从 providers[id] 继承(端点协议随端点走,
+ * apiType(运行时适配):同样从 providers[id] 继承(端点协议随端点走,
  * 与 baseUrl/apiKeyEnv 同语义);无 providerId/条目未声明=undefined=chat。 */
 export type TrackName = "coding" | "audio.chat" | "audio.asr" | "audio.tts";
 const TRACK_DEFAULT_KEY: Record<TrackName, string> = {
@@ -147,9 +147,9 @@ const TRACK_DEFAULT_KEY: Record<TrackName, string> = {
 };
 export function resolveTrackEndpoint(config: Config, track: TrackName, ref: { baseUrl?: string; providerId?: string; apiKeyEnv?: string }): { baseUrl?: string; apiKeyEnv: string; apiType?: "chat" | "responses" | "anthropic" } {
   const p = ref.providerId ? config.providers.find((x) => x.id === ref.providerId) : undefined;
-  // 协议继承门槛(2026-10-19 产线 404 根治):ref.baseUrl 显式且 ≠provider.baseUrl(典型=env 层
+ // 协议继承门槛(生产环境 404 根治):ref.baseUrl 显式且 ≠provider.baseUrl(典型=env 层
   // GENIE_LLM_BASE_URL 换端点)时,apiType 不再从 providerId 继承——否则 anthropic 协议打到
-  // OpenAI 兼容端点(实测 MAAS /v1/messages 必 404 空体)。想继承协议请只写 providerId
+ // OpenAI 兼容端点(经验证 MAAS /v1/messages 必 404 空体)。想继承协议请只写 providerId
   // (baseUrl 留空=完全继承)或保持 baseUrl 与 provider 一致。
   const baseDiverged = ref.baseUrl !== undefined && ref.baseUrl !== p?.baseUrl;
   return {
@@ -185,13 +185,12 @@ function readSecrets(repoRoot: string): Record<string, unknown> {
 const legacyFallbackWarned = new Set<string>();
 
 /**
- * 凭证解析(按轨),返回来源。优先级(2026-10-20 修正):
+ * 凭证解析(按轨),返回来源。优先级(修正):
  *   ① env[envName]     —— 该 Provider 的专属环境变量
  *   ② secrets[envName] —— 本机密钥文件里的专属密钥
  *   ③ coding 旧直传兜底 GENIE_LLM_API_KEY(env → secrets),**仅当前两者都没有时**
- *
  * 旧实现先看 env.GENIE_LLM_API_KEY 再看 secrets,导致「Switch 到智谱端点时拿到的仍是阿里云
- * 的 GENIE_LLM_API_KEY」→ 401「令牌已过期或验证不正确」(2026-10-20 用户实报的最新 session 失败)。
+ * 的 GENIE_LLM_API_KEY」→ 401「令牌已过期或验证不正确」(用户用户反馈的最新 session 失败)。
  * Provider 专属密钥一旦存在就必须优先,env 的通用旧键只能做最后的兼容兜底。
  * 双轨红线:audio 轨不回落 coding 旧直传——命名空间不串。
  */
@@ -291,7 +290,7 @@ export function listSecretKeys(repoRoot: string): string[] {
   }
 }
 
-/** 写入一个密钥到 .genie/secrets.json(0600,原子 tmp+rename;step-125 预设一键接入)。
+/** 写入一个密钥到 .genie/secrets.json(0600,原子 tmp+rename; 预设一键接入)。
  * 只更新目标键,保留其它键;坏文件按空对象重建。返回值只含「是否覆盖了已有值」。
  * 红线:值不落配置、不入日志、不回包回显。 */
 export function setSecretValue(repoRoot: string, name: string, value: string): { existed: boolean } {
@@ -316,12 +315,11 @@ export function setSecretValue(repoRoot: string, name: string, value: string): {
   return { existed };
 }
 
-/** 模型元数据查找(ZCode 模型管理语义,step-048):按模型名在 providers[].models 里查
+/** 模型元数据查找(ZCode 模型管理语义:按模型名在 providers[].models 里查
  * contextWindow/maxTokens;条目兼容旧字符串形态。找不到=null(调用方走轨级回退)。 */
 export function modelMetaOf(
   config: Config,
-  model: string | undefined,
-): { contextWindow?: number; maxTokens?: number } | null {
+  model: string | undefined): { contextWindow?: number; maxTokens?: number } | null {
   if (!model) return null;
   for (const p of config.providers ?? []) {
     for (const m of p.models ?? []) {
@@ -334,7 +332,7 @@ export function modelMetaOf(
   return null;
 }
 
-/** 读取一个密钥值(2026-10-21 web.search 配置层用;env 优先,secrets 回退)。
+/** 读取一个密钥值( web.search 配置层用;env 优先,secrets 回退)。
  * 只在本机进程内消费,值不落日志/回包——与 resolveTrackApiKey 同红线。 */
 export function readSecretValue(repoRoot: string, name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   const fromEnv = env[name];

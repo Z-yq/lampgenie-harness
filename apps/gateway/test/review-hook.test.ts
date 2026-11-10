@@ -1,5 +1,5 @@
 /**
- * 验收钩子已下线(step-083,2026-10-16 用户口径):「code review 不要自动触发,
+ * 验收钩子已下线:「code review 不要自动触发,
  * 应当由 coding agent 来触发」——非 coding 任务(规划/问答)done 不再弹代码评论卡。
  * 本文件从「钩子行为测试」改为「下线回归测试」:task done 后 journal 零 review.findings。
  */
@@ -20,7 +20,7 @@ function gitRepo(): string {
   return dir;
 }
 
-describe("验收钩子下线(step-083)", () => {
+describe("验收钩子下线", () => {
   it("脏工作区 + 任务 done:journal 零 review.findings(自动触发已移除,不弹评论卡)", async () => {
     const dir = gitRepo();
     appendFileSync(join(dir, "a.ts"), "+console.log('dbg')\n"); // 脏工作区:旧钩子必产 findings

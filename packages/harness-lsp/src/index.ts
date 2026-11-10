@@ -1,12 +1,10 @@
 /**
- * @lampgenie/lsp — 编辑后 LSP 诊断 + 保存即格式化(step-114 / M108)。
- *
+ * @lampgenie/lsp — 编辑后 LSP 诊断 + 保存即格式化( /)。
  * 用法(工具编排层):
  *   // 落盘前:采集基线
  *   const baseline = await collectBaselineDiagnostics({ root, absPath, text: oldText, settings });
  *   // 落盘后:只报新增 ERROR
  *   const suffix = await editCheckSuffix({ root, absPath, settings, baseline, baselineText: oldText });
- *
  * 语义:
  * - settings 缺省=关闭(低层);生产配置 coding.lsp 显式传入(缺省 on,见 ConfigSchema)。
  * - server 缺失/崩溃/超时=静默跳过(fail-soft),不阻塞写入。

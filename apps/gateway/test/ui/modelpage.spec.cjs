@@ -1,5 +1,5 @@
-/** step-997/UI 板浏览器验收:模型管理页结果态 + 添加 Provider 弹窗 + 生效模型切换 + 五态/密钥锁/回滚。
- * 目标=隔离 gateway(PANEL_BASE 默认 7791),不碰 7700 产线配置。 */
+/** /UI 板浏览器验收:模型管理页结果态 + 添加 Provider 弹窗 + 生效模型切换 + 五态/密钥锁/回滚。
+ * 目标=隔离 gateway(PANEL_BASE 默认 7791),不碰 7700 生产环境配置。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7791";
 

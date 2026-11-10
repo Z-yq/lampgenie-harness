@@ -1,5 +1,5 @@
 /**
- * typed symbols 单测(step-089 P1 / designs/26 §2):
+ * typed symbols 单测( P1 / §2):
  * C 深提取七形态(int / char 指针 / struct X / typedef / enum / 数组 / 函数指针)+span;
  * Py/Go/Java/TS 补导出;groupByDataType/semantic-token 流;索引档零回退锚
  * (variable 不进 engine byName——跨文件候选解析不吸收变量名)。
@@ -41,7 +41,7 @@ const C_SRC = [
   "}",
 ].join("\n");
 
-describe("typed/C(step-089 P1,C 做深)", () => {
+describe("typed/C( P1,C 做深)", () => {
   it("索引档:文件级变量七形态带 dataType;typedef 带底层类型", async () => {
     const { dir, cleanup } = fixture({ "f.c": C_SRC });
     try {
@@ -293,8 +293,8 @@ describe("typed/边界(不支持语言显式降级)", () => {
   });
 });
 
-// step-101:读取失败降级理由不截断完整路径(旧 slice(0,80) 把 ENOENT 路径拦腰斩成「参数被截断」幻象)。
-describe("typed/读取失败理由(step-101:完整路径不截断)", () => {
+// 读取失败降级理由不截断完整路径(旧 slice(0,80) 把 ENOENT 路径拦腰斩成「参数被截断」幻象)。
+describe("typed/读取失败理由(完整路径不截断)", () => {
   it("长路径 ENOENT:五语言降级理由全量含完整路径", async () => {
     const { dir, cleanup } = fixture({});
     try {
@@ -325,7 +325,7 @@ describe("typed/读取失败理由(step-101:完整路径不截断)", () => {
   });
 });
 
-// step-100:opencv 风格 C++(namespace 包裹/调用约定宏吊死 qualified/函数指针 typedef/
+// opencv 风格 C++(namespace 包裹/调用约定宏吊死 qualified/函数指针 typedef/
 // 宏常量维度数组/多行声明)——accum.cpp 与 imgproc.hpp 真实形态的浓缩 fixture。
 const OPENCV_STYLE_SRC = [
   "namespace cv",
@@ -372,7 +372,7 @@ const OPENCV_STYLE_SRC = [
   "}",
 ].join("\n");
 
-describe("typed/C++ opencv 风格(step-100 着色补位)", () => {
+describe("typed/C++ opencv 风格(着色补位)", () => {
   it("namespace 下探变量+宏吊死 qualified 营救+fn-ptr typedef+数组名纠偏+多行声明整流", async () => {
     const { dir, cleanup } = fixture({ "accum.cpp": OPENCV_STYLE_SRC });
     try {

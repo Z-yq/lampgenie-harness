@@ -1,5 +1,5 @@
 /**
- * sensing/algoprofile 测试(step-077 P3):
+ * sensing/algoprofile 测试( P3):
  * 六角色信号(model-def/training/inference/data-prep/cv-dsp/eval-metrics)+入口点提取+
  * minHits 防单发误报+模块聚合+反例零误报+codeSense mode=algo e2e+LLM 导读挂载/降级。
  */
@@ -106,10 +106,10 @@ describe("algoprofile 六角色", () => {
   });
 });
 
-// ============================ 非产品路径过滤(P1-1,2026-10-20) ============================
+// ============================ 非产品路径过滤(P1-1 ============================
 
 describe("queryAlgoProfiles 非产品路径过滤(docs/ 与 .md 不是算法实现)", () => {
-  // mmdetection 实锤形态:docs/ 下的教程 notebook/脚本被算成算法文件
+ // mmdetection 注意形态:docs/ 下的教程 notebook/脚本被算成算法文件
   const DOC_ALGO_MD = `# 训练教程
 
 \`\`\`python

@@ -1,5 +1,5 @@
 /**
- * teamai hooks 采用判定层(designs/24 追记):claude 形态钩子 → 我们的任务生命周期钩子体系。
+ * teamai hooks 采用判定层:claude 形态钩子 → 我们的任务生命周期钩子体系。
  * 纪律:如实映射不硬造——claude 的工具闸(PreToolUse/PostToolUse)在我们的任务生命周期事件
  * (task.start/done/fail/cancel)里无等价执行点,不硬造执行语义;我们的等价安全面是
  * permission 规则(.genie/permissions.json deny 规则),对可识别的密钥拦截类钩子给出机器可读建议;

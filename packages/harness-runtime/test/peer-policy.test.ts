@@ -1,6 +1,5 @@
 /**
  * #179 Peer 级访问快照(纯逻辑面)直测。
- *
  * 关注点不是「函数返回了什么形状」,而是几条硬边界:
  *   owner 恒 allow / 失败一律 fail-closed(POLICY_FAILED ≠ DENY_POLICY)/ 未知条件名不放行 /
  *   一项坏不影响批量其它项 / 快照的四种演进(applyFollow·invalidate·reload·mergeReconnect)语义。

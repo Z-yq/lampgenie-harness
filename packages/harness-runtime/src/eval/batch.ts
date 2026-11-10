@@ -1,5 +1,5 @@
 /**
- * L3 跑批(designs/10 §3):评测集×backend×judge,journal-first(每用例先落盘再汇总),
+ * L3 跑批( §3):评测集×backend×judge,journal-first(每用例先落盘再汇总),
  * 失败用例不丢其余结果。backend/judge 注入式——CI 用确定性实现,真 LLM 另测(不冒充)。
  * 同 seed 可复现:输入+seed 决定 backend 脚本步进,分差应为 0。
  */
@@ -30,7 +30,7 @@ export interface BatchRunResult {
 export type BatchBackend = (input: string, seed: number) => Promise<string>;
 export type BatchJudge = (c: BatchCase, output: string) => Promise<{ score: number; notes?: string }>;
 
-/** 评测集加载(tasks/eval/cases/*.yaml 的最小子集:id/version/seed/input;完整 schema 逐步收敛)。 */
+/** 评测集加载(*.yaml 的最小子集:id/version/seed/input;完整 schema 逐步收敛)。 */
 export function loadCases(dir: string): BatchCase[] {
   if (!existsSync(dir)) return [];
   const cases: BatchCase[] = [];
@@ -57,8 +57,7 @@ export async function runBatch(
   cases: BatchCase[],
   backend: BatchBackend,
   judge: BatchJudge,
-  resultsDir: string,
-): Promise<BatchRunResult> {
+  resultsDir: string): Promise<BatchRunResult> {
   mkdirSync(resultsDir, { recursive: true });
   const runId = `run-${Date.now().toString(36)}`;
   const results: BatchJudgeResult[] = [];

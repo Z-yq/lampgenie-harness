@@ -1,15 +1,12 @@
 /**
- * Office(PPTX/DOCX)只读预览的服务端解析(2026-10-29,板节点 ide-o1)。
- *
+ * Office(PPTX/DOCX)只读预览的服务端解析(板节点 ide-o1)。
  * 为什么不在前端解:pptx/docx 是 zip 二进制,浏览器侧要么引 zip 库要么拉整包;而且 IDE 的文件字节
  * 走的是 file.read(文本)与 /ide/asset(图片/媒体)两条既定通道,二进制文档哪条都不合适。
  * 这里用 jszip(pptxgenjs 的传递依赖,已在盘上)解包 + 正则/手写轻量 XML 树(**不引 XML 解析器**,
  * OOXML 结构简单,少一个打包风险面),产出与前端约定的 OfficeAst,由 assets/ide-office.js 只负责画。
- *
  * 契约(不可改,前端 worker 按此实现):
  *   OfficeRun / OfficeShape / OfficeSlide / OfficeBlock / OfficeAst —— 见下方 interface。
- *
- * 健壮性硬要求(用户口径「预览不该白屏也不该 500 满天飞」):
+ * 健壮性硬要求:
  *  - 任何 XML 缺字段不得抛错:取不到的属性一律走默认值(数字 0 / 空文本 / 不产出该字段);
  *  - zip 解不开(非 OOXML / 坏包)→ throw Error("不是有效的 OOXML 文件");
  *  - 文件超 128MB 直接拒(防内存炸弹:整包要读进内存才能解)。
@@ -62,7 +59,7 @@ export type OfficeAst =
   | { kind: "docx"; blocks: OfficeBlock[]; headers?: OfficeBlock[]; footers?: OfficeBlock[]; footnotes?: OfficeBlock[] };
 
 /** 单文件上限(与路由 413 同源口径):整包读进内存才可解,再大就是内存炸弹。
- *  2026-10-29 AST v2:64MB → 128MB(带图/嵌表的大课件常超 64MB,实测 90MB 级 pptx 可正常解)。 */
+ * AST v2:64MB → 128MB(带图/嵌表的大课件常超 64MB,经验证 90MB 级 pptx 可正常解)。 */
 export const OFFICE_MAX_BYTES = 128 * 1024 * 1024;
 /** 可预览扩展名(小写带点)。 */
 export const OFFICE_DOC_EXT = new Set([".pptx", ".docx"]);
@@ -771,7 +768,7 @@ const PPTX_GROUP_MAX_DEPTH = 8; // 组嵌套上限(防环/防爆栈)
 
 /** spTree/grpSp 子节点 → 扁平形状数组。grpSp 按 grpSpPr/a:xfrm 递归展开成**绝对定位** shape(深度上限 8)。 */
 function pptxShapeList(host: XNode, rels: Record<string, string>, baseDir: string, docPath: string, pid: string, out: OfficeShape[], depth = 0, nodes?: XNode[], ctx?: ShapeCtx & PptxParts, xf?: Xf): OfficeShape[] {
-  /** nodes(可选,2026-10-29 文本回写用):与 out **同序**记录形状对应的 XML 节点,
+ /** nodes(可选, 文本回写用):与 out **同序**记录形状对应的 XML 节点,
    *  保证 shapes[i] ↔ nodes[i] 一一对应(rewriteOfficeText 靠它定位第 i 个形状的文本节点)。 */
   const push = (sh: OfficeShape, node: XNode): void => {
     applyXf(sh, xf);
@@ -800,7 +797,7 @@ function pptxShapeList(host: XNode, rels: Record<string, string>, baseDir: strin
       const fb = child(k, "Fallback");
       if (fb && depth < 4) pptxShapeList(fb, rels, baseDir, docPath, pid, out, depth + 1, nodes, ctx, xf);
     }
-    // 其余(nvGrpSpPr/grpSpPr/extLst/... )忽略
+ // 其余(nvGrpSpPr/grpSpPr/extLst/...)忽略
   }
   return out;
 }
@@ -1057,7 +1054,7 @@ function docxParagraphCommentIds(p: XNode): string[] {
 }
 
 /** body 顺序遍历:块级元素只认 w:p / w:tbl / w:sdt;分节/页眉页脚/批注/修订不产出节点。
- *  nodes(可选,2026-10-29 文本回写用):与 out 同序记录块对应的 XML 节点(w:p / w:tbl)。
+ * nodes(可选, 文本回写用):与 out 同序记录块对应的 XML 节点(w:p / w:tbl)。
  *  cmts(可选,AST v2):批注 id → "作者: 内容",命中的段落挂 block.comments(string[])。 */
 function docxBlocksFromBody(body: XNode, nodes?: XNode[], cmts?: Record<string, string>): OfficeBlock[] {
   const out: OfficeBlock[] = [];
@@ -1149,7 +1146,7 @@ async function readZipText(zip: JSZip, path: string): Promise<string | undefined
   } catch { return undefined; }
 }
 
-// ───────────────────────── 文本级回写(2026-10-29 板节点「OOXML 文本回写」P2) ─────────────────────────
+// ───────────────────────── 文本级回写(板节点「OOXML 文本回写」P2) ─────────────────────────
 /** 一条文本编辑指令(下标语义与 parseOffice 输出一致;整段替换,不保留 run 级差异)。 */
 export interface OfficeTextEdit {
   slideIndex?: number;     // pptx:第几页(1-based,与 OfficeAst.slides[].index 一致)
@@ -1197,16 +1194,13 @@ function pptxSlidePartsOf(zip: JSZip): { part: string; num: number }[] {
 
 /**
  * 文本级回写(只改文本节点的字符区间,**不重新序列化整棵 XML**)。
- *
  * 实现:zip 解包 → 读目标 part 的**原始字符串**(ppt/slides/slideN.xml 或 word/document.xml)
  * → 用与 parseOffice 同源的遍历(pptxShapeList / docxBlocksFromBody 的 nodes 收集口)定位第 N 个
  * shape/block → 只把该 shape/block 下 `<a:t>` / `<w:t>` 的内容区间替换成转义后的新文本
  * → `zip.file(part, newXml)` **只覆盖这一个条目** → generateAsync 重新打包。
- *
  * 字节层面的如实口径:**zip 重新打包后整体字节必然与原文件不同**(DEFLATE 压缩流、条目顺序/时间戳
  * 都会变),所以验收标准是「其它条目的**解压后内容**逐字不变」,不是「zip 字节不变」。
  * 本函数只改被编辑 part 的文本节点区间,其余 part 的解压内容天然一致。
- *
  * 定位失败(下标越界 / 该 shape 没有文本节点 / 表格块 / 找不到 body)一律抛明确错误,
  * 不静默返回原 buf(否则上层会以为"保存成功但其实没改")。
  */

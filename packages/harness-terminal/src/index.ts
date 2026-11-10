@@ -1,10 +1,8 @@
 /**
- * @lampgenie/terminal — 持久终端会话(step-122)。
- *
+ * @lampgenie/terminal — 持久终端会话。
  * 用法(agent 编排层):
  *   const service = new TerminalSessionService({ audit: (e) => journal.append({ kind: "custom", ... }) });
  *   const tool = createTerminalTool({ service, owner: task.sessionId, root: taskRoot });
- *
  * 分工:run_cmd=一次性命令;terminal=保活/交互式/cwd 状态的连续操作。
  * 零原生依赖:Linux 用系统 `script` 伪 TTY,其它平台回退 stdio 管道。
  */

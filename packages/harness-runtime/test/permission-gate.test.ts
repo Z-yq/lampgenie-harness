@@ -20,7 +20,7 @@ function llm(script: string[], toolCalls?: { id: string; name: string; arguments
   };
 }
 
-describe("loop 权限闸门(step-033 F2)", () => {
+describe("loop 权限闸门( F2)", () => {
   it("deny:工具不执行,journal 落 permission.gate{effect:denied,by:rule}", async () => {
     const journal = new MemoryJournal();
     const rules: PermissionRule[] = [{ permission: "danger", pattern: "*", action: "deny" }];

@@ -7,7 +7,7 @@ export type TaskState =
   | "queued"       // 已入队,等待调度
   | "running"      // 正在执行
   | "blocked"      // 被资源锁/权限等阻塞
-  | "interrupted"  // 被外因打断(网关重启/OOM),非人为取消;可续跑(2026-11-04 三次 OOM 实锤痛点)
+  | "interrupted"  // 被外因打断(网关重启/OOM),非人为取消;可续跑(三次 OOM 实测确认痛点)
   | "done"         // 成功完成
   | "failed"       // 失败终态
   | "cancelled";   // 被取消终态
@@ -48,24 +48,24 @@ export interface Task {
   result?: string;
   /** 幂等键:同一 key 不重复建任务。 */
   idempotencyKey?: string;
-  /** 凭证引用名(step-033 tunnel 委派):只传名字,值由目标节点本地解析(红线:值不过网关)。 */
+ /** 凭证引用名( tunnel 委派):只传名字,值由目标节点本地解析(红线:值不过网关)。 */
   credentialRef?: string;
-  /** 项目 id(step-035):workdir 按项目解析;缺省=激活项目/回退 harness 根。 */
+ /** 项目 id:workdir 按项目解析;缺省=激活项目/回退 harness 根。 */
   projectId?: string;
-  /** F3 自定义分组(step-037 收口):用户桶,正交元数据不改状态机;缺省无。 */
+ /** F3 自定义分组:用户桶,正交元数据不改状态机;缺省无。 */
   group?: string;
   /** 显示标题(F3):缺省显示 instruction 截断;重命名即改此字段。 */
   title?: string;
-  /** step-165 gaps3.2(ref session-mgmt.ts:132-136 custom 粘性):用户改过名=true;此后该会话行
+ /** (ref session-mgmt.ts:132-136 custom 粘性):用户改过名=true;此后该会话行
    *  标题不再被新任务的 instruction 派生标题顶掉;清空重命名=抹掉标记回默认派生。 */
   titleCustom?: boolean;
   /** 置顶(F3):侧栏置顶区,正交于状态的元数据。 */
   pinned?: boolean;
   /** 归档(F3):从默认列表隐藏;正交元数据,不改变终态。 */
   archived?: boolean;
-  /** 本次运行起点(step-046,「已工作 X 分 X 秒」):进入 running 时刷新;面板用 now-startedAt 实时计时。 */
+ /** 本次运行起点(「已工作 X 分 X 秒」):进入 running 时刷新;面板用 now-startedAt 实时计时。 */
   startedAt?: number;
-  /** 附件(step-048):已上传文件;agent 侧注入任务书 + vision 通道(image/*)。 */
+ /** 附件:已上传文件;agent 侧注入任务书 + vision 通道(image/*)。 */
   attachments?: { name: string; path: string; mime?: string; size?: number }[];
   /** 任务进展(TaskSupervisor.touch 写入):面板防御式读取,全部字段可选;正交元数据,不改状态机。 */
   progress?: { phase?: string; step?: number; note?: string; at?: number };

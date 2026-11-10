@@ -1,5 +1,5 @@
 /**
- * step-032 e2e:邀请流全链/吊销即时踢/隐私红线/relay 挂演练(designs/05 验证方式四条)。
+ * e2e:邀请流全链/吊销即时踢/隐私红线/relay 挂演练(验证方式四条)。
  * 团队仓=本地 bare git repo(CustomGitProvider 真实 git 命令;Codeup 实 API 待令牌,降级路径即本形态)。
  */
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
@@ -131,7 +131,7 @@ afterAll(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("step-032 Team Relay e2e", () => {
+describe(" Team Relay e2e", () => {
   it("D1 邀请流全链:邀请→兑换→MR 分支→合并→pull 生效;合并前无任何权限", async () => {
     // ① owner 连接并鉴权通过。
     const owner = new TestClient(relayUrl, "owner");
@@ -272,7 +272,7 @@ describe("step-032 Team Relay e2e", () => {
     expect(alice2.closed).toBe(true);
     expect(String(kick.reason)).toContain("吊销");
     const kickMs = Date.now() - t0;
-    expect(kickMs).toBeLessThan(30_000); // designs/05 验收线:30s 内(实测值进记录)
+    expect(kickMs).toBeLessThan(30_000); // 验收线:30s 内(实测值进记录)
     // eslint-disable-next-line no-console
     console.log(`[D2] 吊销→踢连接实测 ${kickMs}ms(轮询 150ms)`);
 
@@ -375,7 +375,7 @@ describe("step-032 Team Relay e2e", () => {
     bobClient.stop();
   }, 30_000);
 
-  it("client 拒绝分支锚定:revoked 永久停 / legacy 无 code 保守停(审计 R1-C6)", async () => {
+  it("client 拒绝分支锚定:revoked 永久停 / legacy 无 code 保守停(审计)", async () => {
     // ① 已吊销成员(alice 在 D1 的 D2 段被标记 revoked):真 client 收 reject(code=revoked)→
     //    stopped=true,退避重试终止(connecting 只出现首轮,后续观察窗内不再出现)。
     const aliceStates: string[] = [];

@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * 安装包内容对账门(pkg-s4, 2026-11-08)。
- *
- * 背景(实测事故):electron-builder 的 NSIS 打包在 win-unpacked 里有文件被占用/扫描锁定时,
+ * 安装包内容对账门。
+ * 背景(经验证事故):electron-builder 的 NSIS 打包在 win-unpacked 里有文件被占用/扫描锁定时,
  * 7za 会**静默跳过**该文件继续出包;0.0.8/0.0.9 都因此把 chrome_elf.dll / vulkan-1.dll /
  * D3DCompiler_47.dll / onnxruntime.dll 漏在安装包外,首次启动才被壳的运行时自检拦下。
  * 这里在打包后直接解出安装包内嵌的 app 7z,与 dist/win-unpacked 逐文件对账:
  *   - 缺文件 → 非零退出并点名(必须重新打包,且先关掉占用产物的进程);
  *   - 多出文件 → 只提示(通常是上一次构建残留,不阻塞)。
- *
  * 用法:node scripts/verify-installer.mjs [--exe <path>] [--dir dist/win-unpacked] [--json]
  * 默认取 dist/LampGenie Setup <package.version>.exe。
  */

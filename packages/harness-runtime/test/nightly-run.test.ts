@@ -235,8 +235,7 @@ describe("planRunSteps / nextStep", () => {
     const replanned = planRunSteps(started);
     expect(replanned.steps).toHaveLength(6);
     expect(replanned.steps.every((step) => step.status === "pending" && step.consumedTokens === 0)).toBe(
-      true,
-    );
+      true);
     expect(started).toEqual(snapshot);
   });
 
@@ -532,8 +531,7 @@ describe("finalizeRun / buildRunReport", () => {
     expect(lines[1]).toContain("demo");
     expect(lines[1]).toContain("status");
     expect(lines.some((line) => line.startsWith("window:") && line.includes("2026-03-07T00:00:00.000"))).toBe(
-      true,
-    );
+      true);
     expect(lines.some((line) => line.startsWith("coverage:"))).toBe(true);
     expect(lines).toContain("candidates: 1");
     expect(lines).toContain("unprocessed: 1");

@@ -1,8 +1,6 @@
 /**
- * 模块作用注记(2026-10-27):flow 模块图节点旁的一句话「这个模块是干什么的」。
- *
- * 为什么(用户口径):只看模块名 + 「21 文件/329 符号」读不出职责;模块作用要标在图旁边。
- *
+ * 模块作用注记:flow 模块图节点旁的一句话「这个模块是干什么的」。
+ * 为什么:只看模块名 + 「21 文件/329 符号」读不出职责;模块作用要标在图旁边。
  * 来源优先级(全部确定性,不调 LLM):
  *   1. package.json description(TS/JS monorepo 的权威一句话)
  *   2. 模块 README(首个有意义的标题/段落)
@@ -75,7 +73,7 @@ function readmeNote(text: string, module: string): string | undefined {
   const heading = lines.find((l) => /^#\s+/.test(l));
   if (heading) {
     const h = cleanNote(heading.replace(/^#+\s*/, ""));
-    // 只认破折号/冒号/「 - 」,不能把模块名里的连字符当分隔符(pkg-readme → readme 的坑)
+ // 只认破折号/冒号/「 -」,不能把模块名里的连字符当分隔符(pkg-readme → readme 的坑)
     const m = /^(.*?)\s*(?:[—–]|\s-\s|::?)\s*(.+)$/.exec(h);
     if (m?.[2] && m[2].trim().length >= 4) return clipNote(m[2]);
     if (h && !sameModuleName(h, module)) return clipNote(h);

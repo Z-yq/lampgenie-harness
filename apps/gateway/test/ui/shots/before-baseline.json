@@ -991,12 +991,12 @@
   }
  },
  "shots": [
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-17nodes-all.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-17nodes-fit.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-add-panel.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-after-add.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-after-add-late.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-60nodes.png"
+  "apps/gateway/test/ui/shots/before-17nodes-all.png",
+  "apps/gateway/test/ui/shots/before-17nodes-fit.png",
+  "apps/gateway/test/ui/shots/before-add-panel.png",
+  "apps/gateway/test/ui/shots/before-after-add.png",
+  "apps/gateway/test/ui/shots/before-after-add-late.png",
+  "apps/gateway/test/ui/shots/before-60nodes.png"
  ],
  "errors": []
 }

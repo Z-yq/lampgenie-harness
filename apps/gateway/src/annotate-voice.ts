@@ -1,10 +1,8 @@
 /**
  * 录音批注转写(截图标注链的语音输入,2026-11 新增)。
- *
  * 面板在标注时可以直接说话,录音以 dataURL(audio/webm;codecs=opus)随 annotate.submit
  * 一起上来;服务端把它交给小模型(qwen3.8-omni-flash 形态的 OpenAI 兼容端点)转写成
  * 文字,再并入任务书。全链路 fail-soft:转写失败只记原因,不阻塞提交。
- *
  * 纯函数 + 可注入 fetch,便于单测(mock fetch 即可覆盖段落解析/超时/HTTP 错误)。
  */
 import { chatCompletionsUrl } from "@lampgenie/runtime/agent/openai-provider";
@@ -194,7 +192,7 @@ export function createVoiceParser(opts: VoiceParserOptions): VoiceParser {
             content: [
               { type: "text", text: VOICE_TRANSCRIBE_PROMPT },
               // DashScope qwen-omni 系的 input_audio.data 要 Data URI 形态(data:;base64,xxx):
-              // 裸 base64 实测 400「The provided URL does not appear to be valid」(2026-11-08 产线实锚,
+ // 裸 base64 经验证 400「The provided URL does not appear to be valid」(生产环境验证,
               // 与 voice-draft.ts 同源修复)。
               { type: "input_audio", input_audio: { data: "data:;base64," + bytes.toString("base64"), format } },
             ],

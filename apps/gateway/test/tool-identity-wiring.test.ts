@@ -1,5 +1,5 @@
 /**
- * M153 工具注册身份治理接线(main agent 装配侧):governToolIdentity 只剔除冲突工具并留一条
+ * 工具注册身份治理接线(main agent 装配侧):governToolIdentity 只剔除冲突工具并留一条
  * journal 证据(custom payload.type="tool.identity"),无冲突时零事件(不污染回放)。
  */
 import { describe, it, expect } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * apiType 装配面直测(step-127):providers[].apiType 经 providerId 继承 →
+ * apiType 装配面直测:providers[].apiType 经 providerId 继承 →
  * buildLlmFromConfig/buildAudioChatFromConfig/buildLlmFromEnv → 请求落到对应协议端点
  * (URL/凭证头)。fetch 桩捕获 URL+headers+body(无网络;协议级端到端见
  * packages/harness-runtime/test/provider-apitypes.test.ts 的真 mock server)。

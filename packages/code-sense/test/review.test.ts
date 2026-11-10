@@ -41,7 +41,7 @@ describe("D1 diff 收集三形态", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("未跟踪文件收集(designs/17 §2.1):新生文件进审查,点文件/生成物目录跳过", async () => {
+  it("未跟踪文件收集( §2.1):新生文件进审查,点文件/生成物目录跳过", async () => {
     const dir = gitRepo();
     writeFileSync(join(dir, "fresh.ts"), "export const fresh = 1;\n");
     writeFileSync(join(dir, ".env"), "SECRET=abc\n");

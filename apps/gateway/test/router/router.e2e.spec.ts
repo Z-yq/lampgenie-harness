@@ -6,7 +6,7 @@ import { DEFAULT_POLICY_CONFIG, type PolicyConfig } from "../../src/router/polic
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("router e2e:explicit 派发回执兼容 + 订阅直通 steer(step-0143 sr6)", () => {
+describe("router e2e:explicit 派发回执兼容 + 订阅直通 steer( sr6)", () => {
   it("explicit trigger→tm.submit 恰 1 次(idempotencyKey=user.<key>),task 字段与直提同构", async () => {
     const tm = new TaskSupervisor();
     const submitSpy = vi.spyOn(tm, "submit");

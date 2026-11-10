@@ -1,5 +1,5 @@
 /**
- * M108 收尾:进程内子代理(workerWriteTools)的 write_file / edit_file 也走
+ * 收尾:进程内子代理(workerWriteTools)的 write_file / edit_file 也走
  * 「写前 baseline + 写后 delta」——只报新增 ERROR,旧错误不刷屏;baseline:false 回旧行为。
  * 与主 agent file-tools 同序:baseline 采集必须在 writeFileSync 之前。
  * 用 tsc 兜底(本机无 typescript-language-server),命令覆盖为不存在路径以强制走兜底分支。

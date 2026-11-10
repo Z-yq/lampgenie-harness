@@ -21,7 +21,7 @@ function capturingLlm() {
   return { llm, seen };
 }
 
-describe("提示词注入修复(step-048 审计修复①②④)", () => {
+describe("提示词注入修复(审计修复①②④)", () => {
   let dir: string | null = null;
   afterEach(() => { if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; } });
 
@@ -65,7 +65,7 @@ describe("提示词注入修复(step-048 审计修复①②④)", () => {
       const p = setInterval(() => { const cur = tm.get(t.id); if (cur && ["done", "failed"].includes(cur.state)) { clearInterval(p); res(); } }, 40);
       setTimeout(() => { clearInterval(p); res(); }, 15_000);
     });
-    // 2026-10-22 system 瘦身:工具清单节不再进 system——MCP 工具经 tools 参数下发(模型可见),
+ // system 瘦身:工具清单节不再进 system——MCP 工具经 tools 参数下发(模型可见),
     // system 侧由 tool_view 提供按需查看通道。
     const call = seen.find((x) => x.system.includes("vibe coding 主 agent")) ?? { system: "", user: "", tools: [] as string[] };
     expect(call.tools).toContain("mcp__testsrv__query_db");

@@ -1,5 +1,5 @@
 /**
- * step-086 堆预算自适应测试:①扩展名→语言档分类;②估算=基线+Σ系数×文件数(合成夹具精确对账);
+ * 堆预算自适应测试:①扩展名→语言档分类;②估算=基线+Σ系数×文件数(合成夹具精确对账);
  * ③tier 三档(ok/warn/risk 按预算比);④risk 降数解(MAX_FILES 下限/透传 env);⑤建议堆帽 clamp。
  * 环境变量(GENIE_SENSE_HEAP_MB/GENIE_SENSE_MAX_FILES)逐用例保存恢复,不泄漏。
  */
@@ -56,7 +56,7 @@ function fixture(nPy: number, nTs: number, nCpp = 0): string {
   return root;
 }
 
-describe("step-086 堆预算自适应", () => {
+describe(" 堆预算自适应", () => {
   it("①扩展名→语言档分类(engine 扫描面全覆盖)", () => {
     expect(extClassOf("a.py")).toBe("py");
     expect(extClassOf("a.go")).toBe("go");

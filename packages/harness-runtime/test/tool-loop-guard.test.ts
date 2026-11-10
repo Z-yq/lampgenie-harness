@@ -1,5 +1,5 @@
 /**
- * M115 工具循环护栏:纯状态机单测(不启 AgentLoop)。
+ * 工具循环护栏:纯状态机单测(不启 AgentLoop)。
  * 覆盖:canonical args / 结果 hash / 同签名 3 notice 5 stop / 2~4 轮批次周期 / 结果 stub 范围 /
  * 每轮配额与 env / 成功 mutation 重置 / poller 与参数错误不计失败。
  */

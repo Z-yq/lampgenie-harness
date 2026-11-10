@@ -1,5 +1,5 @@
 /**
- * tree-sitter 结构解析后端(step-021 二期收口:接口不变,零依赖纯文本解析器保底)。
+ * tree-sitter 结构解析后端(二期:接口不变,零依赖纯文本解析器保底)。
  * web-tree-sitter wasm 懒加载:wasm 资产缺失/初始化失败/语法错误 → 返回 undefined,
  * 调用方回退纯文本栈式解析(行为与旧版逐字节一致)。tier 语义不变(structural);
  * source 字段如实标注 "tree-sitter" | "text"。
@@ -8,12 +8,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 
-/** step-067 起 C/C++ 同机制装载(tree-sitter-c / tree-sitter-cpp,adapters/cpp.ts 消费)。
+/** 起 C/C++ 同机制装载(tree-sitter-c / tree-sitter-cpp,adapters/cpp.ts 消费)。
  * senseB21:javascript 同包 wasm(tree-sitter-wasms 0.1.13 自带)——内嵌脚本索引
  * (callgraph/inline-js.ts)解析 TS 模板字符串里的 <script> JS 源用。
- * 2026-10-21:typescript 同包 wasm(sensing/decision.ts 消费)——TS 的类型注解在
+ * typescript 同包 wasm(sensing/decision.ts 消费)——TS 的类型注解在
  * javascript 语法下必 ERROR,决策点感知必须走 typescript 语法。
- * 2026-10-25:rust/csharp/ruby/php(adapters/rust|cs|rb|php.ts 消费;csharp 的 wasm
+ * rust/csharp/ruby/php(adapters/rust|cs|rb|php.ts 消费;csharp 的 wasm
  * 文件名是 tree-sitter-c_sharp.wasm,装载时映射,见 TS_WASM_NAME)。 */
 export type TsLang = "python" | "go" | "java" | "c" | "cpp" | "javascript" | "typescript" | "rust" | "csharp" | "ruby" | "php";
 
@@ -63,7 +63,7 @@ function childrenOf(node: TsTsNode): TsTsNode[] {
 }
 
 /** 调用点的函数标识符文本(字段优先:python/go/java 的 function;ruby 的 method;
- * 字段缺省回退首子——0.25 实测既有语言首子即 fn 表达式)。 */
+ * 字段缺省回退首子——0.25 经验证既有语言首子即 fn 表达式)。 */
 function callTarget(node: TsTsNode): string | undefined {
   const byField = node.childForFieldName?.("function")
     ?? node.childForFieldName?.("method")
@@ -75,7 +75,7 @@ function callTarget(node: TsTsNode): string | undefined {
 
 let parserCache: Map<TsLang, TsParser> | undefined;
 /** 负缓存:装载失败(典型=bundle 形态 wasm 缺失,Emscripten abort)是确定性失败,
- * 不缓存则逐文件重试=逐文件一次进程级 abort(2026-10-14)。 */
+ * 不缓存则逐文件重试=逐文件一次进程级 abort。 */
 const failedLangs = new Set<TsLang>();
 
 /** 懒加载语言 parser(进程级缓存;任何失败=undefined,不抛)。 */
@@ -84,7 +84,7 @@ export async function loadTsParser(lang: TsLang): Promise<TsParser | undefined> 
   if (parserCache?.has(lang)) return parserCache.get(lang);
   try {
     // web-tree-sitter 是 CJS/ESM 双发布;仓内 ESM 下 createRequire 载 cjs 入口最稳。
-    // 版本配对(实测三连):web-tree-sitter 0.25.10 ↔ tree-sitter-wasms 0.1.13 ABI 兼容;
+ // 版本配对(经验证三连):web-tree-sitter 0.25.10 ↔ tree-sitter-wasms 0.1.13 ABI 兼容;
     // 0.27 报 dylink metadata 不识别、0.22.6 CJS 打包损坏(空导出)——登记防再踩。
     // 必须走 ESM 动态 import(条件 exports .import);require 包装触发 strict-mode 自检炸。
     const wts = (await import("web-tree-sitter")) as unknown as {
@@ -94,7 +94,7 @@ export async function loadTsParser(lang: TsLang): Promise<TsParser | undefined> 
     if (!parserCache) parserCache = new Map();
     const Parser = wts.Parser;
     if (!(Parser as unknown as { __inited?: boolean }).__inited) {
-      // 无参 init:默认 locateFile 相对包内 web-tree-sitter.wasm(实测唯一稳路径;
+ // 无参 init:默认 locateFile 相对包内 web-tree-sitter.wasm(经验证唯一稳路径;
       // 注入 locateFile 的三种写法在 tsx/vitest 下各炸,已登记)。
       await Parser.init();
       (Parser as unknown as { __inited?: boolean }).__inited = true;

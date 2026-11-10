@@ -1,5 +1,5 @@
 /**
- * byModel 归集口径补齐(2026-11-03):
+ * byModel 归集口径补齐:
  * ① 失败调用(llm.trace 带非空 error)也进 byModel:calls +1、token 全 0、不污染任何 ms/平均延迟字段;
  * ② 失败事件无 model 时**不建桶**(刻意不复用 message.agent 的 "?" 兜底,避免脏桶);
  * ③ 成功 llm.trace 仍不进 byModel(成功由 message.agent 计入,防重复);

@@ -1,12 +1,10 @@
 /**
- * sensing/algoprofile(step-077 P3 / designs/24 §2.3):算法画像——框架 API 模式识别。
- *
+ * sensing/algoprofile( P3 / §2.3):算法画像——框架 API 模式识别。
  * 文件级「算法角色」判定(每条信号带 {line} 证据):
  *   model-def(nn.Module 子类+forward / keras.Model)/ training(loss.backward/optimizer.step/
  *   .fit(/GradientTape)/ inference(predict/infer/model.eval()/onnx InferenceSession.run/torch.no_grad)/
  *   data-prep(DataLoader/Dataset/tf.data/transforms)/ cv-dsp(cv2./librosa./torchaudio./PIL/scipy.signal ≥2 次)/
  *   eval-metrics(sklearn.metrics/accuracy_score/f1_score 等)。
- *
  * 诚实边界:不编造跨文件「数据流」边(文件间真实调用边由 callgraph 消费方自行 join);
  * 管线序=data-prep→model-def→training→inference→eval-metrics 声明式排序,非数据流断言。
  */
@@ -16,7 +14,7 @@ import { join } from "node:path";
 export type AlgoKind = "model-def" | "training" | "inference" | "data-prep" | "cv-dsp" | "eval-metrics";
 
 export interface AlgoSignal {
-  pattern: string;   // 命中的框架 API 形态(如 "nn.Module 子类" / "loss.backward()")
+  pattern: string;   // 命中的框架 API 形态(如 "nn.Module 子类" / "loss.backward")
   line: number;
 }
 
@@ -43,7 +41,7 @@ interface SignalDef {
   /** 同一文件内该信号的最小命中数(防单发 import 行误报)。 */
   minHits: number;
   role?: string;   // entryPoint 角色标注
-  /** 权重(主角色判定):类/def 定义形态重于调用点形态(实锤:模型文件里 demo 用的
+ /** 权重(主角色判定):类/def 定义形态重于调用点形态(注意:模型文件里 demo 用的
    *  predict/no_grad 调用点计数会压过 nn.Module 类定义,主角色被误判成 inference)。 */
   weight?: number;
 }
@@ -74,7 +72,7 @@ const SIGNALS: SignalDef[] = [
   { kind: "cv-dsp", pattern: "scipy.signal", re: /scipy\.signal\.\w+/, minHits: 1 },
   { kind: "eval-metrics", pattern: "sklearn.metrics", re: /sklearn\.metrics|from\s+sklearn\s+import\s+metrics/, minHits: 1 },
   { kind: "eval-metrics", pattern: "指标函数(accuracy/f1/auc)", re: /\b(accuracy_score|f1_score|roc_auc_score|precision_score|recall_score)\s*\(/, minHits: 1 },
-  // 2026-10-22 P0:C/C++ 算法面(嵌入式 CV 仓的算法库不能被判 0 文件)。
+ // P0:C/C++ 算法面(嵌入式 CV 仓的算法库不能被判 0 文件)。
   { kind: "cv-dsp", pattern: "opencv2 include", re: /#\s*include\s*[<"]opencv2\//, minHits: 1 },
   { kind: "cv-dsp", pattern: "cv:: 调用", re: /\bcv::\w+/, minHits: 2 },
   { kind: "cv-dsp", pattern: "OpenCV C API(cvXxx)", re: /\bcv(?:Load|Create|Run|Resize|Cvt|Clone|Release|Get|Set|Warp|Filter|Threshold)\w*\s*\(/, minHits: 3 },
@@ -136,7 +134,7 @@ export const ALGO_FINGERPRINT_LITERALS = [
   "def infer",
   ".eval()",
   "tf.data.",
-  // C/C++(2026-10-22)
+ // C/C++
   "#include <opencv2/",
   "#include \"opencv2/",
   "cv::",

@@ -1,7 +1,6 @@
 /**
  * review --deep 的 LLM 适配层(零新增依赖,fetch 直调)。
- *
- * 凭证链(step-105,与 sensing/api 语义层同构):
+ * 凭证链(与 sensing/api 语义层同构):
  *   显式 flag(--base-url/--model/--api-key)> env 三件套(GENIE_LLM_BASE_URL/MODEL/API_KEY,
  *   与 gateway factory.buildLlmFromEnv 同名同源)> 配置文件 ~/.codesense/config.json
  *   > ask-file 中继(宿主零配置:CLI 写 ask-*.json,宿主 agent 答 answer-*.json,120s 超时撤题)。
@@ -18,7 +17,7 @@ export interface ReviewLlmEnv {
 }
 
 /** 从 env 读深审凭证;三件套缺一=null;BASE_URL/MODEL 在场但缺 KEY=抛(同 buildLlmFromEnv 语义)。
- * step-105 起 CLI 主链路改走 resolveReviewLlm(完整凭证链);本函数保留为程序化兼容面
+ * 起 CLI 主链路改走 resolveReviewLlm(完整凭证链);本函数保留为程序化兼容面
  * (index.ts 导出)——只读 env 一档,不覆盖 config/ask-file。 */
 export function reviewLlmFromEnv(env: NodeJS.ProcessEnv = process.env): ReviewLlmEnv | null {
   const baseUrl = env.GENIE_LLM_BASE_URL;
@@ -73,7 +72,7 @@ export function makeReviewLlm(cfg: ReviewLlmEnv, opts: { timeoutMs?: number } = 
   };
 }
 
-// ---- 凭证链接入(step-105):flag > env > config > ask-file,与 sensing/api 语义层同构 ----
+// ---- 凭证链接入:flag > env > config > ask-file,与 sensing/api 语义层同构 ----
 
 export interface ResolvedReviewLlm {
   llm: ReviewLlm;

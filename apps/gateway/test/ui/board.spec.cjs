@@ -1,6 +1,6 @@
-/** UI 实测:语义流程白板(step-057,designs/22)——真实 chromium 无头。
- * 前置:面板实例在 PANEL_BASE(缺省 7700,产线专用口——不要对 7700 跑)运行;测试板文件由本脚本自己造/自己清。
- * 跑法(不碰产线):npx tsx test/ui/_board_selfhost.cjs(自起临时端口实例+注入 PANEL_BASE 后运行本文件)。
+/** UI 经验证:语义流程白板——真实 chromium 无头。
+ * 前置:面板实例在 PANEL_BASE(缺省 7700,生产环境专用口——不要对 7700 跑)运行;测试板文件由本脚本自己造/自己清。
+ * 跑法(不碰生产环境):npx tsx test/ui/_board_selfhost.cjs(自起临时端口实例+注入 PANEL_BASE 后运行本文件)。
  * 覆盖:会话恢复→板清单→mermaid 流程图渲染→节点卡→明细卡(语义流程/连接三态)→手绘批注层
  *      →从代码生成→Dify 画布(缩放/框选/拖拽/直操作)→实时白板浮窗(入口统一/板清单/画布/评论/编辑/展开)。 */
 const { chromium } = require("playwright-core");
@@ -45,7 +45,7 @@ const BOARD2 = {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "t-ui-1.json"), JSON.stringify(BOARD));
   fs.writeFileSync(path.join(dir, "t-ui-2.json"), JSON.stringify(BOARD2));
-  // 设计沉淀 fixture(step-058):项目级索引写 harness 根,测试结束快照还原
+ // 设计沉淀 fixture:项目级索引写 harness 根,测试结束快照还原
   const arcIdxPath = path.join(HARNESS_ROOT, ".genie", "board-archive.json");
   const arcBackup = fs.existsSync(arcIdxPath) ? fs.readFileSync(arcIdxPath, "utf-8") : null;
   fs.writeFileSync(arcIdxPath, JSON.stringify({ version: 1, items: [
@@ -85,9 +85,9 @@ const BOARD2 = {
       await page.evaluate(() => { try { boardRefresh(); } catch (e) {} });
     }
     await page.locator("#boardGraph svg").first().waitFor({ timeout: 10000 }).catch(() => {});
-    check("画布边图 svg 渲染", (await page.locator("#boardGraph svg.bf-cv-edges").count()) === 1); // step-111 修:断言现代化——svg 祖先计数会算进卡内 done 勾 svg(step-097 图标 svg 化后 count=2),按类定位边图本体
+    check("画布边图 svg 渲染", (await page.locator("#boardGraph svg.bf-cv-edges").count()) === 1); // 修:断言现代化——svg 祖先计数会算进卡内 done 勾 svg(图标 svg 化后 count=2),按类定位边图本体
     check("板头元信息(标题/rev/进度;画布模式板头)", await page.locator("#boardGraph .bd-meta").textContent().then((t) => t.includes("UI 验收板") && t.includes("rev") && t.includes("已落实")).catch(() => false));
-    check("任务选择器有板项", await page.locator("#boardTaskSel option").first().textContent().then((t) => t.includes("UI 验收板")).catch(() => false)); // .first():双 fixture 后多 option,严格模式禁多元素 textContent
+    check("任务选择器有板项", await page.locator("#boardTaskSel option").first().textContent().then((t) => t.includes("UI 验收板")).catch(() => false)); // .first:双 fixture 后多 option,严格模式禁多元素 textContent
 
     // 2. 节点卡 + 连接三态徽标
     const cards = page.locator("#boardNodes .bd-card");
@@ -117,12 +117,12 @@ const BOARD2 = {
       await page.mouse.move(box.x + 160, box.y + 120, { steps: 8 });
       await page.mouse.up();
     }
-    const WKEY = "zh:whiteboard:" + SID + ":t-ui-1"; // 草稿键按 (会话,板) 隔离(2026-10-14 串台修复)
+    const WKEY = "zh:whiteboard:" + SID + ":t-ui-1"; // 草稿键按 (会话,板) 隔离(串台修复)
     check("手绘一笔不炸(localStorage 本板键有草稿)", await page.evaluate((k) => !!localStorage.getItem(k), WKEY));
     await pollFn(() => fs.existsSync(path.join(dir, "t-ui-1.overlay.png")));
     check("批注层服务端落盘(overlay.png)", fs.existsSync(path.join(dir, "t-ui-1.overlay.png")));
 
-    // 4b. 刷新恢复(2026-10-14 用户口径「刷新/再登录后点开白板没内容」):清本板 localStorage 草稿
+ // 4b. 刷新恢复:清本板 localStorage 草稿
     //     再 reload——恢复只能来自服务端 overlay(铁证);批注框刷新后默认收起,展开必须出内容。
     const wbSamples = () => page.evaluate(() => {
       const c = document.getElementById("wbCanvas");
@@ -143,8 +143,8 @@ const BOARD2 = {
     const sReload = await wbSamples();
     check("刷新后展开批注框出内容(本地草稿已清,服务端 overlay 恢复)", sReload > 0, "samples=" + sReload);
 
-    // 4c. 批注按板严格隔离(用户口径「不能随便乱插」):切 B 板=空白不串;切回 A 板=笔迹还在。
-    //     等待轮询化(drvfs/消息时序窗:固定 1500ms 在 board.doc 迟到时假红,run6b 实证)。
+ // 4c. 批注按板严格隔离:切 B 板=空白不串;切回 A 板=笔迹还在。
+ // 等待轮询化(drvfs/消息时序窗:固定 1500ms 在 board.doc 迟到时假红,run6b 验证)。
     await page.selectOption("#boardTaskSel", "t-ui-2");
     let sB = -1;
     for (let i = 0; i < 10; i++) { await page.waitForTimeout(600); sB = await wbSamples(); if (sB === 0) break; } // 切板清台+board.doc(t-ui-2) 落位
@@ -184,7 +184,7 @@ const BOARD2 = {
     check("刷新后编辑持久(人工验收模块+人改文案)", cards2.includes("人工验收模块") && cards2.includes("人改"));
 
     // ===== 七期:从代码生成模块图(code-sense 整理 → 模块板) =====
-    // step-111 修:step-088 主题化模态把原生 prompt 换成 uiDialog(.uid-mask/.uid-input/.uid-ok),
+ // 修: 主题化模态把原生 prompt 换成 uiDialog(.uid-mask/.uid-input/.uid-ok),
     // waitForEvent("dialog") 永远等不到——交互层现代化为页面内表单(先试 uiDialog,回退原生 dialog 双兼容)
     await page.click("#boardFromCode");
     const uidInput = page.locator(".uid-mask .uid-input");
@@ -247,12 +247,12 @@ const BOARD2 = {
       await page.screenshot({ path: "/tmp/ui-profile-module-canvas.png" });
     }
 
-    // ===== step-058:设计沉淀(done 板 → 项目级设计记忆)+ 反查角标 =====
+ // ===== 设计沉淀(done 板 → 项目级设计记忆)+ 反查角标 =====
     // 沉淀区:索引 fixture 已 seed(app.ts,t-ui-1);arcQuery 由 bdOpenProfile 触发(drvfs/消息时序→轮询)。
-    // 取证(2026-10-14 批注轮):服务端半场裸 WS 探针实证健康(project.list→__harness__;archive.list
+ // 取证(批注轮):服务端半场裸 WS 探针验证健康(project.list→__harness__;archive.list
     // 回 fixture 条目),面板侧若空则补一发面板自己的 arcQuery(直调函数,无 openProfile 副作用);
-    // 仍空=面板消息链问题,按 ENV-SKIP 记(本 spec 既有惯例),产线实例全量验证。
-    // step-118 tab 化:文件跳转后视图停在「文件钻取」tab,设计沉淀在「结构」tab;回切再断言(意图不变)
+ // 仍空=面板消息链问题,按 ENV-SKIP 记(本 spec 既有惯例),生产环境实例全量验证。
+ // tab 化:文件跳转后视图停在「文件钻取」tab,设计沉淀在「结构」tab;回切再断言(意图不变)
     await page.evaluate(() => { try { projectSetTab("structure", true); } catch {} });
     const arcDiag = await page.evaluate(() => {
       try {
@@ -306,7 +306,7 @@ const BOARD2 = {
     await pollFn(async () => (await page.locator("#boardGraph .cv-node").count()) === 4);
     arcChk("设计沉淀:关闭后会话板画布恢复大白板宿主", (await page.locator("#boardGraph .cv-node").count()) === 4);
     // 反查过滤:角标点击 → 沉淀区按文件过滤 → 清除还原
-    // step-118 tab 化:角标在「文件钻取」pane(点击后应用会切回结构 tab 展示过滤结果)
+ // tab 化:角标在「文件钻取」pane(点击后应用会切回结构 tab 展示过滤结果)
     await page.evaluate(() => { try { projectSetTab("files", true); } catch {} });
     await page.waitForTimeout(150);
     if (!arcSkip) await page.locator("#ppfFns .arc-badge").first().click({ timeout: 4000 }).catch(() => {});
@@ -429,7 +429,7 @@ const BOARD2 = {
     await page.screenshot({ path: "/tmp/ui-board.png", fullPage: false });
     check("零 pageerror", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 
-    // ===== 实时白板浮窗(2026-10-14 入口统一+升级)=====
+ // ===== 实时白板浮窗(入口统一+升级)=====
     // 7. 入口统一:任务卡「查看白板」chip 的绑定处理器(boardOpenTask)开浮窗、不切主视图
     await page.evaluate(() => switchView("chat")); // 浮窗在聊天视图上浮(真实使用场景)
     await page.waitForTimeout(600);
@@ -505,7 +505,7 @@ const BOARD2 = {
     check("实时刷新:面板自动跟进 4/4 完成", await page.locator("#bfProg").textContent().then((t) => t.includes("4/4") && t.includes("完成")).catch(() => false));
     await page.screenshot({ path: "/tmp/ui-board-panel-live.png" });
 
-    // 10. 面板按板续作(step-088 起为页内 uiPrompt 模态;驱动 .uid-input/.uid-ok,意图不变)
+ // 10. 面板按板续作(起为页内 uiPrompt 模态;驱动 .uid-input/.uid-ok,意图不变)
     await page.click("#bfContinue");
     await page.waitForTimeout(400);
     await page.locator("#bfContinue").scrollIntoViewIfNeeded().catch(() => {});
@@ -521,7 +521,7 @@ const BOARD2 = {
     await pollFn(async () => (await page.locator("#boardGraph .cv-node").count()) === 4);
     check("展开:画布回到大白板宿主", (await page.locator("#boardGraph .cv-node").count()) === 4);
     // 10c. composer「白板」按钮:开关浮窗(按钮在聊天 footer,先回聊天视图;关=画布回大白板宿主)
-    // 2026-10-21 画布分流:画布形态点「白板」=定位白板卡不弹浮窗——本用例守经典契约,先切经典布局。
+ // 画布分流:画布形态点「白板」=定位白板卡不弹浮窗——本用例守经典契约,先切经典布局。
     await page.evaluate(() => { if (document.body.classList.contains("cv-shell")) { try { CanvasShell.setMode("classic"); } catch (e) {} } });
     await page.evaluate(() => switchView("chat"));
     await page.waitForTimeout(400);
@@ -546,7 +546,7 @@ const BOARD2 = {
         while (!pred(d) && Date.now() - t0 < 12000) { await page.waitForTimeout(600); d = JSON.parse(fs.readFileSync(boardFileP, "utf-8")); }
         return d;
       };
-      // 10a. 添加模块工具箱:26 类型全列出(step-083 +4 / step-121 工作流板 +6);点类型→画布新节点+直改板落盘
+ // 10a. 添加模块工具箱:26 类型全列出( +4 / 工作流板 +6);点类型→画布新节点+直改板落盘
       // (浮窗开/关/展开的 board.list/board.doc 回执+drvfs 停摆窗会在十期开场陆续落地并重建 cvHost——
       //  先等画布就位,再以长耐心重试开工具箱;重试窗内画布整个消失过=drvfs 停摆(环境),按 ENV-SKIP 记,不掩盖真缺陷)
       const nB10 = await page.locator("#boardGraph .cv-node").count();
@@ -588,7 +588,7 @@ const BOARD2 = {
       let savedAdd = null;
       if (!envSkip) {
         check("十期:添加模块工具箱打开", toolboxOk);
-        check("十期:工具箱 26 类型(step-083 +4/step-121 工作流板 +6;分组+可搜索)", (await page.locator("#cvAddPanel .cv-aitem").count()) === 26);
+        check("十期:工具箱 26 类型( +4/ 工作流板 +6;分组+可搜索)", (await page.locator("#cvAddPanel .cv-aitem").count()) === 26);
         let itemClicked = false;
         for (let att = 0; att < 3 && !itemClicked; att++) {
           if (!(await page.locator("#cvAddPanel").isVisible().catch(() => false))) await openToolbox();
@@ -606,7 +606,7 @@ const BOARD2 = {
         savedAdd = JSON.parse(fs.readFileSync(path.join(dir, "t-ui-1.json"), "utf-8"));
       }
       // 10b. 端口拖拽连线:先「适配」收全部节点进画布(画布窄,pos 大的节点端口会被裁剪——
-      // getBoundingClientRect 照报坐标但鼠标点进去命中的是旁边栏,探针 G 实证),再选
+ // getBoundingClientRect 照报坐标但鼠标点进去命中的是旁边栏,探针 G 验证),再选
       // 「出端口+卡体都在画布内且中心可命中」的一对,且目标未被源连过(判重会让断言变空洞)
       await page.click("#cvZfit").catch(() => {});
       await page.waitForTimeout(500);
@@ -657,7 +657,7 @@ const BOARD2 = {
       console.log("[10c] arrange click=" + JSON.stringify(arrOk) + " arranged=" + arranged);
       const savedArr = await waitDiskBoard((d) => d.nodes.every((n) => n.pos && isFinite(n.pos.x)) && JSON.stringify(d.nodes.map((n) => n.id + ":" + (n.pos ? Math.round(n.pos.x) + "," + Math.round(n.pos.y) : "x"))) !== preArrangePos);
       const layoutLanded = JSON.stringify(savedArr.nodes.map((n) => n.id + ":" + (n.pos ? Math.round(n.pos.x) + "," + Math.round(n.pos.y) : "x"))) !== preArrangePos;
-      check("十期:整理布局落盘(全节点有 pos)", savedArr.nodes.every((n) => n.pos && isFinite(n.pos.x)), layoutLanded ? "" : "(布局未重排:直改板保存与在途回执竞态,登记 step-073 遗留;悬停删除改按「钮可命中」边验证)");
+      check("十期:整理布局落盘(全节点有 pos)", savedArr.nodes.every((n) => n.pos && isFinite(n.pos.x)), layoutLanded ? "" : "(布局未重排:直改板保存与在途回执竞态,登记  遗留;悬停删除改按「钮可命中」边验证)");
       // 10d. 边悬停出删除钮→点击删边(整段重试:回执重渲会换 DOM,单次取点会被打空)。
       // 续作轮修正:只挑「删除钮中心确为钮本身顶层」的边(布局竞态下钮可能被卡片掩埋,
       // elementFromPoint=卡片头——点击物理不可达;与浮窗段 437 行「挑中心可命中的卡」同纪律)。

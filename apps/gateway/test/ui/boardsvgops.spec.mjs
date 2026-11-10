@@ -1,4 +1,4 @@
-/** 白板 svg(flowkit)交互与导出逐按钮实测(2026-11-05 flowkit 断裂修复验证)。
+/** 白板 svg(flowkit)交互与导出逐按钮经验证( flowkit 断裂修复验证)。
  *  自起临时实例(默认 7795,不碰 7700),板副本落独立 SID(status=implementing 绕 done 写门禁)。
  *  判定三档:可用 / 不可用(明确置灰+说明或有提示) / 静默失败。
  *  覆盖:#cvArrangeBtn(svg 置灰+说明)、#cvAddBtn、双击空白、右键节点菜单+删除+Ctrl+Z、

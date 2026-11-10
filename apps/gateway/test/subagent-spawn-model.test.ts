@@ -1,6 +1,5 @@
 /**
  * `subagent.spawn` 记模型(2026-11「面板上看得见用了什么模型」T1)。
- *
  * 为什么这样测:**行为级**——照 spawn-tool-policy.test.ts 的 journal 级集成锚，
  * createGatewayApp 真链跑一次 spawn_subagent，读 journal 断言 payload.model 落盘。
  * 不能只测源码文本：模型名取的是 `subagentModelNameOf(models?.subagent ?? llm)`

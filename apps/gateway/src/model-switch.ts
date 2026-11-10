@@ -1,11 +1,9 @@
 /**
- * 主轨模型热切的唯一解析件(2026-10-20「最新 session 用 GLM 一直不行」根因收口)。
- *
+ * 主轨模型热切的唯一解析件(「最新 session 用 GLM 一直不行」根因)。
  * 设计对齐 ZCode 的 Provider Registry:
  *   - 选择 = (providerId, modelId) 对;端点/协议/凭证由拥有该模型的 Provider 派生;
  *   - 切换前先做选择校验(模型目录/凭证可解析),不把半成品写进运行时;
  *   - 解析结果(实际生效的 model/provider/apiType/凭证来源)回给面板,不再用「热生效」空话。
- *
  * 本文件只做纯计算(不写盘、不打网络),main.handleCfgSet 负责持久化与审计;单测直接覆盖。
  */
 import {
@@ -59,7 +57,6 @@ export interface ModelSwitchResolution {
 
 /**
  * 把 coding.llm 的路由字段校正到「拥有该模型的 Provider」。
- *
  * 只回写 route 能确定的字段;自定义 baseUrl(不属于任何 Provider 端点)保留,不强行抹掉代理配置。
  * 返回被改动的点路径,调用方据此把路由键归入热应用(provider.update 本次会带上它们)。
  */
@@ -89,7 +86,7 @@ export function reconcileCodingRoute(config: Config): { changed: string[]; route
 }
 
 export type RoleName = "compact" | "review" | "subagent" | "digest" | "voice";
-// voice=语音任务书(2026-11-08):无 provider 实例(server 每次 voice.draft 现读 live config),
+// voice=语音任务书:无 provider 实例(server 每次 voice.draft 现读 live config),
 // 但路由归属/reconcile 语义与其它角色同源,进同一张 RoleName 表。
 
 export interface RoleSwitchResolution {
@@ -134,8 +131,7 @@ export function resolveRoleSwitch(
   config: Config,
   repoRoot: string,
   role: RoleName,
-  env: NodeJS.ProcessEnv = process.env,
-): RoleSwitchResolution | undefined {
+  env: NodeJS.ProcessEnv = process.env): RoleSwitchResolution | undefined {
   const ref = config.coding.models[role];
   if (!ref?.model) return undefined;
   const merged = { ...config.coding.llm, ...ref, model: ref.model };
@@ -179,8 +175,7 @@ export function resolveRoleSwitch(
 export function resolveModelSwitch(
   config: Config,
   repoRoot: string,
-  env: NodeJS.ProcessEnv = process.env,
-): ModelSwitchResolution {
+  env: NodeJS.ProcessEnv = process.env): ModelSwitchResolution {
   const ref = config.coding.llm;
   const route = resolveCodingModelRoute(config, ref);
   if (!ref.model) return { reconciled: [], routeError: "未配置模型(coding.llm.model 为空)" };

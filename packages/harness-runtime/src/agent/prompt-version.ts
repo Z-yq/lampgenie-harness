@@ -1,9 +1,7 @@
 /**
  * RSI #209 提示词版本与覆盖治理(纯逻辑零 IO)。
- *
  * 要解决的问题:提示词改了没法回滚、答不出「这个会话读的是哪版」、团队与 RSI 互相覆盖、
  * 内置默认升级后自定义覆盖静默失效、同一 turn 内不同 step 读到不同版本。
- *
  * 口径:
  * - 提示词配置是**不可变版本序列**:每个 key 一条 PromptHistory,revisions 单调追加,
  *   每条带 revision/predecessor/timestamp/origin;current 指向「此刻生效的版本」。
@@ -14,11 +12,9 @@
  * - 与默认完全相同的覆盖没有意义:保存时自动写回 current=1 并标 PRUNED;
  *   pruneRedundant 用于治理历史残留。
  * - 参数非法/键不存在一律折叠成稳定码返回,不 throw;返回的 book 一律是新对象(入参不被修改)。
- *
  * 保留名口径:`admin.*` 与 `__` 前缀在内置声明处即拒绝;`system.*` 是内置命名空间
  * (createBook 的输入就是系统默认文本),允许声明;任何试图往 book 里**新增**保留名 key 的
  * 保存路径一律 RESERVED_NAME。这样内置提示 `system.coding` 可正常建版与覆盖。
- *
  * 依赖纪律:零 import、零 IO、不引 agent loop / gateway。
  */
 
@@ -324,7 +320,6 @@ export interface SaveRevisionResult {
 
 /**
  * 保存一个新版本(不可变:返回新 book,入参不动)。
- *
  * 判定顺序:非法输入 → 未知/保留 key → placeholder 契约 → base 冲突(不写,回 draft)
  * → 与默认相同(NOOP;已有覆盖则自动删覆盖并标 PRUNED)→ RSI 审批 → 追加 revision。
  */

@@ -5,7 +5,7 @@ import { MemoryJournal } from "@lampgenie/core";
 import { wireExecutor } from "../src/executor-wiring.js";
 import { EchoChildBackend } from "@lampgenie/executors";
 
-describe("可达性分派守卫(R5-C11 修复:dispatch 接进执行路径)", () => {
+describe("可达性分派守卫(修复:dispatch 接进执行路径)", () => {
   it("无标签直通 / 无节点显式失败 / 命中返回解释", () => {
     const nodes = new NodeRegistry();
     expect(dispatchGuard(nodes, {})).toEqual({ ok: true, node: null });

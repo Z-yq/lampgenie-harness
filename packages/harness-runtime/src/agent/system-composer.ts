@@ -1,5 +1,5 @@
 /**
- * 系统提示组装器(designs/18 §3 / designs/14 §1.2 / step-028):
+ * 系统提示组装器( §3 / §1.2 /):
  * base 身份 + AGENTS.md 项目指令节 + 经验索引节 + 在场工具清单节。
  * - sections 带 cacheHint 元数据(ZCode 纪律):当前 openai provider 单条 system 透传,
  *   字段为后续 provider 层缓存断点预留,不改变行为。
@@ -42,7 +42,7 @@ export interface ComposeInput {
   experienceIndex?: { category: string; name: string; description: string }[];
   /** 实际挂载的工具与一句话用途(只提在场的)。 */
   tools?: ToolHint[];
-  /** 子代理资源调度节(step-071 父子 ask-answer):渲染为独立 system 节;缺席=不渲染该节(零变化)。 */
+ /** 子代理资源调度节(父子 ask-answer):渲染为独立 system 节;缺席=不渲染该节(零变化)。 */
   subagentDispatch?: string;
   /**
    * 技能索引入参(n6,主 agent 也注入技能清单,ZCode context/sections/skills.ts):
@@ -67,7 +67,7 @@ export interface SkillIndexEntry {
 /** 技能索引字符预算(ZCode DEFAULT_SKILL_METADATA_BUDGET=20_000)。 */
 export const SKILL_INDEX_MAX_CHARS = 20_000;
 /** 每条描述截断长度(token 优化轮 07:100 → 80;索引是「认路」用的,长用法走 skill_view 全文)。
- *  **实测更正(2026-10-31,数据同源纪律)**:本轮最初估算「cap 100→80 省 3,472 字符」是**错的** ——
+ * **经验证更正(数据同源纪律)**:本轮最初估算「cap 100→80 省 3,472 字符」是**错的** ——
  *  当时把行尾 `(file: …)` 路径也算进了「描述长度」。剥掉路径后真实分布是:描述均长 43 字、最长 100,
  *  超 80 字的只有 2 条,cap=80 实际只省 **40 字符**。技能索引的真实降幅(9,835→4,882)几乎全部
  *  来自「省略可推导的 file 路径」(见 formatSkillIndexLine),cap 从 100 降到 80 只是顺带收紧上限,
@@ -77,14 +77,14 @@ export const SKILL_INDEX_DESC_CHARS = 80;
 /** AGENTS.md 注入总预算(ref 各家 16K-1MB 之间取保守值)。 */
 export const AGENTS_MD_MAX_CHARS = 16_000;
 
-/** AGENTS.md 压缩阈值(2026-10-19 用户口径:「超过 4000 字符时就进行压缩」)。
+/** AGENTS.md 压缩阈值( 「超过 4000 字符时就进行压缩」)。
  *  背景:仓 AGENTS.md 已 24 万字符,旧逻辑按前缀截断→模型永远只看到最老的台账、
- *  最近工作全被砍(step-132/129/131 实测出现 0 次),且每次调用白烧 ~7K input tokens。
+ * 最近工作全被砍(/129/131 经验证出现 0 次),且每次调用白烧 ~7K input tokens。
  *  压缩策略=确定性(注入路径不许异步/LLM):规则节全文 + 最近 N 条留痕首行。 */
 export const AGENTS_MD_COMPRESS_CHARS = 4_000;
 /** 压缩后每条留痕保留的字符数(首行摘要,够认出「哪一轮、改了什么」)。 */
 const LEDGER_LINE_CHARS = 120;
-/** 留痕最多保留条数(2026-10-22 system 瘦身:留痕是历史台账,tips 历史档案类按需注入更合适;
+/** 留痕最多保留条数( system 瘦身:留痕是历史台账,tips 历史档案类按需注入更合适;
  * system 常驻只留最近 3 条认路,不再按预算装满)。 */
 export const LEDGER_MAX_LINES = 3;
 
@@ -112,7 +112,7 @@ export function compressAgentsMdText(text: string, maxChars = AGENTS_MD_COMPRESS
   let out = marker + (head ? "\n\n" + head : "");
 
   const picked: string[] = [];
-  // 从最新一条往回装(2026-10-22 最多 LEDGER_MAX_LINES 条;规则节优先占预算,留痕只认路);
+ // 从最新一条往回装(最多 LEDGER_MAX_LINES 条;规则节优先占预算,留痕只认路);
   // 装不下即停(更早的只会更旧,不再挤占预算)。
   for (let i = ledger.length - 1; i >= 0 && picked.length < LEDGER_MAX_LINES; i--) {
     const raw = ledger[i]!.trim();
@@ -226,7 +226,7 @@ function isInsideDir(dir: string, target: string): boolean {
 }
 
 /**
- * AGENTS.md 发现(M144 指令文件链):
+ * AGENTS.md 发现(指令文件链):
  * - 每目录候选(按优先级):`<dir>/AGENTS.md`、`<dir>/.genie/AGENTS.md`、`<dir>/.agents/AGENTS.md`;
  *   同一文件按 realpath 去重(子目录更具体 > 同目录候选优先级高),不存在跳过;
  * - 范围:workspace 根(pnpm-workspace.yaml 或 .git 所在,含)→ startDir;
@@ -319,7 +319,7 @@ function renderAgentsMd(files: AgentsMdFile[]): string {
       lines.push(header, "[已省略:项目指令总预算耗尽]");
       continue;
     }
-    // 2026-10-19:超阈值(4000)先确定性压缩(规则节+最近留痕),再无果才硬截断。
+ // 超阈值(4000)先确定性压缩(规则节+最近留痕),再无果才硬截断。
     const usable = f.text.length > AGENTS_MD_COMPRESS_CHARS ? compressAgentsMdText(f.text) : f.text;
     const text = usable.length > budget ? `${usable.slice(0, budget)}\n[已截断:单文件超出剩余预算]` : usable;
     budget -= text.length;
@@ -328,14 +328,14 @@ function renderAgentsMd(files: AgentsMdFile[]): string {
   return lines.join("\n");
 }
 
-/** 经验索引节(designs/18 §3:每条一行 name:60字;空库给 fold 引导)。 */
+/** 经验索引节( §3:每条一行 name:60字;空库给 fold 引导)。 */
 function renderExperienceIndex(index: { category: string; name: string; description: string }[]): string {
   if (index.length === 0) {
     return ["# 经验索引", "(当前为空;任务中发现可复用做法或坑,用 experience_fold 沉淀)"].join("\n");
   }
   const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看;发现经验有误用 experience_fold 修正)"];
   for (const e of index) {
-    // M130:描述硬限走 clampSkillDescription(BMP 文本下与旧 slice(0,60)+"…" 逐字节一致)。
+ // 描述硬限走 clampSkillDescription(BMP 文本下与旧 slice(0,60)+"…" 逐字节一致)。
     const desc = clampSkillDescription(e.description, SKILL_DESCRIPTION_MAX).text;
     lines.push(`- ${e.category}/${e.name}: ${desc}`);
   }
@@ -343,12 +343,11 @@ function renderExperienceIndex(index: { category: string; name: string; descript
 }
 
 /**
- * M130 审计用:经验索引里被 60 字硬限截断的条目(不改渲染,只列清单)。
+ * 审计用:经验索引里被 60 字硬限截断的条目(不改渲染,只列清单)。
  */
 export function skillDescriptionTruncations(
   index: { category: string; name: string; description: string }[],
-  max: number = SKILL_DESCRIPTION_MAX,
-): { category: string; name: string; originalLength: number; textLength: number }[] {
+  max: number = SKILL_DESCRIPTION_MAX): { category: string; name: string; originalLength: number; textLength: number }[] {
   const out: { category: string; name: string; originalLength: number; textLength: number }[] = [];
   for (const e of index) {
     const r = clampSkillDescription(e.description, max);
@@ -375,9 +374,9 @@ export function renderSkillIndex(entries: SkillIndexEntry[], budget = SKILL_INDE
   const header = [
     "# 技能索引(需要全文用 skill_view(category,name) 读;可按需调用,不要凭空猜技能名)",
   ];
-  // 同模板条目折叠(2026-10-29 token 轮 P2):实测索引占 system prompt 的 52%(13,630 字符),
+ // 同模板条目折叠( token 轮 P2):经验证索引占 system prompt 的 52%(13,630 字符),
   // 其中 `.genie/experiences/incidents/task-*` 是 **28 条同模板**的「失败任务候选经验」——
-  // description 前半句完全一样(实测 3 条样例逐字相同),每条都占约 100 字符摘要 + 路径。
+ // description 前半句完全一样(经验证 3 条样例逐字相同),每条都占约 100 字符摘要 + 路径。
   // 这类条目对模型「认路」零价值(看名字就知道是什么,点开全是同一个模板),却按条数线性吃预算。
   // 折叠口径:**同 category + 同 description 前缀 ≥ COLLAPSE_MIN 条**才折叠成一行带计数;
   // 少于阈值的类目不动(防止把「真有不同的几条」压成一条,丢信息)。
@@ -390,7 +389,7 @@ export function renderSkillIndex(entries: SkillIndexEntry[], budget = SKILL_INDE
   ].join("\n");
   if (full.length <= budget) return full;
   // 超预算:降级为 name + file 一行。
-  // **降级路径不折叠**(2026-10-29):降级形态的用途是「可枚举的索引」——每条都要能按名字+路径
+ // **降级路径不折叠**:降级形态的用途是「可枚举的索引」——每条都要能按名字+路径
   // 直达;折叠成一行计数会让「具体有哪些条目」消失。而折叠的价值本来只在完整形态(描述占大头),
   // 降级形态每行只有名字+路径(约 70 字符/条),不需要再折叠。
   return [
@@ -407,14 +406,11 @@ const COLLAPSE_DESC_PREFIX = 40;
 
 /**
  * 折叠「同 category + 同 description 前缀」的批量条目为一根计数行。
- *
  * 为什么按 description 前缀而不是按名字正则:名字是 `task-02308c2c` 这类随机会话 id,
  * 正则匹配它等于硬编码某种命名;而「描述通篇同一句模板」正是要消灭的冗余本体,按内容判定
  * 与生成来源解耦(将来换命名规则也不会失效)。
- *
  * 折叠后仍保留可用性:计数行给出 `skill_view(category, <任一名字>)` 的取法,
  * 说明「另有 N 条同模板,可按同一形态查看」——模型要查细节时不必知道全部名字。
- *
  * @param withDescription false=超预算降级路径:折叠行也不带描述(降级纪律「只留 name+file」不能
  *   被折叠行绕过去——否则「预算 200 字符却塞进来一条 100 字描述」的情况仍会发生)。
  */
@@ -456,9 +452,8 @@ export function collapseDuplicateSkills(
   return { collapsed, rest };
 }
 
-/** 技能路径可推导时省略(2026-10-31 token 轮)。
- *
- * 实测(生产 7700 trace):技能索引 10,018 字符里 `(file: /mnt/e/...SKILL.md)` 占 **4,731 字符(47%)**,
+/** 技能路径可推导时省略( token 轮)。
+ * 经验证(真实会话 trace):技能索引 10,018 字符里 `(file: /mnt/e/...SKILL.md)` 占 **4,731 字符(47%)**,
  * 而 45/45 条路径都等于 `.genie/experiences/<category>/<name>/SKILL.md` —— 完全可由索引行的
  * `category/name` 推导。而读全文的官方通道是 `skill_view(category,name)`(不需要路径)。
  * 省 ≈1,971 tok/步(15 步任务 ≈29.5k tok)。**只省略可推导的**:插件/自定义根等不可推导的仍原样输出。
@@ -516,7 +511,7 @@ export function composeSystemPrompt(input: ComposeInput): ComposedSystem {
   return { text: sections.map((s) => s.content).join("\n\n"), sections };
 }
 
-// ---- step-071 父子 ask-answer 配套提示词(纯函数渲染器,装配方取用) ----
+// ---- 父子 ask-answer 配套提示词(纯函数渲染器,装配方取用) ----
 
 /**
  * 父 agent「子代理资源调度」节(与 permission.heavyOp 闸门配套):spawn 任务书告知义务 +
@@ -533,7 +528,7 @@ export function renderSubagentDispatchSection(opts: { answerToolMounted?: boolea
 }
 
 /**
- * 子代理重操作纪律块(step-071:拼进子代理系统提示/任务书前缀):先申请、不绕行、如实报告。
+ * 子代理重操作纪律块(拼进子代理系统提示/任务书前缀):先申请、不绕行、如用户反馈告。
  * 由装配方(LlmLoopBackend subSystem 或 composeSubagentInstructions 前缀)在子代理有命令执行
  * 工具时注入;只读子代理不注入(结构性无重操作)。
  */

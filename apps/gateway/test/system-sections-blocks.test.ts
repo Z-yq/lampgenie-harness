@@ -1,14 +1,11 @@
 /**
- * 系统提示「裸块 → 具名节」单一真源(2026-10-30 修 f1)。
- *
- * **实测故障**:system 全文用字符串 `+` 拼(memBlock + goalBlock + planBlock + workspaceBlock +
+ * 系统提示「裸块 → 具名节」单一真源(修 f1)。
+ * **经验证故障**:system 全文用字符串 `+` 拼(memBlock + goalBlock + planBlock + workspaceBlock +
  * planFileBlock),而给 loop 做节 diff 的 `systemSections` 另手写一份 → 两份清单不同步,
  * 漏了 planBlock/workspaceBlock。
- *
  * 后果不是「少发一点」而是**静默丢规则**:plan 模式与「工作区内」权限模式的约束文本在全文里,
  * 但节 diff 永远看不到它们变化 → `[系统提示更新]` 零追加 → 模型收不到「现在是 plan 模式,
  * 不许改代码」。省 token 绝不能换行为退化。
- *
  * 本文件锁住三件事:
  * ① plan / workspace 必须出现在节清单里(正是漏掉的那两个);
  * ② 空块不进节清单(与旧字符串拼接语义一致);

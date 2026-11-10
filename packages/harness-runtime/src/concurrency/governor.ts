@@ -6,12 +6,10 @@
 // 泳道里一台纯 AIMD 状态机（`AimdRegulator`）+ 一条按 run 轮转的准入队列。
 // 进程级 AIMD 并发治理的设计参考 ZCode 项目的 dynamic-workflow 思路（致谢，Apache-2.0）；
 // 本目录为独立实现：类型、状态机方法面、协调器结构与命名均为本仓自有。
-//
 // 闸门粒度是**模型请求的每一次尝试**：runner 每次尝试前 `take`、尝试结束 `release`，
 // 退避 sleep 期间不持槽。ticket 就是该次尝试的状态事件汇：runner 把该尝试的
 // 生命周期事件同时投递给 ticket，协调器从 ticket 上读结果。本方案
 // **不**再用 adapter 级 `addStatusSink`——同一事件不能既经 ticket 又经 adapter sink 各喂一次。
-//
 // 这里是协调器里**唯一**会碰时钟与定时器的地方：状态机只收 `now`；冷却到期要唤醒等待者，
 // 所以需要一个 setTimeout（可注入，unref）。
 
@@ -36,7 +34,6 @@ export function providerModelKey(model: ModelRoute): string {
 
 /**
  * driver 看到的窄端口（不是整个协调器）。
- *
  * - `tryEnter`：同步快路径——闸门开着**且没有任何人在排队**才给 ticket；否则 undefined，调用方再走
  *   `enter` 并报「等待槽位」。有等待者时不走快路径是公平性：否则一个请求密集的 run 会靠
  *   快路径越过别的 run 的队列。
@@ -113,8 +110,7 @@ const defaultSchedule = (callback: () => void, delayMs: number): (() => void) =>
 };
 
 export function createWorkflowConcurrencyCoordinator(
-  options: WorkflowConcurrencyCoordinatorOptions,
-): WorkflowConcurrencyCoordinator {
+  options: WorkflowConcurrencyCoordinatorOptions): WorkflowConcurrencyCoordinator {
   const now = options.now ?? Date.now;
   const schedule = options.schedule ?? defaultSchedule;
   const lanes = new Map<string, ProviderLane>();
@@ -169,8 +165,7 @@ export function createWorkflowConcurrencyCoordinator(
   const issueTicket = (
     lane: ProviderLane,
     runId: string,
-    epoch: number,
-  ): AdmissionTicket => {
+    epoch: number): AdmissionTicket => {
     let settled = false;
     const settle = (signal: (at: number) => ConcurrencyShift[]): void => {
       if (settled) return;
@@ -205,8 +200,7 @@ export function createWorkflowConcurrencyCoordinator(
                   at,
                   epoch,
                   reason as AimdThrottleCause,
-                  event.retryAfterMs,
-                ),
+                  event.retryAfterMs),
               );
               return;
             }
@@ -249,8 +243,7 @@ export function createWorkflowConcurrencyCoordinator(
   /** 按轮转挑下一个有等待者的 run。 */
   const pickNextRun = (lane: ProviderLane): string | undefined => {
     const runs = [...lane.queues.keys()].filter(
-      (runId) => (lane.queues.get(runId)?.length ?? 0) > 0,
-    );
+      (runId) => (lane.queues.get(runId)?.length ?? 0) > 0);
     if (runs.length === 0) return undefined;
     const last = lane.lastGrantedRun;
     const lastIndex = last === undefined ? -1 : runs.indexOf(last);

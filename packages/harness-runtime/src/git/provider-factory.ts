@@ -1,12 +1,10 @@
 /**
- * GitProvider 工厂(designs/06 R1「team={provider, groupPath}」落地)。
+ * GitProvider 工厂( R1「team={provider, groupPath}」落地)。
  * providers.yaml 按 team 绑定平台:relay 部署点据此构造平台 provider——此前 Relay 只能
  * CustomGitProvider(new 写死),GitLab/Codeup 平台 provider 从未进 Relay 通道。
- *
  * 优先级:providers.yaml[team].provider 显式(kind=custom/gitlab/codeup)>环境变量 RELAY_PROVIDER。
  * `platform: "force"`=开发/测试注入点:providers.yaml 声明了平台但仍用裸 git 命令(不碰平台 API),
  * 真实平台 API 路径(github/gitlab/codeup)待平台令牌实机联调。
- *
  * 凭证红线(token/secret 绝入日志与错误文案):
  *   ① 环境变量明示(EXPLICIT=明文入 env;SECRETREF=$ENV:NAME=从 NAME 解析,缺省=fail-visible 抛错);
  *   ② 写入仓=fail-visible 抛错;③ git config 全局凭据落盘=fail-visible 抛错。

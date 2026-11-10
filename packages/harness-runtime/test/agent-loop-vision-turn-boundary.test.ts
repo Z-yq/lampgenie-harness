@@ -1,7 +1,7 @@
 /**
  * 视觉图回收改 turn 边界(2026-11 token 优化轮 02):
  * 契约:同 turn 内一律保留 dataUrl(不再「只留最新一张」——那会在同一 turn 内每加一张图
- * 就重写历史中段,实测放大 132×/提示缓存整段失效);只有**当前 turn 之前**的图转占位。
+ * 就重写历史中段,经验证放大 132×/提示缓存整段失效);只有**当前 turn 之前**的图转占位。
  * 图→turn 归属按 journal 事件序推(落在哪个 turn.start 之后属哪个 turn),不改 payload schema。
  */
 import { describe, it, expect } from "vitest";

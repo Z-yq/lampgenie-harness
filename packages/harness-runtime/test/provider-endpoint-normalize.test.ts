@@ -1,5 +1,5 @@
 /**
- * step-137 回归:chat 端点归一(chatCompletionsUrl)。
+ * 回归:chat 端点归一(chatCompletionsUrl)。
  * 覆盖实机踩到的形态:面板预设写入的 baseUrl 常自带 /v1。
  */
 import { describe, expect, it } from "vitest";

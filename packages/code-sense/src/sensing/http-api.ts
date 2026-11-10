@@ -1,16 +1,13 @@
 /**
- * sensing/http-api(step-077 / designs/24 §2.1):HTTP 接口确定性提取。
- *
- * pageflow 同款方法论:纯行扫描(零 ts-morph/零 tree-sitter,与 step-068 的 Python 提取核心零交叠),
+ * sensing/http-api( / §2.1):HTTP 接口确定性提取。
+ * pageflow 同款方法论:纯行扫描(零 ts-morph/零 tree-sitter,与 的 Python 提取核心零交叠),
  * 每条 endpoint 带 {file,line} 证据;框架指纹预筛(grep 级)后才读文件,大仓秒级。
- *
  * 覆盖形态(设计稿 §2.1 表):
  *   TS/JS:express/koa/fastify(app.METHOD/router.METHOD+use 前缀)、Next.js 文件约定;
  *   Python:FastAPI(@app.METHOD/APIRouter(prefix)+include_router)、Flask(@app.route/@bp.route+
  *          Blueprint(url_prefix)+register_blueprint)、aiohttp(web.METHOD/add_routes/add_get 族);
  *   Java:Spring(@RestController+@RequestMapping 类级前缀 × @*Mapping 方法级);
  *   Go:gin(r.GET 族)/net-http(http.HandleFunc)/gorilla mux(HandleFunc+Methods)。
- *
  * 诚实边界(设计稿砍量):裸 node createServer if-chain 路由不支持(无确定性形态);
  * 跨文件挂载解析不到=prefixInferred 标注,不猜前缀值。
  */
@@ -68,9 +65,9 @@ export function detectFrameworks(text: string): string[] {
 const HTTP_METHODS = new Set(["get", "post", "put", "delete", "patch", "head", "options"]);
 const WS_METHODS = new Set(["websocket", "ws"]);
 
-// ============================ step-091 公共设施 ============================
+// ============================ 公共设施 ============================
 
-/** Python 三引号字符串行屏蔽(step-091;实锤:starlette_app.py:392 docstring 里的
+/** Python 三引号字符串行屏蔽(注意:starlette_app.py:392 docstring 里的
  * `Route("/health", health)` doctest 示例会被行扫描当真路由——与 python.ts moduleTripleLines
  * 同纪律:进入三引号作用域的行不参与提取;同一行开合同合的 docstring 不屏蔽)。 */
 function pythonTripleMask(lines: string[]): Uint8Array {
@@ -113,7 +110,7 @@ function collectCallSpan(lines: string[], lineIdx: number, openParenCol: number,
       }
       if (ch === "'" || ch === '"') { quote = ch; continue; }
       if (ch === "#") {
-        // python 行内注释(实锤:注释里的撇号 "don't" 会吊死引号配对)——只收注释前片段
+ // python 行内注释(注意:注释里的撇号 "don't" 会吊死引号配对)——只收注释前片段
         parts.push(line.slice(from, j));
         lineDone = true;
         break;
@@ -199,7 +196,7 @@ function resolvePathLikeExpr(expr: string, consts: Map<string, string>): { path?
   const lits = [...folded.matchAll(/(?:[fFrRbB]*)["']([^"']*)["']/g)].map((m) => m[1]!);
   // 取最后一个路径形字面量(实参里运行时值不是字面量,不会进来)
   const pathLike = lits.filter((v) => v.includes("/") || /\{\w/.test(v));
-  // 路径形优先;无路径形时唯一字面量兜底(实锤:_ROUTE_OAUTH_CALLBACK="oauth2callback"
+ // 路径形优先;无路径形时唯一字面量兜底(注意:_ROUTE_OAUTH_CALLBACK="oauth2callback"
   // 无斜杠,是 make_url_path 的路径实参位——多字面量时不猜)
   const pick = pathLike[pathLike.length - 1] ?? (lits.length === 1 ? lits[0] : undefined);
   if (!pick) return { inferred: true };
@@ -223,22 +220,22 @@ function joinPath(prefix: string, p: string): string {
   return (a + b) || "/";
 }
 
-/** 注释行守卫(实锤:本模块自身源码的注释里写着 @GetMapping("/x") 示例,被 Spring 提取器
+/** 注释行守卫(注意:本模块自身源码的注释里写着 @GetMapping("/x") 示例,被 Spring 提取器
  * 当真实路由——行扫描层必须先剔注释行再匹配;docHint 读取是另一条路,不受影响)。 */
 function isCommentLine(line: string): boolean {
   const t = line.trimStart();
   return t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*");
 }
 
-/** docstring 行守卫(step-091:三引号开头的行是 docstring 内容——多行 docstring 由
+/** docstring 行守卫(三引号开头的行是 docstring 内容——多行 docstring 由
  * pythonTripleMask 屏蔽,单行 docstring(同行开合)mask 覆盖不到,这里按行首形态拦。
- * 实锤形态:fixture 与真实仓都有 `"""...Route("/x", h)..."""` 的 doctest/示例行)。 */
+ * 注意形态:fixture 与真实仓都有 `"""...Route("/x", h)..."""` 的 doctest/示例行)。 */
 function isPyDocLine(line: string): boolean {
   const t = line.trimStart();
   return t.startsWith('"""') || t.startsWith("'''");
 }
 
-/** 文档路径守卫(step-085 RC-M,streamlit 实锤:specs/*.md 产品文档里的接口示例被提取成
+/** 文档路径守卫( RC-M,streamlit 注意:specs/*.md 产品文档里的接口示例被提取成
  * 「真端点」——api.endpoints[0].file=specs/…product-spec.md:322,桥对账全城假数据)。
  * 文档扩展名 + docs 目录段一律不提取;守卫放 extractApiSurface 入口,指纹预筛即使放进候选也拦。 */
 const DOC_EXT_RE = /\.(md|mdx|markdown|adoc|asciidoc|rst|txt)$/i;
@@ -252,7 +249,7 @@ function cleanDoc(line: string): string {
 }
 
 /** decorator 首参(路径)提取:字面量(精确)或调用包裹字面量(包装器或加运行时前缀→pi)。
- * 跨行形态(redash embed.py `@routes.route(\n org_scoped_rule("/embed/…")` 实锤):本行空参时前瞻 ≤4 行。 */
+ * 跨行形态(redash embed.py `@routes.route(\n org_scoped_rule("/embed/…")` 注意):本行空参时前瞻 ≤4 行。 */
 function decoratorPathArg(lines: string[], i: number, afterParen: string): { path: string; inferred: boolean } | undefined {
   const tryText = (s: string): { path: string; inferred: boolean } | undefined => {
     const lit = /^(["'`])([^"'`]+)\1/.exec(s);
@@ -317,7 +314,7 @@ function extractPythonDecorators(file: string, lines: string[]): ApiEndpoint[] {
     const recv = m[1]!;
     const methodRaw = m[2]!;
     if (!varPrefix.has(recv) && recv !== "app" && recv !== "bp" && recv !== "router") continue; // 防误命中无关 decorator
-    // 路径实参:字面量(精确)或调用包裹字面量(`org_scoped_rule("/login")` redash 实锤——
+ // 路径实参:字面量(精确)或调用包裹字面量(`org_scoped_rule("/login")` redash 注意——
     // 包装器可能加运行时前缀,取内层字面量+prefixInferred 如实;跨行 decorator 前瞻 ≤4 行)
     const afterParen = lines[i]!.slice(m.index + m[0].length);
     const pr = decoratorPathArg(lines, i, afterParen);
@@ -373,14 +370,14 @@ function extractPythonDecorators(file: string, lines: string[]): ApiEndpoint[] {
   return out;
 }
 
-/** starlette 提取器(step-091 RC-M;step-100 扩 Mount):Route/WebSocketRoute 列表形态。
+/** starlette 提取器( RC-M; 扩 Mount):Route/WebSocketRoute 列表形态。
  * 真实形态(poly-streamlit):`Route(_with_base(ROUTE_HEALTH, base_url), _health_endpoint,
  * methods=["GET","HEAD"])` 多行;常量 `ROUTE_HEALTH: Final = f"{BASE_ROUTE_CORE}/health"`。
  * path 实参=纯字面量→精确路径;调用/常量表达式→折叠同文件常量取路径形值+prefixInferred
  * (base_url 类运行时前缀静态未知,如实标注)。
- * step-100 Mount:`Mount(prefix, routes=[Route(...)…])`——Mount 跨度按括号深度定界
+ * Mount:`Mount(prefix, routes=[Route(...)…])`——Mount 跨度按括号深度定界
  * (字符串/行内注释感知),界内 Route/WebSocketRoute 继承 Mount 前缀(嵌套 Mount 前缀复合);
- * prefix 为运行时变量(streamlit `Mount(mount_path, app=…)` 实锤)→ 前缀不解析,
+ * prefix 为运行时变量(streamlit `Mount(mount_path, app=…)` 注意)→ 前缀不解析,
  * 内层路由以本地路径+prefixInferred 如实入账;`app=子应用` 形态内部无路由,零端点(边界)。
  * `routes=变量` 形态:同文件 `NAME = […Route…]` 列表赋值按行区间绑定前缀。 */
 function extractStarlette(file: string, lines: string[], mask: Uint8Array): ApiEndpoint[] {
@@ -508,12 +505,12 @@ function extractStarlette(file: string, lines: string[], mask: Uint8Array): ApiE
   return out;
 }
 
-/** Tornado 提取器(step-091 RC-M;step-100 扩:变量绑定元组+import 常量):(path, Handler[, settings])
+/** Tornado 提取器( RC-M; 扩:变量绑定元组+import 常量):(path, Handler[, settings])
  * 元组族——web.Application([...])/add_handlers(...)/URLRouter(...) 调用 span 与
  * `handlers.append/extend/= [` 变量语境;首元 raw/str 字面量或含路径字面量的调用表达式
- * (regex 尾巴确定性清洗)。step-100:`NAME = (path, Handler, …)` 变量绑定元组登记后被
+ * (regex 尾巴确定性清洗)。`NAME = (path, Handler, …)` 变量绑定元组登记后被
  * 语境 span 内裸名引用即收(jupyterlab labapp `build_handler = (build_path, BuildHandler, …)`
- * → `handlers.append(build_handler)` 实锤);extraConsts=仓级 import 常量表(由
+ * → `handlers.append(build_handler)` 注意);extraConsts=仓级 import 常量表(由
  * expandTornadoSurface 注入;缺省=同文件常量,091 行为恒等)。 */
 function extractTornado(file: string, lines: string[], mask: Uint8Array, extraConsts?: Map<string, string>): ApiEndpoint[] {
   const out: ApiEndpoint[] = [];
@@ -534,7 +531,7 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
   const seen = new Set<string>();
   const pushTuple = (tupleSpan: string, line: number): void => {
     // 元组形态门:字面量/调用表达式/裸常量名首元(裸名=纯标识符不带点,靠 consts/extraConsts
-    // 解析,解不出即弃;带点属性表达式 self.base_url 不是常量,误收实锤:ujoin 内层组被当元组)
+ // 解析,解不出即弃;带点属性表达式 self.base_url 不是常量,误收注意:ujoin 内层组被当元组)
     if (!/^\(\s*(?:[rRuUbB]*["']|[A-Za-z_]\w*\s*[\(,]|[A-Za-z_][\w.]*\()/.test(tupleSpan)) return;
     const args = splitCallArgs(tupleSpan);
     if (args.length < 2) return;
@@ -564,7 +561,7 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
       ...(inferred ? { prefixInferred: true } : {}),
     });
   };
-  // 语境 span:web.Application(/add_handlers(/URLRouter( 调用;handlers 变量 = [ / .append(
+ // 语境 span:web.Application(/add_handlers(/URLRouter(调用;handlers 变量 = [ / .append(
   const ctxRe = /web\.Application\s*\(|add_handlers\s*\(|URLRouter\s*\(/;
   const varDefRe = /^\s*(\w*[hH]andlers?\w*)\s*(?:=|:)\s*\[/;
   const appendRe = /(\w*[hH]andlers?\w*)\.(append|extend|insert)\s*\(/;
@@ -584,8 +581,8 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
     const span = collectCallSpan(lines, i, openCol, 200);
     // 逐括号组扫描:每个闭合的 (…) 组尝试一次元组解析(非元组形态在 pushTuple 里校验失败即弃)
     const opens: { start: number; d: number }[] = [];
-    // 2026-10-22 P0:元组行号 = 语境 span 起点 + span 内换行数。旧实现整段用 i+1,
-    // web.Application([...]) 里所有路由都报到 Application 行(实测 7 条全 @449)。
+ // P0:元组行号 = 语境 span 起点 + span 内换行数。旧实现整段用 i+1,
+ // web.Application([...]) 里所有路由都报到 Application 行(经验证 7 条全 @449)。
     const lineOfOffset = (off: number): number => i + 1 + (span.slice(0, off).match(/\n/g)?.length ?? 0);
     let depth = 0, quote: string | null = null;
     for (let j = 0; j < span.length; j++) {
@@ -597,7 +594,7 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
       else if (ch === "[" || ch === "{") depth++;
       else if (ch === ")" || ch === "]" || ch === "}") {
         depth--;
-        // 只有 ) 弹栈:] } 只减深度(否则 dict 收尾 } 会弹掉元组条目,真元组被外层冒名)
+ // 只有) 弹栈:] } 只减深度(否则 dict 收尾 } 会弹掉元组条目,真元组被外层冒名)
         if (ch !== ")") continue;
         const o = opens.pop();
         if (o) {
@@ -608,8 +605,8 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
         }
       }
     }
-    // 变量绑定元组引用(step-100):语境 span 内的裸名命中同文件赋值表即收
-    // (实锤 jupyterlab `handlers.append(build_handler)`;span 外裸名不收——无挂载语境不猜)
+ // 变量绑定元组引用:语境 span 内的裸名命中同文件赋值表即收
+ // (注意 jupyterlab `handlers.append(build_handler)`;span 外裸名不收——无挂载语境不猜)
     for (const [name, t] of tupleAssign) {
       if (new RegExp(`\\b${name}\\b`).test(span)) pushTuple(t.span, t.line);
     }
@@ -617,7 +614,7 @@ function extractTornado(file: string, lines: string[], mask: Uint8Array, extraCo
   return out;
 }
 
-/** Flask-RESTful 提取器(step-091 RC-M):api.add_resource(Resource, "/url1", "/url2", …) 及
+/** Flask-RESTful 提取器( RC-M):api.add_resource(Resource, "/url1", "/url2", …) 及
  * 子类化形态(redash ApiExt.add_org_resource)。每个 "/…" 开头位置参数字面量=一个端点
  * (RESTful 资源类方法决定动词,method=ANY 如实);handler=首参资源类简单名。多行调用支持。 */
 function extractFlaskRestful(file: string, lines: string[], mask: Uint8Array): ApiEndpoint[] {
@@ -781,7 +778,7 @@ function extractGo(file: string, lines: string[], frameworks: string[]): ApiEndp
   return out;
 }
 
-/** Go chi 族(step-091 RC-N 上游):方法化路由(recv.Get/Post/…)+ Group/Route 作用域前缀拼装
+/** Go chi 族( RC-N 上游):方法化路由(recv.Get/Post/…)+ Group/Route 作用域前缀拼装
  * + Handle 字面量 + 「常量+字面量」拼接路径。真实形态:
  *   grafana  `r := hs.RouteRegister; r.Get("/login/:name", quota(…), hs.OAuthLogin)`;
  *            `apiRoute.Group("/folders", func(folderRoute …) { folderRoute.Get("/id/:id", …) })`
@@ -789,7 +786,7 @@ function extractGo(file: string, lines: string[], frameworks: string[]): ApiEndp
  *            BaseURL 为运行时字段——取字面量尾段+prefixInferred,与 RC-N 前端折叠通道对齐);
  *            `m.Handle("/api/admin/plugins", pluginAdmin)`。
  * 与 gin 的天然不交:gin 方法名 UPPERCASE、chi 首字母大写;HandleFunc 留给 net-http 分支防双发。
- * 误报面(实证):HTTP 客户端取值 `Query().Get("forceLogin")` 单参且首参非 "/" 字面量——被
+ * 误报面(验证):HTTP 客户端取值 `Query.Get("forceLogin")` 单参且首参非 "/" 字面量——被
  * 「首参路径字面量+≥2 实参」规则排除。 */
 interface ChiScope { param: string; prefix: string; endLine: number }
 
@@ -813,8 +810,8 @@ function goStringConsts(lines: string[]): Map<string, string> {
 
 /** chi 路径实参解析:纯字面量/"a"+"b" 相邻折叠(全字面量=精确);`EXPR+"/lit"` EXPR 为同文件
  * 常量→折叠拼接(精确),否则字面量尾段+prefixInferred(运行时前缀,如实标注)。
- * step-100 跨行扩展:调用包裹字面量 `toMacaronPath("/x")` 单字面量调用——callee 名以
- * path/route/url 结尾(纯路径变换语义,grafana ngalert 实锤)→字面量精确;其它调用→字面量
+ * 跨行扩展:调用包裹字面量 `toMacaronPath("/x")` 单字面量调用——callee 名以
+ * path/route/url 结尾(纯路径变换语义,grafana ngalert 注意)→字面量精确;其它调用→字面量
  * +prefixInferred(变换语义静态未知,如实)。 */
 function resolveChiPath(expr: string, consts: Map<string, string>): { path?: string; inferred: boolean } {
   const t = expr.trim();
@@ -862,8 +859,8 @@ function resolveChiPath(expr: string, consts: Map<string, string>): { path?: str
 /** chi 末参 handler:纯标识符(dotted 取末段)、`X.Wrap(ident)` 包装形态解出真 handler;
  * 其余(中间件链/inline func)=handlerInline。不猜:解不出就 inline,不冒充实名。
  * 兼容入参带/不带外层调用残留尾括号两种形态(先原样判,再剥一层重试)。
- * step-100:跨行末参的深层包装(grafana ngalert `metrics.Instrument(…, api.Hooks.Wrap(
- * srv.RouteGetAlertStatuses), m)` 实锤)——未命中时取参数文本内最后一个 Wrap 调用。 */
+ * 跨行末参的深层包装(grafana ngalert `metrics.Instrument(…, api.Hooks.Wrap(
+ * srv.RouteGetAlertStatuses), m)` 注意)——未命中时取参数文本内最后一个 Wrap 调用。 */
 function chiHandlerOf(lastArg: string): { handler?: string; inline?: boolean } {
   const t0 = lastArg.trim();
   const cands = t0.endsWith(")") ? [t0, t0.slice(0, -1).trimEnd()] : [t0];
@@ -879,7 +876,7 @@ function chiHandlerOf(lastArg: string): { handler?: string; inline?: boolean } {
   return { inline: true };
 }
 
-/** Go 版括号平衡 span 收集(step-100;跨行 chi 路由用):字符串 `"` 与反引号感知、`//` 行内注释
+/** Go 版括号平衡 span 收集(跨行 chi 路由用):字符串 `"` 与反引号感知、`//` 行内注释
  * 剥除(注释里的引号/括号会吊死配对);返回含外层括号的完整 span,未闭合(超帽)返回空串=不猜。 */
 function collectGoCallSpan(lines: string[], lineIdx: number, openParenCol: number, maxLines = 20): string {
   let depth = 0;
@@ -932,8 +929,7 @@ function extractChi(file: string, lines: string[], frameworks: string[]): ApiEnd
     const recv = mm[1]!;
     const method = mm[2]!;
     const scope = scopes.length && scopes[scopes.length - 1]!.param === recv ? scopes[scopes.length - 1]! : undefined;
-    // 路径实参:从 ( 后到首个深度 0 逗号(单行形态);跨行回退 collectGoCallSpan(step-100,
-    // grafana 132 处 `route.Post(\n "/import",\n …\n)` 实锤;超帽未闭合=不猜,维持 skip)
+ // 路径实参:从 (后到首个深度 0 逗号(单行形态);跨行回退 collectGoCallSpan( // grafana 132 处 `route.Post(\n "/import",\n …\n)` 注意;超帽未闭合=不猜,维持 skip)
     const openCol = line.indexOf("(", mm.index);
     let depth = 0, quote: string | null = null, endCol = -1;
     for (let j = openCol; j < line.length; j++) {
@@ -1042,7 +1038,7 @@ function extractAiohttp(file: string, lines: string[]): ApiEndpoint[] {
   return out;
 }
 
-// ============================ step-100 仓级 pass ============================
+// ============================ 仓级 pass ============================
 // 跨文件形态(Tornado Handler 方法级绑定 / Flask blueprint 定义与注册分居两文件)需要仓级视野:
 // 单文件提取器(extractEndpointsFromFile)保持同步纯函数不变(091 测试面零影响),仓级 pass 仅在
 // extractApiSurface 内以 import 图+盘存读取做确定性解析——解析不到=原样保留/不产出,不猜。
@@ -1057,8 +1053,7 @@ function makePyTextOf(root: string): PyTextOf {
       if (cache.size >= 60) return Promise.resolve(undefined); // 帽:病态 import 扇出防炸
       p = readFile(join(root, rel), "utf-8").then(
         (t) => t,
-        () => undefined,
-      );
+        () => undefined);
       cache.set(rel, p);
     }
     return p;
@@ -1075,7 +1070,7 @@ async function pythonImportMap(root: string, file: string, lines: string[]): Pro
   const map = new Map<string, string[]>();
   const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "";
   // 存在性检查走 statSync(不碰文本读缓存——stdlib/三方包探测 miss 会把缓存帽吃满,
-  // jupyterlab labapp 前 60 行 import 探测实锤把第 61 行的 build_handler 挤出)
+ // jupyterlab labapp 前 60 行 import 探测注意把第 61 行的 build_handler 挤出)
   const { statSync } = await import("node:fs");
   const exists = (rel: string): boolean => {
     try { return statSync(join(root, rel)).isFile(); } catch { return false; }
@@ -1163,15 +1158,14 @@ function scanTornadoClassMethods(text: string, cls: string): string[] | undefine
 
 /** import 名的 re-export 链解析(≤depth 跳):候选文件自身再 import 同名时跟随——
  * 包级 __init__.py 中转形态(redash `from redash.handlers import routes` → __init__
- * → `from redash.handlers.base import routes` 实锤)。 */
+ * → `from redash.handlers.base import routes` 注意)。 */
 async function resolveNameFile(
   root: string,
   cands: string[],
   name: string,
   has: (fileText: string, file: string) => boolean,
   textOf: PyTextOf,
-  depth = 2,
-): Promise<string | undefined> {
+  depth = 2): Promise<string | undefined> {
   for (const c of cands) {
     const t = await textOf(c);
     if (t === undefined) continue;
@@ -1188,7 +1182,7 @@ async function resolveNameFile(
   return undefined;
 }
 
-/** step-100 仓级 pass ①:Tornado——import 已知常量重解析(变量绑定元组首元的 build_path 族)
+/** 仓级 pass ①:Tornado——import 已知常量重解析(变量绑定元组首元的 build_path 族)
  * + Handler 方法级绑定(web.Application 元组与 Handler.get/post 的确定性绑定:
  * 同文件类定义或 import 已知时,ANY 端点升级为逐方法端点;解析不到=保留 ANY,091 边界不退化)。 */
 async function expandTornadoSurface(root: string, texts: Map<string, string>, endpoints: ApiEndpoint[]): Promise<void> {
@@ -1261,7 +1255,7 @@ async function expandTornadoSurface(root: string, texts: Map<string, string>, en
   }
 }
 
-/** step-100 仓级 pass ②:Flask blueprint 跨文件挂载——定义表(`NAME = Blueprint(…, url_prefix=…)`)
+/** 仓级 pass ②:Flask blueprint 跨文件挂载——定义表(`NAME = Blueprint(…, url_prefix=…)`)
  * × 注册表(`app.register_blueprint(ref, url_prefix=…)`,ref 经注册方 import 图解析;循环变量/
  * 工厂调用诚实跳过)× import 已知 recv 的 decorator 提取(redash `@routes.route(…)` 族:
  * recv 经本文件 import 图落到定义表才收,守卫强度不退化)。 */
@@ -1290,7 +1284,7 @@ async function expandFlaskBlueprints(root: string, texts: Map<string, string>, e
     const localVars = new Set([...bpDef.keys()].filter((k) => k.startsWith(f + "#")).map((k) => k.slice(f.length + 1)));
     for (const m of text.matchAll(/\.register_blueprint\s*\(\s*([A-Za-z_][\w.]*)([^)]*)\)/g)) {
       const ref = m[1]!;
-      // 循环变量/工厂返回值不可静态归属(redash `for blueprint in […]: register_blueprint(blueprint)` 实锤)
+ // 循环变量/工厂返回值不可静态归属(redash `for blueprint in […]: register_blueprint(blueprint)` 注意)
       if (new RegExp(`for\\s+${ref.split(".")[0]!}\\s+in\\b`).test(text)) continue;
       const kw = /url_prefix\s*=\s*["']([^"']*)["']/.exec(m[2]!);
       const mountPrefix = kw?.[1] ?? "";
@@ -1331,7 +1325,7 @@ async function expandFlaskBlueprints(root: string, texts: Map<string, string>, e
       let isLocal = false;
       if (localDefs.has(recv)) { defKey = localDefs.get(recv)!; isLocal = true; }
       else {
-        // import 解析 + re-export 链(redash `from redash.handlers import routes` 实锤)
+ // import 解析 + re-export 链(redash `from redash.handlers import routes` 注意)
         const rf = await resolveNameFile(root, im.get(recv) ?? [], recv, (_tx, c) => bpDef.has(`${c}#${recv}`), textOf);
         if (rf) defKey = `${rf}#${recv}`;
       }
@@ -1422,12 +1416,12 @@ export function extractEndpointsFromFile(file: string, text: string): ApiEndpoin
 }
 
 /** 仓级提取:候选文件(指纹预筛后的集合,调用方用 grep 预筛或全量小仓)逐文件行扫描。
- * step-085 RC-M:文档路径(.md/.adoc/.rst/…/docs 目录)不提取——specs/*.md 里的接口示例
+ * RC-M:文档路径(.md/.adoc/.rst/…/docs 目录)不提取——specs/*.md 里的接口示例
  * 此前直接成了「端点」。 */
 export async function extractApiSurface(root: string, files: string[]): Promise<ApiSurface> {
   const endpoints: ApiEndpoint[] = [];
   let scanned = 0;
-  // step-100:python 面文件文本留存(仓级 pass 用;register_blueprint 注册方可能无框架指纹,显式收编)
+ // python 面文件文本留存(仓级 pass 用;register_blueprint 注册方可能无框架指纹,显式收编)
   const pyTexts = new Map<string, string>();
   const PY_PASS_FW = new Set(["fastapi", "flask", "flask-restful", "starlette", "tornado"]);
   for (const f of files) {
@@ -1438,7 +1432,7 @@ export async function extractApiSurface(root: string, files: string[]): Promise<
     } catch { continue; }
     const fw = detectFrameworks(text);
     const hasBpReg = /register_blueprint\s*\(/.test(text);
-    // blueprint 使用方信号(redash admin.py 实锤:@routes.route 但零 flask import——指纹层不认识,
+ // blueprint 使用方信号(redash admin.py 注意:@routes.route 但零 flask import——指纹层不认识,
     // 仓级 pass 的 recv→import→定义解析是精度闸,这里只负责让文件进入仓级视野)
     const hasBpDeco = f.endsWith(".py") && /@\w+\.(route|get|post|put|delete|patch|head|options|websocket)\s*\(\s*["'A-Za-z_]/.test(text);
     if (fw.length === 0 && !nextjsRoutePath(f) && !hasBpReg && !hasBpDeco) continue;
@@ -1446,7 +1440,7 @@ export async function extractApiSurface(root: string, files: string[]): Promise<
     endpoints.push(...extractEndpointsFromFile(f, text));
     if (hasBpReg || hasBpDeco || fw.some((x) => PY_PASS_FW.has(x))) pyTexts.set(f, text);
   }
-  // step-100 仓级 pass(确定性解析;解析不到=原样保留,不猜)
+ // 仓级 pass(确定性解析;解析不到=原样保留,不猜)
   await expandTornadoSurface(root, pyTexts, endpoints);
   await expandFlaskBlueprints(root, pyTexts, endpoints);
   endpoints.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
@@ -1457,9 +1451,9 @@ export async function extractApiSurface(root: string, files: string[]): Promise<
 
 /** 指纹预筛用的字面量清单(search.grepIn 是字面量匹配——传正则源会被转义失效,
  * 这里必须给字面串;宁可多收候选文件,提取层按 detectFrameworks 精确判定)。
- * step-091 重排:框架特异字面量在前、泛型("net/http" 单 pattern 可命中数千文件)垫后——
+ * 重排:框架特异字面量在前、泛型("net/http" 单 pattern 可命中数千文件)垫后——
  * grepFilesIn 逐 pattern 累积、配额满即早退,泛型先跑会把特异 pattern 挤出候选
- * (grafana 1500 配额实证)。小仓(候选<max)集合恒等=零回退面。 */
+ * (grafana 1500 配额验证)。小仓(候选<max)集合恒等=零回退面。 */
 export const API_FINGERPRINT_LITERALS = [
   "fastapi",
   "from flask import",

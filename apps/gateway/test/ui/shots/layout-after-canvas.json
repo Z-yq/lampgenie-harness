@@ -4,10 +4,10 @@
  "beforeSource": "apps/gateway/test/ui/shots/before-baseline.json",
  "errors": [],
  "shots": [
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-17-all.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-17-fit.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-60-all.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-60-fit.png"
+  "apps/gateway/test/ui/shots/layout-after-17-all.png",
+  "apps/gateway/test/ui/shots/layout-after-17-fit.png",
+  "apps/gateway/test/ui/shots/layout-after-60-all.png",
+  "apps/gateway/test/ui/shots/layout-after-60-fit.png"
  ],
  "17nodes": {
   "board": "17nodes",

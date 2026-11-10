@@ -1,15 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * M145 上下文构成归因 CLI:读 journal,打印该会话最近 N 帧 context.breakdown 的分类占比。
- *
+ * 上下文构成归因 CLI:读 journal,打印该会话最近 N 帧 context.breakdown 的分类占比。
  * 用法:
  *   tsx scripts/context-breakdown.mts --session <sid> [--journal <dir>] [--json] [--last N]
- *
  *   --session <sid>   会话 id(必填;对应 <journal>/<sid>.jsonl 或 <journal>/sessions/<sid>.jsonl)
  *   --journal <dir>   journal 根目录(缺省 .genie/journals)
  *   --json            机器可读输出
  *   --last <N>        只打最后 N 帧(缺省 1)
- *
  * 退出码:0 = 已输出(含「该会话无 context.breakdown」);2 = 参数错误 / journal 无法解析。
  * 口径:chars 逐字(exact)、tokens 本地估算(local_estimate);provider usage 只做对照行,
  * 不覆盖本地估算值。

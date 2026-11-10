@@ -1,6 +1,5 @@
 /**
- * step-131 总路线并入代码档案:WS 读/生成面实测。
- *
+ * 总路线并入代码档案:WS 读/生成面经验证。
  * 断言链(全走真实链路,不 mock code-sense):
  *  ① 协议:profile.sense.get 合法(信封 v:1 强制)。
  *  ② manifest 缺席 → exists=false + 显式原因(不猜、不报错)。
@@ -75,7 +74,7 @@ function waitFor(inbox: Record<string, unknown>[], type: string, after = 0, ms =
   });
 }
 
-describe("profile.sense.get(总路线并入代码档案,step-131)", () => {
+describe("profile.sense.get(总路线并入代码档案)", () => {
   it("协议:合法消息过 / 缺信封拒", () => {
     expect(parseClientMessage('{"v":1,"type":"profile.sense.get"}')?.type).toBe("profile.sense.get");
     expect(parseClientMessage('{"v":1,"type":"profile.sense.get","projectId":"p1","generate":true}')?.type).toBe("profile.sense.get");

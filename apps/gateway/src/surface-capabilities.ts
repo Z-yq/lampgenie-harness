@@ -1,10 +1,8 @@
 /**
- * M167 表面/通道能力包(2026-11-08)。
- *
+ * 表面/通道能力包。
  * 问题(矩阵 #167 missing):不同「表面」(面板 / SMS / 手机 / 语音)的渲染与交互能力不同,
  * 但 agent 对所有表面输出同一形态:给 SMS 发 markdown 表格、宣称不能发文件、向无 UI 表面
  * 暴露面板工具、同一任务在弱表面语义静默变化。
- *
  * 口径(纯函数层,不碰 IO;可被测试与真实运行时共用):
  *   1. 客户端用 client.surface 声明能力位 {rendersMarkdown,maxChars,mediaKinds,hasUI};
  *   2. resolveSurfaceCaps:缺席 = LEGACY(当前面板行为,逐位兜底),有任一字段 = source client;
@@ -12,7 +10,6 @@
  *   3. outputContract:按能力位拼「输出契约」注入主 agent instruction;legacy 返回空串(零变化);
  *   4. filterToolsForSurface:hasUI=false 时剔除 GUI 专属工具(面板/白板/审批/浏览器);
  *   5. degradeForSurface:最终输出超 maxChars → 截断 + 显式降级标记(不静默);legacy 不降级。
- *
  * 红线:legacy(没有任何声明)必须与改动前行为逐字一致 —— 契约空串、工具原样、不降级。
  */
 
@@ -160,8 +157,7 @@ const GUI_ONLY_SET = new Set<string>(GUI_ONLY_TOOLS);
 /** hasUI=true 原样返回;false 剔除 GUI_ONLY_TOOLS 并把被剔除的工具名列出(留痕用)。 */
 export function filterToolsForSurface<T extends { name: string }>(
   tools: readonly T[],
-  caps: SurfaceCaps,
-): { tools: T[]; filtered: string[] } {
+  caps: SurfaceCaps): { tools: T[]; filtered: string[] } {
   if (caps.hasUI) return { tools: [...tools], filtered: [] };
   const filtered: string[] = [];
   const kept = tools.filter((t) => {
@@ -300,8 +296,7 @@ export function degradeFinalFor(
   sessionId: string,
   taskId: string,
   caps: SurfaceCaps,
-  text: string,
-): { text: string; degraded: boolean } {
+  text: string): { text: string; degraded: boolean } {
   const d = degradeForSurface(text, caps);
   if (d.degraded) {
     try {

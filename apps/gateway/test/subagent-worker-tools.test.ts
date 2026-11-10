@@ -1,5 +1,5 @@
 /**
- * worker 能力对齐(2026-10-19 用户口径:「worker 应该和 coding agent 差不多的编程/执行能力,
+ * worker 能力对齐( 「worker 应该和 coding agent 差不多的编程/执行能力,
  * 只是不能再派发子 agent」)。契约:worker 挂 terminal/web/browser/board_read/session_search;
  * 派发类工具(spawn_subagent/answer_subagent/task_output/steer_task/run_workflow)与 ask_user
  * 结构性不给(不靠提示词约束,靠工具面缺失)。

@@ -1,4 +1,4 @@
-/** step-073 白板语义深化 UI 实测(真实 chromium + 自含 gateway,journalDir 固定):
+/** 白板语义深化 UI 经验证(真实 chromium + 自含 gateway,journalDir 固定):
  * S1 modulemap→板(真实索引,跨模块调用聚合 ×N 边)/ S2 增量渲染不闪烁(done 翻牌→DOM 元素引用不变)/
  * S3 虚拟边(画布加边→落盘 virtual:true+虚线类)/ S4 rev 冲突条(草稿保留+拉取最新)/ S5 archmap 无 LLM 显式降级/
  * S6 sequence 时序板(真实 debug 链)/ S7 pageflow 空产物显式降级
@@ -54,7 +54,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   check("S1.3 模块节点带 fileRef(入口文件)", !!(mmDoc && mmDoc.nodes.every((n) => n.fileRef)), "");
   const mmNodes = mmDoc ? mmDoc.nodes.length : 0;
 
-  // ---------- S7:pageflow(harness 面板页可被 HTML 入口解析出页面,实测 27 页;提前跑防重活堆积) ----------
+ // ---------- S7:pageflow(harness 面板页可被 HTML 入口解析出页面,经验证 27 页;提前跑防重活堆积) ----------
   // code-sense 重负载链在共享机上首轮冷建图可能超窗——超时重试一次(缓存热后快)
   const wsCallRetry = async (msg, rt, ms) => { let r = await wsCall(msg, rt, ms); if (r && r.timeout) r = await wsCall(msg, rt, ms); return r; };
   const pf = await wsCallRetry({ v: 1, type: "board.fromsense", sessionId: sid, source: "pageflow" }, "board.doc", 120000);
@@ -88,12 +88,12 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   const incr = await evalJ(() => {
     const cur = {}; for (const el of document.querySelectorAll(".cv-node")) cur[el.dataset.cv] = el;
     const same = Object.keys(window.__els).every((k) => window.__els[k] === cur[k] && window.__els[k].isConnected);
-    const doneMark = cur["a1"] && !!cur["a1"].querySelector(".cv-done .icn"); // step-111 修:✓ 字符已被 step-097 图标体系统一为 svg(done 勾断言随之现代化)
+    const doneMark = cur["a1"] && !!cur["a1"].querySelector(".cv-done .icn"); // 修:✓ 字符已被 图标体系统一为 svg(done 勾断言随之现代化)
     const sum = cur["a2"] && cur["a2"].querySelector(".cv-sum").textContent.indexOf("已修订") >= 0;
     const meta = document.querySelector("#boardGraph .bd-meta");
     return { same, doneMark, sum, meta: meta ? meta.textContent.slice(0, 60) : "" };
   });
-  check("S2.2 增量补丁:节点 DOM 元素引用零更换(不闪烁实锤)", incr.same, "");
+  check("S2.2 增量补丁:节点 DOM 元素引用零更换(不闪烁实测确认)", incr.same, "");
   check("S2.3 done 勾+摘要修订原位生效", incr.doneMark && incr.sum, JSON.stringify({ d: incr.doneMark, s: incr.sum }));
   check("S2.4 meta 行 rev 跟进", incr.meta.indexOf("rev 2") >= 0, incr.meta);
   await shot("s2-incremental-patch");
@@ -104,8 +104,8 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   check("S3.1 画布加边落盘 virtual=true", !!vSaved, vSaved ? "edges=" + vSaved.edges.length : "");
   const vCls = await evalJ(() => !!document.querySelector("#boardGraph path.bfe-virtual"));
   check("S3.2 虚拟边虚线类渲染", vCls);
-  // 静默落盘回执收口(drvfs/负载下回执可晚于磁盘可见):等 boardDoc.rev 追平盘上 rev 再进编辑态,
-  // 防迟到回执在打字后重渲表单把在填文本冲掉(实测竞态实锤)。
+ // 静默落盘回执(drvfs/负载下回执可晚于磁盘可见):等 boardDoc.rev 追平盘上 rev 再进编辑态,
+ // 防迟到回执在打字后重渲表单把在填文本冲掉(经验证竞态注意)。
   const tIncrRev = () => JSON.parse(fs.readFileSync(path.join(HARNESS_ROOT, ".genie/boards", sid, "t-incr.json"), "utf-8")).rev;
   await poll(() => { const r = tIncrRev(); return evalJ((rr) => boardDoc && boardDoc.rev === rr, r); });
   await shot("s3-virtual-edge");
@@ -114,7 +114,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   await page.click("#boardEditBtn");
   await poll(() => evalJ(() => boardEditOn && !!document.getElementById("bdeTitle")));
   await evalJ(() => { document.getElementById("bdeTitle").value = "我的并发草稿标题"; });
-  // 抓重渲肇事者:表单容器子树 MutationObserver(实测打字后被重渲冲掉——找出谁干的)
+ // 抓重渲肇事者:表单容器子树 MutationObserver(经验证打字后被重渲冲掉——找出谁干的)
   await evalJ(() => {
     window.__mutLog = [];
     const box = document.getElementById("boardDetail");

@@ -1,4 +1,4 @@
-/** UI 实测:F6 workflow ask 面板直答——server 端 router.ask(与 run_workflow dispatch 同一通路)→面板问题卡→作答回传。 */
+/** UI 经验证:F6 workflow ask 面板直答——server 端 router.ask(与 run_workflow dispatch 同一通路)→面板问题卡→作答回传。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

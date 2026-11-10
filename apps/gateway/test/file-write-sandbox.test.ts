@@ -1,9 +1,8 @@
 /**
- * step-141 IDE 保存链沙箱负面断言:file.write 必须「合法相对路径可写、一切越界形态拒绝且
+ * IDE 保存链沙箱负面断言:file.write 必须「合法相对路径可写、一切越界形态拒绝且
  * 真实文件未创建」。沙箱=realpath 前缀比对(与 file.read 同强度,symlink 先解析防逃逸)+
  * .git/ 路径段拒 + 512KB 上限;允许新建文件,父目录不存在报错(协议口径:不隐式建目录,
  * 故合法写用例需预建父目录)。
- *
  * 测试基建纪律(与 file-read-full.test.ts 同款):
  * - 端口:http listen(0) 真实绑定取空闲口(不硬编码,合跑/并行零 EADDRINUSE);
  * - waitType 消费式(命中即从 inbox 移除),同 type 多次请求各取各的响应;

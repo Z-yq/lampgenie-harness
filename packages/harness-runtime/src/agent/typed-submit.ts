@@ -2,7 +2,6 @@
  * typed ask 的提交修复协议(RSI #31):schema 校验失败不整轮重派,而是同 turn 把
  * violation(path/expected/got)作为 tool error 回给子代理,最多 3 次 repair + 1 次 nudge,
  * 只有通过 schema 的 submit 才能 settle。
- *
  * 全纯函数,不触 IO;落盘与投影在 apps/gateway/src/typed-submit-store.ts。
  */
 
@@ -225,8 +224,7 @@ export function validateAgainstSchema(
 export function submitResult(
   state: TypedAskState,
   payload: unknown,
-  schema: JsonSchema,
-): SubmitOutcome {
+  schema: JsonSchema): SubmitOutcome {
   if (state.status !== "open") {
     return { state: { ...state }, ok: false, codes: [TYPED_ALREADY_SETTLED] };
   }

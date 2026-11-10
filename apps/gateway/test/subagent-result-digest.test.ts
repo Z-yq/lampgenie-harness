@@ -1,6 +1,5 @@
 /**
- * 子代理终态「可投递正文」纯函数回归(2026-10-30,task_output 免独立往返)。
- *
+ * 子代理终态「可投递正文」纯函数回归(task_output 免独立往返)。
  * 背景:旧实现终态只发「300 字摘要 + 指针(task_output agentId=…)」,主模型必然再发一轮
  * task_output 取正文——每次子代理完成额外吃一次完整 LLM 往返。本测试锁四点:
  *  ① extractDeliverableText 的提取口径(剥 [progress]、取最后一个 [result] 之后、超限截断、空输入);

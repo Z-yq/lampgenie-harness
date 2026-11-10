@@ -153,16 +153,14 @@ describe("permission 求值", () => {
     const r = evaluatePermission(
       "fs.read", "/tmp/a.txt",
       [[{ permission: "fs.read", pattern: "/tmp/*", action: "allow" }]],
-      wildcardMatch,
-    );
+      wildcardMatch);
     expect(r.action).toBe("allow");
   });
   it("deny 优先于不命中", () => {
     const r = evaluatePermission(
       "shell.exec", "rm -rf /",
       [[{ permission: "shell.exec", pattern: "*", action: "deny" }]],
-      wildcardMatch,
-    );
+      wildcardMatch);
     expect(r.action).toBe("deny");
   });
 });
@@ -205,7 +203,7 @@ describe("journal 崩溃恢复(R1 审计 C15)", () => {
   });
 });
 
-describe("step-046", () => {
+describe("", () => {
   it("transition 进入 running 刷新 startedAt(「已工作」计时数据源)", () => {
     const base: Task = {
       id: "t1", sessionId: "s", instruction: "i", state: "queued", createdAt: 1, updatedAt: 1,

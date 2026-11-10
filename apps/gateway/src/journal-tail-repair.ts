@@ -1,15 +1,12 @@
 /**
- * 崩溃尾部修复(机制 M25,机制矩阵 #25):
- *
+ * 崩溃尾部修复(机制 ,机制矩阵 #25):
  * 网关在工具执行期间死掉时,journal 里会留下「有 tool.call 无 tool.result」「有 step.start 无
  * step.end / 有 turn.start 无 turn.end」的未闭合尾部。resume 后模型看到历史残缺,可能盲目重试
  * 有副作用的工具(文件已写/命令已执行却以为没做)。
- *
  * 解药:resume **之前**用纯函数扫描尾部,补齐合成终态(append-only,不改历史):
  *  - 未闭合 tool.call → tool.result(TOOL_OUTCOME_UNKNOWN,明确「只读/幂等才可重试」);
  *  - 未闭合 step → step.end(reason=tail-repair);
  *  - 未闭合 turn → turn.end(reason=tail-repair)。
- *
  * 纪律:
  *  - 只动**最后一个未闭合 turn**;其后已有 turn.end 的(已闭合历史)完全不动。
  *  - 事件时间复用该会话最后一条事件的 time(不写真实当前时间,避免「修复发生在崩溃之后」的假时序)。
@@ -74,7 +71,6 @@ interface OpenStep {
 
 /**
  * 纯函数:给出需要补的合成终态。无未闭合尾部 → 空计划(events=[] 且计数全 0)。
- *
  * 只认**最后一个 turn.start** 之后的尾部;其它会话的事件不混入。
  */
 export function planTailRepair(input: JournalEvent[]): TailRepairPlan {

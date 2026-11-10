@@ -1,5 +1,5 @@
 /**
- * tree-sitter 后端专项(step-021 二期收口):懒加载/补盲(多行签名)/声明+调用点/降级。
+ * tree-sitter 后端专项(二期):懒加载/补盲(多行签名)/声明+调用点/降级。
  */
 import { describe, it, expect } from "vitest";
 import { parseWithTreeSitter } from "../src/adapters/tree-sitter";

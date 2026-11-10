@@ -1,10 +1,8 @@
 /**
- * 网关 pid 文件(2026-10-25 7700 稳定性批)。
- *
+ * 网关 pid 文件( 7700 稳定性批)。
  * 语义:`.genie/gateway.pid` 只表示「当前**正在服务**的网关进程」——由网关在 listen/装配完成
  * 后自行写入(此前写点在外部的重启脚本里,重启不经过脚本就永远是旧 pid,外部门禁/排障会误杀)。
  * 退出时仅当内容仍是自己的 pid 才删除(避免把继任者的 pid 文件误删)。
- *
  * 写盘用 tmp+rename:读方(面板/守护/安全重启器)永远不会读到半截数字。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";

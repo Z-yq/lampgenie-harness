@@ -1,14 +1,12 @@
 /**
  * 结算落盘层(tool-settlement 的持久面):把「哪几个任务被 fork 出去、谁被 await、谁被 drain
  * 掉、race 谁赢、超时砍了谁」写成可复核的事件流 `<root>/.genie/rsi/settlement.jsonl`。
- *
  * 文件形状:JSONL,一行一个事件(v=1):
  *   { v: 1, at: <number>, kind, taskId?, payload }
  * - **只 append,不改写**:结算动作本质是时序事实,重排/覆盖会把「谁先被观察」这条因果抹掉;
  * - **坏行不整文件失效**:逐行 JSON.parse,坏行只记 1-based 行号并跳过——一条脏行不该让整段
  *   结算历史变成不可读(与 tool-pins-store 的 countLines/append 口径同源);
  * - **写后行数校验**:append 后重数非空行,必须 before+1,否则返回 false(不 throw、不回滚)。
- *
  * 依赖纪律:node:fs / node:path + runtime 结算原语(两跳惰性解析:先包 spec,vitest 的
  * `--conditions=development` 走 src 入口;`node --experimental-strip-types` 跑 CLI 时 spec 解析不到
  * dist,回退仓内相对 src URL——同 fixture-store.ts:107 的口径)。类型面用 `import type`,被
@@ -92,8 +90,7 @@ interface SettlementRuntime {
   abortHandle(h: SettleHandle, code?: string): void;
   withTimeout(
     handles: SettleHandle[],
-    ms: number,
-  ): Promise<
+    ms: number): Promise<
     | { status: "completed"; log: SettlementLog }
     | { status: "timeout"; code: "SETTLE_TIMEOUT_ABORTED"; aborted: string[] }
   >;

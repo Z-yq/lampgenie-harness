@@ -1,4 +1,4 @@
-// Git 面板同步操作面静态断言(2026-10-27):推送/拉取按钮+勾选文件提交+git.ok 回显。
+// Git 面板同步操作面静态断言:推送/拉取按钮+勾选文件提交+git.ok 回显。
 // panel.ts 是 26k 行内联脚本大文件,按既有 panel-script-syntax 模式做源码级契约锚。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";

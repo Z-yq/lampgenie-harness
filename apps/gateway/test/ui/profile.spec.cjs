@@ -1,4 +1,4 @@
-/** step-049 UI 实测:项目档案管线(添加项目→异步进度→架构图→模块搜索详情→演进→独立窗口)。
+/** UI 经验证:项目档案管线(添加项目→异步进度→架构图→模块搜索详情→演进→独立窗口)。
  * 用临时小项目走真实链路:project.add → profile.get → 进度广播 → done 渲染。 */
 const { chromium } = require("playwright-core");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
@@ -47,7 +47,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   await page.waitForTimeout(600);
   check("档案视图打开", await page.locator("#view-project").isVisible());
 
-  // 3. 等管线完成(进度条到 100/状态=完成;小项目秒级——step-101 窗口 15s→45s:
+ // 3. 等管线完成(进度条到 100/状态=完成;小项目秒级—— 窗口 15s→45s:
   // 冷索引首建在 WSL 冷缓存+同机并发负载下可超 15s(编排者登记「冷索引超时」),加长窗不减
   // 测试意图(断言仍是「管线必完成」),只消环境噪音;健康时仍秒级通过)
   let done = false;
@@ -122,7 +122,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("规划三项齐(增/删/依赖)", plan2.includes("payments") && plan2.includes("alpha") && plan2.includes("front"), plan2.slice(0, 70));
   const gsvg = await page.locator("#ppGraph").innerHTML();
   check("图合并规划态(规划节点/删除样式/虚线边)", gsvg.includes("payments") && (gsvg.includes("pnew") || gsvg.includes("node")), gsvg.length + "B");
-  // 生成任务书并执行(step-101:088 起确认已是 uiConfirm 主题模态,page.once("dialog") 永远接不到
+ // 生成任务书并执行(088 起确认已是 uiConfirm 主题模态,page.once("dialog") 永远接不到
   // →模态残留拦截后续全部点击,本 spec 确定性红的真因;改接 .uid-mask 内 .uid-ok)
   await page.click("#planApply");
   await page.locator(".uid-mask .uid-ok").click();
@@ -153,7 +153,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   }
   check("手动重建→完成", done2);
 
-  // 清理:移除测试项目(净状态)。step-101 两处现代化:①项目行已无 .p-del 按钮——删除迁入
+ // 清理:移除测试项目(净状态)。 两处现代化:①项目行已无 .p-del 按钮——删除迁入
   // 「…」更多菜单(openProjectMenu→移除项目,panel.ts renderProjects 在案);②确认同为 088
   // uiConfirm 主题模态,接 .uid-mask 内 .uid-ok(原生 dialog 永远等不到)。
   await row.hover();

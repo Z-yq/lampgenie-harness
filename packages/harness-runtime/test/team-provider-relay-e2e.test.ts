@@ -1,5 +1,5 @@
 /**
- * 平台绑定 team 的 e2e(designs/06 R1):providers.yaml 按 team={provider, groupPath} 声明,
+ * 平台绑定 team 的 e2e( R1):providers.yaml 按 team={provider, groupPath} 声明,
  * relay 经 provider-factory 构造 provider——用 `platform: "force"` 声明平台但走裸 git 命令
  * (不碰平台 API;真实 gitlab/codeup API 路径待平台令牌实机联调)。
  * 链:providers.yaml(force)→ providerFromBinding=CustomGitProvider → bootstrap 空仓 →

@@ -1,5 +1,5 @@
 /**
- * 内置技能禁用面(step-047,ZCode 技能开关对齐):
+ * 内置技能禁用面(ZCode 技能开关对齐):
  * .genie/skills-disabled.json 存被停用的内置技能名;mergeSkillIndexWith 过滤后进系统提示。
  * 用户/项目技能走 ExperienceStore.status(disabled),两条通道互不干扰。
  */

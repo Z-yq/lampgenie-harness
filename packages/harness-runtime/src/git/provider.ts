@@ -1,5 +1,5 @@
 /**
- * GitProvider 抽象(designs/06 R7):统一 clone/MR/webhook 操作面。
+ * GitProvider 抽象( R7):统一 clone/MR/webhook 操作面。
  * 实现:Codeup / GitLab / GitHub / 自定义降级。
  */
 import { execFile } from "node:child_process";

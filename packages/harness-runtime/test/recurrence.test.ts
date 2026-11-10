@@ -41,7 +41,7 @@ describe("recurrence 基础语义", () => {
 });
 
 describe("recurrence DST 边界(纽约时区)", () => {
-  // 2026 年美国夏令时:3 月第二个周日(2026-03-08)02:30 本不存在(跳变);11 月第一个周日(2026-11-01)01:30 出现两次(重复)。
+ // 2026 年美国夏令时:3 月第二个周日02:30 本不存在(跳变);11 月第一个周日01:30 出现两次(重复)。
   it("跳变时刻(03-08 02:30 local):past 追赶后应落到合法时刻且严格前进", () => {
     // 目标壁钟 02:30 -05:00(EST);3/8 起 EDT。选 now 在 3/8 之后。
     const now = Date.UTC(2026, 2, 9, 12, 0, 0);
@@ -63,7 +63,7 @@ describe("recurrence DST 边界(纽约时区)", () => {
 
 describe("recurrence weekdays 语义", () => {
   it("周末被跳过:周五的 daily 改 weekdays 追赶后落到周一", () => {
-    // 2026-01-16 是周五(UTC)。now=周六 12:00,目标壁钟 09:00(已过)。
+ // 是周五(UTC)。now=周六 12:00,目标壁钟 09:00(已过)。
     const now = Date.UTC(2026, 0, 17, 12, 0, 0); // 周六
     const start = Date.UTC(2026, 0, 16, 9, 0, 0); // 周五 09:00
     const next = nextRunAt(start, "weekdays", { now });

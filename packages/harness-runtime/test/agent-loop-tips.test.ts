@@ -1,5 +1,5 @@
 /**
- * tips 即时信息增强(2026-10-21 用户口径「做哪类事之前注入对应提示,不一股脑开工全塞」):
+ * tips 即时信息增强:
  * 契约:每 step 组装消息时调用 opts.tips,ctx 带上一步实际执行的工具名(含被闸拒绝的调用);
  * 返回非空=ephemeral user 消息注入(不落 journal);step 0 恒无上一步工具;tips 异常不打断主链。
  */
@@ -40,7 +40,7 @@ describe("AgentLoop tips 注入点", () => {
     expect(ctxs[1]?.lastStepTools).toEqual(["echo"]);
     expect(seen[1]).toContain("TIP-ECHO");
     expect(seen[0]).not.toContain("TIP-ECHO");
-    // 上下文零影响(2026-10-22 可见化改造后的契约):tip 文本不再出现在 journal 的对话事件里,
+ // 上下文零影响(可见化改造后的契约):tip 文本不再出现在 journal 的对话事件里,
     // 只旁路落一条 tip.injected 留痕(面板展示用);deriveMessages 白名单不读它 → 下一轮请求不吃回自己。
     const { deriveMessages } = await import("../src/agent/loop");
     expect(JSON.stringify(deriveMessages(journal, "tip-test"))).not.toContain("TIP-ECHO");
@@ -102,7 +102,7 @@ describe("AgentLoop tips 注入点", () => {
   }, 20_000);
 
   it("ctx.compacts=本会话 compact.done 计数(真压缩边界);他会话的压缩不计", async () => {
-    // compact 后 tip 失忆自愈(2026-10-21):loop 每 step 从 journal 数 compact.done 交给装配方,
+ // compact 后 tip 失忆自愈:loop 每 step 从 journal 数 compact.done 交给装配方,
     // 装配方据此清「已注入」状态重注入一次。本用例锚 loop 层契约:计数只算本会话。
     const journal = new MemoryJournal();
     journal.append({ kind: "compact.done", sessionId: "tip-compact", payload: { summary: "第一次压缩" } });

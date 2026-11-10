@@ -1,6 +1,6 @@
 /**
- * code_sense 唯一入口(designs/16 §2 定稿接口)。
- * 一期(step-017):debug 全量/explore grep 版/plan+ui 显式降级/五态/沙箱/预算。
+ * code_sense 唯一入口( §2 定稿接口)。
+ * 一期:debug 全量/explore grep 版/plan+ui 显式降级/五态/沙箱/预算。
  */
 import { sandboxResolve, SandboxError } from "./search";
 import { recallSymbols, type SymbolCandidate } from "./retrieval/symbol-recall";
@@ -16,7 +16,7 @@ import { decideMode, type AutoDecision, type Mode } from "./profile";
 export type EvidenceKind = "ast" | "index" | "readme" | "grep" | "suggested" | "inferred";
 export type Tier = "semantic" | "structural" | "lexical";
 export { renderForLlm } from "./llm";
-// 符号优先召回(2026-10-21):explore 的查询→候选符号面;分词/词典在 ./search/cjk.ts(纯函数)
+// 符号优先召回:explore 的查询→候选符号面;分词/词典在 ./search/cjk.ts(纯函数)
 export type { SymbolCandidate, SymbolRef, SymbolDoc, SymbolScore } from "./retrieval/symbol-recall";
 export type { QueryTerm, QueryTerms } from "./retrieval/cjk";
 export { recallSymbols, scoreSymbols, loadIndexCached, clearSymbolRecallCache } from "./retrieval/symbol-recall";
@@ -38,9 +38,9 @@ export {
   classify, applyJsxComponentUsage,
   type C2fIndex, type C2fNode, type C2fEdge, type NodeKind, type SymbolQueryResult,
 } from "./callgraph/c2f";
-// 模块视图(2026-10-22 P1):模块清单+跨模块交互矩阵+枢纽/测试面/mermaid——架构级答案面
+// 模块视图( P1):模块清单+跨模块交互矩阵+枢纽/测试面/mermaid——架构级答案面
 export { buildModuleView, renderModuleView, mermaidModuleGraph, moduleGroupOf, type ModuleView, type ModuleInfo, type ModuleEdge, type HubInfo, type TestLink } from "./callgraph/modview";
-/** 路径口径(2026-10-20 六面同源单一真相):测试/非产品路径/证据优先级。
+/** 路径口径(六面同源单一真相):测试/非产品路径/证据优先级。
  * 从本包根出口统一转出,消费方不必知道它住在 path-filter.ts 还是 callgraph/c2f.ts。 */
 export { isTestPath, isNonProductPath, isNonProductEvidencePath, isBuildArtifactPath, isDocLikePath, evidenceRank, filterNonProductPaths, nonProductFilterNote } from "./path-filter";
 export {
@@ -67,14 +67,14 @@ export interface CodeSenseResult {
   mode: "debug" | "plan" | "explore" | "ui" | "api" | "state" | "algo";
   autoDecision?: AutoDecision;
   projectState: ProjectState;
-  /** explore 自举二轮的溯源说明(2026-10-18:低命中时用命中行标识符扩展再聚合,词列在说明里)。 */
+ /** explore 自举二轮的溯源说明(低命中时用命中行标识符扩展再聚合,词列在说明里)。 */
   note?: string;
 
   callchain?: {
     center: { name: string; id: string; file: string; line: number };
     upstream: FlowEdge[];
     downstream: FlowEdge[];
-    /** 面向人的关系图(mermaid)——LLM 消费上面的结构化边,图给面板(designs/16 §9 分工)。 */
+ /** 面向人的关系图(mermaid)——LLM 消费上面的结构化边,图给面板( §9 分工)。 */
     mermaid?: string;
     /** nd-id→符号名(面板点节点下钻用)。 */
     mermaidNodes?: { id: string; name: string }[];
@@ -82,7 +82,7 @@ export interface CodeSenseResult {
   };
   signatures?: Record<string, Signature>;
   matches?: { file: string; line: number; text: string }[];
-  /** explore 符号优先召回(2026-10-21):查询 → 候选符号(索引打分+1 跳邻居扩展)。
+ /** explore 符号优先召回:查询 → 候选符号(索引打分+1 跳邻居扩展)。
    * 加性字段(旧消费方忽略即可);缺省/空=索引未就绪或零命中(已如实降级到 grep)。 */
   symbols?: SymbolCandidate[];
 
@@ -92,7 +92,7 @@ export interface CodeSenseResult {
    * React/Vue/HTML 三形态由 pageflow 承载,两者互补)。 */
   routes?: import("./pageflow/approutes").AppRoutesResult;
 
-  // —— 业务感知剖面(step-077,designs/24)——
+ // —— 业务感知剖面——
   /** api 剖面:HTTP 接口表面(确定性)+OpenAPI 对账+影响面+LLM 语义(opt-in 分层)。 */
   api?: import("./sensing/index").ApiSurfaceResult;
   /** state 剖面:状态机表面(五形态确定性提取,mermaid 可上白板)。 */
@@ -105,7 +105,7 @@ export interface CodeSenseResult {
   modules?: import("./modulemap/index").ModuleGuide[];
   hotspots?: string[];
 
-  // —— debug 剖面:时序(R5-C20 接入:step-020 的孤儿能力接进返回) ——
+ // —— debug 剖面:时序(接入: 的孤儿能力接进返回) ——
   sequence?: import("./sequence/index").StaticSequence;
 
   // —— debug 剖面:IDE 三件套(任务开工全局意识的直接证据源) ——
@@ -126,7 +126,7 @@ export interface CodeSenseOptions {
   mode?: Mode;
   depth?: number;
   refresh?: boolean;
-  /** plan 剖面跳过 archLlm(gitdiagram 全量生成)——step-052:30KB 提示下全量实测 ~55s,
+ /** plan 剖面跳过 archLlm(gitdiagram 全量生成)——30KB 提示下全量经验证 ~55s,
    * 任务开工注入只取静态模块图(毫秒级);LLM 版由调用方走暖缓存/后台生成。 */
   skipArchLlm?: boolean;
 }
@@ -138,7 +138,7 @@ export interface PlanDeps {
 let planDeps: PlanDeps = {};
 export function setPlanDeps(d: PlanDeps): void { planDeps = d; }
 
-/** 结果预算上限(designs/16 §9)。 */
+/** 结果预算上限( §9)。 */
 const RESULT_BUDGET_BYTES = 16 * 1024;
 const GRAPH_TTL_MS = 60_000;
 
@@ -254,7 +254,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
       // 其它解析失败(如纯文件名不存在)回落 grep,不误伤
     }
   }
-  // 多形态变体:全词(obj.method)/末段(method)/首段(obj)——单段截断会漏方法链定位(R4-C9)。
+ // 多形态变体:全词(obj.method)/末段(method)/首段(obj)——单段截断会漏方法链定位。
   // 过滤 <3 字符段:文件扩展名("ts")类垃圾变体会吃满 grep 配额,把真命中挤出 focus。
   const qBase = query.split(":")[0]!.trim();
   const qParts = qBase.split(/[.\s]+/).filter((p) => p.length >= 3);
@@ -288,7 +288,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
   const fileScore = new Map<string, number>();
   const hitFiles: string[] = [];
   // 非源码文件(md/文档)不进 focus 也不算证据:C27 的本意是「文档里提及的符号」快速降级——
-  // md 命中若算证据,ghostMentionFn 类查询会带 2 次退避+3 次重建(~10s)才降级(实锤复测)
+ // md 命中若算证据,ghostMentionFn 类查询会带 2 次退避+3 次重建(~10s)才降级(注意复测)
   const isSrcHit = (f: string): boolean => GRAPH_SOURCE_EXT.has(f.slice(f.lastIndexOf(".")));
   for (const h of rawHits) {
     if (!isSrcHit(h.file)) continue;
@@ -302,7 +302,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
     .map((x) => x.f)
     .slice(0, 25);
   const hits = ordered.map((file) => ({ file }));
-  // focus 总量封顶:常用词变体会把命中目录的邻居全展开(harness 仓 "append" 实测炸到 100+ 文件,
+ // focus 总量封顶:常用词变体会把命中目录的邻居全展开(harness 仓 "append" 经验证炸到 100+ 文件,
   // ts-morph 解析超时)——显式/命中文件必保,邻居按序补足
   const FOCUS_MAX = 40;
   const focus = new Set<string>([...explicitFiles, ...ordered].slice(0, FOCUS_MAX));
@@ -323,7 +323,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
   let { graph, hit, builtAt } = await getLazyGraph(cacheKey, refresh, buildGraph);
   // query 形态:file.ts:123 → 该行所属符号;符号名 → 匹配(唯一或最长包含);
   // obj.method → 容器.方法(方法符号 name=method、container=obj——整串从来匹配不上 name,
-  // R4-C9 此前靠 degraded 分支假绿);方法在基类定义时(MemoryJournal.append→BaseJournal.append)
+ // 此前靠 degraded 分支假绿);方法在基类定义时(MemoryJournal.append→BaseJournal.append)
   // 按文件名↔类名互含回退到基类符号(继承语义)
   const resolve = (g: CallGraph): { center?: import("./callgraph/engine").Symbol; upstream: FlowEdge[]; downstream: FlowEdge[] } => {
     const preds: ((s: { id: string; name: string; file: string; line: number; container?: string }) => boolean)[] = [];
@@ -356,7 +356,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
   };
   let sub = resolve(graph);
   // ts-morph 高负载下偶发整图空解析(套件四见的同源抖动):「整图为空 + grep 证明符号文本在仓内」
-  // 才值得重试(递增退避 ×2)。图非空的「未找到」不重试——审计 R1-C27:文档/注释里提及的符号
+ // 才值得重试(递增退避 ×2)。图非空的「未找到」不重试——审计 :文档/注释里提及的符号
   // (存在于仓内但解析不出符号)会带 3 次无关重建+2.8s 退避,白等 15s 才降级
   const symbolGrepped = hits.length > 0 || explicitFiles.size > 0;
   if (!sub.center && graph.symbols.size === 0 && symbolGrepped) {
@@ -415,7 +415,7 @@ async function debugProfile(root: string, query: string, scan: import("./project
       } catch { /* 类型定位失败:该类型不标位置 */ }
     }
   }
-  // 时序(R5-C20):聚焦符号的静态执行序+异步边界;失败静默省略,不冒充、不阻塞主链。
+ // 时序:聚焦符号的静态执行序+异步边界;失败静默省略,不冒充、不阻塞主链。
   let sequence: import("./sequence/index").StaticSequence | undefined;
   try {
     const seq = await (await import("./sequence/index")).sequenceOfSymbol(root, [...focus], sub.center.name);
@@ -520,7 +520,7 @@ async function uiProfile(root: string, scan: import("./project").ProjectScan, ba
   };
 }
 
-/** api 剖面(step-077,designs/24 §5.1):HTTP 接口表面。
+/** api 剖面(§5.1):HTTP 接口表面。
  * 语义层在注入 senseLlm 时自动启用(注入=调用方明确要语义);query 含路径片段(/api/x)时过滤到匹配端点。 */
 async function apiProfile(root: string, query: string, base: CodeSenseResult): Promise<CodeSenseResult> {
   const { queryApiSurface, getSensingDeps } = await import("./sensing/index");
@@ -562,7 +562,7 @@ async function apiProfile(root: string, query: string, base: CodeSenseResult): P
   };
 }
 
-/** state 剖面(step-077 P2,designs/24 §2.2):状态机表面(五形态;零检出=显式降级)。 */
+/** state 剖面( P2, §2.2):状态机表面(五形态;零检出=显式降级)。 */
 async function stateProfile(root: string, base: CodeSenseResult): Promise<CodeSenseResult> {
   const { queryStateMachines } = await import("./sensing/index");
   const surface = await queryStateMachines(root);
@@ -571,7 +571,7 @@ async function stateProfile(root: string, base: CodeSenseResult): Promise<CodeSe
     degraded.push({
       layer: "sensing-state",
       reason: "未检出受支持的状态机形态(transitions-table/switch 转移/状态模式类族/XState/Redux slice)",
-      howToActivate: "确认仓内有具名状态管理代码;DB status 字段流转按设计不做(见 designs/24 §2.2)",
+      howToActivate: "确认仓内有具名状态管理代码;DB status 字段流转按设计不做(见  §2.2)",
     });
   }
   return {
@@ -584,7 +584,7 @@ async function stateProfile(root: string, base: CodeSenseResult): Promise<CodeSe
   };
 }
 
-/** algo 剖面(step-077 P3,designs/24 §2.3):算法画像。query 含文件路径片段时聚焦导读。 */
+/** algo 剖面( P3, §2.3):算法画像。query 含文件路径片段时聚焦导读。 */
 async function algoProfile(root: string, query: string, base: CodeSenseResult): Promise<CodeSenseResult> {
   const { queryAlgoProfiles, getSensingDeps } = await import("./sensing/index");
   const withSemantics = Boolean(getSensingDeps().senseLlm);
@@ -595,7 +595,7 @@ async function algoProfile(root: string, query: string, base: CodeSenseResult): 
     degraded.push({
       layer: "sensing-algo",
       reason: "未检出算法框架信号(nn.Module/训练循环/推理入口/DataLoader/cv2/librosa 等)",
-      howToActivate: "确认仓内有 CV/语音/深度学习代码;信号清单见 designs/24 §2.3",
+      howToActivate: "确认仓内有 CV/语音/深度学习代码;信号清单见  §2.3",
     });
   }
   if (!withSemantics) {
@@ -616,11 +616,11 @@ function findOriginalId(graph: CallGraph, center: { name: string; file: string }
 
 async function exploreProfile(root: string, query: string, base: CodeSenseResult): Promise<CodeSenseResult> {
   const { grepIn, normalizeQuery, extractIdentifiers } = await import("./search");
-  // ① 符号优先召回(2026-10-21):中文问句先切词+中英词典映射,读静态索引打分出候选符号。
+ // ① 符号优先召回:中文问句先切词+中英词典映射,读静态索引打分出候选符号。
   // 这是「入口词」修复——symbol 一查就准,explore 此前只走 grep,中文问句没有 camelCase 字面量
   // 必然召回不到 makeSubagentPermissionAsker 这类符号。索引缺失=诚实降级(不建索引、不编造)。
   const recall = recallSymbols(root, query);
-  // 2026-10-22 P0:第三方/内嵌源码候选不进 explore 默认面(旧行为只降 0.3 倍,
+ // P0:第三方/内嵌源码候选不进 explore 默认面(旧行为只降 0.3 倍,
   // saadk_6920 的 OpenCV thirdparty 头仍占满候选)。docs/examples 保留(已有降权)。
   const symbols = recall.symbols.filter((s) => !isVendoredPath(s.file));
   const vendorFiltered = recall.symbols.length - symbols.length;
@@ -628,7 +628,7 @@ async function exploreProfile(root: string, query: string, base: CodeSenseResult
   const variants = normalizeQuery(query);
   let matches = await grepIn(root, variants, { max: 100 });
   let bootstrapped: string[] = [];
-  // 低命中自举二轮(2026-10-18):首轮命中 <3 且命中行里有英文标识符时,提取标识符再聚合一轮
+ // 低命中自举二轮:首轮命中 <3 且命中行里有英文标识符时,提取标识符再聚合一轮
   // (「总路线」首轮仅 1 条文档命中;二轮从该行/既有命中提取 roadmap 类词根继续挖 UI 锚点)。
   // 只自举一次,配额不变;扩出的词记录在 degraded 说明里(诚实可溯)。
   if (matches.length < 3) {
@@ -643,8 +643,8 @@ async function exploreProfile(root: string, query: string, base: CodeSenseResult
   }
   const degraded = [...(base.degraded ?? [])];
   if (recall.degraded) degraded.push({ layer: "symbol-recall", reason: recall.degraded, howToActivate: "codesense index <root> 构建静态索引(符号召回=毫秒级读索引,不触发构建)" });
-  // grep 行排序(2026-10-21 符号优先):候选符号所在文件 > 生产源码 > 测试 > 文档/非产品路径
-  // (docs/tasks/vendor/ref)。实锤:中文问句的前列曾是 AGENTS.md/tasks 文档(中文叙述天然含问句词),
+ // grep 行排序(符号优先):候选符号所在文件 > 生产源码 > 测试 > 文档/非产品路径
+ // (docs/)。注意:中文问句的前列曾是 AGENTS.md/tasks 文档(中文叙述天然含问句词),
   // 真实现文件被挤到后面——符号块虽已置顶,行命中仍按此序降噪(稳定排序,同档内保持 ripgrep 到达序)。
   const symbolFiles = new Set(symbols.map((s) => s.file));
   const rank = (f: string): number => {
@@ -691,10 +691,10 @@ async function exploreProfile(root: string, query: string, base: CodeSenseResult
   };
 }
 
-/** 结果预算:超限裁剪(designs/16 §9 裁剪序)。
+/** 结果预算:超限裁剪( §9 裁剪序)。
  * 裁剪序=matches→references→sequence(steps)→远跳(callchain)→evidence→sequence(整块丢弃)——
  * 预算是白名单式机制:结果里新增任何集合字段都必须同步登记进裁剪序,
- * 否则字段默认逃逸(审计 R1-C25:references/sequence 曾把最坏组合顶到 42.7KB)。 */
+ * 否则字段默认逃逸(审计 :references/sequence 曾把最坏组合顶到 42.7KB)。 */
 function applyBudget(r: CodeSenseResult): CodeSenseResult {
   let out = JSON.stringify(r);
   if (out.length <= RESULT_BUDGET_BYTES) return r;
@@ -706,7 +706,7 @@ function applyBudget(r: CodeSenseResult): CodeSenseResult {
     omitted += budgeted.matches.length - 30;
     budgeted.matches = budgeted.matches.slice(0, 30);
   }
-  // explore 符号候选(2026-10-21):新集合字段必须登记进裁剪序(C25 纪律;此前 references/
+ // explore 符号候选:新集合字段必须登记进裁剪序(C25 纪律;此前 references/
   // sequence 逃逸把最坏组合顶到 42.7KB)。裁剪序=符号优先:先裁降权的 grep 行(30→20),
   // 再动符号候选(10→6)——符号是主召回通道,不能被行命中的体积挤掉。
   if (!fits() && budgeted.symbols && budgeted.symbols.length > 10) {
@@ -717,7 +717,7 @@ function applyBudget(r: CodeSenseResult): CodeSenseResult {
     omitted += budgeted.matches.length - 20;
     budgeted.matches = budgeted.matches.slice(0, 20);
   }
-  // api 剖面(step-077):端点清单裁剪(C25 纪律——新集合字段必须登记进裁剪序)
+ // api 剖面:端点清单裁剪(C25 纪律——新集合字段必须登记进裁剪序)
   if (budgeted.api && budgeted.api.endpoints.length > 30) {
     omitted += budgeted.api.endpoints.length - 30;
     budgeted.api = { ...budgeted.api, endpoints: budgeted.api.endpoints.slice(0, 30) };
@@ -740,7 +740,7 @@ function applyBudget(r: CodeSenseResult): CodeSenseResult {
       }
     }
   }
-  // state 剖面(step-077):状态机转移/提示区裁剪
+ // state 剖面:状态机转移/提示区裁剪
   if (budgeted.state) {
     const s = budgeted.state;
     const totalT = s.machines.reduce((n, m) => n + m.transitions.length, 0);
@@ -824,10 +824,10 @@ function applyBudget(r: CodeSenseResult): CodeSenseResult {
   return budgeted;
 }
 
-/** 文件级下钻(step-048 追记八:项目档案钻到「每个文件的每个函数」+调用关系图):
- * 快路径=静态 c2f 索引直读(毫秒,2026-10-12 三改:提前生成,不点哪个算哪个);
+/** 文件级下钻(项目档案钻到「每个文件的每个函数」+调用关系图):
+ * 快路径=静态 c2f 索引直读(毫秒, 三改:提前生成,不点哪个算哪个);
  * 索引未就绪回退懒解析(与 debugProfile 同口径)。
- * 六期修复(step-057):旧版慢路径会在主进程内跑 buildC2fIndex(ts-morph 全仓,分钟级阻塞事件循环)——
+ * 六期修复:旧版慢路径会在主进程内跑 buildC2fIndex(ts-morph 全仓,分钟级阻塞事件循环)——
  * 现在重建只经 onStale 回调交给调用方(gateway 走 sense-index-manager 的 fork),本函数绝不起进程内重建;
  * allowStale=用过期索引降级应答(调用方明知索引略旧也要快),配合 onStale 通知后台刷新。 */
 export async function fileSymbolsOf(root: string, relFile: string, opts?: {
@@ -854,7 +854,7 @@ export async function fileSymbolsOf(root: string, relFile: string, opts?: {
           .map((id) => index.nodes.find((n) => n.id === id))
           .filter((n): n is NonNullable<typeof n> => !!n)
           // senseB23:内嵌脚本符号按 inline-js 如实展示(此前 container 符号一律冒充 method)。
-          // 2026-10-21:类型声明/箭头/类按 symKind 如实展示(此前 interface/type/enum 冒充
+ // 类型声明/箭头/类按 symKind 如实展示(此前 interface/type/enum 冒充
           // function、嵌套箭头无显示位);parent 随行(嵌套符号的所在函数/类)。
           .map((n) => ({ name: n.name.includes(".") ? n.name.slice(n.name.lastIndexOf(".") + 1) : n.name, kind: n.symKind ?? (n.container ? "method" : "function"), line: n.line, container: n.container ?? null, parent: n.parent ?? null, id: n.id }))
           .sort((a, b) => a.line - b.line)
@@ -866,9 +866,9 @@ export async function fileSymbolsOf(root: string, relFile: string, opts?: {
     }
   }
   // 慢路径兜底(索引缺失):懒解析本文件+邻域(轻);**不再进程内重建**——六期修复,主进程 ts-morph
-  // 全仓构建=事件循环分钟级卡死(实测把 gateway 打成无响应);重建交给调用方 onStale/启动预热 fork。
+ // 全仓构建=事件循环分钟级卡死(经验证把 gateway 打成无响应);重建交给调用方 onStale/启动预热 fork。
   const scan = await scanProject(root);
-  // engine 的 symbol.file 是绝对路径(实测);比对前归一(相对入参 → 绝对)
+ // engine 的 symbol.file 是绝对路径(经验证);比对前归一(相对入参 → 绝对)
   const absTarget = isAbsolute(relFile) ? relFile : `${root.replace(/\/$/, "")}/${relFile}`;
   const dir = relFile.split("/").slice(0, -1).join("/");
   const neighbors = scan.files.filter((f) => f !== relFile && f.split("/").slice(0, -1).join("/") === dir);

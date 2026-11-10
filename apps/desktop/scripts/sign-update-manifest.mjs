@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 更新清单签名工具(2026-11-09):用 Ed25519 私钥对 update.json 的规范化字段签名。
+ * 更新清单签名工具:用 Ed25519 私钥对 update.json 的规范化字段签名。
  * 用法:
  *   node scripts/sign-update-manifest.mjs --manifest path/to/update.json --key .smoke/keys/update-release-ed25519.pem
  *   node scripts/sign-update-manifest.mjs --manifest path/to/update.json --verify --pub .smoke/keys/update-release-ed25519.pub.pem

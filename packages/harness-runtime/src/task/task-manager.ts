@@ -183,7 +183,6 @@ export class TaskSupervisor {
     systemMaxConcurrent = 2,
     // 终态任务保留 3 天而非 24 小时：语音场景里「周五派的活周一问」很常见，
     // 24 小时会让隔天的查询就拿不到状态，用户只能重新派一次。
-    //
     // 数量上限（maxTerminalTasksPerOwner）保持不变：prune() 按 createdAt 降序
     // 保留最新的那一批，所以放宽时间窗不会让内存无界增长 —— 上限仍然是硬顶。
     terminalTtlMs = 259_200_000,
@@ -216,8 +215,7 @@ export class TaskSupervisor {
     this.maxTerminalTasksPerOwner = maxTerminalTasksPerOwner
     this.progressEventIntervalMs = Math.max(
       50,
-      Number(progressEventIntervalMs) || 1_000,
-    )
+      Number(progressEventIntervalMs) || 1_000)
     this.logger = taskLogger
     this.sessionJournal = sessionJournal
     this.scheduledTaskTimeoutMs = scheduledTaskTimeoutMs
@@ -283,7 +281,7 @@ export class TaskSupervisor {
           status: 'scheduled',
           runner: saved.kind === 'reminder'
             ? async obj => ({ content: obj })
-            : null, // scheduled_task runner set from scheduledTaskRunner in start()
+            : null, // scheduled_task runner set from scheduledTaskRunner in start
           resolve: null,
           promise: null,
           activity: Array.isArray(saved.activity) ? saved.activity : [],
@@ -390,7 +388,7 @@ export class TaskSupervisor {
       status: 'scheduled',
       runner: saved.kind === 'reminder'
         ? async obj => ({ content: obj })
-        : null, // scheduled_task 的 runner 由 start() 从 scheduledTaskRunner 接线
+        : null, // scheduled_task 的 runner 由 start 从 scheduledTaskRunner 接线
       resolve: null,
       promise: null,
       activity: Array.isArray(saved.activity) ? saved.activity : [],
@@ -444,8 +442,7 @@ export class TaskSupervisor {
       // 修复崩溃后过期的 tasks.json。
       if (existing) {
         this.recoveryCandidates = this.recoveryCandidates.filter(
-          candidate => candidate !== existing,
-        )
+          candidate => candidate !== existing)
         this.tasks.delete(id)
       }
       this.restore([this.#withSeriesAnchor(snapshot, existing?.recurrenceStartAt)])
@@ -898,8 +895,7 @@ export class TaskSupervisor {
           task.status === 'completed'
             ? TaskChangeEvent.COMPLETED
             : TaskChangeEvent.FAILED,
-          task,
-        )
+          task)
         if (shouldAnnounceTaskDone(task)) {
           this.emit(TaskChangeEvent.NOTIFICATION_PENDING, task)
         }
@@ -1097,8 +1093,7 @@ export class TaskSupervisor {
       if (!isFinishedTask(task.status)) continue
       const age = now - (task.completedAt || task.createdAt)
       const awaitingDelivery = ['pending', 'delivering'].includes(
-        task.notificationStatus,
-      )
+        task.notificationStatus)
       const ttl = awaitingDelivery
         ? this.pendingNotificationTtlMs
         : this.terminalTtlMs

@@ -242,7 +242,7 @@ describe("白板执行期可见化(n1/n2/A3)", () => {
       // 徽标点击不得冒泡成「选中节点」以外的副作用(必须 stopPropagation)
       expect(rc).toContain("e.stopPropagation()");
       // 评论框复用既有协议与既有标记(#bdCmtInput/#bdCmtSend + board.comment),不另造协议
-      // c1:协议字面量收口到单一发送出处 bdSendComment(append/update/delete 共用),浮层只调它
+ // c1:协议字面量到单一发送出处 bdSendComment(append/update/delete 共用),浮层只调它
       const open = extractFn(html, "bdOpenNodeComment");
       expect(open).toContain("bdCmtInput");
       expect(open).toContain("bdCmtSend");
@@ -619,7 +619,7 @@ describe("白板评论编辑/删除(c1)", () => {
   }, 30_000);
 });
 
-/* ---- 白板「易读性」w1/w2/w3(2026-10-25:60 节点板实测适配 k=0.70 只能看到 2/60 节点、
+/* ---- 白板「易读性」w1/w2/w3(60 节点板经验证适配 k=0.70 只能看到 2/60 节点、
  *      31/60 标题被 ellipsis、52/60 摘要被裁、泳道 21 条平均 2.8 节点)---- */
 describe("白板易读性(w1 写者过滤 / w2 密度分层 / w3 摘要单行)", () => {
   it("①写者过滤:前缀分组 chip + 过滤后按子集重算布局 + 提示「只看 x · 共 n/N 节点」", async () => {
@@ -636,11 +636,11 @@ describe("白板易读性(w1 写者过滤 / w2 密度分层 / w3 摘要单行)",
       // 渲染链:①filter 只影响渲染(DOM 不建被过滤节点) ②布局拿**子集**重算
       const rc = extractFn(html, "renderBoardCanvas");
       expect(rc).toContain("cvWriterFilterDoc(doc, cvWriterOn)");
-      // 2026-10-25 A:宽板折行开关与过滤/密度分层同口径传入(布局仍按子集重算)
+ // A:宽板折行开关与过滤/密度分层同口径传入(布局仍按子集重算)
       expect(rc).toContain("BoardFlowLayout.layout(fdoc, {");
       expect(rc).toContain("autoWrap: cvCodeInfo ? false : cvFlowWrapWanted(doc, fdoc)");
       expect(rc).toContain("wrap: cvCodeInfo ? 3 : undefined");
-      // 2026-10-26:UI 交互地图按层排序后再 map(源头仍是过滤后的 cvRenderDoc,不是全量 doc)
+ // UI 交互地图按层排序后再 map(源头仍是过滤后的 cvRenderDoc,不是全量 doc)
       expect(rc).toContain("const cardNodes = cvUiInfo ? cvRenderDoc.nodes.slice().sort");
       expect(rc).toContain("const cards = cardNodes.map(");
       expect(rc).toContain("cvWriterAll = cvWriterChips(");
@@ -705,7 +705,7 @@ describe("白板易读性(w1 写者过滤 / w2 密度分层 / w3 摘要单行)",
       // 展开态进结构签名(否则增量补丁让点击无效)
       expect(extractFn(html, "cvStructSig")).toContain("cvFoldOpen.size");
       // w4 空壳泳道降噪:lanes 里 boxless 的(成员全被收进 +N 的泳道)不画 .cv-lane 框——
-      // 实测 60 节点板 21 框 vs 7 卡(3:1),空壳虚线框互相重叠糊画面;数据不删(计数块要靠 key→label)
+ // 经验证 60 节点板 21 框 vs 7 卡(3:1),空壳虚线框互相重叠糊画面;数据不删(计数块要靠 key→label)
       const laneHtmlSrc = rc.slice(rc.indexOf("const laneHtml"), rc.indexOf("const cards"));
       expect(laneHtmlSrc).toContain("filter((lane) => !lane.boxless)");
       expect(laneHtmlSrc).toContain('class="cv-lane');
@@ -720,10 +720,10 @@ describe("白板易读性(w1 写者过滤 / w2 密度分层 / w3 摘要单行)",
 
   it("④卡片头信息分层:头行只留 kind+标题,验收/变更徽标换到第二行(标题槽 ≥100px)", async () => {
     await withPanel(7994, (html) => {
-      // 治字号(2026-10-25 实测 k=1 时 5/7 主干卡标题被 ellipsis 截断,标题槽只 71–73px):
+ // 治字号(经验证 k=1 时 5/7 主干卡标题被 ellipsis 截断,标题槽只 71–73px):
       // 卡宽 208 定死,想在头行里挤出 100px 只能减少头行常驻件——.cv-head 允许换行,
       // .cv-title 给 min-width 撑住下限,验收徽标(.cv-acc)与变更徽标(.bd-tag)自然落到第二行。
-      // step-1010:卡头条底也走白板令牌(--bcv-card-head-bg),其余逐字不变
+ // 卡头条底也走白板令牌(--bcv-card-head-bg),其余逐字不变
       expect(html).toContain(".cv-node .cv-head{display:flex;align-items:center;gap:6px;padding:7px 10px 4px;font-size:12px;color:var(--cv-head-fg);background:var(--bcv-card-head-bg);font-weight:600;flex-wrap:wrap}");
       const titleCss = ".cv-node .cv-title{flex:1;min-width:";
       const ti = html.indexOf(titleCss);
@@ -751,12 +751,12 @@ describe("白板易读性(w1 写者过滤 / w2 密度分层 / w3 摘要单行)",
   it("⑤适配 k 取换行后的真实世界尺寸(cvFitNow 用 DOM 实测,不回退旧 bounds)", async () => {
     await withPanel(7995, (html) => {
       const fit = extractFn(html, "cvFitNow");
-      // 主干换行后位置变了:适配必须按 DOM 实测(left/top/offsetWidth/offsetHeight),不能拿布局引擎的旧包围盒
+ // 主干换行后位置变了:适配必须按 DOM 经验证(left/top/offsetWidth/offsetHeight),不能拿布局引擎的旧包围盒
       expect(fit).toContain('cvH.querySelectorAll(".cv-node,.cv-fold")');
       expect(fit).toContain("el.style.left");
       expect(fit).toContain("el.offsetWidth");
       expect(fit).not.toContain("cvFlowInfo.bounds");
-      // 密度分层下泳道框跨全板(实测单框 8000px 高)不算进适配,只按看得见的卡+计数块
+ // 密度分层下泳道框跨全板(经验证单框 8000px 高)不算进适配,只按看得见的卡+计数块
       expect(fit).toContain("if (cvFoldMode) continue;");
       // 可读下限在位:自然 k 大于它时不许被钳到 0.7
       expect(html).toContain("const CV_FIT_READABLE_MIN = 0.7;");

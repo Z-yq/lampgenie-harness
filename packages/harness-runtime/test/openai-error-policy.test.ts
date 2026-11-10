@@ -1,5 +1,5 @@
 /**
- * M33 接线验收:postWithRetry / 流中途错误的分类→重试/停止行为(假 fetch,不真连网)。
+ *  接线验收:postWithRetry / 流中途错误的分类→重试/停止行为(假 fetch,不真连网)。
  * 与 openai-retry-governor.test.ts(429 退避+AIMD)、openai-stream.test.ts 互补:
  * 那两份锚定旧行为不回归,这份锚定新策略表的接线。
  */

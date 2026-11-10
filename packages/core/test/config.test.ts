@@ -27,7 +27,7 @@ describe("ConfigSchema 默认值(就地)", () => {
     expect(c.coding.vlm?.model).toBe("glm-5v");
     expect(c.coding.vlm?.baseUrl).toBeUndefined(); // 未显式填=继承主端点(factory 合并)
     expect(resolveTrackEndpoint(c, "coding", { ...c.coding.llm, ...c.coding.vlm }).baseUrl)
-      .toBe("https://api.z.ai/api/anthropic"); // 同 provider 继承实锤
+      .toBe("https://api.z.ai/api/anthropic"); // 同 provider 继承实测确认
   });
 
   it("parse({}) 得全套默认", () => {
@@ -39,12 +39,12 @@ describe("ConfigSchema 默认值(就地)", () => {
     expect(resolveTrackEndpoint(c, "coding", c.coding.llm).apiKeyEnv).toBe("GENIE_LLM_API_KEY");
     expect(resolveTrackEndpoint(c, "audio.chat", c.audio.chat).apiKeyEnv).toBe("GENIE_AUDIO_API_KEY"); // 双轨凭证命名空间不串
     expect(c.coding.llm.timeoutMs).toBe(60_000);
-    // 视觉能力(2026-10-25):vision 缺省 undefined(=true 语义,主流多模态);vlm 缺省不配
+ // 视觉能力:vision 缺省 undefined(=true 语义,主流多模态);vlm 缺省不配
     expect(c.coding.llm.vision).toBeUndefined();
     expect(c.coding.vlm).toBeUndefined();
     expect(c.journal.dir).toBe(".genie/journals");
     expect(c.concurrency.maxConcurrent).toBe(4);
-    expect(c.agent.maxSteps).toBe(3000); // schema 已于 step-139 改为 3000 上限/默认;旧断言未同步
+    expect(c.agent.maxSteps).toBe(3000); // schema 已于 改为 3000 上限/默认;旧断言未同步
     // 上下文模型评分默认本地 150M Jev(/decide)
     expect(c.context.modelScoring.mode).toBe("shadow");
     expect(c.context.modelScoring.providerUrl).toBe("http://127.0.0.1:8105");
@@ -71,7 +71,7 @@ describe("ConfigSchema 默认值(就地)", () => {
     expect(() => ConfigSchema.parse({ gateway: { port: 99999 } })).toThrow();
     expect(() => ConfigSchema.parse({ executor: { kind: "local" } })).toThrow();
   });
-  it("resolveTrackEndpoint apiType 继承(step-127):providers[id].apiType 经 providerId 透出;未声明=undefined", () => {
+  it("resolveTrackEndpoint apiType 继承:providers[id].apiType 经 providerId 透出;未声明=undefined", () => {
     const c = ConfigSchema.parse({
       providers: [
         { id: "zai-plan", baseUrl: "https://api.z.ai/api/anthropic", apiKeyEnv: "ZAI_CODING_PLAN_API_KEY", apiType: "anthropic", models: [] },
@@ -254,7 +254,7 @@ describe("凭证优先级(2026-10-20 401 根因:专属密钥不得被旧 GENIE_L
   });
 });
 
-describe("step-046 配置面", () => {
+describe(" 配置面", () => {
   it("permissions.mode 默认 ask,可热应用", () => {
     const base = ConfigSchema.parse({});
     expect(base.permissions.mode).toBe("ask");
@@ -265,7 +265,7 @@ describe("step-046 配置面", () => {
   });
   it("coding.llm.reasoningEffort 枚举+热路径", () => {
     const base = ConfigSchema.parse({});
-    // 默认=high(2026-10-13 视频 2 用户口径:「思考要默认为高才行」;档位含 xhigh=最高,端点实测接受)。
+ // 默认=high(视频 2 「思考要默认为高才行」;档位含 xhigh=最高,端点经验证接受)。
     expect(base.coding.llm.reasoningEffort).toBe("high");
     expect(HOT_CONFIG_PATHS.has("coding.llm.reasoningEffort")).toBe(true);
     const { next, applied } = applyConfigPatch(base, { coding: { llm: { reasoningEffort: "xhigh" } } });
@@ -302,7 +302,7 @@ describe("step-046 配置面", () => {
   });
 });
 
-describe("step-125 服务商预设:authMode 与密钥写入", () => {
+describe(" 服务商预设:authMode 与密钥写入", () => {
   it("authMode 可选;缺省 undefined=api;token-plan 保留", () => {
     const base = ConfigSchema.parse({ providers: [{ id: "p", baseUrl: "https://x", models: ["m"] }] });
     expect(base.providers[0]!.authMode).toBeUndefined();

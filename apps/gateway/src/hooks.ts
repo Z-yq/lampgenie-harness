@@ -1,5 +1,5 @@
 /**
- * 任务生命周期钩子(step-047,ZCode hooks 概念裁剪):.genie/hooks.json。
+ * 任务生命周期钩子(ZCode hooks 概念裁剪):.genie/hooks.json。
  * 事件:task.start/task.done/task.fail/task.cancel;动作:在项目根执行一条命令(30s 超时;
  * shell 由 shell-invocation 决定:POSIX=bash 登录 shell(-lc 语义),Windows=cmd.exe /d /s /c,GENIE_SHELL_BIN 可覆盖)。
  * 纪律:fail-soft(钩子失败不影响任务;结果落 journal hook.run 可观测);命令跑在项目根,输出只留摘要。

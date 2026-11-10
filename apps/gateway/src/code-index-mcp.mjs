@@ -1,23 +1,20 @@
 #!/usr/bin/env node
 /**
  * genie code-index MCP server(stdio)——把 code-sense 静态调用索引作为工具暴露给任意 MCP 客户端
- * (首要客户端:ZCode)。协议=JSON-RPC 2.0 over stdio(MCP 2024-11-05 基线)。
- *
+ * (首要客户端:ZCode)。协议=JSON-RPC 2.0 over stdio(MCP 基线)。
  * 工具面(六件读 .genie/sense-index 静态产物,毫秒级;索引缺失/过期自动后台重建;
- * step-080 起加 api/state/algo 三件=step-077 sensing 行扫描,不触发索引构建):
+ * 起加 api/state/algo 三件= sensing 行扫描,不触发索引构建):
  *   code_index_symbol(name, repo?)      符号定义+调用者+被调者(跨仓合并)
  *   code_index_file(path, repo?)        文件符号表(含 code2flow 分类/出入度)
  *   code_index_entrypoints(repo?)       入口函数清单(trunk,缺省逐仓分组)
  *   code_index_graph(name, repo?)       符号邻域 code2flow mermaid 图
  *   code_index_filegraph(path, repo?)   文件级 code2flow 图
- *   code_index_impact(name, repo?)      改动影响面清单(step-066)
- *   code_index_api(repo?)               HTTP 接口表面+OpenAPI 对账(step-077/080)
- *   code_index_state(repo?)             状态机表面(step-077/080)
- *   code_index_algo(file?, repo?)       算法画像(step-077/080)
+ * code_index_impact(name, repo?) 改动影响面清单
+ * code_index_api(repo?) HTTP 接口表面+OpenAPI 对账(/080)
+ * code_index_state(repo?) 状态机表面(/080)
+ * code_index_algo(file?, repo?) 算法画像(/080)
  *   code_index_wire(root?, repo?, changed?) WS 消息协议表面(协议声明↔handler↔面板发送/接收三处对账)
- *
  * 多仓路由:repo 参数/路径仓前缀/跨仓自动路由,见 code-index-core.ts。
- *
  * 用法: node code-index-mcp.mjs <项目根>(缺省=cwd)
  * 环境变量: GENIE_SENSE_INDEX_ROOT 可覆盖项目根。
  */
@@ -35,7 +32,7 @@ if (isMain) {
   const mcp = createCodeIndexMcp(ROOT);
 
   let buf = "";
-  // 在飞异步分派计数(step-080):api/state/algo 行扫描秒级,一次性管道场景 stdin 关闭
+ // 在飞异步分派计数:api/state/algo 行扫描秒级,一次性管道场景 stdin 关闭
   // 早于响应写出——直接 exit(0) 会吃掉在飞响应,先等清零再退。
   let pendingCalls = 0;
   process.stdin.setEncoding("utf-8");
@@ -78,7 +75,7 @@ if (isMain) {
         return;
       }
       if (method === "tools/call") {
-        // step-080:api/state/algo 走 async sensing 分派,统一 dispatchToolAsync(其余工具
+ // api/state/algo 走 async sensing 分派,统一 dispatchToolAsync(其余工具
         // 内部委托同步 dispatchTool 行为零变)。响应按 id 关联,异步到达不破坏 stdio 协议。
         pendingCalls++;
         Promise.resolve(mcp.dispatchToolAsync(String(params?.name ?? ""), params?.arguments ?? {}))

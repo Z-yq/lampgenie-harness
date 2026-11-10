@@ -183,7 +183,7 @@ describe("senseB21/senseB23 索引贯通(C2fIndex + 查询面)", () => {
       expect(hits[0]!.symbol.symKind).toBe("inline-js");
       expect(hits[0]!.symbol.file).toBe("panel.ts");
       expect(hits[0]!.symbol.line).toBe(6);
-      // 上游(sink)/下游(renderPill)非空——任务3 验收口径
+ // 上游(sink)/下游(renderPill)非空——任务3 验径
       expect(hits[0]!.callers.length).toBeGreaterThan(0);
       expect(hits[0]!.callees.length).toBeGreaterThan(0);
       expect(hits[0]!.callers[0]!.name).toBe("PAGE·script-1.sink");

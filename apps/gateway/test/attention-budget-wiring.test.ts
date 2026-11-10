@@ -1,5 +1,5 @@
 /**
- * M183 接线验证(gateway 侧,假 askUser/broker):
+ * 接线验证(gateway 侧,假 askUser/broker):
  * a. ask_user 无结构提问 → 工具错误(稳定码+可操作提示),askUser.ask 调用 0 次(不落面板);
  * b. 合法提问(带编号 options)→ 原路径放行;
  * c. answer_subagent 的 reason 超 30 词 → 截断后仍解答(批准语义不丢);

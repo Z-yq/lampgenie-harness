@@ -1,5 +1,5 @@
 /**
- * step-067 fail-visible 三面单测:
+ * fail-visible 三面单测:
  * 覆盖报告计算/告警判定、manifest 落盘(buildIndexWithReuse)、doctor 覆盖核对(WARN 不假绿)、
  * entrypoints 零覆盖显式状态、旧索引向后兼容(无 coverage 字段=现场重算降级,不假绿不炸)。
  */
@@ -30,7 +30,7 @@ afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 });
 
-describe("语言覆盖报告(step-067 fail-visible)", () => {
+describe("语言覆盖报告( fail-visible)", () => {
   it("computeLanguageCoverage:磁盘/已索引按扩展名分列,零覆盖如实呈现", async () => {
     const dir = fixture({
       "a.c": "int one(void) { return 1; }\n",
@@ -68,7 +68,7 @@ describe("语言覆盖报告(step-067 fail-visible)", () => {
     expect(formatCoverageLine(undefined)).toBeUndefined();
   });
 
-  it("manifest:buildIndexWithReuse 产物带 coverage 字段(含 step-079 分层)并落盘可读回", async () => {
+  it("manifest:buildIndexWithReuse 产物带 coverage 字段(含  分层)并落盘可读回", async () => {
     const dir = fixture({
       "lib.c": "int add_them(int a, int b) { return a + b; }\n",
       "hdr.h": "int add_them(int a, int b);\n",
@@ -89,16 +89,16 @@ describe("语言覆盖报告(step-067 fail-visible)", () => {
     expect(querySymbol(back, "add_them").length).toBeGreaterThan(0);
   });
 
-  it("step-079 分层:lexical/skipped 计数与 skippedReasons 逐文件,coveragePct 口径诚实", async () => {
+  it(" 分层:lexical/skipped 计数与 skippedReasons 逐文件,coveragePct 口径诚实", async () => {
     const dir = fixture({
       "ok.c": "int ok_fn(void) { return 1; }\n",
-      "noise.h": "@interface Trash : NSObject\n@end\nextern int g_flag;\n", // ObjC 干扰致 ERROR,但 extern 声明经容错提取(step-089)→ full
+      "noise.h": "@interface Trash : NSObject\n@end\nextern int g_flag;\n", // ObjC 干扰致 ERROR,但 extern 声明经容错提取→ full
       "pure_blob.h": "0x62, 0xEB, 0x5A, 0xAA,\n".repeat(25000), // 超 512KB 闸、零声明 → skipped(429KB 会进 tree-sitter 病态解析,必须 >512KB)
     });
     const out = await buildIndexWithReuse(dir, { force: true });
     const cov = out.index.coverage!;
     expect(cov.byExt[".c"]).toMatchObject({ full: 1 });
-    expect(cov.byExt[".h"] && cov.byExt[".h"].full).toBe(1); // noise.h:step-089 容错提取 extern 声明 → full(原词法档漂移,能力增益)
+    expect(cov.byExt[".h"] && cov.byExt[".h"].full).toBe(1); // noise.h: 容错提取 extern 声明 → full(原词法档漂移,能力增益)
     expect(cov.byExt[".h"] && cov.byExt[".h"].skipped).toBe(1); // pure_blob.h 跳过
     expect(cov.coveragePct).toBe(66.7); // (full 1 + lexical 1)/(3) — skipped 不进分子
     expect(Object.keys(cov.skippedReasons ?? {})).toContain("pure_blob.h");
@@ -107,7 +107,7 @@ describe("语言覆盖报告(step-067 fail-visible)", () => {
     expect(formatCoverageLine(cov)).toContain("分层覆盖 66.7%");
   });
 
-  it("step-079 RC-G:GENIE_SENSE_MAX_FILES 上限可配,truncation 如实登记", async () => {
+  it(" RC-G:GENIE_SENSE_MAX_FILES 上限可配,truncation 如实登记", async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 12; i++) files[`f${i}.c`] = `int fn_${i}(void) { return ${i}; }\n`;
     const dir = fixture(files);
@@ -131,7 +131,7 @@ describe("语言覆盖报告(step-067 fail-visible)", () => {
       "another.c": "int another_fn(void) { return 0; }\n",
       "update_defines.py": "VALUE = 1\n",
     });
-    // 手工构造旧形态索引:只有 py 文件符号、无 coverage 字段(step-065 实测的 1/~1846 假绿形态)
+ // 手工构造旧形态索引:只有 py 文件符号、无 coverage 字段(经验证的 1/~1846 假绿形态)
     const oldStyle: C2fIndex = {
       version: 1,
       root: dir,
@@ -206,10 +206,10 @@ describe("语言覆盖报告(step-067 fail-visible)", () => {
     expect(warns.some((w) => w.startsWith(".c:"))).toBe(true);
   });
 });
-// step-084 RC-H:整仓不支持语言 fail-visible(此前纯 Rust/C#/PHP 仓 totalDisk=0,
-// doctor「磁盘无源文件」+「通过」假绿;audit 2026-10-16 实锤)
-// 2026-10-25:Rust/C#/Ruby/PHP 已接入 adapter → 本组夹具改用仍未覆盖的 Lua/Kotlin。
-describe("不支持语言诚实报错(step-084 RC-H)", () => {
+// RC-H:整仓不支持语言 fail-visible(此前纯 Rust/C#/PHP 仓 totalDisk=0,
+// doctor「磁盘无源文件」+「通过」假绿;audit 注意)
+// Rust/C#/Ruby/PHP 已接入 adapter → 本组夹具改用仍未覆盖的 Lua/Kotlin。
+describe("不支持语言诚实报错( RC-H)", () => {
   it("纯 .lua 仓:coverage 行含 unsupported 标记,告警显式「语言不支持」而非二义措辞", async () => {
     const dir = fixture({
       "src/main.lua": "local function main() end\n",

@@ -1,5 +1,5 @@
 /**
- * step-098 RC-B6 过度声明收敛(code_index 工具面):
+ * RC-B6 过度声明收敛(code_index 工具面):
  * formatSymbolHit 的 trunk 标签/空调用方文案=「索引内无」口径;弃边台账在场时
  * 直说「存在未解析同名调用」;entrypoints 工具描述同步收敛。
  */
@@ -20,7 +20,7 @@ function stateOf(index: C2fIndex): RepoState {
   return { root: "/x", name: "x", index, stale: false };
 }
 
-describe("step-098 RC-B6 工具面措辞不过度声明", () => {
+describe(" RC-B6 工具面措辞不过度声明", () => {
   it("trunk 标签=索引内无调用方;无弃边时不直判无人调用", () => {
     const st = stateOf(fabricate());
     const h = querySymbol(st.index, "f")[0]!;

@@ -1,13 +1,11 @@
 /**
  * 夜间离线整合 store(IO / 调度 / 流水线执行)。
- *
  * 分层红线:
  * - 纯逻辑(幂等 / 预算 / 状态机 / 候选挖掘)一律调 `@lampgenie/runtime/agent/nightly-run`,
  *   本文件**不重复实现**,只做 IO、时钟、原子落盘与六步编排。
  * - 只读 journalDir(绝不写),只写 `<root>/.genie/rsi/nightly/**`。
  * - 除「参数错误 / run 不存在」外不 throw 到调用方:步骤执行异常会被转成 step failed +
  *   `NIGHTLY_FAILED`,让 run 可 retry。
- *
  * 磁盘布局(全部在 root 下):
  *   .genie/rsi/nightly/<project>/<date>.json                  run 记录(一 run 一文件)
  *   .genie/rsi/nightly/<project>/<date>.selection.json        本轮选中的会话快照(增量边界)
@@ -15,7 +13,6 @@
  *   .genie/rsi/nightly/<project>/<date>.evidence-pending.json update-graph 产物(待人工确认)
  *   .genie/rsi/nightly/queue.jsonl                            append-only 实验队列
  *   .genie/rsi/nightly/cursor.json                            { [projectId]: NightlyCursor }
- *
  * 续跑语义:每步 markStep 后**立即**原子落盘(同目录 .tmp + rename),因此进程在任意两步之间
  * 被杀掉,下一次 runNightly 都能从 `nextStep` 接上。
  */
@@ -422,8 +419,7 @@ function readSelection(
   file: string,
   run: NightlyRun,
   journalDir: string,
-  maxSessions: unknown,
-): NightlySelectionFile {
+  maxSessions: unknown): NightlySelectionFile {
   const stored = readJson<NightlySelectionFile>(file);
   if (stored && Array.isArray(stored.sessions)) return stored;
   // 回退:没有 selection 快照(例如手工塞进来的 run 文件)时按 mtime 取一批。
@@ -724,8 +720,7 @@ export async function startNightly(root: string, options: StartNightlyOptions): 
   const maxSessions = normaliseLimit(options.maxSessions, DEFAULT_MAX_SESSIONS);
   const all = enumerateSessions(options.journalDir);
   const fresh = all.filter((entry) =>
-    typeof cursor.lastMtimeMs === "number" ? entry.mtimeMs > cursor.lastMtimeMs : true,
-  );
+    typeof cursor.lastMtimeMs === "number" ? entry.mtimeMs > cursor.lastMtimeMs : true);
   const selected = fresh.slice(0, maxSessions);
 
   const config: NightlyConfig = { ...(options.config ?? {}) };
@@ -882,8 +877,7 @@ export async function listRuns(root: string): Promise<NightlyRun[]> {
 /** 手工暂停(只对 pending/running 有效,否则原样返回 + NIGHTLY_INVALID)。 */
 export async function pauseNightly(
   root: string,
-  options: PauseNightlyOptions,
-): Promise<{ run: NightlyRun | null; codes: NightlyCode[] }> {
+  options: PauseNightlyOptions): Promise<{ run: NightlyRun | null; codes: NightlyCode[] }> {
   const paths = nightlyPaths(root, options.projectId, options.date);
   const run = loadRunFromFile(paths);
   if (!run) return { run: null, codes: [NIGHTLY_CODES.NIGHTLY_INVALID] };
@@ -944,8 +938,7 @@ function withBudgetHeadroom(run: NightlyRun): NightlyRun {
 /** 手工收尾(六步都 done/skipped 才允许)。 */
 export async function finalizeNightly(
   root: string,
-  options: FinalizeNightlyOptions,
-): Promise<{ run: NightlyRun | null; codes: NightlyCode[] }> {
+  options: FinalizeNightlyOptions): Promise<{ run: NightlyRun | null; codes: NightlyCode[] }> {
   const paths = nightlyPaths(root, options.projectId, options.date);
   const run = loadRunFromFile(paths);
   if (!run) return { run: null, codes: [NIGHTLY_CODES.NIGHTLY_INVALID] };

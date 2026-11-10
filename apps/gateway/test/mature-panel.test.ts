@@ -1,5 +1,5 @@
 /**
- * step-046 成熟面板件:diffstat/stats/scope/思考链路/权限模式/startedAt 单测。
+ * 成熟面板件:diffstat/stats/scope/思考链路/权限模式/startedAt 单测。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
@@ -23,7 +23,7 @@ function tmpGitRepo(): string {
   return dir;
 }
 
-describe("diffstat(step-046 内联变更条数据源)", () => {
+describe("diffstat(内联变更条数据源)", () => {
   it("修改文件 → numstat 汇总(未跟踪文件不计,与 checkpoint 语义对齐)", async () => {
     const dir = tmpGitRepo();
     try {
@@ -52,7 +52,7 @@ describe("diffstat(step-046 内联变更条数据源)", () => {
   });
 });
 
-describe("computeStatsSummary(step-046 使用统计归约)", () => {
+describe("computeStatsSummary(使用统计归约)", () => {
   it("journal 归约:轮次/token/热力图/会话表/工作时长", () => {
     const j = new MemoryJournal();
     const tm = new TaskSupervisor();
@@ -86,7 +86,7 @@ describe("computeStatsSummary(step-046 使用统计归约)", () => {
   });
 });
 
-describe("自动化 scope(step-046 全局/项目分栏)", () => {
+describe("自动化 scope(全局/项目分栏)", () => {
   it("create 带 scope 持久化;无 scope=全局语义", () => {
     const dir = mkdtempSync(join(tmpdir(), "gwauto-"));
     try {
@@ -106,7 +106,7 @@ describe("自动化 scope(step-046 全局/项目分栏)", () => {
   });
 });
 
-describe("权限模式(step-046 输入区下拉)", () => {
+describe("权限模式(输入区下拉)", () => {
   it("setPermissionMode 三态与非法回退 ask", () => {
     setPermissionMode("auto");
     expect(permissionMode()).toBe("auto");

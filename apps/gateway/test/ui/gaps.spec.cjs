@@ -1,4 +1,4 @@
-/** UI 实测:step-042 缺口批(删除/清归档/短标题/cc 三 scope/划词/保会话)。 */
+/** UI 经验证: 缺口批(删除/清归档/短标题/cc 三 scope/划词/保会话)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -6,11 +6,11 @@ const { mkdtempSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 
 (async () => {
-  // journalDir 指临时目录,避免污染产线 journal
-  const jd = mkdtempSync(join(tmpdir(), "gaps-"));
+ // journalDir 指临时目录,避免污染生产环境 journal
+  const jd = mkdtempSync(join(tmpdir(), "-"));
   function join(a, b) { return a + "/" + b; }
   const backend = {
-    kind: "gaps-e2e",
+    kind: "-e2e",
     async spawn(spec, onEvent) {
       onEvent({ type: "result", result: { ok: true, finalText: "ok" } });
       return { taskId: spec.taskId, cancel: async () => {}, steer: async () => true, respondPermission: async () => {} };
@@ -21,7 +21,7 @@ const { tmpdir } = require("node:os");
   await new Promise((r) => setTimeout(r, 400));
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--no-proxy-server"] });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  // step-090:原生 confirm 已迁 uiConfirm 页内模态(step-088),page.on("dialog") 自动应答退役;
+ // 原生 confirm 已迁 uiConfirm 页内模态,page.on("dialog") 自动应答退役;
   // 删除任务/清空归档两处确认在触发点就地驱动模态。
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e).slice(0, 120)));
@@ -45,7 +45,7 @@ const { tmpdir } = require("node:os");
   await row.click({ button: "right" });
   await page.waitForTimeout(200);
   await page.locator("#taskMenu .tm-item", { hasText: "删除任务" }).click();
-  await page.locator(".uid-box .uid-msg", { hasText: "彻底删除任务" }).waitFor({ state: "visible", timeout: 3000 }); // step-090:页内模态确认
+  await page.locator(".uid-box .uid-msg", { hasText: "彻底删除任务" }).waitFor({ state: "visible", timeout: 3000 }); // 页内模态确认
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(500);
   const after = await page.locator("#taskList .t-row").count();
@@ -64,7 +64,7 @@ const { tmpdir } = require("node:os");
   await page.waitForTimeout(300);
   check("归档视图含清空钮", (await page.locator("#archClear").count()) === 1);
   await page.click("#archClear");
-  await page.locator(".uid-box .uid-msg", { hasText: "清空全部" }).waitFor({ state: "visible", timeout: 3000 }); // step-090:页内模态确认
+  await page.locator(".uid-box .uid-msg", { hasText: "清空全部" }).waitFor({ state: "visible", timeout: 3000 }); // 页内模态确认
   await page.locator(".uid-box .uid-ok").click();
   await page.waitForTimeout(900);
   const rowsAfterClear = await page.locator("#taskList .t-row").allTextContents();

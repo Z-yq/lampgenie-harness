@@ -1,21 +1,17 @@
 /**
  * 证据图谱持久层(生产侧,证据图谱 2026-11):把 evidence-graph 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:证据/结论的历史版本本身就是审计事实——修正、取代、权威指定、衰减归档
  * 都不能靠读改写整文件把旧状态抹掉。单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言。
- *
  * 数据面:`<root>/.genie/evidence/graph.jsonl`,每行 {v:1,type,at,...}
  * - add          {node}                             新证据(含双时态字段与关联)
  * - supersede    {oldId,by,reason,node}             新版本取代旧版(旧版 validTo/supersededBy 由投影补)
  * - correct      {id,by,reason,patch:{validTo,supersededBy},node} 用户纠正生成新版本
  * - authoritative{id,demoted:[{id,authoritativeness}]} 权威版指定 + 组内降级
  * - decay        {policy,updates:[{id,status?,...}],report} 衰减/容量逐出(状态而非物理删)
- *
  * 投影语义(loadEvidenceGraph):
  * - node 载荷按 node.id upsert(latest wins);supersede/correct 的 patch 套到被指向的 id;
  *   authoritative 的 demoted 逐条赋值;decay 的 updates 逐条赋值。
  * - 坏行(JSON 坏 / 未知 v / 缺必需字段)只计入 parseErrors 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
  * runtime 模块按 experiment-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -108,19 +104,16 @@ interface EvidenceRuntime {
   correctEvidence(
     graph: EvidenceGraph,
     id: string,
-    input: CorrectEvidenceInput,
-  ): { ok: boolean; graph: EvidenceGraph; node?: EvidenceNode; code?: string };
+    input: CorrectEvidenceInput): { ok: boolean; graph: EvidenceGraph; node?: EvidenceNode; code?: string };
   markAuthoritative(
     graph: EvidenceGraph,
-    id: string,
-  ): { ok: boolean; graph: EvidenceGraph; demoted: string[]; code?: string };
+    id: string): { ok: boolean; graph: EvidenceGraph; demoted: string[]; code?: string };
   queryEvidence(graph: EvidenceGraph, filter?: EvidenceQuery): EvidenceNode[];
   conflictsOf(graph: EvidenceGraph, at?: number): EvidenceConflict[];
   historyOf(graph: EvidenceGraph, id: string): EvidenceNode[];
   applyDecay(
     graph: EvidenceGraph,
-    policy: DecayPolicy,
-  ): { ok: boolean; graph: EvidenceGraph; report: DecayReport; code?: string };
+    policy: DecayPolicy): { ok: boolean; graph: EvidenceGraph; report: DecayReport; code?: string };
   rescoreForModelVersion(
     graph: EvidenceGraph,
     modelVersion: string,
@@ -408,8 +401,7 @@ export function supersedeEvidence(
 export function correctEvidence(
   root: string,
   id: string,
-  input: CorrectEvidenceInput,
-): EvidenceStoreResult {
+  input: CorrectEvidenceInput): EvidenceStoreResult {
   const { graph } = loadEvidenceGraph(root);
   const result = rt.correctEvidence(graph, id, input);
   if (!result.ok || !result.node) return { ok: false, code: result.code ?? "EVIDENCE_STORE_ERROR" };

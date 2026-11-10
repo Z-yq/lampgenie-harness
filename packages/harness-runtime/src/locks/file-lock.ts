@@ -87,8 +87,7 @@ async function exclusiveCreateInPlace(target: string, payload: string): Promise<
 }
 
 async function createOrInspect(
-  resolved: string, payload: string, log: LockLogger,
-): Promise<"acquired" | "live" | "stale"> {
+  resolved: string, payload: string, log: LockLogger): Promise<"acquired" | "live" | "stale"> {
   if (await exclusiveCreate(resolved, payload)) return "acquired";
   const state = await lockState(resolved, log);
   if (state !== "missing") return state;

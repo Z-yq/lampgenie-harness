@@ -1,5 +1,5 @@
 /**
- * journal → deepseek-harness session-format v4 导出(step-004 二期收口)。
+ * journal → deepseek-harness session-format v4 导出(二期)。
  * 行帧规格=deepseek-harness 开源项目公开的 session-format v4(致谢),实现为本仓自研:
  * 行帧契约(v1-to-v2/codec.ts encodeHeader/encodeSourceEventRanges 对照):
  *   header 行={type:"session",version:4,id,createdAt,[cwd],[parentSession],isSeeded,

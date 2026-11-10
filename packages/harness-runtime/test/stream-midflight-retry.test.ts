@@ -1,5 +1,5 @@
 /**
- * 流中途错误重试(2026-10-20 实锤:任务因 "Inference engine abort. Finish reason: [UNKNOWN]" 整体失败)。
+ * 流中途错误重试(注意:任务因 "Inference engine abort. Finish reason: [UNKNOWN]" 整体失败)。
  * 根因:该错误在 SSE data 的 error 对象里,HTTP 状态是 200——现有 postWithRetry 只重试
  * 429/5xx 状态码,流内错误直达 chat() 调用方 → AgentLoop 抛出 → task.fail。
  * 修复:StreamMidFlightError + chatStreamedWithRetry(指数退避,最多 min(retry,3) 次)。

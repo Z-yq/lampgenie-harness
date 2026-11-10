@@ -1,14 +1,11 @@
 /**
  * data 层工具仓(data layer tool store)。
- *
  * 落盘布局(硬约定):
  * - 工具目录 `<root>/.genie/rsi/tools/*.json`,每个 data 工具一个文件;
  *   文件内容 `{ spec: DataToolSpec, versions: DataToolSpec[] }`(versions 含当前版,semver 降序,首项 === spec)。
  * - 钉扎文件 `<root>/.genie/rsi/tool-pins.json`,`Record<sessionId, Record<toolName, version>>`。
- *
  * 语义全在 packages/harness-runtime/src/agent/data-tool-registry.ts(纯逻辑,已全绿);
  * 本文件只负责 IO:读目录组 registry、原子写盘、热加载(无进程内缓存,每次调用都重读目录)。
- *
  * 依赖纪律:只 import node:fs / node:path + 两跳解析的 runtime 模块;不 import agent loop、
  * 不 import gateway 其它业务模块。全部导出函数同步签名(顶层 await 解析 runtime)。
  */
@@ -79,12 +76,10 @@ interface DataToolRuntime {
   ): { ok: boolean; registry: DataToolRegistryView; codes: string[]; reason?: string };
   unregisterTool(
     registry: DataToolRegistryView,
-    name: string,
-  ): { ok: boolean; registry: DataToolRegistryView; codes: string[]; restored?: string; reason?: string };
+    name: string): { ok: boolean; registry: DataToolRegistryView; codes: string[]; restored?: string; reason?: string };
   checkDependencies(
     registry: DataToolRegistryView,
-    env: DoctorEnv,
-  ): {
+    env: DoctorEnv): {
     registry: DataToolRegistryView;
     missing: Array<{ name: string; kind: string; dep: string }>;
     degraded: string[];
@@ -99,8 +94,7 @@ interface DataToolRuntime {
     registry: DataToolRegistryView,
     sessionId: string,
     name: string,
-    version: string,
-  ): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
+    version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
   listTools(registry: DataToolRegistryView): {
     native: string[];
     data: Array<{ name: string; version: string; degraded?: string[]; shadowOf?: string; wrapOf?: string }>;
@@ -395,8 +389,7 @@ interface RegisterOpts {
 function resolveApprover(
   opts: RegisterOpts | undefined,
   owner: string,
-  now: number,
-): { kind: "human" | "owner" | "agent"; id: string; at: number } | undefined {
+  now: number): { kind: "human" | "owner" | "agent"; id: string; at: number } | undefined {
   if (opts?.approval?.ok !== true) return undefined;
   return { kind: opts.approval.kind ?? "human", id: opts.approval.by ?? `human:${owner}`, at: now };
 }
@@ -437,8 +430,7 @@ function evaluateGate(raw: UnknownRecord, opts: RegisterOpts | undefined, now: n
 export function registerDataTool(
   root: string,
   spec: unknown,
-  opts?: RegisterOpts,
-): {
+  opts?: RegisterOpts): {
   ok: boolean;
   codes: string[];
   reason?: string;
@@ -533,8 +525,7 @@ export function registerDataTool(
 /** 卸载 data 工具:删文件 + 清理所有 session 对该 name 的钉扎。 */
 export function unregisterDataTool(
   root: string,
-  name: string,
-): { ok: boolean; codes: string[]; restored?: string; reason?: string } {
+  name: string): { ok: boolean; codes: string[]; restored?: string; reason?: string } {
   const scan = scanStore(root);
   const removed = rt.unregisterTool(scan.registry, name);
   if (!removed.ok) return { ok: false, codes: removed.codes, reason: removed.reason };
@@ -609,8 +600,7 @@ export function pinDataTool(
   root: string,
   sessionId: string,
   name: string,
-  version: string,
-): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
+  version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
   const reloaded = reloadTools(root);
   const pinned = rt.pinToolVersion(reloaded.registry, sessionId, name, version);
   if (!pinned.ok) return pinned;
@@ -628,8 +618,7 @@ export function pinDataTool(
 /** 依赖体检:读目录组 registry → checkDependencies 拿 missing/degraded。 */
 export function doctorDataTools(
   root: string,
-  env: DoctorEnv,
-): { ok: boolean; missing: Array<{ name: string; kind: string; dep: string }>; degraded: string[]; codes: string[] } {
+  env: DoctorEnv): { ok: boolean; missing: Array<{ name: string; kind: string; dep: string }>; degraded: string[]; codes: string[] } {
   const scan = scanStore(root);
   const checked = rt.checkDependencies(scan.registry, env);
   const codes = [...checked.codes];

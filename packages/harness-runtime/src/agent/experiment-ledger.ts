@@ -1,6 +1,5 @@
 /**
  * 实验台账(Experiment Ledger):把「假设 → 干预 → 灰度 → 指标 → 决策」写成可审计记录。
- *
  * 为什么需要台账而不是口头结论:一个 tip/prompt/工具面改动(A/B 变体)做完后,最常见的坏状态
  * 是「看起来变好了」——样本不够、只有均值没有方差、方向对了但幅度小到噪声里、或者两个实验
  * 同时改了同一处互相污染。本模块把这些判定做成纯函数:
@@ -11,7 +10,6 @@
  * - decideExperiment:决策产出新版本(深拷贝),入参实验不回写;adopt 必须先过闸。
  * - planCanary:灰度批次按 sha256(expId:key) 升序取前 N,确定性可复现、无随机。
  * - filterByStratum:按项目/任务类/模型/时间窗取实验,缺省字段即通配。
- *
  * 纯逻辑:零 IO,不读文件/网络/环境。只用 node:crypto 的 sha256(稳定 id 与批次排序)。
  */
 import { createHash } from "node:crypto";
@@ -170,8 +168,7 @@ function stratumSortKey(s: ExperimentStratum): string {
 /** 两个时间窗是否重叠(ISO 字符串比较;任一方缺失视为重叠)。 */
 function windowsOverlap(
   a: { from: string; to: string } | undefined,
-  b: { from: string; to: string } | undefined,
-): boolean {
+  b: { from: string; to: string } | undefined): boolean {
   if (!a || !b) return true;
   return a.from <= b.to && b.from <= a.to;
 }
@@ -214,8 +211,7 @@ export function isProportionLike(metric: ExperimentMetric): boolean {
 
 /** 两样本差值的标准误。返回 null 表示「都不可算」。 */
 function standardErrorOfDifference(
-  metric: ExperimentMetric,
-): { se: number; kind: "stddev" | "binomial" } | null {
+  metric: ExperimentMetric): { se: number; kind: "stddev" | "binomial" } | null {
   const b = metric.baseline;
   const r = metric.result;
   if (!r) return null;

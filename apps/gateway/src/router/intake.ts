@@ -1,5 +1,5 @@
 /**
- * intake 去重三判据(step-0143 P1,参照 dsh-superagent-prototype/src/core/intake.ts#receive):
+ * intake 去重三判据( P1,参照 dsh-superagent-prototype/src/core/intake.ts#receive):
  * stored / duplicate / filtered——scope 未监听落 filtered;同 trigger.id 二次 receive 返回 duplicate 不重复入队。
  * P1 只接两个主径入口:面板 task.submit(server.ts)与飞书 im-inbound.ts;
  * 其余 tm.submit 直调点不收敛(等效 explicit,不破坏行为)。
@@ -66,8 +66,8 @@ export function buildTrigger(input: {
   now?: () => number;
 }): Trigger {
   const now = input.now ?? Date.now;
-  // 2026-11-04 修复:删除 200 字「预览截断」——旧实现把截断文写进 Trigger.instruction 本体,
-  // dispatch 的 tm.submit 与 agent 任务书拿到的就是截断文(实锤:五任务书全被截到 214 字,
+ // 修复:删除 200 字「预览截断」——旧实现把截断文写进 Trigger.instruction 本体,
+ // dispatch 的 tm.submit 与 agent 任务书拿到的就是截断文(注意:五任务书全被截到 214 字,
   // 硬纪律段全丢)。「预览」语义只允许存在于渲染层,不允许进数据本体;且本路由是确定性闸门,
   // 没有任何研判提示词消费长文本——截断的前提本身不成立。需要预览的消费方自行局部截断。
   const instruction = input.instruction;

@@ -1,5 +1,5 @@
 /**
- * 音色清单单测(2026-10-20 音色选择+试听):
+ * 音色清单单测(音色选择+试听):
  * voicesForModel 按模型分组返回官方清单;未知模型=空表(自定义 id 兜底)。
  * 真源:help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list / qwen-tts-voice-list。
  */

@@ -1,9 +1,7 @@
 /**
- * 树刷新(step-1023)契约测试:dirCache 子树失效。
- *
+ * 树刷新契约测试:dirCache 子树失效。
  * 背景:四个刷新入口(#ideRefresh / #sbFtRefresh / 命令面板「刷新文件树」/ 右键「刷新此目录」)
  * 原本只删根键,展开中的子目录缓存仍在 → 刷新后看不到新条目。
- *
  * 覆盖:
  *  ①treeCacheKeysUnder 纯函数:根键/子键/兄弟键/remote 伪根/空 root/前缀陷阱(/a 不匹配 /ab)
  *  ②invalidateTreeCache 行为:清子树(含在飞 filesPending),兄弟与无关键保留

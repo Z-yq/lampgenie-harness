@@ -14,7 +14,7 @@ import {
 } from "../src/xlsx-recalc.js";
 import { checkOfficeArtifact } from "../src/office-qa.js";
 
-/** M103 表格计算真值链:纯内存夹具,不依赖 soffice / openpyxl。
+/** 表格计算真值链:纯内存夹具,不依赖 soffice / openpyxl。
  *  覆盖:7 类错误码、普通文本不误报、公式漂移两态、recalc 三态、office-qa 接线。 */
 const dir = mkdtempSync(join(tmpdir(), "xlsx-recalc-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));

@@ -1,26 +1,21 @@
 /**
- * git 破坏命令守卫(g1,2026-11-05)。
- *
- * **病根实锤**:11-05 09:18 一个子代理执行 `git stash`,把全仓 142 个未提交文件收进 stash,
+ * git 破坏命令守卫(g1。
+ * **病根注意**:11-05 09:18 一个子代理执行 `git stash`,把全仓 142 个未提交文件收进 stash,
  * 工作树回退成"什么都没改"的假象。既有命令围栏 `fenceCommand`(file-tools.ts)只管路径越界,
  * git stash/checkout/reset/clean/restore 一条都不拦。
- *
  * **判定口径**:基于**解析后的 git 子命令**判定,不做裸子串匹配——
  *   `echo git stash` / `git log --grep=stash` / `grep -r "git checkout" .` 一律不误判(前者命令词不是 git,
  *   后者是 log 的查询参数/是 grep 的参数)。
- *
  * **能穿透的前缀形态**(逐段剥壳):
  *   `FOO=1 git stash`(环境赋值)、`sudo -u x git stash`(sudo/env/nice/nohup/time/xargs 等包装器)、
  *   `cd /x && git stash`(按 `; && || | & 换行` 切段后逐段判)、`git -C <path> stash`、`git --no-pager stash`、
  *   `git -c core.pager=cat stash`(全局选项)、`sh -c "git stash"` / `bash -lc "cd x && git stash"`(引号内递归解析)。
- *
  * **能力边界(如实登记,不假装封死)**:
  *   - `$(...)`/反引号命令替换里的 git:反引号按引号处理不解析内部;`$(git stash)` 不在解析范围。
  *   - `bash script.sh` / `make deploy` / `node -e` 等**脚本/解释器内部**的 git 调用:文本层看不见。
  *   - 别名(`git config alias.x stash` 后跑 `git x`)、git 插件/子命令扩展:按未知子命令处理=一律 write(保守)。
  *   - 远程 `ssh host git stash`、`xargs -I{} git stash`(包装器后的占位符形态)只做尽力解析。
  *   - 超长/奇异引号嵌套(如 `sh -c "sh -c 'git stash'"` 深层)只递归一层 sh -c。
- *
  * 返回约定:`null` = 非 git 命令 / 只读 git 查询(无需干预);否则给出判定。
  * `destructive` 蕴含 `write`(破坏命令当然也是写),调用方用 `destructive || write` 判"要干预"即可。
  */
@@ -179,7 +174,7 @@ function classify(sub: string, rest: string[]): GitGuardVerdict | null {
   switch (sub) {
     case "stash": {
       if (act === "list" || act === "show") return null; // 只读查询放行
-      return verdict(true, true, "stash", `git stash 会把未提交改动整体收进 stash、工作树回退(2026-11-05 实锤:142 文件被收走)`);
+      return verdict(true, true, "stash", `git stash 会把未提交改动整体收进 stash、工作树回退(2026-11-05 实测确认:142 文件被收走)`);
     }
     case "worktree": {
       if (act === "list") return null;

@@ -1,5 +1,5 @@
 /**
- * 会话 worker host 协议测试(2026-10-21 抄 ZCode:一会话一进程):fork 桩 worker(test/fixtures/
+ * 会话 worker host 协议测试(设计参考 ZCode(致谢):一会话一进程):fork 桩 worker(test/fixtures/
  * session-worker-stub.mjs)走真 IPC——ready/journal 上行(权威 seq 重分配)/task.state 回写/
  * 子代理镜像/cancel 下发/RPC 应答(journal.readSession)。
  * 真实栈(LLM)端到端不在 vitest 跑(worker 装配读真实配置);host↔worker 协议面在此钉死。

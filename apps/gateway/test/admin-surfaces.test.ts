@@ -1,5 +1,5 @@
 /**
- * step-047 管理面单测:自定义命令 / 钩子 / 内置技能禁用 / MCP 客户端 / 统计增强。
+ * 管理面单测:自定义命令 / 钩子 / 内置技能禁用 / MCP 客户端 / 统计增强。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -13,7 +13,7 @@ import { MemoryJournal } from "@lampgenie/core";
 import { TaskSupervisor } from "../src/task-manager.js";
 import { computeStatsSummary } from "../src/stats.js";
 
-describe("CommandStore(step-047 自定义命令)", () => {
+describe("CommandStore(自定义命令)", () => {
   it("upsert/list/remove 往返;名称白名单防路径穿越", () => {
     const dir = mkdtempSync(join(tmpdir(), "gwcmd-"));
     try {
@@ -40,7 +40,7 @@ describe("CommandStore(step-047 自定义命令)", () => {
   });
 });
 
-describe("HookStore + runHookEvent(step-047 任务生命周期钩子)", () => {
+describe("HookStore + runHookEvent(任务生命周期钩子)", () => {
   it("CRUD + 事件过滤执行 + journal hook.run + markRun", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gwhook-"));
     try {
@@ -83,7 +83,7 @@ describe("HookStore + runHookEvent(step-047 任务生命周期钩子)", () => {
   });
 });
 
-describe("skills-admin(step-047 内置技能禁用)", () => {
+describe("skills-admin(内置技能禁用)", () => {
   it("set/read 往返 + 持久化", () => {
     const dir = mkdtempSync(join(tmpdir(), "gwsk-"));
     try {
@@ -100,7 +100,7 @@ describe("skills-admin(step-047 内置技能禁用)", () => {
   });
 });
 
-describe("MCP 客户端(step-047 stdio JSON-RPC)", () => {
+describe("MCP 客户端( stdio JSON-RPC)", () => {
   it("fixture 服务器:initialize → tools/list → tools/call 全链路", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gwmcp-"));
     try {
@@ -155,7 +155,7 @@ describe("MCP 客户端(step-047 stdio JSON-RPC)", () => {
   }, 20000);
 });
 
-describe("stats 增强(step-047)", () => {
+describe("stats 增强", () => {
   it("峰值/连续天数/健康度/工具维度", () => {
     const j = new MemoryJournal();
     const tm = new TaskSupervisor();

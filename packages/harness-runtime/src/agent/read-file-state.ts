@@ -1,16 +1,14 @@
 /**
- * 已读文件状态 Map(designs/25「同文件读第二遍」机制层;入口语义参考 ZCode
+ * 已读文件状态 Map(「同文件读第二遍」机制层;入口语义参考 ZCode
  * packages/core/src/tool/read-file-state.ts 的状态键 + mtime 归一化思路,持久化面不复刻)。
- *
  * 提示词层已有「同文件读第二遍=信号」的纪律,但没有机制面事实可查:模型只能凭记忆判断
- * 「这个文件我读过没有」,重读死循环(microcompact.ts 头注登记的 read_file×31 实锤)根因之一。
+ * 「这个文件我读过没有」,重读死循环(microcompact.ts 头注登记的 read_file×31 注意)根因之一。
  * 本模块补机制层:
  * - **登记**:read_file 执行成功时把 {path, mtimeMs, readAt} 记进 per-session 内存 Map
  *   (session 隔离;进程内生命周期与 loop 一致,不落 journal——纯提示层事实,不是会话真相)。
  * - **注入**:loop 每步组装消息时(与 todo reminder 同一注入点)把清单渲染成
  *   ephemeral `<system-reminder>` 块(不落 journal,与 todo 提醒同语义)。
  * - **上限**:清单超 MAX_REMINDER_FILES 只列最近 N 个(防提醒块随会话线性膨胀)。
- *
  * 归一化(照 ZCode 思路,不照抄实现):
  * - path:统一 `/` 分隔 + trim——同一文件经不同写法(反斜杠/尾随空白)命中同一条目;
  *   键用相对路径(工具已按根内相对路径展示),不做真实路径 resolve(围栏已由 file-tools 保证)。
@@ -23,9 +21,9 @@ export interface ReadFileEntry {
   path: string;
   mtimeMs: number;
   readAt: number;
-  /** 已读行段(合并后,升序):读传递(2026-11-05 D3 复测)——主 agent 已读片段是子代理「勿重读」的依据。 */
+ /** 已读行段(合并后,升序):读传递( D3 复测)——主 agent 已读片段是子代理「勿重读」的依据。 */
   ranges?: Array<{ off: number; end: number }>;
-  /** 本会话累计读取次数(重复读取去重,2026-11-07):每次 recordFileRead +1;缺省(旧数据)=按 1 次算。 */
+ /** 本会话累计读取次数(重复读取去重:每次 recordFileRead +1;缺省(旧数据)=按 1 次算。 */
   readCount?: number;
 }
 
@@ -43,7 +41,7 @@ export const MAX_REMINDER_FILES = 15;
 /** 注册表保留的会话数上限(LRU:超限淘汰最久未登记的会话,防长跑进程内存无界增长)。 */
 export const MAX_TRACKED_SESSIONS = 64;
 
-/** 读传递任务书块上限(字符):防反向膨胀——注入成本必须远小于它省下的重读 token(D3 实测 17.5%/25k tok)。 */
+/** 读传递任务书块上限(字符):防反向膨胀——注入成本必须远小于它省下的重读 token(D3 经验证 17.5%/25k tok)。 */
 export const MAX_HANDOFF_BLOCK_CHARS = 700;
 /** 读传递任务书块最多列出的文件数。 */
 export const MAX_HANDOFF_BLOCK_FILES = 8;
@@ -70,7 +68,7 @@ export function normalizeReadMtime(mtimeMs: number | undefined): number {
 /**
  * 登记一次成功读取(同 path 覆盖为最新 mtime/readAt:读同一文件两次只留最新一条)。
  * 返回归一化后的条目(便于调用方/测试断言)。
- * ranges 入参(2026-11-05 读传递):缺省=旧行为(无行段信息,视为全文件);传入则与既有行段
+ * ranges 入参(读传递):缺省=旧行为(无行段信息,视为全文件);传入则与既有行段
  * 合并去重(升序、相邻段拼缝),供「父已读哪些片段」的跨 agent 传递。
  */
 export function recordFileRead(sessionId: string, filePath: string, mtimeMs: number, readAt: number = Date.now(), ranges?: Array<{ off: number; end: number }>): ReadFileEntry {
@@ -118,7 +116,7 @@ export function readFilesOf(sessionId: string): ReadFileEntry[] {
   return [...m.values()].sort((a, b) => b.readAt - a.readAt);
 }
 
-// ---- 重复读取去重(2026-11-07:同文件同 mtime 同行段已在上下文,不再重复注入正文) ----
+// ---- 重复读取去重(同文件同 mtime 同行段已在上下文,不再重复注入正文) ----
 // 判据(纯函数,无副作用):同 path + 归一化 mtime 相等 + 请求行段 [off,end] 已被登记 ranges
 // 完全覆盖(end=RANGE_END_INF 视为到文件尾;条目无 ranges=旧数据,视为全文已覆盖)。
 // 只判「是否重复」,是否真的省略注入由调用方(force/首读/父键口径)决定。
@@ -147,8 +145,7 @@ export function checkRepeatRead(
   mtimeMs: number,
   off: number,
   end: number,
-  exactWindow = false,
-): RepeatReadVerdict {
+  exactWindow = false): RepeatReadVerdict {
   const entry = sessions.get(sessionId)?.get(normalizeReadPath(filePath));
   if (!entry) return { duplicate: false, readCount: 0 };
   const readCount = entry.readCount ?? 1; // 旧数据(无 readCount 字段)按已读 1 次算
@@ -196,7 +193,7 @@ export function clearReadFiles(sessionId: string): void {
   imageSessions.delete(sessionId);
 }
 
-// ---- 读传递(2026-11-05 D3 复测 17.5% 跨 agent 读重叠治理) ----
+// ---- 读传递( D3 复测 17.5% 跨 agent 读重叠治理) ----
 // 父会话已读事实(含行段)→ 子代理两类触达:
 //  ① spawn 时随任务书注入(renderParentReadBlock):哪些文件哪些行段父已读过+引用指引;
 //  ② 子代理 read_file 命中交叠时尾注(renderParentReadHint)。
@@ -217,7 +214,7 @@ function fmtRanges(ranges: Array<{ off: number; end: number }> | undefined): str
 }
 
 /**
- * 读传递任务书块(spawn 注入;上限 MAX_HANDOFF_BLOCK_CHARS≈175 tok 防反向膨胀——对实测
+ * 读传递任务书块(spawn 注入;上限 MAX_HANDOFF_BLOCK_CHARS≈175 tok 防反向膨胀——对经验证
  * 25k tok/6.88h 重叠量,注入/收益比 <1%)。空清单=null(零注入)。
  */
 export function renderParentReadBlock(entries: ReadonlyArray<ReadFileEntry> | undefined): string | null {

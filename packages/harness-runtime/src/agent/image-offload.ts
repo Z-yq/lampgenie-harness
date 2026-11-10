@@ -1,17 +1,14 @@
 /**
- * 图片 offload 持久位置(M58,对齐 docs/mechanisms.md #58)。
- *
+ * 图片 offload 持久位置(,对齐 docs/mechanisms.md #58)。
  * 要治的病:图片密集会话里 provider 直接回 `IMAGE_OFFLOAD_REQUIRED` / 图片尺寸预算类错误,
  * 整个 turn 立即失败(此前 10144px PNG 事故:坏 data URL 已进 journal,每轮重放都撞同一错),
  * 重试白烧 provider 重试预算;历史图片也回不来(derive 每轮重放同一批 data URL)。
- *
  * 本模块是**纯数据变换 + durable 落盘**(不依赖 provider、不改 journal):
  *  1) `isImageBudgetError` 只认图片预算/尺寸类错误(含中文文案),其它错误一律 false;
  *  2) `offloadImages` 按消息顺序、消息内图片顺序把 data URL 落盘到
  *     `<root>/.genie/image-offload/<sessionId>/<sha1>.<ext>`,请求里换成一行占位文本
  *     (`[image offloaded: <绝对路径> (sha1 <前12位>, <bytes>B)]`),占位按普通文本计价。
  *     同 hash 已存在 → 直接复用(durable,不重复写);非法/非白名单 data URL 保留原样并记 skipped。
- *
  * 落盘用「临时文件 + rename」:写一半崩掉不会留下半张图被后续请求当真图读。
  */
 import { createHash } from "node:crypto";
@@ -145,14 +142,12 @@ async function writeDurable(file: string, buf: Buffer, tag: string): Promise<voi
 
 /**
  * 把请求里可 offload 的图片落盘、正文换占位文本。**不改 journal/历史**,只返回新 messages。
- *
  * 只处理 `role === "user"` 的 `images[]`(普通用户消息 + view_image 的 `[视觉注入]` 投影消息)——
  * tool 消息本身不带图,图片在 derive 时已投影成后置 user 消息。
  */
 export async function offloadImages<M extends OffloadableMessage>(
   messages: M[],
-  opts: ImageOffloadOptions,
-): Promise<ImageOffloadResult<M>> {
+  opts: ImageOffloadOptions): Promise<ImageOffloadResult<M>> {
   const skipped: SkippedImage[] = [];
   const offloaded: OffloadedImage[] = [];
   const out = [...messages];
@@ -216,7 +211,7 @@ export async function offloadImages<M extends OffloadableMessage>(
 }
 
 /**
- * 投影校验(M58 要求 3):offload 前后**消息条数与角色序列必须逐位相同**,只允许正文追加占位与
+ * 投影校验(要求 3):offload 前后**消息条数与角色序列必须逐位相同**,只允许正文追加占位与
  * images 数组缩短。校验不通过 = 不重试(诚实),由调用方抛原错误。
  */
 export function offloadProjectionPreserved<M extends OffloadableMessage>(

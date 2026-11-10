@@ -1,10 +1,8 @@
 /**
  * 后台复盘 fork 的持久层(gateway 侧):把 retrospective-fork 的纯逻辑落到 append-only 台账。
- *
  * 为什么 append-only:`event / trigger / fork / artifact / done` 都是审计事实(哪一轮因何触发、
  * fork 拿到了什么规格、写进了哪条洞察),后来的写入不能覆盖或抹掉历史;每行追加后重读文件
  * 统计非空行数做写后校验,让「写成功了吗」成为可复核的断言而不是「appendFileSync 没抛异常」。
- *
  * 数据面:`<root>/.genie/rsi/retro.jsonl`,每行 `{"v":1,"type":...,"sessionId":...,"at":ISO}`
  * - `event{kind}` —— user-turn / tool-iteration / final-response / interrupt / cron(计数与跳过口径)。
  * - `state{nudge?,userTurns?,...}` —— 外部状态覆盖(被 nudge 拉起的会话等)。
@@ -12,7 +10,6 @@
  * - `fork{spec}` —— fork 规格落盘;恢复时 depth/nudge 从规格取,故嵌套复盘被 SKIPPED_DEPTH 挡住。
  * - `artifact{artifact}` —— 证据图输入;幂等键 `retro:<session>:<retroCount>` 去重。
  * - `done` —— 复盘完成(计数清零、retroCount+1)。
- *
  * 投影语义:按行序折叠单个 sessionId 的状态;坏行(JSON 坏 / 未知 type / 缺 sessionId)只计入
  * badLines 并跳过 —— 一行坏不整文件失效、不 throw。参数错误是本层唯一允许的拒绝(稳定码 INVALID)。
  */

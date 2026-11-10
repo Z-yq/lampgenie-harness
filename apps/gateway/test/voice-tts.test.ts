@@ -1,5 +1,5 @@
 /**
- * voice.tts 播报链单测(step-014 二期收口):qwen-tts 客户端构造/请求形态/URL 取音频;
+ * voice.tts 播报链单测(二期):qwen-tts 客户端构造/请求形态/URL 取音频;
  * 未配置=undefined(诚实降级);brief 级改写器走 voice 包 rewriteForSpeech。
  */
 import { describe, it, expect, afterEach } from "vitest";

@@ -6,7 +6,7 @@ import { MemoryJournal } from "@lampgenie/core";
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("router policy gate+版本哈希(step-0143 sr4)", () => {
+describe("router policy gate+版本哈希( sr4)", () => {
   it("observe 模式 inferred 候选→不派发且 audit.would_accept:true", async () => {
     const cfg = configOf(); // mode=observe
     const r = gate({ source: "im", threadKey: "session:s9" }, cfg, new Map());
@@ -60,7 +60,7 @@ describe("router policy gate+版本哈希(step-0143 sr4)", () => {
   });
 });
 
-describe("observe 恒不派发(step-0143 sr7 负面断言)", () => {
+describe("observe 恒不派发( sr7 负面断言)", () => {
   it("observe 路径:spy(TaskSupervisor.submit) 调用 0 次;runCompanionTurn 未触发;disposition 记 observed", async () => {
     const tm = new TaskSupervisor();
     const submitSpy = vi.spyOn(tm, "submit");

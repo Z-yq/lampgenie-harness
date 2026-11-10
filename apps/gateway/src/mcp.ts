@@ -1,5 +1,5 @@
 /**
- * MCP 客户端(step-047,ZCode MCP 服务器管理裁剪):stdio JSON-RPC 2.0。
+ * MCP 客户端(ZCode MCP 服务器管理裁剪):stdio JSON-RPC 2.0。
  * 生命周期:按需连接(连接后常驻,闲时由 closeAll 收);工具以 mcp__<server>__<tool> 并入主 agent。
  * 纪律:fail-soft(服务器不可达=工具调用返回错误文本,不挂任务);stderr 丢弃防污染 RPC 流。
  */

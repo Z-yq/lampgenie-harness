@@ -1,11 +1,9 @@
 /**
- * M115 工具循环护栏(tool-loop-guard):治「同一读取/搜索/失败调用反复重放」「A,B,A,B 批次循环」
- * 「重复结果灌上下文」三类空转(机制 M115)。
- *
+ * 工具循环护栏(tool-loop-guard):治「同一读取/搜索/失败调用反复重放」「A,B,A,B 批次循环」
+ * 「重复结果灌上下文」三类空转(机制)。
  * 本模块是纯函数 + 状态机,不依赖 Journal/AgentLoop;loop 在工具执行段前后接线:
  *   beforeCall() 执行前查 stop/配额(命中=该调用不执行,直接回工具 error);
  *   record()     执行后记账并给出 {notice(前置一行)/stub(只换模型可见文本)/stop(兜底)}。
- *
  * 口径:
  *  - 签名 = `tool|canonicalArgs(args)`(键排序递归 JSON;数组保序;undefined/函数忽略)。
  *  - 同签名连续 3 次 → notice;连续 5 次 → stop(第 5 次在 beforeCall 就被拦下,不执行)。
@@ -61,7 +59,7 @@ const STUB_TOOLS = new Set([
   "read_file", "grep", "glob", "list_dir", "web_fetch", "web_search",
   "session_search", "code_sense", "task_output",
 ]);
-/** 无条件视为轮询器(不参与连续失败计数)。wait_until(2026-11-08):超时后重试同参是合法形态。 */
+/** 无条件视为轮询器(不参与连续失败计数)。wait_until:超时后重试同参是合法形态。 */
 const POLLER_TOOLS = new Set(["task_output", "wait_for", "wait_until"]);
 /** 成功即视为 mutation(重置连击/失败计数)。 */
 const MUTATION_TOOLS = new Set([

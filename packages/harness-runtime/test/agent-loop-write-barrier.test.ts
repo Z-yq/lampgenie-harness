@@ -1,5 +1,5 @@
 /**
- * M24 写前持久化屏障(loop 侧):工具执行前 / LLM 请求前 flushStrict 失败即 fail-closed。
+ *  写前持久化屏障(loop 侧):工具执行前 / LLM 请求前 flushStrict 失败即 fail-closed。
  * 断言语义:
  * ①flushStrict 抛错 → 工具**未执行**,tool.result 写固定错误框(含原因),turn 以 [写前屏障] 失败;
  * ②flushStrict 成功 → 工具正常执行,且 flush 发生在 execute 之前(顺序断言);
@@ -83,7 +83,7 @@ describe("AgentLoop 写前屏障(工具执行前)", () => {
     expect(content).toContain("已阻止工具执行");
     const error = (results[0]!.payload as { error?: { origin?: string } }).error;
     expect(error?.origin).toBe("write-barrier");
-    // 收口事件:turn.end reason=write-barrier
+ // 事件:turn.end reason=write-barrier
     const turnEnds = journal.readAll().filter((e) => e.kind === "turn.end");
     expect((turnEnds[turnEnds.length - 1]!.payload as { reason: string }).reason).toBe("write-barrier");
   });
@@ -153,7 +153,7 @@ describe("AgentLoop 写前屏障(LLM 请求前)", () => {
   });
 });
 
-describe("AgentLoop 写前屏障(async flushStrict:M24 生产态 RPC ack)", () => {
+describe("AgentLoop 写前屏障(async flushStrict: 生产态 RPC ack)", () => {
   /** flushStrict 返回 Promise 的 journal(worker ProxyJournal 形态)。 */
   class AsyncJournal implements Journal {
     private inner = new MemoryJournal();

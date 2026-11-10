@@ -1,19 +1,15 @@
 /**
  * Office→PDF 准入的持久层(#182,生产侧):把 office-pdf-admission 的纯状态机落到单一 JSON 账本。
- *
  * 数据面:`<root>/.genie/rsi/office-pdf.json`
  *   { "v": 1, "state": { cache, inflight, queue, aliases, activeBytes, conversions, disposed, seq } }
  * 产物面:`<root>/.genie/rsi/office-pdf-out/<digest>.pdf`(由注入的 converter 写,本模块只要求它能被 stat)。
- *
  * 为什么是整账本 + 原子替换:
  * 准入状态是**当下态**(谁在等、谁在转、占了多少钱),读时只关心当前结论;追加事件流会让
  * 「还能不能收一个新请求」退化成每次全量折叠。写临时文件 → renameSync 让「读到的永远是某一
  * 完整代」成立:崩溃最多丢掉最后一次未 rename 的写,不会读到半个 inflight。
- *
  * 为什么 converter 是注入的:
  * 本层是准入与账本,不负责 spawn LibreOffice(那是部署/进程管理的事,也不该在单元测试里跑真的)。
  * 注入 converter 后:真环境传真的,测试传假的,准入裁决与产物校验逻辑完全共用一条路径。
- *
  * 失败口径:
  * - 参数错误(TypeError)是唯一 throw 的情形。
  * - 读失败(文件不存在 / JSON 坏 / 顶层形状坏)→ 折叠成 OFFICEPDF_STORE_ERROR,**写操作拒写**:
@@ -22,7 +18,6 @@
  * - 业务拒绝(REJECTED / INVALID_OUTPUT / SOURCE_CHANGED / INVALID)直接透传 runtime 稳定码,
  *   且**不写盘**(拒收前零副作用)。
  * - store 自产码不写进 runtime 码表(OFFICEPDF_STORE_CODES 只在本层出现)。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(经 workspace 子路径导入)。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -93,7 +88,7 @@ export interface ConverterInput {
   sourcePath?: string;
 }
 
-/** 转换器输出:产物事实(全部由转换器如实报告,本层不替它猜)。 */
+/** 转换器输出:产物事实(全部由转换器如用户反馈告,本层不替它猜)。 */
 export interface ConverterOutput {
   ok: boolean;
   path?: string;

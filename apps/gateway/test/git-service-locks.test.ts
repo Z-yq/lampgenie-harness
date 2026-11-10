@@ -1,11 +1,10 @@
 /**
- * 2026-10-28 「偶发 git-failed」回归:面板 toast 只显示
+ * 「偶发 git-failed」回归:面板 toast 只显示
  * `Error: Command failed: git status --porcelain -b`(code=git-failed, stderr 为空)。
- *
- * 实测根因(见 board 证据):
+ * 经验证根因(见 board 证据):
  * ①本仓 490 个变更时单次 `git status --porcelain -b` 已 5.7~11.8s,而 runGit 统一
  *   timeout=15s;
- * ②面板 gitLoad / IDE SCM 角标 / 多会话各自触发 status,并发 4/8 份实测总耗时
+ * ②面板 gitLoad / IDE SCM 角标 / 多会话各自触发 status,并发 4/8 份经验证总耗时
  *   10.7s/12.9s,单个请求越过 15s → execFile SIGTERM;
  * ③超时被 kill 时 Node 的 error 只有一句 `Command failed: <cmd>`,stderr 为空,
  *   server 又原样回帧 → 面板只看到这句无信息量原文;

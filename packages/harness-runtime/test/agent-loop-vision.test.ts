@@ -1,5 +1,5 @@
 /**
- * 视觉桥 e2e(2026-10-25 view_image;对齐 ZCode tool-result-media-projection):
+ * 视觉桥 e2e( view_image;对齐 ZCode tool-result-media-projection):
  * 工具返回 [vision-image] 哨兵 → loop 落账剥离 dataUrl 进 payload.images + 确认句 →
  * deriveMessages 投影后置 user 消息(user+images)→ provider 请求可见;
  * 多次注入按 **turn 边界**回收:同一 turn 内全保留 dataUrl,进入新 turn 后旧 turn 的图转占位
@@ -65,7 +65,7 @@ describe("视觉桥(view_image sentinel → 后置 user images)", () => {
     expect(after?.images).toEqual(["data:image/png;base64,QUJD"]);
   });
 
-  // 2026-11 token 优化轮 02:回收口径从「只留最新一张」改为 **turn 边界**——同 turn 内一律保留
+ // 2026-11 token 优化轮 02:回径从「只留最新一张」改为 **turn 边界**——同 turn 内一律保留
   // dataUrl(否则同一 turn 内每加一张图就重写历史中段,提示缓存整段失效),只有进入新 turn 后
   // 旧 turn 的图才转占位。跨 turn 行为见 agent-loop-vision-turn-boundary.test.ts。
   it("deriveMessages 重放:后置 user 消息在列;同 turn 内两次注入都保留 dataUrl(不转占位)", async () => {
@@ -115,7 +115,7 @@ describe("视觉桥(view_image sentinel → 后置 user images)", () => {
     expect(p.content).toContain("not-json"); // 原样落账(诚实回退)
   });
 
-  // 2026-10-30 多图化:工具一次返回多张(paths 数组),哨兵 payload 形状 {images[],label,errors?}。
+ // 多图化:工具一次返回多张(paths 数组),哨兵 payload 形状 {images[],label,errors?}。
   it("多图哨兵:images 数组直通投影,确认句带张数", async () => {
     const journal = new MemoryJournal();
     const multi: Tool = {

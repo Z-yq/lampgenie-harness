@@ -1,5 +1,5 @@
 /**
- * 429 自动重试+governor AIMD 信号源专项(step-008 二期收口)。
+ * 429 自动重试+governor AIMD 信号源专项(二期)。
  * 此前 governor/AIMD 全链存在但零生产者(model_retry_scheduled 无人发)——本套件锚定:
  * 429→retry(Retry-After/退避)→model_retry_scheduled 经票据喂 AIMD(throttled 降 cap)。
  */

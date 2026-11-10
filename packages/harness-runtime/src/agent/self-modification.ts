@@ -1,17 +1,14 @@
 /**
  * RSI #196 自我修改安全门(Self-Modification Gate,纯逻辑零 IO)。
- *
  * 任何自我修改(tool / tip / prompt / skill / code / config)都走同一道门:
  *   证据(evidence) + 影响面(impact) + dry-run + canary + rollback point + owner 六件套;
  *   RSI 生成的改动不可自批(必须 human approver);不可逆改动必须人类审批。
- *
- * 口径(与 M151 审批对象同源):
+ * 口径(与 审批对象同源):
  * - canonical JSON:键升序递归、数组保序、undefined/函数/符号忽略 —— 与 approval-object.ts 的
  *   canonicalApprovalJson 同一语义(本模块不 import gateway,故内联一份等价实现)。
  * - freezeSelfModification:只冻结「变更面」字段(surface/targetRef/variant/summary/evidence/
  *   impact/dryRun/rollback/irreversible/riskFlags),sha256 全 64 位十六进制;apply 前按同一对象复核。
  * - 结论优先级:结构性/六件套缺失 → deny;仅审批类 → need-approval;全过 → allow。
- *
  * 依赖纪律:只 import node:crypto;不读写文件、不引 agent loop、不引 gateway。
  */
 
@@ -315,7 +312,7 @@ function canonicalValue(value: unknown, stack: Set<object>): string | undefined 
   }
 }
 
-/** canonical JSON 文本(与 M151 canonicalApprovalJson 同口径)。 */
+/** canonical JSON 文本(与 canonicalApprovalJson 同口径)。 */
 export function canonicalModificationJson(value: unknown): string {
   const out = canonicalValue(value, new Set());
   if (out === undefined) throw new TypeError("自我修改对象根值不可 JSON 化");

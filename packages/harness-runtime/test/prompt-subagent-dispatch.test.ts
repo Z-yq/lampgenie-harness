@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { composeSystemPrompt, renderSubagentDispatchSection, renderSubagentHeavyOpDiscipline } from "../src/agent/system-composer";
 
-describe("system-composer 子代理资源调度节(step-071 D7)", () => {
+describe("system-composer 子代理资源调度节( D7)", () => {
   const base = "你是 lampgenie-harness 的 vibe coding 主 agent(代表 identity 节)。";
 
   it("subagentDispatch 缺席=不渲染该节(与旧版零差异)", () => {
@@ -42,7 +42,7 @@ describe("system-composer 子代理资源调度节(step-071 D7)", () => {
     const dispatch = renderSubagentDispatchSection({ answerToolMounted: true });
     const after = composeSystemPrompt({ base, subagentDispatch: dispatch }).text.length;
     expect(after - before).toBe(dispatch.length + 2); // "\n\n" 连接
-    // 子代理纪律块形态:先申请/不绕行/如实报告三禁;精简 ≤400 字符
+ // 子代理纪律块形态:先申请/不绕行/如用户反馈告三禁;精简 ≤400 字符
     const d = renderSubagentHeavyOpDiscipline();
     expect(d).toContain("如实等待审批结果");
     expect(d).toContain("禁止拆分命令、换等价命令或改写命令字面来规避判定");

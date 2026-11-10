@@ -1,7 +1,7 @@
 /**
  * 单实例锁:双写 journal → seq 重复 → 重启丢事件 → LLM 400 的结构性防线。
- * 2026-10-25 加固回归:僵尸/PID 复用/旧格式锁/损坏锁/锁面不可写都必须「能自动回收或诚实拒绝」,
- * 不能让一个死 pid 的锁把新实例永久挡在门外(实测事故)。
+ * 加固回归:僵尸/PID 复用/旧格式锁/损坏锁/锁面不可写都必须「能自动回收或诚实拒绝」,
+ * 不能让一个死 pid 的锁把新实例永久挡在门外(经验证事故)。
  */
 import { describe, it, expect } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
@@ -147,7 +147,7 @@ describe("instance-lock", () => {
     expect(parseProcStat("777 (no-close")).toBeUndefined();
   });
 
-  // Windows 实测(2026-11-08 新用户模拟):死 pid 18576 的 process.kill(pid,0) 抛 EPERM 而不是
+ // Windows 经验证(新用户模拟):死 pid 18576 的 process.kill(pid,0) 抛 EPERM 而不是
   // ESRCH,旧逻辑直接当活锁 → 陈旧锁永久挡住启动。EPERM 必须用 tasklist 复核。
   it("pidAlive:Windows EPERM + tasklist 说不存在 → 判死", () => {
     const eperm = (): never => {

@@ -1,6 +1,5 @@
 /**
  * surface 审计:把「概念足迹清单」和「逐条处置结论」对账,判断这次替换/下线是否真的走完了。
- *
  * 规则(确定性,不做语义猜测):
  *  - resolution 按 file 匹配(给了 line 则必须相等);resolved / removed 计入 resolved;
  *  - keep-legacy 必须带非空 reason(≥4 字),否则进 invalidJustifications 且不算 justified;

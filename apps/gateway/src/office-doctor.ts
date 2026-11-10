@@ -1,6 +1,5 @@
 /**
- * 办公环境 doctor(M104):把「环境依赖探测」从一句话提示变成可执行体检。
- *
+ * 办公环境 doctor:把「环境依赖探测」从一句话提示变成可执行体检。
  * 核心口径(**不许静默跳过**):
  *   - 三类依赖:core(缺了根本跑不了)/ optional(缺了能力降级)/ install-on-demand(可以现装);
  *   - 缺失且**没尝试安装** → status = "needs-install" 且 installAttempted = false,
@@ -8,7 +7,6 @@
  *   - attemptInstall=true 时才真的执行安装:装完必须**复验版本**;安装失败 →
  *     status = "install-failed" 并如实写进 remediation;
  *   - overall ok = false **当且仅当** core 项失败,或有 install-on-demand 项 install-failed。
- *
  * 探测函数可注入(probe),测试用桩即可覆盖全部状态,不依赖宿主装了什么。
  */
 import { execFile } from "node:child_process";

@@ -74,7 +74,7 @@ describe("gateway WS 集成", () => {
     ws.close();
   });
 
-  it("node.register 实装(step-011):注册成功回执", async () => {
+  it("node.register 实装:注册成功回执", async () => {
     app = createGatewayApp({ port: 7798 });
     const ws = await connect(7798);
     await nextMessage(ws, "hello");
@@ -264,7 +264,7 @@ describe("gateway WS 集成", () => {
     await nextMessage(ws0, "hello");
     ws0.send(JSON.stringify({ v: 1, type: "models.list" }));
     const err = await nextMessage(ws0, "error");
-    // step-101:错误码域化(models- 前缀)——panel /models/ 内联分支才能接住,状态行不滞留「拉取中…」
+ // 错误码域化(models- 前缀)——panel /models/ 内联分支才能接住,状态行不滞留「拉取中…」
     expect(err.code).toBe("models-not-implemented");
     ws0.close();
     await app.close();
@@ -318,7 +318,7 @@ describe("gateway WS 集成", () => {
     ws.close();
   });
 
-  it("cfg.set 子代理模型:provider 已装配时热分发 update(step-112)", async () => {
+  it("cfg.set 子代理模型:provider 已装配时热分发 update()", async () => {
     const updates: Record<string, unknown>[] = [];
     const fakeLlm = {
       update: () => {},
@@ -345,7 +345,7 @@ describe("gateway WS 集成", () => {
     ws.close();
   });
 
-  it("cfg.set 角色模型换 Provider:路由冷项不把模型热切到旧端点(step-112)", async () => {
+  it("cfg.set 角色模型换 Provider:路由冷项不把模型热切到旧端点", async () => {
     const updates: Record<string, unknown>[] = [];
     const fakeLlm = { update: () => {}, chat: async () => ({ content: "", toolCalls: undefined }) };
     const fakeCompact = { update: (p: Record<string, unknown>) => updates.push(p), chat: async () => ({ content: "", toolCalls: undefined }) };
@@ -374,7 +374,7 @@ describe("gateway WS 集成", () => {
   });
 });
 
-describe("step-046 WS 面:diffstat/统计", () => {
+describe(" WS 面:diffstat/统计", () => {
   it("task.diffstat:checkpoint 事件携带 sha → 返回真实 numstat;无快照 → 空", async () => {
     const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -433,7 +433,7 @@ describe("step-046 WS 面:diffstat/统计", () => {
 });
 
 /**
- * 2026-10-22「主动 /compact 感觉没运行」服务端两因(板节点 n3/n4):
+ * 「主动 /compact 感觉没运行」服务端两因(板节点 n3/n4):
  * ③手动压缩恒走主轨 llm(与自动路径 agent-wiring.ts:2174 不同源);
  * ④轮次守卫按相邻 role 段计 assistant 轮 → 一轮多 step 被误判「会话太短」。
  * 手动路径 keepRecentMessages=10:消息必须 > 10 条才有可压缩 head。

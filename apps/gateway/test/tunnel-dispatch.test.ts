@@ -1,5 +1,5 @@
 /**
- * step-033 e2e/单元:tunnel 委派+失联重派+深度拒绝+凭证红线。
+ * e2e/单元:tunnel 委派+失联重派+深度拒绝+凭证红线。
  * D2 红线=凭证值不过 gateway 侧(journal+下发帧+回流),grep 断言;
  * D1 双节点以双客户端/双注册等价模拟(单机环境,登记近似)。
  */
@@ -55,7 +55,7 @@ afterEach(async () => {
   app = null;
 });
 
-describe("step-033 tunnel 委派(WS e2e)", () => {
+describe(" tunnel 委派(WS e2e)", () => {
   it("D6+D2:节点真执行→done;凭证值不过 gateway(journal/下发帧/回流全 grep 无命中)", async () => {
     app = createGatewayApp({ port: 7787, executor: new EchoChildBackend() });
     const user = await connect(7787);
@@ -152,7 +152,7 @@ describe("step-033 tunnel 委派(WS e2e)", () => {
   });
 });
 
-describe("step-033 深度与失联(单元-集成)", () => {
+describe(" 深度与失联(单元-集成)", () => {
   it("D4 委派深度>1 机制拒绝", async () => {
     const nodes = new NodeRegistry();
     const conns = new NodeConnections();

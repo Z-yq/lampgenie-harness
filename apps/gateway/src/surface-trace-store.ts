@@ -1,18 +1,14 @@
 /**
  * 表面替换溯源的持久层:把 surface-trace 的纯逻辑落到 append-only jsonl,读时回放成投影。
- *
  * 数据面:`<root>/.genie/rsi/surface.jsonl`,每行 `{v:1,...SurfaceEvent}`(一事件一行)。
- *
  * 为什么 append-only:一次 replace 是「某段历史在某代际被改写」的审计事实。若直接改写原行,
  * 「谁在什么代际覆盖了哪些节点」就永久不可考;并发压缩基于旧 surface 提交也无从发现。
  * 因此:原事件行永不删除、永不改写,replace 只是**新增一行**声明来源与覆盖,读时回放成
  * `{events, appendOrigin, shadowed, contentGeneration}` 投影——journal 全留,视图收窄。
- *
  * 校验:所有写入先过 runtime 的 validateEvent(同一条契约,CLI/agent loop/gateway 共用),
  * 失败返回 `{ok:false,codes}` 且**不写盘**(拒收即零副作用)。
  * `replaceEvent` 在只有一个 source 且该事件存在时自动带上 oldEvent,这样 tool_call/tool_result
  * 的「只允许改 content」不需要调用方每次自己捞旧事件;多 source 时不猜(shadowedSeqs 同理不猜)。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其它业务模块。
  * runtime 模块按 cohort-signature-store 的两跳套路惰性解析(vitest 走 development 导出、
  * 裸 tsx/dist 回退仓内源文件),顶层 await 以保持所有导出函数同步签名。
@@ -73,8 +69,7 @@ interface SurfaceRuntime {
   validateEvent(
     event: SurfaceEvent,
     existing: readonly SurfaceEvent[],
-    opts?: SurfaceValidateOptions,
-  ): { ok: boolean; codes: string[] };
+    opts?: SurfaceValidateOptions): { ok: boolean; codes: string[] };
   applySurfaceEvent(state: SurfaceState, event: SurfaceEvent): { state: SurfaceState; codes: string[] };
   humanTranscript(state: SurfaceState): { events: SurfaceEvent[]; codes: string[] };
   derivedCacheVersion(state: SurfaceState): number;
@@ -210,8 +205,7 @@ function appendLine(root: string, event: SurfaceEvent): boolean {
 function withOldEvent(
   event: SurfaceEvent,
   existing: readonly SurfaceEvent[],
-  opts: SurfaceValidateOptions | undefined,
-): SurfaceValidateOptions {
+  opts: SurfaceValidateOptions | undefined): SurfaceValidateOptions {
   if (opts?.oldEvent !== undefined) return opts;
   const sources = Array.isArray(event.sourceEventSeqs) ? event.sourceEventSeqs : [];
   if (sources.length !== 1) return opts ?? {};
@@ -223,8 +217,7 @@ function writeEvent(
   root: string,
   input: unknown,
   want: SurfaceOp,
-  opts?: SurfaceValidateOptions,
-): SurfaceWriteResult {
+  opts?: SurfaceValidateOptions): SurfaceWriteResult {
   const path = surfaceTracePath(root);
   if (!isRecord(input)) return { ok: false, codes: ["SURFACE_INVALID"] };
   const declared = input["surfaceOp"];
@@ -236,8 +229,7 @@ function writeEvent(
   const verdict = rt.validateEvent(
     event,
     projection.state.events,
-    want === "replace" ? withOldEvent(event, projection.state.events, opts) : opts,
-  );
+    want === "replace" ? withOldEvent(event, projection.state.events, opts) : opts);
   if (!verdict.ok) return { ok: false, codes: verdict.codes };
   if (!appendLine(root, event)) {
     return { ok: false, codes: ["SURFACE_STORE_WRITE_FAILED"] };
@@ -249,16 +241,14 @@ function writeEvent(
 export function validateIncoming(
   root: string,
   event: unknown,
-  opts?: SurfaceValidateOptions,
-): { ok: boolean; codes: string[] } {
+  opts?: SurfaceValidateOptions): { ok: boolean; codes: string[] } {
   if (!isRecord(event)) return { ok: false, codes: ["SURFACE_INVALID"] };
   const projection = loadSurfaceTrace(root);
   const candidate = { ...event } as SurfaceEvent;
   return rt.validateEvent(
     candidate,
     projection.state.events,
-    candidate.surfaceOp === "replace" ? withOldEvent(candidate, projection.state.events, opts) : opts,
-  );
+    candidate.surfaceOp === "replace" ? withOldEvent(candidate, projection.state.events, opts) : opts);
 }
 
 /** 追加一条 append 事件(契约不过就拒收且不写盘)。 */

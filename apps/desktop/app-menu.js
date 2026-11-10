@@ -1,9 +1,7 @@
 /**
  * role-based 应用菜单(菜单结构语义设计参考 ZCode 项目,致谢;本仓独立实现)。
- *
  * 为什么需要:壳此前 `Menu.setApplicationMenu(null)`,Ctrl+C/V/X/A/Z、Ctrl+R、F12 这些
  * 桌面用户默认期待的快捷键全靠 Chromium 兜底,且没有「关于/日志目录」等桌面入口。
- *
  * 设计约束:
  * - 编辑类用 Electron role(标准快捷键 + 系统语义);
  * - 缩放不用 role(role 直接改 webContents,绕过壳的持久化与夹取):用 accelerator 只展示

@@ -1,6 +1,5 @@
 /**
- * sensing/statemachines(step-077 P2 / designs/24 §2.2):状态机感知泛化。
- *
+ * sensing/statemachines( P2 / §2.2):状态机感知泛化。
  * 形态清单(全部确定性行扫描,触发点带 {file,line} 证据):
  *   F1 transitions-table:TRANSITIONS 字面量表(key: new Set([...]))——sequence/index.ts 金标准形态的泛化;
  *   F2 switch/if-else 转移:状态变量声明(联合类型/enum/字面量赋值)+ 转移赋值双条件收敛
@@ -8,8 +7,7 @@
  *   F3 state-pattern 类族:多类 extends 同一 State 基类 + context.setState(new X()) 转移;
  *   F4 XState createMachine 配置对象(braces 配对提取 states/on 映射);
  *   F5 Redux createSlice(弱化产物:slice 名+状态字段+reducer 动作清单,标 redux-slice 防误读为状态机)。
- *
- * 砍量(designs/24 §2.2 论证):DB status 字段流转不做(跨文件 ORM 数据流,假阳/假阴双高)——
+ * 砍量( §2.2 论证):DB status 字段流转不做(跨文件 ORM 数据流,假阳/假阴双高)——
  * 退化为 statusHints 词法提示区(tier=lexical,标注「可能含误判,仅供人工排查入口」)。
  */
 import { readFile } from "node:fs/promises";
@@ -64,7 +62,7 @@ function extractTransitionsTable(file: string, lines: string[]): StateMachine[] 
     }
   }
   if (transitions.length === 0) return [];
-  // 名称守卫(实锤误报:vendor 里 `stepEvents: new Set([...])` 这类普通集合映射被当状态机):
+ // 名称守卫(注意误报:vendor 里 `stepEvents: new Set([...])` 这类普通集合映射被当状态机):
   // 声明名含 TRANSITION/STATE/MACHINE 或类型注记 Record<*State*, Set<*State*>> 才算状态转移表,
   // 否则整体降级为 candidates(不产机,不误报)。
   const lookback = text.slice(Math.max(0, firstIdx - 400), firstIdx);
@@ -128,7 +126,7 @@ function extractSwitchMachines(file: string, lines: string[]): StateMachine[] {
     const to = am?.[2] ?? sm?.[1];
     if (to) {
       // 双条件收敛:①值 ∈ 声明状态集(或状态集未知但形态像状态机)②有 from 上下文(case/if)——
-      // 无上下文=初始赋值/裸赋值(实锤:`private state: GateState = "idle"` 声明行被当转移)
+ // 无上下文=初始赋值/裸赋值(注意:`private state: GateState = "idle"` 声明行被当转移)
       if (ctxFrom && (stateSet.size === 0 || stateSet.has(to))) {
         stateSet.add(to);
         stateSet.add(ctxFrom);
@@ -199,7 +197,7 @@ function extractXState(file: string, lines: string[]): StateMachine[] {
     let inOn = false; let onBase = 0;
     const evLineRe = /(\w+)\s*:\s*["']([\w-]+)["']/g;
     // target 对象形态:[^}{] 防跨越嵌套键(`on: { TOGGLE: "x", RESET: { target: "y" } }`
-    // 的 [^}] 会从 on 一路吞到 RESET 的 target,trigger 被误记成 "on"——实锤于 toggle fixture)
+ // 的 [^}] 会从 on 一路吞到 RESET 的 target,trigger 被误记成 "on"——注意于 toggle fixture)
     const evTargetRe = /(\w+)\s*:\s*\{[^}{]*?target\s*:\s*["']([\w-]+)["']/g;
     const scanEvents = (text: string, lineNo: number): void => {
       // target 对象形态先提(防 { target: "x" } 里的 target 被当事件名)
@@ -254,7 +252,7 @@ function extractReduxSlice(file: string, lines: string[]): StateMachine[] {
   for (let i = 0; i < lines.length; i++) {
     if (!/createSlice\s*\(/.test(lines[i]!)) continue;
     const tracker = createBraceTracker();
-    // 2026-10-22 P0:记录「喂入前」的花括号深度——旧实现用行处理后深度判 reducers 键,
+ // P0:记录「喂入前」的花括号深度——旧实现用行处理后深度判 reducers 键,
     // 单行签名 `setOptions: (state, action) => {` 处理后深度已多一层,16 个 reducer 只认出
     // 第 1 个(首键恰好写成 `addChatItem: (` 跨行、深度未变)。另带圆括号深度,排除参数行
     // (action: PayloadAction<...>)被误当动作名。
@@ -276,7 +274,7 @@ function extractReduxSlice(file: string, lines: string[]): StateMachine[] {
     for (const b of block) {
       const nm = /name\s*:\s*["']([\w-]+)["']/.exec(b.raw);
       if (nm && !name) name = nm[1]!;
-      // createSlice( 未闭合时 paren 恒 ≥1:以「reducers 行当时的 paren」为基准,
+ // createSlice(未闭合时 paren 恒 ≥1:以「reducers 行当时的 paren」为基准,
       // 参数表所在层(reducersParen+1)自然被排除。声明行必须 continue——否则同行的
       // 「深度回落=块关」判定会把刚设好的深度立刻清掉(before 比块内层少 1)。
       if (/^\s*initialState\s*:/.test(b.raw) && !initialDepth) { initialDepth = b.before + 1; initialParen = paren; paren += parenDelta(b.code); continue; }

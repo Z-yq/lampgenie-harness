@@ -45,22 +45,18 @@ export function summarizeMemoryProvider(provider) {
 
 /**
  * Provider-neutral persistence port for frontend memory.
- *
  * Required methods:
  *   describe() -> { protocolVersion, key, label }
  *   list(ownerId, options) -> MemoryDocument[]
  *   apply(ownerId, changes, context) -> MemoryApplyResult | Promise<...>
- *
  * list() is deliberately synchronous because it supplies the latency-sensitive
  * Realtime prompt. Remote providers should keep a bounded local snapshot and
  * refresh it after apply(). Writes may be asynchronous.
- *
  * Protocol v2 optional capabilities:
  *   query(ownerId, query, options, context) -> MemoryQueryResult
  *   observe(ownerId, exchange, context) -> void
  *   flush(ownerId, context) -> void
  *   observeAudio(ownerId, event, context) -> void
- *
  * Providers advertise semanticQuery/sessionObservation/audioStreamObservation
  * from describe(). observeAudio() runs on the accepted PCM16 input hot path
  * and receives chunk, speech_started, speech_stopped, and session_ended events.
@@ -69,7 +65,6 @@ export function summarizeMemoryProvider(provider) {
  * extractor and preference learner; the two learning pipelines never run in
  * parallel. Such providers also own retention, sensitive-data filtering, and
  * deletion policy for the exchanges they observe.
- *
  * Optional lifecycle methods:
  *   health() -> { ok, ... }
  *   close()

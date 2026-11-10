@@ -1,8 +1,7 @@
 /**
  * board-layout-elk 单测:自实现 wrapping 布局(createBoardElkLayout)接进 board-diagram 后,
  * 真 flowkit 出图的 **宽高比** 必须落进目标区间(单列长链 → 接近 16:9)。
- *
- * 断言的是 viewBox 的 w/h(实测基线:改前 17 节点 5.45:1、60 节点 2.47:1)。
+ * 断言的是 viewBox 的 w/h(经验证基线:改前 17 节点 5.45:1、60 节点 2.47:1)。
  * 覆盖:①17 节点 3 groups ②60 节点 6 groups ③带环图 ④带边 label ⑤布局器抛错时的回退。
  */
 import { describe, it, expect } from "vitest";

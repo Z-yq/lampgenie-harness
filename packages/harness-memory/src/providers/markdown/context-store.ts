@@ -67,8 +67,8 @@ function tidyMarkdown(content) {
       seenBullets.add(item)
       return true
     })
-  // 空节清理(2026-10-19):标题后紧跟标题/EOF = 无内容节,整节丢弃
-  // (实测 USER.md 积累 69 个空「## 用户明确要求」,每个都白烧注入 token)。
+ // 空节清理:标题后紧跟标题/EOF = 无内容节,整节丢弃
+ // (经验证 USER.md 积累 69 个空「## 用户明确要求」,每个都白烧注入 token)。
   return dropEmptySections(kept)
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')

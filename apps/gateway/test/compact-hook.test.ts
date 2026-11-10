@@ -1,7 +1,7 @@
 /**
- * step-058 compact 钩子接线锚定(makeCompactHook):
+ * compact 钩子接线锚定(makeCompactHook):
  * ①子 agent 结果合并(tool.result)只增上下文——合并本身绝不触发压缩(解耦);
- * ②usage 实测逼近模型窗口(80%)才真压缩,且压缩发生时同步触发 exp 经验沉淀(用户口径);
+ * ②usage 经验证逼近模型窗口(80%)才真压缩,且压缩发生时同步触发 exp 经验沉淀;
  * ③无窗口时显式阈值(config agent.compactThresholdTokens 通道)兜底。
  */
 import { describe, it, expect } from "vitest";
@@ -29,7 +29,7 @@ function agent(j: MemoryJournal, text: string, inputTokens: number): void {
   j.append({ kind: "message.agent", sessionId: "s1", payload: { text, usage: { inputTokens } } });
 }
 
-describe("makeCompactHook(step-058)", () => {
+describe("makeCompactHook()", () => {
   it("子 agent 结果合并(tool.result)只增上下文——绝不因此触发压缩(与合并解耦)", async () => {
     const j = new MemoryJournal();
     j.append({ kind: "message.user", sessionId: "s1", payload: { text: "派子代理调查" } });
@@ -53,7 +53,7 @@ describe("makeCompactHook(step-058)", () => {
     const store = new ExperienceStore(join(tmp, "exp"));
     const j = new MemoryJournal();
     j.append({ kind: "message.user", sessionId: "s1", payload: { text: "调查 compact 机制并修复" } });
-    // 2026-11-04 强压守卫修订:对话史必须真有分量(est ≥ 阈)——「usage 大但史小」是死亡螺旋形态,
+ // 强压守卫修订:对话史必须真有分量(est ≥ 阈)——「usage 大但史小」是死亡螺旋形态,
     // 现在会被 force-vs-est 守卫拦下。真实增长 = 历史里有真实体量(工具结果堆积)。
     j.append({ kind: "message.user", sessionId: "s1", payload: { text: "素材".repeat(20_000) } });
     agent(j, "第0步", 7000);
@@ -89,7 +89,7 @@ describe("makeCompactHook(step-058)", () => {
     agent(j, "x", 30_000);
     agent(j, "x", 30_000);
     agent(j, "x", 30_000); // ≥ 显式阈 24000 → fire+force
-    // M49 缩小校验(摘要必须严格小于被遮蔽的 head):hook 的 keepRecent=min(10,msgCount-1),
+ // 缩小校验(摘要必须严格小于被遮蔽的 head):hook 的 keepRecent=min(10,msgCount-1),
     // 消息数 ≤11 时 head 恒只有第 1 条(这里是 "hi"),压缩毫无收益且会被 not-smaller 拒。
     // 补齐消息数到 12 让 head 含真实体量(第 2 条 3 万字素材),与生产「长会话压缩」形态一致。
     for (let i = 0; i < 7; i++) agent(j, "x", 30_000);

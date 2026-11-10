@@ -13,7 +13,7 @@ import { startGatewayServer, repairSessionProjectDrift } from "./server.js";
 import { repairTailBeforeResume } from "./journal-tail-repair.js";
 import { journalArchiveDirOf } from "./journal-maintenance.js";
 import { createEffectQueue, relayActivityHandler, type EffectQueue } from "./effect-queue.js";
-// M112 终态投递义务:启动回放 seed + 启动 sweep 一次(不自动重投,等连接)。
+// 终态投递义务:启动回放 seed + 启动 sweep 一次(不自动重投,等连接)。
 import { createDeliveryObligationStore, type DeliveryObligation } from "./delivery-obligation.js";
 import { hasUserStoppedSince, appendUserStoppedMarker, USER_STOPPED_EVENT, USER_STOPPED_RESUME_MESSAGE } from "./user-stop-marker.js";
 import { NodeConnections, NodeDispatch } from "./nodes.js";
@@ -56,7 +56,7 @@ import type { EffectiveModel } from "./model-switch.js";
 import { permissionMode } from "./permission-mode.js";
 import { join as joinPath } from "node:path";
 import { repoRoot } from "./repo-root.js";
-import { sampleLoad } from "./load-sample.js"; // step-1042:节点 Fleet 真实负载(旧硬编码恒零)
+import { sampleLoad } from "./load-sample.js"; // 节点 Fleet 真实负载(旧硬编码恒零)
 import { PROTOCOL_VERSION } from "@lampgenie/protocol";
 import { TEMPLATES } from "@lampgenie/workflow";
 import type { SubagentBackend } from "@lampgenie/executors";
@@ -65,22 +65,22 @@ import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 export interface GatewayApp {
   taskManager: TaskSupervisor;
   nodes: NodeRegistry;
-  /** 项目注册表(step-035)。 */
+ /** 项目注册表。 */
   projects: ProjectRegistry;
   /** workflow ask 面板应答路由(F6;观察/测试面)。 */
   workflowAskRouter: WorkflowAskRouter;
-  /** ask_user 问答路由(step-1033:指挥台待答卡数据源;观察/测试面)。 */
+ /** ask_user 问答路由(指挥台待答卡数据源;观察/测试面)。 */
   askUser: AskUserRouter;
-  /** 定时自动化(step-043;观察/测试面)。 */
+ /** 定时自动化(观察/测试面)。 */
   automations: AutomationStore;
   automationScheduler: AutomationScheduler;
   /** journal(观察/测试面;评论卡等事件注入用)。 */
   journal: Journal;
-  /** M189 持久效果队列(外部副作用先落账后执行;observation/测试面)。 */
+ /** 持久效果队列(外部副作用先落账后执行;observation/测试面)。 */
   effectQueue: EffectQueue;
-  /** OTel 导出器(step-031 收口;GENIE_OTEL_ENDPOINT 门控,未配置=undefined)。 */
+ /** OTel 导出器(GENIE_OTEL_ENDPOINT 门控,未配置=undefined)。 */
   otel?: { stats(): { spans: number; failures: number; pending: number }; stop(): void };
-  /** 记忆接线(step-029 收口):上下文块+会话终态学习。 */
+ /** 记忆接线:上下文块+会话终态学习。 */
   memory: MemoryWiring;
   /** 外部 HTTP server 模式:把 WS 挂到给定 server(panel 同端口用)。 */
   attachWs(server: Server): void;
@@ -97,7 +97,7 @@ export function browserCfgFrom(config: unknown): {
 } {
   /* 必须在每次调用时**现读** config.browser,不能把子对象捕获进闭包:cfg.set 走
    * `Object.assign(config, next)`(main.ts),它会整体替换 config.browser 为新对象——
-   * 捕获旧子对象会让面板「一键启用浏览器」写完配置仍读到 enabled=false(2026-11 实锤)。 */
+ * 捕获旧子对象会让面板「一键启用浏览器」写完配置仍读到 enabled=false(2026-11 注意)。 */
   const live = () => (config as { browser?: { enabled?: boolean; allowDomains?: string[]; idleMinutes?: number; profile?: "persistent" | "ephemeral"; profileDir?: string; headless?: boolean } } | undefined)?.browser;
   return {
     enabled: () => live()?.enabled !== false,
@@ -118,11 +118,11 @@ export interface GatewayAppOptions {
   /** executor 后端;缺省 = 不执行(任务停在 running)。 */
   executor?: SubagentBackend;
   /** LLM(coding 轨);与 executor 同时提供时,任务走主 agent loop。
-   * step-1033:super agent 指挥台对话模型 = 本字段(删除 companionLlm 独立轨)。 */
+ * super agent 指挥台对话模型 = 本字段(删除 companionLlm 独立轨)。 */
   llm?: LlmProvider;
   /** true=外部 HTTP server 模式(panel 同端口);false/缺省=立即独立监听 WS(旧行为)。 */
   useExternalHttp?: boolean;
-  /** 主模型上下文窗口 tokens(step-048:自动压缩阈值+容量看板;main.ts 按轨取 config)。 */
+ /** 主模型上下文窗口 tokens(自动压缩阈值+容量看板;main.ts 按轨取 config)。 */
   contextWindow?: number;
   /** TaskSupervisor 并发参数(配置驱动,packages/core ConfigSchema)。 */
   concurrency?: Partial<{ maxConcurrent: number; maxConcurrentPerOwner: number; maxConcurrentSystem: number }>;
@@ -146,9 +146,9 @@ export interface GatewayAppOptions {
     /** 角色 provider 热切完整参数(含 apiKey,仅内部使用,不得随回包下发)。 */
     roleHot?: Record<string, Record<string, unknown>>;
   };
-  /** step-125 预设一键接入:把用户 Key 写入 .genie/secrets.json(0600);缺省=密钥写入未启用。 */
+ /** 预设一键接入:把用户 Key 写入 .genie/secrets.json(0600);缺省=密钥写入未启用。 */
   onSecretSet?: (name: string, value: string) => { existed: boolean };
-  /** step-125:密钥名列表(只返回名字,绝不返回值);设置页「是否覆盖」提示用。 */
+ /** 密钥名列表(只返回名字,绝不返回值);设置页「是否覆盖」提示用。 */
   listSecrets?: () => string[];
   /** 角色模型 provider(压缩/评审);cfg.set 热项按路径前缀分发到对应 provider。 */
   models?: {
@@ -162,15 +162,15 @@ export interface GatewayAppOptions {
   /** per-session 主模型覆盖 store(白板「per-session 主模型」;main load-once 注入):
    *  set/get 处理器与 agent 接线派生面都从这里出;缺省=session.model.* 报 not-implemented。 */
   sessionModels?: SessionModelStore;
-  /** 辅助链轨(step-052):archLlm 导读/压缩/记忆 llmCall 走这条(生产=coding 轨);
+ /** 辅助链轨:archLlm 导读/压缩/记忆 llmCall 走这条(生产=coding 轨);
    * 未提供时回退主轨(行为与旧版一致)。原样落 realtime 主轨=每任务 3 个 realtime 会话
    * (2×archLlm+1×主)+压缩触发再开——端点会话压力的结构性来源。 */
   auxLlm?: LlmProvider;
-  /** 单模型探活(step-052 F4):设置页模型列表逐项「测」;生产由 main 注入(带端点/凭证解析)。 */
+ /** 单模型探活( F4):设置页模型列表逐项「测」;生产由 main 注入(带端点/凭证解析)。 */
   probeModel?: (model: string, providerId?: string) => Promise<{ ok: boolean; ms: number; error?: string }>;
-  /** 浏览器控制配置读取器(step-048;生产由 main 注入 live config 面)。 */
+ /** 浏览器控制配置读取器(生产由 main 注入 live config 面)。 */
   browserConfig?: { enabled: () => boolean; allowDomains: () => string[]; idleMinutes?: () => number; profile?: () => "persistent" | "ephemeral"; profileDir?: () => string; headless?: () => boolean };
-  /** 记忆库只读视图(step-047;生产由 main 注入 MemoryStore 面)。 */
+ /** 记忆库只读视图(生产由 main 注入 MemoryStore 面)。 */
   memoryView?: () => { user: string; memory: string; root: string; usage: { user: { used: number; limit: number }; memory: { used: number; limit: number } } };
   /** 主 agent 当前所在轨(audio.chat / coding 回退 / off),sysMeta 透出可观测。 */
   llmTrack?: string;
@@ -183,39 +183,38 @@ function parseCsv(v: string | undefined): string[] {
 
 export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   const journal = opts.journal ?? (opts.journalDir
-    // write-behind+sharded(2026-10-21):异步批量落盘解 9p 同步写阻塞;抄 ZCode session-store
+ // write-behind+sharded:异步批量落盘解 9p 同步写阻塞;设计参考 ZCode(致谢) session-store
     // 按会话分文件(跨会话小 kind→global.jsonl,会话肥 kind→sessions/<sid>.jsonl,旧 gateway.jsonl
     // 冻结只读),内存为权威源,退出钩子清尾批。
     ? new FileJournal(`${opts.journalDir}/gateway.jsonl`, {
         writeBehind: true,
         sharded: true,
-        // M123(2026-11-08):归档会话冷读兜底(与 main.ts boot 装配同源,兜底构造不能漏)。
+ // 归档会话冷读兜底(与 main.ts boot 装配同源,兜底构造不能漏)。
         archiveDir: journalArchiveDirOf(opts.journalDir),
       })
     : new MemoryJournal());
-  // M123(2026-11-08)归档冷读开关:兜底构造的 journal 在构造器里已同步 load 完,此处立即开启,
+ // 归档冷读开关:兜底构造的 journal 在构造器里已同步 load 完,此处立即开启,
   // 保持「显式读会话可回读归档副本」的既有语义(main.ts 传 journal 时由 main 在其装配后开启)。
   if (!opts.journal && journal instanceof FileJournal) journal.enableArchiveReads();
-  // 会话全文检索(step-115):只登记缓存路径,索引首次查询才构建(不占启动时间);
+ // 会话全文检索:只登记缓存路径,索引首次查询才构建(不占启动时间);
   // 缓存随 journalDir 隔离——测试临时目录不会污染生产索引。
   configureSessionSearch(journal, { cacheFile: defaultSessionSearchCacheFile(opts.journalDir) });
 
-  // M189 持久效果队列:外部副作用先落 effect 行(commit 后才执行),崩溃后可折叠恢复。
+ // 持久效果队列:外部副作用先落 effect 行(commit 后才执行),崩溃后可折叠恢复。
   // 本轮只接 team 活动推送这一处真实外部面;其它推送/通知保持原路径不变。
   const effectQueue = createEffectQueue({ journal });
   effectQueue.register("relay.activity", relayActivityHandler(
-    () => (globalThis as { __teamView?: { notifyActivity(projectId: string, category: string, type: string, summary: string): void } }).__teamView,
-  ));
+    () => (globalThis as { __teamView?: { notifyActivity(projectId: string, category: string, type: string, summary: string): void } }).__teamView));
 
   const taskManager = new TaskSupervisor(opts.concurrency ?? {});
 
-  // OTel 远端上报(step-031 收口):env 门控 opt-in,未配置零开销;失败 fail-soft 不碰主链。
+ // OTel 远端上报:env 门控 opt-in,未配置零开销;失败 fail-soft 不碰主链。
   const otelExporter = otelExporterFromEnv();
   if (otelExporter) otelExporter.attach(journal);
-  // 会话状态服务端推送(step-030 收口):任务变化即广播 sessionId,面板即时刷新(轮询留作断线兜底)。
+ // 会话状态服务端推送:任务变化即广播 sessionId,面板即时刷新(轮询留作断线兜底)。
   taskManager.onChange((task) => {
     broadcastRaw({ v: 1, type: "session.status.changed", sessionId: task.sessionId });
-    // Plan 审批流(step-053,ZCode ExitPlanMode 语义):plan 模式任务完成→落计划文件+广播审批。
+ // Plan 审批流(ZCode ExitPlanMode 语义):plan 模式任务完成→落计划文件+广播审批。
     if (task.state === "done" && permissionMode() === "plan") {
       void (async () => {
         const { readFileSync: rf, mkdirSync: mk, writeFileSync: wf } = await import("node:fs");
@@ -238,32 +237,32 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // agentTurns(会话累计 assistant 轮数)= interrupted 回执「中断前进度」数据源,提升到本层
   // 供下方自动恢复窗共用(两处消费,同一遍回放,不为回执再读一遍 journal)。
   const agentTurns = new Map<string, number>();
-  // M34:用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
+ // :用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
   // restore / autoResume 都按它判,不额外扫 journal(journal 已 35MB 级)。
   const userStoppedAt = new Map<string, number>();
-  // J4(2026-11-05):会话最近活动时间索引。与下面的回放同一遍 readAll 累加(不为回执再读一遍 journal;
+ // 会话最近活动时间索引。与下面的回放同一遍 readAll 累加(不为回执再读一遍 journal;
   // 冷会话事件由 readAll 的冷回读补齐),timeline 事实源=journal 事件 time。
   const sessionActivity = new SessionActivityIndex();
-  // M112:终态投递义务快照(与任务快照同一遍 readAll 收集;journal 已 35MB,不扫第二遍)。
+ // 终态投递义务快照(与任务快照同一遍 readAll 收集;journal 已 35MB,不扫第二遍)。
   const deliverySeeds: DeliveryObligation[] = [];
   {
-    // 2026-10-19「这些删不掉」根治:先扫墓碑(task.deleted)建已删 id 集——删除此前只落内存,
-    // journal 里一条删除事件都没有,回放把删掉的任务全复活(实测 235 条全回来)。
+ // 「这些删不掉」根治:先扫墓碑(task.deleted)建已删 id 集——删除此前只落内存,
+ // journal 里一条删除事件都没有,回放把删掉的任务全复活(经验证 235 条全回来)。
     // 单次遍历同时收集墓碑集与任务快照(code_review findings:两次 readAll 让启动回放解析翻倍;
     // journal 已 35MB/3.5 万行,没必要扫两遍)。墓碑判定在遍历结束后统一做——
     // 墓碑事件与任务事件混在同一条流里,顺序无关(删除是终态意图)。
     const dead = new Set<string>();
     const snapshots = new Map<string, import("@lampgenie/core").Task>();
     for (const ev of journal.readAll()) {
-      // J4:同一遍顺带累计会话最近活动时间(白名单 kind;见 session-activity.ts)。
+ // 同一遍顺带累计会话最近活动时间(白名单 kind;见 session-activity.ts)。
       sessionActivity.noteEvent(ev);
-      // M112:终态投递义务(后写覆盖前写;payload 即义务快照)。
+ // 终态投递义务(后写覆盖前写;payload 即义务快照)。
       if (ev.kind === "delivery.obligation") {
         const ob = ev.payload as DeliveryObligation | undefined;
         if (ob && typeof ob.obligationId === "string") deliverySeeds.push(ob);
         continue;
       }
-      // M34:用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
+ // :用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
       if (ev.kind === "custom") {
         const up = ev.payload as { type?: unknown; at?: unknown } | undefined;
         if (up && up.type === USER_STOPPED_EVENT) {
@@ -289,13 +288,13 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     taskManager.markDeleted(dead);
     const restored = new Map([...snapshots].filter(([id]) => !dead.has(id))); // 墓碑命中不回填
     if (restored.size > 0) {
-      // 2026-10-19 用户实报修复:收编结果回写 journal(终态快照)——旧实现收编只在内存,
+ // 用户用户反馈修复:收编结果回写 journal(终态快照)——旧实现收编只在内存,
       // journal 里仍留 running,每次重启重复收编(历史会话侧栏时间反复变「刚刚」)。
       const collectedTasks = taskManager.restore([...restored.values()], {
-        // 清算回执:原任务书 id + sessionId + 中断前进度(2026-11-05 状态机恢复语义)。
+ // 清算回执:原任务书 id + sessionId + 中断前进度(状态机恢复语义)。
         receipt: (t) =>
           `网关重启中断(原任务书 ${t.id} / 会话 ${t.sessionId} / 中断前约 ${agentTurns.get(t.sessionId) ?? 0} 轮;可续跑)`,
-        // M34:任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
+ // :任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
         userStopped: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
       });
       for (const ct of collectedTasks) {
@@ -304,7 +303,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     }
   }
 
-  // M112 网关终态投递义务表:启动 sweep 一次——超租约 attempting 回 pending(进程崩在发送中)、
+ // 网关终态投递义务表:启动 sweep 一次——超租约 attempting 回 pending(进程崩在发送中)、
   // attempts≥3 或首投起超 24h → failed;delivered 保持。不自动重投(无连接时不得 claim,
   // 补投发生在 hello 或在线周期 sweep)。
   const deliveryObligations = createDeliveryObligationStore({ journal, seed: deliverySeeds });
@@ -322,7 +321,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       idempotencyKey: `task.${task.id}.${task.state}`,
     });
     bus.emit("task.changed", task);
-    // 团队活动流(2026-10-27):任务开始/终态上行 relay——M189 起改走持久效果队列:
+ // 团队活动流:任务开始/终态上行 relay——改走持久效果队列:
     // 先落 effect 行(commit 后才执行),崩溃可折叠恢复;同类(同 kind)按入队顺序执行,
     // 同一 taskId 的连续状态变化折叠为最新 payload(替换而不重复上行)。
     if (task.state === "running" || task.state === "done" || task.state === "failed" || task.state === "cancelled") {
@@ -340,7 +339,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     }
   });
 
-  // 节点注册表先建:本机注册为 local 节点(R5-C11 修复:dispatch 在单机形态真实可选)。
+ // 节点注册表先建:本机注册为 local 节点(修复:dispatch 在单机形态真实可选)。
   // 标签从 env(CSV);缺省无标签=local 只接无 reachability 要求的任务,防「假装分派」。
   const nodes = new NodeRegistry();
   const LOCAL_NODE_ID = "local";
@@ -350,23 +349,22 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     reachability: parseCsv(process.env.GENIE_LOCAL_REACHABILITY),
   });
   const localHeartbeat = setInterval(() => {
-    // step-1042:真实负载(旧硬编码 {0,0,0});runningTasks=运行中任务数。
+ // 真实负载(旧硬编码 {0,0,0});runningTasks=运行中任务数。
     nodes.heartbeat(LOCAL_NODE_ID, sampleLoad(taskManager.list().filter((t) => t.state === "running").length));
   }, 30_000);
   localHeartbeat.unref?.();
   // 启动即采一次(否则新 boot 要等 30s 才有非零负载/心跳时间)。
   nodes.heartbeat(LOCAL_NODE_ID, sampleLoad(taskManager.list().filter((t) => t.state === "running").length));
 
-  // 委派通道(step-033):连接表+调度器;node.register 登记,断开除名(server.ts)。
+ // 委派通道:连接表+调度器;node.register 登记,断开除名(server.ts)。
   const nodeConnections = new NodeConnections();
   const nodeDispatch = new NodeDispatch(nodes, nodeConnections);
-  // 项目注册表(step-035,ZCode workspace 移植):默认项目=harness 本体。
+ // 项目注册表(ZCode workspace 移植):默认项目=harness 本体。
   // 持久化跟随 journal 隔离语义:journalDir 在=同目录落盘;不在=会话内态(防测试实例共享仓库树污染)。
   const projects = new ProjectRegistry(
     repoRoot(),
-    opts.journalDir ? join(opts.journalDir, "projects.json") : null,
-  );
-  // 远程项目启动重探测(2026-10-26 实证修复):load() 启动期把 remote 重置 unavailable-remote-unverified
+    opts.journalDir ? join(opts.journalDir, "projects.json") : null);
+ // 远程项目启动重探测(验证修复):load 启动期把 remote 重置 unavailable-remote-unverified
   // (远程不本地 statSync 的语义),而旧实现只在 project.add 触发探测——网关每次重启后面板恒「不可用」。
   // 启动后异步重探一轮(全部 remote 项目;失败=unreachable,菜单「重新探测」可手动再试)。
   setTimeout(() => {
@@ -381,7 +379,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       }).catch(() => { /* 探测失败保持 unverified */ });
     }
   }, 4_000).unref?.();
-  // 「已移除项目」残留 scrub(2026-10-14 用户口径):历史任务可能挂着已移除项目的 projectId
+ // 「已移除项目」残留 scrub:历史任务可能挂着已移除项目的 projectId
   // (移除清理上线前的存量/外部改动),启动期一次性清引用——会话保留,侧栏落「任务」分区;
   // 纠偏以专用事件 task.project.clear 落 journal(重启幂等:清过的任务 projectId 已空不再命中)。
   const scrubPids = [
@@ -392,32 +390,32 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   if (scrubPids.length > 0) {
     cleanupProjectTaskRefs(journal, (p) => taskManager.clearProjectRef(p), scrubPids);
   }
-  // 存量归属漂移归位(2026-10-22):旧序 explicit > owner 期间被贴错项目的任务回到会话 owner。
+ // 存量归属漂移归位:旧序 explicit > owner 期间被贴错项目的任务回到会话 owner。
   // 放在 scrub 之后:先清掉已移除项目引用,再按在册 owner 归位(owner 已移除=不迁移)。
   try {
     const repairedN = repairSessionProjectDrift(journal, taskManager, projects);
     if (repairedN > 0) console.log(`[gateway] 会话归属纠偏:${repairedN} 个历史任务归位到所属会话 owner 项目`);
   } catch { /* 纠偏失败不阻塞启动(下次重启重试) */ }
-  // 权限审批中介(step-037 B2):60s 无应答自动拒;广播通道在 server 创建后 attach。
-  // 记忆接线(step-029 孤儿件收口):harness-memory 上下文注入+会话终态学习;
+ // 权限审批中介( B2):60s 无应答自动拒;广播通道在 server 创建后 attach。
+ // 记忆接线(补全):harness-memory 上下文注入+会话终态学习;
   // 无 LLM=学习链关闭(fail-soft no-op),上下文注入照常(读文档是本地操作)。
   const memoryWiring: MemoryWiring = createMemoryWiring({
     root: joinPath(repoRoot(), ".genie", "memory"),
     ...(opts.llm ? {
       llmCall: async ({ system, user }: { system: string; user: string }) => {
-        // step-052:记忆学习链走辅助轨(coding),不占 realtime 主会话。
+ // 记忆学习链走辅助轨(coding),不占 realtime 主会话。
         const res = await (opts.auxLlm ?? opts.llm!).chat([{ role: "system", content: system }, { role: "user", content: user }], []);
         return res.content;
       },
     } : {}),
   });
   const permissionBroker = new PermissionBroker();
-  // step-1033:super agent 指挥台对话模型 = coding 主模型(opts.llm);companionLlm/companionTrack 已删除。
+ // super agent 指挥台对话模型 = coding 主模型(opts.llm);companionLlm/companionTrack 已删除。
   // config.companion.track 仍可解析但被忽略——打一条日志告知(旧配置文件不报错)。
   if ((opts.config as { companion?: { track?: string } } | undefined)?.companion?.track !== undefined) {
     console.warn("[super] companion.track 已废弃,统一走 coding 主模型(opts.llm);该配置项被忽略");
   }
-  // 会话级代答层(step-033 收口):qwen permission-policy 移植件接入审批链——
+ // 会话级代答层:qwen permission-policy 组件接入审批链——
   // 面板「总是允许」= F2 规则(模式级)+ policy 登记(会话级)双写;env GENIE_PERM_POLICY=off 显式关闭。
   if (process.env.GENIE_PERM_POLICY !== "off") {
     const policy = new TaskPermissionGuard({
@@ -432,16 +430,16 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       applyDecision: (ownerId, sessionId, decision, taskId) => policy.applyDecision(ownerId, sessionId, decision, taskId),
     };
   }
-  // 定时自动化(step-043):store 持久化 .genie/automations.json;调度到点提交 system 任务。
+ // 定时自动化:store 持久化 .genie/automations.json;调度到点提交 system 任务。
   const automations = new AutomationStore(join(repoRoot(), ".genie", "automations.json"));
   const automationScheduler = new AutomationScheduler(
     automations,
-    // scope 消费(step-046):项目级自动化按该项目 workdir 跑(taskId 带 projectId)。
+ // scope 消费:项目级自动化按该项目 workdir 跑(taskId 带 projectId)。
     (a) => taskManager.submit("system", `auto-${a.id.slice(0, 8)}`, a.instruction, { title: "[自动] " + a.name, ...(a.scope && a.scope !== "global" ? { projectId: a.scope } : {}) }).sessionId,
     (e) => journal.append({ kind: "automation.run", sessionId: e.sessionId, payload: e }),
   );
   automationScheduler.start();
-  // 终态任务自动归档(step-044,ZCode 自动归档阈值):每天检查;阈值热读(改配置下轮生效)。
+ // 终态任务自动归档(ZCode 自动归档阈值):每天检查;阈值热读(改配置下轮生效)。
   const archiveSweep = () => {
     const days = (opts.config as { tasks?: { autoArchiveDays?: number } } | undefined)?.tasks?.autoArchiveDays ?? 0;
     if (!days) return 0;
@@ -458,7 +456,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   archiveTimer.unref?.();
   setTimeout(() => void archiveSweep(), 5_000).unref?.();
 
-  // ---- step-047 管理面装配 ----
+ // ---- 管理面装配 ----
   // 多根(ZCode roots.ts 语义):user 根 ~/.genie/commands(priority 10)+ project 根
   // <repoRoot>/.genie/commands(priority 20;同名时 project 覆盖 user)。home 为空则跳过 user 根。
   const home = os.homedir();
@@ -469,7 +467,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   const hooks = new HookStore(join(repoRoot(), ".genie", "hooks.json"));
   const mcpStore = new McpServerStore(join(repoRoot(), ".genie", "mcp.json"));
   const mcp = new McpManager(mcpStore);
-  // 项目档案管线(step-049):项目添加即异步建图;进度广播;任务终态→模块演进+防抖重建。
+ // 项目档案管线:项目添加即异步建图;进度广播;任务终态→模块演进+防抖重建。
   const profiles = new ProjectProfileIndex(
     join(repoRoot(), ".genie", "profiles"),
     (pid) => projects.list().find((x) => x.id === pid)?.path,
@@ -479,25 +477,23 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           chat: (messages: { role: string; content: string }[]): Promise<{ content: string }> =>
             opts.llm!.chat(messages as never, [], undefined) as Promise<{ content: string }>,
         }
-      : undefined,
-  );
+      : undefined);
   const plugins = new PluginSystem(
     repoRoot(),
     (i) => mcpStore.add(i),
     (id) => { mcp.closeAll(); return mcpStore.remove(id); },
   );
   const wizardGen = (input: { kind: "ssh" | "docker"; host: string; user: string; port: number; nodeId: string }) => {
-    // step-1042:gateway 对外地址取本机 LAN IP(旧 hardcode 127.0.0.1——远程机拿到的 curl 地址不可达);
+ // gateway 对外地址取本机 LAN IP(旧 hardcode 127.0.0.1——远程机拿到的 curl 地址不可达);
     // env GENIE_PUBLIC_HOST 一票覆盖(公网/域名部署场景);note 由向导自带说明。
     const host = pickLanAddress(
       Object.entries(os.networkInterfaces()).flatMap(([name, addrs]) =>
         (addrs ?? []).map((a) => ({ name, address: a.address, internal: a.internal, family: String(a.family) })),
       ),
-      process.env.GENIE_PUBLIC_HOST,
-    );
+      process.env.GENIE_PUBLIC_HOST);
     return genBootstrapCommand({ ...input, gatewayUrl: "ws://" + host + ":" + opts.port });
   };
-  // 档案演进钩子(step-049):终态任务→diffstat 文件映射模块→recentChanges+防抖重建。
+ // 档案演进钩子:终态任务→diffstat 文件映射模块→recentChanges+防抖重建。
   // (与钩子运行器同一订阅点,独立去重键;diffstat 失败/无快照=只记任务不记文件。)
   const profileSeen = new Set<string>();
   taskManager.onChange((t) => {
@@ -516,7 +512,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         const svc = await import("./git-service.js");
         const ev = journal.readAll().filter((e) => e.kind === "checkpoint.create" && (e.payload as { taskId?: string }).taskId === t.id).at(-1);
         const sha = ev ? ((ev.payload as { sha?: string | null }).sha ?? null) : null;
-        // 2026-10-26 远端化:远程项目的 checkpoint(远端 git stash)→ diffstat 走远端 git --numstat
+ // 远端化:远程项目的 checkpoint(远端 git stash)→ diffstat 走远端 git --numstat
         const cpRemote = sha && ev ? parseRemoteProject(String((ev.payload as { root?: string }).root ?? "")) : null;
         if (sha && cpRemote) {
           const rg = await remoteGit(cpRemote, ["diff", "--numstat", sha]);
@@ -542,11 +538,11 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       profiles.recordChange(pid, { taskId: t.id, title: t.title || t.instruction.slice(0, 40), files, add, del });
     })().catch(() => {});
   });
-  // 白板收官钩子(step-057,designs/22):任务 done →
+ // 白板收官钩子:任务 done →
   // ① checkpoint diffstat 回填板 actual_files(计划 vs 实际对账)+置 status=done;
   // ② 涉事仓索引后台重建(agent 改完码,code-index 结果跟着改——过期判定见 c2f 双段)。
-  // 2026-10-18 F 修复(体验官 A P2,撤销三期 B1 的 HEAD 兜底):sha=null=无可信任务前基线,
-  // diff HEAD 会把仓里他人/其他任务的在途改动算成「计划外」(共享仓实测污染纯规划板 50 文件)。
+ // F 修复(撤销三期 B1 的 HEAD 兜底):sha=null=无可信任务前基线,
+ // diff HEAD 会把仓里他人/其他任务的在途改动算成「计划外」(共享仓经验证污染纯规划板 50 文件)。
   // 判定在 finalizeBoardOnTaskDone 内:判据=sha 有无(不看板 kind),null=跳过对账不翻 done,sha≠null 零改动。
   // fail-soft:任一环节炸都不碰任务链;ensureIndex 自身有 in-flight 去重与 fresh 短路。
   const boardDoneSeen = new Set<string>();
@@ -563,7 +559,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       const bs = await import("./board-store.js");
       const r = await bs.finalizeBoardOnTaskDone({ storeRoot: repoRoot(), sessionId: t.sessionId, taskId: t.id, workdir, sha });
       if (r.backfilled) bus.emit("board.changed", { sessionId: t.sessionId, taskId: t.id });
-      // 设计沉淀(step-058):收官回填后,done 板登记进项目级沉淀索引(代码档案「设计沉淀」区数据源)。
+ // 设计沉淀:收官回填后,done 板登记进项目级沉淀索引(代码档案「设计沉淀」区数据源)。
       // 幂等:archiveDoneBoard 按 sessionId/taskId upsert,钩子重复触发不产生重复条目。
       await bs.archiveDoneBoardAsync(repoRoot(), t.sessionId, t.id, t.projectId ?? HARNESS_PROJECT_ID);
     })().catch(() => {});
@@ -579,18 +575,18 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     if (hookSeen.size > 2000) hookSeen.clear();
     const cwd = projects.resolveWorkdir(t.projectId);
     void runHookEvent(hooks, journal, ev, t, cwd).catch(() => {});
-    // 验收钩子已下线(step-083,2026-10-16 用户口径):评审不是所有任务的验收面——
+ // 验收钩子已下线:评审不是所有任务的验收面——
     // 非 coding 任务(规划/问答)done 也会弹代码评论卡;触发权交还 coding agent
     // (SYSTEM 复查纪律:coding 任务完成前主动调 code_review,非 coding 任务不调)。
   });
   // F6:workflow ask 面板应答路由(广播通道与 broker 同源,server 创建后 attach)。
   const workflowAskRouter = new WorkflowAskRouter((msg) => broadcastRaw(msg));
-  // ask_user 面板问答(2026-10-19 许愿式编程):主 agent 需求取舍时发问,面板直答。
+ // ask_user 面板问答(许愿式编程):主 agent 需求取舍时发问,面板直答。
   const askUserRouter = new AskUserRouter((msg) => broadcastRaw(msg));
   let broadcastRaw: (msg: Record<string, unknown>) => void = () => {};
-  // 流式中继(step-050,ZCode 流式消息展示):loop onStream→80ms 合批→stream 消息广播。
+ // 流式中继(ZCode 流式消息展示):loop onStream→80ms 合批→stream 消息广播。
   const streamRelay = createStreamRelay((msg) => broadcastRaw(msg));
-  // step-1033(super agent 指挥台):super 通道——ask_user 转接(coding agent 提问经指挥台转述,
+ // (super agent 指挥台):super 通道——ask_user 转接(coding agent 提问经指挥台转述,
   // 答复经 relay_answer→askUserRouter.answer 回交,先答先用)+ 任务状态播报
   // (done/failed/cancelled/interrupted/blocked 注入 super 会话并广播 super.notice;
   //  interrupted/blocked/failed 额外广播 super.inbox.changed 让面板重拉 inbox)。
@@ -603,14 +599,14 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         llm: opts.llm,
         // fixC5: relay_answer 工具的答复回交(AskUserRouter.answer;失效=面板已先答)。
         askAnswer: (requestId: string, answer: string) => askUserRouter.answer(requestId, answer),
-        // step-1033: task_resume 工具的续跑回调(与 WS task.resume 同源:幂等重提同 session 续跑)。
+ // task_resume 工具的续跑回调(与 WS task.resume 同源:幂等重提同 session 续跑)。
         resumeTask: (taskId: string) => {
-          // M34:用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
+ // :用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
           const stoppedTask = taskManager.get(taskId);
           if (stoppedTask && hasUserStoppedSince(journal, { taskId: stoppedTask.id, sessionId: stoppedTask.sessionId, since: stoppedTask.createdAt })) {
             return { ok: false, reason: USER_STOPPED_RESUME_MESSAGE };
           }
-          // M25 崩溃尾部修复:续跑前把未闭合 turn/step/tool.call 补合成终态(否则模型盲目重试有副作用的工具)。
+ //  崩溃尾部修复:续跑前把未闭合 turn/step/tool.call 补合成终态(否则模型盲目重试有副作用的工具)。
           const repairNote = repairTailBeforeResume(journal, taskManager.get(taskId)?.sessionId);
           const resumed = taskManager.resumeInterrupted(taskId, (t) =>
             "【续跑】此前任务(" + t.id + ")被网关重启打断。请基于该会话已有进展(session 历史/工作区现状)继续完成原任务书,不要重做已完成部分:" +
@@ -619,9 +615,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         },
         // 写前持久化屏障:与 coding agent 同一 config.agent.writeBarrier 口径(非法/缺席=undefined→loop 缺省 hard)。
         writeBarrier: writeBarrierOf((opts.config as { agent?: { writeBarrier?: "off" | "hard" } } | undefined)),
-        // M58 图片 offload:与 coding 轨同根(默认开启;管家轮次带图时 provider 报图片预算错误可自愈)。
+ //  图片 offload:与 coding 轨同根(默认开启;管家轮次带图时 provider 报图片预算错误可自愈)。
         imageOffload: imageOffloadOf(repoRoot()),
-        // step-1041: list_nodes 工具数据源(与 WS nodes.list 同源注册表+60s 心跳在线判定)。
+ // list_nodes 工具数据源(与 WS nodes.list 同源注册表+60s 心跳在线判定)。
         listNodes: () => nodes.list().map((n) => ({
           nodeId: n.nodeId,
           online: Date.now() - n.lastHeartbeat <= 60_000,
@@ -636,7 +632,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     : undefined;
   if (superChannel) taskManager.onChange((t) => superChannel.onTaskChanged(t));
   askUserRouter.onAsk = (p) => superChannel?.relayAsk(p);
-  // step-1033 ASR(语音输入转写):config.audio.chat 同一 provider 一次 chat 调用(消息带 audio),
+ // ASR(语音输入转写):config.audio.chat 同一 provider 一次 chat 调用(消息带 audio),
   // 提示「把这段语音逐字转写成文本,只输出文本」;未配置 audio.chat=undefined(server 回 VoiceUnavailable)。
   // 不在 super 链上产生人格设定与语音回播——转写文本由前端另行 super.turn 提交。
   const asrChatCfg = (opts.config as { audio?: { chat?: { model?: string; baseUrl?: string; providerId?: string } } } | undefined)?.audio?.chat;
@@ -658,7 +654,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         };
       })()
     : undefined;
-  // 档案进度广播(step-049):tick 节流(≥4% 或终态)。
+ // 档案进度广播:tick 节流(≥4% 或终态)。
   {
     let lastPct = new Map<string, number>();
     profiles.onProgress((p) => {
@@ -670,7 +666,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     });
   }
 
-  // 会话 worker 进程化(2026-10-21 抄 ZCode:一会话一进程):生产缺省开;VITEST/显式 off 回进程内。
+ // 会话 worker 进程化(设计参考 ZCode(致谢):一会话一进程):生产缺省开;VITEST/显式 off 回进程内。
   // worker 模式下 gateway 不跑 agent loop——TaskSupervisor 权威/队列照旧,running 任务 fork session-worker;
   // 巡检(watchdog)对象=镜像注册表(host 维护),journal/权限/MCP/流式经 IPC 中继。
   const sessionWorkerOn =
@@ -686,7 +682,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     const bgAgentsMirror = (globalThis as { __bgAgents?: Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; ownerTask?: string }> }).__bgAgents
       ?? new Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; ownerTask?: string }>();
     (globalThis as { __bgAgents?: unknown }).__bgAgents = bgAgentsMirror;
-    // M26(2026-11-08)续跑身份护栏(worker 形态):worker 内已禁本地续跑,续跑由网关 onTaskDone 发起,
+ // M26续跑身份护栏(worker 形态):worker 内已禁本地续跑,续跑由网关 onTaskDone 发起,
     // 故「任务开工时的目标修订号」快照必须在网关侧维护——running 入表、终态取用并清理。运行期 goal 被
     // clear/replace(每条 goal.set 使 revision+1)→ 续跑被 GOAL_REVISION_STALE 拒,不会把旧任务进展接到新目标上。
     const goalRevisionAtTaskStart = new Map<string, number | null>();
@@ -708,7 +704,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       projects, // P0:项目表快照注入(worker resolveWorkdir 与网关同源)
       // P0:goal 续跑网关统一发起(worker 内已禁本地 submit——网关不可见+退出截杀);
       // 与进程内同参(tm/journal/llm),提交后续跑任务走正常队列→新 worker fork。
-      // M26:带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
+ // :带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
       onTaskDone: (task) => {
         const rev = goalRevisionAtTaskStart.get(task.id) ?? null;
         goalRevisionAtTaskStart.delete(task.id);
@@ -718,9 +714,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     const ranTasks = new Set<string>();
     taskManager.onChange((task) => {
       if (task.state === "cancelled") {
-        // M34(session-worker 形态):取消同样先落「用户已停止」标记再通知 worker 停
+ // (session-worker 形态):取消同样先落「用户已停止」标记再通知 worker 停
         // (进程内形态由 agent-wiring 的 onChange 落;两条形态都必落,恢复侧才读得到)。
-        // 只对真正跑过的任务落标记:续跑替代(resumeInterrupted 把原任务收口 cancelled)不是用户停止。
+ // 只对真正跑过的任务落标记:续跑替代(resumeInterrupted 把原任务 cancelled)不是用户停止。
         if (ranTasks.has(task.id)) {
           appendUserStoppedMarker(journal, { taskId: task.id, sessionId: task.sessionId, source: "cancel" });
           ranTasks.delete(task.id);
@@ -729,7 +725,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         workerHost.cancelTask(task.id);
       } else if (task.state === "running") {
         ranTasks.add(task.id);
-        // M26:开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
+ // :开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
         if (!goalRevisionAtTaskStart.has(task.id)) {
           try {
             goalRevisionAtTaskStart.set(task.id, readGoalFromJournal(journal.readSession(task.sessionId), task.sessionId)?.revision ?? null);
@@ -790,7 +786,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
             return { config: cfg, sources: opts.configSources ?? {}, projectPath: opts.configProjectPath ?? "(未指定)", readOnly: gw.panelReadOnly === true };
           },
           set: (patch: Record<string, unknown>) => {
-            // M180 权限预设原子绑定:合法性**先校验、后落盘**——未知预设在此抛错,cfg.set 回 error,
+ // 权限预设原子绑定:合法性**先校验、后落盘**——未知预设在此抛错,cfg.set 回 error,
             // 配置文件与本进程状态都不变(不留半写);custom 合法(保留现状三旋钮,只把 preset 置 custom)。
             const permPatch = patch.permissions as { preset?: unknown; mode?: unknown } | undefined;
             const presetPatchRaw = typeof permPatch?.preset === "string" ? permPatch.preset.trim() : "";
@@ -806,11 +802,11 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
             const modelsPatch = codingPatch?.models;
             const hotDone: string[] = [];
             const isMainTrack = (p: string) => p.startsWith("coding.llm.") || p.startsWith("audio.chat.");
-            // step-112:providerId/baseUrl/apiKeyEnv 是冷项——同补丁含路由切换时绝不把模型热切到旧端点/旧凭证
+ // providerId/baseUrl/apiKeyEnv 是冷项——同补丁含路由切换时绝不把模型热切到旧端点/旧凭证
             // (provider.update 只认 model/baseUrl 等,providerId/apiKeyEnv 不认;混热会造出「模型新、路由旧」)。
             const routeCold = (prefix: string) => base.needsRestart.some((p) => p === prefix + ".providerId" || p === prefix + ".baseUrl" || p === prefix + ".apiKeyEnv");
             const mainRouteCold = routeCold("coding.llm") || routeCold("audio.chat");
-            // 2026-10-19 跨端点热切:main 层已把新端点/凭证/协议解析成 update 可吃的具体值(hotLlm)。
+ // 跨端点热切:main 层已把新端点/凭证/协议解析成 update 可吃的具体值(hotLlm)。
             // 在场时路由类键不再算冷——provider 实例内部换 baseUrl/apiKey/apiType,下个任务即生效。
             const hotLlmPatch = (base as { hotLlm?: Record<string, unknown> }).hotLlm;
             const mainTrackTouched = base.applied.some(isMainTrack) || base.needsRestart.some(isMainTrack);
@@ -820,7 +816,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               else if (p.startsWith("coding.models.review.") && opts.models?.review && !routeCold("coding.models.review")) hotDone.push(p);
               else if (p.startsWith("coding.models.subagent.") && opts.models?.subagent && !routeCold("coding.models.subagent")) hotDone.push(p);
               else if (p.startsWith("coding.models.digest.") && opts.models?.digest && !routeCold("coding.models.digest")) hotDone.push(p);
-              // 语音任务书(2026-11-08):无 provider 实例,server 每次 voice.draft 现读 live config——
+ // 语音任务书:无 provider 实例,server 每次 voice.draft 现读 live config——
               // 全键(含 route)恒热,不该被标成 needsRestart 骗用户重启。
               else if (p.startsWith("coding.models.voice.")) hotDone.push(p);
             }
@@ -830,12 +826,12 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
             for (const p of base.needsRestart) if (p.startsWith("coding.models.voice.") && !hotDone.includes(p)) hotDone.push(p);
             if (llmHot && mainTrackTouched && (hotLlmPatch || !mainRouteCold)) {
               const ref = (hotLlmPatch ?? audioPatch?.chat ?? codingPatch?.llm ?? {}) as Record<string, unknown>;
-              // step-139 O2:角色 provider(review/subagent 恒建、模型继承主轨)跟随主轨模型热切;
+ // O2:角色 provider(review/subagent 恒建、模型继承主轨)跟随主轨模型热切;
               // 显式配了 model 的角色 modelName≠主轨旧值,天然不跟。effort 不动——实例内已按角色定档
               // (main=implementationEffort,roles=xhigh),模型热切不改变 effort 行为。
               const prevMainModel = (opts.llm as { modelName?: string } | undefined)?.modelName;
               if (ref) llmHot(ref);
-              // 2026-10-20:主轨路由/模型变化后,按 Registry 语义重建角色 provider(review/subagent/compact),
+ // 主轨路由/模型变化后,按 Registry 语义重建角色 provider(review/subagent/compact),
               // 让「role 只配 model」也能解析到拥有该模型的 Provider;旧实现只按 modelName 跟随,跨端点时
               // review 仍打旧端点(review 配 deepseek 却继承智谱 baseUrl → 404)。重建失败保留旧实例(fail-soft)。
               let rolesRebuilt = false;
@@ -845,7 +841,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
                   const rebuilt = buildModelProviders(opts.config as unknown as Config, repoRoot(), opts.configSources);
                   if (rebuilt.compact) opts.models.compact = rebuilt.compact as NonNullable<typeof opts.models.compact>;
                   if (rebuilt.review) opts.models.review = rebuilt.review as NonNullable<typeof opts.models.review>;
-                  // 2026-10-20:subagent 未显式配置时 factory 返回 undefined——无条件赋值,清掉旧独立实例,
+ // subagent 未显式配置时 factory 返回 undefined——无条件赋值,清掉旧独立实例,
                   // 后续 spawn 经 `models?.subagent ?? llm` 回退**新**主 provider(同模型同档位跟随热切)。
                   opts.models.subagent = rebuilt.subagent as typeof opts.models.subagent;
                   // 提炼模型(2026-11):未配置时 factory 返回 undefined——无条件赋值清掉旧实例,
@@ -874,16 +870,15 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
             if (opts.models?.review && hotDone.some((p) => p.startsWith("coding.models.review.")) && rolePatchOf("review")) opts.models.review.update(rolePatchOf("review")!);
             if (opts.models?.subagent && hotDone.some((p) => p.startsWith("coding.models.subagent.")) && rolePatchOf("subagent")) opts.models.subagent.update(rolePatchOf("subagent")!);
             if (opts.models?.digest && hotDone.some((p) => p.startsWith("coding.models.digest.")) && rolePatchOf("digest")) opts.models.digest.update(rolePatchOf("digest")!);
-            // 权限模式热生效(step-046):ask/auto/readonly 立即改变两个 ask 点的处置。
+ // 权限模式热生效:ask/auto/readonly 立即改变两个 ask 点的处置。
             if (base.applied.includes("permissions.mode")) setPermissionMode((opts.config as { permissions?: { mode?: string } }).permissions?.mode);
-            // M180 预设差量原子落地:三旋钮(sandbox/approval/mode)由 applyPreset 一次算出差异并同源应用,
+ // 预设差量原子落地:三旋钮(sandbox/approval/mode)由 applyPreset 一次算出差异并同源应用,
             // 再落一条 permission.preset.applied journal(审计面);同 preset 幂等=applied 空且 preset 未变→不落账。
             if (presetPatchRaw) {
               const beforeKnobs = presetKnobsOf(presetBefore);
               const appliedPreset = applyPreset(
                 { preset: presetBefore, sandbox: beforeKnobs.sandbox, approval: beforeKnobs.approval, mode: permissionMode() },
-                presetPatchRaw,
-              );
+                presetPatchRaw);
               setPermissionMode(appliedPreset.mode);
               setCurrentPresetName(appliedPreset.preset);
               if (appliedPreset.applied.length > 0 || appliedPreset.preset !== presetBefore) {
@@ -908,7 +903,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               // 本来就已经生效——直接并入 applied,不再被谎报成「重启生效」。
               applied: [...hotDone, ...hotOther],
               // 已热应用的路由键从 needsRestart 里剔除(否则面板同时显示「已热应用」和「重启生效」)。
-              // 2026-10-28 修复:此前把 base.applied 里所有非 hotDone 键都挪进 needsRestart —— 模型轨以外的
+ // 修复:此前把 base.applied 里所有非 hotDone 键都挪进 needsRestart —— 模型轨以外的
               // 热键(web.search.* 等)因此一律被谎报「重启生效」,面板徽标与用户预期相反。
               needsRestart: [
                 ...base.needsRestart.filter((p) => !hotDone.includes(p)),
@@ -922,7 +917,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               ...(base.routeError ? { routeError: base.routeError } : {}),
             };
           },
-          // step-125:预设一键接入的密钥通道。只写密钥文件;值不进配置/日志/回包。
+ // 预设一键接入的密钥通道。只写密钥文件;值不进配置/日志/回包。
           secretSet: (name: string, value: string) => {
             if (!opts.onSecretSet) throw new Error("密钥写入未启用(生产入口 main.ts 才提供)");
             return opts.onSecretSet(name, value);
@@ -960,7 +955,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   });
   // fixD3:/team/p2p/* HTTP 端点注册(panel servePanel 顶部委托;独立 WS 模式无 HTTP=直连面不可用,如实降级)。
   (globalThis as { __teamP2p?: TeamP2P }).__teamP2p = teamP2p;
-  // fixD4 分发桥收口:任务终态 → taskId 关联 issue → 结果摘要(≤300 字)回写评论 + status→done。
+ // fixD4 分发桥:任务终态 → taskId 关联 issue → 结果摘要(≤300 字)回写评论 + status→done。
   // 竞态:echo 形执行器在 submit() 内同步完成,终态事件可能先于 linkTask——关联未命中时
   // 短延迟重试一次(dispatch handler 侧还有登记后即查兜底,双保险)。
   taskManager.onChange((t) => {
@@ -1013,7 +1008,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   let wss: GatewayServer | undefined;
   let externalServer: Server | undefined;
 
-  // super-agent Router(step-0143 P1):面板 task.submit 与飞书 im-inbound 两主径 Trigger 入 router。
+ // super-agent Router( P1):面板 task.submit 与飞书 im-inbound 两主径 Trigger 入 router。
   // observe 模式 inferred 候选恒不派发(只落 disposition);订阅直通=threadKey 自动关联,活 Ticket
   // 的后续 Trigger 经 journal steer 注入(owner worker 下一 step 生效,对齐 agent-wiring steer_task)。
   // 落账 .genie/router/audit.jsonl(append-only,无凭证字段);policy 读 .genie/router/policy.json。
@@ -1026,7 +1021,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       journal.append({ kind: "message.user", sessionId: ticket.sessionId, payload: { text: `[转向] ${trigger.instruction}` } });
       if (ticket.taskId !== undefined) journal.append({ kind: "task.progress", sessionId: ticket.sessionId, payload: { taskId: ticket.taskId, steer: trigger.instruction.slice(0, 120) } });
     },
-    // step-0144 P2 LLM 研判:仅 mode=auto 时 dispatch 会调用(auto 闸在 router/dispatch.ts);
+ // P2 LLM 研判:仅 mode=auto 时 dispatch 会调用(auto 闸在 router/dispatch.ts);
     // 研判大脑=runSuperAgentTurn(与 super agent 同一模型/工具面),prompt 要求回 JSON
     // {decision,intent_evidence};解析失败/无 deps=fail-soft 回 undefined(等效缺证据→ignore,sr8 不放松)。
     assess: superDeps && superSoul
@@ -1047,14 +1042,14 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   const ensureServer = (server?: Server): GatewayServer => {
     if (!wss) {
       wss = startGatewayServer({ port: opts.port, taskManager, journal, nodes, nodeConnections, nodeDispatch, projects, permissionBroker, routerApi,
-        // J4(2026-11-05):会话最近活动时间索引(侧栏排序用;启动回放已 seed,运行期 subscribe 更新)。
+ // 会话最近活动时间索引(侧栏排序用;启动回放已 seed,运行期 subscribe 更新)。
         sessionActivity,
-        // M112:终态投递义务表(启动已 sweep 一次;server 侧负责 claim/重发/回收租约)。
+ // 终态投递义务表(启动已 sweep 一次;server 侧负责 claim/重发/回收租约)。
         deliveryObligations,
-        // step-121 工作流板:wf-agent 节点派发用(与主 loop 同一 executor)
+ // 工作流板:wf-agent 节点派发用(与主 loop 同一 executor)
         ...(opts.executor ? { executor: opts.executor } : {}),
         ...(opts.llm ? { superAgent: {
-          // step-1033:指挥台后端装配——turn/history/inbox/asr/onActivity(契约 §5)。
+ // 指挥台后端装配——turn/history/inbox/asr/onActivity(契约 §5)。
           // 用户轮次走 channel 串行队列(与播报/转述轮互斥,防答复与转述并发互相看不见)。
           turn: (text: string) =>
             (superChannel ?? { turn: async (t: string) => (await runSuperAgentTurn(superDeps!, t, superSoul!)).text }).turn(text),
@@ -1079,7 +1074,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       wizardGen,
       skillsAdmin: (() => { const st = getExperienceStore(); return { disabled: () => disabledBuiltins(repoRoot()), set: (n: string, d: boolean) => setBuiltinDisabled(repoRoot(), n, d), index: () => mergeSkillIndexWith(st.index(), []) }; })(),
       memoryView: opts.memoryView ?? (() => {
-        // 记忆只读视图(step-047):与 companion 同一 MemoryStore 目录。
+ // 记忆只读视图:与 companion 同一 MemoryStore 目录。
         const st = new MemoryStore(join(repoRoot(), ".genie", "soul", "memories"));
         return {
           user: st.entries("user").join(String.fromCharCode(10) + String.fromCharCode(10)),
@@ -1098,7 +1093,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         root: repoRoot(),
         journal,
       }) } : {}), ...(opts.llm ? { llm: opts.llm } : {}),
-      // 2026-10-22:压缩模型轨下传——手动 /compact 要与自动路径同源(models.compact ?? auxLlm ?? llm),
+ // 压缩模型轨下传——手动 /compact 要与自动路径同源(models.compact ?? auxLlm ?? llm),
       // 否则配了 coding.models.compact 的用户点 /compact 仍在用主轨。
       ...(opts.models ? { models: opts.models } : {}),
       ...(opts.auxLlm ? { auxLlm: opts.auxLlm } : {}),
@@ -1110,7 +1105,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       // 语音任务书 fetch 注入(voice.draft 测试面;缺省=全局 fetch)
       ...(opts.voiceDraftFetch ? { voiceDraftFetch: opts.voiceDraftFetch } : {}) });
       permissionBroker.attach((msg) => (wss as { broadcast?: (m: import("@lampgenie/protocol").ServerMessage) => void }).broadcast?.(msg as import("@lampgenie/protocol").ServerMessage));
-      // step-1042 关卡 Gate:决议广播——多端(Gate 视图/modal/指挥台 inbox/第二标签页)一致清理挂起行,
+ // 关卡 Gate:决议广播——多端(Gate 视图/modal/指挥台 inbox/第二标签页)一致清理挂起行,
       // 漏掉 permission.ask 帧的客户端也能收敛;同时廉价触发指挥台 inbox 重拉(perm 项消失)。
       permissionBroker.onSettle = (item) => {
         broadcastRaw({ v: 1, type: "permission.resolved", requestId: item.requestId, decision: item.decision, by: item.by });
@@ -1121,7 +1116,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     return wss;
   };
 
-  // IM 入站(step-013 二期收口):飞书事件回调小服务,env 门控;未配置=零行为变化。
+ // IM 入站(二期):飞书事件回调小服务,env 门控;未配置=零行为变化。
   if (process.env.GENIE_FEISHU_VERIFICATION_TOKEN) {
     void (async () => {
       const { startInboundServer, parseGroupBinds } = await import("./im-inbound.js");
@@ -1132,7 +1127,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         ...(process.env.GENIE_FEISHU_BOT_OPEN_ID ? { botOpenId: process.env.GENIE_FEISHU_BOT_OPEN_ID } : {}),
         groupBindings: parseGroupBinds(process.env.GENIE_FEISHU_GROUP_BINDS),
         submitTask: async ({ sessionId, instruction, title }) => {
-          // step-0143 P1:飞书主径 Trigger 入 router。dm/mention 命中 task 路由=addressed
+ // P1:飞书主径 Trigger 入 router。dm/mention 命中 task 路由=addressed
           // (显式点名→explicit 派发,行为与旧直提一致);observe 兜底不派发(零 LLM,只落账)。
           const r = await routerApi.submit({ source: "im", sessionId, instruction, addressed: true, ...(title ? { extra: { title } } : {}) });
           if (!(r.outcome && (r.outcome.kind === "dispatched" || r.outcome.kind === "steered"))) {
@@ -1149,7 +1144,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     })().catch(() => { /* 入站面故障不影响主服务 */ });
   }
 
-  // 2026-11-05 interrupted 自动恢复(env GENIE_AUTORESUME_MINUTES,缺省=关):重启后对「中断发生在
+ // interrupted 自动恢复(env GENIE_AUTORESUME_MINUTES,缺省=关):重启后对「中断发生在
   // 窗内」的任务自动重提同 session 续跑(11-04 人工续跑口径产品化);陈年中断不自动碰,留面板一键。
   // 放在全部接线(workerHost.dispatch/journal onChange)之后:重提任务立即走正常派发链。
   {
@@ -1157,10 +1152,10 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     if (Number.isFinite(arMinutes) && arMinutes > 0) {
       const resumed = taskManager.autoResumeInterrupted({
         windowMs: arMinutes * 60_000,
-        // M34:有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
+ // :有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
         // 覆盖「上次重启已收编 interrupted、之后才出现停止标记」的历史任务)。
         blocked: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
-        // M25:修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
+ // :修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
         // 重复续跑不会重复扫尾(applyTailRepair 本身也幂等,二次全 0)。
         buildInstruction: (t) => {
           const repairNote = repairTailBeforeResume(journal, t.sessionId);
@@ -1210,11 +1205,11 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     },
 async close() {
       clearInterval(localHeartbeat);
-      // M189:停止取新 + await 在飞;pending(nextAt 未到也算)留在 journal 里,重启由 fold 恢复。
+ // 停止取新 + await 在飞;pending(nextAt 未到也算)留在 journal 里,重启由 fold 恢复。
       try { await effectQueue.drain(); } catch { /* 关停 fail-soft */ }
       closeSessionSearch(journal); // 会话检索缓存 flush(只关已创建的索引)
-      // write-behind journal 显式清队(2026-10-27):否则关闭后立刻重启/新实例读盘会看不到
-      // 最后一批事件(实测:任务提交→立即关→重启丢任务)。MemoryJournal 无 flush=no-op。
+ // write-behind journal 显式清队:否则关闭后立刻重启/新实例读盘会看不到
+ // 最后一批事件(经验证:任务提交→立即关→重启丢任务)。MemoryJournal 无 flush=no-op。
       try { (journal as { flush?: () => void }).flush?.(); } catch { /* 清队失败不影响关停 */ }
       otelExporter?.stop();
       automationScheduler.stop();

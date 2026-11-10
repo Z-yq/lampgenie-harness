@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const REPO = resolve(__dirname, "../../..");
 
-describe("档案文件钻取(step-048 追记八)", () => {
+describe("档案文件钻取", () => {
   it("协议:profile.file 双向", () => {
     expect(parseClientMessage('{"v":1,"type":"profile.file","projectId":"p","file":"a.ts"}')?.type).toBe("profile.file");
     expect(parseClientMessage('{"type":"profile.file"}')).toBeNull();

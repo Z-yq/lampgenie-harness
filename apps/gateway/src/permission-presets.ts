@@ -1,6 +1,5 @@
 /**
- * 权限预设(M180「权限预设原子绑定与会话钉扎」):预设名 → 权限集合的**唯一真源**。
- *
+ * 权限预设(「权限预设原子绑定与会话钉扎」):预设名 → 权限集合的**唯一真源**。
  * 语义:
  * - 权限不再只是一个 mode 枚举,而是三旋钮 (sandbox, approval, mode) 的组合;预设名是它的紧凑名字。
  * - `PRESETS` 是静态表(纯数据);`custom`/`auto` 是**保留名**,不是表行:
@@ -10,7 +9,6 @@
  *   UnknownPresetError),绝不静默降级成 ask(权限放宽必须是用户显式动作)。
  * - 会话钉扎(pin):任务开工时把当时的全局预设落成本会话快照;此后全局漂移不影响已开工会话。
  * - 子代理:恒 approval=never(免审),sandbox 继承父 pin。
- *
  * 本模块是纯函数 + 一个进程内「当前预设名」状态(启动 set、cfg.set 成功后 set、开工读取);
  * 不做 IO(唯一副作用是 pinSession 写 journal,由调用方注入)。
  */
@@ -198,8 +196,7 @@ export function pinSession(journal: Journal, sessionId: string, presetName: stri
 export function resolveSessionPermission(
   journal: Journal,
   sessionId: string,
-  fallbackPreset: string = DEFAULT_STARTUP_PRESET,
-): SessionPermissionPin & { pinned: boolean; source: "pin" | "default" } {
+  fallbackPreset: string = DEFAULT_STARTUP_PRESET): SessionPermissionPin & { pinned: boolean; source: "pin" | "default" } {
   const pinned = findPin(journal, sessionId);
   if (pinned) return { ...pinned, pinned: true, source: "pin" };
   const n = normalizeName(fallbackPreset) || DEFAULT_STARTUP_PRESET;

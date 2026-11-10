@@ -1,13 +1,11 @@
 /**
  * board.fromsense source=decision(控制流板)端到端:
  * 点一个符号 → 板上看到它的**条件/循环**真分支树(decision.ts 的 DecisionPoint[] → decisionsBoard)。
- *
  * 四条主线(与任务书验收一一对应):
  *  ① 真实源文件 + 函数名 → 节点 flow 非空且同时含 branch 与 loop(空壳/假树会红);
  *  ② 同内容重复请求 → 同一 taskId、rev 递增(fail-soft 覆盖前的「内容寻址」语义);
  *  ③ 换函数(等于换内容指纹)→ taskId 变化(旧图自然失效,不手工清理);
  *  ④ 无分支点 / 扫描失败 → 单节点「无分支点」板,不抛错;缺定位参数 → 明确错误文案。
- *
  * 落盘纪律:全程 GENIE_REPO_ROOT=临时目录(夹具源文件也在临时目录里),绝不写真实仓 .genie/boards。
  * 夹具源=仓内真实文件 packages/code-sense/src/sensing/decision.ts 的副本(真 if/while/for,不是手写小样)。
  */
@@ -52,8 +50,7 @@ describe("board.fromsense source=decision(控制流板:符号 → 条件/循环�
   };
   /** 从 cursor 起等一条匹配帧(与 board.test.ts 同款轮询;drvfs 高载下放宽到 20s)。 */
   const waitFor = (
-    pred: (m: Record<string, unknown>) => boolean, cursor: number, tag: string, ms = 20000,
-  ): Promise<Record<string, unknown>> =>
+    pred: (m: Record<string, unknown>) => boolean, cursor: number, tag: string, ms = 20000): Promise<Record<string, unknown>> =>
     new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("等消息超时 " + tag)), ms);
       const poll = setInterval(() => {
@@ -64,8 +61,7 @@ describe("board.fromsense source=decision(控制流板:符号 → 条件/循环�
 
   /** 发一条 decision 请求,返回该板的 taskId + doc(回执先于广播,按 cursor 取本次的那一条)。 */
   const fromSenseDecision = async (
-    params: Record<string, unknown>, tag: string,
-  ): Promise<{ taskId: string; doc: BoardDoc }> => {
+    params: Record<string, unknown>, tag: string): Promise<{ taskId: string; doc: BoardDoc }> => {
     const cursor = inbox.length;
     send({ type: "board.fromsense", sessionId: SID, source: "decision", ...params });
     const m = await waitFor((mm) => mm.type === "board.doc" || mm.type === "error", cursor, tag);

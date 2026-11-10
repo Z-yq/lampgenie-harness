@@ -1,13 +1,13 @@
 /**
- * 剖面判定(定序,designs/16 §3)+ 五剖面编排。
- * 一期实装:debug(全量)/explore(grep 版);plan/ui 显式降级(二期 step-018/019)。
+ * 剖面判定(定序, §3)+ 五剖面编排。
+ * 一期实装:debug(全量)/explore(grep 版);plan/ui 显式降级(二期 /019)。
  */
 
 export type Mode = "auto" | "debug" | "plan" | "explore" | "ui" | "api" | "state" | "algo";
 
 const UI_WORDS = ["页面", "跳转", "路由", "按钮", "前端", "page", "route", "navigate"];
 const PLAN_WORDS = ["规划", "设计", "怎么加", "影响", "新功能", "架构", "plan", "design"];
-/** 业务感知强意图词(step-077,designs/24 §5.1):与 ui 词同级优先(规则 1.5)。
+/** 业务感知强意图词(§5.1):与 ui 词同级优先(规则 1.5)。
  * ASCII 词按词边界匹配(防 "api.ts" 这类路径被子串误吞);CJK 词按 includes。 */
 const API_WORDS = ["接口清单", "有哪些接口", "接口列表", "http接口", "http 接口", "rest接口", "rest 接口", "路由表", "openapi", "swagger"];
 const API_WORDS_ASCII = ["endpoint", "endpoints", "rest api"];
@@ -52,7 +52,7 @@ function hasWord(q: string, cjk: string[], ascii: string[]): boolean {
   return ascii.some((w) => new RegExp(`\\b${w.replace(/[.]/g, "\\.")}\\b`, "i").test(lower));
 }
 
-/** auto 判定:有序规则,首个命中即停(designs/16 §3 + designs/24 §5.1 业务感知词)。 */
+/** auto 判定:有序规则,首个命中即停( §3 + §5.1 业务感知词)。 */
 export function decideMode(query: string, knownSymbols?: Set<string>): AutoDecision {
   const q = query.trim();
   // 2. ui 词优先(强意图:页面语境覆盖符号语境)

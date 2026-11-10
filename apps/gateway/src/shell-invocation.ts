@@ -1,10 +1,8 @@
 /**
- * Windows shell 抽象(step-136 K4 / P1-6)。
- *
+ * Windows shell 抽象( K4 / P1-6)。
  * 背景:hooks 执行、终端工具、子代理 run_cmd 三处原本硬编码 `bash -lc <cmd>`,Windows 原生无 bash,
  * 双击 exe 形态下这三个功能会直接 ENOENT 崩掉(不是"降级",是"不可用")。此模块把「命令字符串 →
  * (可执行文件, 参数数组)」的决策收成一处纯函数,三处调用点统一走它。
- *
  * 规则(平台无关,可单测):
  * - 覆盖来源:`opts.shellBin` > env `GENIE_SHELL_BIN`(桌面壳/用户显式指定,Windows 上建议填
  *   Git for Windows 的 bash,如 `C:\Program Files\Git\bin\bash.exe`,即可拿回 POSIX 语义);
@@ -12,12 +10,10 @@
  *   basename 含 `cmd` → `/d /s /c`(Windows cmd 专用语义);其他名字(如 powershell.exe)不猜,
  *   退回按平台默认参数形态处理(win32 → `/d /s /c`,其他 → `-lc`);
  * - 无 shellBin 时:platform=win32 → `cmd.exe /d /s /c <cmd>`;其他 → `bash -lc <cmd>`。
- *
  * Windows 降级理由:cmd.exe 的 `/d`(跳过 AutoRun 注册表脚本)/`/s`(保留引号原样,配合 `/c` 的
  * 外层引号剥离规则)/`/c`(执行后退出)是让 `cmd /c "命令含空格"` 可靠工作的标准组合;它**不是** bash,
  * 因此 `&&` 之外的 POSIX 语法(单引号、`$(...)`、`export`、`[ -f ... ]`)不会被解释——这是显式降级,
  * 由调用点的 ENOENT/错误文案告知用户装 Git for Windows 或设 `GENIE_SHELL_BIN`,不静默吞。
- *
  * 纯函数:零 IO、不读时钟、不 spawn,除默认读一次 `process.env.GENIE_SHELL_BIN`。
  */
 import { parseWslPath, wslErrorHint, wslShellInvocation } from "./wsl.js";

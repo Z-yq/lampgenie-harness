@@ -1,6 +1,6 @@
 /**
- * super agent 指挥台(designs/20,step-045;step-0144 更名 audio/companion agent → super agent;
- * step-1033 起旧 companion 链整体替换为指挥台后端链):
+ * super agent 指挥台(更名 audio/companion agent → super agent;
+ * 起旧 companion 链整体替换为指挥台后端链):
  * - 会话:sessionId = super:<YYYYMMDD>(按天滚动,journal 复用,零新存储;旧 companion: 前缀
  *   journal 只读不迁移,app.ts history 过滤与 journal kind 双认都靠它);
  * - system 每轮重组:SOUL+记忆块(soul 双库,super agent 专有)+用户偏好摘要+ 全局状态摘要
@@ -10,7 +10,7 @@
  * - 动手永远派给 coding 轨(唯一不动手边界);其余操作(取消/增删工作区/改派)直接执行+事后说明;
  * - SuperAgentChannel:ask_user 转接(coding agent 提问经指挥台转述)+ 任务状态播报
  *   (journal/广播 super.notice;interrupted/blocked/failed 额外发 super.inbox.changed);
- * - 无音频链路(step-1033):语音输入走 voice.transcribe(ASR→文本),回复只有文本,无 audioB64 回传。
+ * - 无音频链路:语音输入走 voice.transcribe(ASR→文本),回复只有文本,无 audioB64 回传。
  */
 import { join } from "node:path";
 import type { Journal, Task } from "@lampgenie/core";
@@ -26,13 +26,13 @@ import { repoRoot } from "./repo-root.js";
 import { captureBaseline } from "./turn-change-ledger.js";
 import { runTaskCloseout } from "./task-closeout.js";
 
-/** super agent 会话 id:按天滚动(长对话自然分卷;step-1033 起前缀 super:)。 */
+/** super agent 会话 id:按天滚动(长对话自然分卷; 起前缀 super:)。 */
 export function superSessionId(now = new Date()): string {
   const d = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
   return `super:${d}`;
 }
 
-/** @deprecated step-1033 legacy 别名:旧调用面仍引用 `companionSessionId`;语义已切到 super 前缀。 */
+/** @deprecated legacy 别名:旧调用面仍引用 `companionSessionId`;语义已切到 super 前缀。 */
 export const companionSessionId = superSessionId;
 
 export interface SuperAgentDeps {
@@ -42,16 +42,16 @@ export interface SuperAgentDeps {
   llm: LlmProvider;
   /** fixC5: relay_answer 的答复回交(AskUserRouter.answer;缺省=转接通道未启用)。 */
   askAnswer?: (requestId: string, answer: string) => boolean;
-  /** step-1033: task_resume 工具注入的续跑回调(app.ts 用 taskManager.resumeInterrupted 接线;
+ /** task_resume 工具注入的续跑回调(app.ts 用 taskManager.resumeInterrupted 接线;
    * 缺省=工具如实回「续跑未接线」)。 */
   resumeTask?: (taskId: string) => { ok: boolean; newTaskId?: string; reason?: string };
   /** fixC6: 管家自己在本轮内操作过的任务(如 task_cancel)——终态播报跳过主动轮次(已当面说明,不重复播)。 */
   channel?: SuperAgentChannel;
   /** 写前持久化屏障(config.agent.writeBarrier 透传):"off"|"hard";缺省=loop 内部 hard(旧行为不变)。 */
   writeBarrier?: "off" | "hard";
-  /** M58 图片 offload 落盘根(装配方传 {root: repoRoot()};缺省不传=loop 层不启用,行为逐字不变)。 */
+ /**  图片 offload 落盘根(装配方传 {root: repoRoot};缺省不传=loop 层不启用,行为逐字不变)。 */
   imageOffload?: { root: string };
-  /** step-1041: list_nodes 工具的节点清单注入(app.ts 用 NodeRegistry 接线,在线判定与 WS nodes.list 同源
+ /** list_nodes 工具的节点清单注入(app.ts 用 NodeRegistry 接线,在线判定与 WS nodes.list 同源
    *  60s 心跳窗;缺省=工具如实回「未接线」,不假造节点)。 */
   listNodes?: () => { nodeId: string; online: boolean; capabilities: string[]; reachability: string[]; runningTasks: number }[];
 }
@@ -60,7 +60,7 @@ function soulDir(): string {
   return join(repoRoot(), ".genie", "soul");
 }
 
-/** 全局状态摘要(designs/20 §2):工作区清单+各区最近任务+活跃 todo。 */
+/** 全局状态摘要( §2):工作区清单+各区最近任务+活跃 todo。 */
 export function globalStateSummary(deps: SuperAgentDeps): string {
   const projects = deps.projects.list();
   const tasks = deps.taskManager.list();
@@ -94,7 +94,7 @@ export function userPreferenceSummary(soulStore: MemoryStore): string {
  * (活跃时的主动轮次之外,不活跃期间落下的通知也能被下一轮看到)。 */
 export function recentSystemInjections(journal: Journal, now = new Date()): string {
   const sid = superSessionId(now);
-  // kind 双认(step-1033):旧 companion.notice/companion.relay 只读兼容 + 新 super.notice/super.relay(写侧)。
+ // kind 双认:旧 companion.notice/companion.relay 只读兼容 + 新 super.notice/super.relay(写侧)。
   const KINDS = new Set(["companion.notice", "companion.relay", "super.notice", "super.relay"]);
   const evs = journal.readAll().filter((e) => e.sessionId === sid && KINDS.has(e.kind as string));
   if (!evs.length) return "";
@@ -120,11 +120,11 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 - 调工具前不口头铺垫(「我看一下」「稍等」都不说);工具返回后再作答;不要用口头承诺代替工具调用。
 - 一轮里含多个意图就逐项处理,不要只办第一件;也不要因需要多次查工具就转去派任务。
 ### 指代消解
-- 「上次那个/刚才的任务/genie-voice 那边」:先用上方状态摘要与对话消解;消解不了用 task_status 按任务名片段查,或 recall_tasks 找历史;仍不确定才问,且只问一个必要问题。
+- 「上次那个/刚才的任务/其它项目那边」:先用上方状态摘要与对话消解;消解不了用 task_status 按任务名片段查,或 recall_tasks 找历史;仍不确定才问,且只问一个必要问题。
 ### 任务书纪律(许愿式转发)
 - spawn_task 的 instruction 必须自包含:写清用户是谁、在什么场景、要什么、验收标准,把口语里的指代补全——coding agent 看不到我们的对话。
 - 忠实完整化:只补完成它所必需的上下文,不擅自扩大范围(范围取舍是 coding agent 许愿式深挖的职责)。
-### 跨项目/跨机联调(step-1041)
+### 跨项目/跨机联调
 - 多项目联动(如本地 PC 前端 + 远程 Linux 服务器后端联调):先 list_nodes/list_projects 确认对端在位与可用,再逐个 spawn_task;同批任务打同一 group 标签(如「联调-web」),看板按组聚类展示。
 - 联调任务书必须写清对端信息:地址/端口/启动方式/依赖顺序(哪边先起、等什么就绪),不能只写「和另一边联调」——coding agent 看不到别的任务。
 - 网络资源借助(借端口/借服务/跨机访问):把「谁来提供、在哪个地址、如何验证可达」写进依赖方任务书;提供方的任务书写清「要暴露什么、监听哪里」。
@@ -209,7 +209,7 @@ export function inferProject(projects: ProjectRegistry, text: string): string | 
   return best?.id;
 }
 
-/** 调度工具面(designs/20 §2 六件 + fixC2 任务全生命周期件 + fixC5 relay_answer)。 */
+/** 调度工具面( §2 六件 + fixC2 任务全生命周期件 + fixC5 relay_answer)。 */
 export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStore): Tool[] {
   const { taskManager: tm, projects } = deps;
   const listProjects: Tool = {
@@ -226,7 +226,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       })));
     },
   };
-  // step-1041: list_nodes——跨机联调/远程派任务前查对端在位(节点 id/在线态/能力与可达性标签/负载);
+ // list_nodes——跨机联调/远程派任务前查对端在位(节点 id/在线态/能力与可达性标签/负载);
   // 在线判定与 WS nodes.list 同源(60s 心跳窗),由 app.ts 注入,未接线=如实告知不假造。
   const listNodes: Tool = {
     name: "list_nodes",
@@ -265,7 +265,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
     },
   };
   // fixC3: spawn_task 升级——显式 projectId > 任务书语义匹配(label/basename 命中)> 主仓兜底(回复里说明归属);
-  // step-1041: 增可选 group(联调等需联动的多条任务打同一标签,看板聚类展示;Task.group 既有 F3 字段,零新存储)。
+ // 增可选 group(联调等需联动的多条任务打同一标签,看板聚类展示;Task.group 既有 F3 字段,零新存储)。
   const spawnTask: Tool = {
     name: "spawn_task",
     description: "给某工作区派任务(开一条并行线)。instruction 要自包含(用户是谁/场景/目标/验收;coding agent 看不到我们的对话);用户点名项目给 projectId,未点名会按语义匹配,匹配不上落主仓。多项目联动的任务(如联调)给同一 group 标签。",
@@ -362,7 +362,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       const instruction = a.note?.trim() ? `${t.instruction}\n\n[管家重发补充] ${a.note.trim()}` : t.instruction;
       const nt = tm.submit("user", sid, instruction, {
         ...(t.projectId ? { projectId: t.projectId } : {}),
-        ...(t.group ? { group: t.group } : {}), // step-1041: 联调组重发保持同组(看板聚类不断)
+        ...(t.group ? { group: t.group } : {}), // 联调组重发保持同组(看板聚类不断)
         title: `${String(t.title ?? t.instruction).slice(0, 34)}(重发)`,
       });
       return `已重发为新任务 ${nt.id.slice(0, 8)}(原任务 ${t.id.slice(0, 8)} 的任务书${a.note ? "+补充" : ""})`;
@@ -426,7 +426,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       return ok ? "答复已交回,coding 助手会继续。" : "该问题已失效(面板那边已先答),告诉用户已处理过。";
     },
   };
-  // step-1033: task_resume——interrupted/blocked 任务一键续跑(幂等重提同 session 续跑任务)。
+ // task_resume——interrupted/blocked 任务一键续跑(幂等重提同 session 续跑任务)。
   const taskResume: Tool = {
     name: "task_resume",
     description: "恢复被中断的任务:按任务名片段/任务 id 匹配,基于该会话已有进展续跑(不重做已完成部分);直接执行,回复里说明续跑结果。",
@@ -489,7 +489,7 @@ export interface SuperAgentChannelOptions {
 }
 
 /**
- * super agent 通道——任务状态播报 + ask_user 转接(step-1033 起出站只发 super.*)。
+ * super agent 通道——任务状态播报 + ask_user 转接(起出站只发 super.*)。
  * - 通知/转接一律落 journal(super.notice / super.relay,super 会话)——
  *   buildSuperAgentSystem 的「近期系统注入」块让下一轮自动可见;
  * - 同时广播协议消息(super.notice / super.relay)给指挥台面板;
@@ -506,8 +506,7 @@ export class SuperAgentChannel {
   constructor(
     private readonly deps: SuperAgentDeps,
     private readonly soulStore: MemoryStore,
-    private readonly opts: SuperAgentChannelOptions,
-  ) {
+    private readonly opts: SuperAgentChannelOptions) {
     this.deps.channel = this;
   }
 
@@ -551,9 +550,9 @@ export class SuperAgentChannel {
     void this.serialize(() => this.announce(text));
   }
 
-  /** fixC5: 用户轮次也进串行队列——与播报/转述轮次互斥(实测竞态:用户对转接的答复与
+ /** fixC5: 用户轮次也进串行队列——与播报/转述轮次互斥(经验证竞态:用户对转接的答复与
    * 管家转述轮次并发跑,两边互相看不见,答复轮把转述复读一遍而没走 relay_answer)。
-   * step-1033:音频入参已删除(语音先走 voice.transcribe → 文本 → 本方法)。 */
+ * 音频入参已删除(语音先走 voice.transcribe → 文本 → 本方法)。 */
   turn(text: string): Promise<string> {
     return this.serialize(async () => (await runSuperAgentTurn(this.deps, text, this.soulStore)).text);
   }
@@ -581,24 +580,24 @@ export async function runSuperAgentTurn(deps: SuperAgentDeps, text: string, soul
     sessionId: superSessionId(),
     system: buildSuperAgentSystem(deps, soulStore),
     llm: deps.llm,
-    // step-132:super agent 轨同享 LLM 轨迹(全量 messages+响应,.genie/llm-trace/)。
+ // super agent 轨同享 LLM 轨迹(全量 messages+响应,.genie/llm-trace/)。
     llmTrace: makeLlmTraceSink(deps.journal),
     tools: buildSuperAgentTools(deps, soulStore),
     maxSteps: 6,
     // 写前持久化屏障(config.agent.writeBarrier):undefined 不写键 → loop 缺省 hard,行为同旧版。
     ...(deps.writeBarrier ? { writeBarrier: deps.writeBarrier } : {}),
-    // M58 图片 offload:管家轮次也可能带图(视觉输入),与 coding 轨同根落盘 .genie/image-offload/。
+ //  图片 offload:管家轮次也可能带图(视觉输入),与 coding 轨同根落盘 .genie/image-offload/。
     ...(deps.imageOffload ? { imageOffload: deps.imageOffload } : {}),
   });
-  // 收尾聚合(M16/M23/M107/M169/M170/M5):与主 agent 同一实现;super 轮次 warn-only,
+ // 收尾聚合(/////):与主 agent 同一实现;super 轮次 warn-only,
   // 绝不 hardFail,终稿只追加紧凑「## 收尾审计」段(全 na 不追加)。
   const startSeq = deps.journal.length;
   // 基线采集与 runTurn 并发(git status 在大仓上秒级;不阻塞用户轮次)。
   const baselinePromise = captureBaseline(repoRoot()).catch(() => null);
   const out = await loop.runTurn(text);
-  // step-1041 落盘兜底:轮内事件(turn.start/message.user/message.agent)依赖 write-behind 的
+ // 落盘兜底:轮内事件(turn.start/message.user/message.agent)依赖 write-behind 的
   // microtask 批冲刷(正常毫秒级落盘)。11-09 取证口径修正:.genie/llm-trace/super:<date> 目录实为
-  // companion.test.ts 的测试运行(假 LLM 固定回复文本与 trace 逐字同源),产线从未跑过真实 super 轮;
+ // companion.test.ts 的测试运行(假 LLM 固定回复文本与 trace 逐字同源),生产环境从未跑过真实 super 轮;
   // 轮末显式 flush 一次,把「轮次完成⇒字节在盘」变成确定性不变量,防重启窗口丢尾批
   // (best-effort,失败不碰主链;MemoryJournal 无此方法,no-op)。
   try {
@@ -623,7 +622,7 @@ export async function runSuperAgentTurn(deps: SuperAgentDeps, text: string, soul
   }
 }
 
-// ── step-1033:指挥台 inbox 聚合 ──
+// ── 指挥台 inbox 聚合 ──
 
 /** inbox 数据源(显式传入,不给 super-agent 引入 router/permission/task-manager 之外的依赖面)。 */
 export interface SuperInboxSources {
@@ -655,8 +654,7 @@ const clip = (s: string, n: number): string => {
 export function buildSuperInbox(
   deps: Pick<SuperAgentDeps, "taskManager">,
   sources: SuperInboxSources = {},
-  limit = 30,
-): SuperInboxItem[] {
+  limit = 30): SuperInboxItem[] {
   const now = sources.now ?? Date.now();
   const head: SuperInboxItem[] = [];
   const failed: SuperInboxItem[] = [];
@@ -703,7 +701,7 @@ export function buildSuperInbox(
   return [...head, ...failed].slice(0, Math.max(0, limit));
 }
 
-// ── step-0144 更名兼容别名(双写期):audio/companion agent → super agent;旧调用面
+// ── 更名兼容别名(双写期):audio/companion agent → super agent;旧调用面
 // (agent-wiring/test/e2e 等)不改不破;旧名删除时点随 U3 拍板(下一面板版本发布后)。──
 export type CompanionDeps = SuperAgentDeps;
 export { SuperAgentActivity as CompanionActivity };

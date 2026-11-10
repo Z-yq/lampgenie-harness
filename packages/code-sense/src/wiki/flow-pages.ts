@@ -1,12 +1,10 @@
 /**
- * 代码档案的 flow / 语义指南 / 功能拆解页(2026-10-26)。
- *
- * 分工(与 designs/16 §9 一致):
+ * 代码档案的 flow / 语义指南 / 功能拆解页。
+ * 分工(与 §9 一致):
  *  - flow 页:确定性图(module/file/功能线 mermaid)+ 入口/分层/枢纽表,事实全部来自
  *    buildCodeFlow;不含 LLM。
  *  - guide / features 页:确定性骨架(入口、路径、模块、关键文件/函数)为正文;
  *    LLM 只追加「语义解读」小节(每条带 file:line 引用回查),不改事实字段/图。
- *
  * 图在面板「Wiki 文档」tab 内由 mermaid 渲染;页内 path:line 自动变可点击引用。
  */
 import type { PageDraft } from "./pages";
@@ -56,8 +54,7 @@ export async function buildFlowPage(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
-  bundle: WikiFlowBundle,
-): Promise<PageDraft> {
+  bundle: WikiFlowBundle): Promise<PageDraft> {
   const flow = bundle.primary;
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 全仓代码流`, "", flowBanner(input, bundle), ""];
@@ -187,8 +184,7 @@ export async function buildModuleFlowPage(
   config: WikiConfig,
   moduleName: string,
   flow: CodeFlow,
-  bundle: WikiFlowBundle,
-): Promise<PageDraft> {
+  bundle: WikiFlowBundle): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# 模块 ${moduleName} · 文件级代码流`, "", flowBanner(input, bundle), ""];
   const modNote = bundle.moduleNotes[moduleName];
@@ -253,14 +249,13 @@ export async function buildGuidePage(
   cache: SourceCache,
   config: WikiConfig,
   bundle: WikiFlowBundle,
-  narrative?: WikiNarrative,
-): Promise<PageDraft> {
+  narrative?: WikiNarrative): Promise<PageDraft> {
   const flow = bundle.primary;
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 语义级代码指南`, "", flowBanner(input, bundle), ""];
   if (narrative) lines.push(renderNarrative(narrative));
 
-  // ---- 问答式组装(2026-10-27 通用机制):按读者自然问题顺序,信号层驱动,哪类信号在场呈现哪类 ----
+ // ---- 问答式组装(通用机制):按读者自然问题顺序,信号层驱动,哪类信号在场呈现哪类 ----
   const surfaces = bundle.surfaces;
   const SHAPE_LABEL: Record<string, string> = { service: "HTTP 服务", cli: "命令行/脚本", mixed: "服务 + 命令行", library: "库(被别人 import)" };
   lines.push("## 一、这个项目是什么、干什么用", "");
@@ -374,8 +369,7 @@ export async function buildFeaturesPage(
   cache: SourceCache,
   config: WikiConfig,
   bundle: WikiFlowBundle,
-  narrative?: WikiNarrative,
-): Promise<PageDraft> {
+  narrative?: WikiNarrative): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 功能拆解`, "", flowBanner(input, bundle), ""];
   if (narrative) lines.push(renderNarrative(narrative));
@@ -447,7 +441,7 @@ export async function buildFeaturesPage(
 }
 
 /**
- * 管线「关键流程图」页(2026-10-27):函数体语句级 CFG——真实语句/条件菱形/是·否/
+ * 管线「关键流程图」页:函数体语句级 CFG——真实语句/条件菱形/是·否/
  * 循环回边/try-catch/return-throw;长函数分页(不丢节点)。功能线语义名仍由 features 页承载,
  * 本页只负责「这条管线在代码里到底怎么走」。
  */
@@ -455,8 +449,7 @@ export async function buildPipelineCfgPage(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
-  cfg: WikiPipelineCfg,
-): Promise<PageDraft> {
+  cfg: WikiPipelineCfg): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const totalNodes = cfg.functions.reduce((a, f) => a + f.nodes.length, 0);
   const totalDiagrams = cfg.functions.reduce((a, f) => a + (f.pages?.length ?? 1), 0);

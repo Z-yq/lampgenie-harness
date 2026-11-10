@@ -1,12 +1,11 @@
 /**
  * microcompact(读侧工具结果治理),两条独立路径:
- * ①超大结果精炼(2026-10-22 用户口径「修剪精炼」:content > 8KB 的可占位工具结果替换为
+ * ①超大结果精炼( content > 8KB 的可占位工具结果替换为
  *   head 4K + 剪除标记 + tail 1K,dsh pruner 同语义;寻址参数保留可精确重读);
- * ②阈值触发的组清理(step-140,对齐 ZCode compact/microcompact.ts 阈值语义):
+ * ②阈值触发的组清理(对齐 ZCode compact/microcompact.ts 阈值语义):
  *   token 估算 ≥ thresholdTokens 才触发;按工具结果组保留最近 keepRecent(缺省 5)组,
  *   更早的清为带寻址的「已清除」占位;minSavings 不足整体回滚。
- *
- * 2026-10-25 Phase 0(用户口径「热区逐字、温区语义、冷区摘要、全程可回查」)在两条路径前
+ * Phase 0在两条路径前
  * 增加确定性治理:
  * - 硬保护:错误/异常结果、认知工具、不可逆动作回执(edit_file/write_file)永不剪
  *   (错误日志的中段栈帧往往就是根因,head/tail 也不能碰);
@@ -14,11 +13,9 @@
  * - supersede:只读可重跑工具同 (tool, 寻址) 的旧结果被后续调用取代(错误结果不参与);
  * - per-tool cap:可按工具覆写超大结果阈值;
  * - pruned/manifest:返回本次折叠/剪除清单,供 loop 注入上下文清单与 journal 留痕。
- *
- * 历史教训(2026-10-18 用户实报,不可回退):旧实现按「最近 N 组」**无条件**滚动占位,
+ * 历史教训(用户用户反馈,不可回退):旧实现按「最近 N 组」**无条件**滚动占位,
  * 第 6 组起模型对全部旧工具结果失忆 → read_file×31 重读死循环。所以路径②**只在
  * token 估算达到阈值时触发**(ZCode thresholdTokens 语义),绝不回到无条件滚动。
- *
  * 与 ZCode 的已知差异(如实登记):我们的 Message 无 isError 字段,错误结果用内容特征
  * (traceback/ERROR/failed/exit code 等)保守识别——宁可多留,不静默丢错误。
  */
@@ -43,7 +40,7 @@ export const IRREVERSIBLE_TOOLS = new Set(["edit_file", "write_file"]);
 /** 同目标后续结果可安全取代旧结果的只读、可重跑工具(terminal/run_cmd 有副作用,不在此列)。 */
 const SUPERSEDABLE_TOOLS = new Set(["read_file", "grep", "glob", "list_dir"]);
 
-/** 超大结果阈值(字符):超过才精炼(路径①)。2026-10-22 用户口径「对工具结果进行修剪精炼」:
+/** 超大结果阈值(字符):超过才精炼(路径①)。 
  * 48KB→8KB,且形态从「整体占位+重读」改为 head/tail 保留中段剪除(deepseek-harness
  * compaction-tool-result-pruner 同语义:head 4K + 标记 + tail 1K——尾部往往是错误与最终结果,
  * 头部是上下文,中段价值最低)。寻址参数保留在标记里,需要中段细节仍可精确重读。 */
@@ -56,13 +53,11 @@ export const PRUNE_TAIL_CHARS = 1_000;
 export const MIN_TOKEN_SAVINGS = 256;
 
 /**
- * cache-aware 剪枝策略 v2(2026-11-06 用户口径校准:前缀稳定是第一约束)。
- *
+ * cache-aware 剪枝策略 v2(校准:前缀稳定是第一约束)。
  * v1(批量 + 粘性重放)**不够**:它只保证「不新增清空」,但 `deriveMessages` 每步从 journal 重建,
  * 而 dedup「保最后一份」/ args 摘要「保最后一条」/ supersede / keepRecent 窗口都是**随追加而变**的规则
  * ——新来一条就把上一步已发出去的消息改写掉 → 公共前缀从改写点起塌陷。
- * 用户实锤:250k→160k→240k→200k 的起伏把命中率压到极低,因为前缀每步都在变。
- *
+ * 用户注意:250k→160k→240k→200k 的起伏把命中率压到极低,因为前缀每步都在变。
  * v2 不变量(实现即这套):
  * ①**append-only 常态**:已进入上一次请求的消息,渲染结果必须逐字节不变。唯一满足该性质的是
  *   「只看单条消息自身内容」的变换(head/tail 精炼,幂等);随追加而变的规则一律不许常态化跑。
@@ -73,11 +68,10 @@ export const MIN_TOKEN_SAVINGS = 256;
  * ④**冷却**:重置后须再增长 ≥ 50k tok 或过 ≥ 20 步才允许下一次重置;同一 turn ≤ 1 次。
  * ⑤**新增预算**:单步增量 ≤ max(1.5%, 1.5k tok) —— 在**写时**用 spill 落盘定形压住(loop 侧),
  *   绝不「先全量进上下文再靠 prune 减回」(那正是用户点名的震荡形态)。
- *
  * 只在调用方传 `policyState` 时生效(loop 默认传 → 默认开启;单测/旧构造点不传 → 旧行为逐字不变)。
  */
 export const MIN_PRUNE_CONTEXT_TOKENS = 110_000;
-/** 重置后基线目标 = 触发阈值 × 该比例(用户口径 85~90%:别压太低,否则「压到底再长回」= 锯齿)。 */
+/** 重置后基线目标 = 触发阈值 × 该比例(85~90%:别压太低,否则「压到底再长回」= 锯齿)。 */
 export const RESET_TARGET_RATIO = 0.88;
 /** 单次重置的最大削减比例(禁止 250k→160k 这种 36% 大跳)。 */
 export const MAX_RESET_CUT_RATIO = 0.2;
@@ -85,13 +79,13 @@ export const MAX_RESET_CUT_RATIO = 0.2;
 export const RESET_COOLDOWN_TOKENS = 50_000;
 /** 重置后冷却:经过多少步才允许下一次重置。 */
 export const RESET_COOLDOWN_STEPS = 20;
-/** 同一 turn 内允许的前缀重置次数上限(用户口径 ≤1)。 */
+/** 同一 turn 内允许的前缀重置次数上限(≤1)。 */
 export const MAX_RESETS_PER_TURN = 1;
 /** 重置的最小削减 tokens(太小 = 白白打碎一次前缀)。 */
 export const PRUNE_MIN_BATCH_TOKENS = 20_000;
 /** 收益门:剩余调用次数的保守假设。重置削 12~20%,按 10 次回本即可(比 v1 的 5 更保守)。 */
 export const PRUNE_ASSUMED_REMAINING_CALLS = 10;
-/** 每步新增预算比例(用户口径 1~2%,缺省 1.5%)。 */
+/** 每步新增预算比例(1~2%,缺省 1.5%)。 */
 export const GROWTH_BUDGET_RATIO = 0.015;
 /** 每步新增预算下限(tokens):小上下文按比例算出来太小,会误伤早期步。 */
 export const GROWTH_BUDGET_MIN_TOKENS = 1_500;
@@ -146,12 +140,10 @@ const MODEL_HOT_TAIL_MESSAGES = 6;
 export const DEFAULT_GROWTH_SPURT_TOKENS = 12_000;
 
 /**
- * 本地 token 估算系数(2026-11-04 实测标定,替换旧的 chars/4)。
- *
+ * 本地 token 估算系数(经验证标定,替换旧的 chars/4)。
  * ⚠️ 2026-11 token 轮:**仅作回退系数**,真值走 `agent/token-estimate.ts`(cl100k 真分词器 +
  * 标定 ratio)。下面两个常量只为「其它模块仍 import 系数」与「分词器不可用时的回退口径」保留,
  * 本文件不再用它们做任何估算。
- *
  * 历史标定(仍作回退档位的依据):近 5 天 `.genie/journals/sessions` 6,975 个「会话内累计字符量 vs
  * 上游 usage.inputTokens」采样点(只取累计字符 >50k 的点,排除 system/tools schema 占比过高的早期步)。网格搜索系数 W
  * 使 |usage/est − 1| 的中位数最小:
@@ -170,7 +162,7 @@ export function estimateTokensOfText(text: string): number {
   return rawTokens(text);
 }
 
-/** 路径①精炼内容前缀(2026-10-22 head/tail 形态)。 */
+/** 路径①精炼内容前缀( head/tail 形态)。 */
 const HUGE_PLACEHOLDER_PREFIX = "[工具结果已精炼:";
 /** 路径②占位内容前缀(已清除/可重读标记)。 */
 const CLEARED_PLACEHOLDER_PREFIX = "[工具结果已清除(上下文压力):";
@@ -180,7 +172,7 @@ const SUPERSEDED_PLACEHOLDER_PREFIX = "[工具结果已被后续同类调用取�
 /** 模型明确判定「不需要」:不留正文,但必须留下调用发生过的可核记账。 */
 const MODEL_DROP_PLACEHOLDER_PREFIX = "[工具结果已按模型判断不保留:";
 
-/** assistant 侧历史写入正文摘要标记(2026-11-03 token 轮:写工具参数里的整文件正文
+/** assistant 侧历史写入正文摘要标记( token 轮:写工具参数里的整文件正文
  * 是历史 token 的最大单一来源,且一旦 later 写入成功就是死重)。summary 值以此开头,
  * 由 isPlaceholderContent 识别 → 幂等(二次处理不再摘要,输出逐字节相同)。 */
 const ARGS_SUMMARY_PREFIX = "[历史正文已省略:";
@@ -195,11 +187,10 @@ const MIN_ARGS_SUMMARY_CHARS = 400;
 /** 单个参数值短于此不摘要(edit_file 的 old_string 常常很短,替换成摘要反而更长)。 */
 const MIN_SINGLE_ARGS_SUMMARY_CHARS = 200;
 /** 全量去重的「热区年龄」:只有距末尾至少这么多条消息的旧副本才折叠。
- *
- *  设计理由(prefix-stability / system-in-history ④ 实测踩到):去重是「新副本到达时改写旧副本」,
+ * 设计理由(prefix-stability / system-in-history ④ 经验证踩到):去重是「新副本到达时改写旧副本」,
  *  若对贴着末尾的副本立即折叠,每来一次重复就把历史中段改一次 → 公共前缀从该处起全部失效
  *  (token 轮的目标恰好包括缓存命中)。让副本先滑出热区再折叠:折叠在长会话里仍会发生
- *  (实测重复回执一般都在几十条之前),但不会出现「每步都改历史」。折叠一旦发生即稳定,
+ * (经验证重复回执一般都在几十条之前),但不会出现「每步都改历史」。折叠一旦发生即稳定,
  *  因为占位内容被 isPlaceholderContent 识别、不再参与后续折叠。 */
 const DEDUP_MIN_AGE_MESSAGES = 8;
 
@@ -218,7 +209,7 @@ const ERROR_MARKERS: RegExp[] = [
   /\bpermission denied\b/i,
   /\b(?:timed?\s*out|timeout)\b/i,
   /Segmentation fault/i,
-  // 中文工具错误(真实链路实测:`错误:路径非法或越出项目根...` 曾漏过 hard-protect)
+ // 中文工具错误(真实链路经验证:`错误:路径非法或越出项目根...` 曾漏过 hard-protect)
   /^\s*(?:错误|失败|异常)[：:]/m,
   /^\s*(?:参数错误|路径非法|越出项目根|权限不足|拒绝访问)/m,
   // 结构化工具错误:{"ok":false,"error":"..."} / {"is_error":true}
@@ -239,7 +230,7 @@ export interface MicrocompactPrunedItem {
   newChars: number;
 }
 
-/** microcompact 配置(step-140):thresholdTokens 未给(或 ≤0)=路径②关闭,只走超大占位。 */
+/** microcompact 配置:thresholdTokens 未给(或 ≤0)=路径②关闭,只走超大占位。 */
 export interface MicrocompactConfig {
   /** 组清理触发阈值(估算 tokens ≥ 此值才触发)。 */
   thresholdTokens?: number;
@@ -269,18 +260,18 @@ export interface MicrocompactConfig {
    * foldDuplicateAndSuperseded 三重限制(COMPACTABLE_TOOLS + where 非空 + IRREVERSIBLE_TOOLS)。 */
   dedupAnyTool?: boolean;
   /** 裁剪净收益门(缺省 true)：就地改写历史中段会让**前面所有 token 的前缀缓存失效**
-   *  (实测 57k 前缀因裁 1 条 500 字符的旧结果而全量重算,一次多花 5.7 万 token)。
+ * (经验证 57k 前缀因裁 1 条 500 字符的旧结果而全量重算,一次多花 5.7 万 token)。
    *  开启后:只有当「省下的 token ≥ 前缀失效代价 × 系数」时才真正裁剪,否则放弃本次裁剪。
    *  关闭 = 恢复旧的无条件裁剪行为(仅用于对照实验)。 */
   breakEvenGate?: boolean;
   /** 净收益门的保守系数(缺省 3):省 1 token 至少要抵 3 token 的重算代价才值得裁。 */
   breakEvenFactor?: number;
-  /** cache-aware 前缀稳定策略 v2(2026-11-06):传了 `policyState` 才生效(loop 默认传)。
+ /** cache-aware 前缀稳定策略 v2:传了 `policyState` 才生效(loop 默认传)。
    *  以下字段可覆写默认值;`cacheAware:false` = 整条策略关闭(恢复旧的每步增量行为)。 */
   cacheAware?: boolean;
   /** 最小上下文门槛(tokens,缺省 110_000;自动夹到触发阈值的 90%)。低于它不做重置。 */
   minContextTokens?: number;
-  /** 重置后基线目标 = 触发阈值 × 该比例(缺省 0.88,即用户口径 85~90%)。 */
+ /** 重置后基线目标 = 触发阈值 × 该比例(缺省 0.88,即85~90%)。 */
   resetTargetRatio?: number;
   /** 单次重置的最大削减比例(缺省 0.2):禁止「250k→160k」这种大起大落。 */
   maxResetCutRatio?: number;
@@ -356,7 +347,7 @@ export interface MicrocompactResult {
   cutTokens?: number;
 }
 
-/** micro 阈值推导(step-140,对齐 ZCode buildDefaultMicrocompactThreshold):
+/** micro 阈值推导(对齐 ZCode buildDefaultMicrocompactThreshold):
  * max(0, min(⌊auto×0.9⌋, auto−2000)),auto=autoCompact 阈值(compact-gate 同源口径)。
  * 极小 auto(<2000)推导出 0 = 关闭组清理。 */
 export function buildDefaultMicrocompactThreshold(autoCompactThreshold: number): number {
@@ -369,15 +360,14 @@ export function buildDefaultMicrocompactThreshold(autoCompactThreshold: number):
 export function shouldAggressivePrune(
   currentTokens: number,
   lastRequestTokens: number | undefined,
-  growthSpurtTokens: number | undefined,
-): boolean {
+  growthSpurtTokens: number | undefined): boolean {
   if (growthSpurtTokens === undefined || growthSpurtTokens <= 0) return false;
   if (lastRequestTokens === undefined || lastRequestTokens <= 0) return false;
   return currentTokens - lastRequestTokens >= growthSpurtTokens;
 }
 
 /** 快估 token(消息数组)。
- *  2026-11-03 token 轮:assistant 的 toolCalls[].arguments 也计入——write_file 的整文件正文
+ * token 轮:assistant 的 toolCalls[].arguments 也计入——write_file 的整文件正文
  *  全在 arguments 里,旧口径只累加 content.length,导致写文件型膨胀对阈值判定完全隐形。
  *  2026-11 token 轮:token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio),
  *  本函数只做转调;argChars 的口径由统一模块实现,本文件不再自己算。 */
@@ -404,7 +394,7 @@ function contentHash(content: string): string {
 }
 
 /** 保守识别错误结果:全量扫描,命中任一特征即保护(误判=多留,不会丢)。
- * 不用 head/tail 采样:审计实测 8KB 中段的 ERROR 会被采样漏掉,随后 head/tail 把中段剪掉。 */
+ * 不用 head/tail 采样:审计经验证 8KB 中段的 ERROR 会被采样漏掉,随后 head/tail 把中段剪掉。 */
 export function looksLikeErrorResult(content: string): boolean {
   if (!content) return false;
   return ERROR_MARKERS.some((re) => re.test(content));
@@ -512,8 +502,7 @@ export function buildContextManifest(items: readonly MicrocompactPrunedItem[]): 
 /** 把 pruned 清单换算成可观测的 savedTokens。 */
 function savedTokensOf(items: readonly MicrocompactPrunedItem[]): number {
   return Math.ceil(
-    items.reduce((sum, item) => sum + Math.max(0, item.originalChars - item.newChars), 0) / 4,
-  );
+    items.reduce((sum, item) => sum + Math.max(0, item.originalChars - item.newChars), 0) / 4);
 }
 
 function resultOf(
@@ -569,12 +558,10 @@ function isArgsSummarized(call: ToolCall): boolean {
 }
 
 /**
- * assistant 侧 pass:历史写入正文摘要化(2026-11-03 token 轮)。
- *
+ * assistant 侧 pass:历史写入正文摘要化( token 轮)。
  * 病根:write_file 的整文件正文全部躺在 assistant.toolCalls[].arguments 里,写入成功后就是死重
  * ——文件内容已经落盘,模型真要再看必须 read_file(而 read_file 结果本身有 head/tail+组清理治理)。
  * 只保留**最近 1 条**写入的完整正文(热区逐字:模型刚写完,正在自检/贴诊断),更早的换成摘要。
- *
  * 摘要必须是**合法 JSON 且保留 path**:toolWhere 靠 path 生成占位寻址,derive/tool 配对也只看 id。
  * 摘要前缀进 arguments → isPlaceholderContent 可识别 → 二次处理跳过,输出逐字节稳定。
  */
@@ -645,18 +632,16 @@ function summarizeWriteArgsPass(messages: Message[], config?: MicrocompactConfig
 }
 
 /**
- * 全量结果去重(2026-11-03 token 轮):**只按内容指纹**,不看工具名/寻址/保护名单。
- *
+ * 全量结果去重( token 轮):**只按内容指纹**,不看工具名/寻址/保护名单。
  * 旧 foldDuplicateAndSuperseded 被三重限制(COMPACTABLE_TOOLS + where 非空 + IRREVERSIBLE_TOOLS),
- * 写工具回执因此永不折叠:实测反复 write_file 同一文件后,每次「已覆写 xxx(1234 字节)」回执
+ * 写工具回执因此永不折叠:经验证反复 write_file 同一文件后,每次「已覆写 xxx(1234 字节)」回执
  * 逐字相同却全部留在历史里。这一遍补上:完全相同内容的旧 tool 结果只保留最后一份。
  * toolCallId 全部保留 → tool 配对不破;只改读侧副本,journal 原文不动。
  */
 function dedupIdenticalResults(
   messages: Message[],
   idx: Map<string, { name: string; where: string }>,
-  config?: MicrocompactConfig,
-): FoldResult {
+  config?: MicrocompactConfig): FoldResult {
   if (config?.dedupAnyTool === false) return { messages, items: [] };
   const lastByHash = new Map<string, number>();
   const hashByIndex = new Map<number, string>();
@@ -703,8 +688,7 @@ function dedupIdenticalResults(
 function foldDuplicateAndSuperseded(
   messages: Message[],
   idx: Map<string, { name: string; where: string }>,
-  config?: MicrocompactConfig,
-): FoldResult {
+  config?: MicrocompactConfig): FoldResult {
   const eligible = new Map<number, { tool: string; where: string; content: string }>();
   messages.forEach((message, index) => {
     if (message.role !== "tool" || typeof message.content !== "string") return;
@@ -781,14 +765,13 @@ function foldDuplicateAndSuperseded(
  * 未配置 thresholdTokens=路径②关闭(向后兼容)。
  */
 /**
- * 入口分发(2026-11-06 v2):
+ * 入口分发( v2):
  * - 传了 `policyState`(loop 每步都传)→ cache-aware 冻结区/重置策略(前缀稳定优先);
  * - 未传(单测旧构造点、auto-compact pre-prune、`cacheAware:false`)→ 旧全量管线,行为逐字不变。
  */
 export function microcompactMessages(
   messages: Message[],
-  config?: MicrocompactConfig,
-): MicrocompactResult {
+  config?: MicrocompactConfig): MicrocompactResult {
   // 缺省「未配置 microcompact(无阈值)= 旧行为逐字不变」:此时不进 cache-aware 管线,
   // 否则 dedup / args 摘要 / model_drop 这些「随追加而变」的规则会被尾区渲染跳过(功能回退)。
   const cacheAware = config?.cacheAware !== false
@@ -801,10 +784,9 @@ export function microcompactMessages(
 /** 旧全量管线(会就地改写历史中段的每一条):只在无策略态时使用,以及作为冻结区/尾区的渲染器。 */
 function legacyMicrocompact(
   messages: Message[],
-  config?: MicrocompactConfig,
-): MicrocompactResult {
+  config?: MicrocompactConfig): MicrocompactResult {
   const idx = toolCallIndex(messages);
-  // 回归安全顺序(2026-11-03 读侧历史裁剪):
+ // 回归安全顺序(读侧历史裁剪):
   // ①assistant 写入正文摘要化、②全量结果去重——两者都**只消费派生消息副本**:
   //   去重的"最后一份"判定若跑在②之后会对外置/精炼文本做二次比对,故顺序固定为:
   //   args 摘要 → 全量去重(未折叠前的内容指纹)→ 旧 dedup/supersede → head/tail → 组清理。
@@ -813,10 +795,9 @@ function legacyMicrocompact(
   const folded = foldDuplicateAndSuperseded(anyDedup.messages, idx, config);
   const items: MicrocompactPrunedItem[] = [...argsSummary.items, ...anyDedup.items, ...folded.items];
 
-  // 净收益门(2026-11-03):就地改写历史中段 = 该处之前所有 token 的前缀缓存全部失效。
-  // 实测事故:57k 前缀只裁掉一条 500 字符旧结果,当轮 input 全量重算(cached=0),多花 5.7 万 token ——
+ // 净收益门:就地改写历史中段 = 该处之前所有 token 的前缀缓存全部失效。
+ // 经验证事故:57k 前缀只裁掉一条 500 字符旧结果,当轮 input 全量重算(cached=0),多花 5.7 万 token ——
   // 省 125 token、亏 1.4 万 token,净亏 100 倍。故裁剪前先算账:省得不够就不裁。
-  //
   // 只管「纯为省 token」的两类(args_summarized / dedup);superseded / model_drop 是**正确性**裁剪
   // (旧结果已被取代或模型判丢,留着会误导 agent),那类必须裁,不进净收益账。
   if (config?.breakEvenGate !== false) {
@@ -856,7 +837,7 @@ function legacyMicrocompact(
     if (!meta || !meta.where || !COMPACTABLE_TOOLS.has(meta.name)) return message; // 无寻址=不可回读
     if (config?.modelKeep?.has(message.toolCallId)) return message; // 模型 keep:逐字保留
     if (isPlaceholderContent(message.content)) return message;
-    // 错误结果硬保护:head/tail 也不行——关键栈帧可能就在中段(审计实测 8KB 中段被剪)。
+ // 错误结果硬保护:head/tail 也不行——关键栈帧可能就在中段(审计经验证 8KB 中段被剪)。
     if (isProtectedResult(meta.name, message.content, config)) return message;
     const modelDrop = config?.modelDrop?.has(message.toolCallId) === true
       && index < folded.messages.length - MODEL_HOT_TAIL_MESSAGES;
@@ -962,11 +943,10 @@ function legacyMicrocompact(
   return resultOf(out, [...items, ...clearedItems], "applied");
 }
 
-/* ───────────────────────── cache-aware v2(2026-11-06) ───────────────────────── */
+/* ───────────────────────── cache-aware v2 ───────────────────────── */
 
 /**
  * cache-aware 渲染:冻结区 + 尾区。
- *
  * ①冻结区 [0, frozenCount):用旧全量管线渲染(**只渲染这个固定切片**,故输出逐字节稳定);
  *   组清理由 `thresholdTokens: 1` 强制生效(重置时已定下「清哪些」,之后每步只是重放同一结果)。
  * ②尾区 [frozenCount, end):只做 head/tail 精炼——它是**单条消息自决**的幂等变换,
@@ -1031,8 +1011,7 @@ function decideReset(
   messages: Message[],
   est: number,
   frozenCount: number,
-  config: MicrocompactConfig,
-): {
+  config: MicrocompactConfig): {
   policy: MicrocompactPolicy;
   frozenCount: number;
   reason: string;
@@ -1093,7 +1072,7 @@ function decideReset(
       return skip("cooldown-skip", `距上次重置 ${stepsSince} 步、仅增 ${growth} tok(需 ≥${cooldownSteps} 步或 ≥${cooldownTokens} tok):冷却期内不动前缀`);
     }
   }
-  // 同 turn 上限(用户口径 ≤1)。
+ // 同 turn 上限(≤1)。
   const maxPerTurn = config.maxResetsPerTurn ?? MAX_RESETS_PER_TURN;
   if ((state.resetsThisTurn ?? 0) >= maxPerTurn) {
     return skip("turn-cap-skip", `本 turn 已重置 ${state.resetsThisTurn} 次(上限 ${maxPerTurn}):下 turn 前保持前缀稳定`);
@@ -1121,8 +1100,8 @@ function decideReset(
   for (const group of candidates) {
     if (lastIndexAfter([group]) + 1 <= frozenCount) continue; // 已在冻结区内的组不重复计入
     const gain = estimateGroupSavings(group, messages);
-    // 上限硬约束(用户口径:禁 250k→160k 大跳):再加这一组就超 est×20% 且已有可清组,就停手。
-    // 不夹住的话,「凑够 cutTarget 的最后一组」会把削减量顶到 cap 之外(实测 1368 > 1038)。
+ // 上限硬约束(禁 250k→160k 大跳):再加这一组就超 est×20% 且已有可清组,就停手。
+ // 不夹住的话,「凑够 cutTarget 的最后一组」会把削减量顶到 cap 之外(经验证 1368 > 1038)。
     if (chosen.length > 0 && saved + gain > cap) break;
     chosen.push(group);
     saved += gain;
@@ -1151,8 +1130,7 @@ function lastIndexAfter(groups: ClearCandidate[][]): number {
 function renderFrozenAndTail(
   messages: Message[],
   frozenCount: number,
-  config: MicrocompactConfig,
-): { messages: Message[]; items: MicrocompactPrunedItem[]; anchor?: string } {
+  config: MicrocompactConfig): { messages: Message[]; items: MicrocompactPrunedItem[]; anchor?: string } {
   const frozenSlice = messages.slice(0, frozenCount);
   const tailSlice = messages.slice(frozenCount);
   const items: MicrocompactPrunedItem[] = [];
@@ -1259,8 +1237,7 @@ function estimateGroupSavings(group: ClearCandidate[] | undefined, messages: Mes
     if (!original) continue;
     const placeholderEst = Math.min(
       original.length,
-      CLEARED_PLACEHOLDER_EST_CHARS + candidate.meta.name.length + candidate.meta.where.length,
-    );
+      CLEARED_PLACEHOLDER_EST_CHARS + candidate.meta.name.length + candidate.meta.where.length);
     sum += Math.max(0, estimateTokensOfText(original) - placeholderEst * ASCII_TOKENS_PER_CHAR);
   }
   return Math.ceil(sum);

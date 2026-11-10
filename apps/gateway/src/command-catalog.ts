@@ -1,6 +1,5 @@
 /**
  * 内置命令目录(2026-10,对齐 ZCode「内置命令目录 = 唯一权威」语义)。
- *
  * 真源说明:
  * - 名字与中文描述照抄 apps/gateway/src/panel.ts 的 `SLASH_COMMANDS`(面板 UI 注册表);
  *   服务端这份是权威目录,面板/CLI/WS 客户端都以本表为准(catalog 走 commands.catalog)。
@@ -10,7 +9,6 @@
  *   以及 rewind / fork / mode(r3;面板均已接到既有通道——checkpoint 流/session.fork 两段式/cfg.set)。
  *   其余(mcp / plugins / login / logout)留 TODO:本仓库相应能力尚未接到命令面
  *   (login/logout=ZCode 账号体系专属,无账号不做),等落地后再入目录,避免「目录里有、执行不了」的假指令。
- *
  * 冲突语义:RESERVED_COMMAND_NAMES 里的名字自定义命令不得覆盖——CommandStore.list() 命中同名
  * 只给 warning 诊断并从自定义列表剔除(内置优先,见 commands-store.ts)。
  */

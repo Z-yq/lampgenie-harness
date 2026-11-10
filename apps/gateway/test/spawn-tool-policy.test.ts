@@ -1,5 +1,5 @@
 /**
- * spawn journal toolPolicy 快照直测锚(step-069,step-061 遗留③④):
+ * spawn journal toolPolicy 快照直测锚(遗留③④):
  * ①四形态(有白名单/无白名单兜底/deny-only/MCP 显式开)直测 buildSubagentToolPolicy 纯函数;
  * ②池外工具名 warnings 观测面(不改行为只补观测):声明与工具池零命中的 token → warnings 非空;
  * ③journal 级集成锚:createGatewayApp 真链 spawn,读 gateway.jsonl 断言 subagent.spawn.toolPolicy
@@ -14,7 +14,7 @@ import { buildExecutorFromConfig } from "../src/factory.js";
 import { buildSubagentToolPolicy, resolveSubagentCapability } from "../src/agent-wiring.js";
 import { BUILTIN_AGENT_PROFILES, loadAgentProfiles } from "@lampgenie/runtime/agent/agent-profiles";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("spawn-tool-policy"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -77,7 +77,7 @@ describe("buildSubagentToolPolicy 四形态(直测锚)", () => {
   });
 });
 
-describe("池外工具名 warnings(step-061 遗留④:静默不生效→journal 可观测)", () => {
+describe("池外工具名 warnings(遗留④:静默不生效→journal 可观测)", () => {
   it("声明池外工具(code_review)→ warnings 非空且点名;行为面(装配)不受影响", () => {
     const dir = mk();
     mkdirSync(join(dir, ".genie", "agents"), { recursive: true });
@@ -136,7 +136,7 @@ describe("spawn journal toolPolicy(journal 级集成锚:createGatewayApp 真链)
         cur = agentType;
         spawnedForCur = false;
         app.taskManager.submit("user", sessionId, "探针任务(不包含任务书标记)");
-        // plan-gate(2026-10-20):general 为写角色,预落合规板放行(本测试焦点是 toolPolicy 载荷,
+ // plan-gate:general 为写角色,预落合规板放行(本测试焦点是 toolPolicy 载荷,
         // 闸门行为由 plan-gate.test 覆盖);taskRoot=GENIE_REPO_ROOT=repo。
         if (agentType === "general") {
           const t0 = app.taskManager.list().find((x) => x.sessionId === sessionId);
@@ -158,7 +158,7 @@ describe("spawn journal toolPolicy(journal 级集成锚:createGatewayApp 真链)
       expect(await runTask("s-tp-strict", "strict")).toBe("done");
       expect(await runTask("s-tp-outer", "outer")).toBe("done");
       // journal 直读:四个 spawn 事件的 toolPolicy 载荷逐一断言。
-      // 2026-10-21 sharded journal(app.ts write-behind+按会话分文件)后旧 gateway.jsonl 冻结不再写入,
+ // sharded journal(app.ts write-behind+按会话分文件)后旧 gateway.jsonl 冻结不再写入,
       // 内存事件表是权威源(BaseJournal.events),关停前读取(不依赖分片落盘时序)。
       const spawns = app.journal.readAll()
         .map((e) => e as { kind: string; sessionId: string; payload: { toolPolicy?: Record<string, unknown> } })

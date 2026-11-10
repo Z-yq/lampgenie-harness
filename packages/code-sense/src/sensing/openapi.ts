@@ -1,10 +1,8 @@
 /**
- * sensing/openapi(step-077 / designs/24 §2.1):OpenAPI/swagger 规范消费与对账。
- *
+ * sensing/openapi( / §2.1):OpenAPI/swagger 规范消费与对账。
  * 规范文件存在时=权威源,与代码提取结果对账:
  *   both(一致)/ spec-only(规范有代码没提取到=候选遗漏)/ code-only(代码有规范没有=规范过期候选)。
  *   差异如实列出,不做自动裁决。
- *
  * JSON 全量解析;YAML=受控子集解析器(零依赖,只识别 paths→method→summary/description/operationId
  * 域;锚点/多行块/流式集合等越界形态显式 partial 降级+失败行号,不硬解不猜)。
  */
@@ -188,12 +186,10 @@ export interface SpecReconcileAtRoot {
 
 /**
  * **OpenAPI 对账的单一真相源**:findSpecFiles → parseSpecFile(排序首个) → reconcileSpec。
- *
  * api 输出(sensing/index.ts 的 ApiSurfaceResult.reconcile)与 bridge 的 spec 形态
  * (crosslang-bridge.ts 的 querySpecBridgeEdges)都必须经此函数取对账结果,**禁止另起一套
  * 发现/解析/对账**(历史上两侧各串一遍同样三步,spec 口径一改就双实现漂移:
  * 例如一侧改了排序/解析降级/键归一化,另一侧不会跟着变)。
- *
  * 授权口径亦唯一定义在此:spec 文件名形态 openapi.<ext> 或 swagger.<ext>、根下深度 ≤3;spec 在两个面
  * 都是同一份(「排序首个」= 多 spec 仓的确定性裁决),不做面与面之间的差异过滤。
  */
@@ -202,7 +198,7 @@ export async function reconcileForRoot(
   endpoints: ApiEndpoint[],
   /** 可选复用:只能传 specFingerprint() 返回的 specFiles(同一发现口径的结果传递,
    * 不是第二条发现路径)。用途=缓存键算完指纹后直接对账,省掉同一轮第二次全仓遍历
-   * (本仓实测一次 findSpecFiles ≈ 0.8s)。传入即视为已发现,不再遍历。 */
+ * (本仓经验证一次 findSpecFiles ≈ 0.8s)。传入即视为已发现,不再遍历。 */
   known?: { specFiles: string[] },
 ): Promise<SpecReconcileAtRoot> {
   const specFiles = known?.specFiles ?? await findSpecFiles(root);
@@ -212,8 +208,7 @@ export async function reconcileForRoot(
 }
 
 /** spec 指纹档位:深档(全仓遍历发现**新增** spec 文件)的最短间隔。
- *
- * 取舍(实测,2026-10,本机 9p 慢盘 E 盘 WSL;poly-owncast 不在本机,无法按 271 端点实测,
+ * 取舍(经验证,2026-10,本机 9p 慢盘 E 盘 WSL;poly-owncast 不在本机,无法按 271 端点经验证,
  * 故在目录数同量级的本仓测量:272 目录 / 2629 文件):
  *   · 深档 findSpecFiles(串行 readdir)= 760~845ms(四次连续稳定)→ 每轮查询都做会把
  *     api/长驻进程查询拖到秒级,与 c2f.ts「查询路径不做同步全仓遍历」的既有纪律冲突;

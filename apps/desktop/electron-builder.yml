@@ -1,11 +1,11 @@
-# Genie Harness 桌面打包(step-136)
+# Genie Harness 桌面打包
 # 用法:pnpm --filter @lampgenie/desktop dist:dir / dist:win
 # 注意:打包前必须先 build gateway(package.json 的 dist:* 脚本已串行),否则 extraResources 为空壳。
 appId: com.genie.harness
 productName: LampGenie
 asar: true
 
-# genie:// 深链(2026-11-09):安装器在 HKCU\Software\Classes\genie 注册协议;
+# genie:// 深链:安装器在 HKCU\Software\Classes\genie 注册协议;
 # 应用启动时还会 setAsDefaultProtocolClient 自愈(见 main.js ensureProtocolRegistration)。
 protocols:
   - name: Genie Harness Protocol
@@ -38,10 +38,9 @@ files:
 # gateway 产物整目录 → resources/gateway(gateway.mjs + assets + wasm + echo-child + sense-index-worker ...)
 # 另带运行时需真实 node_modules 的外部依赖(K5):esbuild --external 的 ts-morph / playwright-core,
 # 以及 code-sense 走 require.resolve 的 tree-sitter-wasms / web-tree-sitter。
-#
-# ⚠️ 不能用静态清单逐包列:实测 ts-morph 有传递依赖(@ts-morph/common → minimatch/path-browserify/
+# ⚠️ 不能用静态清单逐包列:经验证 ts-morph 有传递依赖(@ts-morph/common → minimatch/path-browserify/
 #    tinyglobby → picomatch/fdir/brace-expansion/balanced-match),只拷 4 个根包时打包产物的
-#    `require('ts-morph')` 直接 MODULE_NOT_FOUND,code_review 整块失效(2026-10-19 实测复现)。
+# `require('ts-morph')` 直接 MODULE_NOT_FOUND,code_review 整块失效(经验证复现)。
 #    故改由 scripts/stage-gateway-deps.mjs 递归求依赖闭包,按 Node 嵌套解析语义布点(同名多版本
 #    顶层共用 + 冲突版本巢套在引用方 node_modules 下,pnpm 软链经 realpath 消解为实体目录),
 #    产物在 .stage/node_modules;此处只搬 stage 结果,脚本前置执行并自检 ts-morph 可加载,
@@ -66,7 +65,7 @@ extraResources:
   - from: .stage/sense-remote.tar.gz
     to: sense-remote.tar.gz
   # gateway 目录缺 package.json 时,其中的 .js(tsc 产物,ESM)会被 Node 当 CJS 加载
-  # (实测:外部脚本 import agent-wiring.js 直接 SyntaxError;gateway.mjs 自身是 bundle 不受影响)
+ # (经验证:外部脚本 import agent-wiring.js 直接 SyntaxError;gateway.mjs 自身是 bundle 不受影响)
   - from: ../gateway/package.json
     to: gateway/package.json
 
@@ -86,7 +85,7 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  # 2026-11-09 实测:360 会把「无效快捷方式」清理掉;electron-builder 默认在升级时沿用旧快捷方式
+ # 经验证:360 会把「无效快捷方式」清理掉;electron-builder 默认在升级时沿用旧快捷方式
   # (keepShortcuts 语义),被删后不会补建 → 开始菜单/桌面没有入口,Windows toast 的 AUMID 也失去载体。
   # 桌面快捷方式用 "always" 让每次安装都重建;开始菜单由 build/installer.nsh 的 customInstall 自愈。
   createDesktopShortcut: always

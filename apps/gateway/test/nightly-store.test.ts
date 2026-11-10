@@ -1,6 +1,5 @@
 /**
  * 夜间整合 store 的 IO / 调度 / 流水线验证(纯逻辑在 nightly-run 里已单测)。
- *
  * 全部用例跑在 /tmp 临时 root 上:不碰仓库内 .genie,journalDir 只读。
  */
 import { describe, it, expect, afterEach } from "vitest";

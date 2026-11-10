@@ -1,6 +1,5 @@
 /**
- * M170 交付物声明账本(deliverable,2026-11-07)。
- *
+ * 交付物声明账本(deliverable。
  * A. 工具层:真实临时目录下登记成功 / 拒绝(不存在、目录、符号链接、空路径)/ journal 落账 / 幂等不膨胀 / 回执与 schema;
  * B. 纯函数:readDeliverables 回读、verifyDeliverables 核对(删除、变成目录)、renderDeliverables 段与缺失警告;
  * C. 收尾钩子(agent-wiring):done 追加「## 交付物」段并落 deliverable.verified;failed 不发布。

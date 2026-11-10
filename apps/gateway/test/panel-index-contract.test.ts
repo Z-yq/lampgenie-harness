@@ -2,13 +2,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
 /**
- * step-169 静态契约:panel.ts 的任务列表消费面必须按「索引(TaskIndex)+ 正文按需拉」写。
+ * 静态契约:panel.ts 的任务列表消费面必须按「索引(TaskIndex)+ 正文按需拉」写。
  * panel.ts 是拼进 HTML 的字符串脚本(无 tsc 校验),这里靠源码断言守住协议形状,防回退。
  * cwd = apps/gateway(vitest 根),故用相对 src/panel.ts。
  */
 const src = readFileSync("src/panel.ts", "utf8");
 
-describe("panel 任务索引/正文契约(step-169)", () => {
+describe("panel 任务索引/正文契约", () => {
   it("发出 task.detail.get 请求", () => {
     expect(src).toContain('type: "task.detail.get"');
   });
@@ -33,10 +33,10 @@ describe("panel 任务索引/正文契约(step-169)", () => {
 });
 
 /**
- * step-1036(session.status 增量化):面板侧水位登记 + 请求点收敛 + 切会话清水位。
+ * (session.status 增量化):面板侧水位登记 + 请求点收敛 + 切会话清水位。
  * 协议:请求可选 sinceSeq(=已收到末条 seq),回包 status.seq=服务端当前最大 seq。
  */
-describe("panel session.status 增量消费契约(step-1036)", () => {
+describe("panel session.status 增量消费契约", () => {
   it("有水位登记表 ssSeqBySid 且请求带 sinceSeq", () => {
     expect(src).toContain("ssSeqBySid");
     expect(src).toContain("sinceSeq");

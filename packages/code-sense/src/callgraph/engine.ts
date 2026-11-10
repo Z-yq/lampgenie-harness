@@ -1,5 +1,5 @@
 /**
- * L1 调用图引擎(designs/16 §6.1/6.2):ts-morph semantic 档。
+ * L1 调用图引擎( §6.1/6.2):ts-morph semantic 档。
  * 归属启发式(code2flow 模型移植):this.x→同类;import 符号→源模块;唯一名兜底。
  * 每边带 tier=semantic + evidence=ast(file:line)。
  */
@@ -9,15 +9,12 @@ import { join } from "node:path";
 import { isVendoredPath } from "../path-filter";
 
 /** 索引抽取器版本(单一真相;**任何抽取行为变化必须 +1**)。
- *
  * 为什么需要它:增量复用按文件指纹(mtime+size)搬运节点/边——源码没变但抽取器升级时,
- * 老文件会永远停留在旧抽取结果(2026-10-21 验收实锤:engine.ts 源码顶层 50 条只报 28 条、
+ * 老文件会永远停留在旧抽取结果(验收注意:engine.ts 源码顶层 50 条只报 28 条、
  * 纯类型文件 0 条,doctor 却因 builtAt/mtime 新鲜而假绿)。
- *
  * 版本语义:
- *  - v1(隐式,产物无字段)=2026-10-21 之前的抽取器(仅函数/类/方法/带注解变量);
+ * - v1(隐式,产物无字段)= 之前的抽取器(仅函数/类/方法/带注解变量);
  *  - v2=interface/type/enum/模块级 const/嵌套箭头与嵌套函数全收(file 面补全)。
- *
  * 消费方单一真相: c2f.buildC2fIndex(落盘 C2fIndex.extractorVersion)、
  * code-sense-cli/incremental(复用闸 + sidecar.extractorVersion + 一次全量迁移)、
  * code-sense-cli/doctor(索引版本 vs 本常量的一致性告警)。 */
@@ -29,7 +26,7 @@ export const INDEX_EXTRACTOR_VERSION = 6;
  * - typedef/variable/interface/type/enum:声明符号,只进符号表/查询面,不作调用解析目标。 */
 export type SymbolKind = "function" | "method" | "class" | "arrow" | "typedef" | "variable" | "interface" | "type" | "enum" | "inline-js";
 
-/** 非调用解析目标 kind(typedef/variable 为既有豁免;2026-10-21 补 interface/type/enum——
+/** 非调用解析目标 kind(typedef/variable 为既有豁免; 补 interface/type/enum——
  * 与 querySymbol 可查性解耦:CallGraph.byName 不收这些名字,索引面 buildByMaps 仍全收)。 */
 export function isNonCallableSymbolKind(kind: SymbolKind): boolean {
   return kind === "typedef" || kind === "variable" || kind === "interface" || kind === "type" || kind === "enum";
@@ -39,34 +36,34 @@ export interface Symbol {
   name: string;
   /** 唯一标识:相对路径#容器.名 */
   id: string;
-  /** step-079:typedef/variable 为诚实 kind 扩展(C 全档 typedef 与 lexical 档变量/数组);
+ /** typedef/variable 为诚实 kind 扩展(C 全档 typedef 与 lexical 档变量/数组);
    * 消费面只特判 class,新 kind 按「非类」走通用语义。
    * senseB21:inline-js=模板字符串内嵌 <script>/JS 段的虚拟符号(网页结构感知);参与
    * trunk/leaf 语义(有调用边),C2fNode.symKind 透传同名标注。
-   * 2026-10-21:interface/type/enum=TS 类型声明(符号表可见,非调用解析目标);
+ * interface/type/enum=TS 类型声明(符号表可见,非调用解析目标);
    * arrow=const 箭头函数/函数表达式(变量名即符号名,参与调用图)。 */
   kind: SymbolKind;
   file: string;
   line: number;
   container?: string; // 最近类容器(Class 分组;函数内嵌符号无类时为 undefined)
-  /** 2026-10-21:词法父符号限定名(所在 class/函数/接口;类方法=Class.method 的 Class,
+ /** :词法父符号限定名(所在 class/函数/接口;类方法=Class.method 的 Class,
    * 嵌套箭头=外层函数限定名)。顶层为空。id 的 `#` 后限定段与它一致;
    * C2fNode.parent 透传(显示名=parent+'.'+name)。 */
   parent?: string;
   signature?: Signature;
-  /** step-102:Go 类型声明的 struct/interface 区分(094 精度门假边归因:仓内接口
+ /** Go 类型声明的 struct/interface 区分(094 精度门假边归因:仓内接口
    * balancer.Balancer 与实现体 gracefulswitch.Balancer 撞名,receiverType 窄化被「唯一命中」)。
    * 仅 Go adapter 注册;缺省=非 Go 类型/别名/旧索引(未知)——消费侧(resolveStructCrossFile
    * 撞名闸)只对 "interface" 特判,其余一律按原语义(加性字段,向后兼容)。 */
   typeKind?: "struct" | "interface";
-  /** step-089 P1(designs/26 §2):声明时数据类型文本(变量/typedef 专用;归一化空白,截 120)。
+ /** P1( §2):声明时数据类型文本(变量/typedef 专用;归一化空白,截 120)。
    * 缺省=该符号无类型信息(如实)。查询面(file action/vars)有则显。 */
   dataType?: string;
-  /** 2026-10-22 P0:C/C++ 函数原型(declaration/field_declaration 无函数体)。
+ /** P0:C/C++ 函数原型(declaration/field_declaration 无函数体)。
    * 跨文件同名消歧时定义优先:候选池里只要有唯一非原型定义,就落到它(修复 .cpp 测试调用
    * 因 .c 定义 + .h 原型双候选而整条弃边)。缺省=定义或非 C/C++ 语言。 */
   proto?: boolean;
-  /** step-079 分层覆盖(designs/25):lexical=词法兜底档符号(零边、不进 byName、不进
+ /** 分层覆盖:lexical=词法兜底档符号(零边、不进 byName、不进
    * entrypoints、不作 relink 目标——只进覆盖计数与符号查询);缺省=structural。 */
   tier?: "structural" | "lexical";
 }
@@ -85,19 +82,19 @@ export interface FlowEdge {
   line: number;
   tier: "semantic" | "structural" | "lexical";
   evidenceKind: "ast" | "index" | "readme" | "grep" | "suggested" | "inferred";
-  /** step-066 A1:结构档接收者形态候选(obj.method())携带接收者类型证据(类名)——
+ /** A1:结构档接收者形态候选(obj.method)携带接收者类型证据(类名)——
    * merge 层按 Class.method 候选集消歧(替代对方法名必然同名失效的「全图唯一名」闸)。 */
   receiverType?: string;
-  /** step-102:receiverType 证据的包目录钉扎(仅 Go 产):白名单限定类型 `pkg.T`→pkg 的仓内
+ /** receiverType 证据的包目录钉扎(仅 Go 产):白名单限定类型 `pkg.T`→pkg 的仓内
    * 相对目录;裸名 T→引用方文件目录(同包语义)。撞名闸按它精确判定「证据是否指向接口所在包」
-   * ——同名接口在别包时证据必是结构体,放行(否则误杀同包结构体真边,grpc-go 实测 58 条);
+ * ——同名接口在别包时证据必是结构体,放行(否则误杀同包结构体真边,grpc-go 经验证 58 条);
    * 缺省(非 Go 候选)=保守语义:名册命中即弃边。 */
   receiverTypeDir?: string;
-  /** step-066 A1:模块别名候选(import a.b as z → z.foo())携带来源模块路径提示(dots→slashes 子串)。 */
+ /** A1:模块别名候选(import a.b as z → z.foo)携带来源模块路径提示(dots→slashes 子串)。 */
   moduleHint?: string;
-  /** 2026-10-26:未解析边的调用形态(relink 作用域闸)。prop=属性调用(x.trim()/fs.readFile),
+ /** :未解析边的调用形态(relink 作用域闸)。prop=属性调用(x.trim/fs.readFile),
    * bound=标识符在本文件有局部绑定(参数/局部变量/import),二者都不得在增量 relink 里按
-   * 「全仓唯一同名」跨文件兜底——实锚:code-sense 全量索引 relink 把 400+ 个字符串 .trim()
+ * 「全仓唯一同名」跨文件兜底——依据:code-sense 全量索引 relink 把 400+ 个字符串 .trim
    * 连到 RingBuffer.trim,整仓模块图出现 code-sense→harness-terminal ×422 的假主干。
    * bare=自由标识符(保留 code2flow 的唯一名兜底);new=new Cls()(保留类构造解析机会)。 */
   callForm?: "bare" | "prop" | "new" | "bound" | "import" | "external";
@@ -111,39 +108,39 @@ export interface CallGraph {
   inEdges: Map<string, FlowEdge[]>;
   /** 名字索引(唯一名兜底用):name → ids */
   byName: Map<string, string[]>;
-  /** 文件级 import 依赖(step-066 impact):被导入文件(绝对路径)→ 导入方文件集合。
-   * ts-morph 档在构建期一次解析;step-099 起 Go 经 structFileImports 展开后并入(见 c2f
-   * expandGoImports);python/java 结构档的 import 映射为后续轮边界(登记于 step-099)。 */
+ /** 文件级 import 依赖( impact):被导入文件(绝对路径)→ 导入方文件集合。
+ * ts-morph 档在构建期一次解析; 起 Go 经 structFileImports 展开后并入(见 c2f
+ * expandGoImports);python/java 结构档的 import 映射为后续轮边界(登记于)。 */
   imports?: Map<string, Set<string>>;
-  /** step-099 RC-B2:结构档 adapter 上报的逐文件原始 import 路径清单(绝对路径文件 →
+ /** RC-B2:结构档 adapter 上报的逐文件原始 import 路径清单(绝对路径文件 →
    *  原始 import 路径列表,Go 的 importBindings 值集)。文件→文件的映射需 go.mod 模块锚,
    *  由 c2f/incremental 两侧共用 expandGoImports 展开,adapter/引擎不猜。 */
   structFileImports?: Map<string, string[]>;
-  /** step-099 RC-B5:构建期弃边台账(跨文件候选解析失败被移除的边,按被调名聚合)。
-   * 「诚实弃边」此前完全不可见(096 评测 has_access 锚实锤)——落盘后由索引携带,
+ /** RC-B5:构建期弃边台账(跨文件候选解析失败被移除的边,按被调名聚合)。
+ * 「诚实弃边」此前完全不可见(096 评测 has_access 锚注意)——落盘后由索引携带,
    *  impact/symbol 输出面可读。自归属 miss(self.x 兄弟查找失败)不在此列:它们以
    *  to="" 未解析边形态留在索引里,查询侧可直接计数。 */
   droppedCandidates?: Map<string, DroppedCandidateEntry>;
-  /** step-079 分层覆盖(designs/25 §1):结构档逐文件 outcome(full/lexical/empty/skipped),
+ /** 分层覆盖( §1):结构档逐文件 outcome(full/lexical/empty/skipped),
    * mergeStructAdapters 填充;coverage manifest 的分档计数与 skippedReasons 数据源。
    * 无 outcome 的文件(ts/js 语义档)不进分层口径(如实:其「0 符号」不可判 empty,RC-C)。 */
   structOutcomes?: Map<string, { tier: "full" | "lexical" | "empty" | "skipped"; reason?: string; errors?: boolean }>;
-  /** 2026-11-08:ts/js 语义档解析前守卫跳过的文件(相对路径 → 原因)。此前只进 coverage 的自由文本,
+ /** :ts/js 语义档解析前守卫跳过的文件(相对路径 → 原因)。此前只进 coverage 的自由文本,
    *  查询面无法把「文件无索引符号」翻译成可操作原因;结构化后由索引携带、formatQuery 消费。 */
   guardSkips?: Map<string, string>;
-  /** 2026-11-08 全覆盖:本次扫描的全部源码文件(相对路径,含零符号/守卫跳过/解析失败)。
+ /** 全覆盖:本次扫描的全部源码文件(相对路径,含零符号/守卫跳过/解析失败)。
    *  索引据此建文件级状态表——任何文件都能回答「在不在扫描面/为什么没有符号」,
    *  不再把「有文件但无符号」误报成「文件不存在/无索引」。 */
   scannedFiles?: string[];
-  /** 2026-11-08:ts-morph 装载失败的文件(相对路径)。旧实现 catch 后静默丢弃,
+ /** :ts-morph 装载失败的文件(相对路径)。旧实现 catch 后静默丢弃,
    *  这类文件既不在 byFile 也没有任何原因登记;现结构化落盘,查询面如实说明。 */
   unparsableFiles?: string[];
-  /** step-079 RC-G:上限/RSS 护栏截断登记(如实,不静默)。 */
+ /** RC-G:上限/RSS 护栏截断登记(如实,不静默)。 */
   structTruncated?: { reason: string; limit?: number };
   buildMs: number;
 }
 
-/** step-099 RC-B5:弃边台账条目(按被调名聚合)。 */
+/** RC-B5:弃边台账条目(按被调名聚合)。 */
 export interface DroppedCandidateEntry {
   count: number;
   /** 原因 → 次数(三桶:同名候选非唯一/同名存在但证据不匹配/全图无同名符号)。 */
@@ -154,13 +151,13 @@ export interface DroppedCandidateEntry {
 
 /** ts-morph 语义档扩展名(ts/js)——ts-morph pass 只吃这些(把 .py 喂给 ts-morph 会解析出垃圾符号)。 */
 export const GRAPH_TS_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
-/** 结构 adapter 档扩展名(python/go/java,designs/16 §5)。2026-10-14 起进全图索引——此前 adapter
+/** 结构 adapter 档扩展名(python/go/java, §5)。 起进全图索引——此前 adapter
  * 只接在懒解析路径(buildCallGraphFromFiles),全图索引(listSourceFiles)根本不列 .py/.go/.java,
  * 五个 Python 仓的索引全空或只剩杂散 js,code_index 查询恒「未找到符号」。 */
 export const GRAPH_STRUCT_EXT = new Set([".py", ".go", ".java",
-  // step-067:C/C++(tree-sitter-c/cpp 结构档;清单与 adapters/cpp.ts CPP_EXTS 保持一致)
+ // C/C++(tree-sitter-c/cpp 结构档;清单与 adapters/cpp.ts CPP_EXTS 保持一致)
   ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
-  // 2026-10-25:Rust/C#/Ruby/PHP(tree-sitter-wasms 同包资产;adapters/{rust,csharp,ruby,php}.ts)
+ // Rust/C#/Ruby/PHP(tree-sitter-wasms 同包资产;adapters/{rust,csharp,ruby,php}.ts)
   ".rs", ".cs", ".rb", ".php"]);
 /** 源文件全集(文件列表+指纹口径)=两类合集。 */
 export const GRAPH_SOURCE_EXT = new Set([...GRAPH_TS_EXT, ...GRAPH_STRUCT_EXT]);
@@ -168,7 +165,7 @@ export const GRAPH_SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build",
   // python 生态目录(venv 无点前缀须显式跳;.venv 点前缀已天然跳过;__pycache__ 只含 .pyc,防患)
   "venv", "__pycache__", "site-packages"]);
 
-/** 扫描文件上限:GENIE_SENSE_MAX_FILES(env,≥10)可配,缺省 6000(step-079 RC-G:
+/** 扫描文件上限:GENIE_SENSE_MAX_FILES(env,≥10)可配,缺省 6000( RC-G:
  * 4000 硬上限把 opencv 4590 截断在 doc/*.js 名额上;步进幅度控制单仓内存上界,
  * 配合 mergeStructAdapters 的 RSS 护栏)。所有扫描口径(listSourceFiles/coverage 磁盘枚举/
  * c2f walkFingerprintSync)必须同走此函数,防「同扫描同分母」与假过期口径漂移。 */
@@ -178,7 +175,7 @@ export function maxFilesDefault(): number {
   return Number.isFinite(n) && n >= 10 ? n : 6000;
 }
 
-/** mergeStructAdapters 的 RSS 护栏(step-079 RC-G):超过即停止处理剩余结构档文件,
+/** mergeStructAdapters 的 RSS 护栏( RC-G):超过即停止处理剩余结构档文件,
  * 余下文件 outcome=skipped(reason=内存护栏)并登记 truncation——宁缺勿 OOM(WSL 崩机教训)。 */
 export function maxRssBytes(): number {
   const raw = process.env.GENIE_SENSE_MAX_RSS_MB;
@@ -186,13 +183,13 @@ export function maxRssBytes(): number {
   return Number.isFinite(n) && n >= 256 ? n * 1024 * 1024 : 4608 * 1024 * 1024;
 }
 
-// ---- step-085 RC-K:解析前防御(压缩产物/超大单文件) ----
-// owncast 实锤:static/web/_next 539 个 Next.js 压缩 chunk(最大 722KB/34 行、510KB/1 行)使整仓
+// ---- RC-K:解析前防御(压缩产物/超大单文件) ----
+// owncast 注意:static/web/_next 539 个 Next.js 压缩 chunk(最大 722KB/34 行、510KB/1 行)使整仓
 // 索引在任何堆帽下死于 heap OOM(exit 134)或 RangeError 栈溢出(exit 1)——一目录打死全仓。
 // 防 OOM 只能防在前:解析前 stat+头部采样判压缩产物/超大,跳过并诚实登记(不进 covered)。
 // 阈值对正常源码零误伤设计:手写代码平均行长 <200;单条长字符串常量的文件长行占比极低不命中。
 /** 超大单文件守卫:源文件超过 4MB 不解析(堆压力;诚实 skipped,GENIE_SENSE_PARSE_GUARD=off 关)。
- * 2026-11-08:2MB → 4MB。7700 审计实锤:apps/gateway/src/panel.ts 2.28MB(面板主文件)被 2MB
+ * 2MB → 4MB。7700 审计注意:apps/gateway/src/panel.ts 2.28MB(面板主文件)被 2MB
  * 守卫整文件跳过 → 上千个前端函数在索引里不存在,symbol/impact 永远未命中。4MB 仍远低于 ts-morph
  * 的堆压力线,且压缩产物仍由后面的「平均行长/长行占比」启发拦住。 */
 export const PARSE_GUARD_MAX_BYTES = 4 * 1024 * 1024;
@@ -246,15 +243,15 @@ export async function parseGuardReason(absPath: string): Promise<string | null> 
 }
 
 /** 先自枚举(排除 vendor/node_modules——addSourceFilesAtPaths 后过滤太晚会 OOM),再加载。
- * step-056 导出:索引 staleness 的 mtime 指纹要枚举同一文件集(与构建同口径,防两处漂移)。 */
+ * 导出:索引 staleness 的 mtime 指纹要枚举同一文件集(与构建同口径,防两处漂移)。 */
 export async function listSourceFiles(root: string, limit = maxFilesDefault()): Promise<string[]> {
   return (await listSourceFilesDetailed(root, limit)).files;
 }
 
-/** 同 listSourceFiles,附截断元数据(step-079 RC-G:截断必须如实登记进 coverage manifest,
+/** 同 listSourceFiles,附截断元数据( RC-G:截断必须如实登记进 coverage manifest,
  * 不许「分母=截断后集合」的静默口径)。skipped 不计总数(要计数须走完整个 walk,与上限目的相悖);
- * 上限语义=「至少 limit 个,可能有更多」。step-085 RC-L:超限截断改**确定性公平采样**——
- * 旧版按目录遍历序满 limit 即停(grafana 实测 go 只入扫 22%/ts 31%/tsx 19%,覆盖表象下 76%
+ * 上限语义=「至少 limit 个,可能有更多」。 RC-L:超限截断改**确定性公平采样**——
+ * 旧版按目录遍历序满 limit 即停(grafana 经验证 go 只入扫 22%/ts 31%/tsx 19%,覆盖表象下 76%
  * 仓库未见过),新版全量枚举(安全帽)后按扩展名配额(最大余数法)分配;totalSeen=磁盘实见数。 */
 export interface SourceScan { files: string[]; truncated: boolean; limit: number; totalSeen?: number }
 
@@ -320,7 +317,7 @@ export async function listSourceFilesDetailed(root: string, limit = maxFilesDefa
 }
 
 /** 扫描 root,构建调用图(ts/js 走 ts-morph 语义档;python/go/java 走结构 adapter,见 mergeStructAdapters)。
- * step-085 RC-K:①ts/js 进 ts-morph 前过 parseGuardReason(压缩产物/超大文件跳过并聚合登记,
+ * RC-K:①ts/js 进 ts-morph 前过 parseGuardReason(压缩产物/超大文件跳过并聚合登记,
  * 不进 covered);②符号/调用收集逐文件 try/catch——此前一文件 throw(压缩产物栈溢出)全仓弃。 */
 export async function buildCallGraph(root: string): Promise<CallGraph> {
   const t0 = Date.now();
@@ -356,7 +353,7 @@ export async function buildCallGraph(root: string): Promise<CallGraph> {
     try { collectCalls(sf, graph, root); } catch { tsParseFailures++; }
   }
 
-  // Pass 2.5: 文件 import 依赖(step-066 impact 的 import 通道数据源):
+ // Pass 2.5: 文件 import 依赖( impact 的 import 通道数据源):
   // 被 import 的仓内文件 → 导入方文件。解析不了来源(外部包/动态拼接)不记——宁可缺不假连。
   const imports = new Map<string, Set<string>>();
   for (const sf of files) {
@@ -372,7 +369,7 @@ export async function buildCallGraph(root: string): Promise<CallGraph> {
   }
   graph.imports = imports;
 
-  // Pass 3: 结构 adapter 汇入(python/go/java;2026-10-14 全图索引接入)
+ // Pass 3: 结构 adapter 汇入(python/go/java; 全图索引接入)
   await mergeStructAdapters(graph, root, paths.map((p) => p.replace(root + "/", "")));
 
   // senseB21 Pass 3.5: 内嵌脚本索引(ts/js 文件模板字符串里的 <script>/JS 段)——置于
@@ -388,9 +385,9 @@ export async function buildCallGraph(root: string): Promise<CallGraph> {
     }
   }
 
-  // 扫描上限截断如实登记(step-079 RC-G)——「分母=截断后集合」不再静默;
+ // 扫描上限截断如实登记( RC-G)——「分母=截断后集合」不再静默;
   // RSS 护栏登记(merge 内已设)优先,不覆盖。
-  // step-085 RC-K:守卫跳过/解析失败聚合登记(诚实计量,不进 covered;不进分层口径防 coveragePct 假跌)
+ // RC-K:守卫跳过/解析失败聚合登记(诚实计量,不进 covered;不进分层口径防 coveragePct 假跌)
   const guardNotes: string[] = [];
   if (guardSkips.length > 0) {
     const sample = guardSkips.slice(0, 3).map((g) => g.rel).join(", ");
@@ -447,7 +444,7 @@ function selfDeclName(node: MorphNode): string | undefined {
   }
 }
 
-/** 词法父链限定名 + 最近类容器(2026-10-21)。includeSelf=true 时把节点自身也算进限定名
+/** 词法父链限定名 + 最近类容器。includeSelf=true 时把节点自身也算进限定名
  * (enclosingSymbolId 用,产出的 id 与 collectSymbols 登记一致);false=只取父链。 */
 function enclosingInfo(node: MorphNode, includeSelf: boolean): { parent?: string; container?: string } {
   const names: string[] = [];
@@ -467,7 +464,7 @@ function enclosingInfo(node: MorphNode, includeSelf: boolean): { parent?: string
   };
 }
 
-/** 符号收集(2026-10-21 补全):函数声明(含嵌套)/类+方法/interface/type/enum/
+/** 符号收集(补全):函数声明(含嵌套)/类+方法/interface/type/enum/
  * const 箭头函数与函数表达式(变量名即符号名,含函数体内嵌套)/模块级常量。
  * 类型声明走 addVariableSymbol 同款「不进 byName」通道(不作调用解析目标;
  * 索引面 querySymbol 仍可查——C2fIndex.byName 由节点表全量构建)。
@@ -491,7 +488,7 @@ function collectSymbols(sf: SourceFile, graph: CallGraph): void {
         break;
       }
       case SyntaxKind.ClassDeclaration: {
-        // 类本身也入索引(2026-10-13 覆盖审计:70 个 export class 全部缺席,
+ // 类本身也入索引(覆盖审计:70 个 export class 全部缺席,
         // code_index_symbol 查类名「未找到」——类是调用图的合法圆心)
         const cls = node.asKind(SyntaxKind.ClassDeclaration)!;
         const name = cls.getName() ?? "<anonymous-class>";
@@ -517,7 +514,7 @@ function collectSymbols(sf: SourceFile, graph: CallGraph): void {
             signature: safeSignature(m),
           }, sf);
         }
-        // step-089 P1(designs/26 §2.2):带注解的类属性补导出为 variable 符号(零边、不进 byName——
+ // P1( §2.2):带注解的类属性补导出为 variable 符号(零边、不进 byName——
         // 变量不参与调用解析语义)。注解即声明时类型;无注解属性不猜(如实缺)。
         for (const prop of cls.getProperties()) {
           const t = annotationText(prop);
@@ -598,8 +595,8 @@ function collectSymbols(sf: SourceFile, graph: CallGraph): void {
         break;
       }
       case SyntaxKind.VariableDeclaration: {
-        // 模块级常量(2026-10-21:此前只收带注解的;const 对象/数字常量等无注解声明全缺席)。
-        // 函数体内局部不入索引(designs/26 §2.4);箭头/函数表达式初始化由上一分支按 arrow 收。
+ // 模块级常量(此前只收带注解的;const 对象/数字常量等无注解声明全缺席)。
+ // 函数体内局部不入索引( §2.4);箭头/函数表达式初始化由上一分支按 arrow 收。
         const decl = node.asKind(SyntaxKind.VariableDeclaration)!;
         const declList = decl.getParentIfKind(SyntaxKind.VariableDeclarationList);
         const stmt = declList?.getParentIfKind(SyntaxKind.VariableStatement);
@@ -642,7 +639,7 @@ function annotationText(decl: any): string | undefined {
 }
 
 /** 变量/类型声明登记(仅供符号表/查询面):与 addSymbol 唯一差别=不进 byName
- * (声明名不得被调用解析吸收;designs/26 §2.2 既有纪律,2026-10-21 扩到 interface/type/enum)。 */
+ * (声明名不得被调用解析吸收; §2.2 既有纪律, 扩到 interface/type/enum)。 */
 function addVariableSymbol(graph: CallGraph, sym: Omit<Symbol, "file"> & { file: string }, sf: SourceFile): void {
   const full: Symbol = { ...sym, file: sf.getFilePath() };
   graph.symbols.set(full.id, full);
@@ -690,7 +687,7 @@ function collectCalls(sf: SourceFile, graph: CallGraph, root: string): void {
     const isCall = kind === SyntaxKind.CallExpression;
     const isNew = kind === SyntaxKind.NewExpression;
     if (!isCall && !isNew) return;
-    // new Cls() 也是「类符号的调用方」(qwen/dify 实证:类圆心 callers 恒 0,agent 问
+ // new Cls 也是「类符号的调用方」(qwen/dify 验证:类圆心 callers 恒 0,agent 问
     // 「谁实例化这个类」拿不到任何答案)——与 CallExpression 同一归属链
     // 统一形态:取被调表达式(Identifier / PropertyAccess)
     const expr = isNew
@@ -702,7 +699,7 @@ function collectCalls(sf: SourceFile, graph: CallGraph, root: string): void {
         ? expr.asKind(SyntaxKind.PropertyAccessExpression)!.getName()
         : undefined;
     if (!calleeName) return;
-    // 模块级调用归因(2026-10-14 实仓实锤:main.ts:129 组合根调 createGatewayApp 的边整个丢失,
+ // 模块级调用归因(实仓注意:main.ts:129 组合根调 createGatewayApp 的边整个丢失,
     // callers 只剩测试文件——匿名箭头/顶层语句没有可命名的 enclosing 符号,归到每文件一个
     // `<module>` 虚调用方(不入 symbols,查询/渲染侧按 id 特判),不冒充成某个假函数。
     const callerId = enclosingSymbolId(node) ?? `${sf.getFilePath()}#${MODULE_CALLER}`;
@@ -757,7 +754,7 @@ function collectCalls(sf: SourceFile, graph: CallGraph, root: string): void {
           toId = resolveByImportEvidence(sf, calleeName, candidates) ?? undefined;
         }
       } else {
-        // 属性调用:证据解析,永不唯一名兜底(fs.pathExists→fs-extra、arr.push→数组 实证)
+ // 属性调用:证据解析,永不唯一名兜底(fs.pathExists→fs-extra、arr.push→数组 验证)
         toId = resolvePropCall(expr, sf, calleeName, graph, newExprTypes(sf)) ?? undefined;
       }
     }
@@ -777,10 +774,10 @@ function collectCalls(sf: SourceFile, graph: CallGraph, root: string): void {
   });
 }
 
-/** 唯一名兜底的作用域闸(2026-10-26 整仓 flow 实锤):裸标识符在**本文件有局部绑定**时,
- * 词法作用域已经决定了它的指向——不能再按「全仓唯一同名」吸走别处的符号。三类实锚:
+/** 唯一名兜底的作用域闸(整仓 flow 注意):裸标识符在**本文件有局部绑定**时,
+ * 词法作用域已经决定了它的指向——不能再按「全仓唯一同名」吸走别处的符号。三类依据:
  * ① 外部 import:`import { join } from "node:path"; join(...)` 被连到仓内唯一的
- *    `gaps.spec.cjs#join`(测试文件里的小工具)——整仓 400+ 条假边,模块级图出现
+ * `.spec.cjs#join`(测试文件里的小工具)——整仓 400+ 条假边,模块级图出现
  *    `packages/code-sense → apps/gateway ×851` 的假主干;
  * ② 参数/局部变量:`handler(payload)`(EventBus 的 for-of 参数)被连到
  *    `titlebar-preload.js#handler`;`dirOf(...)`(collectLocalTypes 的回调参数)被连到
@@ -794,10 +791,10 @@ type BindingForm = "free" | "local" | "import-internal" | "import-external";
 
 /** 未解析调用的绑定形态(relink/唯一名兜底的作用域闸数据源):
  * free=自由标识符;local=参数/局部变量/同文件声明;import-internal=相对路径/工作区域名 import;
- * import-external=node:path/fs 等外部包。2026-10-26 全量索引实锚:
+ * import-external=node:path/fs 等外部包。 全量索引依据:
  * ① x.trim() 是属性调用(prop),与绑定无关;② handler/dirOf 是参数(local);
  * ③ join@node:path 是 external;④ @lampgenie/* 工作区 import 即使 ts-morph 解析不到源文件,
- * 也按 internal 放行 relink(否则真实跨包边全丢,实测模块图 65→11 边)。 */
+ * 也按 internal 放行 relink(否则真实跨包边全丢,经验证模块图 65→11 边)。 */
 function bindingForm(sf: SourceFile, expr: MorphNode, calleeName: string, fileText?: string): BindingForm {
   let local = false;
   try {
@@ -805,7 +802,7 @@ function bindingForm(sf: SourceFile, expr: MorphNode, calleeName: string, fileTe
   } catch {
     local = false;
   }
-  // CJS/.js 不在 tsconfig 时 getSymbol() 可能为空(实锚:apps/desktop/paths.js 的
+ // CJS/.js 不在 tsconfig 时 getSymbol 可能为空(依据:apps/desktop/paths.js 的
   // `const { join } = require("node:path")` 被当自由标识符,连到测试文件里的 join ×85)。
   // 文本级兜底只做「有绑定/无绑定」判定,不解析复杂作用域;ts-morph 无本地符号时以它为准
   // (同一表达式两次 getSymbol() 结果可能漂移,不能让 callForm 与解析闸读到不同结论)。
@@ -887,35 +884,35 @@ function localBindingBlocksFallback(sf: SourceFile, expr: MorphNode, calleeName:
 export const MODULE_CALLER = "<module>";
 
 /** 属性调用(obj.x())的证据解析白名单形态:只认 this/命名 import/命名空间 import/new 接收者,
- * **永不走唯一名兜底**。实证(teamai-cli):`fs.pathExists()` 是 fs-extra 的方法,仓内恰好只有一个
+ * **永不走唯一名兜底**。验证(teamai-cli):`fs.pathExists` 是 fs-extra 的方法,仓内恰好只有一个
  * 同名函数时被吸走——虚报文件 114/189;denylist 词表是猫鼠游戏(fs-extra/set/map/任意库方法),
  * 证据闸才是收敛解。代价=无类型证据的普通对象属性调用不解析(丢真边可接受,零虚报优先)。
  * 裸标识符调用的唯一名兜底保留,但测试框架注入全局除外(describe/it/test 等的绑定来自运行时
- * 注入,仓内同名的本地辅助函数会被吸走——opencode test-debug.ts 实测 502 个假 caller)。 */
+ * 注入,仓内同名的本地辅助函数会被吸走——opencode test-debug.ts 经验证 502 个假 caller)。 */
 export const INJECTED_GLOBALS = new Set([
   "describe", "it", "test", "expect", "vi", "suite", "check",
   "beforeEach", "afterEach", "beforeAll", "afterAll", "setup", "teardown",
 ]);
 
-/** 结构 adapter 跨文件解析(2026-10-14 实测:python 同文件调用召回尚可,跨文件 0/11——
+/** 结构 adapter 跨文件解析(经验证:python 同文件调用召回尚可,跨文件 0/11——
  * 各 adapter 只在单文件 byName 里找,import 收集了没消费)。解析对象=adapter 发射的跨文件候选
  * (to===""+toName,可丢弃:解析不了=移除,与旧版「不发射」等价)**加**未解析的自归属边
  * (self.x 兄弟查找失败=容器归属盲区,不可丢弃:解析不了保持原状,不改变既有语义)。
  * 两者都按「同语言+全图唯一名」解析。
- * step-066 A1:方法名几乎必然跨类同名(全图唯一名闸对方法调用系统性弃边,三仓评测
- * R=0/20 实锤)——候选带 receiverType 时先按 container=receiverType 过滤(Class.method
+ * A1:方法名几乎必然跨类同名(全图唯一名闸对方法调用系统性弃边,三仓评测
+ * R=0/20 注意)——候选带 receiverType 时先按 container=receiverType 过滤(Class.method
  * 候选集),再按 moduleHint(文件路径子串)二次收窄;仍非唯一=保持不解析(宁缺勿错)。
- * step-099 RC-B5:被移除的候选进 graph.droppedCandidates 台账(按被调名聚合,
+ * RC-B5:被移除的候选进 graph.droppedCandidates 台账(按被调名聚合,
  * 原因三桶)——「诚实弃边」从不可见变为索引可查。 */
 function resolveStructCrossFile(graph: CallGraph, candidates: FlowEdge[], selfMisses: FlowEdge[]): void {
   const extOf = (file: string) => file.slice(file.lastIndexOf("."));
-  // step-102:Go 接口类型名册(typeKind=interface,仅 Go adapter 注册),按名→所在包目录集。
+ // Go 接口类型名册(typeKind=interface,仅 Go adapter 注册),按名→所在包目录集。
   // receiverType 名为接口时,候选实现体方法必属「仓内接口 X 与实现体 Y 撞名」(Go 语法:接口不能
   // 有方法接收者,container=R 的方法存在 ⟹ 另有非接口类型 R):接口值调用的真实动态类型不可静态
-  // 判定(094 假边实锤:child balancer.Balancer(接口)→ gracefulswitch.Balancer.UpdateClientConnState),
+ // 判定(094 假边注意:child balancer.Balancer(接口)→ gracefulswitch.Balancer.UpdateClientConnState),
   // 不再窄化「唯一命中」,如实弃边+进弃边台账。但同名接口在**别的包**时证据钉扎(receiverTypeDir)
   // 指向结构体包=证据非接口,放行(无钉扎则误杀同包结构体真边:grpc-go internal/transport.Stream
-  // vs 根包接口 grpc.Stream 实测 58 条)。其它语言/旧索引符号无 typeKind=interface →名册天然为空
+ // vs 根包接口 grpc.Stream 经验证 58 条)。其它语言/旧索引符号无 typeKind=interface →名册天然为空
   // →逐位旧行为(零回退面)。
   const goIfaceDirs = new Map<string, Set<string>>();
   for (const s of graph.symbols.values()) {
@@ -926,11 +923,11 @@ function resolveStructCrossFile(graph: CallGraph, candidates: FlowEdge[], selfMi
       goIfaceDirs.set(s.name, set);
     }
   }
-  /** step-067:C/C++ 语言族(C 函数调用点在 .c、声明锚在 .h——同扩展名闸会把这一形态整体弃边;
-   * saadk_c mwInit 实锚:调用在 memwatch.c、唯一索引锚是 memwatch.h 原型,定义体被语法 ERROR 丢弃)。
+ /** C/C++ 语言族(C 函数调用点在 .c、声明锚在 .h——同扩展名闸会把这一形态整体弃边;
+ * saadk_c mwInit 依据:调用在 memwatch.c、唯一索引锚是 memwatch.h 原型,定义体被语法 ERROR 丢弃)。
    * 仅作兜底:同扩展名候选在场时优先(定义优先语义不变),族内唯一才解析。清单与 adapters/cpp.ts CPP_EXTS 同口径。 */
   const C_FAMILY_EXTS = new Set([".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"]);
-  /** 2026-10-22 P1(缺口①):libc/C 内建常用名(跨文件解析时几乎总是被 vendored 头的
+ /** P1(缺口①):libc/C 内建常用名(跨文件解析时几乎总是被 vendored 头的
    * 同名声明吸收成假边)。同文件定义不经此路径(resolveLocal 先连);仓内有真产品定义
    * 时名单不生效(见 tryResolve 的 productDef 守卫)。 */
   const C_LIBC_NAMES = new Set([
@@ -964,8 +961,8 @@ function resolveStructCrossFile(graph: CallGraph, candidates: FlowEdge[], selfMi
   const tryResolve = (e: FlowEdge): string | null => {
     if (e.to || !e.toName) return null;
     const byName = (graph.byName.get(e.toName) ?? []).filter((id) => graph.symbols.has(id));
-    // 2026-10-22 P1(缺口①):libc/内建常用名的跨文件唯一名解析几乎总是假目标——仓内同名
-    // 只是 vendored 头的声明(实测 saadk_6920 的 round/free 被 flann/matrix.h 吸收,71 条
+ // P1(缺口①):libc/内建常用名的跨文件唯一名解析几乎总是假目标——仓内同名
+ // 只是 vendored 头的声明(经验证 saadk_6920 的 round/free 被 flann/matrix.h 吸收,71 条
     // 产品→thirdparty 假边)。真实目标是 libc,连过去=受影响文件清单掺入厂商头。仅当仓内
     // 没有「非原型且非 vendored」的产品定义时拒连(自家真定义照常解析);弃边进台账可追溯。
     if (C_LIBC_NAMES.has(e.toName) && C_FAMILY_EXTS.has(extOf(e.file))) {
@@ -980,20 +977,20 @@ function resolveStructCrossFile(graph: CallGraph, candidates: FlowEdge[], selfMi
     if (pool.length === 0 && C_FAMILY_EXTS.has(extOf(e.file))) {
       pool = narrow(byName.filter((id) => C_FAMILY_EXTS.has(extOf(graph.symbols.get(id)!.file))), e);
     }
-    // 2026-10-22 P0:C/C++ 定义优先——原型(.h 声明)不该与定义(.c)平票把调用整条弃掉。
-    // 实锚:yolox/test/*.cpp 调 SA_YOLOX_Init,候选=.c 定义 + .h 原型 → 旧逻辑弃边,
+ // P0:C/C++ 定义优先——原型(.h 声明)不该与定义(.c)平票把调用整条弃掉。
+ // 依据:yolox/test/*.cpp 调 SA_YOLOX_Init,候选=.c 定义 + .h 原型 → 旧逻辑弃边,
     // 关联测试恒 0。池内存在非原型时先剔原型;两处都是定义(构建开关二选一)仍如实弃边。
     if (pool.length > 1) {
       const defs = pool.filter((id) => graph.symbols.get(id)?.proto !== true);
       if (defs.length > 0) pool = defs;
     }
-    // step-102 撞名闸:唯一候选在场且 receiverType 有接口名册命中时——证据目录指向接口所在包
+ // 撞名闸:唯一候选在场且 receiverType 有接口名册命中时——证据目录指向接口所在包
     // (或无钉扎,保守)=该候选只能是撞名实现体的方法,不可消歧,弃边(台账);证据目录指向别包
     // =证据是结构体(接口在别包重名),放行。精度与「宁缺勿错」优先于这条召回。
     if (pool.length === 1 && e.receiverType) {
       const dirs = goIfaceDirs.get(e.receiverType);
       if (dirs && (e.receiverTypeDir === undefined || dirs.has(e.receiverTypeDir))) {
-        return `接口与实现体撞名: receiverType=${e.receiverType} 是仓内接口(包目录 ${[...dirs].join("|") || "."}),候选为实现体方法,不可消歧(step-102 宁缺勿错)`;
+        return `接口与实现体撞名: receiverType=${e.receiverType} 是仓内接口(包目录 ${[...dirs].join("|") || "."}),候选为实现体方法,不可消歧(宁缺勿错)`;
       }
     }
     if (pool.length !== 1) {
@@ -1066,7 +1063,7 @@ function enclosingSymbolId(node: MorphNode): string | undefined {
 }
 
 /** 同文件 new 表达式接收者类型表:`const repo = new TaskStore()` → repo→[TaskStore]。
- * 属性调用(obj.method())的内建成员黑名单把真调用也拦下(TaskStore.values 实测)——
+ * 属性调用(obj.method)的内建成员黑名单把真调用也拦下(TaskStore.values 经验证)——
  * 接收者是本文件 new 出来的实例时,`new` 证据足以安全解析到 `Class.method`(同文件闸,精度高:
  * 数组/Map/标准库接收者不是 new 出来的标识符,天然不受影响)。懒构建每文件一次。 */
 const newTypeCache = new Map<SourceFile, Map<string, string[]>>();
@@ -1078,7 +1075,7 @@ function newExprTypes(sf: SourceFile): Map<string, string[]> {
   // paramCaller 的参数 r 不得吃到 newCaller 里 const r = new Repo() 的证据)
   m = new Map<string, string[]>();
   try {
-    // getVariableDeclarations() 只返回语句级声明(函数体内的 const 拿不到,实测 0)——
+ // getVariableDeclarations 只返回语句级声明(函数体内的 const 拿不到,经验证 0)——
     // 必须 descendants:useStore 里的 `const s = new Store()` 是本修复的主场景
     for (const decl of sf.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
       const init = decl.getInitializer();
@@ -1113,7 +1110,7 @@ function resolveByImportEvidence(sf: SourceFile, calleeName: string, candidates:
 }
 
 /** 属性调用证据解析(this 已在上游处理):命名空间/默认 import、new 接收者、同文件类静态调用。
- * 任何证据都不成立=不解析(外来对象方法:fs.pathExists/arr.push/cache.set 实证,虚报源头)。
+ * 任何证据都不成立=不解析(外来对象方法:fs.pathExists/arr.push/cache.set 验证,虚报源头)。
  * 返回 null=无证据。 */
 function resolvePropCall(
   expr: MorphNode, sf: SourceFile, propName: string,
@@ -1158,13 +1155,12 @@ function resolvePropCall(
   return null;
 }
 
-/** target 子图:中心符号上下游 N 跳(designs/16 §6.1)。 */
+/** target 子图:中心符号上下游 N 跳( §6.1)。 */
 export function subgraph(
   graph: CallGraph,
   centerPredicate: (s: Symbol) => boolean,
   depth: number,
-  root: string,
-): { center?: Symbol; upstream: FlowEdge[]; downstream: FlowEdge[] } {
+  root: string): { center?: Symbol; upstream: FlowEdge[]; downstream: FlowEdge[] } {
   const center = [...graph.symbols.values()].find(centerPredicate);
   if (!center) return { upstream: [], downstream: [] };
 
@@ -1212,7 +1208,7 @@ function toRelative(e: FlowEdge, root: string): FlowEdge {
 /** 结构 adapter 单文件解析结果(python/go/java/cpp/rust/csharp/ruby/php 共用契约)。
  * crossFileCandidates:本文件内解析不到、但名字在 import 名单里的裸调用候选边
  * (to===""+toName)——由 mergeStructAdapters 在全图合并后统一解析(python 专用,go/java 可不产)。
- * imports(step-099 RC-B2):本文件原始 import 路径清单(Go 产;python/java 待后续轮)。 */
+ * imports( RC-B2):本文件原始 import 路径清单(Go 产;python/java 待后续轮)。 */
 type StructParseResult = { symbols: (Symbol & { signature?: Signature })[]; edges: FlowEdge[]; failures: unknown[]; crossFileCandidates?: FlowEdge[]; imports?: string[] };
 
 /** 结构 adapter 按需加载器(懒 import:bundle 形态内联,dev 形态动态加载)。 */
@@ -1223,7 +1219,7 @@ const STRUCT_ADAPTERS: { ext: string; load: () => Promise<{ parse: (root: string
   { ext: ".py", load: async () => ({ parse: (await import("../adapters/python")).parsePythonFile }) },
   { ext: ".go", load: async () => ({ parse: (await import("../adapters/go")).parseGoFile }) },
   { ext: ".java", load: async () => ({ parse: (await import("../adapters/java")).parseJavaFile }) },
-  // step-067:C/C++(tree-sitter-c/cpp;提取子集与错误容忍策略见 adapters/cpp.ts 头注)
+ // C/C++(tree-sitter-c/cpp;提取子集与错误容忍策略见 adapters/cpp.ts 头注)
   { ext: ".c", load: cppAdapter },
   { ext: ".h", load: cppAdapter },
   { ext: ".cc", load: cppAdapter },
@@ -1232,7 +1228,7 @@ const STRUCT_ADAPTERS: { ext: string; load: () => Promise<{ parse: (root: string
   { ext: ".hh", load: cppAdapter },
   { ext: ".hpp", load: cppAdapter },
   { ext: ".hxx", load: cppAdapter },
-  // 2026-10-25:Rust/C#/Ruby/PHP(tree-sitter wasm 主路径 + 文本回退;接口与 java/go 同形)
+ // Rust/C#/Ruby/PHP(tree-sitter wasm 主路径 + 文本回退;接口与 java/go 同形)
   { ext: ".rs", load: async () => ({ parse: (await import("../adapters/rust")).parseRustFile }) },
   { ext: ".cs", load: async () => ({ parse: (await import("../adapters/csharp")).parseCsharpFile }) },
   { ext: ".rb", load: async () => ({ parse: (await import("../adapters/ruby")).parseRubyFile }) },
@@ -1241,8 +1237,8 @@ const STRUCT_ADAPTERS: { ext: string; load: () => Promise<{ parse: (root: string
 
 /** 结构 adapter 汇入:解析 relFiles 中对应扩展名的文件,符号与边合并进图(全图索引与懒解析共用)。
  * 单文件解析失败=该文件进盲区跳过(诚实,不冒充全量);adapter 加载失败=该语言退回未接入形态。
- * 合并完成后跑 resolveStructCrossFile:候选跨文件边按全图唯一名解析(2026-10-14)。
- * step-079:①逐文件 outcome 聚合进 graph.structOutcomes(分层覆盖数据源);②lexical 档符号
+ * 合并完成后跑 resolveStructCrossFile:候选跨文件边按全图唯一名解析。
+ * ①逐文件 outcome 聚合进 graph.structOutcomes(分层覆盖数据源);②lexical 档符号
  * 只进 graph.symbols(覆盖计数/查询),**不进 byName**——防跨文件候选解析吸收词法符号产假边
  * (lexical 的边不参与 callers/callees 精度口径);③RSS 护栏:超 GENIE_SENSE_MAX_RSS_MB 停止
  * 处理剩余文件,余下 outcome=skipped + graph.structTruncated 登记。 */
@@ -1270,8 +1266,8 @@ export async function mergeStructAdapters(graph: CallGraph, root: string, relFil
         graph.structTruncated = { reason: `RSS 护栏触发(>${Math.round(rssLimit / 1024 / 1024)}MB),剩余结构档文件停止处理(可用 GENIE_SENSE_MAX_RSS_MB 调节)` };
         break;
       }
-      // step-085 RC-K:解析前守卫(压缩产物/超大单文件)——结构档同样设防(超大 .h/.cpp 是
-      // 076 病态成本实证面);跳过如实登记 outcome=skipped
+ // RC-K:解析前守卫(压缩产物/超大单文件)——结构档同样设防(超大 .h/.cpp 是
+ // 076 病态成本验证面);跳过如实登记 outcome=skipped
       const guard = await parseGuardReason(join(root, f));
       if (guard) {
         outcomes.set(f, { tier: "skipped", reason: guard });
@@ -1279,7 +1275,7 @@ export async function mergeStructAdapters(graph: CallGraph, root: string, relFil
       }
       try {
         const r = await adapter.parse(root, f);
-        // step-099 RC-B2:结构档逐文件 import 清单聚合(绝对路径键;展开归 expandGoImports)
+ // RC-B2:结构档逐文件 import 清单聚合(绝对路径键;展开归 expandGoImports)
         if (r.imports && r.imports.length > 0) {
           if (!graph.structFileImports) graph.structFileImports = new Map();
           graph.structFileImports.set(join(root, f), r.imports);
@@ -1292,9 +1288,9 @@ export async function mergeStructAdapters(graph: CallGraph, root: string, relFil
             : { tier: "empty" as const, reason: "解析成功但无顶层声明" }));
         for (const sym of r.symbols) {
           graph.symbols.set(sym.id, sym);
-          // step-089 P1:variable 一律不进 byName(structural 档推广 lexical 既有纪律)——
+ // P1:variable 一律不进 byName(structural 档推广 lexical 既有纪律)——
           // 防跨文件候选解析按名吸收变量符号产假边(调用解析语义只对函数成立)。
-          // 2026-10-21:typedef/interface/type/enum 同列声明豁免(isNonCallableSymbolKind)。
+ // typedef/interface/type/enum 同列声明豁免(isNonCallableSymbolKind)。
           if (sym.tier === "lexical" || isNonCallableSymbolKind(sym.kind)) continue;
           const ids = graph.byName.get(sym.name) ?? [];
           ids.push(sym.id);
@@ -1323,7 +1319,7 @@ export async function mergeStructAdapters(graph: CallGraph, root: string, relFil
           }
         }
       } catch {
-        // 该文件解析盲区:跳过。step-085 RC-K:此前静默——现在如实登记 outcome=skipped
+ // 该文件解析盲区:跳过。 RC-K:此前静默——现在如实登记 outcome=skipped
         // (失败不毙全仓 + 覆盖面可见)
         outcomes.set(f, { tier: "skipped", reason: "解析异常跳过(单文件包保护)" });
       }
@@ -1342,7 +1338,7 @@ export async function mergeStructAdapters(graph: CallGraph, root: string, relFil
   resolveStructCrossFile(graph, crossFileCandidates, selfMisses);
 }
 
-/** 懒解析(designs/16 §7.2 A2):只解析指定文件集(定位→小图),大仓 debug 秒级。 */
+/** 懒解析( §7.2 A2):只解析指定文件集(定位→小图),大仓 debug 秒级。 */
 export async function buildCallGraphFromFiles(root: string, relFiles: string[]): Promise<CallGraph> {
   const t0 = Date.now();
   // 结构语言走各自 adapter(mergeStructAdapters);ts/js 才进 ts-morph。
@@ -1353,7 +1349,7 @@ export async function buildCallGraphFromFiles(root: string, relFiles: string[]):
   const guardSkipsLocal: { rel: string; reason: string }[] = [];
   const unparsable: string[] = [];
   for (const f of tsFiles) {
-    // step-085 RC-K:懒解析路径同过守卫(增量重扫的变更文件里也可能混进压缩产物)
+ // RC-K:懒解析路径同过守卫(增量重扫的变更文件里也可能混进压缩产物)
     const guard = await parseGuardReason(join(root, f));
     if (guard) { guardSkipsLocal.push({ rel: f, reason: guard }); continue; }
     try { project.addSourceFileAtPath(`${root}/${f}`); } catch { unparsable.push(f); }

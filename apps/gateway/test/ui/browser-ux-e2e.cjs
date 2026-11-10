@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 /**
  * 浏览器面板真实 E2E —— 2026-11 browser-ux-redo 改造验收(人机同看 / 人类输入通道 / tab 归属)。
- *
- * 复跑(必须在仓根跑,勿碰 7700 产线网关 —— 本脚本自起 7811):
+ * 复跑(必须在仓根跑,勿碰 7700 生产环境网关 —— 本脚本自起 7811):
  *   node --import tsx apps/gateway/test/ui/browser-ux-e2e.cjs
  * 可选环境变量:CHROME_PATH(缺省 /usr/bin/google-chrome)、E2E_GW_PORT(7811)、
  *             E2E_FIX_PORT(7813)、E2E_IDLE_WAIT_MS(62000,步骤 h 的 idle 观察窗)。
- *
  * 形态(_j4_sidebar_browser.cjs 同款):单进程内 servePanel + createGatewayApp 真网关
  * (useExternalHttp,面板与 WS 同端口)+ 一个夹具 http server + playwright-core 真 chrome 开面板页;
  * 另起一条 node 侧 WS 客户端直说 browser.view.command 协议拿权威回执(getState/snapshot/tabs)。
  * profile 固定 ephemeral —— 避免持久 profile 目录上锁污染(改造点 browser.enabled 缺省 true 不影响这里)。
- *
  * 说明(与任务书的偏差,如实记录):
  *  · idleMinutesOf() 会把浏览器配置函数返回值 Math.round 后 clamp 到 [1,240] 分钟
  *    (browser-tool.ts:420-423),所以 () => 0.001 实际等于 1 分钟;步骤 h 只能真等 ~62s。

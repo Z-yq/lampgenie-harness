@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { servePanel } from "../src/panel.js";
 
-// 追踪 Trace 看板「只有一个数据窗口」契约守卫(2026-10-21 用户口径):
+// 追踪 Trace 看板「只有一个数据窗口」契约守卫:
 // 现状病灶 = 统计区 #sw-slot(max-height:44%;overflow:auto)与 turn 树 #track-body(overflow:auto)
 // 各自独立滚动,视觉上把卡切成上下两个数据窗口;且 status-widget 内还重复渲染一个「任 务」块。
 // 期望 = 唯一滚动落在卡自身,统计区是可选头部块(无数据不占位),「任务」= 最后一个数据块:

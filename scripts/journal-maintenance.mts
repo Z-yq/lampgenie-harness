@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * journal 存储维护 CLI(M123,2026-11-08)。
- *
+ * journal 存储维护 CLI。
  * 用法(node scripts/journal-maintenance.mts [...];Node ≥22.18 默认类型剥离)或 pnpm exec tsx 同参数:
  *   --plan                  (默认)只读:打印候选/可回收字节/预计减少的 boot 文件数
  *   --apply                 执行归档(活 writer 下须 --force;先快照→plan→apply)
@@ -15,7 +14,6 @@
  *   --force                 活 writer 下仍执行(慎用:维护方须自行确保不再写入)
  *   --journal <dir>         journal 目录(缺省从 cwd 向上找 .genie/journals)
  *   --archive <dir>         归档目录(缺省 <journal>/sessions-archive)
- *
  * 退出码:0=正常;2=活 writer 拒跑 / 校验失败 / 恢复失败 / 归档漂移 abort;3=参数或 IO 错误。
  */
 import { existsSync, readdirSync } from "node:fs";

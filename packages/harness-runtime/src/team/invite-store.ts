@@ -1,5 +1,5 @@
 /**
- * 邀请码存储(designs/05 §3):一次性、7 天有效、最大兑换 1 次。
+ * 邀请码存储( §3):一次性、7 天有效、最大兑换 1 次。
  * 原稿形态=SQLite 滚动;node20 无 node:sqlite,一期=JSONL 追加+加载时滚动截断
  * (保留最近 1000 条;数据权威在 Git——兑换结果最终以 roster MR 体现,此仓可重建)。
  */
@@ -11,7 +11,7 @@ export interface InviteRecord {
   createdAt: number;
   expiresAt: number;
   createdBy: string;
-  /** 邀请绑定的项目(designs/23 项目绑定团队:兑换产生的 roster 条目自动带 projects)。 */
+ /** 邀请绑定的项目(项目绑定团队:兑换产生的 roster 条目自动带 projects)。 */
   projects: string[];
   /** 兑换结果(null=未兑换)。 */
   redeemedBy: string | null;

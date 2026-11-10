@@ -1,5 +1,5 @@
 /**
- * M180 权限预设原子绑定与会话钉扎 —— 契约测试。
+ * 权限预设原子绑定与会话钉扎 —— 契约测试。
  * 覆盖:① 5 档映射/auto 别名/custom/未知抛错 ② applyPreset 差量与自定义 ③ pin 幂等与优先级
  * ④ seedResume 补种不覆盖 ⑤ 子代理 delegated-child ⑥ 启动解析 fail-closed ⑦ cfg.set 纯函数语义(先校验后落地)
  * ⑧ 接线:pin 事件形状 + 子代理 asker 放行且不弹 broker。

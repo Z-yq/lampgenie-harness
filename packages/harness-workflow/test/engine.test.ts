@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";
 import { WorkflowEngine, createWorld, isLoaderError, runErrorPrefix } from "../src/engine";
 import { renderTemplate } from "../src/templates";
 import { z } from "zod";
 
-const ROOT = "/mnt/e/workship/genie/lampgenie-harness";
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("D1 双 agent 编排", () => {
   it("facade agent().ask 真派发,report 聚合", async () => {
@@ -134,9 +135,9 @@ describe("D6 沙箱", () => {
   });
 });
 
-describe("D8 esbuild 加载器错误分类(step-121 产线缺陷回归)", () => {
+describe("D8 esbuild 加载器错误分类(生产环境缺陷回归)", () => {
   it("加载/部署类错误不被标成「语法错误」,真语法错误仍是「语法错误」", async () => {
-    // 产线实测的加载失败原文(dist/gateway.mjs 内联 esbuild 时第一条 100% 命中)
+ // 生产环境经验证的加载失败原文(dist/gateway.mjs 内联 esbuild 时第一条 100% 命中)
     for (const msg of [
       "ReferenceError: __filename is not defined",
       "Error: The esbuild JavaScript API cannot be bundled. Please mark the \"esbuild\" package as external",

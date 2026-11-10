@@ -1,5 +1,5 @@
 /**
- * OTLP/HTTP JSON 追踪导出(step-031 遗留收口:OTel/远端上报,零依赖最小实现)。
+ * OTLP/HTTP JSON 追踪导出(遗留:OTel/远端上报,零依赖最小实现)。
  * journal 事件(turn/step/tool/llm)→ OTLP trace spans,批量定时外送;opt-in:
  * 未配 GENIE_OTEL_ENDPOINT 完全不构造、零开销;外送失败静默计数(fail-soft,不碰主链)。
  * 协议:OTLP v1 traces JSON(PUT/POST application/json),span 形状取规范子集。

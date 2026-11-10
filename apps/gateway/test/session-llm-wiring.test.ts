@@ -119,7 +119,7 @@ describe("session.model.set/get WS 端到端(装配:store 落盘 + journal 审�
       // store 落盘:.genie/session-models.json 出现该 sid(持久化闭环,换实例读回同值)
       const file = sessionModelsPath(root);
       expect(existsSync(file), "覆盖表必须落盘").toBe(true);
-      // 2026-10-22:落盘条目新增 revision(CAS 版本,写入即 +1;重启后仍可判「你手上那版过期了」)
+ // 落盘条目新增 revision(CAS 版本,写入即 +1;重启后仍可判「你手上那版过期了」)
       // m5/m2 补齐:新增 updatedAt(prune 排序用,按最旧清理),故断言里剥掉它
       const onDisk = JSON.parse(readFileSync(file, "utf-8")) as Record<string, { model?: string; providerId?: string; revision?: number; updatedAt?: number }>;
       expect(onDisk["sm-s1"]).toMatchObject({ model: "GLM-5.3", providerId: "bigmodel-plan", revision: 1 });
@@ -264,8 +264,7 @@ describe("m1 角色轨跟随会话覆盖 / m3 contextWindow 重算", () => {
     const face = createSessionModelFace(
       cfg({}, { review: { model: "glm-5.3", providerId: "main" } }),
       root,
-      store,
-    );
+      store);
     const ov = { model: "GLM-5.3", providerId: "bigmodel-plan" } as const;
     store.set("s1", { ...ov });
     const roles = face.deriveRoleModels("s1", { ...ov })!;

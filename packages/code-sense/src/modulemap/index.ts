@@ -1,5 +1,5 @@
 /**
- * modulemap(designs/16 §6.4):模块清单+导读。
+ * modulemap( §6.4):模块清单+导读。
  * 静态部分(目录结构→模块清单,evidence=ast)无 LLM;导读 LLM 注入可选。
  */
 import { z } from "zod";
@@ -16,10 +16,10 @@ export type ModuleGuide = z.infer<typeof ModuleGuideSchema>;
 
 /** 静态模块推导:packages/<name>/src 与 apps/<name>/src 为模块;顶层源文件归 "(root)"。
  * evidence=ast(目录结构事实);职责句=入口文件名+manifest 描述(不冒充 LLM 洞见)。
- * step-098(RC-096-A1)泛化:任一文件命中 packages|apps 快路径时保持旧行为逐字节不变;
+ * (RC-096-A1)泛化:任一文件命中 packages|apps 快路径时保持旧行为逐字节不变;
  * 否则按语言惯例做目录拓扑聚类(Go/Java=目录即包;Python=包目录(含 __init__.py)/高内聚目录
  * 同形取 dirname;TS/JS=src 子目录聚合,无 src=前两段)——旧版在仓外恒出唯一模块 "(root)",
- * agent_alpha/poly-redash/go-cobra 三仓实锤 modulemap 不可用。 */
+ * agent_alpha/poly-redash/go-cobra 三仓注意 modulemap 不可用。 */
 export function deriveModules(files: string[]): ModuleGuide[] {
   if (files.some((f) => /^(packages|apps)\/[^/]+\//.test(f))) return deriveModulesMonorepo(files);
   return deriveModulesByTopology(files);
@@ -78,7 +78,7 @@ function topologyKey(f: string): string {
   return segs[0]!;
 }
 
-/** 文件→模块键的单一出处(step-118 wiki 复用;与 deriveModules 的分组口径一致)。
+/** 文件→模块键的单一出处( wiki 复用;与 deriveModules 的分组口径一致)。
  * monorepo 布局(packages|apps)优先:命中包/应用按 `packages/<name>` 归组,其余 "(root)";
  * 否则走目录拓扑聚类(topologyKey)。caller 传入的 files 必须与 deriveModules 同一集合。 */
 export function moduleAssignment(files: string[]): Map<string, string> {
@@ -152,7 +152,7 @@ export async function narrateModule(
   return r.content;
 }
 
-/** 骨架建议(EMPTY 态,designs/16 §7.1):纯 LLM 产物,evidence=suggested。 */
+/** 骨架建议(EMPTY 态, §7.1):纯 LLM 产物,evidence=suggested。 */
 export const SkeletonSchema = z.object({
   modules: z.array(z.object({
     name: z.string(),

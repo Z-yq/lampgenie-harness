@@ -1,5 +1,5 @@
 /**
- * step-114 接线验证:主 agent file-tools 与进程内子代理 write/edit 成功路径都附加
+ * 接线验证:主 agent file-tools 与进程内子代理 write/edit 成功路径都附加
  * `<diagnostics>`。用 tsserver 兜底(本机无 typescript-language-server),命令覆盖为不存在
  * 路径以强制走兜底分支。
  */

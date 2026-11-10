@@ -1,4 +1,4 @@
-/** code 板工程师图形态(2026-10-26):C4 类型/技术行、容器边界、decision/start/end 形状、
+/** code 板工程师图形态:C4 类型/技术行、容器边界、decision/start/end 形状、
  *  call/data/verify 线型与 C4 图例。只做源码契约断言;真实渲染走 Playwright 证据。 */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -9,9 +9,9 @@ const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
 
 describe("code 板工程师图形态", () => {
   it("code 分支启用 cv-code-world/cv-code-node，并解析 [Component: tech] 摘要", () => {
-    // 2026-10-26 测试类型接入 code flow:test 板带 start/end 复用同一套工程师 flow 渲染
+ // 测试类型接入 code flow:test 板带 start/end 复用同一套工程师 flow 渲染
     expect(src).toContain('const wantTestFlow = cvBoardType === "test"');
-    // 2026-10-29 perf 板与 code/test 同列(用户:「性能优化的 flow 还差点意思」):白名单三型同列,
+ // perf 板与 code/test 同列(用户:「性能优化的 flow 还差点意思」):白名单三型同列,
     // 各型进门条件不变(code 恒进 / test 要 start-end / perf 走 cvCodeFlowWanted 同口径)。
     expect(src).toContain('const cvCodeInfo = (cvBoardType === "code" || cvBoardType === "test" || cvBoardType === "perf")');
     expect(src).toContain('const wantPerfFlow = cvBoardType === "perf" && cvCodeFlowWanted(doc.nodes || [])');
@@ -63,7 +63,7 @@ describe("code 板工程师图形态", () => {
     expect(src).toContain("Math.min(132, w - 6)");
     // 回边/左向边绕世界底部
     expect(src).toContain("bounds.y + bounds.h + 24");
-    // code flow 主线实心,不闪动(step-1010:主线色改走 --bcv-flow-main 令牌,字面值降级为 var() 兜底)
+ // code flow 主线实心,不闪动(主线色改走 --bcv-flow-main 令牌,字面值降级为 var 兜底)
     expect(src).toContain(".cv-code-world .bf-cv-edges path.bfe-main{stroke:var(--bcv-flow-main,#4fbf7a)!important");
     expect(src).toContain("stroke-dasharray:none!important;animation:none!important");
   });
@@ -163,7 +163,7 @@ describe("code 板工程师图形态", () => {
     expect(foot).toContain('class="cv-file-name"');
     expect(foot).toContain("board-type-profile.js");
     expect(foot).toContain("cv-chg");
-    // 2026-10-29 口径同步:code flow 用 CV_CHG_LABEL(modify=「改」),不再用面板通用 BD_CHANGE 的「修改」
+ // 口径同步:code flow 用 CV_CHG_LABEL(modify=「改」),不再用面板通用 BD_CHANGE 的「修改」
     expect(foot).toContain("改");
     expect(foot).not.toContain("修改");
     expect(foot).toContain("+1");
@@ -238,7 +238,7 @@ describe("code 板工程师图形态", () => {
     const b = await changeBadgeFn();
     expect(b({ change: "add" }, "cv-chg")).toContain("cv-chg");
     expect(b({ change: "add" }, "cv-chg")).toContain("新增");
-    // 2026-10-29 口径:code flow 徽标用 CV_CHG_LABEL(delete=「删」/keep=「复用」),不是 BD_CHANGE 的「删除/涉及」
+ // 口径:code flow 徽标用 CV_CHG_LABEL(delete=「删」/keep=「复用」),不是 BD_CHANGE 的「删除/涉及」
     expect(b({ change: "delete" }, "cv-chg")).toContain(">删<");
     expect(b({ change: "keep" }, "cv-chg")).toContain("复用");
     expect(b({ change: "keep" }, "cv-chg")).not.toContain("涉及");
@@ -252,7 +252,7 @@ describe("code 板工程师图形态", () => {
   it("2026-10-29 逻辑层口径:modify/delete 卡加一行 .cv-before(「现状:…」),keep/add 不出", async () => {
     // 渲染函数存在 + 卡内接入位置(代码框下方、卡脚 cv-file-foot 之上)
     expect(src).toContain("function cvBeforeHtml(n)");
-    expect(src).toContain("cvBeforeHtml(n) : \"\") +\n      // 2026-10-29 仓库关系上屏");
+    expect(src).toContain("cvBeforeHtml(n) : \"\") +\n      // 仓库关系上屏");
     // 带 before 的卡把代码行显示从 4 降到 3(卡高 176 不变,before 不挤掉 flow 行;cvCodeLines 上限不动)
     expect(src).toContain("cvCodeLines(n).slice(0, cvBeforeHtml(n) ? 3 : 4)");
     // 样式:字号 ≥10px、颜色走已有令牌
@@ -285,7 +285,7 @@ describe("code flow 测试文件锚点剥到侧栏(2026-10-29)", () => {
     expect(src).toContain("function cvCodeFlowTestAnchor(n)");
     expect(src).toContain("if (cvCodeFlowTestAnchor(n)) return true;");
     const f = await flowSideFn();
-    // 正例:function + 测试路径 + 空 flow(实测 tm-t1「board-read 单测」形态)
+ // 正例:function + 测试路径 + 空 flow(经验证 tm-t1「board-read 单测」形态)
     expect(f({ kind: "function", targets: ["apps/gateway/test/board-read-dedup.test.ts"], flow: [] })).toBe(true);
     // 正例:module + __tests__ + 有 flow 但不是函数调用形(断言式文本)
     expect(f({ kind: "module", symbolRef: { file: "src/__tests__/x.ts" }, flow: [{ type: "step", text: "expect(a).toBe(1)" }] })).toBe(true);
@@ -343,7 +343,7 @@ async function fileFootFn(): Promise<{ name: (t: unknown) => string; foot: (n: u
   const src = [
     extractFn(html, "cvFileNameOf"), extractFn(html, "cvChangeBadge"),
     extractFn(html, "cvTargetTitle"), extractFn(html, "cvFileBaseOf"), extractFn(html, "cvFileFootHtml"),
-    // 2026-11-05:E1 回归暴露——cvFileFootHtml 新增 targets 悬浮全文(cvTargetTitle)与 symbolRef chip
+ // E1 回归暴露——cvFileFootHtml 新增 targets 悬浮全文(cvTargetTitle)与 symbolRef chip
     // basename(cvFileBaseOf)两个同文件依赖;沙箱没抽它们就 ReferenceError(不是功能坏了)。
     extractFn(html, "cvTargetTitle"), extractFn(html, "cvFileBaseOf"),
   ].join(String.fromCharCode(10));
@@ -360,7 +360,7 @@ async function changeBadgeFn(): Promise<(n: unknown, extra?: string, pillOnly?: 
     { add: "新增", modify: "改", delete: "删", keep: "复用" },
   ) as (n: unknown, extra?: string, pillOnly?: boolean) => string;
 }
-/** 2026-10-29 测试文件锚点:真跑 cvCodeFlowSide(内含 cvCodeFlowTestAnchor)。 */
+/** 测试文件锚点:真跑 cvCodeFlowSide(内含 cvCodeFlowTestAnchor)。 */
 async function flowSideFn(): Promise<(n: unknown) => boolean> {
   const html = await panelHtml();
   const src = [
@@ -368,7 +368,7 @@ async function flowSideFn(): Promise<(n: unknown) => boolean> {
   ].join(String.fromCharCode(10));
   return new Function(src + String.fromCharCode(10) + "return cvCodeFlowSide;")() as (n: unknown) => boolean;
 }
-/** 2026-10-29 逻辑层口径:`.cv-before` 渲染(modify/delete 才出、1 行 ≤48 字截断)。 */
+/** 逻辑层口径:`.cv-before` 渲染(modify/delete 才出、1 行 ≤48 字截断)。 */
 async function beforeFn(): Promise<(n: unknown) => string> {
   const html = await panelHtml();
   const src = extractFn(html, "cvBeforeHtml");
@@ -377,7 +377,7 @@ async function beforeFn(): Promise<(n: unknown) => string> {
   ) as (n: unknown) => string;
 }
 
-/** 2026-11-05 板头层统计(排除 ph- 阶段卡与 __cv_current 合成基线的口径) */
+/** 板头层统计(排除 ph- 阶段卡与 __cv_current 合成基线的口径) */
 async function layerStatsFn(): Promise<(d: unknown) => { keep: number; chg: number; anchor: number; total: number }> {
   const html = await panelHtml();
   const src = extractFn(html, "cvLayerStats");

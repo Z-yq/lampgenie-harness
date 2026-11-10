@@ -12,7 +12,7 @@ import { composeSystemPrompt, skillDescriptionTruncations } from "../src/agent/s
 
 const CJK = "常驻提示词分块归因:每次改动都要看得见它占到多少 token,不能靠猜。";
 
-describe("M130 clampSkillDescription", () => {
+describe(" clampSkillDescription", () => {
   it("clamp 边界:59/60 不截断,61 截断并加可见省略号", () => {
     const d59 = "a".repeat(59);
     const d60 = "a".repeat(60);
@@ -54,7 +54,7 @@ describe("M130 clampSkillDescription", () => {
   });
 });
 
-describe("M130 buildFootprint", () => {
+describe(" buildFootprint", () => {
   it("footprint 分类/汇总/share/top", () => {
     const report = buildFootprint({
       sections: [
@@ -133,7 +133,7 @@ describe("M130 buildFootprint", () => {
   });
 });
 
-describe("M130 diffFootprint 字节断言", () => {
+describe(" diffFootprint 字节断言", () => {
   const base = {
     sections: [
       { id: "identity", category: "stable", text: "你是管家。" },
@@ -208,7 +208,7 @@ describe("M130 diffFootprint 字节断言", () => {
   });
 });
 
-describe("M130 manifest 解析", () => {
+describe(" manifest 解析", () => {
   it("manifest 未知 category 归 other,tools/toolset 一并解析", () => {
     const parsed = parseFootprintManifest(
       JSON.stringify({
@@ -243,7 +243,7 @@ describe("M130 manifest 解析", () => {
   });
 });
 
-describe("M130 system-composer 接线:渲染字节不变 + truncations", () => {
+describe(" system-composer 接线:渲染字节不变 + truncations", () => {
   const index = [
     { category: "coding", name: "short", description: "短描述" },
     { category: "coding", name: "edge60", description: "a".repeat(60) },
@@ -251,7 +251,7 @@ describe("M130 system-composer 接线:渲染字节不变 + truncations", () => {
     { category: "coding", name: "long-cjk", description: "中".repeat(80) },
   ];
 
-  /** 旧实现(M130 之前)的逐字复刻,作为字节基线。 */
+ /** 旧实现(之前)的逐字复刻,作为字节基线。 */
   function legacyRender(idx: { category: string; name: string; description: string }[]): string {
     if (idx.length === 0) return ["# 经验索引", "(当前为空;任务中发现可复用做法或坑,用 experience_fold 沉淀)"].join("\n");
     const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看;发现经验有误用 experience_fold 修正)"];

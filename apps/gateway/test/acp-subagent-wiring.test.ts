@@ -1,5 +1,5 @@
 /**
- * step-117 接线验证:spawn_subagent(backend="acp") 经 agent-wiring 的最小 branch,
+ * 接线验证:spawn_subagent(backend="acp") 经 agent-wiring 的最小 branch,
  * 真实驱动 mock ACP adapter(协议级),并验证 journal 记录 ACP 会话 id。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("acp-subagent-wiring"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -18,7 +18,7 @@ afterAll(() => { releaseEnvLock("acp-subagent-wiring"); });
 
 const mockAdapter = join(dirname(fileURLToPath(import.meta.url)), "../../../packages/harness-executors/test/fixtures/mock-acp-adapter.mjs");
 
-describe("spawn_subagent ACP 接线(step-117)", () => {
+describe("spawn_subagent ACP 接线", () => {
   it("backend=acp + adapter → ACP 后端真跑;journal 落 backend=acp 与 acp.session", async () => {
     process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }]);
     mkdtempSync(join(tmpdir(), "acp-wire-")); // 触发 tmp 目录存在;workdir 由 harness 注入

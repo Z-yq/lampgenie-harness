@@ -16,7 +16,7 @@ import { buildMainLoopPermission } from "../src/agent-wiring.js";
 import { AgentLoop, type AgentLoopOptions, type Tool } from "@lampgenie/runtime/agent/loop";
 import { MemoryJournal, type PermissionRule } from "@lampgenie/core";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("file-tools"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
@@ -87,14 +87,14 @@ describe("read_file", () => {
     expect(await exec("read_file", { path: "blob.bin" })).toContain("二进制");
   });
 
-  it("超长行截断不产生孤立代理(2026-10-29 DeepSeek 400 实锤回归:第 2000 字符切在代理对中间)", async () => {
+  it("超长行截断不产生孤立代理(2026-10-29 DeepSeek 400 实测确认回归:第 2000 字符切在代理对中间)", async () => {
     const root = mk();
     // 1999 个 BMP 字符 + 🎙(U+1F399=D83C DF99)截在第 2000 个 code unit(高位)上
     const longLine = "中".repeat(1999) + "🎙" + "尾部";
     writeFileSync(join(root, "long.md"), longLine + "\nsecond line\n", "utf-8");
     const { exec } = toolsOf(root);
     const out = await exec("read_file", { path: "long.md" });
-    expect(out).toContain("字符已截断"); // M136:标记改「…(+N 字符已截断)」(计入 2000 额度)
+    expect(out).toContain("字符已截断"); // :标记改「…(+N 字符已截断)」(计入 2000 额度)
     expect(hasLoneSurrogate(out)).toBe(false);
   });
 });
@@ -328,7 +328,7 @@ describe("grep", () => {
     expect(hit).not.toContain("code_sense");
   });
 
-  it("content 行截断(200 字符)切在 emoji 代理对中间不产生孤立代理(2026-10-29 DeepSeek 400 实锤回归)", async () => {
+  it("content 行截断(200 字符)切在 emoji 代理对中间不产生孤立代理(2026-10-29 DeepSeek 400 实测确认回归)", async () => {
     const root = mk();
     // 复刻事故:AGENTS.md:152 行 603 code units,trim 后第 200 个 code unit 恰是 🎙 高位 D83C
     const line = "x".repeat(193) + "框呼吸);小按钮 🎙 删除(避免两个语"; // 199 BMP + 🎙 = 第 200 是高位
@@ -352,7 +352,7 @@ function hasLoneSurrogate(s: string): boolean {
 }
 
 describe("权限链对拍(permission-passing 同形态:主 loop 闸门 × 文件写类)", () => {
-  /** 单工具一 turn:llm 首步发该工具调用,次步收口;返回 journal 与工具结果文本。 */
+ /** 单工具一 turn:llm 首步发该工具调用,次步;返回 journal 与工具结果文本。 */
   async function runOneTool(name: string, args: unknown, perm: PermOption, root: string) {
     const journal = new MemoryJournal();
     const tools: Tool[] = createFileTools({ root, journal, sessionId: "s1" });

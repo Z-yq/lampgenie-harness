@@ -1,11 +1,9 @@
 /**
  * 唯一 token 估算 + 标定模块。
- *
  * 组成：
  *  1) 真分词器（cl100k_base BPE，ranks 走外部资产 `assets/tokenizer/cl100k_base.json`，不内联进 bundle）
  *     懒加载单例；任何一步失败 → 永久 fallback（CJK 1.95/字、其它 0.25/字，ceil），只 warn 一次。
  *  2) 标定层：用 provider 上报 usage 学习「分词器原始计数 → 真实 token」的比例 ratio（输入 / 输出各一条）。
- *
  * 约定：所有导出函数永不抛。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -13,7 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GptEncoding } from "gpt-tokenizer/GptEncoding";
 
-/** 分块编码的块大小（字符）。整段 encode 与分块累加实测误差 < 0.1%。 */
+/** 分块编码的块大小（字符）。整段 encode 与分块累加经验证误差 < 0.1%。 */
 const CHUNK_CHARS = 4000;
 /** rawTokens 结果缓存上限，超出清掉一半（LRU-lite）。 */
 const RAW_CACHE_LIMIT = 4000;

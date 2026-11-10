@@ -1,5 +1,5 @@
 /**
- * 插件安装闸门(M135 A 段)集成测试:pin / kill list / consent 加载态 / host 降级 / ABI 拒装。
+ * 插件安装闸门( A 段)集成测试:pin / kill list / consent 加载态 / host 降级 / ABI 拒装。
  * 全部用临时根目录自建 user catalog,不依赖官方市场快照。
  */
 import { describe, it, expect } from "vitest";

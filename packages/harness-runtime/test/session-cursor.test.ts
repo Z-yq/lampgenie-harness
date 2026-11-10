@@ -197,8 +197,7 @@ describe("parseCursor 解析", () => {
   it("nextBeforeSeq 类型错 → INVALID", () => {
     const envelope = issueAt(100);
     expect(
-      parseCursor({ payload: { ...envelope.payload, nextBeforeSeq: "5" }, signature: envelope.signature }).code,
-    ).toBe("CURSOR_INVALID");
+      parseCursor({ payload: { ...envelope.payload, nextBeforeSeq: "5" }, signature: envelope.signature }).code).toBe("CURSOR_INVALID");
   });
 
   it("非游标 JSON(查询体)当游标 → INVALID", () => {

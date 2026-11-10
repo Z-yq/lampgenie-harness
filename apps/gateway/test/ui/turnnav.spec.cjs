@@ -1,7 +1,7 @@
-/** UI 实测:step-045 完整版轮次导航器(条目=轮数/点击跳转/滚动高亮)。
- *  2026-10-14 形态迁移:#turnNav 自聊天列右缘浮层迁入 footer——横向时间轴(刻度高度=问句长度),
+/** UI 经验证: 完整版轮次导航器(条目=轮数/点击跳转/滚动高亮)。
+ * 形态迁移:#turnNav 自聊天列右缘浮层迁入 footer——横向时间轴(刻度高度=问句长度),
  *  新增检查:footer 归属/横向排布/长会话溢出+当前刻度居中/失败轮红刻度。 */
-process.env.GENIE_CHECKPOINT = "off"; // 测试提速(产线默认开)
+process.env.GENIE_CHECKPOINT = "off"; // 测试提速(生产环境默认开)
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -35,7 +35,7 @@ const { join } = require("node:path");
 
   for (const txt of ["第一轮问题探针", "第二轮问题探针", "第三轮问题探针"]) {
     await page.fill("#instruction", txt);
-    // 2026-10-14:#go 在 1400x900 视口被在途 companion-widget 的 cw-audiorow 停靠层拦截
+ // #go 在 1400x900 视口被在途 companion-widget 的 cw-audiorow 停靠层拦截
     // (未提交在途面,非本 spec 对象)——改走 Enter 提交(composer 一等路径,panel.ts onkeydown)。
     await page.keyboard.press("Enter");
     await page.waitForTimeout(1400);
@@ -89,7 +89,7 @@ const { join } = require("node:path");
   });
   check("真实路径满条(3/3 全亮)", litReal.ok === 3 && litReal.n === 3, JSON.stringify(litReal));
 
-  // ---- 2026-10-14 footer 融入形态 ----
+ // ---- footer 融入形态 ----
   const home = await page.evaluate(() => {
     const nav = document.getElementById("turnNav");
     return { inFooter: !!nav.closest("footer"), inView: !!nav.closest("#view-tasks") };
@@ -104,7 +104,7 @@ const { join } = require("node:path");
   });
   check("横向排布(底对齐,自左向右)", horiz.sameBase && horiz.xAsc && horiz.row, JSON.stringify(horiz));
 
-  // 长会话:150 轮溢出,滚到底后当前刻度居中(scrollLeft>0)且不拽动主视口(step-048 语义)
+ // 长会话:150 轮溢出,滚到底后当前刻度居中(scrollLeft>0)且不拽动主视口(语义)
   await page.evaluate(() => {
     const evs = [];
     for (let i = 1; i <= 150; i++) {

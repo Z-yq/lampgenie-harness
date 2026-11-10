@@ -1,5 +1,5 @@
 /**
- * M108 写后诊断升级:写前 baseline + 只报新增 ERROR。
+ * 写后诊断升级:写前 baseline + 只报新增 ERROR。
  * 用 fake LSP(.py)+ 注入内容做真 checker 往返;纯函数层(subtractBaseline / renderDiagnostics)直测。
  */
 import { afterAll, describe, it, expect } from "vitest";

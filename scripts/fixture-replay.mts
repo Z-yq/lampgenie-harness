@@ -1,10 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * 夹具录制/回放 CLI(#110)。
- *
  * 用法:
  *   tsx scripts/fixture-replay.mts --root <dir> --scope <name> [动作]
- *
  * 动作(每次调用只做一件,按下面顺序取第一个命中的):
  *   --refresh              删夹具文件(刷新 = 删文件重录)
  *   --report               报告单个 scope,或(不给 --scope)列出目录里全部夹具
@@ -12,14 +10,12 @@
  *   --replay <file>        回放一条请求(JSON ExpectedRequest,或 {request:...})
  *   --record <file>        录制一条 {request,response,at?};命中密钥拒绝写盘并保留旧文件
  *   --close                关闭 scope:used==total 才成功
- *
  * 其它参数:
  *   --root <dir>           仓库/任务根(<root>/.genie/fixtures/<name>.json),必填
  *   --scope <name>         scope 名,除「--report 列全部」外必填
  *   --env <file>           凭据值来源:JSON 对象(按 credential-like 变量名过滤)或字符串数组;缺省扫 process.env
  *   --passthrough          显式放行(不打夹具、不录制),退出码 0
  *   --help                 打用法
- *
  * 退出码:0 成功(含 passthrough);1 夹具语义失败(MISMATCH / INCOMPLETE / SECRET_DETECTED /
  * REPLAY_MISSING / INVALID / NOT_FOUND);2 参数错误或 IO 失败(FIXTURE_STORE_ERROR)。
  * stdout 一行 JSON(不含 scope 全文,只带 summary),stderr 给人读的失败原因。

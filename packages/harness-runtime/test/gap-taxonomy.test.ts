@@ -110,8 +110,7 @@ describe("默认分类法", () => {
 
   it.each([...GAP_CATEGORIES])("%s 至少一条 context 条目", (category) => {
     expect(
-      DEFAULT_TAXONOMY.filter((item) => item.gapCategory === category && item.form === "context").length,
-    ).toBeGreaterThanOrEqual(1);
+      DEFAULT_TAXONOMY.filter((item) => item.gapCategory === category && item.form === "context").length).toBeGreaterThanOrEqual(1);
   });
 
   it.each([...GAP_CATEGORIES])("%s 至少一条通配条目(trigger 全空)", (category) => {

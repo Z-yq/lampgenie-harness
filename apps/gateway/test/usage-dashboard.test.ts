@@ -1,5 +1,5 @@
 /**
- * 用量仪表盘归约测试(step-049):computeUsageDashboard 吃 MemoryJournal 造数据——
+ * 用量仪表盘归约测试:computeUsageDashboard 吃 MemoryJournal 造数据——
  * 验证按天分组 / token 求和 / 任务时间窗归属 / 窗口裁剪 / 纯函数确定性。
  * 事件形态对齐生产:task.* payload=Task 快照(app.ts onChange 落 journal),
  * message.agent payload 带 usage{inputTokens,outputTokens,totalTokens,cachedTokens?}。
@@ -65,7 +65,7 @@ function buildJournal(): MemoryJournal {
   return j;
 }
 
-describe("computeUsageDashboard(step-049 用量仪表盘)", () => {
+describe("computeUsageDashboard(用量仪表盘)", () => {
   it("按天分组:任务数/token 求和/步骤/工具落对应自然日,空日补零", () => {
     const dash = computeUsageDashboard(buildJournal(), 30);
     expect(dash.days).toHaveLength(30);

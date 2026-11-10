@@ -1,5 +1,5 @@
 /**
- * 使用统计归约(step-046,ZCode UsageStatistics 对齐):journal 全量离线归约成面板可渲染的摘要。
+ * 使用统计归约(ZCode UsageStatistics 对齐):journal 全量离线归约成面板可渲染的摘要。
  * 纯函数无外部依赖——同一份 journal 重复计算结果恒定(测试可锚定)。
  */
 import type { Journal } from "@lampgenie/core";
@@ -26,13 +26,13 @@ export interface StatsSummary {
   sessions: { sessionId: string; turns: number; tokens: number; llmCalls: number; toolCalls: number; lastAt: number; tasks: number }[];
   /** 模型维度 token 消耗(message.agent 无模型名时归 unknown)。 */
   byModel: { model: string; calls: number; tokens: number }[];
-  /** 工具维度调用次数(step-047)。 */
+ /** 工具维度调用次数。 */
   byTool: { name: string; calls: number }[];
-  /** 活跃度(step-047,ZCode 使用统计 活跃度卡):峰值 token/连续天数。 */
+ /** 活跃度(ZCode 使用统计 活跃度卡):峰值 token/连续天数。 */
   activity: { peakTokens: number; currentStreak: number; longestStreak: number };
-  /** 系统健康度(step-047):近次 LLM 调用的 decode 速度(outputTokens/耗时秒)。 */
+ /** 系统健康度:近次 LLM 调用的 decode 速度(outputTokens/耗时秒)。 */
   health: { samples: { t: number; tps: number }[]; avgTps: number };
-  /** 本地额度(step-048,ZCode 额度卡对齐):今日/本周 token + 周预算与重置时刻。 */
+ /** 本地额度(ZCode 额度卡对齐):今日/本周 token + 周预算与重置时刻。 */
   quota: { today: number; week: number; budget: number; resetAt: number; weekStartAt: number };
   generatedAt: number;
 }
@@ -187,7 +187,7 @@ function dayKey(ts: number): string {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
-// ---- 用量仪表盘(step-049,refs: ZCode usage dashboard 语义移植):按天×按任务两级归约,纯函数零 IO ----
+// ---- 用量仪表盘(refs: ZCode usage dashboard 语义移植):按天×按任务两级归约,纯函数零 IO ----
 
 /** 单日用量聚合(面板条形图一行)。 */
 export interface UsageDay {

@@ -1,7 +1,6 @@
 /**
  * 任务卡进度段契约(panel 侧栏任务行):后端可选 task.progress = {phase?,step?,note?,at?}
  * 经 task.index 下发,前端 tasks Map 无类型 → 全防御式读取。零协议改动、零后端改动。
- *
  * 取码 harness 照抄 panel-ide-deep.test.ts / panel.test.ts:servePanel 取真实面板 HTML,
  * extractFn 花括号配平切出函数源码,new Function 求值后按真实行为断言(不 mock DOM)。
  */

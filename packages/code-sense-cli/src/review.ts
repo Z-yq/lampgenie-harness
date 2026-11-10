@@ -1,7 +1,6 @@
 /**
  * codesense review 指令:把 code-sense 自研评审引擎(packages/code-sense/src/review)
  * 封装为 CLI 形态——人(markdown)/agent(--json)双格式,CI 门禁退出码。
- *
  * 同源纪律:本文件是薄适配,评审行为(target 解析/确定性层/反模式/深审编排/防幻觉/
  * 引用孤儿闸/行级回写店/全文件扫描/会话续跑)全部在引擎 codeReview() 单点;CLI 与
  * gateway code_review 工具共享同一引擎,差异只在包装面。
@@ -89,8 +88,7 @@ function resolveScanOptions(
   p: ParsedArgs,
   scanPath: string | undefined,
   baseline: ReviewSession | null,
-  inherit: boolean,
-): ScanOptions {
+  inherit: boolean): ScanOptions {
   const base = inherit && baseline?.kind === "scan" ? baseline.target.scan : undefined;
   const include = globList(p, "include");
   const exclude = globList(p, "exclude");
@@ -162,7 +160,7 @@ export async function reviewCommand(p: ParsedArgs, opts: ReviewCmdOpts): Promise
     if (opts.llmOverride) {
       llm = opts.llmOverride;
     } else {
-      // 凭证链 flag > env > config > ask-file(step-105,与 sensing/api 语义层同构);
+ // 凭证链 flag > env > config > ask-file(与 sensing/api 语义层同构);
       // fail-visible:--deep 缺凭证不静默降级(exit 2 由调用方按 UsageError 处理;
       // 部分凭证形态错=LlmConfigError 上抛,CLI 同档 exit 2)
       const flags = pickLlmFlags(p);

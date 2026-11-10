@@ -1,15 +1,14 @@
 /**
- * 跳板机网页登录执行器(designs/09 §5,二期):
+ * 跳板机网页登录执行器( §5,二期):
  * node-agent 内置网页会话执行器——录制登录脚本(凭证经节点本地解析注入)→ 按序执行 → 输出回放校验。
  * 网页类用浏览器自动化(playwright 系)封装为 backend;playwright 不是本仓依赖——
  * driver 按注入进来的接口调用(测试用 FakeDriver/NoopDriver,生产由部署侧注入 playwright 系驱动)。
- *
- * 凭证红线(designs/05 值不过 relay 同源):{{cred:NAME}} 占位只在执行到该步时经
+ * 凭证红线(值不过 relay 同源):{{cred:NAME}} 占位只在执行到该步时经
  * resolveCredential 现场解析;值不进脚本原文、不进日志(日志恒记未解析原文)、
  * 不进输出回流(output 做值擦除)。缺引用 = typed 错误 fail-visible,不猜。
  */
 
-/** 录制脚本的一步(designs/09 §5 步集)。 */
+/** 录制脚本的一步( §5 步集)。 */
 export type JumpWebStep =
   | { type: "goto"; url: string }
   | { type: "fill"; selector: string; value: string }
@@ -86,7 +85,7 @@ function parseScript(script: unknown): { steps?: JumpWebStep[]; invalid?: string
       return { invalid: "script 为字符串但不是合法 JSON" };
     }
   }
-  if (!Array.isArray(raw)) return { invalid: "script 必须是步骤数组(designs/09 §5 录制脚本)" };
+  if (!Array.isArray(raw)) return { invalid: "script 必须是步骤数组( §5 录制脚本)" };
   const steps: JumpWebStep[] = [];
   for (let i = 0; i < raw.length; i++) {
     const s = raw[i] as unknown;
@@ -292,8 +291,7 @@ export class FakeDriver implements JumpWebDriver {
   constructor(
     private readonly page: string = "",
     /** 每个驱动调用的副作用钩子(返回 promise 则被 await——挂起/延迟用)。 */
-    private readonly behavior?: (method: string, args: unknown[]) => Promise<void> | void,
-  ) {}
+    private readonly behavior?: (method: string, args: unknown[]) => Promise<void> | void) {}
 
   private async record(method: string, args: unknown[]): Promise<void> {
     this.calls.push({ method, args });
@@ -346,7 +344,7 @@ export interface JumpWebHostOptions {
   log?: (line: string) => void;
 }
 
-/** 跳板机网页登录执行器宿主:node-agent execute 注入面适配(designs/09 §5)。 */
+/** 跳板机网页登录执行器宿主:node-agent execute 注入面适配( §5)。 */
 export class JumpWebHost {
   constructor(private readonly opts: JumpWebHostOptions) {}
 

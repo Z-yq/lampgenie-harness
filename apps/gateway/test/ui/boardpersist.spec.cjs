@@ -1,4 +1,4 @@
-/** 白板会话级落盘(2026-10-14 用户口径「session 里的白板数据要跟着 session 落盘」+「刷新/再登录后点开没内容」):
+/** 白板会话级落盘( +「刷新/再登录后点开没内容」):
  * 手绘批注无语义板时落 <sid>/__session__.overlay.png(服务端);判据=清掉 localStorage 草稿后刷新、
  * 重新展开批注框仍能恢复(证明恢复自服务端 overlay 而非浏览器草稿;批注框刷新后默认收起,
  * 恢复时机=展开,wbResize→wbRestore 补画),且跨会话隔离。真实 chromium + 真实 gateway(PANEL_BASE)。 */
@@ -8,7 +8,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
 (async () => {
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-proxy-server"] });
   const page = await browser.newPage({ viewport: { width: 1400, height: 1600 } });
-  page.setDefaultTimeout(20000); // 高载环境快速失败(2026-10-14 实证:共享机高载下渲染器饥饿会把无超时协议调用挂死)
+  page.setDefaultTimeout(20000); // 高载环境快速失败(验证:共享机高载下渲染器饥饿会把无超时协议调用挂死)
   page.on("dialog", (d) => { console.log("[bp] DIALOG:", d.type(), String(d.message()).slice(0, 80)); d.dismiss().catch(() => {}); }); // 模态弹窗=渲染器协议调用全排队,必须有人接
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 120)));
@@ -30,7 +30,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
     let nz = 0; for (let i = 3; i < d.length; i += 40) if (d[i] !== 0) nz++;
     return nz;
   });
-  // 进白板视图并展开批注框(用户真实动作序列;草稿键 2026-10-14 起按 (会话,板) 隔离)
+ // 进白板视图并展开批注框(用户真实动作序列;草稿键 起按 (会话,板) 隔离)
   const openBoardAndSketch = async () => {
     await page.click("#act-board");
     await page.waitForTimeout(600);

@@ -2,10 +2,8 @@
  * 工具版本钉扎持久层(生产侧,#207 工具会话钉扎 2026-11):把 tool-version-pin 的纯逻辑
  * 落到 append-only jsonl,让「这次会话把每个工具钉在哪个版本、什么时候升过、关没关、
  * 历史调用按哪个 schema 回放」成为可复核的事实。
- *
  * 为什么 append-only:钉扎台账是排查的最后一根绳子——「当时钉的是 1.0.0」不能被后来的写入覆盖;
  * 单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言。
- *
  * 数据面:`<root>/.genie/rsi/tool-pins.jsonl`,每行 `{v:1,type,at,sessionId,...}`
  * - `at` 统一是 ISO 字符串(审计人读),协议纯函数要的毫秒数由 `Date.parse(line.at)` 反推;
  *   调用方传 `at` 时给毫秒数,落盘归一成 ISO。
@@ -14,12 +12,10 @@
  * - call    {callId,tool,version,args,traceBatchKey?}    一次调用,version 是钉扎解析出来的,不是调用方给的
  * - upgrade {tool,from,to,by,confirmed:true}             会话内升级留痕(未确认的升级不会出现在这里)
  * - close   {sessionId}                                  会话关闭
- *
  * 关于第四种行类型 `close`(对任务书三种类型的必要补充):create/call/upgrade 只能表达
  * 「会话开着、钉着、升过」,而「会话已关闭 → 不再接受新调用/新升级」是协议里
  * TOOL_PIN_SESSION_LOCKED 的判据来源,必须有落点;否则投影永远算不出 status="closed",
  * 关闭后的调用会被静默接受。故以 `close` 行承载,语义等价于协议 pins.status="closed"。
- *
  * 投影语义(loadPins):按行序归并。
  * - create 建会话(带 catalog 快照与 versions);同 sessionId 重复 create 行视为坏行(create 是「会话开启一次」)。
  * - upgrade 更新该会话 versions 并追加 upgrades(无 create 前置 → 坏行)。
@@ -27,10 +23,8 @@
  * - call 直接累积(调用历史不依赖会话是否还开着)。
  * 坏行(JSON 坏 / v 不是 1 / type 未知 / 缺载荷 / at 不可解析)只计入 parseErrors 与 badLines
  * (1-based 行号)并跳过:一行坏不整文件失效、不 throw。
- *
  * replay 不回退落盘快照:catalog 一律用调用方的入参。快照只是审计痕迹,若 replay 偷偷回落到
  * 快照,「catalog 里删掉旧 schema → SCHEMA_MISSING」这个最重要的报警就永远演示不出来。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(两跳惰性解析:先包 spec,vitest 的
  * `--conditions=development` 走 src 入口;`node --experimental-strip-types` 直接跑 CLI 时
  * spec 解析不到 dist,回退仓内相对 src URL)。不 import agent loop、不 import gateway 其余业务模块。

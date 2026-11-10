@@ -1,8 +1,8 @@
-/** UI 实测 step-070(R5-C6 根治):WS 断线→指数退避重连→session.history 增量重放(幂等);
+/** UI 经验证 (根治):WS 断线→指数退避重连→session.history 增量重放(幂等);
  *  server kill→重启 不整页 reload(window 探针标记存活);「重连中」角标;连续失败退回 svcWaitRestart 保底。
- *  跑法(一次一个 chromium,不碰产线 7700):
+ * 跑法(一次一个 chromium,不碰生产环境 7700):
  *    cd apps/gateway && GENIE_CHECKPOINT=off npx tsx test/ui/wsreconnect.spec.cjs
- *  截图组落 tasks/step-070-ws-resilience/shots/(正常/重连角标/恢复后 × 1440x900/1280x800/1920x1080 + 1024 窄窗)。 */
+ * 截图组落 (正常/重连角标/恢复后 × 1440x900/1280x800/1920x1080 + 1024 窄窗)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -12,7 +12,7 @@ const { join } = require("node:path");
 const net = require("node:net");
 
 const PORT = Number(process.env.SELF_PORT || 7768); // 7849/7797 是并发会话端口(step.md 避让清单),勿用
-const SHOTS = join(__dirname, "..", "..", "..", "..", "tasks", "step-070-ws-resilience", "shots");
+const SHOTS = join(__dirname, "..", "..", "..", "..", "tasks", "-ws-resilience", "shots");
 const timeline = []; // 重连时间线留证(D4):{t, ev}
 const T0 = Date.now();
 const mark = (ev) => { timeline.push({ t: Date.now() - T0, ev }); };
@@ -177,7 +177,7 @@ const mark = (ev) => { timeline.push({ t: Date.now() - T0, ev }); };
   check("server 重启后自动重连", await waitConn("重连成功", 25000));
   mark("场景二 reconnect ok");
   check("reload 未触发(标记 43 存活)", (await page.evaluate(() => window.__rcProbeMark)) === 43);
-  await page.waitForTimeout(1500); // 追平拍(step-070 wsOnOpen 内 1.5s/4s 增量追平)
+  await page.waitForTimeout(1500); // 追平拍( wsOnOpen 内 1.5s/4s 增量追平)
   check("二次重连后消息甲仍=1(重放幂等)", (await page.locator(".user-line", { hasText: "断线前消息甲" }).count()) === 1);
   check("二次重连后消息乙仍=1", (await page.locator(".user-line", { hasText: "断连窗口消息乙" }).count()) === 1);
   // 恢复后截图组
@@ -210,7 +210,7 @@ const mark = (ev) => { timeline.push({ t: Date.now() - T0, ev }); };
   check("控制台零错误", errs.length === 0, errs.slice(0, 2).join(" | "));
   await browser.close();
   await stopStack();
-  writeFileSync(join(__dirname, "..", "..", "..", "..", "tasks", "step-070-ws-resilience", "reconnect-timeline.json"),
+  writeFileSync(join(__dirname, "..", "..", "..", "..", "tasks", "-ws-resilience", "reconnect-timeline.json"),
     JSON.stringify({ spec: "wsreconnect", port: PORT, startedAt: new Date(T0).toISOString(), timeline, results }, null, 2));
   rmSync(jd, { recursive: true, force: true });
   const fails = results.filter((r) => !r.ok);

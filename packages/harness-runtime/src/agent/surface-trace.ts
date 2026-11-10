@@ -1,12 +1,10 @@
 /**
  * 表面替换溯源契约(surface trace):纯逻辑、零 IO。
- *
  * 为什么需要这一层:压缩、裁剪、offload、上下文代替换都会**改写已有消息**。如果这些改写
  * 不带「来源」与「覆盖节点」的声明,会出三类静默事故:
  * ① 历史丢行——被覆盖的消息从视图里消失,但没有任何记录说明它去哪了,journal 无法复盘;
  * ② tool_call / tool_result 配对断裂——只替换了配对的一端,模型看到悬空的 half-pair;
  * ③ 并发压缩基于旧 surface 提交——两个压缩者各自基于第 N 代内容写回,后写者覆盖新内容。
- *
  * 契约(本模块只做判定与投影,不做 IO):
  * - 一切 message-producing 事件必须带 `surfaceOp`:`append`(新行)或 `replace`(改写已存在内容);
  * - `replace` 必须声明 `sourceEventSeqs`:非空、逐个唯一、**只引用更早事件**(seq 全 < 自身 seq)、
@@ -17,7 +15,6 @@
  *   前者对不上当前代际就是 `SURFACE_GENERATION_STALE`(并发覆盖),后者必须是前者 + 1;
  * - 人读转录只取 append-origin 事件(被 shadow 的不出现在「发生过什么」的线里);
  * - 派生缓存(索引/摘要/记号统计)按 `contentGeneration` 重建,而不是猜。
- *
  * 投影语义:被 replace 的原事件**不删除**,只进 shadowed——journal 保留全部历史行,
  * 视图(transcript)才按 shadow 收窄。所有函数纯函数、不改入参、不抛异常(非法输入折叠成稳定码)。
  */
@@ -294,8 +291,7 @@ export function validateEvent(
  */
 export function applySurfaceEvent(
   state: SurfaceState,
-  event: SurfaceEvent,
-): { state: SurfaceState; codes: string[] } {
+  event: SurfaceEvent): { state: SurfaceState; codes: string[] } {
   const base = coerceState(state);
   if (!isRecord(event)) {
     return { state: base, codes: ["SURFACE_INVALID"] };

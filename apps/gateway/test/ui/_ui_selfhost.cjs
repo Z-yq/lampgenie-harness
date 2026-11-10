@@ -1,4 +1,4 @@
-/** UI spec 通用自启跑法(2026-10-14 子代理过程卡/渲染修复轮):不碰产线 7700,自起临时端口实例后原地运行 spec。
+/** UI spec 通用自启跑法(子代理过程卡/渲染):不碰生产环境 7700,自起临时端口实例后原地运行 spec。
  * 形态学 _board_selfhost.cjs;spec 若需定制装配(executor/llm),放 --opts 模块导出 createGatewayApp 选项。
  * 用法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs [--opts ./xx.opts.cjs] test/ui/<spec>.cjs
  * (SELF_PORT 可改端口,默认 7716;spec 末尾 process.exit 收尾为既有约定,临时目录随进程尽力清) */
@@ -17,7 +17,7 @@ const PORT = Number(process.env.SELF_PORT || 7716);
 
 (async () => {
   // 动态 import(ESM)而非 require:app.ts 依赖链里有顶层 await(sense-index-manager),
-  // tsx 对 .cjs 入口的同步 require 会按 CJS 转译并拒绝 TLA(2026-10-26 tsx 4.23 复现)。
+ // tsx 对 .cjs 入口的同步 require 会按 CJS 转译并拒绝 TLA( tsx 4.23 复现)。
   const { createGatewayApp } = await import("../../src/app.ts");
   const { servePanel } = await import("../../src/panel.ts");
   const jd = mkdtempSync(join(tmpdir(), "uiself-"));

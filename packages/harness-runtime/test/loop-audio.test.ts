@@ -1,5 +1,5 @@
 /**
- * 语音直入 derive 契约(2026-10-21 音频链路优化):journal 全量落 audio,deriveMessages 只保留
+ * 语音直入 derive 契约(音频链路优化):journal 全量落 audio,deriveMessages 只保留
  * **最新一条**带音频的 user 消息(历史轮音频降级为文本占位)——防多轮全量回放请求被 b64 撑爆;
  * 无音频消息/images 映射零变化。
  */

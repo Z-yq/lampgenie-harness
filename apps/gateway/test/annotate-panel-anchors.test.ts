@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** 截图标注面板锚点(2026-10-29):取屏偏移修复 + 录音评论提交链。
+/** 截图标注面板锚点:取屏偏移修复 + 录音评论提交链。
  * 面板 UI 全在 panel.ts 模板字符串内,这里直接读源码文本断言结构性锚点(同 annotate-submit.test.ts 风格)。
  * 锁四件事:①取屏换算走共用换算层、不再拿位图 device px 当上界;②桌面壳真进全屏分支;
  * ③录音状态机(MediaRecorder/opus/120s/删除);④提交链 audioUrl + 8MB 上限 + 回执整理状态文案。 */
@@ -33,7 +33,7 @@ describe("取屏画框坐标(偏移根因)", () => {
   });
 
   it("② 桌面壳真进全屏才走 cover 分支;浏览器路径恒 contain(否则取景被裁、落点整体偏移)", () => {
-    // E2E 实测回归锚:曾经无条件传 true → 浏览器路径也按 cover 取景,选区 500×400 变成 358×346。
+ // E2E 经验证回归锚:曾经无条件传 true → 浏览器路径也按 cover 取景,选区 500×400 变成 358×346。
     expect(PANEL_SRC).toContain("enterCaptureFullscreen(function (isFull) { openCaptureOverlay(url, img, isFull); })");
     expect(PANEL_SRC).not.toContain("openCaptureOverlay(url, img, true)");
     expect(bodyOf("enterCaptureFullscreen")).toContain("done(false)");
@@ -48,7 +48,7 @@ describe("取屏画框坐标(偏移根因)", () => {
 
   it("capBox 只做「client→布局 px」归一(offset=0/scale=1),换算到图像像素只由 confirmCapture 做一次", () => {
     // 回归锚:capBox 一旦把 cap.scale/cap.ox 一起塞进换算层,cap.sel 会变成图像像素而被
-    // capPaint/confirmCapture 当布局 px 用,E2E 实测 300×400 的拖框被算成别的尺寸。
+ // capPaint/confirmCapture 当布局 px 用,E2E 经验证 300×400 的拖框被算成别的尺寸。
     const box = bodyOf("capBox");
     expect(box).toContain("offsetX: 0, offsetY: 0, scale: 1");
     expect(box).toContain("layoutWidth: cap.cssW");

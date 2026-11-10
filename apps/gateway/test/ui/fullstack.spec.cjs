@@ -1,4 +1,4 @@
-/** step-048 UI 实测:插件市场/内嵌浏览器/账号额度/引导中心/附件/远程向导/浏览器控制设置。 */
+/** UI 经验证:插件市场/内嵌浏览器/账号额度/引导中心/附件/远程向导/浏览器控制设置。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
 
@@ -33,7 +33,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   await page.click("#act-market");
   await page.waitForTimeout(900);
   check("市场目录渲染(≥6 卡)", (await page.locator("#mktGrid .mkt-card").count()) >= 6);
-  // 净状态归位(step-101):插件安装态持久在共享仓 .genie/plugins.json(跨实例)——前序跑/产线残留
+ // 净状态归位:插件安装态持久在共享仓 .genie/plugins.json(跨实例)——前序跑/生产环境残留
   // 已装态会让 install 钮缺席(092 教训:spec 必须自带进出双向归位)。已装则先卸到基线再走安装链。
   const preUn = page.locator('#mktGrid .mkt-card[data-id="git-flow"] button[data-act="uninstall"]');
   if ((await preUn.count()) > 0) {
@@ -53,7 +53,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("插件命令进斜杠菜单(/branch-report)", (await page.locator("#slashMenu").textContent()).includes("branch-report"));
   await page.keyboard.press("Escape");
   await page.fill("#instruction", "");
-  // 卸载 → 回收(step-101:088 起确认已是 uiConfirm 主题模态,page.once("dialog") 永远接不到——
+ // 卸载 → 回收(088 起确认已是 uiConfirm 主题模态,page.once("dialog") 永远接不到——
   // 改接 .uid-mask 内 .uid-ok;模态不接会残留遮罩拦截后续全部点击,本 spec 历史红的真因之一)
   await page.click("#act-market");
   await page.waitForTimeout(700);
@@ -63,12 +63,12 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("卸载后回到可安装态", (await page.locator('#mktGrid .mkt-card[data-id="git-flow"] button[data-act="install"]').count()) === 1);
 
   // ── 内嵌浏览器 ──
-  // 2026-10-19:左栏 #act-browser 已撤(用户口径:不展示),改走 Ctrl+Alt+B——同时验证入口未丢
+ // 左栏 #act-browser 已撤(不展示),改走 Ctrl+Alt+B——同时验证入口未丢
   await page.keyboard.press("Control+Alt+b");
   await page.waitForTimeout(300);
   check("内嵌浏览器视图(Ctrl+Alt+B)", await page.locator("#view-browser").isVisible());
-  // step-101:iframe 目标从硬编码产线 7700 改 BASE 注入——自host 跑法(_ui_selfhost)下打的是
-  // 本 spec 自带实例,不再误打产线;独立直跑(PANEL_BASE 缺省 7700)行为同旧。
+ // iframe 目标从硬编码生产环境 7700 改 BASE 注入——自host 跑法(_ui_selfhost)下打的是
+ // 本 spec 自带实例,不再误打生产环境;独立直跑(PANEL_BASE 缺省 7700)行为同旧。
   await page.fill("#brUrl", BASE + "/");
   await page.click("#brGo");
   await page.waitForTimeout(1200);

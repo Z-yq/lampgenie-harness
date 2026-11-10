@@ -1,7 +1,6 @@
 /**
- * M151 审批对象=执行对象:纯函数(canonical hash/deepFreeze/verify/受控改参)+
+ * 审批对象=执行对象:纯函数(canonical hash/deepFreeze/verify/受控改参)+
  * 三处接线(executor 子代理 ask、worker permission.ask RPC、agent-wiring parent-ask 两处)。
- *
  * 核心断言语义:批准的是 A、执行的是 B 时按 denied/object-changed 处理(fail-closed),
  * asked/decided 的 objectHash 成对一致。
  */

@@ -1,5 +1,5 @@
 /**
- * Python structural adapter(designs/16 §5,step-021)。
+ * Python structural adapter( §5。
  * 一期实现:轻量结构解析(缩进块+def/class/self 归属+import 解析),
  * tier=structural(如实标注;tree-sitter 升级已接——adapters/tree-sitter.ts,补盲不换语义,接口不变)。
  */
@@ -16,7 +16,7 @@ export interface PyParseResult {
   /** 解析失败(语法异常等)的文件进盲区。 */
   failures: { file: string; reason: string }[];
   /** 跨文件调用候选(to="" + toName,名字在本文件 import 名单里)——
-   * mergeStructAdapters 全图合并后按唯一名解析(python 单文件解析时跨文件目标不存在,2026-10-14)。 */
+ * mergeStructAdapters 全图合并后按唯一名解析(python 单文件解析时跨文件目标不存在。 */
   crossFileCandidates?: FlowEdge[];
 }
 
@@ -25,7 +25,7 @@ const CLASS_RE = /^(\s*)class\s+([A-Za-z_]\w*)/;
 const SELF_CALL_RE = /self\.([A-Za-z_]\w*)\s*\(/;
 const PLAIN_CALL_RE = /(?<![.\w])([A-Za-z_]\w*)\s*\(/;
 const IMPORT_RE = /^\s*(?:from\s+([\w.]+)\s+import\s+(.+)|import\s+([\w.]+))/;
-// step-066 A1:接收者形态调用 x.method( / self.attr.method(——receiver 链整体捕获
+// A1:接收者形态调用 x.method( / self.attr.method(——receiver 链整体捕获
 // ([\w.]+ 贪到 "(" 前),拆链后按类型证据解析
 const RECEIVER_CALL_RE = /([A-Za-z_]\w*(?:\.\w+)*)\.([A-Za-z_]\w*)\s*\(/g;
 // 只排内建类型/函数名(它们作接收者必是标准库语义);域方法(get/append 等在自定义类上是真边)
@@ -34,23 +34,23 @@ const RECEIVER_STOPWORDS = new Set(["print", "len", "range", "str", "int", "floa
 // 会把类名劈成 prefix="C"+name="hatHandler" 的假匹配);可选前缀组整体含尾点
 const SELF_ATTR_ASSIGN_RE = /^\s*self\.([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*(?:\.\w+)*\.)?([A-Za-z_]\w*)\s*\(/;
 const LOCAL_ASSIGN_RE = /^(\s*)([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*(?:\.\w+)*\.)?([A-Za-z_]\w*)\s*\(/;
-// step-066 A1 补充形态(DI 风格,agent_alpha 50 处 get_component 调用的主流):
+// A1 补充形态(DI 风格,agent_alpha 50 处 get_component 调用的主流):
 // `self.attr = param`(参数别名,类型来自构造器参数 hint)与 `self.attr = param or Class(...)`
 const SELF_ATTR_ALIAS_RE = /^\s*self\.([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*(?:#.*)?$/;
 const SELF_ATTR_OR_RE = /^\s*self\.([A-Za-z_]\w*)\s*=\s*[\w.]+\s+or\s+([A-Za-z_]\w*)\s*\(/;
-// step-068 工厂赋值:`NAME = [await] 前缀.调用名(` / `self.attr = [await] 前缀.调用名(`——
+// 工厂赋值:`NAME = [await] 前缀.调用名(` / `self.attr = [await] 前缀.调用名(`——
 // 类作为实参传给(非类的)调用、结果赋给标识符(to_thread(ChatHandler,…) 实仓形态)。
 // await/点前缀都要能吃(SELF_ATTR_ASSIGN/LOCAL_ASSIGN 被 await 打断、多行实参单行正则够不到——
-// agent_service_async.py:2020/2194 三重形态叠加实证)。组:1=缩进 2=self.attr 名 3=裸名 4=调用名
+// agent_service_async.py:2020/2194 三重形态叠加验证)。组:1=缩进 2=self.attr 名 3=裸名 4=调用名
 const FACTORY_ASSIGN_RE = /^(\s*)(?:self\.([A-Za-z_]\w*)|([A-Za-z_]\w*))\s*=\s*(?:await\s+)?(?:[A-Za-z_]\w*(?:\.\w+)*\.)?([A-Za-z_]\w*)\s*\(/;
-// step-099(096 评测 process_chat 锚):属性拷贝类型证据——`x = a.b.attr` / `self.y = a.b.attr`
-// (RHS 纯属性链:非调用/非下标/非元组,行尾收口)。接收者类型取自 attr 命名约定(snake→Camel)
+// (096 评测 process_chat 锚):属性拷贝类型证据——`x = a.b.attr` / `self.y = a.b.attr`
+// (RHS 纯属性链:非调用/非下标/非元组,行尾)。接收者类型取自 attr 命名约定(snake→Camel)
 // 或 RHS 头=self 时 selfAttrTypes 的真证据。组:1=self 目标名 2=局部目标名 3=RHS 属性链。
 const ATTR_COPY_RE = /^\s*(?:self\.([A-Za-z_]\w*)|([A-Za-z_]\w*))\s*=\s*(?:await\s+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)\s*(?:#.*)?$/;
-// step-099(RC-096-B4):链式构造调用的构造头 `X(...).method(` —— X 段捕获后按括号平衡找配对
+// (RC-096-B4):链式构造调用的构造头 `X(...).method(` —— X 段捕获后按括号平衡找配对
 // `)`,紧跟 `.name(` 即命中(单行形态;多行实参/嵌套不平衡=跳过,诚实边界)。
 const CHAIN_CTOR_HEAD_RE = /([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g;
-// step-089 P1(designs/26 §2.2):模块级注解赋值 `name: Type [= value]`(索引档只收模块级;
+// P1( §2.2):模块级注解赋值 `name: Type [= value]`(索引档只收模块级;
 // 类属性与函数局部归 typed/ 逐文件档)。组:1=名字 2=类型文本。
 const MODULE_VAR_ANNOT_RE = /^([A-Za-z_]\w*)\s*:\s*([^\n=#]+?)\s*(?:=\s*(.+))?$/;
 /** 语句/控制流关键字不收为变量(`else:`/`except E:` 等会被 `NAME: 形态` 误捕)。 */
@@ -67,7 +67,7 @@ function stripTypeHint(t: string): string {
   return /^Optional\[$/.test(first) ? first : first.replace(/\[|\]/g, "");
 }
 
-/** step-068:剥字符串字面量与 # 注释(工厂实参扫描前;结构档不解析转义,f-string 同剥)。 */
+/** 剥字符串字面量与 # 注释(工厂实参扫描前;结构档不解析转义,f-string 同剥)。 */
 function stripLiteralsAndComment(line: string): string {
   let out = "";
   let quote: string | null = null;
@@ -96,7 +96,7 @@ function parenBalance(s: string): number {
   return d;
 }
 
-/** step-099(RC-096-B4):行内链式构造调用枚举——`X(...).method(` 形态逐个产出
+/** (RC-096-B4):行内链式构造调用枚举——`X(...).method(` 形态逐个产出
  * {ctorChain, method};括号不平衡(多行实参)/无 `.method(` 尾=不产出(诚实边界)。
  * 构造边本身由既有 PLAIN_CALL/模块别名路径覆盖,本枚举只服务方法边发射。 */
 function* chainedCtorCalls(line: string): Generator<{ ctorChain: string; method: string }> {
@@ -124,7 +124,7 @@ function snakeToCamel(snake: string): string | undefined {
 }
 
 /**
- * step-068 工厂赋值实参段:赋值行自调用 `(` 起(正则 matchEnd 即 `(` 之后),同行括号
+ * 工厂赋值实参段:赋值行自调用 `(` 起(正则 matchEnd 即 `(` 之后),同行括号
  * 不平衡时按行续收(深度归零停;30 行封顶防病态挂死)。逐行剥字面量/注释。
  * agent_alpha `self.chat_handler = await asyncio.to_thread(` 实参 24 行,类名在次行——封顶
  * 必须盖过真实多行调用。
@@ -143,7 +143,7 @@ function collectFactoryArgText(lines: string[], matchEnd: number, startLine: num
 
 /**
  * 解析单个 Python 文件(tree-sitter 优先,纯文本解析保底;接口不变)。
- * step-021 二期收口:tree-sitter 可用时补纯文本正则的盲区(多行参数签名等 DEF_RE
+ * 二期:tree-sitter 可用时补纯文本正则的盲区(多行参数签名等 DEF_RE
  * 够不到的 def);wasm 缺失/初始化失败=回退纯文本,行为与旧版一致。
  */
 export async function parsePythonFile(root: string, relFile: string): Promise<PyParseResult> {
@@ -161,21 +161,21 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
   // 栈式缩进追踪:当前类/函数容器
   const stack: { indent: number; kind: "class" | "def"; name: string; line: number }[] = [];
   const moduleImports = new Map<string, string[]>(); // 模块 → 导入符号(仓内解析简化)
-  // step-066 A1:import 别名 → 模块路径(`import a.b as z`→z.foo() 的模块级函数解析证据)
+ // A1:import 别名 → 模块路径(`import a.b as z`→z.foo 的模块级函数解析证据)
   const moduleAliases = new Map<string, string>();
-  // step-085 RC-O:`from x import f as g` 别名登记(绑定名 g → 原名 f)。调用点写 g,import 名单
+ // RC-O:`from x import f as g` 别名登记(绑定名 g → 原名 f)。调用点写 g,import 名单
   // 闸必须按绑定名对照;但跨文件目标的符号名是 f——候选边 toName 若写 g,merge 层全图唯一名
   // 按 toName 查必失配(redash「导入改名调用部分丢失」初判,叠加在模块级缺口之上)。
   const aliasOriginal = new Map<string, string>();
-  // step-066 A1:self.attr = SomeClass(...) 属性接收者类型(文件级,attr→类名集)
+ // A1:self.attr = SomeClass(...) 属性接收者类型(文件级,attr→类名集)
   const selfAttrTypes = new Map<string, Set<string>>();
 
-  // step-066 A1:构造器参数类型表(符号 id → 参数名→类型)——`self.attr = param` 别名赋值的类型源
+ // A1:构造器参数类型表(符号 id → 参数名→类型)——`self.attr = param` 别名赋值的类型源
   const paramTypes = new Map<string, Map<string, string>>();
 
   // Pass 1: 收集 def/class 与 import
   const defRanges: { start: number; end: number; symbol: PySymbol }[] = [];
-  // step-068:本文件类名集(regex+tree-sitter 双源)——工厂实参的类证据与构造调用闸
+ // 本文件类名集(regex+tree-sitter 双源)——工厂实参的类证据与构造调用闸
   const classDefs = new Set<string>();
   let pendingImport: string | null = null; // 括号多行 from-import 的模块名
   const recordParamTypes = (sym: PySymbol): void => {
@@ -219,7 +219,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
       defRanges[defRanges.length - 1]!.end = findBlockEnd(lines, i, curIndent);
       stack.push({ indent, kind: "def", name, line: i + 1 });
     } else if (indent === 0 && stack.length === 0) {
-      // step-089 P1(designs/26 §2.2):模块级注解变量 `name: Type [= value]`——kind=variable
+ // P1( §2.2):模块级注解变量 `name: Type [= value]`——kind=variable
       // +dataType,零边(engine merge 层 variable 不进 byName)。语句/控制流关键字不收。
       const stripped = stripLiteralsAndComment(line);
       const varM = MODULE_VAR_ANNOT_RE.exec(stripped);
@@ -245,17 +245,17 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
         }
         names.push(binding);
       }
-      // 同模块多次 import 合并(deepwiki-open rag.py 实锤:__init__ 里两次 from api.config
+ // 同模块多次 import 合并(deepwiki-open rag.py 注意:__init__ 里两次 from api.config
       // import 不同的函数,后者 set 覆盖前者名单→get_embedder_type 候选闸漏判→跨文件调用丢失)
       const prev = moduleImports.get(mod) ?? [];
       moduleImports.set(mod, [...new Set([...prev, ...names])]);
-      // step-066 A1:`import a.b.c[.as z]` → 绑定名(z 或末段 c)→ 模块路径(模块别名接收者证据)
+ // A1:`import a.b.c[.as z]` → 绑定名(z 或末段 c)→ 模块路径(模块别名接收者证据)
       if (imp[3]) {
         const asAlias = line.match(/as\s+([A-Za-z_]\w*)/)?.[1];
         const binding = asAlias ?? mod.split(".").pop()!;
         if (binding) moduleAliases.set(binding, mod);
       }
-      // 括号多行 from-import(service/app.py「from .prompt_render import (」实锤:名单在
+ // 括号多行 from-import(service/app.py「from .prompt_render import (」注意:名单在
       // 后续行,单行 IMPORT_RE 只捕到 "("——跨文件候选闸因此漏掉函数内懒导入的真调用)
       if (/\(\s*$/.test(imp[2] ?? "")) {
         pendingImport = mod;
@@ -281,7 +281,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
     }
   }
 
-  // tree-sitter 补盲(step-021 二期收口):多行参数签名等 DEF_RE 够不到的 def,
+ // tree-sitter 补盲(二期):多行参数签名等 DEF_RE 够不到的 def,
   // 从 AST 声明补入(tier=structural 如实;pure 解析器保底语义不变)。
   try {
     const { parseFileWithTreeSitter } = await import("./tree-sitter");
@@ -289,7 +289,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
     if (ts) {
       const known = new Set(symbols.map((x) => `${x.name}:${x.line}`));
       // 容器判定用 AST 行界(包含关系):c.start < d.start 且 d.end ≤ c.end,取最内层。
-      // 旧版「行号<它的最近已知名」是兄弟节点误归属——实测 _period_start(前一个 def)
+ // 旧版「行号<它的最近已知名」是兄弟节点误归属——经验证 _period_start(前一个 def)
       // 吃掉多行签名的 render_memory_block,符号名查不到(code_index 查空的一条真因)。
       const findContainer = (d: { startLine: number; endLine: number }): string | undefined => {
         let best: { name: string; startLine: number } | undefined;
@@ -303,7 +303,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
       };
       for (const d of ts.declarations) {
         if (d.kind !== "function_definition" && d.kind !== "class_definition") continue;
-        if (d.kind === "class_definition") classDefs.add(d.name); // step-068 类名集 AST 源
+        if (d.kind === "class_definition") classDefs.add(d.name); // 类名集 AST 源
         if (known.has(`${d.name}:${d.startLine}`)) continue;
         const isFn = d.kind === "function_definition";
         const container = isFn ? findContainer(d) : undefined; // 类不做嵌套容器(与正则栈语义一致)
@@ -321,12 +321,12 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           recordParamTypes(sym2);
         }
       }
-      // 多行签名 def 的函数体也要扫调用边(2026-10-14 实仓实锤:a1_adapter.build_evidence_pack
+ // 多行签名 def 的函数体也要扫调用边(实仓注意:a1_adapter.build_evidence_pack
       // 双行签名,defRanges 只收单行 DEF_RE → 该方法「调用 0」,体内 self.x 调用边全丢)。
       // 补盲函数用 AST 行界建 range;正则命中的已有 range 不重复。
       const regexRanged = new Set(defRanges.map((r) => r.symbol));
       // 容器修复:三引号字符串的内容行(缩进 0)会把 class 从正则缩进栈弹掉,后续方法
-      // 丢容器/误标 function(a1_adapter._semantic_coverage 实锤)——AST 行界是权威,
+ // 丢容器/误标 function(a1_adapter._semantic_coverage 注意)——AST 行界是权威,
       // 按「最内层包围声明」(与上方 findContainer 同规则,函数容器不跳层)修正既有符号。
       for (const d of ts.declarations) {
         if (d.kind !== "function_definition") continue;
@@ -354,11 +354,11 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
   // Pass 2: 函数体内调用边(self.x 优先归属;import 名对照;唯一名兜底)
   const byName = new Map<string, PySymbol[]>();
   for (const s of symbols) byName.set(s.name, [...(byName.get(s.name) ?? []), s]);
-  // import 名单(from x import a,b → {a,b}):裸调用的跨文件候选闸(2026-10-14——此前
+ // import 名单(from x import a,b → {a,b}):裸调用的跨文件候选闸(——此前
   // moduleImports 收集了没消费,跨文件调用边 0/11 全漏,真 API 被误标「入口,无人调用」)
   const importedNames = new Set<string>();
   for (const names of moduleImports.values()) for (const n of names) importedNames.add(n);
-  // step-068 类证据闸:本文件 class 定义(classDefs,regex+AST 双源)或 import 名单内且
+ // 类证据闸:本文件 class 定义(classDefs,regex+AST 双源)或 import 名单内且
   // 首字母大写(Python 类名的结构档约定,小写不猜)。
   const isKnownClass = (n: string): boolean => classDefs.has(n) || (importedNames.has(n) && /^[A-Z]/.test(n));
   // 集合闸精化(零回退形态):旧=size===1 即取(既有形态逐字节保持);新增=多成员时已知类
@@ -372,9 +372,9 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
   };
   const crossFileCandidates: FlowEdge[] = [];
   const candSeen = new Set<string>();
-  // step-066 A1:函数局部接收者类型(逐 def 范围:`svc = ChatService(...)` 之后 svc.method( 有证据)
+ // A1:函数局部接收者类型(逐 def 范围:`svc = ChatService(...)` 之后 svc.method(有证据)
   // 范围按行序扫描——regex 范围在前/AST 补盲范围追加在后的原始顺序会让后文的调用先于前文的
-  // `self.attr = ...` 赋值被处理(node_executor 实证:646 行 get_component 先于 373 行赋值扫描)
+ // `self.attr = ...` 赋值被处理(node_executor 验证:646 行 get_component 先于 373 行赋值扫描)
   const localTypes = new Map<string, Map<string, Set<string>>>();
   defRanges.sort((a, b) => a.start - b.start);
   for (const range of defRanges) {
@@ -414,7 +414,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
         m2.set(localAssign[2]!, set2);
         localTypes.set(range.symbol.id, m2);
       }
-      // step-068 工厂赋值:`x/self.attr = [await] mod.fn(Class, …)`——类作为**裸实参**传给
+ // 工厂赋值:`x/self.attr = [await] mod.fn(Class, …)`——类作为**裸实参**传给
       // 非类调用,结果标识符获得指向该类的类型线索(agent_alpha `self.chat_handler = await
       // asyncio.to_thread(\n ChatHandler,…)` 生产 2 处的形态;await/多行实参是既有正则的盲区)。
       // 已知类恰一才记(≥2=歧义不猜);调用名本身是已知类=构造形态(SELF_ATTR/LOCAL_ASSIGN
@@ -443,8 +443,8 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           }
         }
       }
-      // step-099(096 process_chat 锚):属性拷贝类型证据——`x = a.b.attr` / `self.y = a.b.attr`
-      // (chat_handler = session.chat_handler 之后 chat_handler.process_chat( 跨文件召回)。
+ // (096 process_chat 锚):属性拷贝类型证据——`x = a.b.attr` / `self.y = a.b.attr`
+ // (chat_handler = session.chat_handler 之后 chat_handler.process_chat(跨文件召回)。
       // attr 含 `_` 才走命名约定推断(snake→Camel);merge 层「container 匹配+全图唯一」双闸
       // 吸收猜错(无匹配=候选丢弃,零假边);RHS 头=self 优先取 selfAttrTypes 真证据。
       {
@@ -468,7 +468,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           }
         }
       }
-      // step-099(RC-096-B4):链式构造调用 `X(...).method(` 的方法边(构造边既有路径已覆盖;
+ // (RC-096-B4):链式构造调用 `X(...).method(` 的方法边(构造边既有路径已覆盖;
       // serialize_query 的 queries API 上游整族漏报根因)。X=已知类(本文件/ import 名单+
       // 首字母大写,别名回落原名),候选带 receiverType=X,merge 层双闸解析。
       for (const cc of chainedCtorCalls(line)) {
@@ -494,12 +494,11 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
         });
       }
       // self.x() → 同类方法(兄弟查找失败=跨文件同类方法,候选带 receiverType=所在类证据;
-      // 属性可调用实例不在此猜——selfAttrTypes 只服务 self.attr.method( 链,宁缺勿错)
+ // 属性可调用实例不在此猜——selfAttrTypes 只服务 self.attr.method(链,宁缺勿错)
       for (const m of line.matchAll(new RegExp(SELF_CALL_RE.source, "g"))) {
         const target = m[1]!;
         const sibling = symbols.find(
-          (s) => s.name === target && s.container === range.symbol.container,
-        );
+          (s) => s.name === target && s.container === range.symbol.container);
         edges.push({
           from: range.symbol.id,
           to: sibling?.id ?? "",
@@ -510,7 +509,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           ...(sibling || !range.symbol.container ? {} : { receiverType: range.symbol.container }),
         });
       }
-      // 接收者形态 obj.method( / self.attr.method( / 模块别名 mod.func(step-066 A1:此前
+ // 接收者形态 obj.method( / self.attr.method( / 模块别名 mod.func( A1:此前
       // 这类调用整体不发射——PLAIN_CALL_RE 的负向环视排除点号形态,跨文件方法边 0/20 的直接根源)
       for (const m of line.matchAll(RECEIVER_CALL_RE)) {
         const chain = m[1]!;
@@ -525,7 +524,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           receiverType = soleType(selfAttrTypes.get(attr));
         } else if (moduleAliases.has(chain)) {
           moduleHint = (moduleAliases.get(chain) ?? "").replace(/\./g, "/");
-          // step-085 RC-O:点前缀构造 mod.Foo( → __init__ 候选(模块别名证据+已知类名;
+ // RC-O:点前缀构造 mod.Foo( → __init__ 候选(模块别名证据+已知类名;
           // 类名小写/未 import 不猜;别名 import 的类按原名发候选——目标符号名是原名)
           const clsName = aliasOriginal.get(method) ?? method;
           if (isKnownClass(method)) {
@@ -555,11 +554,10 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
           ...(moduleHint ? { moduleHint } : {}),
         });
       }
-      // 2026-10-22 P1(spawn 边):Process(target=fn)/Thread(target=fn)——多进程/线程启动的
+ // P1(spawn 边):Process(target=fn)/Thread(target=fn)——多进程/线程启动的
       // 函数引用不是调用点,旧图看不见 launcher→worker(agent_alpha run_master 链沉底根因)。
-      // 跨行形态(实锚 process_manager.py:91 `Process(` 与 :92 `target=run_worker` 不同行):
-      // 直接扫 target= 裸标识符(该 kwarg 语义就是可调用对象引用),不再要求同行有 Process(;
-      // 解析语义与普通调用同源(同文件唯一直连;import 名单发候选交 merge 层)。
+ // 跨行形态(依据 process_manager.py:91 `Process(` 与 :92 `target=run_worker` 不同行):
+ // 直接扫 target= 裸标识符(该 kwarg 语义就是可调用对象引用),不再要求同行有 Process( // 解析语义与普通调用同源(同文件唯一直连;import 名单发候选交 merge 层)。
       for (const m of line.matchAll(/\btarget\s*=\s*([A-Za-z_]\w*)\b/g)) {
         const fn = m[1]!;
         if (["print", "len", "range", "str", "int", "float", "dict", "list", "set", "self", "None", "True", "False"].includes(fn)) continue;
@@ -584,10 +582,10 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
       for (const m of line.matchAll(new RegExp(PLAIN_CALL_RE.source, "g"))) {
         const callee = m[1]!;
         if (["print", "len", "range", "str", "int", "float", "dict", "list", "set", "super", "isinstance", "self"].includes(callee)) continue;
-        // step-068 A3:构造调用 Foo( → Foo.__init__ 实例化关联。同文件(必做):直接 ast 边
+ // A3:构造调用 Foo( → Foo.__init__ 实例化关联。同文件(必做):直接 ast 边
         // (构造调用→类节点的既有边不动,叠加);类无 __init__(继承 object)不造。跨文件(尽力):
         // import 名单内已知类名发候选(receiverType=类名),merge 层按 Class.__init__ 候选集解析,
-        // 同名多类=不解析不回退(承 step-066 接收者双闸语义)。__init__ 内 Foo( 自构递归两侧都跳。
+ // 同名多类=不解析不回退(承 接收者双闸语义)。__init__ 内 Foo(自构递归两侧都跳。
         const selfInitId = `${relFile}#${callee}.__init__`;
         if (range.symbol.id !== selfInitId) {
           if (classDefs.has(callee)) {
@@ -598,7 +596,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
             const k = `${range.symbol.id}|__init__|${callee}`;
             if (!candSeen.has(k)) {
               candSeen.add(k);
-              // step-085 RC-O:别名 import 的构造候选按原名发(receiverType=目标符号名)
+ // RC-O:别名 import 的构造候选按原名发(receiverType=目标符号名)
               crossFileCandidates.push({ from: range.symbol.id, to: "", toName: "__init__", file: relFile, line: i + 1, tier: "structural", evidenceKind: "inferred", receiverType: aliasOriginal.get(callee) ?? callee });
             }
           }
@@ -609,7 +607,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
         if (!toId) {
           // 本文件解析不到但确在 import 名单里:发跨文件候选(to="" 由 merge 层全图唯一名解析;
           // 解析不了会被丢弃,与旧版「不发射」等价)。多候选/未 import:不猜。
-          // step-085 RC-O:别名 import(from x import f as g)的 toName 回落原名 f——
+ // RC-O:别名 import(from x import f as g)的 toName 回落原名 f——
           // 目标符号名是 f,按绑定名 g 查全图唯一名必失配(候选被丢弃=边丢失)。
           if (cands.length === 0 && importedNames.has(callee)) {
             const k = `${range.symbol.id}|${callee}`;
@@ -629,9 +627,9 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
       }
     }
   }
-  // Pass 3: 模块级调用(step-085 RC-O)。adapter 此前只扫 def 体,顶层语句/decorator 行的调用
+ // Pass 3: 模块级调用( RC-O)。adapter 此前只扫 def 体,顶层语句/decorator 行的调用
   // 整面丢失(redash org_scoped_rule 9 个跨文件调用方里 8 个在 `@routes.route(org_scoped_rule(..))`
-  // decorator 行,R=0.111 的真根因;2026-10-15 登记的「py 仓 <module> 边为 0 属设计边界」就此收口)。
+ // decorator 行,R=0.111 的真根因; 登记的「py 仓 <module> 边为 0 属设计边界」就此)。
   // 归属 `${relFile}#${MODULE_CALLER}` 虚调用方——与 TS 侧同形态,c2f classify 的 ghostSuffix
   // 特判保证模块级调用方不取消符号入口资格,查询/渲染侧零改动。
   // 闸与 Pass 2 同源(宁缺勿错):裸调用=同文件唯一名直连 / import 名单发候选(toName 按别名
@@ -642,7 +640,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
   const inDefBody = new Uint8Array(lines.length);
   for (const range of defRanges) {
     // start(def 行)也要标:多行签名 def 的首行(`async def execute(` 无闭括号)不匹配 DEF_RE,
-    // 不标会被 Pass 3 当模块级调用行,发射 `<module>→execute` 假边(agent_alpha 三实锚复现)
+ // 不标会被 Pass 3 当模块级调用行,发射 `<module>→execute` 假边(agent_alpha 三依据复现)
     for (let i = range.start; i <= range.end && i < lines.length; i++) inDefBody[i] = 1;
   }
   const inTriple = moduleTripleLines(lines);
@@ -682,7 +680,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
         tier: "structural", evidenceKind: "inferred", moduleHint,
       });
     }
-    // step-099 RC-B4:模块级链式构造调用(与 Pass 2 同规则;模块级接收者调用本就只走
+ // RC-B4:模块级链式构造调用(与 Pass 2 同规则;模块级接收者调用本就只走
     // 模块别名证据,链式构造的 receiverType=类名证据比别名更强,单列)
     for (const cc of chainedCtorCalls(line)) {
       const segs = cc.ctorChain.split(".");
@@ -749,7 +747,7 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
   return { symbols, edges: dedup, failures, crossFileCandidates };
 }
 
-/** 模块级三引号字符串行位图(step-085 RC-O):行命中=该行在 """ / ''' 字符串内或开合行本身。
+/** 模块级三引号字符串行位图( RC-O):行命中=该行在 """ / ''' 字符串内或开合行本身。
  * 单行引号内的 triple 样文本(s = '"""')不算开——逐字符扫描,单引号态优先。 */
 function moduleTripleLines(lines: string[]): Uint8Array {
   const flags = new Uint8Array(lines.length);

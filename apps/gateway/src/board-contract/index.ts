@@ -1,4 +1,4 @@
-/** 变更契约规则集统一出口(2026-10-25 重构;board-accept.ts 保留兼容转发)。 */
+/** 变更契约规则集统一出口(重构;board-accept.ts 保留兼容转发)。 */
 export { validateChangeContract } from "./validate.js";
 export type { BoardContractIssue, BoardNodeT, EdgeLike } from "./shared.js";
 export { scanFlowContract } from "./rules/flow.js";

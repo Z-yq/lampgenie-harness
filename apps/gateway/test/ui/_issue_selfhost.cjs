@@ -1,6 +1,6 @@
 /** fixD MVP 自启跑法:自起 7858 实例(临时 gitlab-remote 项目+假 token)+真实浏览器跑 issueboard.spec.cjs。
  * 场景:私有 gitlab URL 样本 + 假 token → 原生失败自动降级 RepoIssues → 新建 issue → 看板卡 → 拖拽落盘 → 刷新保持。
- * 用法:cd apps/gateway && npx tsx test/ui/_issue_selfhost.cjs   (SELF_PORT 可改,默认 7858;不碰产线 7700)
+ * 用法:cd apps/gateway && npx tsx test/ui/_issue_selfhost.cjs (SELF_PORT 可改,默认 7858;不碰生产环境 7700)
  * 清理纪律:临时项目/journal 随进程清;真实仓 .genie/{team/members.json,secrets.json} 恢复测试前原样。 */
 // 新协议消息(issue.*)在 @lampgenie/protocol src;tsx 直跑解析到旧 dist 会判 invalid-message——
 // 缺 development 条件时自重跑(与 vitest 的 NODE_OPTIONS=--conditions=development 同语义)。

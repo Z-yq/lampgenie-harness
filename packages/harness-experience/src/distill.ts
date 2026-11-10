@@ -30,10 +30,10 @@ ${NEGATIVE_LIST}
 {"ops":[{"op":"write","category":"","name":"","description":"≤60字","body":"经验的完整内容:什么场景/怎么做/什么坑"},{"op":"skip","reason":""}]}
 只输出 JSON。`;
 
-/** 探针/测试任务甄别(2026-10-19 用户实报「经验索引被污染」):e2e/冒烟/手工探针任务的
+/** 探针/测试任务甄别(用户用户反馈「经验索引被污染」):e2e/冒烟/手工探针任务的
  *  失败不代表可复用教训——曾沉淀 14 条「失败任务候选经验:回答 1+1 / 派子代理 /
  *  用 browser 工具打开 https://example.com …」,占到经验索引一半,会误导后续任务。
- *  只按特征判,不用长度阈值(实测「跑测试」「重启服务」这类真实短任务会被长度规则误伤)。 */
+ * 只按特征判,不用长度阈值(经验证「跑测试」「重启服务」这类真实短任务会被长度规则误伤)。 */
 export function isProbeTask(instruction: string): boolean {
   const s = String(instruction || "").trim();
   if (/^(你好|您好|嗨|hi|hello)[!！。.~]*$/i.test(s)) return true;
@@ -46,8 +46,8 @@ export function isProbeTask(instruction: string): boolean {
   return false;
 }
 
-/** 基础设施故障甄别(2026-10-19):LLM 400/流超时/网关重启这类失败不是任务教训,沉淀下来只会
- *  污染经验索引(实测:桌面 exe 规划任务因 tool_calls 配对 400 失败,生成了 3 条
+/** 基础设施故障甄别:LLM 400/流超时/网关重启这类失败不是任务教训,沉淀下来只会
+ * 污染经验索引(经验证:桌面 exe 规划任务因 tool_calls 配对 400 失败,生成了 3 条
  *  「失败任务候选经验:接下来规划一下…」「继续？」,全是噪声)。 */
 export function isInfraFailure(result?: string): boolean {
   const s = String(result || "");
@@ -87,8 +87,7 @@ export async function distillFromTask(
         if (op.op === "write" && op.category && op.name && op.description && op.body) {
           await store.write(
             { category: op.category, name: op.name, description: op.description, created_by: "agent", status: "active", ...(opts?.project ? { project: opts.project } : {}) },
-            op.body,
-          );
+            op.body);
           distilled++;
         } else if (op.reason) {
           skipped.push(op.reason);
@@ -107,8 +106,7 @@ async function deterministicDistill(
   store: ExperienceStore,
   task: { id: string; instruction: string; state: string },
   trace: string,
-  project?: string,
-): Promise<{ distilled: number; skipped: string[] }> {
+  project?: string): Promise<{ distilled: number; skipped: string[] }> {
   if (task.state !== "failed") {
     return { distilled: 0, skipped: ["非失败任务且无 LLM——不沉淀(避免把普通完成误当经验)"] };
   }

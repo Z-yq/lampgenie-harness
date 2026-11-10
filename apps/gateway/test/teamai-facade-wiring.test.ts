@@ -1,9 +1,9 @@
 /**
- * teamai 门面三件套接线测试(designs/30 §2.3/2.4/2.6):
- * ① 协议契约:teamai.inspect / contribute / remove 已进 ClientMessage 联合(parseClientMessage 实测);
+ * teamai 门面三件套接线测试( §2.3/2.4/2.6):
+ * ① 协议契约:teamai.inspect / contribute / remove 已进 ClientMessage 联合(parseClientMessage 经验证);
  * ② TeamView 转发面:contribute/remove 在 client ready 时向 relay 发对应帧,未 ready 返回 false;
  * ③ 回包分发:relay.teamai.{contribute,remove}.result 到达时各自监听器被调、参数一致,
- *    且不与 pushListeners 串包(designs/30 三通道分流的回归护栏)。
+ * 且不与 pushListeners 串包(三通道分流的回归护栏)。
  * 不涉及真实网络/端口:TeamRelayClient 用 vi.mock 换成最小假 client。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";

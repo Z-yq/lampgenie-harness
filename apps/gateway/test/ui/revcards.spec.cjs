@@ -1,4 +1,4 @@
-/** UI 实测:代码评论卡(review.findings→行级卡→点击 F4 查看器定位)。 */
+/** UI 经验证:代码评论卡(review.findings→行级卡→点击 F4 查看器定位)。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

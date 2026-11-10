@@ -1,5 +1,5 @@
 /**
- * SubagentBackend 契约(designs/09 §1 定稿)+ NDJSON-RPC 子进程基类。
+ * SubagentBackend 契约( §1 定稿)+ NDJSON-RPC 子进程基类。
  * backend 内部 session/工具细节永不反序列化给主控(dsh 私有边界原则)。
  */
 import { spawn, type ChildProcess } from "node:child_process";
@@ -13,9 +13,9 @@ export interface TaskSpec {
   permissions: "readonly" | "sandbox" | "inherit";
   budget?: { tokens?: number; wallClockSec?: number };
   env?: Record<string, string>;
-  /** 派生权限规则(step-033:父 deny 下传的收敛集;executor 侧按能力采纳)。 */
+ /** 派生权限规则(父 deny 下传的收敛集;executor 侧按能力采纳)。 */
   permissionRules?: { permission: string; pattern: string; action: "allow" | "deny" | "ask" }[];
-  /** 父中止信号(designs/25 ZCode createSubagentTaskAbortController 语义):父 loop 取消→子代理一并取消。 */
+ /** 父中止信号( ZCode createSubagentTaskAbortController 语义):父 loop 取消→子代理一并取消。 */
   parentSignal?: AbortSignal;
 }
 
@@ -35,13 +35,13 @@ export type SubagentEvent =
 export interface SubagentHandle {
   readonly taskId: string;
   readonly pid?: number;
-  /** ACP 后端会话 id(step-117;非 ACP 后端缺席)——接线侧据此落 journal。 */
+ /** ACP 后端会话 id(非 ACP 后端缺席)——接线侧据此落 journal。 */
   readonly acpSessionId?: string;
   /** ACP adapter 标识(内置名/命令;非 ACP 后端缺席)。 */
   readonly acpAdapter?: string;
   cancel(mode: "graceful" | "force"): Promise<void>;
   steer(text: string, mode: "hint" | "directive"): Promise<boolean>;
-  /** 权限应答(step-033):对子进程 permission-ask 的回流——此前 ask 有来无回必挂死。 */
+ /** 权限应答:对子进程 permission-ask 的回流——此前 ask 有来无回必挂死。 */
   respondPermission(requestId: string, decision: "allow-once" | "reject"): Promise<void>;
 }
 
@@ -71,7 +71,7 @@ export abstract class NdjsonChildBackend implements SubagentBackend {
       env: { ...process.env, ...env },
       stdio: ["pipe", "pipe", "pipe"],
     });
-    // spawn 失败(ENOENT 等)必接住:上抛会把宿主进程整个带崩(规划任务派发实测)。
+ // spawn 失败(ENOENT 等)必接住:上抛会把宿主进程整个带崩(规划任务派发经验证)。
     child.on("error", (err) => {
       if (state === "spawning" || state === "running") {
         state = "failed";

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
 /**
- * 桌面能力接入契约(2026-11-09):
+ * 桌面能力接入契约:
  * - 系统通知走 preload 原生桥(主进程去重/焦点抑制),浏览器侧保留 HTML5 fallback;
  * - 只对 running/queued/pending → done/failed 的跃迁通知(重连重放/历史终态不刷屏);
  * - notifyTaskDone 只能有一份实现(此前两份重复声明,后者覆盖前者导致通知链路失效);

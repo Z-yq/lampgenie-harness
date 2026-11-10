@@ -1,5 +1,5 @@
 /**
- * 内嵌团队 relay(2026-10-27 团队页空态修复):「有 gateway 就有团队」。
+ * 内嵌团队 relay(团队页空态修复):「有 gateway 就有团队」。
  * 此前团队面三重死亡:relay 服务进程(apps/relay)从没人启动、.env 的 RELAY_URL 对 gateway
  * 进程是死文件、TeamView 因此从未构造(面板 orgs:[])。本模块在未配置外部 relay 时
  * 于本机自举一个单 org relay:本地 bare 团队仓 + owner 成员种子 + 项目绑定种子,
@@ -190,7 +190,7 @@ export interface TeamProjectBinding {
 }
 
 /**
- * 全项目绑定种子(2026-10-27「团队页只有 lampgenie-harness」修复):注册表里每个有 origin 的
+ * 全项目绑定种子(「团队页只有 lampgenie-harness」修复):注册表里每个有 origin 的
  * 本地项目都进 roster——projects.yaml 加 <key>.type/.repo 键 + owner 成员 projects 数组补齐
  * (presence 按 member.projects 投影,成员数组不含该项目=团队页该项目恒无成员)。
  * 幂等:repo 归一化反查复用既有键;零变化零提交。非 git 项目(originUrl=null)不入册。

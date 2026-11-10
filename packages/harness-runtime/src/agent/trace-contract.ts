@@ -1,7 +1,6 @@
 /**
- * 轨迹数据契约(M201,2026-11-09 RSI 第 28 轮 #201):把 journal 的**原始事件**抽取成统一的
+ * 轨迹数据契约(, RSI 第 28 轮 #201):把 journal 的**原始事件**抽取成统一的
  * **轨迹事件**批次,供夜间整合批量消费。
- *
  * 三条红线:
  * 1. **纯逻辑零 IO**——输入 raw 事件数组,输出批次对象;落盘(批次文件/账本)在
  *    `apps/gateway/src/trace-harvest.ts`。
@@ -11,7 +10,6 @@
  *    工具结果整条判死)。
  * 3. **幂等键含版本**——batchKey = sha256(sessionId + seq 区间 + ruleVersion +
  *    contractVersion);规则或契约升级必产新键,重跑不重复入账。
- *
  * 事件词汇(kind 判别字段):
  * - `step`      步进画像(steps/calls/tokensSpent/phase):来源 `task.trajectory` 优先,
  *               该会话本批无 trajectory 时退用 `step.start`(steps=1,计数缺省 0,不推断)。
@@ -23,7 +21,6 @@
  * - `decision`  可判定决策(what/effect/tool/key):来源 `permission.gate` 的 effect、
  *               `tip.injected` 的注入键、`custom` 的 what/type ∈ {task.route, plan.gate,
  *               goal.*}、以及工具调用里的 `board_upsert`。
- *
  * 覆盖口径:`coverageRate = mappedEvents / (inputEvents - duplicateSeqs)`(分母 0 给 0,
  * 不产生 NaN);未被映射的 kind 逐类计数在 `unmappedByKind`(含「本轮未选用的二选一来源」,
  * 如已有 trajectory 时的 step.start)。
@@ -315,8 +312,7 @@ function decisionWhatOf(p: Payload): string | undefined {
  */
 export function extractTraceBatch(
   rawEvents: readonly unknown[],
-  opts: TraceExtractOptions,
-): TraceBatch {
+  opts: TraceExtractOptions): TraceBatch {
   const contractVersion = opts.contractVersion ?? TRACE_CONTRACT_VERSION;
   const dropped: TraceDropped = { count: 0, byReason: {}, byField: {} };
   const inputEvents = Array.isArray(rawEvents) ? rawEvents.length : 0;

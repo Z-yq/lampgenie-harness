@@ -1,7 +1,6 @@
-/** UI 交互流程板布局引擎(2026-10-26,docKind=page 且 ≥2 屏):
+/** UI 交互流程板布局引擎(docKind=page 且 ≥2 屏):
  * 「多屏原型 + 元素锚点 + 彩色交互流线」——不是把页面结构图缩成小窗,而是把一次 UI 任务
  * 的「屏幕地图」和「交互跳转」画成一张能读的图。
- *
  * 纯函数零 IO 零随机(确定性排序带 id tie-breaker);浏览器挂 BoardUiFlowLayout,
  * vitest 直接 module.exports 单测。输入依赖 BoardPageLayout.layout(doc) 的结果(base):
  * base 负责页内 UI 线框尺寸/角色/主线/回边;本引擎负责:
@@ -12,7 +11,6 @@
  *  - 正交路由:同排相邻直连、跨排走行间通道、跨多排走右侧车道,回边走下方通道;
  *  - 顶部分组图例(按目标屏配色)+ 主路径摘要;常驻导航画底部 tab 条;
  *  - 交互逻辑/未归属节点收进底部辅助带(不与屏幕混排)。
- *
  * 不改板数据:布局是渲染层视图,节点 pos 不落盘;用户拖动走面板侧 localStorage 微调。
  */
 (function (root, factory) {
@@ -210,7 +208,7 @@
         if (!pageOf.has(desc[d0].id)) pageOf.set(desc[d0].id, pageIds[p0]);
       }
     }
-    // 同一节点被两个 page contains(实测 planner 复用 id):第一个 page 拥有,后来的 page 不重复摆放
+ // 同一节点被两个 page contains(经验证 planner 复用 id):第一个 page 拥有,后来的 page 不重复摆放
     for (var p0b = 0; p0b < pageIds.length; p0b++) {
       var pidb = pageIds[p0b];
       pageDesc.set(pidb, rawDesc.get(pidb).filter(function (n) { return pageOf.get(n.id) === pidb; }));
@@ -221,7 +219,7 @@
     }
     function descendants(pid) { return pageDesc.get(pid) || []; }
 
-    // ---- 1.5) 浮层归属(2026-10-26 用户口径「按键弹窗怎么表达」) ----
+ // ---- 1.5) 浮层归属 ----
     // 弹窗/抽屉/下拉菜单是一个独立节点(component/section,标签写明浮层形态),它的子树不再参与
     // 页内普通行布局——渲染层把它画成页内浮层,流线从触发按钮落到浮层边框,而不是落到页内某按钮。
     var baseRoles = (base && base.roles) || new Map();
@@ -312,7 +310,7 @@
     for (var nv0 = 0; nv0 < nodes.length; nv0++) if (isNav(nodes[nv0])) navIds.add(nodes[nv0].id);
 
     // ---- 2) 屏幕阅读序:前向 nav 图 → 入口 → 最长主路径 → 其余分支(声明序) ----
-    // base 的分层在「结果页→继续浏览回首页」这类回边环上会破错边(实测主路径被反成结果页开头),
+ // base 的分层在「结果页→继续浏览回首页」这类回边环上会破错边(经验证主路径被反成结果页开头),
     // 所以交互地图自己算:回边按语义标签剥离,入口取可达最多,主路径用最长简单路径,分支尾随。
     var fwdAdj = new Map();
     var fwdIndeg = new Map();
@@ -758,7 +756,7 @@
     }
 
     // ---- 6.6) 浮层布局(弹窗/底部抽屉/右侧抽屉/下拉):页内浮层,不占普通行 ----
-    // 用户口径:按键弹出窗口必须有「窗口本体」可指——从触发按钮画到浮层边框;浮层内控件再连后续页面。
+ // 按键弹出窗口必须有「窗口本体」可指——从触发按钮画到浮层边框;浮层内控件再连后续页面。
     var popups = [];
     var popupHeadingIds = new Set();
     var popupTriggers = new Set();
@@ -873,7 +871,7 @@
         top: er.y - pr.y,
       };
       if (preferSide && dist[preferSide] >= 1 && corridorClear(preferSide)) return preferSide;
-      // 目标方向被同排兄弟挡住时,先试上下出页,不要为了近而反向横穿整页(实测「编辑快捷键」向左绕)。
+ // 目标方向被同排兄弟挡住时,先试上下出页,不要为了近而反向横穿整页(经验证「编辑快捷键」向左绕)。
       var fallback = preferSide === "right" ? ["bottom", "top", "left"]
         : preferSide === "left" ? ["bottom", "top", "right"]
         : preferSide === "top" ? ["right", "left", "bottom"]
@@ -1158,7 +1156,7 @@
       pmf.x = pf.x; pmf.y = pf.y; pmf.caption.x = pf.x; pmf.caption.y = pf.y - CAPTION_H + 6;
     }
 
-    // ---- 10) 交互边解析:页/元素统一到真实锚点 ----
+ // ---- 10) 交互边解析:页/元素统一到真依据点 ----
     var pageMetaById = new Map();
     pageMeta.forEach(function (pm) { pageMetaById.set(pm.id, pm); });
     function rectOf(id) {
@@ -1309,7 +1307,7 @@
             if (popN && popR) return { id: popId, node: popN, pageId: id, rect: popR, element: false, isPage: false, logic: false, inferred: false, popup: true, popupId: popId };
           }
         }
-        // 2026-10-26 用户口径:跳转到新页面的箭头只需指向新页面的大框,不再推断目标页里的按钮。
+ // 跳转到新页面的箭头只需指向新页面的大框,不再推断目标页里的按钮。
         return { id: id, node: n, pageId: id, rect: r, element: false, isPage: true, logic: false, inferred: false, pageFrame: true };
       }
       return { id: id, node: n, pageId: pid, rect: r, element: !isPageNode && !!pid, isPage: isPageNode, logic: !pid, inferred: false, fallbackPage: isPageNode };
@@ -1333,7 +1331,7 @@
       var sp = src.pageId, tp = dst.pageId;
       var back = false;
       if (sp && tp) {
-        // 不用 base.backEdges:base 为破环会把它断的边记成回边(实测把「提交成功→结果页」误标回边),
+ // 不用 base.backEdges:base 为破环会把它断的边记成回边(经验证把「提交成功→结果页」误标回边),
         // 交互地图按自己的前向图层级 + 语义标签判回边。
         if (isBackLabel(ed.label)) back = true;
         var lsp = levelMap.get(sp) || 0;
@@ -1659,7 +1657,7 @@
         out = routeAux(fl, srcR, dstR);
         fl.path = pathOf(out.pts);
       } else if (fl.kind === "popup" && fl.sourcePage && fl.sourcePage === fl.targetPage) {
-        // 同页弹窗:触发控件 → 浮层边框。先试直接折线;若穿过兄弟控件(实测确认按钮→弹窗的竖线
+ // 同页弹窗:触发控件 → 浮层边框。先试直接折线;若穿过兄弟控件(经验证确认按钮→弹窗的竖线
         // 会压住列表行),改走页面内侧空隙绕行,保证线不压任何控件。
         var srcC = { x: srcR.x + srcR.w / 2, y: srcR.y + srcR.h / 2 };
         var dstC = { x: dstR.x + dstR.w / 2, y: dstR.y + dstR.h / 2 };
@@ -1754,7 +1752,7 @@
             else if (dstMeta.row < srcMeta.row) sSide = "top";
             else sSide = (dstMeta.x + dstMeta.w / 2) >= (srcMeta.x + srcMeta.w / 2) ? "right" : "left";
           }
-          // 目标控件两侧都是兄弟时,选离屏边最近的一侧进——从远端进会横穿同排兄弟(实测详情页
+ // 目标控件两侧都是兄弟时,选离屏边最近的一侧进——从远端进会横穿同排兄弟(经验证详情页
           // 「申请领养」右侧按钮被左侧「收藏」挡住,箭头穿收藏行)。两侧都贴边时按列方向选。
           if (fl.target.element && dstMeta) {
             var gl = dstR.x - dstMeta.x;
@@ -1775,7 +1773,7 @@
         if (srcPopupId && srcMeta && dstMeta) {
           sSide = (dstMeta.x + dstMeta.w / 2) >= (srcMeta.x + srcMeta.w / 2) ? "right" : "left";
         } else if (fl.source.element && srcMeta) {
-          // 普通页内控件:目标方向那一侧有兄弟行挡着才换边,不无条件改走屏底(实测会竖穿开关/列表)。
+ // 普通页内控件:目标方向那一侧有兄弟行挡着才换边,不无条件改走屏底(经验证会竖穿开关/列表)。
           sSide = pageExitSide(fl.source.id, fl.sourcePage, sSide);
         }
         // 端点必须落在控件上:元素→页边界→路由→页边界→元素 合并成一条连续流线,
@@ -1802,7 +1800,7 @@
             startB = startPageB;
           }
         }
-        // 浮层目标落在浮层边框;页面跳转目标落在目标页大框边界(用户 2026-10-26 口径)。
+ // 浮层目标落在浮层边框;页面跳转目标落在目标页大框边界(用户 口径)。
         var endB = fl.target.element ? leaderPointOnPage(dstR, dstMeta, tSide)
           : fl.target.popup ? portOf(dstR, tSide)
           : portOf(dstMeta, tSide);
@@ -1832,7 +1830,7 @@
       fl.labelX = lab.x; fl.labelY = lab.y; fl.labelAnchor = lab.anchor || "middle";
       fl.labelW = lab.w || Math.min(210, Math.max(42, fl.labelText.length * 6.6 + 14));
     }
-    // 标签避让:多条流在底部通道汇合时标签会叠成黑块(实测「跳转:删除结果」压住「返回:用户列表」)。
+ // 标签避让:多条流在底部通道汇合时标签会叠成黑块(经验证「跳转:删除结果」压住「返回:用户列表」)。
     // 按流序做简单下移,保持文字可读;世界尺寸随后会把标签纳入,避免被裁。
     var placedLabels = [];
     for (var lbf = 0; lbf < flows.length; lbf++) {

@@ -1,5 +1,5 @@
 /**
- * M49 压缩事务(机制矩阵 #49):
+ *  压缩事务(机制矩阵 #49):
  * ①会话级锁(auto 与 manual 不并发摘要)②generation 重验(摘要期间 surface 变了不提交)
  * ③摘要缩小硬校验(不比 head 小就不写 done)④abandoned 检测(悬空 compact.start 只落一次)。
  */
@@ -24,7 +24,7 @@ function optsOf(llm: LlmProvider, devlogDir: string) {
   return { thresholdTokens: 100, keepRecentMessages: 3, compactLlm: llm, devlogDir, force: true };
 }
 
-describe("M49 ①会话级压缩锁", () => {
+describe(" ①会话级压缩锁", () => {
   it("压缩在跑时第二次调用 → compact.skipped(compaction-in-progress),摘要模型只调 1 次", async () => {
     const j = longJournal();
     const dir = mkdtempSync(join(tmpdir(), "gh-txn-"));
@@ -55,7 +55,7 @@ describe("M49 ①会话级压缩锁", () => {
   });
 });
 
-describe("M49 ②generation 重验", () => {
+describe(" ②generation 重验", () => {
   it("摘要期间 append message.user → compact.failed(surface-changed),不写 done,锁释放可再压", async () => {
     const j = longJournal();
     const dir = mkdtempSync(join(tmpdir(), "gh-txn-"));
@@ -91,7 +91,7 @@ describe("M49 ②generation 重验", () => {
   });
 });
 
-describe("M49 ③摘要缩小硬校验", () => {
+describe(" ③摘要缩小硬校验", () => {
   it("摘要不比 head 小 → compact.failed(summary-not-smaller),不写 done", async () => {
     const j = new MemoryJournal();
     // head 极小(17 条单字消息),摘要模型返回超长文本 → summaryTokens 必然 ≥ headTokens
@@ -125,7 +125,7 @@ describe("M49 ③摘要缩小硬校验", () => {
   });
 });
 
-describe("M49 ④失败出口释放锁", () => {
+describe(" ④失败出口释放锁", () => {
   it("摘要空串:failed + 锁释放", async () => {
     const j = longJournal();
     const dir = mkdtempSync(join(tmpdir(), "gh-txn-"));
@@ -146,7 +146,7 @@ describe("M49 ④失败出口释放锁", () => {
   });
 });
 
-describe("M49 ⑤abandoned 检测", () => {
+describe(" ⑤abandoned 检测", () => {
   it("历史 compact.start 无后续 → 落一次 compact.abandoned;重复调用不重复落", async () => {
     const j = new MemoryJournal();
     const startedAt = Date.now() - 60_000;
@@ -191,7 +191,7 @@ describe("M49 ⑤abandoned 检测", () => {
 });
 
 /**
- * 模拟 session-worker 的 ProxyJournal(2026-11-07 修复 M49 generation 口径):
+ * 模拟 session-worker 的 ProxyJournal(修复  generation 口径):
  * 种子事件保留 **全局 seq**(60 万+),本地 append 的 seq=replica.length(小整数)——两者混用。
  * 旧实现 lock.generation=compact.start.seq 后 readSession(seq+1),会把整段种子历史算成「新增」。
  */
@@ -226,7 +226,7 @@ class MixedSeqJournal {
 
 const asJournal = (j: MixedSeqJournal) => j as unknown as Parameters<typeof autoCompact>[0];
 
-describe("M49 ⑥ generation 用本会话事件计数(seq 无关)", () => {
+describe(" ⑥ generation 用本会话事件计数(seq 无关)", () => {
   it("ProxyJournal 混用 seq:摘要期间无新增 → 正常提交 done(不被历史全局 seq 误判)", async () => {
     const j = new MixedSeqJournal();
     j.seed(300); // 300 条 seq=600000+ 的历史事件

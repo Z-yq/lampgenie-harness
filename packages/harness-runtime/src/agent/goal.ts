@@ -1,5 +1,5 @@
 /**
- * 会话目标运行时(step-053,ZCode target 子系统移植:ZCode contracts/src/tools/target.ts)。
+ * 会话目标运行时(ZCode target 子系统移植:ZCode contracts/src/tools/target.ts)。
  * 状态机:active|paused|budget_limited|complete(单会话单目标,journal 最后一条 goal.set 为准=upsert 语义);
  * 续跑提示词/完成校验提示词逐字移植(ZCode formatGoalContinuationPrompt/formatGoalCompletionVerificationPrompt);
  * 校验解析 fail-open(坏 JSON=passed,防垃圾输出导致无限续跑);目标 ≤4000 字符。
@@ -7,15 +7,15 @@
 import type { Journal, JournalEvent } from "@lampgenie/core";
 
 export const MAX_GOAL_OBJECTIVE_CHARS = 4000;
-/** M26:续跑事件在 journal 里的 payload.type(通用 "custom" kind;goal.blocked 同族)。 */
+/** :续跑事件在 journal 里的 payload.type(通用 "custom" kind;goal.blocked 同族)。 */
 export const GOAL_CONTINUE_EVENT = "goal.continue";
 export const GOAL_BLOCKED_EVENT = "goal.blocked";
-/** 2026-11-07 修静默停摆:goal 入口心跳 / 完成校验器每次尝试留痕(同为通用 "custom" kind)。 */
+/** 修静默停摆:goal 入口心跳 / 完成校验器每次尝试留痕(同为通用 "custom" kind)。 */
 export const GOAL_TICK_EVENT = "goal.tick";
 export const GOAL_VERIFIER_EVENT = "goal.verifier";
 /** goal.blocked 的「校验器连续不可用」稳定码(与 goalContinueVerdict 的拒因码同族)。 */
 export const GOAL_VERIFIER_UNAVAILABLE_CODE = "GOAL_VERIFIER_UNAVAILABLE";
-/** M26(2026-11-08)续跑轮 claim/release(通用 "custom"):崩溃恢复判据=claim 无 release 且无
+/** M26续跑轮 claim/release(通用 "custom"):崩溃恢复判据=claim 无 release 且无
  * goal.continue → 该轮视为未派发、可重试;正常派轮由 goal.continue 结账(不 release)。 */
 export const GOAL_ROUND_CLAIM_EVENT = "goal.round.claim";
 export const GOAL_ROUND_RELEASE_EVENT = "goal.round.release";
@@ -33,9 +33,9 @@ export interface SessionGoal {
   /** 目标首次设定的 epoch ms(时间预算/时长记账基准)。 */
   startedAt: number;
   updatedAt: number;
-  /** M26 目标修订号(每条 goal.set 事件 +1;readGoalFromJournal 计算)。续跑身份校验用它判「目标是否已被改过」。 */
+ /**  目标修订号(每条 goal.set 事件 +1;readGoalFromJournal 计算)。续跑身份校验用它判「目标是否已被改过」。 */
   revision: number;
-  /** M26 续跑轮次(该会话 goal.continue 事件数;readGoalFromJournal 计算)。 */
+ /**  续跑轮次(该会话 goal.continue 事件数;readGoalFromJournal 计算)。 */
   round: number;
 }
 
@@ -48,7 +48,7 @@ export function isValidGoalObjective(text: string): boolean {
 export function readGoalFromJournal(events: JournalEvent[], sessionId: string): SessionGoal | null {
   const scoped = events.filter((e) => e.sessionId === sessionId);
   const goalEvents = scoped.filter((e) => e.kind === "goal.set");
-  // M26 round:续跑轮次 = 该会话 goal.continue 事件数(写入方=网关 maybeContinueGoal;
+ //  round:续跑轮次 = 该会话 goal.continue 事件数(写入方=网关 maybeContinueGoal;
   // kind 走 core 的通用 "custom" + payload.type,不新增 EventKind 联合成员,worker/journal 全兼容)。
   const round = scoped.filter((e) => e.kind === "custom" && (e.payload as { type?: unknown } | undefined)?.type === GOAL_CONTINUE_EVENT).length;
   // 持有器绕开 CFA 自引用收窄(current 在循环内被赋 null 后 TS 把 prev 推成 never)。
@@ -85,7 +85,7 @@ export function readGoal(journal: Journal, sessionId: string): SessionGoal | nul
   return readGoalFromJournal(journal.readAll(), sessionId);
 }
 
-/** M26 续跑被拒的稳定码(纯判据,不读写任何状态)。 */
+/**  续跑被拒的稳定码(纯判据,不读写任何状态)。 */
 export type GoalContinueBlockCode =
   | "GOAL_INACTIVE"
   | "GOAL_ROUND_LIMIT"
@@ -105,11 +105,11 @@ export interface GoalContinueVerdictInput {
   activeSubagents?: number;
   /** 发起本轮时预期的目标修订号(缺省=不做 stale 校验)。 */
   expectedRevision?: number;
-  /** M26(2026-11-08)本次要发的轮次(round+1)是否已有 goal.continue 留痕(幂等重入)。 */
+ /** M26本次要发的轮次(round+1)是否已有 goal.continue 留痕(幂等重入)。 */
   hasContinueForRound?: boolean;
-  /** M26:会话是否已有 running/queued 且标题以 "[goal]" 开头的续跑任务。 */
+ /** :会话是否已有 running/queued 且标题以 "[goal]" 开头的续跑任务。 */
   hasTaskForRound?: boolean;
-  /** M26:该轮已有 claim(无 release、无 continue)=上次崩溃未派发 → 按崩溃重试放行。 */
+ /** :该轮已有 claim(无 release、无 continue)=上次崩溃未派发 → 按崩溃重试放行。 */
   claimedRound?: number;
   /** 当前时刻(缺省 Date.now();只用于 reason 里的耗时读数)。 */
   now?: number;
@@ -124,13 +124,13 @@ export interface GoalContinueVerdict {
 export interface GoalRoundClaimState {
   /** 该轮有 goal.round.claim。 */
   claimed: boolean;
-  /** 该轮有 goal.round.release(claim 已成对收口)。 */
+ /** 该轮有 goal.round.release(claim 已成对)。 */
   released: boolean;
   /** 该轮有 goal.continue(轮次已真正派出)。 */
   continued: boolean;
 }
 
-/** M26 纯判据:某一轮的 claim/release/continue 留痕状态(崩溃恢复用;只看该会话的自定义事件)。 */
+/**  纯判据:某一轮的 claim/release/continue 留痕状态(崩溃恢复用;只看该会话的自定义事件)。 */
 export function goalRoundClaimState(events: JournalEvent[], sessionId: string, round: number): GoalRoundClaimState {
   const state: GoalRoundClaimState = { claimed: false, released: false, continued: false };
   for (const e of events) {
@@ -144,7 +144,7 @@ export function goalRoundClaimState(events: JournalEvent[], sessionId: string, r
   return state;
 }
 
-/** M26 纯判据:这一轮 goal 续跑能不能发。顺序=status → 轮次 → 子代理 → 预算 → 修订号 → 重复轮。 */
+/**  纯判据:这一轮 goal 续跑能不能发。顺序=status → 轮次 → 子代理 → 预算 → 修订号 → 重复轮。 */
 export function goalContinueVerdict(input: GoalContinueVerdictInput): GoalContinueVerdict {
   const { goal, round, maxContinues, activeSubagents = 0, expectedRevision, hasContinueForRound = false, hasTaskForRound = false, claimedRound, now } = input;
   if (!goal) return { allow: false, code: "GOAL_INACTIVE", reason: "会话无目标(未设定或已被清除)" };
@@ -157,7 +157,7 @@ export function goalContinueVerdict(input: GoalContinueVerdictInput): GoalContin
   if (expectedRevision !== undefined && expectedRevision !== goal.revision) {
     return { allow: false, code: "GOAL_REVISION_STALE", reason: `目标修订已变化(预期 ${expectedRevision},当前 ${goal.revision})` };
   }
-  // M26 重复轮护栏(2026-11-08):悬挂 claim 且该轮既无 continue 也无在跑的 goal 任务 = 上次崩溃在
+ //  重复轮护栏:悬挂 claim 且该轮既无 continue 也无在跑的 goal 任务 = 上次崩溃在
   // 派发前断掉 → 放行重试;其余情况「该轮已有 continue」或「已有 [goal] 任务在跑/排队」= 幂等拒发。
   const crashRetry = claimedRound !== undefined && !hasContinueForRound && !hasTaskForRound;
   if (!crashRetry && hasContinueForRound) {
@@ -171,8 +171,8 @@ export function goalContinueVerdict(input: GoalContinueVerdictInput): GoalContin
   return { allow: true, reason: crashRetry ? `${base}(round ${round + 1} 悬挂 claim 按崩溃重试放行)` : base };
 }
 
-/** 校验器不可用时的兜底 nextAction(2026-11-07):不带停顿、给出可执行的下一步目标文件。
- * 目标文本里出现 .md 路径(如 tasks/designs/mechanism-gap-matrix.md)就点名那一个,否则回落默认名。 */
+/** 校验器不可用时的兜底 nextAction:不带停顿、给出可执行的下一步目标文件。
+ * 目标文本里出现 .md 路径(如)就点名那一个,否则回落默认名。 */
 const GOAL_VERIFIER_FALLBACK_DEFAULT = "上一轮任务已完成但完成校验器不可用;请对照 mechanism-gap-matrix.md 选下一个 missing/partial 机制继续推进,并在本轮末尾回写矩阵。";
 
 export function goalVerifierFallbackNextAction(goal: SessionGoal | null): string {
@@ -205,7 +205,7 @@ export function consecutiveVerifierFailures(events: JournalEvent[], sessionId: s
   return n;
 }
 
-/** 状态变更通知(goal_state_change 语义;message.system 入对话流。2026-10-23 用户口径:提示词全中文)。 */
+/** 状态变更通知(goal_state_change 语义;message.system 入对话流。 提示词全中文)。 */
 export function goalStateChangeNotice(kind: "paused" | "resumed" | "cleared"): string {
   switch (kind) {
     case "paused":
@@ -227,7 +227,7 @@ export interface GoalVerification {
   nextAction: string;
 }
 
-/** 续跑提示词(formatGoalContinuationPrompt 语义,含完成审计清单;2026-10-23 汉化,协议标记
+/** 续跑提示词(formatGoalContinuationPrompt 语义,含完成审计清单; 汉化,协议标记
  * 〈untrusted_objective〉与 JSON 属性名保留英文)。 */
 export function formatGoalContinuationPrompt(goal: SessionGoal, verification?: Pick<GoalVerification, "nextAction" | "reason"> | null): string {
   const tokenBudget = goal.tokenBudget === null ? "无" : goal.tokenBudget.toString();
@@ -280,7 +280,7 @@ export function formatGoalContinuationPrompt(goal: SessionGoal, verification?: P
   ].join("\n");
 }
 
-/** 完成校验提示词(formatGoalCompletionVerificationPrompt 语义;2026-10-23 汉化,JSON 形状与
+/** 完成校验提示词(formatGoalCompletionVerificationPrompt 语义; 汉化,JSON 形状与
  * 属性名保留英文——那是解析器契约)。 */
 export function formatGoalCompletionVerificationPrompt(goal: SessionGoal): string {
   const tokenBudget = goal.tokenBudget === null ? "无" : goal.tokenBudget.toString();

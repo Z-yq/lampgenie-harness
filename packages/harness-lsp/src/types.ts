@@ -1,5 +1,5 @@
 /**
- * 编辑后检查的公共类型(step-114 / M108)。
+ * 编辑后检查的公共类型( /)。
  * 语义:settings 缺省=低层关闭(单测/嵌入方不传=行为与旧版一致);
  * 生产配置 coding.lsp 经 zod 解析后显式传入({enabled:true,...}),即用户可见的「缺省 on」。
  */
@@ -28,7 +28,7 @@ export interface LspSettings {
   /** 保存即格式化开关。 */
   format?: boolean;
   /**
-   * 写前 baseline + 写后 delta(M108):只报「写前不存在的新增」诊断。
+ * 写前 baseline + 写后 delta:只报「写前不存在的新增」诊断。
    * 缺省 true;显式 false=旧行为(全量报告写后诊断)。
    */
   baseline?: boolean;
@@ -49,7 +49,7 @@ export const LSP_DEFAULTS = {
   timeoutMs: 2000,
   maxDiagnostics: 20,
   format: true,
-  /** 诊断块渲染总字符预算(M108):超出截断并注明。 */
+ /** 诊断块渲染总字符预算:超出截断并注明。 */
   maxRenderChars: 4096,
   /** 超过该大小的文件跳过格式化+诊断(预算保护)。 */
   maxFileBytes: 512 * 1024,
@@ -115,7 +115,7 @@ export interface EditCheckInput {
   /** coding.lsp 配置;缺省=关闭(低层语义)。 */
   settings?: LspSettings;
   /**
-   * 写前 baseline 诊断(M108):由 collectBaselineDiagnostics 在**落盘前**采集。
+ * 写前 baseline 诊断:由 collectBaselineDiagnostics 在**落盘前**采集。
    * - undefined = 不做 delta(全量报告写后诊断,旧行为);
    * - null = 采集失败(渲染块带 note="baseline 不可用,仅报当前 ERROR",仍只报 ERROR);
    * - 数组 = 对消(空数组=新文件基线为空)。
@@ -125,7 +125,7 @@ export interface EditCheckInput {
   baselineText?: string;
 }
 
-/** 写前 baseline 采集输入(M108)。 */
+/** 写前 baseline 采集输入。 */
 export interface BaselineCheckInput {
   root: string;
   absPath: string;
@@ -134,7 +134,7 @@ export interface BaselineCheckInput {
   settings?: LspSettings;
 }
 
-/** 渲染选项(M108)。 */
+/** 渲染选项。 */
 export interface RenderDiagnosticsOptions {
   /** 是否连 warning 一起回灌(缺省 false:只报 ERROR)。 */
   includeWarnings?: boolean;

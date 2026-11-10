@@ -1,4 +1,4 @@
-/** 编辑态平移取证探针(2026-11-06)。
+/** 编辑态平移取证探针。
  *  骨架抄 probe_canvas_after.mjs;自起临时实例(默认 7794,占用则 7795),**绝不碰 7700**。
  *  取证点:panel.ts 的 svg 平移分支部删掉了编辑态早退 `if (cvMode === "svg" && cvSvgNodeAt(e) && boardEditOn) return;`
  *  → 编辑态按住图元拖也应平移整图。量三项(真 page.mouse,各 +20px×6 = 120px 右移):

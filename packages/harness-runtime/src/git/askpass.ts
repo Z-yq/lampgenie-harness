@@ -1,6 +1,5 @@
 /**
- * git 凭据辅助(designs/06 二期:GitLab/Codeup https 克隆/推送的 token 传递)。
- *
+ * git 凭据辅助(二期:GitLab/Codeup https 克隆/推送的 token 传递)。
  * 令牌处理决策(诚实登记):
  * - 不走「token 内嵌 https URL」——那会把带 token 的 remote 写进 .git/config(token 落盘)。
  * - 不走 argv 内嵌——argv 在 /proc/<pid>/cmdline 对同机进程可读。

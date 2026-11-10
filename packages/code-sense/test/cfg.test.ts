@@ -1,5 +1,5 @@
 /**
- * 函数级 CFG(2026-10-27):语句级控制流图——真实语句/条件菱形/是·否/循环回边/switch/try/
+ * 函数级 CFG:语句级控制流图——真实语句/条件菱形/是·否/循环回边/switch/try/
  * return·throw·break·continue/注释与常量说明/长函数分页。
  */
 import { describe, it, expect } from "vitest";

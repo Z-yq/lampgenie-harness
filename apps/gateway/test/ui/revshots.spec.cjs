@@ -1,6 +1,6 @@
-/** 多尺寸不破版回归(step-074 D6):1440x900 / 1280x800 / 1920x1080 / 窄窗 900x700。
+/** 多尺寸不破版回归( D6):1440x900 / 1280x800 / 1920x1080 / 窄窗 900x700。
  * 素材=7800 上真实持久会话(review.findings 卡+注入留痕)+持久夹具项目(回写店)。
- * 断言:评论组/注入钮/modal/店勾选件在各尺寸可见;无横向溢出;0 pageerror。截图落 tasks/step-074。 */
+ * 断言:评论组/注入钮/modal/店勾选件在各尺寸可见;无横向溢出;0 pageerror。截图落。 */
 const { chromium } = require("playwright-core");
 const { join } = require("node:path");
 
@@ -15,7 +15,7 @@ const SIZES = [
 ];
 
 (async () => {
-  const shotDir = join(__dirname, "../../../../tasks/step-074-review-inject-chat/shots");
+  const shotDir = join(__dirname, "../../../../tasks/-review-inject-chat/shots");
   const results = [];
   const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS" : "FAIL") + " " + name + (detail ? " — " + detail : "")); };
   let projAdded = false;

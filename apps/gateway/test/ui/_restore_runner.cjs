@@ -1,4 +1,4 @@
-/** step-072 白板恢复闭环实测 runner:掌管 gateway 子进程生命周期(启动/杀/同参重启),
+/** 白板恢复闭环经验证 runner:掌管 gateway 子进程生命周期(启动/杀/同参重启),
  * 然后进程内运行 boardrestore.spec.cjs(spec 末尾 process.exit 收尾)。
  * 用法:cd apps/gateway && npx tsx test/ui/_restore_runner.cjs
  * 环境:SELF_PORT(默认 7799)/GENIE_JOURNAL_DIR(默认 /tmp/j-s072)/KEEP_JOURNAL=1 跳过清账(复跑验收用) */
@@ -12,10 +12,10 @@ const SERVER = path.join(__dirname, "_restore_server.cjs");
 
 let child = null;
 async function start() {
-  // --conditions=development:workspace 包走 src,绕开 stale dist(并发在途面 parent-ask-broker dist 缺失实证;
+ // --conditions=development:workspace 包走 src,绕开 stale dist(并发在途面 parent-ask-broker dist 缺失验证;
   // 与 vitest 全仓同一条件,免「包级 build」重操作)。
-  // detached:true=独立进程组——gateway 会 fork sense-index-worker(重建孤儿实测:重启后旧 worker 存活
-  // 并吃满 CPU,把后续 spec 页面加载拖到 60s 超时),必须按组杀(续作轮 2026-10-16)。
+ // detached:true=独立进程组——gateway 会 fork sense-index-worker(重建孤儿经验证:重启后旧 worker 存活
+ // 并吃满 CPU,把后续 spec 页面加载拖到 60s 超时),必须按组杀(续作轮)。
   child = spawn(process.execPath, ["--import", "tsx", "--conditions=development", SERVER], {
     env: { ...process.env, SELF_PORT: String(PORT), GENIE_JOURNAL_DIR: JD, GENIE_CHECKPOINT: "off", NODE_OPTIONS: "--max-old-space-size=1024" },
     stdio: ["ignore", "pipe", "pipe"],

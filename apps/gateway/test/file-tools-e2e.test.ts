@@ -12,13 +12,13 @@ import { join } from "node:path";
 import { createGatewayApp, type GatewayApp } from "../src/app.js";
 import { EchoChildBackend } from "@lampgenie/executors";
 
-// env 互斥(2026-10-20):threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
+// env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 beforeAll(async () => { await acquireEnvLock("file-tools-e2e"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
 afterAll(() => { releaseEnvLock("file-tools-e2e"); });
 
-process.env.GENIE_CHECKPOINT = "off"; // 临时目录跑 git 快照超 5s(2026-10-14 全量套件实测),e2e 关闭
+process.env.GENIE_CHECKPOINT = "off"; // 临时目录跑 git 快照超 5s(全量套件实测),e2e 关闭
 process.env.GENIE_SENSE_ORIENT = "off"; // 开工 orient 不吃脚本化 LLM 步数
 process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "file.write", pattern: "*", action: "allow" }]);
 
@@ -29,7 +29,7 @@ describe("文件工具端到端(echo 后端 + 脚本化 LLM,WS 全链)", () => {
   it("write_file → read_file → edit_file 一轮完成,journal 三对工具事件齐全,文件真实落盘", async () => {
     const projDir = mkdtempSync(join(tmpdir(), "gh-filetools-e2e-"));
     try {
-      // 脚本化 LLM:四个 step——写/读/编/收口
+ // 脚本化 LLM:四个 step——写/读/编/
       let phase = 0;
       app = createGatewayApp({
       config: { agent: { planGate: "off" } }, // 文件链测试与规划闸无关,显式关(闸门行为由 plan-gate.test 覆盖)

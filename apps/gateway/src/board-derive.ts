@@ -1,6 +1,5 @@
 /**
  * 白板「关系自动推导引擎」(设计板节点 n3):纯函数,零 IO。
- *
  * 背景:白板节点由 agent 落板时只写 nodes/accept/targets,edges 往往为空,人看到的板「没有结构」。
  * 本模块按**确定性规则**从已有事实补边,宁缺不猜:
  * - R0 显式边原样保留最前(用户/agent 画的边是事实,不改 kind/label,不补 virtual);
@@ -9,8 +8,7 @@
  *   去假边两道闸:① 该 targets 条目只被 **1 个**节点引用时才可成边(≥2 节点引用的共享路径不唯一,跳过);
  *   ② 同一段 cmd 命中多个 B 时只留 id 前缀(首个 `-` 前)与 A 相同者,前缀都对不上则全部不生成;label 文案不变,只减量;
  * - R2 同组次序:同 group 内按声明序相邻两节点补 nav 边(无需索引,纯结构)。
- * 推导出的边一律 virtual: true(=待核实的推断边,画布虚线渲染),与实证边区分。
- *
+ * 推导出的边一律 virtual: true(=待核实的推断边,画布虚线渲染),与验证边区分。
  * 纪律:
  * - resolver 不可用/查不到必须返回 null —— 本模块据此**不造边**,不靠命名相似度猜;
  * - 自环与不存在的节点 id 不参与推导(显式边不受此限:原样保留);
@@ -64,8 +62,7 @@ function keepKind(k: unknown): DerivedEdge["kind"] {
 export function deriveBoardEdges(
   nodes: Array<{ id: string; label?: string; group?: string; targets?: string[]; accept?: Array<{ cmd: string }>; phase?: string; change?: string }>,
   explicit: Array<{ from: string; to: string; kind?: string; label?: string }>,
-  ctx?: DeriveCtx,
-): DerivedEdge[] {
+  ctx?: DeriveCtx): DerivedEdge[] {
   const list: Node[] = Array.isArray(nodes) ? nodes.filter((n): n is Node => !!n && typeof n.id === "string" && n.id !== "") : [];
   const byId = new Map<string, Node>();
   for (const n of list) if (!byId.has(n.id)) byId.set(n.id, n);

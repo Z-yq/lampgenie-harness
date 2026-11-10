@@ -1,7 +1,7 @@
-/** boardwf.spec.cjs 自起跑法(step-121 工作流板):不碰产线 7700;临时端口 7817 实例+journal /tmp/j-s121。
+/** boardwf.spec.cjs 自起跑法(工作流板):不碰生产环境 7700;临时端口 7817 实例+journal /tmp/j-s121。
  * 用法:cd apps/gateway && NODE_OPTIONS=--conditions=development SELF_PORT=7817 npx tsx test/ui/_boardwf_selfhost.cjs
  * 注意:NODE_OPTIONS 必须在命令行传——文件内的 process.env 赋值只影响子进程,对本进程已初始化的模块解析
- * 条件无效(实锤:不带 env 跑,protocol 新字段 docKind=workflow/wf 走 dist 旧 zod,新板全部 skipped、
+ * 条件无效(注意:不带 env 跑,protocol 新字段 docKind=workflow/wf 走 dist 旧 zod,新板全部 skipped、
  * 板清单空、spec 在选板处 30s 超时)。下方赋值仅作子进程兜底保留。 */
 process.env.NODE_OPTIONS = (process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + " " : "") + "--conditions=development";
 process.env.GENIE_CHECKPOINT = "off";

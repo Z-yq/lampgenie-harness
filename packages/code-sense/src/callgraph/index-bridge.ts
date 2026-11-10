@@ -1,10 +1,8 @@
 /**
- * callgraph/index-bridge(step-106 / designs/27 §7 落地):索引桥边段计算的单一出处。
- *
- * 把 step-103 的 A1 HTTP api 桥确定性边(exact/exact-folded,过可信度闸)挂进 c2f 索引:
+ * callgraph/index-bridge( / §7 落地):索引桥边段计算的单一出处。
+ * 把 的 A1 HTTP api 桥确定性边(exact/exact-folded,过可信度闸)挂进 c2f 索引:
  * buildC2fIndex(code-sense 全量)与 code-sense-cli 增量链(buildLocked)共用本函数——
  * 两条构建链不得各自实现第二份。
- *
  * 纪律:
  *  - 运行时只经**动态 import** 触达 sensing/crosslang-bridge(sensing/index 静态引用
  *    callgraph/c2f,反向静态引用会成环;type-only import 编译期擦除,无环);
@@ -42,7 +40,7 @@ export async function computeIndexBridge(root: string, opts?: IndexBridgeOptions
     if (r.degraded) {
       return { ...base, state: r.state, edges: [], degraded: r.degraded.reason };
     }
-    // 规范化排序后落盘:rg 多线程输出序不稳(实测同仓同参连跑两次 edges 序不同、集合相等),
+ // 规范化排序后落盘:rg 多线程输出序不稳(经验证同仓同参连跑两次 edges 序不同、集合相等),
     // 索引产物要「同盘同参字节可复现」(RC-L 公平采样同族纪律);排序不改变边集合与配对语义。
     // 比较键必须构成全序(稳定排序的输入序不稳,并列项会继承乱序)——一直比到 to.line/literal。
     const edges = [...r.edges].sort((a, b) => {

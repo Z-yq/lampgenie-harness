@@ -235,12 +235,14 @@ describe("模型选择 UI 对齐 ZCode 布局", () => {
 
   it("⑪ 窄视口:1150px 保留 + 980px 隐藏 .mt-label/.tb-text(只留图标)", async () => {
     const html = await fetchHtml(7926);
-    const at1150 = html.slice(html.indexOf("@media (max-width:1150px){"), html.indexOf("@media (max-width:1150px){") + 500);
+    const at1150Anchor = html.indexOf("@media (max-width:1150px){", html.indexOf(".model-trigger{max-width:180px}") - 400);
+    const at1150 = html.slice(at1150Anchor, at1150Anchor + 500);
     expect(at1150).toContain(".model-trigger{max-width:180px}");
     // zcode 收窄顺序:先隐藏 providerName/ 前缀(模型名优先保留),再整段文案换图标
     expect(at1150).toContain(".model-trigger .mt-provider{display:none}");
     // 更窄:模型选择器变纯图标方形按钮(size-7=28px)/档位只留脑图标+进度条
-    const at980 = html.slice(html.indexOf("@media (max-width:980px){"), html.indexOf("@media (max-width:980px){") + 500);
+    const at980Anchor = html.indexOf("@media (max-width:980px){", html.indexOf(".model-trigger .mt-label{display:none}") - 400);
+    const at980 = html.slice(at980Anchor, at980Anchor + 500);
     expect(at980).toContain(".model-trigger .mt-label{display:none}");
     expect(at980).toContain(".model-trigger{width:28px;max-width:28px;padding:0;justify-content:center;gap:0}");
     expect(at980).toContain(".thought-btn .tb-text{display:none}");

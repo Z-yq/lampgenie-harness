@@ -1,4 +1,4 @@
-/** UI 实测:评审评论一键回注聊天窗(step-074)。
+/** UI 经验证:评审评论一键回注聊天窗。
  * 覆盖:chat rev-card 单条/整批注入钮、modal 目标会话区分(当前/新会话)、注入后指令进会话+留痕 chip、
  *      回写店勾选批量/单条/整批、异会话注入自动跳转、注入钮不触发文件查看器、0 pageerror。
  * 自宿(executor 桩),聊天侧走真实 WS/journal;回写店侧经 UI 添加真实项目(含 .genie/review-comments.json fixture)。
@@ -21,7 +21,7 @@ const { servePanel } = require("../../src/panel.ts");
   const app = createGatewayApp({ useExternalHttp: true, executor: backend });
   servePanel(7751, (srv) => app.attachWs(srv));
   await new Promise((r) => setTimeout(r, 400));
-  const shotDir = join(__dirname, "../../../../tasks/step-074-review-inject-chat/shots");
+  const shotDir = join(__dirname, "../../../../tasks/-review-inject-chat/shots");
   mkdirSync(shotDir, { recursive: true });
   // 回写店 fixture 项目
   const projDir = mkdtempSync(join(tmpdir(), "gh-revinject-ui-"));

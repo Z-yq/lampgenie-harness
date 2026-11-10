@@ -1,4 +1,4 @@
-/** 板型一致性门(2026-10-25 13 类规范)单测:每类一张合格板 + 至少一张反例。
+/** 板型一致性门( 13 类规范)单测:每类一张合格板 + 至少一张反例。
  * 纯函数零 IO;反例断言 [类型门] 点名到具体缺口。 */
 import { describe, it, expect } from "vitest";
 import { validateBoardTypeConformance, validateChangeContract } from "../src/board-contract/index.js";
@@ -512,7 +512,7 @@ describe("2026-10-26 通用硬规则(scale 显式的新板)", () => {
   });
 
   it("旧板(无 scale)不启用新硬规则:flow 形成立但 modify 缺 before 不报新规", () => {
-    // 形态迁移(2026-10-29 门强制 flow):本条断言的是「无 scale 不启用 2026-10-26 硬规则」,
+ // 形态迁移(门强制 flow):本条断言的是「无 scale 不启用 硬规则」,
     // 所以夹具先满足 code 板强制 flow 形,再让 modify 节点缺 before 看新规不触发。
     const nodes = [
       N({ id: "theme-1", kind: "note", group: "主题", label: "主题:面板启动读配置流程", change: "keep", targets: ["apps/gateway/src/panel.ts"] }),
@@ -641,7 +641,7 @@ describe("2026-10-26 通用硬规则(scale 显式的新板)", () => {
   });
 });
 
-describe("内容来源层二期(2026-11-04 用户口径「板上的现状必须是真实结构,不是模型印象」)", () => {
+describe("内容来源层二期(2026-11-04 「板上的现状必须是真实结构,不是模型印象」)", () => {
   const F = "apps/gateway/src/board-contract/rules/type-conformance.ts";
   const ACC = [
     { cmd: "npx vitest run test/board-type-conformance.test.ts", expect: "全绿", type: "command" },
@@ -714,7 +714,7 @@ describe("内容来源层二期(2026-11-04 用户口径「板上的现状必须�
     expect(P(check(nodes, edges, "code"))).not.toContain("锚不可见");
   });
 });
-describe("纯计划步骤板检测(2026-11-04 用户口径:板偏计划步骤而非实际开发内容逻辑)", () => {
+describe("纯计划步骤板检测(2026-11-04 板偏计划步骤而非实际开发内容逻辑)", () => {
   it("零 targets/symbolRef/accept/数据的步骤序列 → 点名「纯计划步骤板」", () => {
     const r = check([
       N({ id: "s1", label: "梳理近两日轨迹", summary: "先看轨迹", targets: [] }),
@@ -754,7 +754,7 @@ describe("纯计划步骤板检测(2026-11-04 用户口径:板偏计划步骤而
   });
 });
 
-describe("composition 作业思路板(2026-11-04 用户口径「办公任务在白板上画作业思路」)", () => {
+describe("composition 作业思路板(2026-11-04 「办公任务在白板上画作业思路」)", () => {
   // 章节节点用既有 kind=section,章间关系用既有 data 边(label 写关系词);
   // 板内不带任何代码契约字段(targets/symbolRef/before),顺序由节点声明序表达。
   const S = (over: Record<string, unknown>) => ({ kind: "section", change: "keep", ...over }) as never;
@@ -877,7 +877,7 @@ describe("白板看得懂(2026-11-04):keep 结构化锚 + 板首主题节点", (
     expect(txt).not.toContain("主题节点");
   });
 
-  // 2026-11-05 code review 补:空壳锚不能蒙混过门(门宣称「画布画得出来」,强度必须对得上)
+ // code review 补:空壳锚不能蒙混过门(门宣称「画布画得出来」,强度必须对得上)
   it("f. 垃圾锚不放行:targets=[''] / symbolRef:{} / targets=['随便写的']", () => {
     const t1 = mk({ keep: { targets: [""] } });
     expect(P(checkStrict(t1.nodes, t1.edges, "code"))).toContain("锚不可见");

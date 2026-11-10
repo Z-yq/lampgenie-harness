@@ -1,12 +1,10 @@
 /**
- * 工具面全量说明(2026-10-31 token 轮:工具面瘦身)。
- *
+ * 工具面全量说明( token 轮:工具面瘦身)。
  * **为什么存在**:工具 `description` 每步随 tools 参数重发,是全任务最贵的固定成本。此前
  * board_upsert 把全部规则(17 段中文,约 2000 字符)内联在 description 里,而 tool_view 的摘要+
  * 指路机制因此形同虚设(指路的目标就是正文自己)。现在 wire description 只留**必须常驻**的部分
  * (工具干什么 / action 四值 / P0 accept 硬约束),完整规则搬到这里,由 `tool_view(name=...)`
  * 按需取——与 `tool-view.ts` 的设计意图一致(用时再看,像 MCP)。
- *
  * **口径**:本表是**唯一**被移除内容的去处。改 wire description 删掉的规则段必须落在这里,
  * 否则就是丢信息。`tool_view` 优先返回本表的全文(其次返回工具自身 description)。
  */

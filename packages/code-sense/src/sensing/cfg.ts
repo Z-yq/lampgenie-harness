@@ -1,14 +1,11 @@
 /**
- * sensing/cfg(2026-10-27):函数级控制流图——「这个函数到底怎么走」的语句级答案。
- *
+ * sensing/cfg:函数级控制流图——「这个函数到底怎么走」的语句级答案。
  * 与 flow 的分工:flow 画「模块/文件/函数之间谁调谁」;cfg 画**一个函数体内部**的真实走向:
  *   语句(原文压缩)+ if/elif/else 菱形条件(是/否边)+ while/for 回边(循环/退出)+
  *   switch/case(default 兜底)+ try/catch/finally(异常边)+ return/throw/break/continue +
  *   函数说明/模块常量注释(黄底 note)+ 调用标注。
- *
- * 为什么(2026-10-27 用户口径):模块级方框+端点列表「不是人能看懂的」,示例是语句级流程图——
+ * 为什么:模块级方框+端点列表「不是人能看懂的」,示例是语句级流程图——
  * 每步写的是代码里的真实调用/判断/循环,读者不需要回源就能理解算法在做什么。
- *
  * 纪律:
  *  - 诚实全量:节点不设上限(缺省 0=全画);--max-nodes 是显式 opt-in,截断如实登记。
  *  - 只画语法树里真实存在的语句/分支/循环;三元/短路表达式不拆成分支(knownLimits 登记)。
@@ -107,9 +104,8 @@ export interface CfgCallRef {
 }
 
 /**
- * 函数说明(2026-10-27 用户口径「函数说明要好好设计」;参考 deepwiki-open 的页面结构:
+ * 函数说明(参考 deepwiki-open 的页面结构:
  * Introduction / Key functions table / 每条带 file:line,不直接倾倒 docstring)。
- *
  * 设计原则:
  *  - 事实分层:职责(首句)/输入(签名参数)/输出(return 表达式)/关键判断(CFG 菱形)/
  *    循环/异常/副作用(调用名启发式)/上下游(索引解析)/位置;
@@ -1353,7 +1349,7 @@ function splitDoc(doc: string | undefined): { purpose: string; details?: string 
 }
 
 /** 调用名启发式识别外部动作(明确标注「按调用名」,不当作精确副作用分析)。
- *  误报收口:push(数组)、Map.delete、dict.update、new Error 都曾命中——这里用
+ * 误报:push(数组)、Map.delete、dict.update、new Error 都曾命中——这里用
  *  「整词/明确复合名」匹配,不用裸子串;数据库动作必须带 db/table/row 限定。 */
 const SIDE_EFFECT_RULES: { re: RegExp; category: string }[] = [
   { re: /(^|_)(log|logger|logging|warn|warning|info|debug|trace|print|console)(_|$)/i, category: "日志/输出" },
@@ -1823,8 +1819,7 @@ export function cfgDescriptionRows(fn: CfgFunction, markdown = true): { label: s
   // Markdown 表格里 `||` 会断列:先换「或」再兜底单竖线;CLI 文本保持原样
   const cell = (s: string, max = 240): string => clip(
     (markdown ? s.replace(/\|\|/g, " 或 ").replace(/\|/g, "/") : s).replace(/\r?\n/g, " "),
-    max,
-  );
+    max);
   const params = d.params.slice(0, 6).map((p) => mdCode(p.raw, markdown));
   const paramText = params.length > 0
     ? params.join(", ") + (d.params.length > 6 ? ` …+${d.params.length - 6}` : "")
@@ -1999,7 +1994,7 @@ export function renderCfgText(fn: CfgFunction, opts: { mermaid?: boolean; full?:
 
 // ---- 渲染:mermaid ----
 
-/** mermaid 标签转义:方括号必须转义——`["a[b]"]` 的 `]` 会提前闭合节点(实测 Parse error),
+/** mermaid 标签转义:方括号必须转义——`["a[b]"]` 的 `]` 会提前闭合节点(经验证 Parse error),
  *  `#` 也要转义,避免源码里的 `#123` 被当实体。 */
 const ENT: Record<string, string> = {
   "&": "&amp;", '"': "#quot;", "<": "#lt;", ">": "#gt;", "|": "&#124;",
@@ -2027,7 +2022,7 @@ function wrapLabel(text: string, width = 46, maxLines = 5): string {
 }
 
 function nodeLabel(n: CfgNode): string {
-  // mermaid 的 circle 节点不接受空引号标签(实测 Parse error),用空格占位
+ // mermaid 的 circle 节点不接受空引号标签(经验证 Parse error),用空格占位
   if (n.kind === "merge" && !n.text) return " ";
   if (n.kind === "note") {
     const body = (n.code ?? "").split("\n").map((x) => wrapLabel(x, 60, 2));

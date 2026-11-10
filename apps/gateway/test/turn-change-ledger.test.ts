@@ -1,6 +1,5 @@
 /**
- * M16 轮末变更账本(turn-change-ledger,2026-11-07)。
- *
+ * 轮末变更账本(turn-change-ledger。
  * A. 纯函数/采集:临时 git 仓(改 tracked / 新建 untracked / .gitignore 忽略 / 超大 / 非 git / 上限截断);
  * B. 接线(agent-wiring):done 与 failed 两路都落 journal custom `turn.change-ledger`,
  *    且账本内容绝不进 finalOut/模型上下文。
@@ -220,7 +219,7 @@ async function runScenario(s: Scenario): Promise<{ state: string; result: string
 }
 
 const seedWrite = (sid: string, append: Append) => {
-  // 用 .md 文档路径:验证账本(M107)对文档抑制,不会把路径写进 finalOut——这样 canary 只可能来自变更账本。
+ // 用 .md 文档路径:验证账本对文档抑制,不会把路径写进 finalOut——这样 canary 只可能来自变更账本。
   append({ kind: "tool.call", sessionId: sid, payload: { toolCallId: "w1", name: "write_file", arguments: JSON.stringify({ path: "docs/__ledger_probe__.md", content: "x" }) } });
 };
 const seedVerifiedThenWrite = (sid: string, append: Append) => {

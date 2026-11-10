@@ -1,17 +1,16 @@
 /**
- * 索引堆预算自适应(step-086,RC-K2):索引前按仓规模估内存,给 worker/CLI 推荐堆帽或分级告警;
+ * 索引堆预算自适应(RC-K2):索引前按仓规模估内存,给 worker/CLI 推荐堆帽或分级告警;
  * 超预算→按 RC-L 公平采样降数(GENIE_SENSE_MAX_FILES,engine 既有机制,本模块只算值/设环境,
  * code-sense 零改动),截断如实登记。
- *
- * 标定(step-085 实测 RSS + 本轮磁盘实测文件数;estMb = 700 基线 + Σ 档系数×文件数):
- *   | 语料 | 文件数 | 实测 RSS | estMb | 误差 |
+ * 标定(经验证 RSS + 本轮磁盘经验证文件数;estMb = 700 基线 + Σ 档系数×文件数):
+ * | 语料 | 文件数 | 经验证 RSS | estMb | 误差 |
  *   | poly-redash | 504 | <1024 | ~900 | ✓ |
  *   | poly-owncast(修后) | 808 | 1042 | 821 | -21%(包络下缘) |
  *   | poly-streamlit | 2250 | 1322 | 1600 | +21% |
  *   | cpp-opencv | 4131 | 2653 | 2972 | +12% |
  *   | grafana 全量 | 16715 | 2057 | 2847 | +38% |
  *   | grafana 6000 截断集 | 6000 | 1205(exit 134 @1024) | 1420 | ≥+18%(风险检出 ✓) |
- * 误差包络 -21%~+38%,按 ±40% 消费;字节模型失效实证:owncast 4.5MB 源码吃 1042MB RSS——
+ * 误差包络 -21%~+38%,按 ±40% 消费;字节模型失效验证:owncast 4.5MB 源码吃 1042MB RSS——
  * 内存主驱动是符号/AST 规模(语言档),源码字节数只作报告交叉项。
  */
 import { statSync } from "node:fs";
@@ -135,8 +134,8 @@ export async function estimateIndexMemory(root: string): Promise<HeapEstimate> {
   const processHeapMb = processHeapLimitMb();
   const explicit = explicitHeapMb();
   const budgetMb = explicit ?? Math.round(processHeapMb * 0.8);
-  // 2026-11-08(7700 审计):文件数模型对上千文件的 ts 仓会低估——lampgenie-harness 1439 文件
-  // 估算 916MB,实测构建峰值 RSS 2.6GB(默认 2GB 堆直接 OOM)。大仓给堆帽下限 4096MB
+ // (7700 审计):文件数模型对上千文件的 ts 仓会低估——lampgenie-harness 1439 文件
+ // 估算 916MB,经验证构建峰值 RSS 2.6GB(默认 2GB 堆直接 OOM)。大仓给堆帽下限 4096MB
   // (V8 堆帽是上限不是预占,不浪费常驻内存);risk/降数判定仍按 est,不受本下限影响。
   const largeRepoFloorMb = scan.files.length >= 800 ? 4096 : 0;
   const recommendedHeapMb = Math.max(largeRepoFloorMb, Math.min(4096, Math.max(1024, Math.ceil((est * 1.35) / 256) * 256)));

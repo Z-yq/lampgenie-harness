@@ -1,5 +1,5 @@
 /**
- * typed/java(step-089 P1 / designs/26 §2.2):Java 逐文件 typed 提取——
+ * typed/java( P1 / §2.2):Java 逐文件 typed 提取——
  * 类字段(structural,与 adapters/java.ts recordField 同判据形态)+class/method token。
  * 与 adapters/java.ts 的关系:索引档收类字段入索引;本档补 span 面向 token 流。
  */

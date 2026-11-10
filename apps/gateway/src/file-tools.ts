@@ -2,7 +2,6 @@
  * 主 agent 直操作文件工具(对标补齐:主循环此前只有 spawn_subagent/code_sense 等,
  * 连 read/write 这类基础文件工具都没有——查文件/小步修改都被迫派子代理,轻活重派)。
  * 六件套:read_file / write_file / edit_file / glob / grep / list_dir。
- *
  * 语义锚点(主流 coding agent 工具契约的诚实子集):
  * - read_file:带行号窗口读(1-based offset + limit,缺省/上限 2000 行,单行截断 2000 字符,
  *   输出总量上限 120KB);读侧登记 mtime(编辑保鲜:写/编辑工具据此拒绝盲写)。
@@ -13,14 +12,13 @@
  *   任意层级的文件名);结果按修改时间新→旧排序(最近改动的文件排前)。
  * - grep:内容检索(content/files_with_matches/count 三种输出模式,缺省 content 带行号)。
  * - list_dir:目录直接子项([d]/[f] 前缀)。
- *
  * 路径围栏:只接受任务项目根内的相对路径——绝对路径与 .. 上跳一律拒绝(board-store 同款判定),
  * 已存在路径再按 realpath 复核,防符号链接逃逸。
  * 权限:读类(read_file/glob/grep/list_dir)声明 isReadOnly——权限闸门豁免,全部权限模式下可用
  * (无副作用的调查不设闸);写类(write_file/edit_file)在 readonly/plan 直接拒绝
  * (permission.gate 落 journal),其余模式交 loop 既有闸门(规则/面板 ask 审批链;
  * 类别别名 file.write——单条规则同时覆盖两个写工具)。
- * journal:tool.call/tool.result 由 loop 统一落账,本模块不重复记(step-093 起唯一例外:
+ * journal:tool.call/tool.result 由 loop 统一落账,本模块不重复记(起唯一例外:
  * read_file 成功后旁路追加 tool.tokens 遥测事件,见下方专用段)。
  */
 import { existsSync, realpathSync, type Stats } from "node:fs";
@@ -28,29 +26,29 @@ import { promises as fsp } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { Journal } from "@lampgenie/core";
 import type { Tool } from "@lampgenie/runtime/agent/loop";
-// 视觉尺寸守卫(2026-11-05 事故):注入前解析图片头判像素,超模型上限直接拒注入——
+// 视觉尺寸守卫(事故):注入前解析图片头判像素,超模型上限直接拒注入——
 // 坏 dataUrl 一旦落进 journal(tool.result.payload.images),derive 每轮重放,会话永久 400。
 import { checkImageSize, readImageSize } from "./image-size.js";
 import { VISION_TOOL_SENTINEL } from "@lampgenie/runtime/agent/loop";
 import { checkImageInjected, checkRepeatRead, recordFileRead, recordImageInjected } from "@lampgenie/runtime/agent/read-file-state";
 import type { DiagnosticItem, LspSettings } from "@lampgenie/lsp";
 import { permissionMode } from "./permission-mode.js";
-// 输入边界防御(M136):read guard 顺序(归一→设备/伪文件→stat special→denylist→binary→read)、
+// 输入边界防御:read guard 顺序(归一→设备/伪文件→stat special→denylist→binary→read)、
 // 单行 clamp、编辑比例守卫;阈值常量集中在 input-boundary(本模块只引用)。
 import { BINARY_PROBE_BYTES, checkEditRatio, clampLine, readGuardPath, readHeadBytes } from "./input-boundary.js";
 import { readToolDump } from "@lampgenie/runtime/agent/big-intake";
 
-/** 异步文件探测(2026-10-29 冻结治理):工具执行面的全部文件 IO 从同步 API 改 fs/promises——
+/** 异步文件探测(冻结治理):工具执行面的全部文件 IO 从同步 API 改 fs/promises——
  *  WSL 9p 挂载停顿时,readFileSync/statSync 会把 worker 事件循环整个冻住(同 worker 的主 agent
- *  与全部子代理一起停摆,2026-10-29 实锤:四个 loop 卡死 35 分钟无人收割)。异步化后单个停顿只
+ * 与全部子代理一起停摆, 注意:四个 loop 卡死 35 分钟无人收割)。异步化后单个停顿只
  *  挂起该工具的 Promise(loop 层 toolTimeoutMs 兜底换路),事件循环与心跳保持活着。
- *  fencePath 同步残留已清零(2026-11-01:existsSync 爬升+realpathSync 是第四次冻结的同类地雷)。 */
+ * fencePath 同步残留已清零(existsSync 爬升+realpathSync 是第四次冻结的同类地雷)。 */
 async function statOrNull(p: string): Promise<Stats | null> {
   try { return await fsp.stat(p); } catch { return null; }
 }
 
 /**
- * 编辑后检查尾缀(step-114 / M108):动态装载 @lampgenie/lsp(包缺失/dist 未建时静默跳过,
+ * 编辑后检查尾缀( /):动态装载 @lampgenie/lsp(包缺失/dist 未建时静默跳过,
  * 行为与旧版一致——fail-soft 不阻塞写入)。生产由 agent-wiring 注入 coding.lsp。
  * baseline/baselineText:写前采集的基线诊断与旧内容(delta 只报新增;不传=旧行为全量报告)。
  */
@@ -59,8 +57,7 @@ async function editCheckSuffixSafe(
   absPath: string,
   settings?: LspSettings,
   baseline?: DiagnosticItem[] | null,
-  baselineText?: string,
-): Promise<string> {
+  baselineText?: string): Promise<string> {
   if (!settings || settings.enabled === false) return ""; // 低层缺省关闭:零装载开销
   try {
     const mod = await import("@lampgenie/lsp");
@@ -71,15 +68,14 @@ async function editCheckSuffixSafe(
 }
 
 /**
- * 写前 baseline 采集(M108):必须在 fsp.writeFile **之前**调用(tsc 兜底按磁盘内容建 program)。
+ * 写前 baseline 采集:必须在 fsp.writeFile **之前**调用(tsc 兜底按磁盘内容建 program)。
  * @returns undefined=不做 delta(低层关闭 / baseline:false);{baseline:null}=采集失败(标未检查,不阻塞写)。
  */
 async function editBaselineSafe(
   root: string,
   absPath: string,
   prevText: string | undefined,
-  settings?: LspSettings,
-): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
+  settings?: LspSettings): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
   if (!settings || settings.enabled === false) return undefined;
   if (settings.baseline === false) return undefined;
   if (prevText === "") return { baseline: [], baselineText: "" }; // 新文件:基线为空(不探测)
@@ -93,10 +89,10 @@ async function editBaselineSafe(
 }
 
 /**
- * 语义 token 旁路发射(step-093 面板着色数据面):read_file 成功后 fire-and-forget 计算
- * SemanticTokenFile(designs/26 §2.1,step-089 typed/ 逐文件深提取)并以 `tool.tokens` 事件入账。
+ * 语义 token 旁路发射(面板着色数据面):read_file 成功后 fire-and-forget 计算
+ * SemanticTokenFile( §2.1, typed/ 逐文件深提取)并以 `tool.tokens` 事件入账。
  * 设计要点:
- * - 异步旁路:typed 提取暖态 25ms~1.5s(C 大文件实测),绝不阻塞 agent loop;着色晚一个拉史
+ * - 异步旁路:typed 提取暖态 25ms~1.5s(C 大文件经验证),绝不阻塞 agent loop;着色晚一个拉史
  *   周期到面板(≤1.5s 节顿),不可感知。
  * - fail-soft:typed 模块缺失(dist 陈旧)/解析异常/不支持语言=静默跳过,行为与旧版一致;
  *   全链 catch,零 unhandled rejection(087 R3 教训:fire-and-forget 必须自吞异常)。
@@ -111,7 +107,7 @@ const TOOL_TOKENS_MEMO_MAX = 8;
 const toolTokensMemo = new Map<string, { mtime: number; payload: Record<string, unknown> | null }>();
 let toolTokensChain: Promise<void> = Promise.resolve(); // 串行队列(防并发提取内存尖峰)
 
-/** LSP 检查器预热(step-114):任务装配时后台加载 typescript,首条编辑不再等模块冷启。 */
+/** LSP 检查器预热:任务装配时后台加载 typescript,首条编辑不再等模块冷启。 */
 let lspWarmed = false;
 function warmLspChecker(settings?: LspSettings): void {
   if (lspWarmed || !settings || settings.enabled === false) return;
@@ -148,8 +144,7 @@ export function scheduleToolTokens(
   callId: string | undefined,
   root: string,
   rel: string,
-  mtimeMs: number,
-): void {
+  mtimeMs: number): void {
   if (!callId || process.env.GENIE_PANEL_TOKENS === "off" || !TOKENIZED_EXT.test(rel)) return;
   toolTokensChain = toolTokensChain
     .then(async () => {
@@ -184,7 +179,7 @@ const MAX_READ_FILE_BYTES = 4 * 1024 * 1024;
 /** code point 安全截断:末端恰落在代理对(surrogate pair)中间时回退一位。
  * 孤立高位代理经 JSON.stringify 输出 \ud83c 形态转义后,上游 LLM 的 JSON 解析器
  * (serde_json 系:DeepSeek/OpenAI)会报 "unexpected end of hex escape" 直接 400
- * (2026-10-29 实锤:grep content 行截断 .slice(0,200) 切在 🎙 U+1F399 中间)。 */
+ * (注意:grep content 行截断 .slice(0,200) 切在 🎙 U+1F399 中间)。 */
 export function safeTruncate(text: string, max: number): string {
   if (text.length <= max) return text;
   const c = text.charCodeAt(max - 1);
@@ -198,11 +193,11 @@ const MAX_WALK_DEPTH = 12;
 /** 扫描跳过目录(与子代理工具面/文件索引对齐:依赖产物与元数据不入检索面)。 */
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".genie", ".zcode", ".agents", "ref", "devlog", "vendor", "coverage", ".next"]);
 
-/** 上下文卫生尾注阈值(2026-10-20):工具输出超过该字节数时提醒主 agent「该拆子任务派子代理」。 */
+/** 上下文卫生尾注阈值:工具输出超过该字节数时提醒主 agent「该拆子任务派子代理」。 */
 const CONTEXT_HYGIENE_BYTES = 6 * 1024;
 
-/* ── edit_file 改后上下文快照(2026-11-08 session 实证落地)────────────────────────
- * 实测(journal 11-01→11-08):1,855 次同文件重复 read_file,其中 464 次=编辑后立刻回读
+/* ── edit_file 改后上下文快照( session 验证落地)────────────────────────
+ * 经验证(journal 11-01→11-08):1,855 次同文件重复 read_file,其中 464 次=编辑后立刻回读
  * 验证——每次回读烧一轮完整 LLM 往返。编辑回执自带改动处上下文(±5 行带行号,read_file
  * 同格式),「改完看一眼」就地完成,无需回读。快照有硬上限(行数/单行/总量),不破上下文卫生。 */
 const EDIT_SNIPPET_CONTEXT_LINES = 5;
@@ -213,7 +208,7 @@ const EDIT_SNIPPET_MAX_BYTES = 4096;
  * 构造 <edited> 快照块:定位替换点在最终文本(可能已被格式化)的首处位置,取其 ±5 行窗口。
  * 定位失败(格式化重排/多行替换被改写)时安静降级返回空串——快照是增强,不是承诺。
  * anchorPrefixLen=纯删除(newStr 空)时的锚:编辑点在最终文本中的字符偏移(前缀未变,可直接映射)。
- * 导出仅供单测锚漂移路径(2026-11-08 审计 B1:格式化改写/短行降级/删除锚三路径直测)。
+ * 导出仅供单测锚漂移路径(审计 B1:格式化改写/短行降级/删除锚三路径直测)。
  */
 export function editedSnippet(rel: string, finalText: string, newStr: string, occurrences: number, anchorPrefixLen = -1): string {
   let idx = newStr ? finalText.indexOf(newStr) : -1;
@@ -268,16 +263,16 @@ export interface FileToolsOptions {
   sessionId: string;
   /** 编辑后 LSP 诊断/格式化配置(coding.lsp;缺省=关闭,低层单测不受影响)。 */
   lsp?: LspSettings;
-  /** plan-gate(2026-10-20):写类前置闸——返回非 null 即拒绝文本(agent-wiring 注入:
+ /** plan-gate:写类前置闸——返回非 null 即拒绝文本(agent-wiring 注入:
    * 本任务无规划板时硬拦,防「不经 planner 直接开写」绕过;planner 落板后自动放行)。 */
   planGate?: (tool: string) => string | null | Promise<string | null>;
-  /** 视觉能力(2026-10-25):mainHasVision=coding.llm.vision(缺省 true);false 时 view_image
-   * 走 vlm 兜底(图转文字描述)。vlm 未配置=无法处理图片,如实报错(不硬造能力)。 */
+ /** 视觉能力:mainHasVision=coding.llm.vision(缺省 true);false 时 view_image
+ * 走 vlm 兜底(图转文字描述)。vlm 未配置=无法处理图片,如用户反馈错(不硬造能力)。 */
   vision?: {
     mainHasVision?: boolean;
     vlm?: { chat: (messages: { role: string; content: string; images?: string[] }[]) => Promise<{ content: string }> };
   };
-  /** 大结果 dump 根(step-1029,`.genie/tool-dumps`):result_read 按 callId/路径取回原文片段。
+ /** 大结果 dump 根(`.genie/tool-dumps`):result_read 按 callId/路径取回原文片段。
    * 不传=result_read 只能吃 dump 路径(仍可用,不报错)。 */
   toolDumpDir?: string;
 }
@@ -298,7 +293,7 @@ export async function fencePath(root: string, raw: unknown): Promise<string | nu
   if (p.split(/[\\/]/).includes("..")) return null;
   const abs = resolve(rootAbs, p);
   if (abs !== rootAbs && !abs.startsWith(rootAbs + sep)) return null;
-  // 复核走真实路径(2026-11-01 异步化:existsSync 爬升+realpathSync×2 是同步地雷——auto 模式
+ // 复核走真实路径(异步化:existsSync 爬升+realpathSync×2 是同步地雷——auto 模式
   // 幸免,但 ask/workspace 模式每个文件工具都走;9p 停顿/单 op 楔死会把 worker 主循环整个冻住,
   // 11-01 冻结收割后彻底清零:fs/promises 化,停顿只挂起本工具的 Promise,心跳保持活着)
   try {
@@ -324,7 +319,6 @@ async function fspStatOk(pPath: string): Promise<boolean> {
 
 /**
  * 命令围栏(workspace=工作区内):对 shell/终端**命令文本**做轻量启发式校验,返回拒因或 null(放行)。
- *
  * 口径与 fencePath 对齐:
  * - 唯一 early-return:permissionMode()!=="workspace" → 立即 null(auto/ask/readonly/plan 四档零回归;
  *   auto=完全访问,ask/readonly/plan 的命令执行仍由既有权限闸门/审批链负责,本函数不介入)。
@@ -361,7 +355,7 @@ const CMD_SAFE_DEV = new Set(["/dev/null", "/dev/zero", "/dev/stdin", "/dev/stdo
 /**
  * 命令分词:引号内空白不切(引号串=一个 shell 词),并标记「散文」串。
  * 散文 = 带引号且内含空白,如 `git commit -m "fix: 参考 /tmp/x 的日志"`、`echo "见 /etc/hosts"`——
- * 这类是说明文字不是路径参数,按路径拦会大面积误伤(实测 workspace 下提交说明常含路径)。
+ * 这类是说明文字不是路径参数,按路径拦会大面积误伤(经验证 workspace 下提交说明常含路径)。
  * 代价:`bash -c "cat /etc/hostname"` 这类引号包裹的完整命令也不判(与 `$()`/反引号/脚本内跳转
  * 同属解释器级能力边界,已在 fenceCommand 头注登记)。
  */
@@ -410,8 +404,8 @@ function relDisplay(root: string, abs: string): string {
   return r || ".";
 }
 
-/** 二进制分级指路(2026-10-25 对齐 ZCode Read 的类型面:pdf/office/视频各有诚实出口)。
- *  M136 起在整读之前用 head 探测复用本函数(④binary 先于 ⑤read)。 */
+/** 二进制分级指路(对齐 ZCode Read 的类型面:pdf/office/视频各有诚实出口)。
+ * 在整读之前用 head 探测复用本函数(④binary 先于 ⑤read)。 */
 function binaryRejection(root: string, abs: string): string {
   const lext = (/\.([a-z0-9]+)$/i.exec(abs)?.[1] ?? "").toLowerCase();
   const rel = relDisplay(root, abs);
@@ -479,11 +473,11 @@ function globMatcher(pattern: string): (rel: string, base: string) => boolean {
   return (rel, base) => res.some((re) => re.test(rel) || (bare && re.test(base)));
 }
 
-/** 编辑保鲜读侧表(designs/25 ReadFileState 语义):path → 本会话读到的 mtime。 */
+/** 编辑保鲜读侧表( ReadFileState 语义):path → 本会话读到的 mtime。 */
 export type ReadState = Map<string, number>;
 
 /** 写类统一前置闸:①readonly/plan 模式拒绝(journal 落账);②plan-gate 规划板在场检查
- * (2026-10-20:无板硬拦,由 agent-wiring 注入;落 journal 与其它闸门事件同形,回放可审计)。 */
+ * (无板硬拦,由 agent-wiring 注入;落 journal 与其它闸门事件同形,回放可审计)。 */
 async function writeDeniedByMode(tool: string, opts: FileToolsOptions): Promise<string | null> {
   const mode = permissionMode();
   if (mode === "readonly" || mode === "plan") {
@@ -528,7 +522,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const a = (args ?? {}) as { path?: string; offset?: number; limit?: number; force?: boolean };
       const abs = await fencePath(root, a.path);
       if (!abs) return `错误:路径非法或越出项目根(${String(a.path ?? "")});只接受项目内相对路径`;
-      // 输入边界防御(M136):realpath 归一 → ①设备/伪文件系统 → ②stat special → ③denylist。
+ // 输入边界防御:realpath 归一 → ①设备/伪文件系统 → ②stat special → ③denylist。
       // 必须在任何读之前(读 /dev/zero 会挂死、FIFO 永久阻塞、/proc/<pid>/environ 泄密)。
       const guard = await readGuardPath(abs);
       if (!guard.ok) return guard.kind === "missing" ? "错误:文件不存在: " + relDisplay(root, abs) : guard.reason;
@@ -541,14 +535,14 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         if (looksBinary(head)) return binaryRejection(root, abs);
       }
       const buf = await fsp.readFile(abs);
-      // 编辑保鲜读侧(designs/25):记录读取时刻 mtime,write/edit 据此拒盲写
+ // 编辑保鲜读侧:记录读取时刻 mtime,write/edit 据此拒盲写
       let mtimeMs = 0;
       try { mtimeMs = (await statOrNull(abs))?.mtimeMs ?? 0; readState.set(abs, mtimeMs); } catch { /* 状态登记失败不阻塞读 */ }
       const lines = buf.toString("utf-8").split("\n");
       const offset = Math.max(Math.min(Number(a.offset) || 1, lines.length), 1);
       const limit = Math.min(Math.max(Number(a.limit) || MAX_READ_LINES, 1), MAX_READ_LINES);
       const winEnd = Math.min(offset + limit - 1, lines.length);
-      // 重复读取去重(2026-11-07):文件未变 + 该行段已在上下文 → 只回短提示,不重复注入正文。
+ // 重复读取去重:文件未变 + 该行段已在上下文 → 只回短提示,不重复注入正文。
       // 判定必须在注入前(否则刚登记的行段会自查自中);路径非法/不存在/过大/二进制分支已在前,
       // 首读(无登记)与 force=true 走原路径、返回文本逐字不变。
       const relForRead = relDisplay(root, abs);
@@ -562,17 +556,17 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
           return `[重复读取·已省略] ${relForRead} 自第 ${v.readCount} 次读取后未变,请求行段(${rangeText})已在上下文;要精确原文用 offset/limit 指定未覆盖窗口,或 force=true 重新注入`;
         }
       } catch { /* 提示层判定失败不阻塞读 */ }
-      // 语义 token 旁路(step-093):成功读取才发射;fire-and-forget 不阻塞返回
+ // 语义 token 旁路:成功读取才发射;fire-and-forget 不阻塞返回
       scheduleToolTokens(opts.journal, opts.sessionId, ctx?.callId, root, relForRead, mtimeMs);
-      // 已读文件状态(designs/25「同文件读第二遍」机制层):per-session 登记相对路径+mtime+行段,
+ // 已读文件状态(「同文件读第二遍」机制层):per-session 登记相对路径+mtime+行段,
       // loop 每步组装消息时据此注入已读清单提醒(ephemeral);行段=本次真实窗口,供读传递
-      // (2026-11-05 D3:主 agent 已读片段下发给子代理,17.5% 跨 agent 重叠治理)。登记失败不阻塞读。
+ // ( D3:主 agent 已读片段下发给子代理,17.5% 跨 agent 重叠治理)。登记失败不阻塞读。
       try { recordFileRead(opts.sessionId, relForRead, mtimeMs, Date.now(), [{ off: offset, end: winEnd }]); } catch { /* 提示层登记失败不阻塞读 */ }
       const window: string[] = [];
       let bytes = 0;
       for (let i = offset; i <= Math.min(offset + limit - 1, lines.length); i++) {
         let text = lines[i - 1] ?? "";
-        // 单行 clamp(M136):超 2000 字符截断并附「…(+N 字符已截断)」,标记计入额度(总长 ≤2000)
+ // 单行 clamp:超 2000 字符截断并附「…(+N 字符已截断)」,标记计入额度(总长 ≤2000)
         text = clampLine(text);
         const row = String(i).padStart(6, " ") + "\t" + text;
         bytes += Buffer.byteLength(row) + 1;
@@ -619,7 +613,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         try { prevText = await fsp.readFile(abs, "utf-8"); } catch { prevText = undefined; } // 读不到=baseline 如实不可用
       }
       try {
-        // M108:baseline 必须在落盘前采集(旧内容);采集失败标 unavailable,不阻塞写。
+ // baseline 必须在落盘前采集(旧内容);采集失败标 unavailable,不阻塞写。
         const base = await editBaselineSafe(root, abs, prevText, opts.lsp);
         await fsp.mkdir(dirname(abs), { recursive: true });
         await fsp.writeFile(abs, content, "utf-8");
@@ -662,14 +656,14 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const newStr = String(a.new_string ?? "");
       if (!oldStr) return "错误:old_string 不能为空(新建文件用 write_file)";
       if (oldStr === newStr) return "错误:old_string 与 new_string 相同,是空操作";
-      // 编辑比例守卫(M136):new 为空或不足 old 一半、且删行 > 20 → 拒(防放宽匹配后静默删大段)
+ // 编辑比例守卫:new 为空或不足 old 一半、且删行 > 20 → 拒(防放宽匹配后静默删大段)
       const ratioDenied = checkEditRatio(oldStr, newStr);
       if (ratioDenied) return ratioDenied;
       const st0 = await statOrNull(abs);
       if (!st0 || !st0.isFile()) return "错误:文件不存在: " + relDisplay(root, abs);
       const cur = st0.mtimeMs;
       const seen = readState.get(abs);
-      // 编辑保鲜(designs/25):未读过拒编;外部改动拒编;刚写过(readState 为最新)可连续编辑
+ // 编辑保鲜:未读过拒编;外部改动拒编;刚写过(readState 为最新)可连续编辑
       if (seen === undefined || cur !== seen) {
         return seen === undefined
           ? "错误:编辑前必须先 read_file 该文件(防盲改)"
@@ -689,13 +683,13 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       }
         const replaced = a.replace_all === true ? text.split(oldStr).join(newStr) : text.replace(oldStr, newStr);
       try {
-        // M108:baseline 必须在落盘前采集(旧内容 text);采集失败标 unavailable,不阻塞写。
+ // baseline 必须在落盘前采集(旧内容 text);采集失败标 unavailable,不阻塞写。
         const base = await editBaselineSafe(root, abs, text, opts.lsp);
         await fsp.writeFile(abs, replaced, "utf-8");
         const suffix = await editCheckSuffixSafe(root, abs, opts.lsp, base?.baseline, base?.baselineText);
         readState.set(abs, (await statOrNull(abs))?.mtimeMs ?? 0); // 格式化可能改写文件,mtime 以最终态为准
         const n = a.replace_all === true ? occurrences : 1;
-        // 改后上下文快照(2026-11-08):从**最终盘上内容**取(格式化后的),消灭「改完回读验证」往返。
+ // 改后上下文快照:从**最终盘上内容**取(格式化后的),消灭「改完回读验证」往返。
         // 纯删除(newStr 空)时锚=首个替换点的前缀长度(单处/replace_all 首处前缀逐字不变)。
         let snippet = "";
         try {
@@ -745,7 +739,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
           if (st) hits.push({ rel, mtime: st.mtimeMs }); // 条目消失容忍
         }
       }
-      // 巨根零命中改进(2026-10-21 实锤:从工作区根 walk 时 4000 文件配额先被其它顶层目录耗尽,
+ // 巨根零命中改进(注意:从工作区根 walk 时 4000 文件配额先被其它顶层目录耗尽,
       // 目标目录永远轮不到匹配,模型 glob 三连零命中后退化成 list_dir 爬目录)——命中 0 且 walk
       // 达上限时显式说明截断,不再裸「(零命中)」误导成「不存在」。
       if (hits.length === 0) {
@@ -760,13 +754,11 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
   };
 
   /**
-   * grep 零命中的引导提示(2026-10-29 token 轮 P2)。
-   *
-   * 实测驱动:24h 内 grep 被调 124 次、read_file 227 次,而 code_sense 只有 14 次;code_sense 硬失败
+ * grep 零命中的引导提示( token 轮 P2)。
+ * 经验证驱动:24h 内 grep 被调 124 次、read_file 227 次,而 code_sense 只有 14 次;code_sense 硬失败
    * 率还高达 21.4%。也就是说「该用代码感知的地方,模型在用文本检索硬撞」——零命中回执正是最容易
    * 走偏的那一刻,旧口径只回一个裸 `(零命中)`(file-tools.ts 旧 :668),模型只能自己猜:
    * 是关键词写错?还是该换工具?于是常见退化是连撞 3~5 次不同关键词,或改用 read_file 整读。
-   *
    * 改法:零命中时按 **pattern 形态** 给定向建议,而不是笼统「请用 code_sense」——
    * ①标识符形态(`doThing`/`Class.method`/`parse_x`)= 典型「在找符号」,指向 code_sense;
    * ②自然语言/中文短语 = 典型「在找文案/日志」,本来就该 grep,只提示换关键词或收窄 path;
@@ -855,7 +847,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const rows = mode === "content" ? contentLines : mode === "files_with_matches" ? fileHits.slice(0, limit) : countHits.slice(0, limit);
       if (rows.length === 0) return `(零命中)${grepZeroHint(raw)}`;
       const body = rows.join("\n") + (truncated || rows.length >= limit ? `\n(已达上限 ${limit} 条${truncated ? ",结果被截断" : ""};收窄 pattern/path/glob 或加 head_limit 不生效时换更精确的关键词)` : "");
-      // 上下文卫生(2026-10-20 用户口径):大输出进主上下文=后续每步 LLM 都背着冗余跑——
+ // 上下文卫生:大输出进主上下文=后续每步 LLM 都背着冗余跑——
       // 尾注提醒主 agent 这类勘察/实施该拆子任务派子代理(其上下文独立)。六件套只挂主 agent,子代理不受扰。
       return Buffer.byteLength(body) > CONTEXT_HYGIENE_BYTES
         ? body + `\n[上下文卫生] 本次输出 ${Math.round(Buffer.byteLength(body) / 1024)}KB 已进入你的上下文——此类大输出勘察/实施建议拆成子任务派 spawn_subagent(子代理上下文独立,过程细节不污染主轨),你只收结论。`
@@ -891,7 +883,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
   };
 
   /**
-   * 查看图片(2026-10-25,对齐 ZCode Read 工具 read-image 分支;2026-10-30 多图化):
+ * 查看图片(对齐 ZCode Read 工具 read-image 分支; 多图化):
    * paths 数组一次读多张(png/jpg/jpeg/gif/webp),单张 ≤2MB(与聊天窗贴图的视觉通道同限额,
    * agent-wiring VISION_MAX_BYTES)、一次 ≤4 张(对齐 VISION_MAX_IMAGES);失败张逐行报错不拖垮整批
    * (失败隔离,参考 zcode recoverable per-image error);返回视觉哨兵
@@ -945,7 +937,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         if (!mime) { errs.push(`- ${rel}: 不支持的图片格式 .${ext || "(无扩展名)"};视觉通道只接受 png/jpg/jpeg/gif/webp(svg 是文本,用 read_file)`); continue; }
         const size = st.size;
         if (size > 2 * 1024 * 1024) { errs.push(`- ${rel}: ${Math.round((size / 1024 / 1024) * 10) / 10}MB 超过视觉通道 2MB 限额;先用图像工具压缩(如 80% 质量 jpg 或缩到 ≤2000px)再查看`); continue; }
-        // 尺寸守卫(2026-11-05):读取前 48KB 头字节解析像素,长边/总像素超模型上限即拒注入。
+ // 尺寸守卫:读取前 48KB 头字节解析像素,长边/总像素超模型上限即拒注入。
         // 修的是根因——超限 dataUrl 一旦进 payload.images 就落进 journal,derive 每轮重放 → 永久 400。
         // 解析失败(null)=放行:未知格式/头被截断不拦正常图(旧 2MB 上限仍在上一行)。
         let dims: ReturnType<typeof readImageSize> = null;
@@ -959,7 +951,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         } catch { /* 读头失败=按解析失败放行(不因守卫自身故障拦图) */ }
         const verdict = checkImageSize(dims, rel);
         if (!verdict.ok) { errs.push("- " + verdict.reason); continue; } // 不 push dataUrl → 不进 payload.images
-        // 重复读取去重(2026-11-07):同图未变且已注入过视觉通道 → 不再花视觉/VLM token 重注。
+ // 重复读取去重:同图未变且已注入过视觉通道 → 不再花视觉/VLM token 重注。
         if (!force) {
           try {
             if (checkImageInjected(opts.sessionId, rel, st.mtimeMs).seen) {
@@ -982,7 +974,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const errSuffix = errs.length ? ";失败:" + errs.join(";") : "";
       /** 注入成功才登记 mtime(失败/报错下次仍可重试)。 */
       const markInjected = () => { for (const it of injected) { try { recordImageInjected(opts.sessionId, it.rel, it.mtimeMs); } catch { /* 台账失败不阻塞 */ } } };
-      // 无视觉主模型 → VLM 兜底(2026-10-25 用户口径:不支持图像的模型用 vlm 提供识别,
+ // 无视觉主模型 → VLM 兜底(不支持图像的模型用 vlm 提供识别,
       // 没有就不能处理图片):图转文字描述作为工具结果返回,图像不进主模型上下文。
       // 去重判定在上面的逐张循环里先做(被跳过的图不进 images,不重复花 VLM token)。
       if (opts.vision?.mainHasVision === false) {
@@ -1013,7 +1005,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
     },
   };
 
-  // 大结果取回(step-1029):上下文里只看得到「选块/摘要 + 全文已落盘:<path>」,细节靠本工具回原文。
+ // 大结果取回:上下文里只看得到「选块/摘要 + 全文已落盘:<path>」,细节靠本工具回原文。
   // 行号沿用原文(dump 逐字节等于原结果),与 read_file 的 `行号|内容` 同形。
   const resultReadTool: Tool = {
     name: "result_read",

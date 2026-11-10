@@ -1,4 +1,4 @@
-// 内嵌团队 relay 自举 e2e(2026-10-27 团队页空态修复):
+// 内嵌团队 relay 自举 e2e(团队页空态修复):
 // 模式判定 / bootstrapTeamRepo 幂等 / 真起 relay+客户端真连认证(操作级闭环)。
 import { describe, expect, it, afterAll } from "vitest";
 import { execFile } from "node:child_process";
@@ -142,23 +142,23 @@ describe("seedTeamProjects 全项目绑定", () => {
       const bareDir = join(root, "team", "team-repo.git");
       const workdir = join(root, "team", "relay");
       await bootstrapTeamRepo({ bareDir, workdir, identityDir: join(root, "identity"), username: "tester", originUrl: "https://git.example.com/a/harness.git", projectId: "harness" });
-      // 追加两个项目绑定(genie-memory 有 origin;genie 非 git=null 不入册)
+ // 追加两个项目绑定(memory-service 有 origin;非 git 仓=null 不入册)
       const w1 = await seedTeamProjects({
         workdir,
         username: "tester",
         bindings: [
           { projectId: "u1", label: "harness", originUrl: "https://git.example.com/a/harness.git" },
-          { projectId: "u2", label: "genie-memory", originUrl: "https://git.example.com/b/memory.git" },
+          { projectId: "u2", label: "memory-service", originUrl: "https://git.example.com/b/memory.git" },
           { projectId: "u3", label: "genie", originUrl: null },
         ],
       });
-      expect(w1.some((k) => k.includes("genie-memory"))).toBe(true);
+      expect(w1.some((k) => k.includes("memory-service"))).toBe(true);
       expect(w1.some((k) => k.startsWith("members/"))).toBe(true); // projects 数组补齐
       const projectsText = (await import("node:fs")).readFileSync(join(workdir, "team-clone", "roster", "projects.yaml"), "utf-8");
-      expect(projectsText).toContain("genie-memory.repo: https://git.example.com/b/memory.git");
+      expect(projectsText).toContain("memory-service.repo: https://git.example.com/b/memory.git");
       expect(projectsText).not.toContain("genie.repo:"); // 非 git 项目不入册
       const memberText = (await import("node:fs")).readFileSync(join(workdir, "team-clone", "roster", "members", "tester.yaml"), "utf-8");
-      expect(memberText).toContain("  - genie-memory"); // presence 投影按 member.projects
+      expect(memberText).toContain("  - memory-service"); // presence 投影按 member.projects
       expect(memberText).toContain("  - harness");
       // 幂等
       const w2 = await seedTeamProjects({
@@ -166,7 +166,7 @@ describe("seedTeamProjects 全项目绑定", () => {
         username: "tester",
         bindings: [
           { projectId: "u1", label: "harness", originUrl: "https://git.example.com/a/harness.git" },
-          { projectId: "u2", label: "genie-memory", originUrl: "https://git.example.com/b/memory.git" },
+          { projectId: "u2", label: "memory-service", originUrl: "https://git.example.com/b/memory.git" },
         ],
       });
       expect(w2).toEqual([]);
@@ -174,7 +174,7 @@ describe("seedTeamProjects 全项目绑定", () => {
       await seedTeamProjects({ workdir, username: "tester", bindings: [{ projectId: "u9", label: "renamed-memory", originUrl: "https://git.example.com/b/memory.git" }] });
       const projectsText2 = (await import("node:fs")).readFileSync(join(workdir, "team-clone", "roster", "projects.yaml"), "utf-8");
       expect(projectsText2).not.toContain("renamed-memory");
-      expect(projectsText2.match(/memory\.repo:/g)?.length).toBe(1);
+      expect(projectsText2.match(/memory-service\.repo:/g)?.length).toBe(1);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

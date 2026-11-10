@@ -55,8 +55,7 @@ export interface ApplyReport {
 export function apply(
   store: ReviewCommentStore,
   findings: Finding[],
-  now: number,
-): { store: ReviewCommentStore; report: ApplyReport } {
+  now: number): { store: ReviewCommentStore; report: ApplyReport } {
   const comments = store.comments.map((c) => ({ ...c }));
   const byKey = new Map(comments.map((c) => [c.key, c]));
   const report: ApplyReport = { posted: [], resolved: [], reopened: [], unchanged: 0, changed: false };

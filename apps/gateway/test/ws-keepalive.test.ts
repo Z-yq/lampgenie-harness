@@ -21,7 +21,7 @@ function waitDone(inbox: { type: string; task?: { state: string } }[], ms = 10_0
   });
 }
 
-describe("WS keepalive 与断连恢复(R5-C6 修复)", () => {
+describe("WS keepalive 与断连恢复(修复)", () => {
   it("静默连接(握手后不回 pong)被超时清理", async () => {
     const port = 7841;
     const srv = startGatewayServer({

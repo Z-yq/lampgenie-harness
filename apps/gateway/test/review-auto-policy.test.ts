@@ -1,5 +1,5 @@
 /**
- * step-139 O1 工具面(codeReviewTool)三档合流测试:
+ * O1 工具面(codeReviewTool)三档合流测试:
  * fast=never > deep=always > 缺省 auto(干净小变更集 → 0 次 LLM 且说明写进回执)。
  * 引擎级纯函数/集成见 packages/code-sense/test/review-policy.test.ts。
  */
@@ -29,7 +29,7 @@ function spyLlm(counter: { n: number }): LlmProvider {
   return { async chat() { counter.n++; return { content: '{"findings":[]}' }; } };
 }
 
-describe("codeReviewTool 三档(fast/deep/auto,step-139 O1)", () => {
+describe("codeReviewTool 三档(fast/deep/auto, O1)", () => {
   it("缺省 auto + 干净小变更集 → 0 次 LLM,回执显式「深审跳过(auto…)」", async () => {
     const dir = cleanSmallRepo();
     const counter = { n: 0 };

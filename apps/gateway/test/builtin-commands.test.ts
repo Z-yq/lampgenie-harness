@@ -1,5 +1,5 @@
 /**
- * ZCode 内置命令服务面(step-052):/goal(journal 目标+回包)/ /compact(手动压缩路径)。
+ * ZCode 内置命令服务面:/goal(journal 目标+回包)/ /compact(手动压缩路径)。
  * 面板 typed 提交分发为纯 UI 逻辑(panel.test 语法门覆盖);此处锚定服务端语义。
  */
 import { describe, it, expect } from "vitest";
@@ -29,7 +29,7 @@ function waitMsg(w: import("ws").WebSocket, type: string, timeoutMs = 15_000): P
   });
 }
 
-describe("内置命令服务面(step-052)", () => {
+describe("内置命令服务面", () => {
   let app: Awaited<ReturnType<typeof createGatewayApp>>;
   let server: Server;
   let port = 0;
@@ -56,7 +56,7 @@ describe("内置命令服务面(step-052)", () => {
     w.send(JSON.stringify({ v: 1, type: "goal.get", sessionId: "gs1" }));
     const get1 = await waitMsg(w, "goal.result");
     expect(get1.goal).toBe("把登录页修好");
-    expect(get1.sync).toBe(true); // 状态同步回包:面板静默刷 chip(「目标已清除」15s 刷屏根因隔离,2026-10-13 视频)
+    expect(get1.sync).toBe(true); // 状态同步回包:面板静默刷 chip(「目标已清除」15s 刷屏根因隔离, 视频)
 
     // pause:目标保留,状态 paused
     w.send(JSON.stringify({ v: 1, type: "goal.set", sessionId: "gs1", goal: "把登录页修好", state: "paused" }));

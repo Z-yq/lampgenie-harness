@@ -1,5 +1,5 @@
 /**
- * 门禁(designs/10 §4):L1 契约 eval 全绿 + 跑批均值不低于阈值 → 绿;否则红清单+exit 1。
+ * 门禁( §4):L1 契约 eval 全绿 + 跑批均值不低于阈值 → 绿;否则红清单+exit 1。
  * 覆盖阈值:override(带理由)→放行但落 eval.gate-override 审计(改门槛要留痕)。
  */
 import { readFileSync, existsSync } from "node:fs";

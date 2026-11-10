@@ -1,5 +1,5 @@
 /**
- * step-1029:context.intake 面板最小渲染(tip-line)。
+ * context.intake 面板最小渲染(tip-line)。
  * 形态:panel-artifact.test.ts 同款「从 PAGE 抽函数源码 + new Function 沙箱」,不起浏览器。
  * 断言只看用户点名的四项(时间/工具/原量→入上下文量/策略)与落盘路径是否呈现,不锁 HTML 细节。
  */

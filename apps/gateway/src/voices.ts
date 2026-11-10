@@ -1,6 +1,6 @@
 /**
- * TTS 音色清单(2026-10-20 音色选择+试听)。
- * 真源(官方文档,抓取于 2026-10-20):
+ * TTS 音色清单(音色选择+试听)。
+ * 真源(官方文档,抓取于):
  * - qwen-audio-3.1-tts-flash / 3.0-tts-plus / 3.0-tts-flash:help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list
  * - qwen3-tts-flash(+realtime):help.aliyun.com/zh/model-studio/qwen-tts-voice-list
  * voice 区分大小写;跨模型混用报 InvalidParameter(官方口径),故清单严格按模型分组。

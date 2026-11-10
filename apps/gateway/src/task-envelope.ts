@@ -1,16 +1,13 @@
 /**
- * M162 任务执行信封(来源签发)。
- *
+ * 任务执行信封(来源签发)。
  * 背景:机器人/远端/群/子代理的任务此前用自己的默认权限跑;在途改配置对已创建任务无感生效;
  * 重投递会重复执行;远程断线可能悄悄落到同路径本地 workspace。
- *
  * 机制:任务创建时由**服务端**签发 {taskId,generation,capabilitySnapshot,policy,digest}:
  * - generation 由 capabilitySnapshot 规范化哈希派生(同目录=同代,目录一变代即变);
  * - digest 是信封本体的 canonical(键排序/数组排序/忽略 undefined)sha256 截断;
  * - 执行前比对当前能力目录/策略,不匹配 fail-closed(四漂移码,带 expected/actual 短摘要,不含敏感内容);
  * - deliveryKey → 投递键 `env:<kind>:<id>:<deliveryKey>`,复用 TaskSupervisor 幂等索引去重;
  * - 外部来源不得自声明 workspace/projectOverride/permissions(自声明即拒)。
- *
  * 刻意不做的:不引入传输层签名(信封只在本进程内签发/校验),capabilitySnapshot 由装配方注入。
  */
 import { createHash } from "node:crypto";
@@ -416,8 +413,7 @@ export type IssuedEnvelopeLookup =
 /** 从 journal 事件里取该 task 最近一条 task.envelope.issued。 */
 export function findIssuedEnvelope(
   events: readonly { kind?: string; payload?: unknown }[] | undefined,
-  taskId: string,
-): IssuedEnvelopeLookup {
+  taskId: string): IssuedEnvelopeLookup {
   if (!Array.isArray(events)) return { kind: "none" };
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const payload = events[i]?.payload as { type?: unknown; taskId?: unknown; envelope?: unknown } | undefined;

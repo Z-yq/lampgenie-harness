@@ -1,6 +1,5 @@
 /**
- * M29 流中断安全锚点恢复(mechanisms「流中断安全锚点恢复」)。
- *
+ *  流中断安全锚点恢复(mechanisms「流中断安全锚点恢复」)。
  * 问题:流式请求中途断流时,面板/聚合里已经有半截正文与思考;adapter 重试若把新增量
  * 接在那半截之后,历史自相矛盾,冷恢复也分不清哪个 attempt 该作废。
  * 口径:
@@ -9,7 +8,6 @@
  *  - 冷恢复(deriveMessages)按 discarded 标记剔除被作废的 message.agent;
  *  - 只由可重试流错误触发(4xx 参数/鉴权/policy 与用户取消不触发);
  *  - 每轮重开上限 10;锚点不完整 → 标注 anchor-missing 上抛(不猜)。
- *
  * 本文件全是纯函数/纯写账,不依赖 provider 与 loop,便于单测。
  */
 import type { Journal } from "@lampgenie/core";

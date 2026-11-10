@@ -1,10 +1,10 @@
 /**
- * 静态调用索引管理(2026-10-12 用户口径三改):
+ * 静态调用索引管理(三改):
  * ① 提前生成:服务启动/项目注册时后台构建全图索引落盘(.genie/sense-index/),不点哪个查哪个;
  * ② 按需查询:code_index 工具给 vibe coding agent 随时调用(symbol/file/entrypoints/graph),
  *    返回结构化信息,不塞 system prompt;
  * ③ code2flow 形态:trunk/leaf/regular 分类+File/Class 群组+边分色,面板图也走此形态。
- * step-086 资源防御:同根单飞锁(跨进程文件锁,忙则等待复用/礼貌拒绝)+ worker 堆帽自适应
+ * 资源防御:同根单飞锁(跨进程文件锁,忙则等待复用/礼貌拒绝)+ worker 堆帽自适应
  * (按仓规模估内存→--max-old-space-size/GENIE_SENSE_MAX_FILES 降数)+ 启动孤儿清扫。
  */
 import { dirname, isAbsolute, join } from "node:path";
@@ -31,7 +31,7 @@ const indexes = new Map<RootKey, C2fIndex>();
 const building = new Map<RootKey, Promise<C2fIndex>>();
 /** 已清扫过的根(每进程一次;warmIndex 可能反复触发)。 */
 const sweptRoots = new Set<RootKey>();
-/** 构建失败冷却(2026-10-20):大工作区(如多仓根 /mnt/e/workship/genie)冷构建实测
+/** 构建失败冷却:大工作区(如多仓巨根)冷构建经验证
  * 7 分钟后 SIGABRT 崩溃且无产物;此前每次查询/派遣都重新 fork 一遍,反复赔 CPU 与内存。
  * 失败后冷却窗口内直接拒绝重试,查询侧降级「尚未就绪」。成功即清。 */
 const buildFailure = new Map<RootKey, { at: number; detail: string; cooldownMs?: number }>();
@@ -41,7 +41,7 @@ function failureCooldownMs(): number {
   return Number.isFinite(n) && n >= 0 ? n : 300_000;
 }
 
-/** 预算拒绝注册表(2026-10-30 巨根治理):ensureIndex 对超预算根**拒绝构建**(自动路径一律不建,
+/** 预算拒绝注册表(巨根治理):ensureIndex 对超预算根**拒绝构建**(自动路径一律不建,
  * 人类显式 CLI --force 仍可)。与失败冷却分开记:拒绝不是故障,是策略;查询面据此给出
  * 「工作区收窄」指引而非误导性的「后台构建中」。TTL 同闸 memo(300s),不另设清理。 */
 const refusedRoots = new Map<RootKey, { at: number; reason: string }>();
@@ -54,7 +54,7 @@ export function indexFailureCooldowns(): { root: string; at: number; detail: str
 /** 索引构建:挪子进程(ts-morph 同步解析 101s 会阻塞主进程事件循环——R2 修复:
  * 此前主进程 warmIndex 导致 WS 握手 30s 无响应,3 个 e2e 超时)。
  * 子进程跑 buildC2fIndex+saveIndex,完成后主进程 loadIndex。
- * step-086:fork 前取同根单飞锁(跨进程防重复索引),锁内二次核对新鲜度(等到的在飞构建
+ * fork 前取同根单飞锁(跨进程防重复索引),锁内二次核对新鲜度(等到的在飞构建
  * 直接复用其产物);worker 带堆帽自适应(execArgv/--max-old-space-size,超预算传降数 env)。 */
 export function ensureIndex(root: string): Promise<C2fIndex> {
   const key = root;
@@ -68,8 +68,8 @@ export function ensureIndex(root: string): Promise<C2fIndex> {
     const remain = Math.ceil((cooldown - (Date.now() - failed.at)) / 1000);
     return Promise.reject(new Error(`索引构建失败冷却中(剩 ${remain}s,${failed.detail})`));
   }
-  // 预算闸(2026-10-30 巨根治理,接全自动路径):超预算根不 fork——此前 risk 档仍采样降数构建
-  // (5160 文件),慢盘上压垮全系统(收割 ×2 + 网关停顿实锤)。闸在锁前:被拒根连锁都不该碰。
+ // 预算闸(巨根治理,接全自动路径):超预算根不 fork——此前 risk 档仍采样降数构建
+ // (5160 文件),慢盘上压垮全系统(收割 ×2 + 网关停顿注意)。闸在锁前:被拒根连锁都不该碰。
   // 注:闸首次判定是有界 walk(≤15s,memo 300s),ensureIndex 调用方全是 fire-and-forget,不阻塞请求。
   const gateP = rootScanVerdict(root).then((v) => {
     if (!v.ok) {
@@ -83,7 +83,7 @@ export function ensureIndex(root: string): Promise<C2fIndex> {
     await gateP; // 预算闸先行:被拒根抛错(调用方 catch 容忍),不碰锁不 fork
     const lock = await acquireBuildLock(root, {
       // holder 如实标注(2026-10-29):本模块在 gateway 与 session-worker 两处实例化,此前硬编码
-      // "gateway" 让等待方排障时找错进程(实锤:「同根索引在飞(pid 639462,gateway)」实际是 worker)。
+ // "gateway" 让等待方排障时找错进程(注意:「同根索引在飞(pid 639462,gateway)」实际是 worker)。
       holder: process.env.GENIE_SESSION_WORKER_CHILD === "1" ? "session-worker" : "gateway",
       onWait: (info) => console.warn(`[sense-index] 同根索引在飞(pid ${info.pid},${info.holder}),等待其完成…`),
     });
@@ -105,7 +105,7 @@ export function ensureIndex(root: string): Promise<C2fIndex> {
         return built;
       } catch (err) {
         // 只对「构建本身失败」(worker 崩溃/退出非 0)记冷却;SIGABRT(OOM 级)= 巨根反复
-        // 全量扫描的系统压力源(2026-10-30 实锤:每次重试都几分钟内存churn 后崩),冷却 ×6。
+ // 全量扫描的系统压力源(注意:每次重试都几分钟内存churn 后崩),冷却 ×6。
         const msg = String((err as Error)?.message ?? err);
         if (/SIGABRT/.test(msg)) buildFailure.set(key, { at: Date.now(), detail: `${msg.slice(0, 180)}(OOM 级,冷却 ×6)` , cooldownMs: 6 * failureCooldownMs() });
         else buildFailure.set(key, { at: Date.now(), detail: msg.slice(0, 200) });
@@ -126,7 +126,7 @@ async function forkWorker(root: string): Promise<C2fIndex> {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [join(here, "sense-index-worker.mjs"), join(here, "sense-index-worker.ts")];
   const workerPath = candidates.find((c) => existsSync(c)) ?? candidates[0]!;
-  // 堆帽自适应(step-086 RC-K2):显式 GENIE_SENSE_HEAP_MB > 按仓估算建议;
+ // 堆帽自适应( RC-K2):显式 GENIE_SENSE_HEAP_MB > 按仓估算建议;
   // 估算失败=fail-open(不带堆帽 flag,与旧行为一致)。
   const extraExec: string[] = [];
   const extraEnv: Record<string, string> = {};
@@ -147,9 +147,9 @@ async function forkWorker(root: string): Promise<C2fIndex> {
   }
   return new Promise<C2fIndex>((resolve, reject) => {
     const key = root;
-    // detached(2026-10-29 冻结治理):构建子进程脱离宿主进程组——宿主(gateway/session-worker)
+ // detached(冻结治理):构建子进程脱离宿主进程组——宿主(gateway/session-worker)
     // 中途死亡时构建继续跑完并原子落盘,下个进程 loadIndex 直接收成品;旧形态子进程随宿主陪葬,
-    // 巨根构建反复从头再来(实锤:/mnt/e/workship/genie 根两次构建均随宿主死亡,只留 worker.pid 墓碑)。
+ // 巨根构建反复从头再来(注意:巨根构建若随宿主进程死亡,只留 worker.pid 墓碑)。
     // stderr 改 ignore:detached 后管道读端随宿主消亡,子进程写 stderr 会 EPIPE 崩溃(崩溃态由
     // buildFailure 冷却+失败重试兜底;worker.pid 登记让等待方按活 worker 语义礼让)。
     const worker = fork(workerPath, [root], {
@@ -173,7 +173,7 @@ async function forkWorker(root: string): Promise<C2fIndex> {
   });
 }
 
-/** 首查等待上限(2026-11-03 首查体验①):GENIE_SENSE_INDEX_WAIT_MS,默认 30000;0=关闭等待(旧行为)。 */
+/** 首查等待上限(首查体验①):GENIE_SENSE_INDEX_WAIT_MS,默认 30000;0=关闭等待(旧行为)。 */
 function firstQueryWaitMs(): number {
   const n = Number(process.env.GENIE_SENSE_INDEX_WAIT_MS ?? 30_000);
   return Number.isFinite(n) && n >= 0 ? n : 30_000;
@@ -212,7 +212,7 @@ async function waitForFreshIndex(root: string, timeoutMs: number): Promise<C2fIn
   }
 }
 
-/** 首查等待入口(2026-11-03;codeIndexQuery 与 sense-tool flow 共用):确保构建在飞(幂等,
+/** 首查等待入口(codeIndexQuery 与 sense-tool flow 共用):确保构建在飞(幂等,
  *  在飞复用),轮询等其落地。timeoutMs 缺省=GENIE_SENSE_INDEX_WAIT_MS(默认 30s)。 */
 export async function waitForIndexReady(root: string, timeoutMs?: number): Promise<C2fIndex | null> {
   const wait = timeoutMs ?? firstQueryWaitMs();
@@ -223,7 +223,7 @@ export async function waitForIndexReady(root: string, timeoutMs?: number): Promi
 }
 
 /** 快取:盘上有且不过期→直接用(毫秒);否则后台重建,先返回盘上旧版(如有)。
- *  2026-10-30 冻结治理:盘加载改异步预热——同步 readFileSync(29-40MB)在 9p 停顿时把
+ * 冻结治理:盘加载改异步预热——同步 readFileSync(29-40MB)在 9p 停顿时把
  *  worker 事件循环冻 183s。冷进程首次调用可能返回 null(异步加载 1-2s 内入内存缓存,
  *  下次调用即得);需要立刻拿索引的路径用 loadIndexAsync。 */
 export function getIndexBestEffort(root: string): { index: C2fIndex | null; rebuilding: boolean; refused?: string } {
@@ -244,7 +244,7 @@ export function getIndexBestEffort(root: string): { index: C2fIndex | null; rebu
   return { index: cached ?? null, rebuilding: needs };
 }
 
-/** 逐个预热未索引/过期子仓(2026-11-03 首查体验②):gateway 启动后后台按序(detectWorkspaceRepos
+/** 逐个预热未索引/过期子仓(首查体验②):gateway 启动后后台按序(detectWorkspaceRepos
  *  清单顺序,**逐个不并发**——慢盘上并发 fork 会互相拖慢且放大内存),已有新鲜索引跳过,其余
  *  ensureIndex 串行兜底(单飞锁幂等,失败只记日志,不抛不中断后续子仓)。 */
 export async function warmWorkspaceSubrepos(base?: string, delayMs?: number): Promise<void> {
@@ -252,7 +252,7 @@ export async function warmWorkspaceSubrepos(base?: string, delayMs?: number): Pr
   if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
   const { detectWorkspaceRepos } = await import("./sense-root-gate.js");
   const repos = await detectWorkspaceRepos(baseRoot);
-  // a3(2026-11-03 命中率三修):循环外计数,循环后输出一行汇总(全跳过也输出)——可观测性。
+ // a3(命中率三修):循环外计数,循环后输出一行汇总(全跳过也输出)——可观测性。
   let skipped = 0;
   let triggered = 0;
   let failed = 0;
@@ -271,7 +271,7 @@ export async function warmWorkspaceSubrepos(base?: string, delayMs?: number): Pr
   console.warn(`[sense-index] 子仓预热汇总: 跳过 ${skipped}(已新鲜) / 触发 ${triggered} / 失败 ${failed}`);
 }
 
-/** 服务启动预热(harness 根;fire-and-forget)+ 首调孤儿清扫(step-086)。 */
+/** 服务启动预热(harness 根;fire-and-forget)+ 首调孤儿清扫。 */
 export function warmIndex(root?: string): void {
   const r = root ?? repoRoot();
   if (!sweptRoots.has(r)) {
@@ -296,7 +296,7 @@ export interface SweepReport {
   skipped: string[];
 }
 
-/** 孤儿清扫(step-086;manager 启动/warmIndex 首调):收割无主 worker 与死锁文件。
+/** 孤儿清扫(manager 启动/warmIndex 首调):收割无主 worker 与死锁文件。
  * 证据链(缺证据不动手,礼貌边界):
  *  - build.lock 持有者 pid 已死(pid+starttime 双校验)→ 删锁;
  *  - worker.pid 持者 pid 已死 → 删登记;
@@ -372,8 +372,8 @@ function procPpid(pid: number): number | null {
 }
 
 /** code_index 工具的查询面(action 分派;全部读静态索引,毫秒级;索引缺失时显式降级)。
- * action=symbol/file/entrypoints/graph/filegraph/impact(step-066:impact=改动影响面清单——
- * 改函数前先查它,签名+双向闭包+受影响文件+关联测试一次出)/api(step-077:HTTP 接口表面——
+ * action=symbol/file/entrypoints/graph/filegraph/impact(impact=改动影响面清单——
+ * 改函数前先查它,签名+双向闭包+受影响文件+关联测试一次出)/api(HTTP 接口表面——
  * 确定性行扫描不依赖索引,索引在场时附带 handler 影响面摘要)。 */
 export async function codeIndexQuery(root: string, action: string, target: string): Promise<string> {
   if (action === "api") {
@@ -382,7 +382,7 @@ export async function codeIndexQuery(root: string, action: string, target: strin
     return renderApiSurface(r);
   }
   if (action === "project") {
-    // step-089 P3:项目底座认知(读 .genie/sense-index/profile.json manifest;缺席=显式提示
+ // P3:项目底座认知(读 .genie/sense-index/profile.json manifest;缺席=显式提示
     // 不触发 LLM 不阻塞;stale=指纹不匹配如实标注)
     const { loadProjectProfile, renderProjectProfile } = await import("@lampgenie/code-sense/project-profile");
     const loaded = loadProjectProfile(root);
@@ -393,7 +393,7 @@ export async function codeIndexQuery(root: string, action: string, target: strin
   }
   const { index, rebuilding, refused } = getIndexBestEffort(root);
   if (refused && !index) {
-    // 巨根拒绝(2026-10-30):绝不能再说「后台构建中」——没有构建在跑,也不会有。给工作区收窄出路。
+ // 巨根拒绝:绝不能再说「后台构建中」——没有构建在跑,也不会有。给工作区收窄出路。
     return workspaceRefusalText(root, { ok: false, files: 0, bytesMb: 0, reason: refused }, await detectWorkspaceRepos(root), "建索引");
   }
   // 巨根已有(采样)索引但被闸拒绝自动重建:照常服务 + 如实标注过期与收窄出路——
@@ -402,10 +402,10 @@ export async function codeIndexQuery(root: string, action: string, target: strin
     ? "\n(注:工作区根超预算不自动重建,以上基于既有索引" + (rebuilding ? "" : ",可能滞后于最新代码") + ";要新结果用 root=\"<子仓名>\" 收窄。)"
     : "";
   if (!index) {
-    // 2026-11-03 首查体验①:未索引子仓的首查不再立刻回「稍后再试」死路——同步**轮询等待**
+ // 首查体验①:未索引子仓的首查不再立刻回「稍后再试」死路——同步**轮询等待**
     // 构建落地(GENIE_SENSE_INDEX_WAIT_MS,默认 30s;500ms 间隔,构建在 detached worker,
     // 网关主循环不被卡)。成功=直接回真实结果;到点未完=诚实降级,带已等待时长与预计剩余。
-    // 失败冷却/无在飞信号时不空等,立即降级。2026-10-20 的洪峰教训保留:10 路并发首查共用
+ // 失败冷却/无在飞信号时不空等,立即降级。 的洪峰教训保留:10 路并发首查共用
     // 同一单飞构建(building 表去重+跨进程锁),只等一次,不会造成建连洪峰。
     const t0 = Date.now();
     const ready = await waitForIndexReady(root);
@@ -423,7 +423,7 @@ export async function codeIndexQuery(root: string, action: string, target: strin
   return rebuilding ? out + rebuildNote(index) : out;
 }
 
-/** 无构建查询(2026-10-30 工作区扇出用):盘上有索引才查(loadIndexAsync,绝不触发构建/闸)。
+/** 无构建查询(工作区扇出用):盘上有索引才查(loadIndexAsync,绝不触发构建/闸)。
  *  返回 null=该根没有盘上索引(扇出方如实标注「未搜索」);有则与 codeIndexQuery 同渲染。 */
 export async function codeIndexQueryNoBuild(root: string, action: string, target: string): Promise<string | null> {
   const cached = indexes.get(root) ?? await loadIndexAsync(root);
@@ -445,17 +445,17 @@ function renderSymbolHits(hits: SymbolQueryResult[]): string {
   }).join("\n---\n");
 }
 
-/** 重建期注记(2026-11-08):带上「当前结果基于哪次构建」——只写「更新中」时,模型无法判断
- *  手里这份结果可能落后多少(7700 实锤:索引 8 天未重建,仍然只给一句「后台更新中」)。 */
+/** 重建期注记:带上「当前结果基于哪次构建」——只写「更新中」时,模型无法判断
+ * 手里这份结果可能落后多少(7700 注意:索引 8 天未重建,仍然只给一句「后台更新中」)。 */
 function rebuildNote(index: C2fIndex): string {
   const built = typeof index.builtAt === "number" ? new Date(index.builtAt).toISOString().slice(0, 16).replace("T", " ") : "未知";
   return `\n(索引正在后台更新至最新代码状态;当前结果基于 ${built} 构建)`;
 }
 
-/** 2026-11-08:file miss 的可操作回执(替代裸「文件无索引符号」)。
+/** :file miss 的可操作回执(替代裸「文件无索引符号」)。
  *  三分支:①构建期被解析守卫跳过(带原因);②文件存在但晚于索引构建(索引滞后);
  *  ③确实查无此文件(保持原文案)。
- *  实锤:15/23 次 file miss 是「文件存在且很新,只是索引没收录」——模型拿到裸文案只能换关键词硬撞。 */
+ * 注意:15/23 次 file miss 是「文件存在且很新,只是索引没收录」——模型拿到裸文案只能换关键词硬撞。 */
 function fileMissText(index: C2fIndex, target: string): string {
   const rel = target.replace(/\\/g, "/").replace(/^\.\//, "");
   const statusKey = index.fileStatus
@@ -518,7 +518,7 @@ export function formatQuery(index: C2fIndex, action: string, target: string): st
   if (action === "file") {
     const nodes = queryFile(index, target);
     if (nodes.length === 0) return fileMissText(index, target);
-    // step-089 P1:符号行带声明类型(有则显;旧索引无 dataType 字段=不显,重建后生效)
+ // P1:符号行带声明类型(有则显;旧索引无 dataType 字段=不显,重建后生效)
     return nodes.map((n) => `  ${n.kind === "trunk" ? "[入口]" : n.kind === "leaf" ? "[叶子]" : "      "} ${n.name} @:${n.line}${n.dataType ? ` [${n.dataType}]` : ""} (调用 ${n.outCount} / 被调 ${n.inCount})`).join("\n");
   }
   if (action === "entrypoints") {
@@ -538,7 +538,7 @@ export function formatQuery(index: C2fIndex, action: string, target: string): st
     return renderFile(index, target);
   }
   if (action === "impact") {
-    // step-066:改动影响面——签名/双向调用闭包(逐跳 dN)/受影响文件/关联测试,一次查询全出。
+ // 改动影响面——签名/双向调用闭包(逐跳 dN)/受影响文件/关联测试,一次查询全出。
     if (!target.trim()) return "impact 需要 target=符号名(如: evaluatePermission)";
     const r = queryImpact(index, target, { depth: 2 });
     if (r.definitions.length === 0) {
@@ -552,9 +552,9 @@ export function formatQuery(index: C2fIndex, action: string, target: string): st
   return "action 必须是 symbol/file/entrypoints/graph/filegraph/impact/api/project";
 }
 
-/** a2(2026-11-03 命中率三修):symbol/impact 精确 miss 时给确定性建议——不让 agent 断链。
+/** a2(命中率三修):symbol/impact 精确 miss 时给确定性建议——不让 agent 断链。
  *  两档:suggestSymbolNames(典范形/编辑距离,c2f 现成)+ camelTokenSuggest(查询词元 ⊆ 候选词元,
- *  "runWorkflow"→"WorkflowEngine.run" 实锤)。恰好 1 个候选=自动改查并带注记行;≥2 个=给候选清单
+ * "runWorkflow"→"WorkflowEngine.run" 注意)。恰好 1 个候选=自动改查并带注记行;≥2 个=给候选清单
  *  (symbol/impact 按精确名重查)。**契约:miss 文本必须仍以「未找到符号」开头**——
  *  sense-tool.ts:277/284 扇出过滤、agent-wiring.ts:2416 都按 startsWith("未找到符号") 过滤,不可破坏。 */
 function buildSymbolMissText(index: C2fIndex, target: string, action: "symbol" | "impact"): string {

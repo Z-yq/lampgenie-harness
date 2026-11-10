@@ -1,5 +1,5 @@
 /**
- * sensing/http-api + openapi + semantic 测试(step-077 P1):
+ * sensing/http-api + openapi + semantic 测试( P1):
  * ① 六框架形态正例(FastAPI 含 APIRouter 前缀+include_router+websocket+route methods/
  *    Flask Blueprint url_prefix/express Router+use 前缀/Next.js 文件约定/Spring/gin);
  * ② 反例:无框架文件零误报;
@@ -119,7 +119,7 @@ func getUser(c *gin.Context) {}
 func createUser(c *gin.Context) {}
 `;
 
-// step-091 fixture:chi(方法化/Group 前缀拼装/Handle/常量+字面量拼接)
+// fixture:chi(方法化/Group 前缀拼装/Handle/常量+字面量拼接)
 // 形态取样 poly-grafana(api.go/folder.go)与 poly-owncast(generated.gen.go/router.go)
 const GO_CHI_FILE = `package api
 
@@ -161,7 +161,7 @@ func notRoutes(c *ctx) {
 const PLAIN_FILE = `export function add(a: number, b: number): number { return a + b; }
 `;
 
-// step-091 fixture:starlette(常量折叠/调用实参/多行/WS/methods)——形态取样 poly-streamlit
+// fixture:starlette(常量折叠/调用实参/多行/WS/methods)——形态取样 poly-streamlit
 const STARLETTE_FILE = `from starlette.routing import Route, WebSocketRoute
 
 BASE_ROUTE_CORE: Final = "_stcore"
@@ -198,7 +198,7 @@ def docstring_guard():
     return None
 `;
 
-// step-091 fixture:Tornado(元组族)——形态取样 poly-jupyterlab
+// fixture:Tornado(元组族)——形态取样 poly-jupyterlab
 const TORNADO_FILE = `import tornado.web
 
 class MainHandler(tornado.web.RequestHandler):
@@ -228,7 +228,7 @@ def register(web_app):
     ])
 `;
 
-// step-091 fixture:Flask-RESTful(add_resource 与子类化 add_org_resource;多行/多 url)
+// fixture:Flask-RESTful(add_resource 与子类化 add_org_resource;多行/多 url)
 // 形态取样 poly-redash
 const FLASK_RESTFUL_FILE = `from flask_restful import Api, Resource
 
@@ -309,9 +309,9 @@ describe("http-api 框架形态提取", () => {
   });
 });
 
-// ============================== step-091:后端提取器族补齐(RC-M/RC-N 上游) ==============================
+// ============================== 后端提取器族补齐(RC-M/RC-N 上游) ==============================
 
-describe("step-091 starlette 提取(常量折叠/调用实参/多行/WS/docstring 守卫)", () => {
+describe(" starlette 提取(常量折叠/调用实参/多行/WS/docstring 守卫)", () => {
   const byPath = (eps: ReturnType<typeof extractEndpointsFromFile>) =>
     new Map(eps.map((e) => [`${e.method} ${e.path}`, e]));
 
@@ -342,7 +342,7 @@ describe("step-091 starlette 提取(常量折叠/调用实参/多行/WS/docstrin
   });
 });
 
-describe("step-091 Tornado 提取(web.Application 元组/handlers.append/add_handlers)", () => {
+describe(" Tornado 提取(web.Application 元组/handlers.append/add_handlers)", () => {
   it("三形态:Application 列表/append 元组 regex 清洗/add_handlers 调用实参", () => {
     const eps = extractEndpointsFromFile("app.py", TORNADO_FILE);
     const m = new Map(eps.map((e) => [e.path, e]));
@@ -356,7 +356,7 @@ describe("step-091 Tornado 提取(web.Application 元组/handlers.append/add_han
     expect(lst?.handler).toBe("FileFindHandler");
     expect(lst?.prefixInferred).toBe(true);
     expect(eps.every((e) => e.framework === "tornado" && e.method === "ANY")).toBe(true);
-    // 2026-10-22 P0:元组行号必须是各自路由行(旧实现全部落在 web.Application 行)
+ // P0:元组行号必须是各自路由行(旧实现全部落在 web.Application 行)
     const rootEp = m.get("/");
     const healthEp = m.get("/api/health");
     expect(rootEp?.line).toBe(9);   // (r"/", MainHandler),
@@ -364,7 +364,7 @@ describe("step-091 Tornado 提取(web.Application 元组/handlers.append/add_han
   });
 });
 
-describe("step-091 Flask-RESTful 提取(add_resource 与子类化 add_org_resource)", () => {
+describe(" Flask-RESTful 提取(add_resource 与子类化 add_org_resource)", () => {
   it("多 url 多行调用;handler=资源类;ANY 如实", () => {
     const eps = extractEndpointsFromFile("api.py", FLASK_RESTFUL_FILE);
     const m = new Map(eps.map((e) => [e.path, e]));
@@ -377,7 +377,7 @@ describe("step-091 Flask-RESTful 提取(add_resource 与子类化 add_org_resour
   });
 });
 
-describe("step-091 Go chi 提取(方法化/Group 前缀拼装/Handle/常量+字面量)", () => {
+describe(" Go chi 提取(方法化/Group 前缀拼装/Handle/常量+字面量)", () => {
   it("中间件链 handler、Group 嵌套前缀、const 拼接精确、字段拼接 pi、Handle、客户端取值零误报", () => {
     const eps = extractEndpointsFromFile("api.go", GO_CHI_FILE);
     const m = new Map(eps.map((e) => [e.path, e]));
@@ -596,9 +596,9 @@ describe("codeSense mode=api 接入面", () => {
   });
 });
 
-// ============================ step-100 RC-M 余量四形态 ============================
+// ============================ RC-M 余量四形态 ============================
 
-describe("step-100 starlette Mount(内联 routes=/变量 routes=/运行时变量前缀/app= 边界)", () => {
+describe(" starlette Mount(内联 routes=/变量 routes=/运行时变量前缀/app= 边界)", () => {
   it("Mount 内路由继承前缀:字面量精确/运行时变量 pi/嵌套复合/app= 零端点/变量列表绑定", () => {
     const text = `from starlette.routing import Mount, Route, WebSocketRoute
 
@@ -641,7 +641,7 @@ routes = [
   });
 });
 
-describe("step-100 chi 跨行路由(grafana dashboardimport/ngalert 形态)", () => {
+describe(" chi 跨行路由(grafana dashboardimport/ngalert 形态)", () => {
   it("多行方法化调用+toMacaronPath 包裹+深层 Wrap handler+单行形态不回退", () => {
     const text = `package api
 
@@ -661,8 +661,7 @@ func (api *ImportDashboardAPI) RegisterAPIEndpoints(routeRegister routing.RouteR
 				http.MethodGet,
 				"/api/prometheus/{DatasourceUID}/api/v1/alerts",
 				api.Hooks.Wrap(srv.RouteGetAlertStatuses),
-				m,
-			),
+				m),
 		)
 		route.Delete("/single", routing.Wrap(api.DeleteDashboard))
 	}, middleware.ReqSignedIn)
@@ -684,7 +683,7 @@ func (api *ImportDashboardAPI) RegisterAPIEndpoints(routeRegister routing.RouteR
   });
 });
 
-describe("step-100 Flask 调用包裹路径(一期,org_scoped_rule 形态)", () => {
+describe(" Flask 调用包裹路径(一期,org_scoped_rule 形态)", () => {
   it("@routes.route(helper(\"/x\")) 取内层字面量+pi;纯字面量保持精确", () => {
     const text = `from flask import Blueprint
 
@@ -709,7 +708,7 @@ def login():
   });
 });
 
-describe("step-100 仓级:Tornado 变量绑定元组+import 常量+Handler 方法级绑定", () => {
+describe(" 仓级:Tornado 变量绑定元组+import 常量+Handler 方法级绑定", () => {
   it("labapp 形态:import 常量路径+变量绑定元组+跨文件 Handler.get/post 方法级展开", async () => {
     const { dir, cleanup } = fixturePyRepo({
       "pkg/labapp.py": `from tornado import web
@@ -803,7 +802,7 @@ class PlainHandler:
   });
 });
 
-describe("step-100 仓级:Flask blueprint 跨文件挂载(redash 形态)", () => {
+describe(" 仓级:Flask blueprint 跨文件挂载(redash 形态)", () => {
   it("定义/使用/注册分居三文件:import 解析 recv + 注册表前缀合成 + 同文件升级", async () => {
     const { dir, cleanup } = fixturePyRepo({
       "app/base.py": `from flask import Blueprint
@@ -898,10 +897,10 @@ def init_app(app):
   });
 });
 
-// ============================ 非产品路径过滤(P1-1,2026-10-20) ============================
+// ============================ 非产品路径过滤(P1-1 ============================
 
 describe("queryApiSurface 非产品路径过滤(docs/examples 不是这个服务提供的接口)", () => {
-  // py-fastapi 实锤形态:docs_src/** 教程里的 @app.get 被算成产品端点
+ // py-fastapi 注意形态:docs_src/** 教程里的 @app.get 被算成产品端点
   const PRODUCT_APP = `from fastapi import FastAPI
 
 app = FastAPI()
@@ -981,7 +980,7 @@ def example_only():
   });
 });
 
-/** step-100:多文件 py 仓夹具(子目录支持)。 */
+/** 多文件 py 仓夹具(子目录支持)。 */
 function fixturePyRepo(files: Record<string, string>): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cssense-rcm-"));
   for (const [rel, content] of Object.entries(files)) {
@@ -992,8 +991,7 @@ function fixturePyRepo(files: Record<string, string>): { dir: string; cleanup: (
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-// =================== OpenAPI 对账单一真相源 + spec 指纹缓存失效(2026-10-21) ===================
-//
+// =================== OpenAPI 对账单一真相源 + spec 指纹缓存失效 ===================
 // 背景:api 面(sensing/index.ts)与 bridge spec 面(crosslang-bridge.ts 的
 // querySpecBridgeEdges)原各串一遍 findSpecFiles→parseSpecFile→reconcileSpec,且 api 面的
 // 60s TTL 缓存键只含源码扩展名指纹(不含 openapi.*/swagger.*)→ 长驻进程内改 spec 不失效。

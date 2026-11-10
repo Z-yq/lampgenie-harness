@@ -8,7 +8,7 @@ describe("protocol schema", () => {
     }));
     expect(m?.type).toBe("task.submit");
   });
-  // ---- 板质量遥测(2026-11-05 bq3):Task.planQuality 向后兼容 ----
+ // ---- 板质量遥测( bq3):Task.planQuality 向后兼容 ----
   it("旧 Task(无 planQuality)parse 通过", () => {
     const t = Task.parse({
       id: "t1", sessionId: "s1", instruction: "x", state: "done",
@@ -34,7 +34,7 @@ describe("protocol schema", () => {
       p0: { passed: 1, total: 1, rate: 1 }, anchorDensity: 1,
     }).success).toBe(false);
   });
-  // M162 生产不可达修复:外部来源字段必须原样保留(zod 默认 strip 会让 server 永远判定为内部路径)
+ // 生产不可达修复:外部来源字段必须原样保留(zod 默认 strip 会让 server 永远判定为内部路径)
   it("task.submit 外部来源字段不被 strip", () => {
     const envelope = { taskId: "t1", source: { kind: "bot", id: "b1" }, digest: "x".repeat(32) };
     const m = parseClientMessage(JSON.stringify({
@@ -122,7 +122,7 @@ describe("explainClientMessageError(P3:非法消息指路)", () => {
   });
 });
 
-describe("文件读写面(step-141 IDE:file.write + file.read full)", () => {
+describe("文件读写面( IDE:file.write + file.read full)", () => {
   it("file.write 合法解析成功(path+content)", () => {
     const m = parseClientMessage(JSON.stringify({ v: 1, type: "file.write", path: "src/a.ts", content: "let x = 1;\n" }));
     expect(m?.type).toBe("file.write");
@@ -144,7 +144,7 @@ describe("文件读写面(step-141 IDE:file.write + file.read full)", () => {
   });
 });
 
-// 2026-10-29 板「OOXML 文本回写」P2:Office 文本级编辑(服务端处理路径)
+// 板「OOXML 文本回写」P2:Office 文本级编辑(服务端处理路径)
 describe("ide.office.edit(Office 文本回写:服务端读文件重写)", () => {
   it("合法 edits 解析成功(pptx 用 slideIndex/shapeIndex,docx 用 blockIndex)", () => {
     const a = parseClientMessage(JSON.stringify({

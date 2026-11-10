@@ -1,23 +1,19 @@
 /**
  * RSI 成本台账持久层(生产侧,RSI 成本 2026-11):把 rsi-cost-roi 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:成本与节省都是审计事实(花了多少、省了多少、门禁在哪一刻降频/停摆),
  * 不能被后来的写入覆盖或抹掉。单行追加 + 写后行数校验(重读文件统计非空行数)让「写成功了吗」
  * 变成可复核的断言,而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/cost.jsonl`,每行一条 `{"v":1,"type":...,"at":ISO,...}`
  * - `cost{id,cycleId,stage,tokens,wallMs,usd?,mechanismId?,projectId?,model?}` —— 一笔花费(字段与行平铺)。
  * - `saving{id,cycleId,tokensSaved,wallMsSaved?,usdSaved?,evidenceRefs?}` —— 一笔节省。
  * - `roi-eval{action,codes,negativeStreak,quota,policy,cycleIds,detail}` —— 一次「已应用」的评测结论。
  * - `downshift{action,quota,negativeStreak,policy}` —— 降频/停摆的落地后果(report 取最后一条当现状)。
- *
  * 投影语义:
  * - evaluateRoiGate 预览(apply 缺省/false)不落盘;apply=true 且 action!="ok" 时落 roi-eval + downshift 两行
  *   (评测事实 + 落地后果分开记);action="ok" 不落盘。
  * - action="pause" 且传了 breakerRoot → await rsi-breaker-store.pause(trigger:"auto-negative-streak",
  *   reason 以 "roi-gate:" 开头),返回里带 breaker 结果(ok/codes/state)。
  * - 坏行(JSON 坏 / 未知 v / 未知 type / 缺 at / 条目字段非法)只计入 badLines 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(两跳惰性解析)+ 惰性复用 rsi-breaker-store.pause
  * (不重复实现熔断折叠)。参数错误是唯一允许 throw 的情形(TypeError);IO/投影/闸门失败一律折叠成稳定码返回。
  */
@@ -57,8 +53,7 @@ interface RoiRuntime {
   summarizeCycles(
     cycleIds: readonly string[] | undefined,
     costs: readonly unknown[] | undefined,
-    savings: readonly unknown[] | undefined,
-  ): {
+    savings: readonly unknown[] | undefined): {
     reports: CycleReport[];
     total: {
       costTokens: number;
@@ -309,8 +304,7 @@ function pickSavingFields(entry: UnknownRecord): UnknownRecord {
 /** 记一笔成本(字段非法不在写入时拒:交给纯逻辑在报告时计入 invalid,台账只忠实落盘)。 */
 export function recordCost(
   root: string,
-  entry: CostEntry | UnknownRecord,
-): { ok: boolean; codes: string[]; at?: string } {
+  entry: CostEntry | UnknownRecord): { ok: boolean; codes: string[]; at?: string } {
   const base = assertRoot("recordCost", root);
   if (!isRecord(entry)) throw new TypeError("recordCost: entry 必须是对象");
   const at = atOf(entry["at"]);
@@ -322,8 +316,7 @@ export function recordCost(
 /** 记一笔节省。 */
 export function recordSavings(
   root: string,
-  entry: SavingEntry | UnknownRecord,
-): { ok: boolean; codes: string[]; at?: string } {
+  entry: SavingEntry | UnknownRecord): { ok: boolean; codes: string[]; at?: string } {
   const base = assertRoot("recordSavings", root);
   if (!isRecord(entry)) throw new TypeError("recordSavings: entry 必须是对象");
   const at = atOf(entry["at"]);

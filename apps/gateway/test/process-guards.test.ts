@@ -1,6 +1,5 @@
 /**
- * process-guards 回归:worker 进程级崩溃保活(2026-10-28 web_search 打崩 session-worker 事故)。
- *
+ * process-guards 回归:worker 进程级崩溃保活( web_search 打崩 session-worker 事故)。
  * 双层验证:
  * ①行为层:子进程装 guard 后抛 uncaughtException/未处理拒绝 → 进程存活 + 日志响亮;
  * ②接线层:session-worker 启动路径确实装了 guard(源码断言,防回退成只挂 unhandledRejection)。

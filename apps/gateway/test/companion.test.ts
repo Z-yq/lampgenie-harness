@@ -22,7 +22,7 @@ const waitFor = async (fn: () => boolean, timeoutMs = 90_000): Promise<void> => 
   }
 };
 
-describe("协议:super 命令(step-1033 指挥台;companion.* 入站兼容)", () => {
+describe("协议:super 命令(指挥台;companion.* 入站兼容)", () => {
   it("super.* 受理;companion.* 入站仍受理(deprecated)", () => {
     expect(parseClientMessage('{"v":1,"type":"super.turn","text":"在干什么"}')?.type).toBe("super.turn");
     expect(parseClientMessage('{"v":1,"type":"super.history"}')?.type).toBe("super.history");
@@ -333,7 +333,7 @@ describe("fixC5: ask_user 转接(SuperAgentChannel.relayAsk)", () => {
   });
 });
 
-describe("step-1033 指挥台 inbox 聚合(buildSuperInbox)", () => {
+describe(" 指挥台 inbox 聚合(buildSuperInbox)", () => {
   it("ask/permission/interrupted/blocked/failed 五类各一;排序 head 升序 + failed 末尾降序", () => {
     const d = deps();
     const now = Date.UTC(2026, 9, 29, 12, 0, 0);

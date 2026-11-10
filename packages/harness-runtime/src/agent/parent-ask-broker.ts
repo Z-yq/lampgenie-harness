@@ -1,18 +1,15 @@
 /**
- * 父子 ask-answer broker(step-071):子代理就重操作(build/install/全量测试等)向父 agent
+ * 父子 ask-answer broker:子代理就重操作(build/install/全量测试等)向父 agent
  * 申请、父 agent LLM 决策批准/拒绝并回流的通用问答机制。
- *
  * 问题流向(与旧链路的差别):子代理工具 ask 的旧链路=面板(用户)或静默拒绝,父 agent 从不参与;
  * 本机制把「重操作申请」路由给**父 agent**——结构化问题(谁/什么命令/为何类重操作)进入父侧,
  * 父 LLM 按决策指引批准或拒绝并给理由,答案回流唤醒阻塞中的子代理;超时=拒绝(fail-closed)。
- *
  * 复用既有链不造平行机制:闸门本体在 loop.ts executeWithPermission(permission.heavyOp),
  * 本模块只承问答编排与审计。父决策两条通道(同一 broker):
  * - 并发泵(前台 spawn,父 loop 阻塞在工具内不可注入):driveParentDecision 在接线方 await
  *   子代理结果期间被并发调用,直接驱动父 LLM 做一次决策 mini-turn;
  * - 注入式(后台 spawn,父 loop 在轮转):onPending 时把 renderPendingQuestionsBlock 追加进
  *   父 journal(message.user,[steer] 同款先例),父代理下一 step 可见,调 answer_subagent 应答。
- *
  * 审计:问答全程落父 journal(kind="custom",payload.topic="subagent.heavy-ask"/"-answer",
  * 含 requestId/命令/分类/决策来源 by/reason);不改 core journal types 的 closed union。
  * 决策 mini-turn 不写父会话 message.agent(防 deriveMessages 把无 tool.result 配对的
@@ -97,7 +94,7 @@ export class ParentAskBroker {
     return new Promise<HeavyAnswer>((resolve) => {
       // 注意:此处 timer 不 unref——「超时=拒绝(fail-closed)」是机制语义,timer 必须可靠触发
       // (unref 后,裸 Node 进程里唯一的未决 ask 会在事件循环空转时直接退出、超时永不触发,
-      // step-071 探针实锤 exit 13 unfinished top-level await);代价=未决 ask 至多拖住进程退出
+ // 探针注意 exit 13 unfinished top-level await);代价=未决 ask 至多拖住进程退出
       // timeoutMs,有界可接受。生产 gateway 常驻进程无感。
       const timer = setTimeout(() => {
         this.settle(requestId, { requestId, approved: false, reason: "审批超时(父代理未在时限内应答),按拒绝处理(fail-closed)", by: "timeout" });

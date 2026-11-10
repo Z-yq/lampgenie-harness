@@ -1,4 +1,4 @@
-/** UI 实测(2026-10-14):B 子代理过程卡状态流转+实时 tail + A 工具结果渲染(喂真实转录形态)。
+/** UI 经验证:B 子代理过程卡状态流转+实时 tail + A 工具结果渲染(喂真实转录形态)。
  * 自启跑法:npx tsx test/ui/_ui_selfhost.cjs --opts test/ui/_subagent.opts.cjs test/ui/subagent.spec.cjs */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";

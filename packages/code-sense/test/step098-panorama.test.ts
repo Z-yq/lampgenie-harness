@@ -1,5 +1,5 @@
 /**
- * step-098 全景修复线 fixture 单测:
+ * 全景修复线 fixture 单测:
  * ① RC-A2① isTestPath 全族(Go/Java/spec 形态)+ 入口降权;
  * ② RC-A1 modulemap 目录拓扑聚类(fast path 不变 + cobra/redash/agent_alpha 三形);
  * ③ RC-A2② JSX 使用证据 → 入口判定(dynamic 别名/命名 import/同文件/负例);
@@ -20,10 +20,10 @@ import { deriveModules } from "../src/modulemap/index";
 import { buildSkeleton, detectFrameworks } from "../src/project-profile";
 
 // ---- ① RC-A2① isTestPath 全族 ----
-describe("step-098 RC-A2① isTestPath 语言族形态", () => {
+describe(" RC-A2① isTestPath 语言族形态", () => {
   it("Go/Java/spec 形态全收;相近命名不误伤", () => {
     // 新增形态
-    expect(isTestPath("command_test.go")).toBe(true); // Go(RC-096-B1 实锤缺口)
+    expect(isTestPath("command_test.go")).toBe(true); // Go(RC-096-B1 实测确认缺口)
     expect(isTestPath("pkg/foo/bar_test.go")).toBe(true);
     expect(isTestPath("TestCommand.java")).toBe(true); // Java Test 前缀
     expect(isTestPath("CommandTest.java")).toBe(true); // Java Test 后缀
@@ -61,7 +61,7 @@ describe("step-098 RC-A2① isTestPath 语言族形态", () => {
 });
 
 // ---- ② RC-A1 modulemap 拓扑聚类 ----
-describe("step-098 RC-A1 modulemap 目录拓扑聚类", () => {
+describe(" RC-A1 modulemap 目录拓扑聚类", () => {
   it("fast path 不变:packages/apps 布局仍走旧口径", () => {
     const mods = deriveModules(["packages/core/src/a.ts", "apps/gateway/src/main.ts", "README.md"]);
     const names = mods.map((m) => m.name);
@@ -139,8 +139,8 @@ describe("step-098 RC-A1 modulemap 目录拓扑聚类", () => {
 });
 
 // ---- ③ RC-A2② JSX 使用证据 → 入口判定 ----
-describe("step-098 RC-A2② JSX 使用证据降权", () => {
-  it("dynamic(() => import) 别名 + 别名路径(@/*):被用组件不再伪入口(agent_alpha RTCCard 实锤形态)", async () => {
+describe(" RC-A2② JSX 使用证据降权", () => {
+  it("dynamic(() => import) 别名 + 别名路径(@/*):被用组件不再伪入口(agent_alpha RTCCard 实测确认形态)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-s098-jsxd-"));
     try {
       mkdirSync(join(dir, "components/Dynamic"), { recursive: true });
@@ -221,7 +221,7 @@ describe("step-098 RC-A2② JSX 使用证据降权", () => {
 });
 
 // ---- ④ RC-A3 profile 骨架去测试污染 ----
-describe("step-098 RC-A3 profile 骨架去测试污染", () => {
+describe(" RC-A3 profile 骨架去测试污染", () => {
   it("骨架 entrypoints 只含生产入口;框架指纹证据锚偏好非测试文件", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-s098-prof-"));
     try {
@@ -270,7 +270,7 @@ describe("step-098 RC-A3 profile 骨架去测试污染", () => {
 });
 
 // ---- ⑤ RC-B6 impact 渲染措辞 ----
-describe("step-098 RC-B6 impact 渲染不过度声明", () => {
+describe(" RC-B6 impact 渲染不过度声明", () => {
   it("trunk 标签与空调用方文案=「索引内无」口径,不直判无人调用/无波及", () => {
     const r: ImpactResult = {
       query: "f", depth: 2,
@@ -279,7 +279,7 @@ describe("step-098 RC-B6 impact 渲染不过度声明", () => {
         callers: [], callees: [],
       }],
       files: [], tests: [], importChannel: true, truncated: false,
-      // step-099 renderImpact 的弃边末节契约:dropped 恒在场(ledgerAvailable=false=旧索引形态)
+ // renderImpact 的弃边末节契约:dropped 恒在场(ledgerAvailable=false=旧索引形态)
       dropped: { ledgerAvailable: false, unresolvedEdges: 0, ledgerTruncated: false },
       summary: { directCallers: 0, directCallees: 0, transitiveCallers: 0, transitiveCallees: 0, fileCount: 0, testCount: 0 },
     };

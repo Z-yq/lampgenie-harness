@@ -1,9 +1,7 @@
 /**
- * 「轨迹」独立看板视图 #view-traj 契约(step-1535)。
- *
- * 用户口径:轨迹要成为**独立看板视图**(逐次决策 + 事件账本 + 泳道三 pane 同屏),唯一数据源 = histEvents;
+ * 「轨迹」独立看板视图 #view-traj 契约。
+ * 轨迹要成为**独立看板视图**(逐次决策 + 事件账本 + 泳道三 pane 同屏),唯一数据源 = histEvents;
  * 不再是「追踪 Trace」里的入口 + #sw-trace / #trajBoard 全屏浮层。
- *
  * 本文件守四件事(每件都是用户可感的行为,不是实现细节):
  *   ① 载体与结构:true 视图 #view-traj + 三 host + 视图头刷新 + 侧栏 act-traj + 注册表(CV_CARDS/VIEW_NAMES);
  *      负面:不再有 position:fixed 的全屏 .traj-board 规则、不再有 trajBoardOpen/trajBoardClose;
@@ -50,7 +48,7 @@ function emojiBad(s: string): string[] {
   return [...s].filter((ch) => EMOJI.test(ch) && !ALLOW.has(ch));
 }
 
-describe("轨迹独立视图 #view-traj(step-1535)", () => {
+describe("轨迹独立视图 #view-traj()", () => {
   it("①载体与结构:视图 + 三 host + 视图头刷新 + 侧栏入口 + 注册表齐备", async () => {
     const html = await panelHtml();
     // 载体:真视图(panel-wrap),内部保留 #trajBoard 容器

@@ -103,7 +103,7 @@ describe("buildAttachmentInjection(任务书「## 附件」块 + 视觉通道)",
   });
 
   it("②'' 像素尺寸超限:即便 <2MB 也不进视觉通道(长边>4000 的截图会 400)", () => {
-    // 造一个 10144x1146 的 PNG 头(事故实锤尺寸),体积很小但像素超限
+ // 造一个 10144x1146 的 PNG 头(事故注意尺寸),体积很小但像素超限
     const png = Buffer.alloc(64);
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png, 0);
     png.writeUInt32BE(13, 8);

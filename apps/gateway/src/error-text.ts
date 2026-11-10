@@ -1,10 +1,8 @@
 /**
  * 错误码 → 人话文案(单一出处)+ 诊断摘要拼装。
- *
  * 口径对齐 ZCode/packages/shared/src/errors.ts:14-89 与 ZCode/packages/ui/src/ChatErrorBanner.tsx:43-105:
  * 「结构化 code 决定人说的人话,message 只作附加细节」——服务端 message 是跨进程兜底,
  * 不能直接充当最终 UI 语言来源(ZCode 注释原话);展示层按 code 本地化,未登记 code 走兜底。
- *
  * 为什么单独成模块:面板(panel.ts,手写 HTML/JS 字符串模板)与 gateway 侧测试要共用
  * 同一张表。panel.ts 通过 `PANEL_ERROR_TEXT_JS`(JSON + 函数源码)构建期字符串注入,
  * 浏览器侧与 Node 侧跑的是同一份文案,不存在第二份手抄表。

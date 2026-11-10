@@ -1,12 +1,10 @@
 /**
- * TypeScript 诊断兜底(step-114):本机没有 typescript-language-server 时,用仓内 `typescript`
+ * TypeScript 诊断兜底:本机没有 typescript-language-server 时,用仓内 `typescript`
  * 编译器 API 做**单文件快速检查**(类型错/语法错)。
- *
  * 为什么不是 tsserver / ts.createProgram(全解析):
- * - ts.createProgram 解析完整项目:仓内 500 行文件实测 7.7s;
- * - tsserver 在 /mnt/e(WSL 9p 盘)打开仓内文件实测 **>15s**(项目/import 解析),直接超预算;
- * - 本实现 `noResolve` + 显式 lib + 全局 shim:实测 1.0-1.5s(冷/热同量级),在 2s 预算内。
- *
+ * - ts.createProgram 解析完整项目:仓内 500 行文件经验证 7.7s;
+ * - tsserver 在 /mnt/e(WSL 9p 盘)打开仓内文件经验证 **>15s**(项目/import 解析),直接超预算;
+ * - 本实现 `noResolve` + 显式 lib + 全局 shim:经验证 1.0-1.5s(冷/热同量级),在 2s 预算内。
  * 诚实边界(不假装等价 LSP):
  * - 不解析 import(模块按 any 处理)→ **跨文件类型错误不会在此兜底中暴露**;
  * - 本地类型错(如 `const n: number = "x"`)与未定义名、语法错照常检出;

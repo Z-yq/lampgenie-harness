@@ -1,5 +1,5 @@
 /**
- * codesense review 指令锚定(step-075):target 三形态/双格式/退出码语义/--deep 闸。
+ * codesense review 指令锚定:target 三形态/双格式/退出码语义/--deep 闸。
  * 全部走临时夹具仓(进程内 runCli / reviewCommand),不打真网络;
  * 桩 LLM 深审全链经 reviewCommand 的 llmOverride 注入(--deep+真凭证的联网路径由验收轮覆盖)。
  */
@@ -46,7 +46,7 @@ beforeAll(() => {
   delete process.env.GENIE_LLM_BASE_URL;
   delete process.env.GENIE_LLM_MODEL;
   delete process.env.GENIE_LLM_API_KEY;
-  // step-105 凭证链接通后 runCli 会读真实 ~/.codesense/config.json——HOME 隔离保 hermetic
+ // 凭证链接通后 runCli 会读真实 ~/.codesense/config.json——HOME 隔离保 hermetic
   savedHome = process.env.HOME;
   homeDir = mkdtempSync(join(tmpdir(), "csrev-home-"));
   process.env.HOME = homeDir;
@@ -124,7 +124,7 @@ describe("codesense review:target 三形态与退出码", () => {
     const code = await runCli(["review", "--root", dir, "--deep"], r.io);
     expect(code).toBe(2);
     expect(r.err()).toContain("GENIE_LLM_BASE_URL"); // env 档仍在指路内
-    expect(r.err()).toContain("codesense config"); // step-105:凭证链指路(config/ask-file)
+    expect(r.err()).toContain("codesense config"); // 凭证链指路(config/ask-file)
     expect(r.err()).toContain("ask-file");
   });
 

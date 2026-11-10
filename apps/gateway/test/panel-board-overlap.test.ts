@@ -1,4 +1,4 @@
-/** step-1010 K:白板「图例条/工具条压住卡片」的源码契约断言。
+/** K:白板「图例条/工具条压住卡片」的源码契约断言。
  *  问题:①.cv-legend 曾是画布底部绝对定位浮层(position:absolute;bottom:10px),适配被
  *  fitMinK 可读下限一夹就溢到图例底下被盖住;②「添加模块/整理」是画布右上绝对定位浮层压顶排卡。
  *  修法(选 A):图例与工具条都移出画布,改为画布外底部占位条 #cvRail(.cv-rail),
@@ -20,7 +20,7 @@ function rule(sel: string): string {
   return src.slice(i, j + 1);
 }
 
-describe("白板图例/工具条不再覆盖画布内容(step-1010 K)", () => {
+describe("白板图例/工具条不再覆盖画布内容( K)", () => {
   it("图例改为画布外底部占位条:.cv-legend 不再是绝对定位浮层", () => {
     const r = rule(".cv-legend");
     expect(r).not.toContain("position:absolute");
@@ -52,7 +52,7 @@ describe("白板图例/工具条不再覆盖画布内容(step-1010 K)", () => {
   });
 
   it("图例与工具条都渲染在 #cvHost 之外(占位条拼在画布闭合之后)", () => {
-    // 模板结尾:画布 `"</div>"` 之后接 cvRailHtml(2026-11-05:中间插入了层 chip 条 lbarHtml,故用正则而非逐字)
+ // 模板结尾:画布 `"</div>"` 之后接 cvRailHtml(中间插入了层 chip 条 lbarHtml,故用正则而非逐字)
     expect(src).toMatch(/wbarHtml \+ (lbarHtml \+ )?"<\/div>" \+ cvRailHtml;/);
     // 四条图例全在占位条变量里,不再是 cvHost 内的兄弟浮层
     const rail = src.slice(src.indexOf("const cvRailLegends"), src.indexOf("const cvRailHtml"));

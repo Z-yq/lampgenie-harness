@@ -1,16 +1,15 @@
 /**
  * 内置浏览器视图资产(assets/browser-view.js)契约测试。
- *
  * 三层:
  *  ①语法层:new Function 解析资产不抛错(与 test/panel-script-syntax.test.ts 同形态;
- *    资产无 TS 编译护栏,坏文件会随构建直进产线);
+ * 资产无 TS 编译护栏,坏文件会随构建直进生产环境);
  *  ②导出层:注入 fake window/document 执行后 window.GenieBrowserView 五个键齐全,state() 初态正确;
  *  ③纯函数层:缩放 clamp/fit(双轴)、8 向视口拖拽换算(带符号方向因子)、滚轮意图判定
  *    (Ctrl/Meta=zoom、横向 deltaX=scroll)、URL 协议白名单(与
  *    ZCode/packages/ui/src/browser-use/{browserViewportZoom.ts,useEmbeddedBrowserWheelChain.ts,
  *    ResponsiveBrowserResizeHandles.tsx} 的语义对齐,辅助工具语义同 embeddedBrowserHelpers)。
  * 另加禁用形态扫描:import/export/<script/内联 onclick/ eval —— 资产必须是零构建的普通 <script>。
- * 说明:本仓无 jsdom,DOM 交互不在此做单测(验收走浏览器实测)。
+ * 说明:本仓无 jsdom,DOM 交互不在此做单测(验收走浏览器经验证)。
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -191,7 +190,7 @@ describe("内置浏览器视图资产:__test 纯函数", () => {
     expect(normalizeUrl("https://example.com")).toBe("https://example.com");
     expect(normalizeUrl("file:///tmp/a.html")).toBe("file:///tmp/a.html");
     expect(normalizeUrl("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
-    // 显式黑名单(安全洞收口:script URL / HTML data / 私有协议)
+ // 显式黑名单(安全洞:script URL / HTML data / 私有协议)
     expect(normalizeUrl("javascript:alert(1)")).toBe("");
     expect(normalizeUrl("JAVASCRIPT:alert(1)")).toBe(""); // 大小写绕过也拦
     expect(normalizeUrl("data:text/html;base64,PHNjcmlwdD4=")).toBe("");
@@ -328,7 +327,7 @@ describe("内置浏览器视图资产:禁用形态", () => {
     expect(fromDom.length).toBeGreaterThan(20);
     for (const c of fromDom) expect(c.startsWith("gbv-"), c).toBe(true);
 
-    // CSS 常量块(CSS = [ ... ].join("") )内的类选择器只允许 gbv-*:
+ // CSS 常量块(CSS = [ ... ].join(""))内的类选择器只允许 gbv-*:
     // 只切这一段,避免把 JS 里的属性访问(S.el.back / msg.seq)误当选择器。
     const cssStart = code.indexOf("var CSS = [");
     const cssEnd = code.indexOf('].join("")', cssStart);

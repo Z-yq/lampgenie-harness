@@ -1,4 +1,4 @@
-/** UI 实测:@ 文件提及(菜单触发/过滤/键盘插入)——真实 gateway+chromium。 */
+/** UI 经验证:@ 文件提及(菜单触发/过滤/键盘插入)——真实 gateway+chromium。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");

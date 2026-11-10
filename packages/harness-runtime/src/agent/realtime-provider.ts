@@ -4,16 +4,15 @@
  * session.update(modalities:["text"], turn_detection:null) → conversation.item.create
  * (input_text/function_call/function_call_output)→ response.create → response.text.delta/done
  * → response.done(output[] 含 message 与 function_call)。单响应槽:每次 chat 新建会话,全量回放历史。
- * 端点规则(genie-voice qwen_realtime.py 实证):wss://<host>/api-ws/v1/realtime?model=...,
+ * 端点规则(qwen-audio-agent qwen_realtime.py 验证,致谢):wss://<host>/api-ws/v1/realtime?model=...,
  * Authorization: Bearer <key>;https baseUrl 的 host 直接复用。
- *
- * text+audio 直出(2026-10-21 realtime-plus 形态,qwen-audio-3.1-realtime* 口径,参考 genie-voice
- * qwen_realtime.py):audioOut=true 时 session modalities ["text","audio"] + voice + 百炼传统字符串
+ * text+audio 直出( realtime-plus 形态,qwen-audio-3.1-realtime* 口径,协议参考 qwen-audio-agent
+ * qwen_realtime.py,致谢):audioOut=true 时 session modalities ["text","audio"] + voice + 百炼传统字符串
  * 音频格式(input_audio_format/output_audio_format);response.audio.delta 聚合为 LlmResponse.audio
  * (pcm16@24k 包 WAV 容器,浏览器可直接播)——该形态链路上不再外挂 tts。语音输入同样直入:
- * user 消息带 audio(input_audio 内容件,voice.speak 转写会话同款实证形态)。
+ * user 消息带 audio(input_audio 内容件,voice.speak 转写会话同款验证形态)。
  * 事件名百炼为 pre-rename 口径(response.audio.delta / response.audio_transcript.delta,
- * 见 genie-voice _BAILIAN_EVENT_REMAP),renamed 口径一并兼容。
+ * 见 qwen-audio-agent _BAILIAN_EVENT_REMAP,致谢),renamed 口径一并兼容。
  */
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
@@ -21,7 +20,7 @@ import type { LlmProvider, LlmResponse, Message, ToolSpec } from "./loop";
 import { extractUsage } from "./openai-provider";
 import { pcm16ToWav } from "./audio-wav";
 
-/** 百炼 realtime 输出音频口径:PCM16 单声道 24kHz(OpenAI Realtime 语义,genie-voice 同)。 */
+/** 百炼 realtime 输出音频口径:PCM16 单声道 24kHz(OpenAI Realtime 语义)。 */
 const REALTIME_OUT_RATE = 24_000;
 
 export interface RealtimeOptions {
@@ -50,7 +49,7 @@ const eventId = () => "event_" + randomUUID().replaceAll("-", "");
 export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { update(patch: Partial<RealtimeOptions>): void; readonly modelName: string } {
   const cur = { ...opts };
   return {
-    /** 模型名读数(step-060 子代理目录):registry/面板展示用;getter=热更新(update)后读到新值。 */
+ /** 模型名读数(子代理目录):registry/面板展示用;getter=热更新(update)后读到新值。 */
     get modelName() { return cur.model; },
     update(patch) {
       if (patch.model !== undefined) cur.model = String(patch.model);
@@ -81,7 +80,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
 
         // 状态机:session.updated → 逐条回放 item(等 created)→ response.create → response.done
         const items = buildItems(messages);
-        // 语音输入在场才声明输入音频格式(纯文本会话字节级维持现状;pcm16=voice.speak 转写会话实证口径)
+ // 语音输入在场才声明输入音频格式(纯文本会话字节级维持现状;pcm16=voice.speak 转写会话验证口径)
         const hasAudioIn = items.some((i) => Array.isArray((i as { content?: Array<{ type?: string }> }).content) && (i as { content: Array<{ type?: string }> }).content.some((c) => c.type === "input_audio"));
         const audioOut = cur.audioOut === true;
         let sent = 0;
@@ -90,7 +89,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
           if (sent >= items.length) {
             if (!pendingCreate) {
               pendingCreate = true;
-              // audioOut 时 response 不带 modalities(继承 session 的 ["text","audio"];genie-voice 父类同款)
+ // audioOut 时 response 不带 modalities(继承 session 的 ["text","audio"];参考实现同款)
               ws.send(JSON.stringify({ event_id: eventId(), type: "response.create", ...(audioOut ? {} : { response: { modalities: ["text"] } }) }));
             }
             return;
@@ -106,7 +105,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
             session: {
               modalities: audioOut ? ["text", "audio"] : ["text"],
               turn_detection: null,
-              // 音频格式仅在音频在场时声明(百炼传统字符串口径,genie-voice 实证:input pcm16/output pcm)
+ // 音频格式仅在音频在场时声明(百炼传统字符串口径,实测验证:input pcm16/output pcm)
               ...((hasAudioIn || audioOut) ? { input_audio_format: "pcm16" } : {}),
               ...(audioOut ? { output_audio_format: "pcm" } : {}),
               ...(audioOut && cur.voice ? { voice: cur.voice } : {}),
@@ -138,7 +137,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
           }
           if (type === "session.updated") { sendItem(); return; }
           if (type === "conversation.item.created") { sent += 1; sendItem(); return; }
-          // 流式增量(step-050,ZCode 流式消息展示):response.text.delta 逐块透出;终态仍以 response.done 聚合为准。
+ // 流式增量(ZCode 流式消息展示):response.text.delta 逐块透出;终态仍以 response.done 聚合为准。
           if (type === "response.text.delta") {
             const d = String(e.delta ?? "");
             if (d && onDelta) { try { onDelta({ text: d }); } catch { /* 回调异常不断流 */ } }
@@ -181,7 +180,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
           }
         });
       });
-      // step-052 自愈:超时多为端点会话态卡死(实测 860ms 直连正常而网关全挂)——换新会话重试一次;
+ // 自愈:超时多为端点会话态卡死(经验证 860ms 直连正常而网关全挂)——换新会话重试一次;
       // 失败一律留日志(此前静默无痕,排障全靠猜)。
       return once().catch((err: Error) => {
         if (/超时/.test(err.message) && !signal?.aborted) {
@@ -202,13 +201,13 @@ function buildItems(messages: Message[]): Record<string, unknown>[] {
     if (m.role === "system") continue; // 进 instructions
     if (m.role === "user") {
       // 语音直入(realtime-plus):audio 在场只发 input_audio(占位文本不掺和,防误导模型;
-      // {type:"input_audio", audio:b64} 为 voice.speak 转写会话同款实证形态)
+ // {type:"input_audio", audio:b64} 为 voice.speak 转写会话同款验证形态)
       const audio = (m as { audio?: { data: string } }).audio;
       items.push(audio?.data
         ? { type: "message", role: "user", content: [{ type: "input_audio", audio: audio.data }] }
         : { type: "message", role: "user", content: [{ type: "input_text", text: m.content }] });
     } else if (m.role === "assistant") {
-      // DashScope api-ws beta 方言:assistant 回放的 content 类型必须是 output_text(step-052 实测;
+ // DashScope api-ws beta 方言:assistant 回放的 content 类型必须是 output_text(经验证;
       // 此前的 'text' 让多轮会话第二回合起必被拒:assistant role only supports content type 'output_text')。
       if (m.content) items.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: m.content }] });
       for (const c of m.toolCalls ?? []) {

@@ -1,16 +1,13 @@
 /**
  * 工作流留白的持久层(gateway 侧):把 workflow-hole 的纯逻辑落到 `<root>/.genie/rsi/holes.json`,
  * 并把「当前脚本源」同步成可执行的草稿 `<root>/drafts/<id>.mjs`。
- *
  * 为什么落在状态文件 + 草稿两份:
  * - holes.json 记的是判断历史(哪些留白、哪些已填、函数体记忆),丢了就得重新问模型;
  * - drafts/<id>.mjs 记的是「此刻脚本长什么样」——停驻时人和调试器直接看这份文件,不必反解 json。
  * 两份都由同一个 HoleState 派生,写入顺序固定(先 states 后 draft),失败折叠成稳定码而不是半真半假。
- *
  * 为什么写入必须原子(写 tmp 再 rename):停驻中的脚本是唯一可恢复副本,写到一半被 kill 会得到
  * 一个既不是旧状态也不是新状态的 json(下次 load 直接 parse 失败,等于丢整份历史)。
  * rename 在同一文件系统上是原子的,写后重读比对让「写成功了吗」成为可复核断言。
- *
  * 依赖纪律:node:fs / node:path;runtime 纯逻辑模块按 defect-lineage-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
  * ② 裸 tsx/dist 缺该文件时回退到仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。

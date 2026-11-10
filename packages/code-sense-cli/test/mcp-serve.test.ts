@@ -1,7 +1,7 @@
 /**
  * MCP serve 模式测试:
  * ①进程内 serveMain(注入 stdio 三件套)——握手/tools list/tools call 全链;
- * ②sensing 三工具(step-080:code_index_api/state/algo)——stdio 全链+错误路径+CLI↔MCP 同源对照;
+ * ②sensing 三工具(code_index_api/state/algo)——stdio 全链+错误路径+CLI↔MCP 同源对照;
  * ③真子进程冒烟(dist bundle 存在时才跑;缺 dist=SKIP,不装假绿)。
  */
 import { describe, it, expect, afterAll } from "vitest";
@@ -19,7 +19,7 @@ let ws = "";
 let mcp: CodeIndexMcp; // autoBuild:false 直调实例(sensing 错误路径与 CLI 同源对照用)
 
 /** 夹具:六件套的索引靶(mod.ts)+ sensing 三工具的行扫描靶(server.ts/gate.ts/model.py,
- * 三者均为 code-sense sensing 既有测试的 proven 形态,step-077 实证可被确定性提取)。 */
+ * 三者均为 code-sense sensing 既有测试的 proven 形态, 验证可被确定性提取)。 */
 async function makeFixture(): Promise<void> {
   if (ws) return; // 幂等:多 describe 共享同一夹具
   ws = mkdtempSync(join(tmpdir(), "csmb-"));
@@ -87,24 +87,24 @@ async function makeFixture(): Promise<void> {
   mcp = createCodeIndexMcp(ws, { autoBuild: false });
 }
 
-// 2026-10-21 E③:MCP 工具面——graph/filegraph 移出 agent 面(mermaid 图给人看,
+// E③:MCP 工具面——graph/filegraph 移出 agent 面(mermaid 图给人看,
 // 走 CLI symbol --graph/file --graph;分派处理器保留,gateway 直调与 required 校验不受影响)。
-// 2026-10-22 P1:+code_index_modules=十二件;2026-10-23:+code_index_branches=十三件;2026-10-26:+code_index_flow=十四件。
+// P1:+code_index_modules=十二件;:+code_index_branches=十三件;:+code_index_flow=十四件。
 const MCP_TOOLS = [
   "code_index_symbol", "code_index_file", "code_index_entrypoints",
-  // 2026-10-22:模块视图(清单+跨模块交互矩阵+枢纽/测试面)
+ // 模块视图(清单+跨模块交互矩阵+枢纽/测试面)
   "code_index_modules",
-  // 2026-10-26:整仓代码流(module/file/function 三层 + 入口/分层/主干)
+ // 整仓代码流(module/file/function 三层 + 入口/分层/主干)
   "code_index_flow",
   "code_index_impact",
   "code_index_api", "code_index_state", "code_index_algo",
-  // step-089 P1/P3:文件变量类型清单 + 项目底座画像
+ // P1/P3:文件变量类型清单 + 项目底座画像
   "code_index_vars", "code_index_project",
-  // 2026-10-21:WS 消息协议表面(协议↔handler↔面板发送/接收)+ 字面量引用面
+ // WS 消息协议表面(协议↔handler↔面板发送/接收)+ 字面量引用面
   "code_index_wire", "code_index_refs",
-  // 2026-10-23:分支/循环骨架(条件关系:这个调用在什么条件下发生)
+ // 分支/循环骨架(条件关系:这个调用在什么条件下发生)
   "code_index_branches",
-  // 2026-11-06:概念足迹面(八类表面:这个概念要动的地方齐了吗)
+ // 概念足迹面(八类表面:这个概念要动的地方齐了吗)
   "code_index_surface",
 ];
 
@@ -141,7 +141,7 @@ function capture(): { io: CliIo; out: () => string } {
 }
 
 describe("serve(进程内,注入 stdio)", () => {
-  it("握手+tools/list 工具面(step-066:+impact;step-080:+api/state/algo;step-089:+vars/project)+tools/call 命中符号", async () => {
+  it("握手+tools/list 工具面(+impact;+api/state/algo;+vars/project)+tools/call 命中符号", async () => {
     await makeFixture();
     const served = await driveServe(ws);
     expect(served.lines.length).toBe(3);
@@ -172,7 +172,7 @@ describe("serve(进程内,注入 stdio)", () => {
   }, 60_000);
 });
 
-describe("sensing 三工具(step-080):stdio 全链", () => {
+describe("sensing 三工具:stdio 全链", () => {
   it("stdio:code_index_api/state/algo 三连 call——异步分派经 serveMain 出真结果(非 Promise 序列化垃圾)", async () => {
     await makeFixture();
     const rpc = [
@@ -204,7 +204,7 @@ describe("sensing 三工具(step-080):stdio 全链", () => {
   }, 120_000);
 });
 
-describe("sensing 三工具(step-080):直调错误路径+CLI↔MCP 同源对照", () => {
+describe("sensing 三工具:直调错误路径+CLI↔MCP 同源对照", () => {
   it("错误路径:未知仓同 pickForced 文案;未知工具委托 dispatchTool=isError;algo file 参数按文件过滤(2026-10-22)", async () => {
     await makeFixture();
     const ghost = await mcp.dispatchToolAsync("code_index_api", { repo: "ghost" });
@@ -215,7 +215,7 @@ describe("sensing 三工具(step-080):直调错误路径+CLI↔MCP 同源对照"
     expect(unknown.content[0]!.text).toContain("未知工具");
     const noFilter = await mcp.dispatchToolAsync("code_index_algo", {});
     expect(noFilter.content[0]!.text).toContain("model.py");
-    // 2026-10-22 P0:file 参数现在真正限定画像文件(旧行为只影响 LLM 导读粒度、确定性面仍全仓)。
+ // P0:file 参数现在真正限定画像文件(旧行为只影响 LLM 导读粒度、确定性面仍全仓)。
     const withFile = await mcp.dispatchToolAsync("code_index_algo", { file: "src/model.py" });
     expect(withFile.isError).toBe(false);
     expect(withFile.content[0]!.text).toContain("src/model.py");

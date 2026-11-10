@@ -1,18 +1,14 @@
 /**
  * 情境签名样本的持久层(RSI 版本治理):把 cohort-signature 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:一条样本的签名是「它当时在什么情境下跑出来的」这一审计事实,
  * 版本切换、基线重估也必须留痕——后来的写入不该覆盖历史行。
  * 单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言(而不是信任 append 没抛)。
- *
  * 数据面:`<root>/.genie/rsi/signatures.jsonl`,每行 `{v:1,type,at,...}`
  * - sample   {sample}                                  一条观测样本(SignatureSample)
  * - version  {modelVersion,providerVersion,prev?,changed}  一次版本登记(每次调用都追加)
  * - baseline {modelVersion,providerVersion,reason}     版本变化时重估基线的留痕
- *
  * 投影语义:按行序读全部行;坏行(JSON 坏 / v 不是 1 / type 未知 / 载荷不合法)只计入 parseErrors
  * 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 cohort-metrics-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -245,8 +241,7 @@ interface SignatureRuntime {
   }): VersionChangeResult;
   markStale(
     experiments: readonly SignatureExperiment[],
-    target: VersionPair,
-  ): MarkStaleResult;
+    target: VersionPair): MarkStaleResult;
   confounders(samples: readonly SignatureSample[]): ConfounderResult;
   survivorBias(samples: readonly SignatureSample[]): SurvivorBiasResult;
 }
@@ -262,8 +257,7 @@ async function loadSignatureRuntime(): Promise<SignatureRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/cohort-signature.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     signatureRuntime = (await import(srcUrl)) as SignatureRuntime;
   }
   return signatureRuntime;
@@ -582,7 +576,6 @@ export function counterfactuals(
 
 /**
  * prev = 台账里最近一条 version 行;没有则回退到**样本里的基线版本**。
- *
  * 基线取「样本最多的 (model,provider) 组合」(并列取最早出现的那个),而不是「最后一条样本」:
  * 版本升级后新样本往往排在末尾,拿最后一条当基线会把「刚升到的新版本」认成旧基线,
  * 于是 changed=false、基线重估静默不发生——正是本模块要防的那类假结论。
@@ -622,8 +615,7 @@ function prevVersionOf(projection: SignatureProjection): VersionPair | undefined
  */
 export function versionChange(
   root: string,
-  opts: SignatureVersionChangeOptions,
-): SignatureVersionChangeStoreResult {
+  opts: SignatureVersionChangeOptions): SignatureVersionChangeStoreResult {
   const base = assertRoot(root);
   const modelVersion = textOf(opts?.modelVersion);
   const providerVersion = textOf(opts?.providerVersion);

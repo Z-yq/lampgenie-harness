@@ -1,12 +1,10 @@
 # 本仓测试样本生成器(自研,非任何外部项目文件)。
-#
 # 生成 5 个「真实形态」样本,供 doc-text 解析器测试使用:
 #   cjk-sample.pdf      手工构造 PDF:非内嵌 CJK 字体 + ToUnicode CMap(含部首码点)
 #   paper-sample.pdf    reportlab 生成:压缩内容流 + CID 字体(无 ToUnicode)
 #   report-sample.docx  python-docx:标题层级/表格/加粗/链接/分页
 #   budget-sample.xlsx  openpyxl:双 Sheet/公式/合并单元格/百分比格式
 #   launch-sample.pptx  python-pptx:标题页/时间线页/表格页/备注
-#
 # 再生成方式(在本目录执行):
 #   uv run --with python-docx==1.1.2 --with openpyxl==3.1.5 --with python-pptx==1.0.2 --with reportlab==4.2.5 gen-samples.py
 #   python3 gen-samples.py   # 仅 cjk-sample.pdf(标准库即可)

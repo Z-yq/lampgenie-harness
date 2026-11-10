@@ -1,10 +1,8 @@
 /**
  * J1 轨迹卡接线(2026-11 token 轮 P0 缺口修复)回归锚。
- *
  * 缺口形态:runtime 已实现 `task.trajectory` 轨迹卡(loop.emitTrajectory,opts
  * trajectorySteps/trajectoryMeta/trajectoryTaskId),但 gateway 装配处没接线 → 真实任务永不落卡、
  * 面板轨迹条恒空、tips 的 ctx.trajectory 恒 undefined。
- *
  * 本文件是**行为级**验证:走真装配路径(createGatewayApp + 假 provider 跑真实 AgentLoop),
  * 断言 journal 里真出现 `task.trajectory`,且轨迹 payload 不进 deriveMessages(零上下文影响)。
  */
@@ -112,7 +110,6 @@ it("e2e:真装配主 loop 跑 10 步只读调用 → journal 落 task.trajectory
 }, 60_000);
 
 /* ───────── C) 轨迹 → 任务进度(touch):agent-wiring 折算纯函数(子任务 C 落点) ─────────
- *
  * 为什么抽纯函数:runWithAgent 装配路径太重(要真起 app + provider),而「note 怎么截断、phase 缺省
  * 带不带键、touch 抛错怎么办」正是容易写错的部分——抽 progressNoteFromTrajectory / applyTrajectoryProgress
  * 直测,装配侧只剩一行 `onTrajectory: (ev) => applyTrajectoryProgress(tm, task.id, ev)`。

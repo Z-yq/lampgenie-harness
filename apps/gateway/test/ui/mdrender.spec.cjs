@@ -1,4 +1,4 @@
-/** 消息渲染探针(2026-10-13 渲染修复):协议标签行中残留/ANSI 色码/有序列表/围栏-引块交错。
+/** 消息渲染探针(渲染修复):协议标签行中残留/ANSI 色码/有序列表/围栏-引块交错。
  * 直接驱动真实面板页的全局 mdToHtml/scrubProtocolLines——乱码与格式乱飞的两个清洗源都在页面脚本里。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
@@ -47,7 +47,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   const r7 = await page.evaluate(() => mdToHtml("| a | b |\n| --- | --- |\n| 1 | 2 |\n" + "```\nplain\n```\n完毕"));
   check("表格+代码块不回退", r7.includes("md-table") && r7.includes("plain"), r7.slice(0, 120));
 
-  // 渲染二期(2026-10-14):斜体/删除线/分隔线/任务列表/嵌套列表
+ // 渲染二期:斜体/删除线/分隔线/任务列表/嵌套列表
   const r8 = await page.evaluate(() => mdToHtml("这是*强调*文字;算式 2 * 3 * 4 不变;~~废弃方案~~作废"));
   check("斜体+删除线", r8.includes("<i>强调</i>") && !r8.includes("<i> 3 <") && r8.includes("<del>废弃方案</del>"), r8.slice(0, 160));
   const r9 = await page.evaluate(() => mdToHtml("上文\n---\n下文"));
@@ -57,7 +57,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   const r11 = await page.evaluate(() => mdToHtml("- 顶一\n  - 子一\n  - 子二\n- 顶二"));
   check("嵌套列表一级", r11.includes("<li>顶一<ul><li>子一</li><li>子二</li></ul></li><li>顶二</li></ul>"), r11.slice(0, 200));
 
-  // 渲染三期(2026-10-14 A 工具结果乱码修复):fc 返回四源——协议标签/终端控制字符/JSON 平铺/硬截断。
+ // 渲染三期( A 工具结果乱码修复):fc 返回四源——协议标签/终端控制字符/JSON 平铺/硬截断。
   // 直接驱动真实面板页的 toolResultCard/cleanToolText(与上方 mdToHtml 同层)。
   const t1 = await page.evaluate(() => toolResultCard("结果附注</tool_result>尾部正文", null));
   check("工具结果协议标签剥离", !t1.includes("tool_result") && t1.includes("尾部正文"), t1.slice(0, 120));

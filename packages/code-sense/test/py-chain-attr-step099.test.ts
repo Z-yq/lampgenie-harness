@@ -1,5 +1,5 @@
 /**
- * step-099 测试(096 评测缺口收口):
+ * 测试(096 评测缺口):
  * ① RC-B4 链式构造调用 `X(...).method(` 的方法边发射(redash queries.py 形态锚定:
  *    `QuerySerializer(...).serialize()` → serialize 的调用方 + serialize_query 的 d2 上游);
  * ② 属性拷贝类型证据 `chat_handler = session.chat_handler` → `chat_handler.process_chat(`
@@ -31,7 +31,7 @@ async function callerIdsOf(dir: string, targetName: string): Promise<string[]> {
   return [...new Set(out)];
 }
 
-describe("step-099 RC-B4:Python 链式构造调用发射", () => {
+describe(" RC-B4:Python 链式构造调用发射", () => {
   it("X(...).method( 单行形态:方法边发射(构造边既有路径外的新召回)", async () => {
     const dir = mkWs();
     mkdirSync(join(dir, "serializers"), { recursive: true });
@@ -109,7 +109,7 @@ describe("step-099 RC-B4:Python 链式构造调用发射", () => {
   });
 });
 
-describe("step-099:Python 属性拷贝类型证据(process_chat 形态)", () => {
+describe("Python 属性拷贝类型证据(process_chat 形态)", () => {
   it("chat_handler = session.chat_handler → chat_handler.process_chat( 跨文件解析", async () => {
     const dir = mkWs();
     mkdirSync(join(dir, "modules"), { recursive: true });

@@ -4,8 +4,7 @@
  *   - packages/ui/src/components/ai-elements/diagram-preview-dialog.tsx
  *     (resolveSvgBounds 的 DOM 无关部分:排除规则/bbox 并集;applyPreviewSvgLayout 的
  *      坐标系对齐计算。React/浏览器副作用未搬。)
- * 移植日期:2026-10-29。原文件保留 Apache-2.0 许可,此处为衍生移植。
- *
+ * 移植日期:。原文件保留 Apache-2.0 许可,此处为衍生移植。
  * 双端约定与 board-flow-layout.js 同款:UMD 风格工厂——
  *   CommonJS(vitest 经 esbuild 转换)走 module.exports;浏览器 script 标签挂全局
  *   DiagramViewport;ESM named export 由文件尾部 export 语句提供(node "type":"module")。
@@ -249,7 +248,7 @@ const DiagramViewport = (function () {
   /* ── 矩阵工具:把元素 bbox 从自身 user space 映射到 root svg 的 user space ────────
    * SVGGraphicsElement.getBBox() 返回的框**不含自身与祖先的 transform**(纯局部坐标)。
    * 板图/mermaid 都是「每个节点一个 <g transform="translate(x,y)">」的布局,
-   * 直接对一堆局部框求并集 = 把不同坐标系混在一起(实测 minX 被拉到 -429.79、
+ * 直接对一堆局部框求并集 = 把不同坐标系混在一起(经验证 minX 被拉到 -429.79、
    * 并集宽 7642 > viewBox 宽 7261,紧凑 fit 反而比 viewBox 更大)。
    * 修法:先 m = inverse(rootCTM) × elementCTM 把框映射到 root user space 再并集。
    * 三个函数纯数学、无 DOM 依赖,便于单测。 */
@@ -375,7 +374,7 @@ const DiagramViewport = (function () {
         };
       },
       function (el) {
-        // 2026-11-05 任务B 修复:局部 getBBox → 映射到 root user space 后再并集。
+ // 任务B 修复:局部 getBBox → 映射到 root user space 后再并集。
         var box = el.getBBox();
         var local = { x: box.x, y: box.y, width: box.width, height: box.height };
         if (!rootInverse) return local;

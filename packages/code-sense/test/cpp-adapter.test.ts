@@ -1,5 +1,5 @@
 /**
- * C/C++ structural adapter 单测(step-067):
+ * C/C++ structural adapter 单测:
  * 提取子集(函数/原型/类型/方法)、原型-定义同文件消歧、调用边(同文件唯一/候选发射)、
  * 错误容忍(健康节点档)、.h 双语法、engine 注册链路(跨文件唯一名解析)。
  */
@@ -40,7 +40,7 @@ const C_SRC = [
   "}",
 ].join("\n");
 
-describe("C/C++ structural adapter(step-067)", () => {
+describe("C/C++ structural adapter()", () => {
   it("C:函数/原型/类型提取+行号+签名,原型让位定义", async () => {
     const { dir, cleanup } = cFixture({ "f.c": C_SRC });
     try {
@@ -123,7 +123,7 @@ describe("C/C++ structural adapter(step-067)", () => {
   });
 
   it("错误容忍:体内 ERROR 不再整段丢边——区间外调用照常成边", async () => {
-    // 2026-10-22 P0:旧语义「函数体含 ERROR → 整函数零边」在真实仓造成大面积假 0 调用方
+ // P0:旧语义「函数体含 ERROR → 整函数零边」在真实仓造成大面积假 0 调用方
     // (SA_ADK_Infer_Sync 仅签名 3 字符 ERROR 丢掉千行函数体全部调用)。现按 ERROR 区间剔除,
     // 区间外健康调用保留。
     const BROKEN = [
@@ -230,10 +230,10 @@ describe("C/C++ structural adapter(step-067)", () => {
     }
   });
 
-  it("engine 注册链路:step-079 容错后 .c 定义恢复 → 同扩展名优先定义(不再落 .h)", async () => {
+  it("engine 注册链路: 容错后 .c 定义恢复 → 同扩展名优先定义(不再落 .h)", async () => {
     const { dir, cleanup } = cFixture({
       "mw.h": "void mw_init(void);\n",
-      // step-079 declarator 容错:体内 ERROR 但 declarator 健康 → mw.c 定义符号恢复(零边)
+ // declarator 容错:体内 ERROR 但 declarator 健康 → mw.c 定义符号恢复(零边)
       "mw.c": "void mw_init(void) { int x = ; }\n",
       "user.c": "void user_fn(void) { mw_init(); }\n",
     });
@@ -280,7 +280,7 @@ describe("C/C++ structural adapter(step-067)", () => {
 
   it("2026-10-22 P1 缺口①:libc 名(round/free)跨文件不再被 vendored 头吸收;仓内真定义照常解析", async () => {
     const { dir, cleanup } = cFixture({
-      // vendored 头里恰好有同名声明(flann/matrix.h 吸收 free 的实锤形态)
+ // vendored 头里恰好有同名声明(flann/matrix.h 吸收 free 的注意形态)
       "thirdparty/fakelibrary/include/fake.h": "void* round(double);\nvoid free(void*);\n",
       "user.c": [
         "#include \"thirdparty/fakelibrary/include/fake.h\"",
@@ -419,7 +419,7 @@ describe("C/C++ structural adapter(step-067)", () => {
   });
 
   it("P0+lexical:巨型文件(>512KB)不再直接跳过——带声明走词法档,零声明 skipped 如实登记", async () => {
-    // 形态一(实锚 agent_alpha cat-565.h):裸十六进制字面量、零声明 → skipped 带 reason
+ // 形态一(依据 agent_alpha cat-565.h):裸十六进制字面量、零声明 → skipped 带 reason
     const pureBlob = "0x62, 0xEB, 0x5A, 0xAA, 0x52, 0x8A, 0x52, 0x69,\n".repeat(45000);
     expect(pureBlob.length).toBeGreaterThan(512 * 1024);
     const d1 = cFixture({ "pure_blob.h": pureBlob });
@@ -468,7 +468,7 @@ describe("C/C++ structural adapter(step-067)", () => {
   });
 });
 
-describe("C/C++ 覆盖率 99% 专项(step-079,designs/25)", () => {
+describe("C/C++ 覆盖率 99% 专项(,)", () => {
   it("G2 模板类:template_type 名节点提取(template<...> class DataType<...> 形态)", async () => {
     const SRC = [
       "#include <complex>",
@@ -568,7 +568,7 @@ describe("C/C++ 覆盖率 99% 专项(step-079,designs/25)", () => {
       const resize = r.symbols.find((s) => s.name === "resize");
       expect(resize).toBeDefined(); // 不再连坐丢弃
       expect(resize!.container).toBe("cv"); // 限定名归 container
-      // 2026-10-22 P0:旧实现整函数零边;现在错误区外两条调用都恢复
+ // P0:旧实现整函数零边;现在错误区外两条调用都恢复
       const calls = r.edges.filter((e) => e.from === "resize.cpp#cv.resize" && e.toName === "real_helper");
       expect(calls.length).toBeGreaterThanOrEqual(1);
       expect(r.outcome?.errors).toBe(true);
@@ -593,7 +593,7 @@ describe("C/C++ 覆盖率 99% 专项(step-079,designs/25)", () => {
     }
   });
 
-  it("step-089 更新:ERROR 文件健康顶层声明走结构档变量提取(tier=structural;step-079 的词法兜底保留给超闸/全坏文件)", async () => {
+  it(" 更新:ERROR 文件健康顶层声明走结构档变量提取(tier=structural; 的词法兜底保留给超闸/全坏文件)", async () => {
     // ObjC/野语法制造全 ERROR(结构档 0 符号),顶层 C 声明由词法档兜底
     const SRC = [
       "@interface CvVideoCamera : UIViewController",   // ObjC 语法 → ERROR
@@ -607,7 +607,7 @@ describe("C/C++ 覆盖率 99% 专项(step-079,designs/25)", () => {
     try {
       const r = await parseCppFile(dir, "log.h");
       const byName = new Map(r.symbols.map((s) => [s.name, s]));
-      // step-089 P1:健康 declaration(extern/const 数组)现由结构档文件级变量提取收编
+ // P1:健康 declaration(extern/const 数组)现由结构档文件级变量提取收编
       //(AST 级证据,比词法 regex 强一档;typedef 函数指针仍=诚实边界不收)
       expect(byName.get("g_sa_log_output_level")?.kind).toBe("variable");
       expect(byName.get("g_sa_log_output_level")?.dataType).toBe("int");
@@ -627,7 +627,7 @@ describe("C/C++ 覆盖率 99% 专项(step-079,designs/25)", () => {
     });
     try {
       const g = await buildCallGraphFromFiles(dir, ["noise.h", "caller.c"]);
-      // step-089 P1:variable 一律不进 byName(结构性纪律,lexical/structural 同规)——
+ // P1:variable 一律不进 byName(结构性纪律,lexical/structural 同规)——
       // 跨文件候选解析绝不吸收变量名(uniq_name(3) 调用形态不得连到变量上)
       const sym = [...g.symbols.values()].find((s) => s.name === "uniq_name");
       expect(sym?.kind).toBe("variable");

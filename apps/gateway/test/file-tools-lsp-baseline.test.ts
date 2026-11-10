@@ -1,5 +1,5 @@
 /**
- * M108 接线验证:主 agent file-tools 的 write/edit 走「写前 baseline + 写后 delta」,
+ * 接线验证:主 agent file-tools 的 write/edit 走「写前 baseline + 写后 delta」,
  * 只把**新增** ERROR 附在工具结果后;已有错误不刷屏。
  * 用 tsc 兜底(本机无 typescript-language-server),命令覆盖为不存在路径以强制走兜底分支。
  */
@@ -30,7 +30,7 @@ function toolsOf(root: string, lsp: { enabled: boolean; format?: boolean; timeou
 
 const BAD = 'const n: number = "x";\n';
 
-describe("M108 写前 baseline × 写后 delta", () => {
+describe(" 写前 baseline × 写后 delta", () => {
   it("新文件写错 → 全量报(基线为空)", async () => {
     const root = mk();
     const { exec } = toolsOf(root, { enabled: true, format: false, timeoutMs: 3000 });

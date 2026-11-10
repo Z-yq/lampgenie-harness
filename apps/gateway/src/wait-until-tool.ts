@@ -1,18 +1,15 @@
 /**
- * agent 工具 `wait_until`(2026-11-08 session 实证落地):条件等待原语。
- *
- * 实测(journal 11-01→11-08,134 session):582 次「sleep N; tail/grep 日志」式终端轮询、
+ * agent 工具 `wait_until`( session 验证落地):条件等待原语。
+ * 经验证(journal 11-01→11-08,134 session):582 次「sleep N; tail/grep 日志」式终端轮询、
  * 累计 sleep 13.4h——模型在等外部进程/脚本产出(文件出现/增长/含串)或终端静默时,
  * 唯一手段是 sleep+读,每个猜测周期烧一轮完整 LLM 往返。本工具把「等条件」变成一次
  * 挂起调用:挂起期间 loop 停在本工具 promise 上(task_output waitFor 同机制),零 LLM
  * 消耗;条件满足即返回并附现场快照(尾部行/字节/行数),省掉「醒了再查一次」的往返。
- *
  * 分工(与既有等待原语不重叠):
  * - 等子代理终态 → task_output(waitFor:"result");
  * - 等自己启动的后台命令 → job(action:"wait");
  * - 等自己发的终端命令 → terminal send(wait:true 默认);
  * - 等**外部进程/文件系统**产出或终端输出静默 → 本工具(此前只能 sleep 轮询的缺口)。
- *
  * 设计纪律:
  * - 只读(isReadOnly=true):不产生副作用,权限闸豁免,可与其它只读探测同批并行;
  * - 挂起=execute promise 内 500ms 节律轮询(task_output 同形态),signal 中止不挡取消;
@@ -187,7 +184,7 @@ export function createWaitUntilTool(opts: CreateWaitUntilToolOptions): Tool {
             return { met: false, snapshot: { type: "file", path: rel, exists: false } };
           }
           const now = Date.now();
-          // 稳定判据=size+mtime 双不变(2026-11-08 审计加固):日志轮转/truncate 后重写同长度内容
+ // 稳定判据=size+mtime 双不变(审计加固):日志轮转/truncate 后重写同长度内容
           // 时 size 不变但 mtime 必变——单一 size 判据会假稳定,双判据把稳定钟重置。
           if (size !== lastSize || mtimeMs !== lastMtime) { lastSize = size; lastMtime = mtimeMs; lastStableAt = now; }
           const stableFor = wantStable ? now - lastStableAt : Number.POSITIVE_INFINITY;

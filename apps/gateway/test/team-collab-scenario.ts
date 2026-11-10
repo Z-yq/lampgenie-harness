@@ -1,13 +1,11 @@
 /**
- * 虚拟组织协作开发流场景(tasks/step-1525-j3-team-collab):
+ * 虚拟组织协作开发流场景:
  * 入册(真 ed25519 身份)→ 鉴权 → 派单 → MR 提交 → 评审合入 → 评审意见 → 修订 → 经验回流 →
  * 资产下线 → 角色变更 → 体检 → 活动流可见性 → 周报聚合,每步产出 1 条 CollabCheck。
- *
  * 两种模式共用同一组步骤与断言:
  * - `temp`:mkdtemp 建根,自种组织(seedVirtualTeam)+ enrollRealMembers + 自起 relay(port 0)。
  * - `live`:attach 仓内活组织 `<repo>/.genie/team`,relay 用 `ws://127.0.0.1:7870`,**不启动 relay、
  *   不重启进程**;只写 .genie 之内(demo 数据允许写,允许 push/merge/remove 真跑一轮)。
- *
  * 纪律:所有等待走轮询(pollUntil),不 sleep 硬等;单步超时默认 15s 并报最后收到的消息
  * (setup 例外:live 需要等 relay 周期拉 roster,语义上限 60s,故 setup 单独放宽)。
  * 断言不放宽:某步语义与预期不同就记 ok=false 并写清现象,由调用方断言失败。
@@ -95,8 +93,7 @@ class Peer {
   constructor(
     readonly name: string,
     url: string,
-    readonly identityDir: string,
-  ) {
+    readonly identityDir: string) {
     this.client = new TeamRelayClient({
       url,
       identityDir,
@@ -341,8 +338,7 @@ step(
     };
   },
   // setup 例外:live 模式要等 relay 周期拉 roster(≤60s),故放宽。
-  180_000,
-);
+  180_000);
 
 // ---- 2. auth.negative ----
 
@@ -401,8 +397,7 @@ step("dev.submit", async (c) => {
       { type: "relay.teamai.push", kind: p.kind, ns: p.ns, name: p.name, description: `${p.name} —— collab 场景`, body: bodies[p.name]! },
       "relay.teamai.push.result",
       undefined,
-      90_000,
-    );
+      90_000);
     if (res.ok !== true) throw new Error(`${p.user} push ${p.name} 失败:${JSON.stringify(res)}`);
     const branch = String(res.branch ?? "");
     if (!branch.startsWith(`teamai/push/${p.user}/`)) throw new Error(`分支名不符合 teamai/push/<user>/<ts>:${branch}`);
@@ -417,7 +412,7 @@ step("dev.submit", async (c) => {
     detail: `三条团队资产以 MR 分支落盘(skill/rule/doc),main 未被自动合并`,
     evidence: JSON.stringify(branches),
   };
-  // live 实测:relay 侧一次 push(git fetch/checkout -B/commit/MR)在 /mnt/e 上约 6-8s,
+ // live 经验证:relay 侧一次 push(git fetch/checkout -B/commit/MR)约 6-8s,
   // 本步串行 3 次 push+branch 轮询 → 15s 预算必超(断言不变,只放宽「等预算」)。
 }, 120_000);
 
@@ -448,8 +443,7 @@ step("review.merge", async (c, r) => {
   const digests = await waitAllDigests(
     c,
     (d) => (d.skills ?? []).some((s) => s.name === c.names.skill) && (d.rules ?? []).some((x) => x.name === `common/${c.names.rule}`),
-    90_000,
-  );
+    90_000);
   const ref = stripPulledAt(digests["demo-kai"]!);
   const inconsistent = MEMBERS.filter((m) => stripPulledAt(digests[m]!) !== ref);
   r.visibility = {
@@ -536,8 +530,7 @@ step("dev.revise", async (c) => {
     { type: "relay.teamai.push", kind: "skill", ns: "common", name: c.names.skill, description: `${c.names.skill} v2(按评审意见修订)`, body: SKILL_BODY_V2(c.names) },
     "relay.teamai.push.result",
     undefined,
-    60_000,
-  );
+    60_000);
   if (res.ok !== true) throw new Error(`revise push 失败:${JSON.stringify(res)}`);
   const branch = String(res.branch ?? "");
   bump(c, "demo-lin");
@@ -560,8 +553,7 @@ step("contribute", async (c) => {
     { type: "relay.teamai.contribute", title: c.names.learning, body: "greet 实现经验:先用空名字跑通回退,再补类型标注。", tags: ["collab", "greet"], project: c.projectId },
     "relay.teamai.contribute.result",
     undefined,
-    60_000,
-  );
+    60_000);
   if (res.ok !== true) throw new Error(`contribute 失败:${JSON.stringify(res)}`);
   bump(c, "demo-lin");
   const branch = String(res.branch ?? "");
@@ -570,8 +562,7 @@ step("contribute", async (c) => {
   const digest = await c.peers["demo-kai"]!.waitDigest(
     base,
     (d) => (d.learnings ?? []).some((l) => String(l.title ?? "").includes(c.names.learning)),
-    15_000,
-  );
+    15_000);
   const hit = (digest.learnings ?? []).find((l) => String(l.title ?? "").includes(c.names.learning));
   const ok = Boolean(hit) && String(hit!.path ?? "").startsWith("learnings/");
   return {
@@ -590,8 +581,7 @@ step("remove", async (c) => {
     { type: "relay.teamai.remove", kind: "rule", ns: "common", name: c.names.rule },
     "relay.teamai.remove.result",
     undefined,
-    60_000,
-  );
+    60_000);
   if (res.ok !== true) throw new Error(`remove 失败:${JSON.stringify(res)}`);
   bump(c, "demo-rui");
   await syncClone(c.clone);
@@ -706,7 +696,7 @@ step("weekly", async (c, r) => {
   const events = ((res.events ?? []) as ActivityEvent[]).filter((e) => e.ts >= c.sinceTs);
   // 周报口径:**demo-kai 视角可见的全部活动**(relay 已按可见性裁掉他人 personal 事件)。
   // 不再按 projectId===demo-app 过滤:活组织里 relay 的 teamai 活动 projectId 归到
-  // 「roster 首个 team 项目」(实测落到 lampgenie-harness),按单个项目过滤会把 push/remove
+ // 「roster 首个 team 项目」(经验证落到 lampgenie-harness),按单个项目过滤会把 push/remove
   // 全部漏掉 —— 这是多团队项目组织下的真实口径缺陷,已登记(见 live-report 与测试表)。
   const visible = events;
   const digest = teamActivityDigest(visible, c.sinceTs);

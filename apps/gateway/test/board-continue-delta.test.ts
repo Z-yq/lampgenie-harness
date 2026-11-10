@@ -66,8 +66,7 @@ async function connect(port: number): Promise<{ ws: WebSocket; inbox: Record<str
 
 /** 发一条 board.save(人改板)并等 board.doc 回执,返回落盘后的板(含 humanEdits)。 */
 async function humanSave(
-  ws: WebSocket, inbox: Record<string, unknown>[], sid: string, tid: string, doc: Record<string, unknown>, baseRev: number,
-): Promise<{ rev: number; humanEdits?: { ids: string[]; rev: number; changes?: Record<string, string[]> } }> {
+  ws: WebSocket, inbox: Record<string, unknown>[], sid: string, tid: string, doc: Record<string, unknown>, baseRev: number): Promise<{ rev: number; humanEdits?: { ids: string[]; rev: number; changes?: Record<string, string[]> } }> {
   ws.send(JSON.stringify({ v: 1, type: "board.save", sessionId: sid, taskId: tid, doc, baseRev }));
   const got = await wait(inbox, (m) => m.type === "board.doc" && (m.doc as { rev?: number })?.rev === baseRev + 1, "board.save");
   return got.doc as { rev: number; humanEdits?: { ids: string[]; rev: number; changes?: Record<string, string[]> } };

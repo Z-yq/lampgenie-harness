@@ -1,8 +1,8 @@
 /**
  * node-agent:远程执行节点。连 gateway、注册能力/可达性、心跳、接任务、跑 executor、回报。
- * step-033:node.task.dispatch 真执行+凭证引用本地解析
+ * node.task.dispatch 真执行+凭证引用本地解析
  * (值只进子进程 env,不进指令文本——输出回流不含值,红线:值不过网关)。
- * 二期(designs/09 §5):GENIE_NODE_JUMPWEB=1 注册 "jumpweb" 任务 kind——
+ * 二期( §5):GENIE_NODE_JUMPWEB=1 注册 "jumpweb" 任务 kind——
  * 跳板机网页登录执行器(录制脚本+凭证本地解析+输出回放校验);未启用时行为与旧版完全一致。
  */
 import WebSocket from "ws";
@@ -12,7 +12,7 @@ import { createJumpWebHandler, type JumpWebDriver, type JumpWebHandleResult, typ
 export * from "./jumpweb.js";
 
 /**
- * 本机负载采样(step-1042 节点 Fleet「真实负载」):与 gateway 侧 load-sample.ts 同一口径
+ * 本机负载采样(节点 Fleet「真实负载」):与 gateway 侧 load-sample.ts 同一口径
  * (cpu=1m 负载均值/核数,mem=1-可用/总量,runningTasks=委派执行并发)。独立小函数就地放——
  * node-agent 是独立分发单文件,不为 10 行采样引 workspace 依赖。
  */
@@ -38,7 +38,7 @@ export interface NodeAgentOptions {
   /** 本地执行后端;缺省=子进程 echo。 */
   execute?: (instruction: string, env: Record<string, string>) => Promise<{ ok: boolean; output: string; error?: string }>;
   /**
-   * 跳板机网页执行器驱动工厂(playwright 系;designs/09 §5。playwright 非本仓依赖,由部署侧注入;
+ * 跳板机网页执行器驱动工厂(playwright 系; §5。playwright 非本仓依赖,由部署侧注入;
    * 未注入时 jumpweb 任务逐个 typed 失败 fail-visible,不伪造成功)。
    */
   jumpwebDriverFactory?: () => JumpWebDriver | Promise<JumpWebDriver>;
@@ -61,8 +61,8 @@ export function startNodeAgent(opts: NodeAgentOptions): { close: () => void } {
   const heartbeatMs = opts.heartbeatMs ?? 25_000;
   const credentials = loadCredentials(opts.credentialsFile);
 
-  // 跳板机网页执行器(designs/09 §5):GENIE_NODE_JUMPWEB=1 才注册;未启用=行为与旧版一致。
-  // 凭证解析走同一本地凭据库(step-033 语义:值只在节点解析,不进指令/日志/回流)。
+ // 跳板机网页执行器( §5):GENIE_NODE_JUMPWEB=1 才注册;未启用=行为与旧版一致。
+ // 凭证解析走同一本地凭据库(语义:值只在节点解析,不进指令/日志/回流)。
   const jumpwebHandler = opts.jumpweb === false
     ? undefined
     : opts.jumpweb ?? (process.env.GENIE_NODE_JUMPWEB === "1"
@@ -75,7 +75,7 @@ export function startNodeAgent(opts: NodeAgentOptions): { close: () => void } {
           })
         : undefined);
 
-  // step-1042:委派执行并发计数(心跳 runningTasks 语义=正在执行的委派任务数)。
+ // 委派执行并发计数(心跳 runningTasks 语义=正在执行的委派任务数)。
   let activeDispatches = 0;
 
   ws.on("open", () => {
@@ -89,7 +89,7 @@ export function startNodeAgent(opts: NodeAgentOptions): { close: () => void } {
 
   const timer = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
-      // step-1042:真实负载(旧硬编码 {0,0,0}——面板 Fleet 的 cpu/mem 恒零占位)。
+ // 真实负载(旧硬编码 {0,0,0}——面板 Fleet 的 cpu/mem 恒零占位)。
       ws.send(JSON.stringify({
         v: 1, type: "node.heartbeat", nodeId: opts.nodeId,
         load: sampleNodeLoad(activeDispatches),
@@ -98,7 +98,7 @@ export function startNodeAgent(opts: NodeAgentOptions): { close: () => void } {
   }, heartbeatMs);
   timer.unref?.();
 
-  // 连接失败/中断的 error 必须接住(R5-C26):CONNECTING 态 terminate 会异步 emit error,
+ // 连接失败/中断的 error 必须接住:CONNECTING 态 terminate 会异步 emit error,
   // 无监听=unhandled 污染宿主退出码(一期无重连策略,静默退出)。
   ws.on("error", () => {});
 
@@ -150,7 +150,7 @@ async function handleDispatch(
     return;
   }
 
-  // 二期(designs/09 §5):kind=jumpweb 且执行器已启用 → 跳板机网页登录链路。
+ // 二期( §5):kind=jumpweb 且执行器已启用 → 跳板机网页登录链路。
   // 未启用时落到下方缺省执行(行为与旧版完全一致)。
   if (msg.kind === "jumpweb" && jumpwebHandler) {
     const credRefs = Array.isArray(msg.credRefs) ? msg.credRefs.map((r) => String(r)) : undefined;

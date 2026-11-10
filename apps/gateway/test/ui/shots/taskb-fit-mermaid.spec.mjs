@@ -1,4 +1,4 @@
-/** 任务B 取证截图 runner v2(2026-10-29 第四次派发;修正前次不合格:① 新旧不用一块板 ③ mermaid 截不到图本体)
+/** 任务B 取证截图 runner v2(第四次派发;修正前次不合格:① 新旧不用一块板 ③ mermaid 截不到图本体)
  *  ① 同板同 viewport(1400×900)前后对照:**同一个 fixture 页/同一份板文件**下
  *     新=紧凑 fit(默认口径,cvTightSvgBounds→DiagramViewport.resolveSvgBoundsFromDom)
  *     旧=viewBox fit(window.__cvFitBasis="viewbox",走面板内保留的 cvSvgContentBox 回退口径)
@@ -175,7 +175,7 @@ try {
     svgViewBox: mNew.svgViewBox,
     kRatio: (mNew.k && mOld.k) ? Math.round((mNew.k / mOld.k) * 1000) / 1000 : null,
     // 未夹紧的理论适配 k(两种口径各自)= min(viewW/(contentW+40), viewH/(contentH+40));
-    // 实测 k 被 CV_FIT_READABLE_MIN=0.7 夹紧时,这两值才是「紧凑 fit 前后」的裸差异。
+ // 经验证 k 被 CV_FIT_READABLE_MIN=0.7 夹紧时,这两值才是「紧凑 fit 前后」的裸差异。
     naturalK: {
       tight: mNew.lastFit ? round4(Math.min(mNew.lastFit.view.w / (mNew.lastFit.w + 40), mNew.lastFit.view.h / (mNew.lastFit.h + 40))) : null,
       viewbox: mOld.lastFit ? round4(Math.min(mOld.lastFit.view.w / (mOld.lastFit.w + 40), mOld.lastFit.view.h / (mOld.lastFit.h + 40))) : null,

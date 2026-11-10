@@ -1,9 +1,8 @@
-/** 板型一致性门(2026-10-25 用户 13 类规范):确定性、纯函数、零 IO。
- *
- * 背景:类型规范长期只在 planner 提示词里,实测出现 test 板画成代码变更图、ui 板混代码
+/** 板型一致性门(用户 13 类规范):确定性、纯函数、零 IO。
+ * 背景:类型规范长期只在 planner 提示词里,经验证出现 test 板画成代码变更图、ui 板混代码
  * targets/WS 逻辑、research 板不是矩阵、contract 板留占位消费者、deploy smoke 未接线。
  * 本规则把「这张图是否回答了该类型的问题」变成可点名的问题,供 board_upsert/audit 回执;
- * 与 validateChangeContract 分开:后者保持 2026-10-25 等价对拍基线,板型门是增量检查。
+ * 与 validateChangeContract 分开:后者保持 等价对拍基线,板型门是增量检查。
  */
 import type { BoardContractIssue, BoardNodeT, EdgeLike } from "../shared.js";
 import { DOC_GENRES } from "../../board-skills.js";
@@ -20,7 +19,7 @@ const issue = (problems: string[], nodeId = "(board)", label = "整板"): BoardC
   nodeId, label, problems: problems.map((p) => `[类型门] ${p}`),
 });
 
-/** 多屏 UI 交互图底线(2026-10-26):页面间必须有 nav 跳转、每屏至少出现在一条交互边上。
+/** 多屏 UI 交互图底线:页面间必须有 nav 跳转、每屏至少出现在一条交互边上。
  * 元素级锚点(component→page)由 planner 提示词引导,渲染层对 page→page 的触发 label 做真实元素归位;
  * 这里不硬卡元素级(存量板仍可读),只卡「连不起来/孤屏」这两类硬缺口。 */
 function multiPageFlowIssues(nodes: BoardNodeT[], es: EdgeLike[]): string[] {
@@ -61,7 +60,7 @@ function multiPageFlowIssues(nodes: BoardNodeT[], es: EdgeLike[]): string[] {
   if (isolated.length) {
     out.push(`页面没有交互连线:${isolated.slice(0, 6).map((p) => p.id).join(",")}——多屏板每屏至少有一条 nav 进出`);
   }
-  // 空白屏过多:交互地图会退化成「一堆空手机壳」(实测 22 屏规划板只有 5 屏有区块)。
+ // 空白屏过多:交互地图会退化成「一堆空手机壳」(经验证 22 屏规划板只有 5 屏有区块)。
   const childCount = new Map<string, number>();
   for (const e of es) {
     if (String(e.kind ?? "") !== "contains") continue;
@@ -75,10 +74,10 @@ function multiPageFlowIssues(nodes: BoardNodeT[], es: EdgeLike[]): string[] {
   return out;
 }
 
-/** step-1008(2026-10-29 用户口径):code 板的步骤节点 = 图上要写代码级动作的节点族。 */
+/** :code 板的步骤节点 = 图上要写代码级动作的节点族。 */
 const CODE_STEP_KINDS = ["function", "module", "io", "tool", "http"];
 
-/** 2026-10-29(用户口径「画的图倾向于 coding agent 接下来的计划,而不是代码逻辑」):
+/** :
  *  「待办动作」形态判定——label 以祈使动词开头(实现/修复/添加…),且 flow 里没有任何
  *  函数调用形(`fn(` / `a.b` / `→`),说明它描述的是要做的事,不是代码里已经存在的步骤。
  *  保守口径:change=keep 的节点不判(keep 的动词 label 可能是在描述现有动作);
@@ -128,8 +127,8 @@ const nodeAnchors = (n: BoardNodeT): string[] => {
   return out.map((s) => s.trim()).filter(Boolean);
 };
 
-/** 二期内容来源层(2026-11-04 用户口径「板上的『现状』必须是真实结构,不是模型印象」):
- *  keep(现状)节点与 modify/delete 的 before 都要带**实证锚**——锚只能来自 code_sense 查证,
+/** 二期内容来源层:
+ * keep(现状)节点与 modify/delete 的 before 都要带**验证锚**——锚只能来自 code_sense 查证,
  *  不许凭印象写。可判定形态:
  *  ① file:line(如 `type-conformance.ts:166` / `apps/gateway/src/x.ts:12`);
  *  ② 「调用方/被调方/callers/callees/被调」+ 真实文件名(带扩展名或路径)。
@@ -139,7 +138,7 @@ const FILE_TOKEN = String.raw`[\w.@$/-]+\.(?:${EXT_ALT})`;
 const FILE_LINE_RE = new RegExp(String.raw`${FILE_TOKEN}:\d+`);
 const FILE_NAME_RE = new RegExp(String.raw`${FILE_TOKEN}(?![\w-])`);
 const CALL_WORD_RE = /(callers?|callees?|被调(?:用)?方?|调用方?|被调用|调用)/i;
-/** 实证锚判定(三条任一条成立即可回链到仓库真实结构):
+/** 验证锚判定(三条任一条成立即可回链到仓库真实结构):
  *  ① 正文(summary/label/flow)出现 file:line;
  *  ② 正文出现「调用词 + 真实文件名」;
  *  ③ 节点自带仓库锚(targets 形如 src/x.ts#symbol、或 symbolRef.file)——同样是能点开的真实位置,
@@ -158,7 +157,7 @@ const hasBeforeAnchor = (text: string): boolean => {
   if (FILE_LINE_RE.test(t) || FILE_NAME_RE.test(t)) return true;
   return SYMBOL_ANCHOR_RE.test(t);
 };
-/** 结构化锚判定(2026-11-04「白板看得懂」):锚必须挂在节点字段上——targets 含真实仓库路径
+/** 结构化锚判定(「白板看得懂」):锚必须挂在节点字段上——targets 含真实仓库路径
  *  或 symbolRef 带 file/name,渲染层才能把锚画在卡上。只把 file:line 写进 summary 的「文本锚」
  *  读者在画布上看不见,不算;`targets:[""]` / `symbolRef:{}` 这类空壳也不算(否则门形同虚设)。
  *  (hasEvidenceAnchor 的文本三路语义不动:断言节点证据判定仍用它。) */
@@ -173,11 +172,11 @@ const hasStructuredAnchor = (n: BoardNodeT): boolean => {
 };
 
 export interface TypeConformanceOpts {
-  /** 显式规模(新板必填):带 scale = 启用 2026-10-26 通用硬规则;旧板不背。 */
+ /** 显式规模(新板必填):带 scale = 启用 通用硬规则;旧板不背。 */
   scale?: string;
   /** 测试/调用方可强制严格规则(不看 scale)。 */
   strict?: boolean;
-  /** 文档体裁(docs 板,2026-10-27 通用机制):board-skills DOC_GENRES 的 key;
+ /** 文档体裁(docs 板, 通用机制):board-skills DOC_GENRES 的 key;
    * 在场时按体裁必答维度查覆盖(章/页 label+summary 命中别名=有落点),缺维度点名。 */
   docGenre?: string;
 }
@@ -188,21 +187,21 @@ const byIdOf = (nodes: BoardNodeT[]): Map<string, BoardNodeT> => new Map(nodes.m
 const isVerificationType = (t: string): boolean =>
   ["code", "test", "ui-func", "fault", "refactor", "perf", "data", "contract", "deploy", "orchestration"].includes(t);
 
-/** 2026-10-26 通用硬规则(仅新板/显式 strict):before/边 label/P0 accept/断言证据/数字口径/孤儿。 */
-/** 纯计划步骤板检测(2026-11-04 用户口径「板偏计划步骤而非实际开发内容逻辑」):
- * 长尾实锤——2-3 节点板全是「s1 梳理→s2 归因→s3 修复」「v1 确认→v2 验证」,零 targets/
+/** 通用硬规则(仅新板/显式 strict):before/边 label/P0 accept/断言证据/数字口径/孤儿。 */
+/** 纯计划步骤板检测:
+ * 长尾注意——2-3 节点板全是「s1 梳理→s2 归因→s3 修复」「v1 确认→v2 验证」,零 targets/
  * symbolRef/accept/数据,退化成 TODO 序列。内容节点=指向实际对象(targets/symbolRef)或带
  * 命令级验收(accept),或 summary/label 带指标数字/文件路径(分析类任务的「内容」=数据与口径)。
  * 全板(除 ph-)无任何内容节点才点名;有内容节点时步骤节点是合法的执行过程节点,不误伤。 */
 function narrativeBoardIssues(nodes: BoardNodeT[], docKind?: string, boardType?: string): string[] {
-  // 页面结构/工作流板:合法无 targets(2026-10-26 口径「非代码目标件不要求 targets」)
+ // 页面结构/工作流板:合法无 targets(口径「非代码目标件不要求 targets」)
   if (String(docKind ?? "") === "page" || String(docKind ?? "") === "workflow") return [];
-  // 作业思路板(composition,2026-11-04):主题/受众/章节是表达结构,本来就不指向代码对象——
+ // 作业思路板(composition:主题/受众/章节是表达结构,本来就不指向代码对象——
   // 「纯计划步骤板」那条判据不适用,改由 case "composition" 的内容判据兜。
   if (String(boardType ?? "") === "composition") return [];
   const real = nodes.filter((n) => !/^ph-/.test(String(n.id)));
   if (real.length < 2) return [];
-  // 内容节点判据归一到 board-content-predicate.ts(取原类型门的宽版,2026-11-04);
+ // 内容节点判据归一到 board-content-predicate.ts(取原类型门的宽版;
   // 与 plan-gate 共享同一实现,防两侧分叉导致同一张板得两个结论。
   if (real.some((n) => isContentNode(n))) return [];
   return [`纯计划步骤板:${real.length} 个节点全是执行序列(先做A→再做B),零 targets/symbolRef/accept/数据——板是「本次变更在系统里的内容契约」不是 TODO 清单。每个节点要么指向实际对象(targets=文件/函数路径,或 symbolRef),要么带命令级 accept;分析/性能任务写指标数字与数据来源,不写「拆解→砍→复跑」`];
@@ -215,20 +214,20 @@ function strictCommonIssues(nodes: BoardNodeT[], es: EdgeLike[], boardType: stri
   if (needsBefore) {
     const bad = nodes.filter((n) => ["modify", "delete"].includes(String(n.change ?? "")) && !hasText(n.before));
     if (bad.length) out.push(`modify/delete 缺 before(原行为/原代码锚点):${bad.slice(0, 6).map((n) => n.id).join(",")}`);
-    // 二期①(2026-11-04 用户口径「板上的现状必须是真实结构,不是模型印象」):keep=现状节点必须带
-    // 实证锚——summary(label/flow 作补充)里至少一个 file:line,或「调用方/被调方 + 真实文件名」。
+ // 二期①:keep=现状节点必须带
+ // 验证锚——summary(label/flow 作补充)里至少一个 file:line,或「调用方/被调方 + 真实文件名」。
     // 纯抽象描述(「处理逻辑」「优化性能」)没有锚 → 读者无法回链到代码,判印象描述。
-    // 2026-11-04 二次收紧(p1「白板看得懂」):锚必须**结构化**(挂 targets/symbolRef),只写在 summary
+ // 二次收紧(p1「白板看得懂」):锚必须**结构化**(挂 targets/symbolRef),只写在 summary
     // 里的 file:line 在画布上渲染不出来,读者看不见 → 也判不合格;文案教怎么改成结构化锚。
     const keepNodes = nodes.filter((n) => !/^ph-/.test(String(n.id)) && String(n.change ?? "") === "keep"
       // 主题节点豁免:它讲「整板用途 + 本次改哪一环」,天然不指向具体代码段;强制它带 targets
-      // 会逼模型给主题塞假锚(2026-11-05 code review 指出的一致性缺口)。
+ // 会逼模型给主题塞假锚( code review 指出的一致性缺口)。
       && !hasThemeNode([n]));
     const unanchored = keepNodes.filter((n) => !hasStructuredAnchor(n));
     if (unanchored.length) {
       out.push(`keep(现状)节点锚不可见:${unanchored.length} 个节点只在 summary 写了 file:line,画布上看不到——把锚挂到 targets=['仓库相对路径#符号名'] 或 symbolRef{file,name,line}(可直接用 board_upsert action=skeleton 预填结构化锚):${unanchored.slice(0, 6).map((n) => `${n.id}「${String(n.label ?? n.id)}」`).join(",")}`);
     }
-    // 二期②:before 升级为「带真实锚」——只说「旧行为」等于没说;要写现有符号名(parseOffice(/readConfig)或 file:line。
+ // 二期②:before 升级为「带真依据」——只说「旧行为」等于没说;要写现有符号名(parseOffice(/readConfig)或 file:line。
     const weakBefore = nodes.filter((n) => ["modify", "delete"].includes(String(n.change ?? ""))
       && hasText(n.before) && !hasBeforeAnchor(String(n.before)));
     if (weakBefore.length) {
@@ -237,7 +236,7 @@ function strictCommonIssues(nodes: BoardNodeT[], es: EdgeLike[], boardType: stri
   }
   const unlabeled = es.filter((e) => String(e.kind ?? "call") !== "contains" && !hasText(e.label));
   if (unlabeled.length) out.push(`边缺显式 label:${unlabeled.slice(0, 6).map((e) => `${e.from}→${e.to}`).join(",")}`);
-  // 2026-10-29(逻辑层口径):keep 节点是「纯读现有逻辑」的快照,不改代码没有可验收的东西 → 免 accept。
+ // (逻辑层口径):keep 节点是「纯读现有逻辑」的快照,不改代码没有可验收的东西 → 免 accept。
   const p0 = nodes.filter((n) => String(n.phase ?? "") === "P0" && String(n.change ?? "") !== "keep");
   const accAll = p0.flatMap((n) => (Array.isArray(n.accept) ? n.accept : []).map((a) => ({ n, a })));
   if (p0.length && accAll.length === 0) out.push("P0 节点没有 accept:无法验收");
@@ -271,7 +270,7 @@ function strictCommonIssues(nodes: BoardNodeT[], es: EdgeLike[], boardType: stri
   return out;
 }
 
-/** 2026-10-26 各类 ➕ 硬规则(文本/边可判定子集;渲染层再出阶段/角色/徽标)。 */
+/** 各类 ➕ 硬规则(文本/边可判定子集;渲染层再出阶段/角色/徽标)。 */
 function strictTypeIssues(nodes: BoardNodeT[], es: EdgeLike[], boardType: string): string[] {
   const out: string[] = [];
   const text = allText(nodes);
@@ -362,22 +361,21 @@ function strictTypeIssues(nodes: BoardNodeT[], es: EdgeLike[], boardType: string
 }
 
 /** 主入口:boardType 缺省/未知 → 不检查(旧板/设计板不背类型门);返回 [] 表示通过。
- * opts.scale 存在(新板显式标规模)时追加 2026-10-26 通用+分类硬规则;旧板保持旧口径。 */
+ * opts.scale 存在(新板显式标规模)时追加 通用+分类硬规则;旧板保持旧口径。 */
 export function validateBoardTypeConformance(
   nodes: BoardNodeT[],
   edges: EdgeLike[] | undefined,
   boardType?: string,
   docKind?: string,
-  opts?: TypeConformanceOpts,
-): BoardContractIssue[] {
+  opts?: TypeConformanceOpts): BoardContractIssue[] {
   if (!boardType) return [];
   const es = edges ?? [];
   const text = allText(nodes);
   const out: BoardContractIssue[] = [];
-  // 纯计划步骤板(2026-11-04):无条件检查——新旧板通杀(长尾实锤的 2-3 节点 TODO 板不分规模)。
+ // 纯计划步骤板:无条件检查——新旧板通杀(长尾注意的 2-3 节点 TODO 板不分规模)。
   const narrative = narrativeBoardIssues(nodes, docKind, boardType);
   if (narrative.length) out.push(issue(narrative));
-  /** flow 板(start/end 存在)通用检查:code 与 test 共用(2026-10-26 测试类型接入 code flow)。 */
+ /** flow 板(start/end 存在)通用检查:code 与 test 共用(测试类型接入 code flow)。 */
   function flowBoardMissing(nodes: BoardNodeT[], es: EdgeLike[]): string[] {
     const missing: string[] = [];
     if (!nodes.some((n) => String(n.kind ?? "") === "start")) missing.push("缺 start:读者找不到触发入口(补一个 kind=start 的触发节点)");
@@ -419,7 +417,6 @@ export function validateBoardTypeConformance(
   switch (boardType) {
     case "code": {
       const missing: string[] = [];
-      // step-1008(2026-10-29 用户口径「code 板应当是 flow 类型的图」):
       // code 板一律是控制流程图——start(触发)→编号步骤(每步 flow 写 2~4 行代码动作)→
       // decision(「是：…」「否：…」双出口)→end(结果)。**不再有「现状/变更双泳道」免检路径**:
       // 模块清单式(code 板画成一排 module 卡 + 调用边)现在判不合规,文案点名缺什么、怎么改。
@@ -437,7 +434,7 @@ export function validateBoardTypeConformance(
         missing.push(`步骤节点 targets 不是仓库相对路径:纯中文描述/纯符号名读者定位不到文件(${noRepoPath.slice(0, 8).map((n) => n.id).join(",")})——写成 packages/x/src/y.ts 或 x/y.ts#symbol`);
       }
       // 节点级 change(add/modify/keep/delete):分流口径由 BoardNodeZ.change 决定。
-      // §取舍(2026-10-29):`packages/protocol/src/index.ts:937` 里 change 是
+ // §取舍:`packages/protocol/src/index.ts:937` 里 change 是
       // `z.enum([...]).default("modify")`,parse 后无法区分「显式标注」与「默认填充」——
       // 门收到的是 parse 后的 doc,所以这里退一步用宽松判定:
       //   显式非 modify(add/keep/delete) 一律算标注;change 缺失(undefined)算未标注;
@@ -448,7 +445,7 @@ export function validateBoardTypeConformance(
       if (unmarked.length) {
         missing.push(`步骤节点未标 change:读者看不出是复用现有逻辑还是改/加/删(${unmarked.slice(0, 8).map((n) => n.id).join(",")})——写 change=keep(复用不改)/modify(改已有)/add(新增)/delete(删)`);
       }
-      // 2026-10-29(用户口径):code 板画的是「现有代码/内容怎么走」,不是 agent 的实施计划。
+ // :code 板画的是「现有代码/内容怎么走」,不是 agent 的实施计划。
       // 待办动作形态的节点(实现/修复/添加…且 flow 没有函数调用形)点名回炉:改画现有代码动作,
       // 实施计划留在 step.md。
       const todos = nodes.filter((n) => !/^ph-/.test(String(n.id)) && isTodoActionNode(n));
@@ -461,7 +458,7 @@ export function validateBoardTypeConformance(
       if (!hasStartOrEnd) {
         missing.push("必须是流程图(不是模块清单):补 start(触发)→步骤→decision(是/否双出口)→end;现状/变更双泳道不再是免检替代写法");
       }
-      // 2026-11-04「白板看得懂」:板首必须有主题节点——读者看完整板要知道「这个大流程在系统里
+ // 「白板看得懂」:板首必须有主题节点——读者看完整板要知道「这个大流程在系统里
       // 干什么用、本次开发改的是其中哪一环」。判据归一到 board-content-predicate.hasThemeNode。
       if (!hasThemeNode(nodes)) {
         missing.push("code 板缺板首主题节点:读者看完整板不知道「这个大流程在系统里是干什么用的、本次开发改的是其中哪一环」——加一个 id 以 theme 开头(或 group=主题)的节点横贯板首,summary 一句话讲清用途与本次改动在流程中的位置");
@@ -471,7 +468,7 @@ export function validateBoardTypeConformance(
     }
     case "test": {
       const missing: string[] = [];
-      // 2026-10-26 测试类型接入 code flow:带 start/end 的测试板与 code flow 同规则
+ // 测试类型接入 code flow:带 start/end 的测试板与 code flow 同规则
       // (主线=测试执行流,被测链路逐函数展开),另加测试特有要求;六段契约仅适用于无 start/end 的旧板。
       const testIsFlow = nodes.some((n) => String(n.kind ?? "") === "start") || nodes.some((n) => String(n.kind ?? "") === "end");
       if (testIsFlow) {
@@ -486,7 +483,7 @@ export function validateBoardTypeConformance(
       if (!/(正常|边界|异常|空板|藏词|normal|boundary|exception|edge case)/i.test(text)) {
         missing.push("没有测试数据组(正常/边界/异常):不知道用哪些输入");
       }
-      if (!hasKind(nodes, "decision")) missing.push("没有 decision 节点:分支覆盖不可见(用户口径:测试任务用 decision 表达分支)");
+      if (!hasKind(nodes, "decision")) missing.push("没有 decision 节点:分支覆盖不可见(测试任务用 decision 表达分支)");
       if (!/(断言|期望|通过标准|expect|assert)/i.test(text)) missing.push("没有断言/通过标准:不知道验证什么");
       if (!hasEdge(es, (e) => (e.kind ?? "call") === "verify")) {
         missing.push("没有 verify 边连被测逻辑:测试流程与被测代码脱节");
@@ -502,7 +499,7 @@ export function validateBoardTypeConformance(
       }
       const chapters = nodes.filter((n) => String(n.kind ?? "") === "section");
       const pages = nodes.filter((n) => String(n.kind ?? "") === "page");
-      // 两层结构(2026-10-26 用户口径:先大骨架→骨架再丰富成页):章(section)≥3,
+ // 两层结构(先大骨架→骨架再丰富成页):章(section)≥3,
       // 每章 ≥1 个 page 子节点(contains);页总数 ≥ 章数。旧板(无 page)退回旧口径只查章数。
       if (pages.length > 0 || chapters.length >= 3) {
         if (chapters.length < 3) missing.push(`章(section)不足(${chapters.length} 个):PPT 大骨架至少 3 章`);
@@ -516,7 +513,7 @@ export function validateBoardTypeConformance(
         if (contentNodes.length < 3) missing.push(`章节/页面骨架不足(${contentNodes.length} 个):文档板至少给 3 个内容段`);
       }
       if (!hasEdge(es, (e) => (e.kind ?? "") === "data")) missing.push("没有 data 推进边:章节之间没有内容承接");
-      // 体裁必答维度覆盖(2026-10-27 通用机制):docGenre 在场时,每个必答维度都要有章/页
+ // 体裁必答维度覆盖(通用机制):docGenre 在场时,每个必答维度都要有章/页
       // 落点(label+summary 命中维度别名);缺维度=读者的问题没被回答,点名回炉。
       // 数据驱动:新增文档体裁只需在 DOC_GENRES 加条目,这里零改动。
       const genre = opts?.docGenre ? DOC_GENRES[String(opts.docGenre)] : null;
@@ -601,7 +598,7 @@ export function validateBoardTypeConformance(
     }
     case "perf": {
       const missing: string[] = [];
-      // 2026-10-29 用户口径「性能优化的 flow 还差点意思」:perf 板与 code/test 同一套 flow 门——
+ // perf 板与 code/test 同一套 flow 门——
       // 主形态是控制流程图(start 触发→采样与基线→定位瓶颈→改动→复测→decision(达标?)→end),
       // 3 张并列模块卡(基线/瓶颈/改动)+ 0 条边 = 模块清单式,不合格。
       // 与 code 一致:不做 grandfather,历史 perf 板同样按流程形态判。
@@ -707,7 +704,7 @@ export function validateBoardTypeConformance(
       break;
     }
     case "composition": {
-      // 作业思路板(2026-11-04 用户口径):办公任务上板画的是「表达结构」——
+ // 作业思路板:办公任务上板画的是「表达结构」——
       // 主题是什么、受众是谁、分几章、章与章什么关系、顺序如何;不是 todo list,也不带代码契约。
       const missing: string[] = [];
       const nodeText = (n: BoardNodeT): string => `${String(n.label ?? "")} ${String(n.summary ?? "")}`;
@@ -756,7 +753,7 @@ export function validateBoardTypeConformance(
     default:
       return [];
   }
-  // 新板(显式标 scale)/强制 strict:追加 2026-10-26 通用硬规则 + 分类 ➕ 规则。
+ // 新板(显式标 scale)/强制 strict:追加 通用硬规则 + 分类 ➕ 规则。
   // 旧板(无 scale)保持既有口径,避免存量板因新规突然全红;画布顶部会对缺 scale 亮黄牌。
   if (opts && (opts.strict || hasText(opts.scale))) {
     const strict = strictCommonIssues(nodes, es, boardType).concat(strictTypeIssues(nodes, es, boardType));

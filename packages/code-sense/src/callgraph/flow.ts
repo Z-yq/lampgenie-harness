@@ -1,6 +1,5 @@
 /**
- * 整仓 code flow(2026-10-26,code2flow 画图语义移植到整仓尺度)。
- *
+ * 整仓 code flow(code2flow 画图语义移植到整仓尺度)。
  * 背景:已有图面都是「局部」的——symbol --graph 是单符号邻域、file --graph 是单文件、
  * modules --graph 是模块矩阵;没有一张「整个项目从哪进来、主流程怎么走、谁依赖谁」的图。
  * code2flow(code2flow)的答案是:全仓函数图 + 每文件 root 节点 + File/Class 分组 +
@@ -10,14 +9,13 @@
  *   ① root 节点:`<file>#<module>` 模块级语句/启动器调用(组合根)是流程起点;
  *   ② 分类:trunk=入度 0(没人调用)/leaf=出度 0(不调别人)/regular=其余;
  *   ③ 分组:module→顶层目录,file→模块组,function→File + Class(嵌套子图);
- *   ④ 裁剪:默认去掉零连接节点;超预算按「入口可达优先 + 调用量」保留,并如实报省略数。
+ * ④ 裁剪:默认去掉零连接节点;超预算按「入口可达优先 + 调用量」保留,并如用户反馈省略数。
  * 额外两件事(超出 code2flow 的整仓适配):
  *   - 分层:BFS 距最近入口的跳数(depth),渲染按层排序,人读图有方向;
  *   - 桥边:索引里的跨语言 HTTP 桥(file 级)在 module/file 图上以虚线接入,
  *     否则前端/后端两张图永远不相连。
- *
- * 数据面与图面分离(designs/16 §9):buildCodeFlow 产结构化对象(agent/JSON 消费),
- * render* 只负责画。默认排除测试与非产品路径(tasks/docs/examples…),--all 放开。
+ * 数据面与图面分离( §9):buildCodeFlow 产结构化对象(agent/JSON 消费),
+ * render* 只负责画。默认排除测试与非产品路径(…),--all 放开。
  */
 import { isNonProductPath, isTestPath } from "../path-filter";
 import type { C2fEdge, C2fIndex, C2fNode } from "./c2f";
@@ -43,7 +41,7 @@ export interface FlowOptions {
   keepIsolated?: boolean;
   /** 默认 false:测试文件不进流程图(测试对模块的调用会淹没主干)。 */
   includeTests?: boolean;
-  /** 默认 false:tasks/docs/examples/vendor 等非产品路径不进图。 */
+ /** 默认 false: 等非产品路径不进图。 */
   includeNonProduct?: boolean;
   /** 目标子图(code2flow --target-function):按节点 key/名字/file/module 定向。 */
   target?: string;
@@ -159,8 +157,8 @@ interface WorkEdge {
   label?: string;
 }
 
-/** 2026-10-27 用户口径「节点不要设置上限应当诚实画出所有」:缺省 0=不设上限,全量画出;
- * maxNodes/maxEdges 只作为用户显式收窄的 opt-in(--max-nodes N),省略数仍如实报。 */
+/** 缺省 0=不设上限,全量画出;
+ * maxNodes/maxEdges 只作为用户显式收窄的 opt-in(--max-nodes N),省略数仍如用户反馈。 */
 const DEFAULT_MAX_NODES: Record<FlowLevel, number> = { module: 0, file: 0, function: 0 };
 const DEFAULT_MAX_EDGES: Record<FlowLevel, number> = { module: 0, file: 0, function: 0 };
 
@@ -479,7 +477,7 @@ export function buildCodeFlow(index: C2fIndex, opts: FlowOptions = {}): CodeFlow
   }
 
   // function 层:每个有顶层调用的文件都会造一个 <module> root(code2flow 语义),全仓规模下
-  // 动辄上百个——它们不能全部当「项目入口」占预算(实测 40 节点全是 <module>/0 边)。
+ // 动辄上百个——它们不能全部当「项目入口」占预算(经验证 40 节点全是 <module>/0 边)。
   // 只保留进程入口对应的 root + 出边最大的 8 个组合根;其余 root 仍是节点(kind=root),只是不标入口。
   if (level === "function") {
     const rootEntries = [...entries]
@@ -538,8 +536,7 @@ export function buildCodeFlow(index: C2fIndex, opts: FlowOptions = {}): CodeFlow
       const cands = suggestFlowTargets(work, level, target);
       throw new FlowTargetError(
         `未找到 flow 目标: ${target}(${level} 层可用目标示例: ${cands.slice(0, 5).join(", ") || "无"})`,
-        cands,
-      );
+        cands);
     }
     center = hit;
     targetKeep = new Set([hit]);
@@ -817,7 +814,7 @@ function suggestFlowTargets(work: Map<string, WorkNode>, level: FlowLevel, targe
 
 // ---- 渲染 ----
 
-/** 子图抽取(2026-10-26):按节点集合裁一张 flow(保留内部边/分组/入口/center)。
+/** 子图抽取:按节点集合裁一张 flow(保留内部边/分组/入口/center)。
  * 用于代码档案里的「单功能线」图:从整仓图上剪下游模块子集,不重新扫索引。 */
 export function filterCodeFlow(flow: CodeFlow, keep: Set<string>): CodeFlow {
   const nodes = flow.nodes.filter((n) => keep.has(n.id));

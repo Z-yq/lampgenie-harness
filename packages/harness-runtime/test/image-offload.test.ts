@@ -1,6 +1,5 @@
 /**
- * M58 图片 offload 持久位置:纯函数层(image-offload.ts)契约。
- *
+ *  图片 offload 持久位置:纯函数层(image-offload.ts)契约。
  * 覆盖:错误识别(图片预算类 true / 其它 false)、按消息与消息内顺序落盘、同 hash 复用、
  * 占位行文本、非法 data URL 保留 + skipped、已占位不重复处理、投影校验。
  */

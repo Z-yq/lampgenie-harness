@@ -1,12 +1,12 @@
-/** UI 实测:F3 任务行操作(右键菜单/重命名/置顶/归档)——真实 gateway+chromium。
- * step-101 现代化(三处陈旧前提,意图全保):
- * ① step-048 起侧栏「会话唯一聚合」(一栏=一个 session,标题取最新任务,panel.ts renderSidebar
+/** UI 经验证:F3 任务行操作(右键菜单/重命名/置顶/归档)——真实 gateway+chromium。
+ * 现代化(三处陈旧前提,意图全保):
+ * ① 起侧栏「会话唯一聚合」(一栏=一个 session,标题取最新任务,panel.ts renderSidebar
  *   注释在案)——同会话两任务只渲染一行,本 spec 改为两任务分两会话(#act-new),各行独立可操作;
- * ② step-088 起 confirm/prompt 全部主题模态化(uiConfirm/uiPrompt),page.on("dialog") 永远接不到
+ * ② 起 confirm/prompt 全部主题模态化(uiConfirm/uiPrompt),page.on("dialog") 永远接不到
  *   ——改接 .uid-mask 内 .uid-input/.uid-ok;
  * ③ 终态等待从「#go 按钮文案」升级为 tasks map 状态谓词——按钮初始态即「发」,waitForFunction
- *   在任务注册前就空过(step-101 probe-rowops2 实证),真终态依赖=task.changed→tasks map。 */
-process.env.GENIE_CHECKPOINT = process.env.GENIE_CHECKPOINT || "off"; // 与 _restore_server 同款:行操作不测 checkpoint,防大仓 stash create 拖慢任务流(step-046 登记)
+ * 在任务注册前就空过( probe-rowops2 验证),真终态依赖=task.changed→tasks map。 */
+process.env.GENIE_CHECKPOINT = process.env.GENIE_CHECKPOINT || "off"; // 与 _restore_server 同款:行操作不测 checkpoint,防大仓 stash create 拖慢任务流(登记)
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -17,7 +17,7 @@ const PORT = Number(process.env.SELF_PORT || 7742);
 (async () => {
   const app = createGatewayApp({ useExternalHttp: true, executor: new EchoChildBackend() });
   servePanel(PORT, (srv) => app.attachWs(srv));
-  // 就绪轮询(dev 条件下 src 整图编译冷启动可达数十秒,固定 400ms 会导航超时——审计 R2 实证)
+ // 就绪轮询(dev 条件下 src 整图编译冷启动可达数十秒,固定 400ms 会导航超时——审计 R2 验证)
   {
     const deadline = Date.now() + 60_000;
     let ready = false;
@@ -53,7 +53,7 @@ const PORT = Number(process.env.SELF_PORT || 7742);
     await page.waitForTimeout(300); // 渲染落定(renderSidebar 由 task.changed 驱动,终态广播后即渲)
   };
 
-  // 两个任务分两个会话(step-048 会话聚合前提:同会话只一行)
+ // 两个任务分两个会话(会话聚合前提:同会话只一行)
   const NAME1 = "第一个任务甲" + RUN;
   const NAME2 = "第二个任务乙" + RUN;
   await submitTask(NAME1);
@@ -69,7 +69,7 @@ const PORT = Number(process.env.SELF_PORT || 7742);
   await row.click({ button: "right" });
   await page.waitForTimeout(250);
   check("右键菜单出现", await page.locator("#taskMenu").isVisible());
-  // 菜单七项(step-053 F3 增「移入分组…」):计数+关键项双断言(纯计数会随功能演进陈旧)
+ // 菜单七项( F3 增「移入分组…」):计数+关键项双断言(纯计数会随功能演进陈旧)
   {
     const menuCount = await page.locator("#taskMenu .tm-item").count();
     const hasGroup = await page.locator("#taskMenu .tm-item", { hasText: "移入分组" }).count();

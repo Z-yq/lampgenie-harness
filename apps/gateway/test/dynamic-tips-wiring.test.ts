@@ -1,11 +1,9 @@
 /**
  * 接线闭环回归锚(J1 2026-11 token 轮,子任务 B + C)。
- *
  * 缺口形态:agent-wiring-dynamic-tips.ts 已备好 `dyn:verify-cadence` / `dyn:delegate` 两张卡的
  * 判定(纯函数 + 常量),但 buildLoopTips 没把 `lastVerifyStep` / `spawnedSubagent` / `tokensSpent`
  * 填进 DynSignals → 生产路径上两张卡永不触发(死代码)。本文件按真实 ctx 序列驱动 buildLoopTips
  * (闭包状态的归属处)来验信号累积,顺带锁 C 的两个进度折算纯函数。
- *
  * 零反斜杠纪律:断言全用 includes 字面串。
  */
 import { it, expect, afterEach, describe } from "vitest";

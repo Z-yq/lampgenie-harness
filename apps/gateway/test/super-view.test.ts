@@ -1,9 +1,8 @@
 /**
- * step-1041 Super Agent 指挥台收口测试。
- *
- * 背景(用户主诉「7700 super agent 无法聊天」的四个实锤断点,本文件逐项锁回归):
+ * Super Agent 指挥台测试。
+ * 背景(用户主诉「7700 super agent 无法聊天」的四个注意断点,本文件逐项锁回归):
  *   ① 聊天无持久化——widget 气泡内存态,刷新/重启即丢;此处锁「真实轮次完成 ⇒ journal 会话文件在盘」
- *      (取证口径:.genie/llm-trace/super:<date> 目录是 companion.test.ts 的测试运行,产线从未跑过轮);
+ * (取证口径:.genie/llm-trace/super:<date> 目录是 companion.test.ts 的测试运行,生产环境从未跑过轮);
  *   ② widget 不消费 error 帧——失败时「思考中…」永不消失(super-console.js 静态断言);
  *   ③ super.turn.done 单发发起 socket——第二标签页等不到回复(真实 WS 双客户端断言广播);
  *   ④ 指挥台无独立聊天渲染区与看板(面板 PAGE 静态契约:#view-super + 四区 + 路由/WS 泵接线)。
@@ -38,8 +37,8 @@ function deps(over: Partial<SuperAgentDeps> = {}): SuperAgentDeps & { taskManage
   };
 }
 
-// ── ① 磁盘持久化回归(产线同参 FileJournal;轮次完成⇒字节在盘) ─────────────────────
-describe("step-1041 super 轮次磁盘持久化(FileJournal 产线同参)", () => {
+// ── ① 磁盘持久化回归(生产环境同参 FileJournal;轮次完成⇒字节在盘) ─────────────────────
+describe(" super 轮次磁盘持久化(FileJournal 生产环境同参)", () => {
   const OLD_ROOT = process.env.GENIE_REPO_ROOT;
   const ROOT = mkdtempSync(join(tmpdir(), "sup-disk-"));
   afterAll(() => {
@@ -71,7 +70,7 @@ describe("step-1041 super 轮次磁盘持久化(FileJournal 产线同参)", () =
 });
 
 // ── ② spawn_task group 透传 / task_resend 保组 / list_nodes ────────────────────────
-describe("step-1041 联调最小组件(group 透传 + list_nodes)", () => {
+describe(" 联调最小组件(group 透传 + list_nodes)", () => {
   function toolMap(d: SuperAgentDeps & { taskManager: TaskSupervisor }) {
     const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
     return new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
@@ -104,7 +103,7 @@ describe("step-1041 联调最小组件(group 透传 + list_nodes)", () => {
 });
 
 // ── ③ 真实 WS 网关:super.turn 双客户端广播(turn.user 与 turn.done 都到第二个客户端) ──
-describe("step-1041 super.turn 双客户端广播(真实 WS 网关,echo 执行器+假 LLM)", () => {
+describe(" super.turn 双客户端广播(真实 WS 网关,echo 执行器+假 LLM)", () => {
   const WS_ROOT = mkdtempSync(join(tmpdir(), "sup-ws-"));
   const OLD_ROOT = process.env.GENIE_REPO_ROOT;
   const PORT = 7961;
@@ -144,7 +143,7 @@ describe("step-1041 super.turn 双客户端广播(真实 WS 网关,echo 执行�
     // turn.user:两端都到(既有行为,回归锚)
     await wait(a.inbox, (m) => m.type === "super.turn.user", "A turn.user");
     await wait(b.inbox, (m) => m.type === "super.turn.user", "B turn.user");
-    // turn.done:step-1041 修复点——B(第二标签页)此前永远收不到
+ // turn.done: 修复点——B(第二标签页)此前永远收不到
     const doneA = await wait(a.inbox, (m) => m.type === "super.turn.done", "A turn.done");
     const doneB = await wait(b.inbox, (m) => m.type === "super.turn.done", "B turn.done");
     expect(String(doneA.text)).toBe(String(doneB.text));
@@ -158,7 +157,7 @@ describe("step-1041 super.turn 双客户端广播(真实 WS 网关,echo 执行�
 });
 
 // ── ④ 面板/资产/服务端源码静态契约 ────────────────────────────────────────────────
-describe("step-1041 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", () => {
+describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", () => {
   const PORT = 7962;
   const panel = servePanel(PORT, () => { /* 不需要 WS */ });
   let pageHtml = "";
@@ -184,7 +183,7 @@ describe("step-1041 指挥台 view 静态契约(面板 PAGE + widget + server �
     expect(pageHtml).toContain("系统健康"); // 看板④
   });
   it("PAGE:路由接线(画布卡注册/loadViewData 分支/WS 泵早退/事件入口/卡内重排)", () => {
-    // step-1041 二轮:画布卡注册(用户口径「画布模式下也要有独立的看板」)——CV_CARDS + CV_VIEW_OF_CARD + 托盘映射
+ // 二轮:画布卡注册——CV_CARDS + CV_VIEW_OF_CARD + 托盘映射
     expect(pageHtml).toContain('{ name: "super", node: "view-super", title: "指挥台 Super"');
     expect(pageHtml).toContain('usage: "usage", super: "super"'); // CV_VIEW_OF_CARD
     expect(pageHtml).toContain('super: "act-super"'); // CV_TRAY_ACT(画布托盘点亮)

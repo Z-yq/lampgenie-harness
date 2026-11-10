@@ -154,7 +154,7 @@ describe("不可变性", () => {
 });
 
 describe("碎泳道合并(小分组 ≥ SMALL_GROUP_MERGE_AT 且预算够时合成一个 fold-small)", () => {
-  /** 按真板实测分布造板:5 组×3 + 15 组×2 + 15 组×1 = 35 条泳道 / 60 节点(全部 < foldMin)。 */
+ /** 按真板经验证分布造板:5 组×3 + 15 组×2 + 15 组×1 = 35 条泳道 / 60 节点(全部 < foldMin)。 */
   function realShape(): { d: BoardDoc; ids: string[] } {
     const nodes: Node[] = [];
     const ids: string[] = [];

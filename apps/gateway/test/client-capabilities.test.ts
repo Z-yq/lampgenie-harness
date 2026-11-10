@@ -1,6 +1,5 @@
 /**
- * M72 能力暴露 allowlist 测试。
- *
+ * 能力暴露 allowlist 测试。
  * 三类证据:
  * 1. 对拍:panel 集合必须与 server.ts handleMessage 的 case 集合逐条一致(漏登记=面板静默 403,
  *    多登记=表外放行;两侧漂移都在这里失败)。
@@ -52,7 +51,7 @@ function configSchemaTopKeys(): string[] {
   return out;
 }
 
-describe("M72 能力暴露 allowlist", () => {
+describe(" 能力暴露 allowlist", () => {
   it("对拍:panel 集合 == server.ts handleMessage case 集合(双向)", () => {
     const cases = serverCaseList();
     expect(cases.length).toBeGreaterThan(150); // 解析失效时立刻失败,而不是空集相等

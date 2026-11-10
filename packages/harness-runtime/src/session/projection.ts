@@ -1,5 +1,5 @@
 /**
- * 会话投影归约器(designs/20 F1,ZCode v4 投影精髓 × qwen journal 事件源):
+ * 会话投影归约器( F1,ZCode v4 投影精髓 × qwen journal 事件源):
  * 单一纯函数把 journal 事件流归约为面板消费的会话投影——todo/subagent/workflow/
  * 压缩标记/消息行——单时钟纪律(不读时钟不触 IO),UI 不再各自扫事件流。
  */
@@ -38,9 +38,9 @@ export interface SessionProjection {
     summaryMessageIds?: number[];
   }[];
   /** 消息行(可见投影:user/agent 文本,工具事件不入行——工具卡另有渲染通道)。
-   * 2026-11-04 有界化(网关 OOM 根因):旧实现把每条消息全文塞进 rows——巨型会话(36K 事件/
+ * 有界化(网关 OOM 根因):旧实现把每条消息全文塞进 rows——巨型会话(36K 事件/
    *  数千条消息,单条可含 500KB 级内容)的投影达数 MB,session.status 每 3s 轮询全量序列化,
-   *  4GB 堆也被打穿(崩溃栈=JsonStringify)。实测消费面:面板状态条只用 todo/subagents/
+ * 4GB 堆也被打穿(崩溃栈=JsonStringify)。经验证消费面:面板状态条只用 todo/subagents/
    *  workflows/compactions,rows 全量是死重。现封顶:尾部 ROWS_MAX 条 + 单条文本 ROW_TEXT_MAX
    * 字符 + rowCount 总数(消费方要全量该走 session.history,不该走状态投影)。 */
   rows: ProjectedRow[];
@@ -53,7 +53,7 @@ export const PROJECTION_ROWS_MAX = 50;
 /** 单行文本截断(行只是预览;全文在 session.history)。 */
 export const PROJECTION_ROW_TEXT_MAX = 200;
 
-/** 增量投影的跨批携带态(step-1036 session.status 增量化;治网关 OOM:面板不再每次全量回拉)。
+/** 增量投影的跨批携带态( session.status 增量化;治网关 OOM:面板不再每次全量回拉)。
  *  只装「projectSession 的单批返回值里装不下」的两类事实:
  *  ① todoCleared/compactionStarted 这类**批内出现与否**的标志(todo 初值 null 无法区分「本批无
  *     todo.updated」与「todo 被清空」;compact.start/compact.done 分落两批时 at/tokens 会丢);
@@ -81,14 +81,12 @@ export function emptyProjectionCarry(): ProjectionCarry {
 }
 
 /**
- * 增量合并(step-1036):把一批新事件的投影 delta 合并进累积投影 prev。
- *
+ * 增量合并:把一批新事件的投影 delta 合并进累积投影 prev。
  * **全量等价性契约**(测试锁):设 factsIn 从 carry 带入(见 projectSession 第三参是 in-out 事实袋)、
  * outCarry 承接跨批态,则对任意事件流分批 A1..An,
  *   merge(merge(projectSession(A1)…), projectSession(Ak))
  * 逐字段 deepEqual 对 A1.concat(..Ak) 的一次全量 projectSession
  * (todo/subagents/workflows/compactions/rows/rowCount)。
- *
  * 逐字段口径(对 projectSession 归约语义的推导):
  * - todo:本批见过 todo.updated 才覆盖(facts.todoSeen),否则保留 prev.todo——
  *   projectSession 的 todo 初值 null 无法区分「本批无 todo.updated」与「todo 被清空」。
@@ -141,14 +139,13 @@ export function mergeProjection(
 }
 
 /**
- * 归约会话事件流。step-1036:新增第三参 factsOut(可选,纯输出)——把「批内出现过什么」记进去
+ * 归约会话事件流。新增第三参 factsOut(可选,纯输出)——把「批内出现过什么」记进去
  * (todoSeen / 未成对的 compactStart),供 mergeProjection 判增量。不带第三参=调用方零改动。
  */
 export function projectSession(
   events: SessionEventLike[],
   allEvents: (SessionEventLike & { sessionId?: string })[] = [],
-  factsOut?: ProjectionDeltaFacts,
-): SessionProjection {
+  factsOut?: ProjectionDeltaFacts): SessionProjection {
   const proj: SessionProjection = {
     todo: null,
     subagents: { spawnCount: 0, resultCount: 0, running: 0 },
@@ -220,7 +217,7 @@ export function projectSession(
         break;
       case "message.user":
       case "message.agent": {
-        // 有界化(2026-11-04):尾部窗口+文本截断(见 SessionProjection.rows 注释)。
+ // 有界化:尾部窗口+文本截断(见 SessionProjection.rows 注释)。
         proj.rowCount += 1;
         const text = String(p.text ?? "");
         proj.rows.push({ kind: ev.kind === "message.user" ? "user" : "agent", text: text.length > PROJECTION_ROW_TEXT_MAX ? text.slice(0, PROJECTION_ROW_TEXT_MAX) + "…(行截断)" : text });
@@ -237,7 +234,7 @@ export function projectSession(
     cur.asks = allEvents.filter((e) => e.sessionId === id && e.kind === "workflow.ask").length;
   }
   proj.workflows = [...wf.values()];
-  // step-1036 增量事实输出(可选):批内见过 todo.updated / 有未成对的 compact.start。
+ // 增量事实输出(可选):批内见过 todo.updated / 有未成对的 compact.start。
   if (factsOut) factsOut.compactStart = compactStart;
   return proj;
 }

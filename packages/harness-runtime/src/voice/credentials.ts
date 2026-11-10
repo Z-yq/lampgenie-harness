@@ -1,5 +1,5 @@
 /**
- * 双轨凭证(designs/07 §4):persona 与 coding 命名空间硬隔离。
+ * 双轨凭证( §4):persona 与 coding 命名空间硬隔离。
  * 交叉访问=启动报错。
  */
 

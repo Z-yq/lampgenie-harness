@@ -1,5 +1,5 @@
 /**
- * archmap(designs/16 §6.3):管线设计(采样→摘录→索引→LLM 两段式→校验修复环)参考 gitdiagram 项目(MIT,致谢),本仓独立实现。
+ * archmap( §6.3):管线设计(采样→摘录→索引→LLM 两段式→校验修复环)参考 gitdiagram 项目(MIT,致谢),本仓独立实现。
  * 采样(打分+多样性)→摘录→SOURCE INDEX→LLM 两段式→zod 校验→修复环→mermaid。
  * LLM 注入式(LlmProvider):无 LLM 时 plan 剖面降级为静态模块结构。
  */
@@ -212,7 +212,7 @@ function parseGraph(raw: string): Graph | null {
   }
 }
 
-// ---- git 热点(designs/16 §7.2,纯静态) ----
+// ---- git 热点( §7.2,纯静态) ----
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const execFileP = promisify(execFile);
@@ -222,7 +222,7 @@ export async function gitHotspots(root: string, days = 30, top = 5): Promise<str
     const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     const { stdout } = await execFileP("git", ["log", `--since=${since}`, "--name-only", "--format="], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
     const count = new Map<string, number>();
-    // 代码文件优先(2026-10-13 质量审计:AGENTS.md/pnpm-lock.yaml 出现在架构热点=噪声,
+ // 代码文件优先(质量审计:AGENTS.md/pnpm-lock.yaml 出现在架构热点=噪声,
     // 热点的语义是「代码热点」;文档/锁文件改得勤不代表架构热点)
     const isCode = (f: string) => /\.(ts|tsx|js|jsx|mjs|cjs|py|go|java|rs)$/.test(f);
     for (const line of stdout.split("\n")) {

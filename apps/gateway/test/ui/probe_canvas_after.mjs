@@ -1,4 +1,4 @@
-/** 画布「四件事」改后取证探针(2026-11-06)。
+/** 画布「四件事」改后取证探针。
  *  骨架抄 probe_canvas_baseline.mjs;自起临时实例(默认 7796,占用则退 7797),**绝不碰 7700**。
  *  量四项(改前值从 shots/before-baseline.json 读):
  *   a 添加模块闭环:点 #cvAddBtn → 点第一个 .cv-aitem → 300/1200/3500ms 读 #cvSvgHost [data-node-id] 数量

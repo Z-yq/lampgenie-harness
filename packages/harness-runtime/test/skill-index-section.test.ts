@@ -33,8 +33,8 @@ describe("renderSkillIndex(n6 行格式)", () => {
       { category: "builtin", name: "tdd", description: "测试驱动开发" },
     ]);
     expect(text).toContain("# 技能索引");
-    // 2026-10-31:`.genie/experiences/<category>/<name>/SKILL.md` 可由索引行名字推导 → 省略
-    // (实测占索引 47% 字符，而读取通道是 skill_view(category,name)，不需要路径)。
+ // `.genie/experiences/<category>/<name>/SKILL.md` 可由索引行名字推导 → 省略
+ // (经验证占索引 47% 字符，而读取通道是 skill_view(category,name)，不需要路径)。
     expect(text).toContain("- ops/port-conflict: 端口占用先查残留进程 (当: 服务起不来时)");
     expect(text).not.toContain("(file: /repo/.genie/experiences/ops/port-conflict/SKILL.md)");
     expect(text).toContain("- coding/ts-esm-paths: TS ESM 相对 import 需带扩展名");
@@ -65,7 +65,7 @@ describe("renderSkillIndex(n6 行格式)", () => {
   });
 
   it("超预算降级为 name + file 一行", () => {
-    // fixture 用**各自不同**的 description:同模板条目会被折叠(2026-10-29 P2),
+ // fixture 用**各自不同**的 description:同模板条目会被折叠( P2),
     // 折叠后体量很小、根本不会超预算,测不到降级分支。降级分支要覆盖的是「真·大量不同技能」。
     const many = Array.from({ length: 200 }, (_, i) =>
       entry({
@@ -110,7 +110,7 @@ describe("renderSkillIndex(n6 行格式)", () => {
 });
 
 describe("同模板条目折叠(2026-10-29 token 轮 P2)", () => {
-  /** 造 N 条同描述前缀的条目(模拟 incidents/task-* 的实测形态)。 */
+ /** 造 N 条同描述前缀的条目(模拟 incidents/task-* 的经验证形态)。 */
   const dupes = (n: number, prefix: string) =>
     Array.from({ length: n }, (_, i) => entry({
       category: "incidents", name: `task-${i}`, description: `${prefix}……后面是同样的模板正文`, path: `/p/incidents/task-${i}/SKILL.md`,
@@ -188,10 +188,10 @@ describe("composeSystemPrompt 技能索引节(n6)", () => {
 
 describe("技能索引体量守卫（防回涨）", () => {
   it("56 条真实规模条目的渲染体量不超上限（生产实测基线）", () => {
-    // 2026-10-31 生产测量：56 条真实索引占 9,835 字符；本轮 desc cap 100→80 后实测 ≈6,362。
+ // 生产测量：56 条真实索引占 9,835 字符；本轮 desc cap 100→80 后经验证 ≈6,362。
     // 掉回 9k 说明 cap 被改回或 (file: path) 重新出现。
     // **fixture 描述必须各不相同**：同模板描述会被 collapseDuplicateSkills 折成一行，
-    // 那样渲染出 210 字符，断言等于没测（2026-10-31 首次写就踩了这个坑）。
+ // 那样渲染出 210 字符，断言等于没测（ 首次写就踩了这个坑）。
     const many = Array.from({ length: 56 }, (_, i) => {
       const n = `skill-${String(i).padStart(2, "0")}`;
       return entry({

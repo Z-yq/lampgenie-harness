@@ -1,9 +1,9 @@
 /**
- * Agent loop(designs/14 §1 定稿):turn/step 循环、journal 驱动、取消配对。
+ * Agent loop( §1 定稿):turn/step 循环、journal 驱动、取消配对。
  * 契约参照 dsh agent-loop(仅借鉴,自研实现);journal 用 core 的 Journal。
  */
 import type { Journal } from "@lampgenie/core";
-// M29 流中断安全锚点恢复:锚点计算 / 可重试判据 / 作废落账 / 冷恢复过滤(纯函数,见 stream-anchor.ts)。
+//  流中断安全锚点恢复:锚点计算 / 可重试判据 / 作废落账 / 冷恢复过滤(纯函数,见 stream-anchor.ts)。
 import { classifyStreamRetry, filterDiscarded, findSafeAnchor, markDiscard, STREAM_REOPEN_MAX, type SafeAnchor } from "./stream-anchor";
 import {
   microcompactMessages, shouldAggressivePrune, ASCII_TOKENS_PER_CHAR,
@@ -12,7 +12,7 @@ import {
 } from "./microcompact";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio)。
 import { estimateMessagesTokens as estimateMessagesTokensUnified } from "./token-estimate";
-// M145 上下文构成归因(只观测,不参与闸门/压缩决策)。
+// 上下文构成归因(只观测,不参与闸门/压缩决策)。
 import { buildContextBreakdown } from "./context-breakdown";
 import {
   buildModelDecisionSets,
@@ -30,7 +30,7 @@ import { createInjectGate, type InjectGate } from "./inject-gate";
 import { spillToolResult } from "./tool-result-spill";
 import { intakeToolResult, shouldIntake, type BigIntakeConfig, type IntakeMeta } from "./big-intake";
 import { normalizeToolArgs, renderToolArgError } from "./tool-args";
-// M153 工具注册身份治理:未知工具按「前缀 + 编辑距离」给可达候选(纯函数,零依赖模块)。
+// 工具注册身份治理:未知工具按「前缀 + 编辑距离」给可达候选(纯函数,零依赖模块)。
 import { describeUnknownTool } from "./tool-identity";
 import {
   ToolLoopGuard,
@@ -44,7 +44,7 @@ import {
   offloadProjectionPreserved,
   type OffloadedImage,
 } from "./image-offload";
-// 系统上下文代(M125):三态 reconcile / 单块合成 / 代重开。指纹实现随之迁到该模块,此处 re-export
+// 系统上下文代:三态 reconcile / 单块合成 / 代重开。指纹实现随之迁到该模块,此处 re-export
 // 保持既有导入面不变。
 import {
   reconcileSystemContext,
@@ -53,7 +53,7 @@ import {
   type SystemContextSource,
   type SystemContextState,
 } from "./system-context-generation";
-// M81 阶段遥测(纯逻辑,无 IO):turn 内 llm/tools 阶段 span + 单条 telemetry.phase 汇总。
+//  阶段遥测(纯逻辑,无 IO):turn 内 llm/tools 阶段 span + 单条 telemetry.phase 汇总。
 import { PhaseRecorder, buildTurnTelemetry, createTelemetryClock, type PhaseToken } from "./phase-telemetry";
 
 export { sectionSha };
@@ -67,7 +67,7 @@ export type Message =
   | { role: "tool"; toolCallId: string; content: string };
 
 /**
- * 视觉工具结果哨兵(2026-10-25 view_image,对齐 ZCode read-image 的"工具结果媒体块"语义):
+ * 视觉工具结果哨兵( view_image,对齐 ZCode read-image 的"工具结果媒体块"语义):
  * 工具(gateway view_image)返回 `[vision-image]{json:dataUrl,label}` → loop 落账时剥离 dataUrl
  * 进 tool.result payload.images(工具可见文本换确认句),derive 时投影为后置 user 消息(OpenAI 系
  * tool content 不支持图片,后置 user part=ZCode tool-result-media-projection 的同构实现)。
@@ -76,15 +76,15 @@ export type Message =
 export const VISION_TOOL_SENTINEL = "[vision-image]";
 
 /**
- * 工具回执激活标记(2026-10-30 board_read 死锁事故):回执文本携带 `[[activate-tool:<name>]]`
+ * 工具回执激活标记( board_read 死锁事故):回执文本携带 `[[activate-tool:<name>]]`
  * → loop 把该工具点亮进广告面(activatedTools),标记本身从模型可见文本剥离并换一句可读提示。
  * 背景:plan-gate 拒绝指路 board_upsert,但它 deferred 不在 wire 面——受约束的函数名采样只能
- * 落在名字最接近的可见工具(board_read)上,「写板」意图永远无出口,实测 38 步同参死循环。
+ * 落在名字最接近的可见工具(board_read)上,「写板」意图永远无出口,经验证 38 步同参死循环。
  * 原则:硬闸要求什么,工具面就必须给什么;闸门/指引文案提到哪个延迟工具,就附上它的激活标记。
  */
 export const ACTIVATE_TOOL_RE = /\[\[activate-tool:([A-Za-z0-9_]+)\]\]/g;
 
-/** 用户语音输入内容(2026-10-21 音频链路优化,omni-query/realtime-plus 两形态共用):
+/** 用户语音输入内容(音频链路优化,omni-query/realtime-plus 两形态共用):
  * data=base64 音频;format 缺省 "pcm16"(浏览器 PTT 的 16kHz 单声道裸 PCM;HTTP query 侧自动包 WAV 容器)。
  * 与 images 同语义:只随 user 消息走,journal 全量落(derive 侧只保留最新一条,防历史回放请求膨胀)。 */
 export interface AudioInput {
@@ -117,13 +117,13 @@ export interface ToolExecOutcome {
   content: string;
   durationMs: number;
   error?: ToolExecError;
-  /** M115 循环护栏:只改「模型可见文本」(结果去重 stub),journal tool.result 仍存 content 原文。 */
+ /** 循环护栏:只改「模型可见文本」(结果去重 stub),journal tool.result 仍存 content 原文。 */
   modelContent?: string;
 }
 
 /** 工具取消文案(executeTracked 的取消分支以字符串而非抛错返回,execOne 归一时复用同一定义)。 */
 const ABORTED_TOOL_TEXT = "[aborted] 执行被取消";
-/** M34(2026-11-07)用户停止语义:被**用户**停止时的固定 modelContent。
+/** M34用户停止语义:被**用户**停止时的固定 modelContent。
  *  旧行为一律回 "[aborted] 执行被取消",模型容易当成可重试错误继续干;用户停止必须明确
  *  「不要继续/不要重试/不要换等价操作」。内部超时/模型取消/其它 abort 仍用 ABORTED_TOOL_TEXT。 */
 export const USER_STOPPED_TOOL_TEXT = "[用户已停止] 当前任务已被用户停止;不要继续执行、不要重试、不要换等价操作,等待用户新指令。";
@@ -136,7 +136,7 @@ function isUserStopReason(reason: unknown): boolean {
   if (!text) return false;
   return USER_STOP_REASON_KEYS.some((k) => text.includes(k));
 }
-/** 取消原因是否「用户停止」(M34)。区分依据只有两条,都不靠猜:
+/** 取消原因是否「用户停止」()。区分依据只有两条,都不靠猜:
  *  ① AbortSignal.reason —— AgentLoop.cancel(reason) 以 `abort(new Error("cancelled:"+reason))` 落原因,
  *     网关 task.cancel 传 "task.cancel";
  *  ② loop 实例自身的 cancel 记账(AgentLoop.userStopped)——工具没拿 signal 时靠这里判。
@@ -146,14 +146,14 @@ export function isUserStopAbort(signal?: AbortSignal): boolean {
   if (!signal?.aborted) return false;
   return isUserStopReason(signal.reason);
 }
-/** 写前持久化屏障(M24)工具侧固定错误框前缀:模型可读文案,error.origin=write-barrier。 */
+/** 写前持久化屏障工具侧固定错误框前缀:模型可读文案,error.origin=write-barrier。 */
 const WRITE_BARRIER_TOOL_PREFIX = "[写前屏障] journal 落盘失败";
 /** 写前屏障阻止工具执行时的固定错误框(原因带在括号里)。 */
 function writeBarrierToolText(reason: string): string {
   return `${WRITE_BARRIER_TOOL_PREFIX}(${reason}),已阻止工具执行(副作用无法归因);检查磁盘空间/9p 挂载后重试。`;
 }
 
-/** 写前屏障失败导致 turn 中止(M24):runTurn 抛它 → 任务 failed(与取消同型:不重派整轮)。 */
+/** 写前屏障失败导致 turn 中止:runTurn 抛它 → 任务 failed(与取消同型:不重派整轮)。 */
 export class WriteBarrierAbortError extends Error {
   constructor(message: string) {
     super(message);
@@ -167,14 +167,14 @@ const GATE_DENY_RE = /^错误:(?:命令被判为重操作|工具 .+? 被权限(?
 /** 兜底:超时文案前缀(executeInner 超时后同样以字符串返回,而非抛错)。 */
 const TOOL_TIMEOUT_RE = /^错误:工具执行超时\(/;
 
-/** M28 输出截断续写:固定续写提示(只进续写请求的**临时** user 消息,绝不进 journal/历史)。 */
+/**  输出截断续写:固定续写提示(只进续写请求的**临时** user 消息,绝不进 journal/历史)。 */
 const OUTPUT_CONTINUATION_PROMPT = "继续。从被截断处紧接着写,不要道歉、不要复述已写内容、不要重新开头。";
 /** 续写次数上限:原始请求 1 次 + 续写最多 3 次;第 4 次仍 length 即放弃(不再请求)。 */
 const OUTPUT_CONTINUATION_MAX = 3;
 /** 续写满 3 次仍被截断时的固定警告(≤120 字,追加到合并文本末尾)。 */
 const OUTPUT_CONTINUATION_LIMIT_WARN = "[输出上限] 已续写 3 次仍被截断;请缩小单次输出或分段交付。";
 
-/** usage 累加(M28 续写):缺项按 0 求和;totalTokens 两侧都缺时保持缺省(不伪造 0)。 */
+/** usage 累加(续写):缺项按 0 求和;totalTokens 两侧都缺时保持缺省(不伪造 0)。 */
 function addUsage(a: LlmResponse["usage"], b: LlmResponse["usage"]): LlmResponse["usage"] {
   if (!a) return b;
   if (!b) return a;
@@ -190,7 +190,7 @@ function addUsage(a: LlmResponse["usage"], b: LlmResponse["usage"]): LlmResponse
   };
 }
 
-/** M145:上下文构成归因的频率闸(同一 turn 内每 N 步落一帧;0=关闭;缺省/非法=1 即每请求)。 */
+/** :上下文构成归因的频率闸(同一 turn 内每 N 步落一帧;0=关闭;缺省/非法=1 即每请求)。 */
 function contextBreakdownEvery(): number {
   const raw = String(process.env["GENIE_CONTEXT_BREAKDOWN_EVERY"] ?? "").trim();
   if (raw === "") return 1;
@@ -202,7 +202,7 @@ function contextBreakdownEvery(): number {
  *  只在前缀确实命中时返回,不做「含错误字样」之类的模糊匹配(避免把正常结果误标失败)。 */
 function toolErrorOf(content: string, name: string): ToolExecError | undefined {
   const message = content.replace(/^错误:?/, "").slice(0, 600);
-  // M34:用户停止与普通取消同归 aborted 类(文案本身已区分;查询侧可按 content 前缀分桶)。
+ // :用户停止与普通取消同归 aborted 类(文案本身已区分;查询侧可按 content 前缀分桶)。
   if (content === ABORTED_TOOL_TEXT || content === USER_STOPPED_TOOL_TEXT) return { origin: "aborted", message, name };
   if (content.startsWith(WRITE_BARRIER_TOOL_PREFIX)) return { origin: "write-barrier", message, name };
   if (GATE_DENY_RE.test(content)) return { origin: "denied", message, name };
@@ -210,7 +210,7 @@ function toolErrorOf(content: string, name: string): ToolExecError | undefined {
   return undefined;
 }
 
-/** M115:ToolExecOutcome → 护栏 kind。只有真失败(threw/timeout/unknown-tool)算失败;
+/** :ToolExecOutcome → 护栏 kind。只有真失败(threw/timeout/unknown-tool)算失败;
  *  参数错误、权限/重操作拒绝、取消都不算(否则模型自救重试会被当成循环)。 */
 const ARG_ERROR_PREFIX = "[工具参数错误]";
 function guardKindOfToolOutcome(r: ToolExecOutcome): GuardKind {
@@ -223,13 +223,13 @@ function guardKindOfToolOutcome(r: ToolExecOutcome): GuardKind {
   }
 }
 
-/** LLM 增量(step-050,ZCode 流式消息展示):onDelta 传入时 provider 走流式通道逐块上报。 */
+/** LLM 增量(ZCode 流式消息展示):onDelta 传入时 provider 走流式通道逐块上报。 */
 export interface LlmDeltaChunk {
   text?: string;
   reasoning?: string;
 }
 
-/** tips 注入返回值(2026-10-22):裸 string=仅注入文本;带 keys=同时留痕分类名给面板。 */
+/** tips 注入返回值:裸 string=仅注入文本;带 keys=同时留痕分类名给面板。 */
 export interface TipInjection {
   text: string;
   /** 本步注入的 tip 类别名(装配方定义,如 code-orient/history-align/dispatch/board-comments)。 */
@@ -246,7 +246,7 @@ export type AgentStreamEvent =
   | { type: "tool-progress"; callId: string; name: string; note: string };
 
 /** LLM 抽象:返回一次完整响应;onDelta 在场时以流式实现(增量经回调透出,聚合结果不变)。 */
-/** M29 流式 attempt 作废信息:attemptId=被作废的那次流式 attempt(与成功 attempt 不同 id)。 */
+/**  流式 attempt 作废信息:attemptId=被作废的那次流式 attempt(与成功 attempt 不同 id)。 */
 export interface LlmChatAttemptInfo {
   attemptId: string;
   /** 0-based attempt 序号(0=首次请求,>=1=provider 内部重试)。 */
@@ -256,7 +256,7 @@ export interface LlmChatAttemptInfo {
   partialChars: number;
 }
 
-/** chat 第 5 参(M29):调用方给本次 chat 一个 attemptId,provider 内部作废半截时回调。 */
+/** chat 第 5 参:调用方给本次 chat 一个 attemptId,provider 内部作废半截时回调。 */
 export interface LlmChatOptions {
   attemptId?: string;
   onAttemptDiscarded?: (info: LlmChatAttemptInfo) => void;
@@ -269,18 +269,18 @@ export interface LlmProvider {
 export interface LlmResponse {
   content: string;
   toolCalls?: ToolCall[];
-  /** M29:产出该响应的流式 attempt id(provider 内部重试后=base#n;非流式缺省)。
+ /** :产出该响应的流式 attempt id(provider 内部重试后=base#n;非流式缺省)。
    *  loop 写进 message.agent,冷恢复按 stream.attempt.discarded 的 attemptId 剔除被作废消息。 */
   attemptId?: string;
-  /** token 用量(step-031:provider 透传,缺省无);cachedTokens=提示缓存命中(step-048);
-   * cacheCreationTokens=提示缓存写入量(step-130 Anthropic cache_creation_input_tokens;仅 Anthropic
+ /** token 用量(provider 透传,缺省无);cachedTokens=提示缓存命中;
+ * cacheCreationTokens=提示缓存写入量( Anthropic cache_creation_input_tokens;仅 Anthropic
    * 原生口径下发)。当前消费方只有 cachedTokens(trace-stats tokens.cached/面板命中率);
    * cacheCreationTokens 为成本核算预留的 additive 面——面板/统计显式接入前不得据此做展示。 */
   usage?: { inputTokens: number; outputTokens: number; totalTokens?: number; cachedTokens?: number; cacheCreationTokens?: number };
-  /** 思考过程(step-046:OpenAI 兼容端点的 reasoning_content/reasoning 字段;缺省无)。
+ /** 思考过程(OpenAI 兼容端点的 reasoning_content/reasoning 字段;缺省无)。
    * journal 进 message.agent.payload.reasoning,面板渲染「思考 · Xs」折叠卡。 */
   reasoning?: string;
-  /** 结束原因(M28,2026-11-07):provider 归一后的同类语义。
+ /** 结束原因(:provider 归一后的同类语义。
    * "length"=输出被 max_tokens 截断 → loop 触发续写(见 OUTPUT_CONTINUATION_*);
    * 缺省=端点没报/适配器拿不到(不触发任何行为,与加本字段前逐字一致)。 */
   finishReason?: "stop" | "length" | "tool_calls" | "content_filter" | "other";
@@ -290,8 +290,7 @@ export interface LlmResponse {
   audio?: { mime: string; base64: string };
 }
 
-/** LLM 调用轨迹(step-132,2026-10-19 用户口径「每次 llm 调用的 message 和 output 都要记录方便 debug」;
- * 同日扩容「怎么送给 llm 服务的就怎么记录」):每 step 一次 chat 后的完整现场——
+/** LLM 调用轨迹( * 同日扩容「怎么送给 llm 服务的就怎么记录」):每 step 一次 chat 后的完整现场——
  * 请求 messages 全量+**工具完整规格(name/description/parameters schema)**+provider 参数面
  * (baseUrl/apiType/model/maxTokens/reasoningEffort/timeoutMs,复现 wire 请求的全部输入)+
  * 响应全文+耗时/TTFT。loop 只上报不落盘(落盘形态由装配方定);model 从 provider 对象尽力读取。 */
@@ -310,7 +309,7 @@ export interface LlmCallTrace {
   /** provider 参数面(describe() 尽力读;缺省=provider 未暴露)。 */
   provider?: Record<string, unknown>;
   response: LlmResponse;
-  /** 失败调用(err.message 摘要;成功缺省)。2026-10-20:失败也落轨迹,不再只留 finalText。 */
+ /** 失败调用(err.message 摘要;成功缺省)。:失败也落轨迹,不再只留 finalText。 */
   error?: string;
 }
 
@@ -323,14 +322,14 @@ export interface ToolSpec {
 
 /** 工具定义:schema + 执行体。 */
 export interface Tool extends ToolSpec {
-  /** 延迟加载(2026-10-22 用户口径「工具像 MCP 一样用时再选」):true=未激活前不进 wire 广告面
+ /** 延迟加载:true=未激活前不进 wire 广告面
    * (tools 参数不含它,省下 schema 常驻 token),但**执行面始终可用**——模型凭记忆直接调用照样
    * 执行并按成功调用自动激活(不硬失败)。激活通道:tool_view(name) 或首次直接调用自身。
    * 装配方(tool-view.attachToolView)按 wire 体量打标;缺省 undefined=老行为逐字节一致。 */
   deferred?: boolean;
-  /** 并发安全声明(designs/14 §1.3):true 才可与其他安全工具并行。 */
+ /** 并发安全声明( §1.3):true 才可与其他安全工具并行。 */
   isConcurrencySafe?(args: unknown): boolean;
-  /** 执行 deadline(2026-10-29 冻结治理):本工具单次 execute 的时限(ms)。
+ /** 执行 deadline(冻结治理):本工具单次 execute 的时限(ms)。
    *  缺省=AgentLoopOptions.toolTimeoutMs(装配层统一帽);**0=自管豁免**——工具自身已有
    *  完备超时/等待语义(terminal 的 waitReason=timeout、spawn_subagent 的 deadlineMin、
    *  ask_user 等人),loop 不再包帽。超时≠取消:底层 Promise 继续跑(文件系统停顿不可中断),
@@ -339,7 +338,7 @@ export interface Tool extends ToolSpec {
   /** 只读声明:true=该工具无副作用,权限闸门豁免(读类工具在全部权限模式下可用——
    * 只读调查不设闸;写类/执行类不声明此字段,照常过规则/ask 审批链)。 */
   isReadOnly?(args: unknown): boolean;
-  /** execute 上下文(step-093):loop 透传调用标识。可选第三参,既有实现(参数更少)不受影响。
+ /** execute 上下文:loop 透传调用标识。可选第三参,既有实现(参数更少)不受影响。
    * 用途=工具内部旁路事件(如 tool.tokens)回指 toolCallId,面板零猜测定向关联。 */
   execute(args: unknown, signal?: AbortSignal, ctx?: { callId: string }): Promise<string>;
 }
@@ -359,30 +358,30 @@ export interface AgentLoopOptions {
   tools?: Tool[];
   /** 单 turn 最大 step 数(防死循环)。 */
   maxSteps?: number;
-  /** 写前持久化屏障(M24):off=完全不调 journal.flushStrict(基础设施/测试逃生);hard(缺省)=
+ /** 写前持久化屏障:off=完全不调 journal.flushStrict(基础设施/测试逃生);hard(缺省)=
    *  工具执行/LLM 请求前 fail-closed。env GENIE_WRITE_BARRIER 优先于本字段;journal 无
    *  flushStrict(旧 MemoryJournal/测试假 journal)时自动 no-op。 */
   writeBarrier?: "off" | "hard";
-  /** 工具执行统一帽(2026-10-29 冻结治理,ms):Tool.timeoutMs 缺省时用它;0=关(不设帽)。
+ /** 工具执行统一帽(冻结治理,ms):Tool.timeoutMs 缺省时用它;0=关(不设帽)。
    *  装配层设 generous 值+对自管工具逐个 timeoutMs:0 豁免——防「单工具无限挂死拖住整个
-   *  agent」(WSL 9p 停顿实测:grep/read_file 同步读冻住事件循环,四个 loop 一起停摆)。 */
+ * agent」(WSL 9p 停顿经验证:grep/read_file 同步读冻住事件循环,四个 loop 一起停摆)。 */
   toolTimeoutMs?: number;
-  /** 压缩钩子(designs/14 §4.2/R5-C9 修复):每 step 前调用,超阈值由实现方触发 autoCompact。
+ /** 压缩钩子( §4.2/ 修复):每 step 前调用,超阈值由实现方触发 autoCompact。
    * 走注入而非直接 import,避免 loop↔auto-compact 循环依赖(auto-compact 引 deriveMessages)。 */
   compactHook?: (journal: Journal, sessionId: string) => Promise<void>;
-  /** microcompact 配置(step-140,对齐 ZCode 阈值触发):thresholdTokens > 0 时启用组清理
+ /** microcompact 配置(对齐 ZCode 阈值触发):thresholdTokens > 0 时启用组清理
    * (保留最近 keepRecent 组,其余清为可重读占位;minSavings 不足回滚);未传=只走超大结果
    * 占位(旧行为,零变化)。阈值由装配方用 autoCompact 阈值推导(buildDefaultMicrocompactThreshold)。
-   * cache-aware 批量/滞后策略(2026-11-06)默认开启(loop 每步传 policyState);
+ * cache-aware 批量/滞后策略默认开启(loop 每步传 policyState);
    * `cacheAware:false` = 恢复旧的每步增量清(仅用于对照实验)。 */
   microcompact?: MicrocompactConfig;
   /** 写时定形 spill(2026-11 token 优化轮 02,对齐 dsh spill-policy):配置后,工具结果**进历史
    * 之前**超阈即落盘并换成「头+标记+尾+落盘路径+回读指引」,之后永不改写——取代读时改写
-   * (microcompact 每步重写历史中段 → 提示前缀逐字变化 → prompt cache 全量失效,实测 uncached
+ * (microcompact 每步重写历史中段 → 提示前缀逐字变化 → prompt cache 全量失效,经验证 uncached
    * 单价是命中的 50 倍)。**可选**:不配置=行为逐字不变(既有构造点/测试零影响)。
    * dir=落盘根(装配方给 `<repo>/.genie/spill`);阈值缺省 8192/头 4096/尾 1024。 */
   spill?: { dir: string; thresholdChars?: number; headChars?: number; tailChars?: number };
-  /** 图片 offload(M58,对齐 #58):配置后,LLM 调用抛「图片预算/尺寸」类错误
+ /** 图片 offload(,对齐 #58):配置后,LLM 调用抛「图片预算/尺寸」类错误
    *  (isImageBudgetError)且本请求带图时,把 data URL 落盘到 `<root>/.genie/image-offload/…`
    *  并在正文追加 `[image offloaded: …]` 占位,再用新 messages **立即重试一次**(这次重试
    *  不占 provider 重试预算也不增加 visionRepairs 计数);仍失败则抛第二次错误并注明
@@ -397,19 +396,17 @@ export interface AgentLoopOptions {
       skipped: { messageIndex: number; imageIndex: number; reason: string }[];
     }>;
   };
-  /** 大结果「智能入上下文」闸门(step-1029,2026-11-06):工具结果进 journal 之前,超过**本步剩余预算**
+ /** 大结果「智能入上下文」闸门:工具结果进 journal 之前,超过**本步剩余预算**
    * 且 ≥ 绝对下限(4k tok)时,chunk 切分 + 本地 8105 选块(±小模型四段摘要),全文落盘
    * `.genie/tool-dumps/<callId>.txt`,上下文里只放「选块/摘要 + 全文已落盘指针」。
    * 与 `spill` 的关系:命中闸走闸门,未命中仍走 spill(二者互斥,绝不双写双定形)。
    * 不配置=行为逐字不变;`GENIE_BIG_RESULT=off` 由装配方折算成 `enabled:false`。 */
   bigIntake?: BigIntakeConfig;
-  /** 系统提示的**分块视图**(2026-10-29 token 轮 04):与 `system` 同一内容,只是保留了节边界。
-   *
+ /** 系统提示的**分块视图**( token 轮 04):与 `system` 同一内容,只是保留了节边界。
    *  为什么需要:system 变更时旧实现把整篇 26~28K 字符全量重发成一条 user 消息
-   *  (`[系统提示更新] …`),实测 855 次调用占全部未命中 token 的 **39.5%**(8.3M uncached,
+ * (`[系统提示更新] …`),经验证 855 次调用占全部未命中 token 的 **39.5%**(8.3M uncached,
    *  脚本 .genie/tmp/agent-eff/analyze15.py)。其中绝大多数变更只涉及一两节(AGENTS.md 摘要 /
    *  memory revision / 技能索引新增),其余节逐字节相同——重发它们纯属白烧。
-   *
    *  给了它之后:变更注入只带**与首版不同的节**(基线=本 loop 首次见到的 sections,跨 turn 保持),
    *  无节变化=零追加。不传(旧构造点/测试)=逐字节退回全文注入,行为不变。 */
   systemSections?: SystemSectionRef[];
@@ -418,7 +415,7 @@ export interface AgentLoopOptions {
   growthSpurtTokens?: number;
   /** 增长突增时保留最近 N 组工具结果(缺省 2;仅 growthSpurtTokens 生效时使用)。 */
   aggressiveKeepRecent?: number;
-  /** 每步新增预算比例(2026-11-06 用户口径 1~2%,缺省 1.5%):单个工具结果超过
+ /** 每步新增预算比例(2026-11-06 1~2%,缺省 1.5%):单个工具结果超过
    *  max(比例×上一步上下文, 下限) 即走写时 spill 落盘定形(留短 stub + 文件指针),
    *  **不是**先全量进上下文再靠 prune 减回去。仅在配置了 `spill` 时生效(否则无落盘点,行为不变)。 */
   growthBudgetRatio?: number;
@@ -426,19 +423,19 @@ export interface AgentLoopOptions {
   growthBudgetMinTokens?: number;
   /** 上下文模型评分(Phase 1/2):默认本地 150M Jev;shadow 只记录,active 参与剪枝。 */
   modelScoring?: ModelScoringConfig;
-  /** todo 提醒节奏(designs/25 ZCode todo reminder):每 N 步向对话注入一次未完成计划提醒(ephemeral 不落 journal);缺省 6,0=关闭。 */
+ /** todo 提醒节奏( ZCode todo reminder):每 N 步向对话注入一次未完成计划提醒(ephemeral 不落 journal);缺省 6,0=关闭。 */
   todoReminderSteps?: number;
-  /** step-137 上下文再锚定:每 N 步注入一次「P0 落目标清单+证据覆盖率」提醒(ephemeral 不落 journal)。
+ /** 上下文再锚定:每 N 步注入一次「P0 落目标清单+证据覆盖率」提醒(ephemeral 不落 journal)。
    * 文本由装配方注入(运行时层不认识白板存储,保持零依赖);返回 null/空=本步不注入。缺省 0=关闭。 */
   boardReminderSteps?: number;
   boardReminder?: () => string | null | Promise<string | null>;
-  /** 待决审批注入(2026-11-03 token 治理):每 step 组装消息时调用,返回非空=作为 ephemeral
+ /** 待决审批注入( token 治理):每 step 组装消息时调用,返回非空=作为 ephemeral
    * user 消息注入(不落 journal,与 todo/board 提醒同机制)。旧口径把审批块以 message.user
    * **永久落** journal,deriveMessages 无条件重放 → 已了结的审批块在 172 个请求里重复出现
    * (2.7M token/日,占注入总量 39.6%),还诱导模型对已结束的请求反复应答。改为 ephemeral 后:
    * 待决期间逐步可见(模型随时可应答),了结即消失。缺省 undefined=零注入,旧行为不触发。 */
   pendingQuestions?: () => string | null;
-  /** tips 即时信息增强(2026-10-21 用户口径「做哪类事之前再注入,不一股脑开工全塞」):
+ /** tips 即时信息增强:
    * 每 step 组装消息时调用,ctx 带上一步实际执行的工具名清单;返回非空=作为 ephemeral
    * user 消息注入(不落 journal,与 todo/board 提醒同机制)。触发条件/一次为限等策略
    * 全在装配方(运行时层不认识经验库/白板,保持零依赖);异常吞掉绝不打断主链。
@@ -446,7 +443,7 @@ export interface AgentLoopOptions {
    * 装配方据此在 compact 后清空「已注入」状态,允许重注入一次(tip 是 ephemeral,压缩后失忆)。
    * 返回值可为 {text,keys}:keys=本步注入的 tip 类别名(code-orient/history-align/dispatch/…),
    * 供 `tip.injected` 留痕事件分类展示;返回裸 string 等价 keys=[]。
-   * 注意:注入仍是 ephemeral——留痕事件只给面板看,deriveMessages 不读(2026-10-22 可见化)。 */
+ * 注意:注入仍是 ephemeral——留痕事件只给面板看,deriveMessages 不读(可见化)。 */
   tips?: (ctx: {
     step: number;
     lastStepTools: string[];
@@ -484,27 +481,27 @@ export interface AgentLoopOptions {
     taskId?: string; step: number; turn: number; phase?: string; subgoal: string;
     tokensSpent: number; errors: number; steps: number; tools: Record<string, number>;
   }) => void;
-  /** 流式回调(step-050):LLM 增量与工具起止的旁路通知;不落 journal(持久层语义不变)。 */
+ /** 流式回调:LLM 增量与工具起止的旁路通知;不落 journal(持久层语义不变)。 */
   onStream?: (e: AgentStreamEvent) => void;
-  /** LLM 调用轨迹回调(step-132):每 step chat 完成后上报 LlmCallTrace(全量 messages+响应);
+ /** LLM 调用轨迹回调:每 step chat 完成后上报 LlmCallTrace(全量 messages+响应);
    * 轨迹是旁路——回调内异常吞掉不碰主链;缺省不配置=零行为变化。 */
   llmTrace?: (info: LlmCallTrace) => void;
-  /** 时间盒收敛提醒(2026-10-19,子代理 deadline):epoch ms。剩余 ≤ deadlineWarnMs 时向本步
-   * 注入一次临时提醒(ephemeral 不落 journal),强制「先输出结论、别再检索」。实锤:子代理用满
+ /** 时间盒收敛提醒(子代理 deadline):epoch ms。剩余 ≤ deadlineWarnMs 时向本步
+ * 注入一次临时提醒(ephemeral 不落 journal),强制「先输出结论、别再检索」。注意:子代理用满
    * 时间盒、76 步、零文本产出,收割时只有「尚无模型文本输出」。 */
   deadlineAt?: number;
   /** 收敛提醒的提前量(ms,缺省 120000)。 */
   deadlineWarnMs?: number;
-  /** 权限闸门(step-033):规则在场时每个工具执行前三态判定;
+ /** 权限闸门:规则在场时每个工具执行前三态判定;
    * undefined=不设闸(行为与旧版一致)。ask 的应答由 askMode 决定(fail-closed 缺省)。 */
   permission?: {
     rules: import("@lampgenie/core").PermissionRule[];
     /** ask 命中的处置:缺省 deny(无人应答按拒绝,dsh fail-closed 纪律)。 */
     askMode?: "deny" | "allow";
-    /** ask 命中的审批回调(权限传递收口):提供时 ask 交其裁决(true=放行,拒绝/异常=按拒绝),
+ /** ask 命中的审批回调(权限传递):提供时 ask 交其裁决(true=放行,拒绝/异常=按拒绝),
      * askMode 不再兜底——主 loop 的面板审批链与子 loop 的父会话审批链都走这里。 */
     onAsk?: (call: ToolCall) => Promise<boolean>;
-    /** 重操作闸(step-071 父子 ask-answer):**只给子代理 loop 配**(主 loop 不配=父代理自身
+ /** 重操作闸(父子 ask-answer):**只给子代理 loop 配**(主 loop 不配=父代理自身
      * 同命令不受闸)。调用方是子代理且工具参数带 command 字符串、判重命中且未豁免时,
      * 绕过 allow 规则强制走 onHeavyAsk(build/install/全量测试类大资源操作必须先经父代理同意);
      * onHeavyAsk 缺省/拒绝/异常=按拒绝(fail-closed)。deny 规则仍是硬顶(本闸在后段规则求值之前,
@@ -519,7 +516,7 @@ export interface AgentLoopOptions {
       onHeavyAsk?: (call: ToolCall, match: import("@lampgenie/core").HeavyOpMatch) => Promise<boolean>;
     };
   };
-  /** waterfall 拦截链(step-008 二期收口,designs/14 §1.2 四拦截点;全部可选,缺省行为与旧版一致)。
+ /** waterfall 拦截链(二期, §1.2 四拦截点;全部可选,缺省行为与旧版一致)。
    * 契约:监听器显式调用 next() 才放行——不 next 即拦截(dsh 三域事件对齐)。 */
   waterfall?: {
     /** agent/pre-step:turn 输入进 journal 前调用;next() 放行(可带改写输入),不 next=拦截本轮。 */
@@ -538,7 +535,7 @@ export interface AgentLoopOptions {
 }
 
 /** 消息 tokens 快估。
- *  2026-11-03 token 轮:assistant 的 `toolCalls[].arguments` **计入**(同系数)——write_file 的整文件
+ * token 轮:assistant 的 `toolCalls[].arguments` **计入**(同系数)——write_file 的整文件
  *  正文全在 arguments 里,旧口径只累加 `content.length`,写文件型膨胀对增长突增/阈值判定完全隐形。
  *  2026-11 token 轮:token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio),
  *  本函数只做转调,不再自带字符系数。 */
@@ -546,12 +543,12 @@ export function estimateMessagesTokens(messages: readonly Message[]): number {
   return estimateMessagesTokensUnified(messages);
 }
 
-/** system 变更转追加的成本守卫系数(designs/token-opt-round3-p1 §4,U1=A,2026-10-28 code_review 修量纲)。
+/** system 变更转追加的成本守卫系数(designs/token-opt-round3-p1 §4,U1=A, code_review 修量纲)。
  *  量纲:**两侧都是 tokens**。左=历史 tokens(`estimateMessagesTokens`),右=一份 system 的 tokens
  *  (`ceil(system.length/4)`)× 本系数。
  *  依据:追加段每步随请求重发,保住的缓存前缀也每步受益,故两者同量纲、直接比较——只有
  *  「历史 tokens ≫ system tokens」时,保住前缀的收益才确定大于多付一份 system 的成本。
- *  系数取 2:产线 system 实测 20.8k~25k 字符(≈5.2k~6.3k tokens),门 ≈10.4k~12.6k tokens 历史;
+ * 系数取 2:生产环境 system 经验证 20.8k~25k 字符(≈5.2k~6.3k tokens),门 ≈10.4k~12.6k tokens 历史;
  *  低于此(典型:任务首轮/短历史)退回旧行为。取 2 而非 1 是给「每步重发 vs 缓存折价」留余量。 */
 const SYSTEM_UPDATE_GATE_RATIO = 2;
 
@@ -565,9 +562,8 @@ const SYSTEM_UPDATE_PREFIX = "[系统提示更新] 以下为本轮生效的系�
 const SYSTEM_SECTION_UPDATE_PREFIX =
   "[系统提示更新] 以下小节已变更,与此前冲突时以本条为准(未列出的小节保持原样):\n";
 
-/** 节片段渲染规则(标题去重,2026-10-30 修 f2)随 M125 迁到 system-context-generation.ts 的
+/** 节片段渲染规则(标题去重, 修 f2)随 迁到 system-context-generation.ts 的
  *  `renderSection`,与三态 reconcile 同源;loop 侧不再保留本地实现。
- *
  *  规则仍要记住:有些节的内容**自带 markdown 标题**——最典型的是 `dateBlock`,内容本身就是
  *  `\n\n## 当前日期\n2026-10-30(周五)`。固定拼 `## ${name}` 会产出双层标题:
  *  ```
@@ -595,9 +591,8 @@ export function headSystemSnapshotOf(journal: Journal, sessionId: string): strin
   return undefined;
 }
 
-/** 节内容指纹(节 diff 用)已随 M125 迁到 system-context-generation.ts 的 `sectionSha`,并在本文件
+/** 节内容指纹(节 diff 用)已随 迁到 system-context-generation.ts 的 `sectionSha`,并在本文件
  *  顶部 re-export(既有导入面不变)。
- *
  *  实现要点仍要记住:**不用 node:crypto** —— 只需「内容变没变」的等价判定,非加密用途;
  *  FNV-1a 32 位足够且零依赖(避免 runtime 为省 token 的旁路功能引入 crypto 依赖)。
  *  碰撞后果可控:撞了=该节变更没被下发,下一次内容变化仍会命中(不同内容几乎不可能持续同 hash)。
@@ -607,7 +602,6 @@ export function headSystemSnapshotOf(journal: Journal, sessionId: string): strin
 const SECTIONS_BASELINE_WHAT = "system.sections.baseline";
 
 /** 读该 session 的节基线(每节 sha)。无基线=undefined(首见)。
- *
  *  **只存 sha 不存正文**:基线正文与 node0 的 system.prompt 快照重复(那份已有全文),
  *  再存一份只会让 journal 变胖、且是该会话敏感内容的第二处暴露面。 */
 export function readSystemSectionsBaseline(journal: Journal, sessionId: string): Map<string, string> | undefined {
@@ -627,7 +621,6 @@ export function readSystemSectionsBaseline(journal: Journal, sessionId: string):
 }
 
 /** 落节基线(**只在没有基线时写一次**;幂等键按 session 固定,永不更新)。
- *
  *  为什么不更新:基线必须恒等于「node0 那一版」。[系统提示更新] 是 ephemeral(不落 journal),
  *  历史里永远没有它;若基线随变更推进,下一轮 diff 就变空 → 模型静默收不到变更。
  *  「基线不可变 + 每轮重算 diff」是唯一自洽的口径:每轮都在把「当前节 vs node0 节」的差重发一遍,
@@ -689,16 +682,13 @@ export function recordActivatedTools(journal: Journal, sessionId: string, names:
 const SYSTEM_DELTA_WHAT = "system.delta";
 
 /** 读该 session **最近一次已落账**的 delta 指纹与 seq(无=undefined)。
- *
- *  为什么 delta 必须落 journal(2026-11 token 轮 P2,产线实测 `web-1793352189337`):
+ * 为什么 delta 必须落 journal(2026-11 token 轮 P2,生产环境经验证 `web-1793352189337`):
  *  delta 曾是 ephemeral——只拼进本次请求、不落 journal,于是下次 deriveMessages 重建历史时
  *  它根本不存在 → 每步都得再 push 一遍,且位置在历史末尾之后=命中不了缓存,**每步全额 uncached**。
  *  该会话 930 次 LLM 调用里 delta 内容只变过 11 种(11 个 md5),却重发 930 次,
  *  单次 17,306 字符≈7,210 tok,累计≈5,831,843 tok,占每步 uncached 的 69~75%。
  *  落账后 delta 成为**持久历史**的一部分(deriveMessages 重放),内容不变即零重投。
- *
  *  只存 sha+seq 供判定;正文另存 payload.text(derive 需要全文重放)。
- *
  *  **一次倒扫拿齐两个判据**(热路径:每步都调,不能扫两遍):
  *  - `landed` = 最近一条 delta 的 sha 与 seq(无=undefined);
  *  - `hardCompactSeq` = 最近一次真压缩边界的 seq(无=0)。判据与 deriveMessages 逐字一致:
@@ -706,8 +696,7 @@ const SYSTEM_DELTA_WHAT = "system.delta";
  *    排除,这里也必须排除——否则每次无摘要占位都触发一次无谓重投)。
  *  两者齐备即提前收工(通常 1~3 个事件)。 */
 export function readSystemDeltaState(
-  journal: Journal, sessionId: string,
-): { landed?: { sha: string; seq: number }; hardCompactSeq: number } {
+  journal: Journal, sessionId: string): { landed?: { sha: string; seq: number }; hardCompactSeq: number } {
   const events = journal.readSession(sessionId);
   let landed: { sha: string; seq: number } | undefined;
   let hardCompactSeq = 0;
@@ -728,7 +717,6 @@ export function readSystemDeltaState(
 }
 
 /** 落一条 delta(全文 + 指纹)。
- *
  *  幂等键含「已落条数」而非仅 sha:同内容重复落账不新增(正常路径根本不会走到——内容没变
  *  调用方就不落),但**真压缩之后**必须允许同内容再落一条(压缩边界之前的旧事件被
  *  deriveMessages 的 out.length=0 抹掉,不重落=模型静默失忆)。 */
@@ -752,7 +740,7 @@ export function latestHardCompactSeq(journal: Journal, sessionId: string): numbe
   return readSystemDeltaState(journal, sessionId).hardCompactSeq;
 }
 
-/** todo 提醒文本(designs/25,ZCode todo reminder 语义):计划未完时生成 ephemeral 提醒;无待办=空。 */
+/** todo 提醒文本(ZCode todo reminder 语义):计划未完时生成 ephemeral 提醒;无待办=空。 */
 export function buildTodoReminder(journal: Journal, sessionId: string): string | null {
   const events = journal.readAll();
   let items: { content: string; status: string }[] | null = null;
@@ -773,12 +761,12 @@ export function buildTodoReminder(journal: Journal, sessionId: string): string |
 /** 从 journal 重建消息列表(deriveMessages)。 */
 export function deriveMessages(journal: Journal, sessionId: string): Message[] {
   const out: Message[] = [];
-  // 音频回放收敛(2026-10-21):journal 全量落音频,但 derive 只保留**最新一条**带音频的 user 消息——
+ // 音频回放收敛:journal 全量落音频,但 derive 只保留**最新一条**带音频的 user 消息——
   // 历史轮的音频降级为其文本占位(语音轮的占位即「(语音输入)」),防多轮后全量回放请求被 b64 撑爆。
   const audioIdx: number[] = [];
-  // 视觉回放收敛(2026-10-25 view_image;2026-11 token 轮 02 改为 turn 口径):
+ // 视觉回放收敛( view_image;2026-11 token 轮 02 改为 turn 口径):
   // journal 全量落 dataUrl,derive 只回收**上一 turn 及更早**的图——同 turn 内一律保留 dataUrl。
-  // 旧口径「只保留最新一张」会在同一 turn 内每新增一张图就重写历史中段(实测放大 132×),
+ // 旧口径「只保留最新一张」会在同一 turn 内每新增一张图就重写历史中段(经验证放大 132×),
   // 提示缓存整段失效。图→turn 归属按事件序推:落在哪个 `turn.start` 之后就属哪个 turn
   // (message.user / tool.result 的 payload 无 turn 字段,补字段会波及 journal schema 与老 journal 兼容)。
   const visionEntries: { idx: number; turn: number; step: number }[] = [];
@@ -790,7 +778,7 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
    *  currentTurn 恒 0 会让「turn >= lastTurn」恒真 → 一张图都不回收(静默退化成永不裁剪,
    *  迟早把请求顶到端点上限),见下方回收分支的旧口径兜底。 */
   let sawTurnBoundary = false;
-  // M29 冷恢复过滤:被 stream.attempt.discarded 作废的 attemptId 的 message.agent 不进上下文;
+ //  冷恢复过滤:被 stream.attempt.discarded 作废的 attemptId 的 message.agent 不进上下文;
   // 已提交的 tool.result 原样保留;无作废标记时 filterDiscarded 原样返回(未作废会话逐字节不变)。
   for (const e of filterDiscarded(journal.readAll())) {
     if (e.sessionId !== sessionId) continue;
@@ -830,9 +818,9 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
         });
         break;
       case "tool.result": {
-        // M115 循环护栏:模型可见文本优先取 payload.modelContent(结果去重 stub);journal 原文仍在 content。
+ // 循环护栏:模型可见文本优先取 payload.modelContent(结果去重 stub);journal 原文仍在 content。
         out.push({ role: "tool", toolCallId: String(p.toolCallId), content: String(p.modelContent ?? p.content ?? "") });
-        // 视觉桥(2026-10-25,对齐 ZCode tool-result-media-projection):view_image 落账的
+ // 视觉桥(对齐 ZCode tool-result-media-projection):view_image 落账的
         // payload.images 投影为后置 user 消息——OpenAI 系 tool content 不支持 image_url,
         // 图片必须走 user 消息多模态 content(工具结果自身保留确认文本)。
         const timgs = Array.isArray(p.images) ? (p.images as string[]) : undefined;
@@ -843,16 +831,16 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
         break;
       }
       case "message.system":
-        // step-048 审计修复③:会话中部的系统提醒以 user 角色注入(opencode synthetic user part 语义)——
+ // 审计修复③:会话中部的系统提醒以 user 角色注入(opencode synthetic user part 语义)——
         // OpenAI 兼容端点对中段 system 消息的容忍度不一,部分严格 chat template 会拒/降智。
         out.push({ role: "user", content: "[系统提醒] " + String(p.text ?? "") });
         break;
       case "compact.done":
-        // step-048:压缩边界=硬截断——边界前的全部消息丢弃,摘要经随后的 message.system 重注入。
+ // 压缩边界=硬截断——边界前的全部消息丢弃,摘要经随后的 message.system 重注入。
         // 此前不截断=压缩只是「加摘要不减上下文」(容量管理空转)。
-        // step-058:只认带摘要的真压缩边界——旧 microcompact 曾写无摘要的 compact.done(占位
+ // 只认带摘要的真压缩边界——旧 microcompact 曾写无摘要的 compact.done(占位
         // 机制遗留),被当成边界=恢复旧会话时上下文再次被清空。真压缩恒有摘要,以此区分。
-        // 2026-10-22 修「主动 /compact 感觉没运行」②:边界口径=**清空历史 + 重放 tail + 重注入摘要**。
+ // 修「主动 /compact 感觉没运行」②:边界口径=**清空历史 + 重放 tail + 重注入摘要**。
         // 旧实现只清空不重放:autoCompact 声称「最近 N 条原文保留」,但 tail 只活在 compact.done
         // 之前的旧事件里,被 out.length=0 一并抹掉 → 压缩后模型失忆(只剩一句摘要)。
         // 现在 payload.tail 携带可重建消息数组,清空后逐条回放;其后的 message.system 照旧重注入摘要。
@@ -882,8 +870,8 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
         }
         break;
       case "custom":
-        // [系统提示更新] 节增量的重放(token 轮 P2,2026-11-02):delta 从 ephemeral 改为持久历史。
-        // 见 readSystemDeltaLanded 注释:旧口径每步重发同一份 delta(产线单会话 930 次调用里内容
+ // [系统提示更新] 节增量的重放(token 轮 P2:delta 从 ephemeral 改为持久历史。
+ // 见 readSystemDeltaLanded 注释:旧口径每步重发同一份 delta(生产环境单会话 930 次调用里内容
         // 只变过 11 种),且位置在历史末尾之后 → 每步全额 uncached(占 uncached 69~75%)。
         // 现在落账一次、按 seq 原位重放一次,后续步骤零重投。
         if (p.what !== SYSTEM_DELTA_WHAT) break; // 其他 custom 事件(基线/激活集等)与上下文无关
@@ -898,22 +886,19 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
   // 超过上限的旧图——删 dataUrl、文本换占位(模型仍可再 view_image);保留下来的图 dataUrl 原样,
   // 这样同一 turn 内连续 view_image 时请求前缀逐字节稳定(旧口径每加一张图就重写历史中段,放大 132×)。
   const lastTurn = currentTurn;
-  /** 视觉 epoch 桶宽(2026-10-29 token 轮 04,实测归因最大项 48.5%)。
-   *
+ /** 视觉 epoch 桶宽(2026-10-29 token 轮 04,经验证归因最大项 48.5%)。
    *  病根(旧口径):回收按「同 turn 只留最新 2 张」——同一 turn 里每看第 3 张图,就把历史
-   *  中段的第 1 张改写成占位,请求前缀从该位置起逐字节不同 → 整条历史重新计费。实测 PPT 校对
+ * 中段的第 1 张改写成占位,请求前缀从该位置起逐字节不同 → 整条历史重新计费。经验证 PPT 校对
    *  会话(web-1793246472452)583 次调用里 **479 次**落入这一类,单次 21,368 uncached,
    *  合计 10.2M uncached = 全部未命中 token 的 48.5%(脚本 .genie/tmp/agent-eff/analyze15.py)。
-   *
    *  改法:回收粒度从「每张图」放宽到「每 VISION_EPOCH_STEPS 步 + 批量裁剪」——同 epoch 内新增
    *  图只追加、不改写历史;只有候选池超过 MAX_VISION_KEEP 时才一次裁到 MAX_VISION_KEEP_AFTER,
    *  即**每 5 张图才失效一次前缀**(旧口径每张一次)。一张图最长存活 2 个 epoch(≈40 步),容量有界。
-   *
    *  为什么用 step 而不是别的维度:step.start 已在 journal 里逐事件可见(loop runTurn 写
    *  payload.step),deriveMessages 本来就在全量扫事件流,加一个计数器零额外 IO。 */
   const VISION_EPOCH_STEPS = 20;
   /** 候选池上限:同 turn + 最近 2 个 epoch 内的图若不超过此数,全部保留(前缀绝对稳定)。
-   *  取 8 是容量/频次权衡:8 张图常驻约 12K token(单图 ~1.5K),而一次前缀失效实测代价
+ * 取 8 是容量/频次权衡:8 张图常驻约 12K token(单图 ~1.5K),而一次前缀失效经验证代价
    *  21,368 uncached token——宁可多常驻几张,也别反复改写历史。 */
   const MAX_VISION_KEEP = 8;
   /** 超过候选池上限时批量裁剪到的张数。一次删多张、只失效一次前缀;裁到 4 使下次裁剪间隔 ≈5 张
@@ -953,20 +938,17 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
 }
 
 /**
- * 工具配对自愈(2026-10-19 用户实报「失败一次就一直卡住一直失败」,实锤阿里云 400:
+ * 工具配对自愈(用户用户反馈「失败一次就一直卡住一直失败」,注意阿里云 400:
  * "An assistant message with 'tool_calls' must be followed by tool messages responding to
  * each 'tool_call_id'")。
- *
  * 协议硬约束:assistant(tool_calls) 之后必须紧跟其 id 对应的 tool 消息。但 journal 是
  * append-only 事件流——后台子代理完成通知(message.system)等事件可能在主 agent 等待
  * 工具结果期间插入,重放时正好夹在 assistant 与 tool 之间 → 每个后续 turn 首次调用即 400,
  * 坏历史被无限重放(会话永久卡死)。
- *
  * 自愈:①被夹在中间的 tool 结果前移到 assistant 紧随位置(结果间保持原序);
  * ②真缺失的结果补一条显式占位 tool 消息(标注「结果缺失」)——宁可多一条可见占位,
  * 也不让一条坏历史把整个会话永久锁死。
- *
- * 第 0 遍(2026-10-22 生产 400 实锤「insufficient tool messages following tool_calls」):
+ * 第 0 遍(生产 400 注意「insufficient tool messages following tool_calls」):
  * **重复 assistant 去重**——同 toolCallId 集(保首个,删后续重复副本)。来源=ProxyJournal
  * 回声双入(网关落账重赋 time,worker 回声去重键含 time → 永不命中 → 同一 message.agent
  * 在 worker 副本出现两次)。坏形态:[A, t1-3, A'](A'是回声副本)——第一遍会给 A' 补占位,
@@ -976,13 +958,11 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
  * 端点生成全局唯一,签名碰撞≈0;空 toolCalls 的 assistant 不入此遍)。
  */
 /**
- * 视觉尺寸 400 自愈(2026-11-05 事故:view_image 注入 10144x1146 PNG → provider 400
+ * 视觉尺寸 400 自愈(事故:view_image 注入 10144x1146 PNG → provider 400
  * `messages[55].image[1]: You have uploaded an unsupported image...`;坏 dataUrl 已进 journal,
  * deriveMessages 每轮重放 → 之后每次「继续」都撞同一 400,会话永久卡死)。
- *
  * 只处理**可判定**的错误:文本含 `unsupported image`。其它 400(参数/协议/tool-pairing)返回 null,
  * 调用方原样抛出——绝不能把无关错误当成图片问题吞掉。
- *
  * 下标映射(实现前已核对适配层):
  *  - openai-provider `toOpenAi` 是 `messages.map` 1:1,system 不剥离,user 的 image_url 下标 j
  *    就是该消息 images[j] → `messages[i]` 可直接定位,清该条全部图(不按 j 单张删:线上报错是
@@ -992,14 +972,12 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
  * 故策略:首次尝试用下标(当且仅当该消息确实带图);拿不到/不匹配则退化为「清空本次请求里
  * 全部带图消息」。第二次(attempt=1)无论下标如何都直接横扫 → 修完请求里 images 总数为 0,
  * 若仍报同类 400 即抛原错(调方重试上限 2 次,收敛有保证)。
- *
  * 就地改 messages(该数组每步由 deriveMessages 重建,不跨步复用);返回 null = 无可修内容。
  */
 export function repairUnsupportedImage(
   err: unknown,
   messages: Message[],
-  attempt = 0,
-): { removed: number; at: number | null } | null {
+  attempt = 0): { removed: number; at: number | null } | null {
   const text = err instanceof Error ? err.message : String(err ?? "");
   if (!/unsupported image/i.test(text)) return null;
   const m = /messages\[(\d+)\]\.image\[/.exec(text);
@@ -1028,7 +1006,7 @@ export function repairUnsupportedImage(
 }
 
 /**
- * 二次失败包装(M58):第一次的图片预算错误在 offload 后仍复现时,给错误追加一句「图片已 offload,
+ * 二次失败包装:第一次的图片预算错误在 offload 后仍复现时,给错误追加一句「图片已 offload,
  * 仍失败」——让调用方/面板知道已经换了无图请求,不再重复消耗 provider 重试预算。
  * 未做过 offload 时**逐字返回原错误**(非图片错误行为零变化)。
  */
@@ -1042,7 +1020,7 @@ function withOffloadNote(err: unknown, applied: boolean): unknown {
 }
 
 /**
- * 请求里是否真的带图(M58 触发面判定):只有 user 消息(普通用户输入 + view_image 的
+ * 请求里是否真的带图(触发面判定):只有 user 消息(普通用户输入 + view_image 的
  * [视觉注入] 投影)带 images。无图时图片预算错误**不做** offload/重试,直接抛原错。
  */
 export function hasUserImages(messages: readonly Message[]): boolean {
@@ -1094,12 +1072,12 @@ export function repairToolPairing(messages: Message[]): Message[] {
     out.splice(0, out.length, ...rest);
     i = ai + block.length;
   }
-  // 第二遍(2026-10-21 实锤 LLM 400「role:'tool' must be a response to a preceding message
+ // 第二遍(注意 LLM 400「role:'tool' must be a response to a preceding message
   // with 'tool_calls'」):孤儿 tool 消息——其 toolCallId 不被「最近的在前 assistant」认领。
   // 历史丢事件(网关双写/重启去重)会留下这种形态:assistant 消息没了,只剩 tool 结果。
   // 孤儿结果没有对应调用,丢弃无损;留着必然 400 且坏历史被无限重放。
-  // 第三遍(2026-10-22 实锤同族 400):**重复 toolCallId**——同一 id 出现多条 tool 消息
-  // (journal 重放跨重启边界双写/tool.result 重复追加;llm-trace 实测每次 1-2 条 dup)。
+ // 第三遍(注意同族 400):**重复 toolCallId**——同一 id 出现多条 tool 消息
+ // (journal 重放跨重启边界双写/tool.result 重复追加;llm-trace 经验证每次 1-2 条 dup)。
   // 严格端点(DeepSeek/OpenAI strict)对重复 tool 响应报同一句「must be a response to a
   // preceding message」;保首条(原结果)丢后续重复,信息无损。
   const cleaned: Message[] = [];
@@ -1145,9 +1123,9 @@ export class AgentLoop {
   private opts: AgentLoopOptions;
   private tools: Map<string, Tool>;
   private aborted = false;
-  /** M34:本 turn 的取消是否来自用户停止(cancel 记账;runTurn 每轮重置)。 */
+ /** :本 turn 的取消是否来自用户停止(cancel 记账;runTurn 每轮重置)。 */
   private userStopped = false;
-  /** 取消信号链(step-008 二期收口,designs/14 §1.4):cancel() abort 当前 turn 的
+ /** 取消信号链(二期, §1.4):cancel abort 当前 turn 的
    * LLM 请求与工具执行;未派发的工具调用补写 ABORTED_BEFORE_DISPATCH 保证配对。 */
   private ac: AbortController | null = null;
   /** 时间盒收敛提醒只注入一次。 */
@@ -1174,7 +1152,7 @@ export class AgentLoop {
   private trajSteps = 0;
   private trajRetries = 0;
   /** 上次落卡的 step(初值 0:step 从 1 起算,「每 N 步」落在第 N/2N… 步,不是 N-1 步——
-   *  初值 -1 会让首条落卡提前一步(实测 step 4 而非 5,J1 复验收口)。step 0 另有 step<=0 早退。 */
+ * 初值 -1 会让首条落卡提前一步(经验证 step 4 而非 5,J1 复验)。step 0 另有 step<=0 早退。 */
   private trajLast = 0;
   private trajLastPhase: string | undefined;
   private trajEmitted = 0;
@@ -1184,12 +1162,12 @@ export class AgentLoop {
    *  仅作归属标注用途:循环是串行推进的(同一步内的并发安全批共享同一 turn/step)。 */
   private curTurn = 0;
   private curStep = 0;
-  /** 同参重复检测(2026-10-29 board_read 无限循环事故):上一步的调用签名与连击数。 */
+ /** 同参重复检测( board_read 无限循环事故):上一步的调用签名与连击数。 */
   private lastStepCallSig = "";
   private stepCallStreak = 0;
-  /** M115 工具循环护栏:随 turn 生灭(runTurn 开头 new 一个),跨 turn 不累积。 */
+ /** 工具循环护栏:随 turn 生灭(runTurn 开头 new 一个),跨 turn 不累积。 */
   private toolGuard: ToolLoopGuard | undefined;
-  /** 已读清单上次注入签名(2026-10-24 变化触发;剥离相对时间后的清单文本)。 */
+ /** 已读清单上次注入签名(变化触发;剥离相对时间后的清单文本)。 */
   private lastReadReminderSig?: string;
   /** 上次见到的 compact.done 计数(读清单的失忆自愈锚:压缩后 ephemeral 消失须重注一次)。 */
   private lastReminderCompacts = 0;
@@ -1200,7 +1178,7 @@ export class AgentLoop {
   private lastContextManifestSig?: string;
   /** context.prune 上次留痕签名(pruned 集合变化才落 journal,避免每步刷事件)。 */
   private lastPruneLogSig?: string;
-  /** cache-aware 前缀稳定策略状态(2026-11-06 v2):clock 每步 +1;
+ /** cache-aware 前缀稳定策略状态( v2):clock 每步 +1;
    *  其余字段首次使用时从 journal 末条 context.prune 播种(跨 loop 实例延续——gateway 每 turn 新建 loop)。 */
   private pruneClock = 0;
   /** 冻结区条数 + 边界 toolCallId(前缀稳定器:只有重置才前移)。 */
@@ -1209,19 +1187,19 @@ export class AgentLoop {
   /** 上次重置的 clock / 上下文估算(冷却判定基线)。 */
   private lastResetClock?: number;
   private lastResetTokens?: number;
-  /** M29:流式 attemptId 计数器(sessionId:turn:step:n)。message.agent 与作废留痕共用同一 id。 */
+ /** :流式 attemptId 计数器(sessionId:turn:step:n)。message.agent 与作废留痕共用同一 id。 */
   private attemptSeq = 0;
-  /** 本 turn 已重置次数(turn 首步归零,用户口径同 turn ≤1)。 */
+ /** 本 turn 已重置次数(turn 首步归零,同 turn ≤1)。 */
   private resetsThisTurn = 0;
   private pruneStateSeeded = false;
   /** 上一步请求的上下文估算 tokens(算每步 growth% 供事件与看板)。 */
   private lastRequestContextTokens?: number;
   /** 本步任务目标(goalFromMessages 口径;大结果闸门判 chunk 相关性用)。 */
   private stepGoal = "";
-  /** 已激活的延迟工具(2026-10-22):deferred 工具被 tool_view 查看或被直接调用后进广告面。
+ /** 已激活的延迟工具:deferred 工具被 tool_view 查看或被直接调用后进广告面。
    * 会话级(跨 turn 保留)——用过一次的工具后续每步都广告,不再反复激活。
    * **跨 loop 实例也保留**(token 轮 P1-2):gateway 每 turn 新建 AgentLoop,只用实例字段会每 turn
-   * 重演「27 → 29 → 27」的 schema 翻转(实测 15 个 run 里 10 次 run-start 翻转=1.47M uncached)。
+ * 重演「27 → 29 → 27」的 schema 翻转(经验证 15 个 run 里 10 次 run-start 翻转=1.47M uncached)。
    * 现落 journal custom 事件持久化(见 readActivatedTools / recordActivatedTools),首次需要时读回 merge。 */
   private activatedTools = new Set<string>();
   /** 本 loop 是否已从 journal 读过激活集(只读一次;之后靠本实例累积增量)。 */
@@ -1246,13 +1224,13 @@ export class AgentLoop {
   /** 本轮最终响应自带的模型音频(realtime-plus text+audio 直出;runTurn 开头清零,最终响应覆盖)。
    * 装配方按轮读取(companion 广播 audioB64)——不上 journal(b64 不落事件流),轨迹侧同剥离。 */
   lastAudio: LlmResponse["audio"] = undefined;
-  /** 评分节拍计数器(2026-11-05):跨 turn 累加,**构造归零、runTurn 不清**。
-   *  旧实现按 `step % scoreEverySteps` 判定,而 step 每 turn 从 0 重数 → 实测今日 108 次评分
+ /** 评分节拍计数器:跨 turn 累加,**构造归零、runTurn 不清**。
+ * 旧实现按 `step % scoreEverySteps` 判定,而 step 每 turn 从 0 重数 → 经验证今日 108 次评分
    *  有 78 次落在 step 0,scoreEverySteps 实际退化成「每 turn 首步各评一次」。 */
   private scoringTick = 0;
-  /** 写前屏障(M24)上次成功 flush 时的 journal 水位:同 step 内无新 append → 不重复落盘。 */
+ /** 写前屏障上次成功 flush 时的 journal 水位:同 step 内无新 append → 不重复落盘。 */
   private lastFlushedSeq = -1;
-  /** 本 turn 屏障失败原因(非 null = 本轮已中止:后续工具不再执行,step/turn 以 write-barrier 收口)。 */
+ /** 本 turn 屏障失败原因(非 null = 本轮已中止:后续工具不再执行,step/turn 以 write-barrier)。 */
   private writeBarrierFailed: string | null = null;
 
   constructor(opts: AgentLoopOptions) {
@@ -1260,7 +1238,7 @@ export class AgentLoop {
     this.tools = new Map((opts.tools ?? []).map((t) => [t.name, t]));
   }
 
-  /** 写前屏障模式(M24):env GENIE_WRITE_BARRIER > opts.writeBarrier > "hard"。
+ /** 写前屏障模式:env GENIE_WRITE_BARRIER > opts.writeBarrier > "hard"。
    *  off=完全不调(基础设施/测试逃生);hard=fail-closed。 */
   private writeBarrierMode(): "off" | "hard" {
     const env = String(process.env["GENIE_WRITE_BARRIER"] ?? "").trim().toLowerCase();
@@ -1269,7 +1247,7 @@ export class AgentLoop {
     return this.opts.writeBarrier === "off" ? "off" : "hard";
   }
 
-  /** 写前持久化屏障(M24,fail-closed):副作用(工具执行/LLM 请求)前先把已记录事件落盘。
+ /** 写前持久化屏障(,fail-closed):副作用(工具执行/LLM 请求)前先把已记录事件落盘。
    *  - journal 无 flushStrict(旧 MemoryJournal/测试假 journal)→ no-op(零回归);
    *  - 同 step 内 journal.length 未变(上次 flush 后无新 append)→ 跳过;
    *  - flush 前后都查取消信号:已取消返回 cancelled(不执行副作用);
@@ -1281,7 +1259,7 @@ export class AgentLoop {
     if (signal?.aborted) return { ok: false, cancelled: true };
     if (journal.length === this.lastFlushedSeq) return { ok: true };
     try {
-      // M24 生产态(2026-11-07):worker 侧 ProxyJournal 的 flushStrict 是 async(RPC ack 才返回),
+ //  生产态:worker 侧 ProxyJournal 的 flushStrict 是 async(RPC ack 才返回),
       // await 让 Promise reject 与同步 throw 走同一条错误路径(失败=阻止副作用 + 固定错误框)。
       await journal.flushStrict.call(journal);
     } catch (err) {
@@ -1299,7 +1277,7 @@ export class AgentLoop {
 
   cancel(reason = "user-cancel"): void {
     this.aborted = true;
-    // M34:用户停止记账(与 signal.reason 双通道——工具没拿 signal 时靠这里判文案)。
+ // :用户停止记账(与 signal.reason 双通道——工具没拿 signal 时靠这里判文案)。
     if (isUserStopReason(reason)) this.userStopped = true;
     this.ac?.abort(new Error(`cancelled:${reason}`));
   }
@@ -1309,12 +1287,12 @@ export class AgentLoop {
     return this.userStopped || isUserStopAbort(signal);
   }
 
-  /** 取消时的工具 modelContent(M34):用户停止=固定文案;其它取消=旧 [aborted] 语义。 */
+ /** 取消时的工具 modelContent():用户停止=固定文案;其它取消=旧 [aborted] 语义。 */
   private cancelledToolText(signal?: AbortSignal): string {
     return this.userStopCancelled(signal) ? USER_STOPPED_TOOL_TEXT : ABORTED_TOOL_TEXT;
   }
 
-  /** 每步新增预算(tokens):用户口径 ≤1~2%,缺省 1.5%,下限 1.5k(小上下文按比例算会误伤早期步)。 */
+ /** 每步新增预算(tokens):≤1~2%,缺省 1.5%,下限 1.5k(小上下文按比例算会误伤早期步)。 */
   private growthBudgetTokens(): number {
     const base = this.lastRequestContextTokens ?? this.lastContextTokens ?? 0;
     const floor = this.opts.growthBudgetMinTokens ?? GROWTH_BUDGET_MIN_TOKENS;
@@ -1322,7 +1300,7 @@ export class AgentLoop {
     return Math.max(floor, Math.floor(base * (this.opts.growthBudgetRatio ?? GROWTH_BUDGET_RATIO)));
   }
 
-  /** cache-aware 策略状态播种(v2,2026-11-06):从 journal 末条 context.prune 读回
+ /** cache-aware 策略状态播种(v2:从 journal 末条 context.prune 读回
    *  clock / 冻结区 / 锚点 / 冷却基线 —— gateway 每 turn 新建 AgentLoop,不播种就会「每 turn 首步
    *  都当成未压过」而反复重置前缀(与本改动要治的病同族)。 */
   private seedPruneState(journal: Journal, sessionId: string): void {
@@ -1361,25 +1339,20 @@ export class AgentLoop {
     return snap;
   }
 
-  /** 节级增量(system 提示更新用,token 轮 04;M125 起三态判定走 system-context-generation)。
-   *
+ /** 节级增量(system 提示更新用,token 轮 04;三态判定走 system-context-generation)。
    *  返回 undefined = 调用方没给 systemSections(旧构造点/测试)→ 调用方走全文注入,逐字节不变。
    *  返回 string = 变更节的**单块**文本(按 key 字典序合成);空串 = **无节变化 → 零追加**。
-   *
-   *  **基线不可变**(2026-10-29 关键修正,别改成「随变更推进」):`[系统提示更新]` 消息是
+ * **基线不可变**(关键修正,别改成「随变更推进」):`[系统提示更新]` 消息是
    *  ephemeral 的——只拼进本次请求,不落 journal,故下一 turn 的历史里没有它。这意味着
    *  ① diff 必须每轮重算;
    *  ② 基线必须是「node0 那一版」而不是「上一轮那版」——若基线随变更推进,第二轮 diff 就变空、
    *    零追加,模型从此再也看不到变更(静默失忆,比多花 token 严重得多)。
-   *
    *  **基线必须持久化到 journal**:gateway 是「每任务新建一个 AgentLoop」,实例字段会在每个新任务
    *  被重置 → 每次都当作首见 → 永远全文注入,改动等于没做。故基线落一条 `custom` 事件
    *  (payload.what="system.sections.baseline",只存每节 sha,幂等键按 session 固定),
    *  首次写入后**永不更新**;loop 内加一层内存缓存(避免每步扫 session 事件)。
-   *
    *  首见(无基线)= node0 就是当前 system → 零追加并落基线,不白付全文。
-   *
-   *  **removal 三态(M125)**:判定交给 `reconcileSystemContext`——ok 且 sha 相同=unchanged,
+ * **removal 三态**:判定交给 `reconcileSystemContext`——ok 且 sha 相同=unchanged,
    *  ok 且不同=update,unavailable=保留旧值(**绝不**当删除),absent=明确消失才删。loop 侧
    *  只负责把「装配方给的 sections」翻译成源:当前清单里的一律 `ok`,`基线里有、当前清单没有`的
    *  显式给 `absent`(sections 是**全量**清单,缺席=今天这一版确实没有它,不是「读不到」)。
@@ -1387,8 +1360,7 @@ export class AgentLoop {
   private async systemSectionDelta(
     journal: Journal,
     sessionId: string,
-    node0IsStale: boolean,
-  ): Promise<string | undefined> {
+    node0IsStale: boolean): Promise<string | undefined> {
     const sections = this.opts.systemSections;
     if (!sections || sections.length === 0) return undefined;
     let base = this.sectionBaselineCache;
@@ -1413,7 +1385,7 @@ export class AgentLoop {
       codec: TEXT_CODEC,
       load: async () => ({ status: "ok" as const, value: s.content }),
     }));
-    // 消失的节必须**显式**告诉模型「这节没了」(2026-10-29):条件块(/goal 清空、plan 模式退出、
+ // 消失的节必须**显式**告诉模型「这节没了」:条件块(/goal 清空、plan 模式退出、
     // workspace 切回)消失时,若只发「未列出的小节保持原样」,模型会继续按已失效的旧目标/旧模式
     // 行事——省 token 不能以行为退化为代价。移除通知只有一行,成本可忽略。
     // 三态口径:这里给的是 **absent**(明确不在今天这一版),不是 unavailable(暂时读不到)。
@@ -1427,14 +1399,13 @@ export class AgentLoop {
   }
 
   /** Phase 1 shadow / Phase 2 active 共用的模型评分调用;失败只留痕,不抛。
-   *  2026-11-05 优化:候选过小(数<3 或总 chars<20k)不发 HTTP 但仍落一条事件;同候选集内容键
+ * 优化:候选过小(数<3 或总 chars<20k)不发 HTTP 但仍落一条事件;同候选集内容键
    *  命中缓存则复用上次 decisions(cacheHit/durationMs=0);error 一律不写缓存、保持确定性剪枝。 */
   private async runModelScoring(
     derived: Message[],
     step: number,
     sessionId: string,
-    journal: Journal,
-  ): Promise<ModelDecisionSets | undefined> {
+    journal: Journal): Promise<ModelDecisionSets | undefined> {
     const config = this.opts.modelScoring;
     if (!config) return undefined;
     const resolved = resolveModelScoringConfig(config);
@@ -1451,7 +1422,7 @@ export class AgentLoop {
           sessionId,
         });
     // active 才产出决策集;为避免「评分跑过但没生效」无从查询,把生效集合大小直接落账
-    // (2026-11-04 审计:T-E 36h 1271 次评分、零 keep/drop,只能靠复算才看出来)。
+ // (审计:T-E 36h 1271 次评分、零 keep/drop,只能靠复算才看出来)。
     const sets = !result || result.error || resolved.mode !== "active"
       ? undefined
       : buildModelDecisionSets(result.decisions, resolved.minConfidence);
@@ -1572,7 +1543,7 @@ export class AgentLoop {
     const { journal, sessionId } = this.opts;
     // 每次 runTurn 重置取消态:上一个 turn 的 cancel 不影响新 turn(gateway 每任务新建 loop,双保险)。
     this.aborted = false;
-    this.userStopped = false; // M34:用户停止记账按 turn 重置
+    this.userStopped = false; // 用户停止记账按 turn 重置
     this.lastStepTools = [];
     this.lastStepError = false;
     // J1 每轮重置:token 计时/错误计数/本步文件/轨迹统计归零,注入闸水位随 tokensSpent 归零重来
@@ -1599,7 +1570,7 @@ export class AgentLoop {
     this.advertisedThisTurn = undefined;
     const ac = new AbortController();
     this.ac = ac;
-    // waterfall agent/pre-step(designs/14 §1.2):输入进 journal 前的改写/拦截点。
+ // waterfall agent/pre-step( §1.2):输入进 journal 前的改写/拦截点。
     let input: { userText: string; images?: string[]; audio?: AudioInput } = { userText, images, ...(audio ? { audio } : {}) };
     if (this.opts.waterfall?.preStep) {
       let ran = false;
@@ -1619,9 +1590,9 @@ export class AgentLoop {
       }
       input = nextInput;
     }
-    // turn 边界(step-031,dsh turn/start 对应物;reason 落 turn.end)
+ // turn 边界(dsh turn/start 对应物;reason 落 turn.end)
     const turn = ++AgentLoop.turnCounter;
-    // M81 阶段遥测(turn 级,只观测零决策变更):clock/recorder/turnT0 + 汇总累加槽。
+ //  阶段遥测(turn 级,只观测零决策变更):clock/recorder/turnT0 + 汇总累加槽。
     // 每 turn 至多一条 telemetry.phase,任何异常静默(旁路不得打断主链)。
     const phaseClock = createTelemetryClock();
     const phaseRecorder = new PhaseRecorder(phaseClock);
@@ -1629,14 +1600,14 @@ export class AgentLoop {
     const phaseState = { emitted: false };
     let turnUsage: LlmResponse["usage"];
     let turnTtftMs: number | undefined;
-    // M115 循环护栏状态随 turn 重置(跨 turn 不累积:上一轮的连击/配额不带进新任务)。
+ // 循环护栏状态随 turn 重置(跨 turn 不累积:上一轮的连击/配额不带进新任务)。
     this.toolGuard = new ToolLoopGuard(turn);
     journal.append({ kind: "turn.start", sessionId, payload: { turn } });
     journal.append({ kind: "message.user", sessionId, payload: {
       text: input.userText,
       // txa3:归属轮次(用户消息不属于某 step,故只带 turn)。
       turn,
-      // step-052:显示与模型分账——displayText=用户原始输入(面板展示);text=注入块合流后的任务书(喂模型)。
+ // 显示与模型分账——displayText=用户原始输入(面板展示);text=注入块合流后的任务书(喂模型)。
       ...(meta?.displayText ? { display: meta.displayText } : {}),
       ...(meta?.attachments?.length ? { attachments: meta.attachments } : {}),
       ...(input.images?.length ? { images: input.images } : {}),
@@ -1646,7 +1617,7 @@ export class AgentLoop {
     const maxSteps = this.opts.maxSteps ?? 10;
     let finalText = "";
     let turnReason: "completed" | "max-steps" | "aborted" | "cancelled" | "stopped" = "completed";
-    // 空响应防抖(2026-10-30 MB 会话实锤):上游可 200-正常返回「零内容+零工具」(实测 603s 挂流
+ // 空响应防抖( MB 会话注意):上游可 200-正常返回「零内容+零工具」(经验证 603s 挂流
     // 0 output token 后 resolve)——空终态几乎总是传输/上游抖动而非模型决策,重试一次再接受。
     let emptyTurnRetried = false;
 
@@ -1657,22 +1628,21 @@ export class AgentLoop {
       this.curStep = step;
       journal.append({ kind: "step.start", sessionId, payload: { turn, step } });
       try {
-        // microcompact 不再落 journal compact.* 事件(step-058):占位替换只在本步组装消息时
+ // microcompact 不再落 journal compact.* 事件:占位替换只在本步组装消息时
         // 经 microcompactMessages 读取侧生效;此前每条工具结果写一对无摘要 compact.* 事件,
         // 被 deriveMessages 当真压缩边界硬截断(模型失忆)+面板渲染「上下文已压缩」+闸门清零。
         if (this.opts.compactHook) await this.opts.compactHook(journal, sessionId);
         const derived = deriveMessages(journal, sessionId);
-        // 大结果闸门(step-1029):chunk 相关性判断需要一个「当前任务目标」,与 model-scoring 同口径
+ // 大结果闸门:chunk 相关性判断需要一个「当前任务目标」,与 model-scoring 同口径
         // (去掉纪律卡、跳过 [系统提醒]);每步刷新,execOne 里直接用。
         this.stepGoal = goalFromMessages(derived);
-        // 增长突增:上一请求实测 tokens 与本次组装前估算的差 ≥ 阈值 → 本步用激进组清理。
+ // 增长突增:上一请求经验证 tokens 与本次组装前估算的差 ≥ 阈值 → 本步用激进组清理。
         // 这是「膨胀速度」维度;常规阈值组清理只在总量到线时触发,感知不到单步灌入一大坨。
         const rawContextTokens = estimateMessagesTokens(derived);
         const growthSpurt = shouldAggressivePrune(
           rawContextTokens,
           this.lastContextTokens,
-          this.opts.growthSpurtTokens,
-        );
+          this.opts.growthSpurtTokens);
         if (growthSpurt) {
           try {
             journal.append({
@@ -1704,7 +1674,7 @@ export class AgentLoop {
               keepRecent: this.opts.aggressiveKeepRecent ?? 2,
             }
           : (this.opts.microcompact ?? {});
-        // cache-aware 前缀稳定策略(2026-11-06 v2):clock 每步 +1;turn 首步归零本 turn 重置计数。
+ // cache-aware 前缀稳定策略( v2):clock 每步 +1;turn 首步归零本 turn 重置计数。
         this.pruneClock += 1;
         if (!this.pruneStateSeeded) {
           this.pruneStateSeeded = true;
@@ -1738,7 +1708,7 @@ export class AgentLoop {
           this.frozenCount = compacted.frozenCount;
         }
         if (compacted.anchor !== undefined) this.pruneAnchor = compacted.anchor;
-        // 每步新增量(用户口径 ≤1~2%):以上一步请求估算为基线;first step 无基线不上报。
+ // 每步新增量(≤1~2%):以上一步请求估算为基线;first step 无基线不上报。
         const growthTokens = this.lastRequestContextTokens !== undefined
           ? Math.max(0, rawContextTokens - this.lastRequestContextTokens)
           : undefined;
@@ -1748,14 +1718,14 @@ export class AgentLoop {
           : undefined;
         // system 提示词 in-history(token 轮 P1,designs/token-opt-round3-p1 §3):
         // 改前每步用当轮 system **原地重写** node0 → system 一变(任务类别切换/AGENTS.md 摘要刷新/
-        // 技能索引新增/memory revision/计划文件注入,同 session 实测 2~4 个版本)整段前缀缓存从
+ // 技能索引新增/memory revision/计划文件注入,同 session 经验证 2~4 个版本)整段前缀缓存从
         // token 0 失效(样本 run 首调用 19 次 = 1.08M uncached,占 uncached 15.2%,每次放大 53.7×)。
         // 改后:node0 = 该 session 首条 system.prompt 快照(冻结,永不重写);system 变更改为在历史
         // 之后追加一条 user 消息(对齐 deepseek-harness systemPromptUpdate:'in-history'),缓存
         // 前缀继续命中。快照缺席(旧 journal / 测试直接构造 loop)→ fallback=当轮 system,逐字同旧行为。
         const headSystem = this.headSystemFor(journal, sessionId);
         // 成本守卫(见 SYSTEM_UPDATE_GATE_RATIO 注释:两侧同量纲=tokens)。
-        // **决策按 turn 冻结**(2026-10-28 code_review 修):历史上限随 step 增长,若每步重算,
+ // **决策按 turn 冻结**( code_review 修):历史上限随 step 增长,若每步重算,
         // 长 turn 中途会越过门 → node0 突然从「当轮 system」切成「冻结 headSystem」并开始追加,
         // 同一 turn 内 node0 身份翻转=又打碎一次前缀(正是本改动要消除的病)。故首步定案后本 turn 复用。
         if (this.systemDecision === undefined) {
@@ -1773,9 +1743,8 @@ export class AgentLoop {
         // 同 turn 内 this.opts.system 固定 → 内容逐字节相同,天然恒 1 条(不是累积 push)。
         // 位置=紧随历史(此后各类 ephemeral 提醒才 push):更新即「历史之后的第一条」,语义上
         // 与 deriveMessages 的 [系统提醒] 中段注入同族;不同步写进 journal,故不参与下次 derive。
-        //
-        // 增量口径(2026-10-29 token 轮 04):有 sections 时只注入**与首版基线不同的节**——
-        // 旧口径整篇 26~28K 字符重发,实测占全部未命中 token 的 39.5%(8.3M uncached);
+ // 增量口径( token 轮 04):有 sections 时只注入**与首版基线不同的节**——
+ // 旧口径整篇 26~28K 字符重发,经验证占全部未命中 token 的 39.5%(8.3M uncached);
         // 而绝大多数变更只涉及一两节(agents-md 摘要 / memory revision / skill-index 新增)。
         // 无节变化=零追加(比追加空壳更省,且不破坏前缀)。无 sections(旧构造点/测试)=全文,逐字节不变。
         if (appendSystemUpdate) {
@@ -1786,17 +1755,15 @@ export class AgentLoop {
             // 旧构造点(无 systemSections):全文注入逐字不变,仍为 ephemeral(不落 journal)。
             messages.push({ role: "user", content: SYSTEM_UPDATE_PREFIX + this.opts.system });
           } else if (delta.length > 0) {
-            // 持久化 + 去重(token 轮 P2,2026-11-02):节增量落 journal 成为持久历史,
-            // 内容(指纹)没变就不再重投——见 readSystemDeltaLanded 的生产实测注释。
-            //
+ // 持久化 + 去重(token 轮 P2:节增量落 journal 成为持久历史,
+ // 内容(指纹)没变就不再重投——见 readSystemDeltaLanded 的生产经验证注释。
             // **无二次注入**:deriveMessages 在本步开头就已执行(见上方 `const derived = ...`),
             // 故本次 append 不会回流进本步 messages;本步照常 push 一次,下一步 derive 重放它、
             // 指纹命中 → 零 push。二者绝不同时发生(loop.ts:1017-1020 记载的旧坑就是
             // 「既落账又 push」在同一 derive 之后重复计入)。
-            //
             // **compact 后必须重落**:真压缩 out.length=0 会抹掉边界之前的 delta 事件
             // (derive 重放不到),此时强制重落一条——静默失忆比多花一次 token 严重得多。
-            // M125:delta 已是**单块**文本(reconcile 内按 key 字典序合成),不再逐片段 join。
+ // delta 已是**单块**文本(reconcile 内按 key 字典序合成),不再逐片段 join。
             const text = SYSTEM_SECTION_UPDATE_PREFIX + delta;
             const sha = sectionSha(text);
             const { landed, hardCompactSeq } = readSystemDeltaState(journal, sessionId);
@@ -1827,7 +1794,7 @@ export class AgentLoop {
           messages.push({ role: "user", content: `[系统提醒] ${compacted.manifest}` });
         }
         // Phase 1 数据面:折叠决策留痕(不落 compact 边界;pruned 集合或策略变化才写,防事件膨胀)。
-        // 2026-11-06 v2:append-only 常态也要留一行(policy/budgetGrowthPct),看板才读得出
+ // v2:append-only 常态也要留一行(policy/budgetGrowthPct),看板才读得出
         // 「这一步为什么动了前缀/为什么没动」;签名含 policy + growth% 以避免逐步刷。
         const budgetPctBucket = budgetGrowthPct === undefined ? "-" : budgetGrowthPct.toFixed(1);
         const policySig = `${compacted.policy ?? "legacy"}:${pruneSig}:${budgetPctBucket}`;
@@ -1845,7 +1812,7 @@ export class AgentLoop {
                 savedTokens: compacted.savedTokens ?? 0,
                 growthSpurt,
                 items: (compacted.pruned ?? []).slice(0, 20),
-                // cache-aware 前缀稳定字段(2026-11-06 v2):看板读这些判断
+ // cache-aware 前缀稳定字段( v2):看板读这些判断
                 // 「这一步为什么动了前缀 / 为什么没动」。
                 ...(compacted.policy ? { policy: compacted.policy } : {}),
                 planCount: compacted.planCount ?? compacted.compacted,
@@ -1858,7 +1825,7 @@ export class AgentLoop {
                   : {}),
                 ...(compacted.frozenCount !== undefined ? { frozenCount: compacted.frozenCount } : {}),
                 ...(compacted.cutTokens !== undefined ? { cutTokens: compacted.cutTokens } : {}),
-                // 每步新增量与预算(用户口径 1~2%):growthTokens / budgetGrowthPct / budgetTokens。
+ // 每步新增量与预算(1~2%):growthTokens / budgetGrowthPct / budgetTokens。
                 ...(growthTokens !== undefined ? { growthTokens } : {}),
                 ...(budgetGrowthPct !== undefined ? { budgetGrowthPct } : {}),
                 budgetTokens,
@@ -1888,15 +1855,15 @@ export class AgentLoop {
             this.lastPruneLogSig = policySig; // 落账成功才去重;失败下步重试
           } catch { /* 遥测落账失败不打断主链 */ }
         }
-        // todo 提醒(designs/25 ZCode todo reminder):ephemeral 注入不落 journal;todoReminderSteps=0 关闭。
-        // J1:周期命中后再过注入闸(同 key ≥10k token 间隔),避免短步连刷同一句未完成计划。
+ // todo 提醒( ZCode todo reminder):ephemeral 注入不落 journal;todoReminderSteps=0 关闭。
+ // 周期命中后再过注入闸(同 key ≥10k token 间隔),避免短步连刷同一句未完成计划。
         if (this.opts.todoReminderSteps && step > 0 && step % this.opts.todoReminderSteps === 0) {
           const reminder = buildTodoReminder(journal, sessionId);
           if (reminder && this.gate.check("remind:todo", this.tokensSpent)) messages.push({ role: "user", content: reminder });
         }
-        // 已读文件提醒(designs/25「同文件读第二遍」机制层):清单**变化才注入**。
-        // 2026-11-05 D4 治理:旧版「+每 10 步刷一次」的周期刷新是 readlist 957 次/7d 的真实触发
-        // 路径(tips-inventory 实测)——清单未变的整 10 步复读纯噪音,删周期分支只留签名变化;
+ // 已读文件提醒(「同文件读第二遍」机制层):清单**变化才注入**。
+ // D4 治理:旧版「+每 10 步刷一次」的周期刷新是 readlist 957 次/7d 的真实触发
+ // 路径(tips-inventory 经验证)——清单未变的整 10 步复读纯噪音,删周期分支只留签名变化;
         // compact 后 ephemeral 从模型视野消失,由 compact 计数锚重置签名、允许重注一次(失忆自愈)。
         // 变化判定剥离相对时间括号(「刚刚/3 分钟前」本身随时间变,不剥则每步都算「变化」)。
         // ephemeral 不落 journal:每步从注册表现算,microcompact/deriveMessages 主链不受影响。
@@ -1905,13 +1872,13 @@ export class AgentLoop {
         if (compactsNow !== this.lastReminderCompacts) {
           this.lastReminderCompacts = compactsNow;
           this.lastReadReminderSig = undefined;
-          // J1:真压缩边界=模型失忆,旧水位不再代表「它看过」→ 清空全部 key,允许各提醒重新到达。
+ // 真压缩边界=模型失忆,旧水位不再代表「它看过」→ 清空全部 key,允许各提醒重新到达。
           this.gate.reset();
         }
         const readReminderRaw = buildReadFilesReminder(sessionId);
         if (readReminderRaw) {
           const sig = readReminderRaw.replace(/\([^)]*\)/g, "");
-          // J1:签名变化只是内因,仍要过闸(清单变得再勤也守 ≥10k token);被闸拒时不更新签名,
+ // 签名变化只是内因,仍要过闸(清单变得再勤也守 ≥10k token);被闸拒时不更新签名,
           // 下一步仍「算变化」→ 到点即补投,不会永久丢掉这次变化。
           if (sig !== this.lastReadReminderSig) {
             if (this.gate.check("remind:readlist", this.tokensSpent)) {
@@ -1920,18 +1887,18 @@ export class AgentLoop {
             }
           }
         }
-        // 落目标再锚定(step-137):每 N 步注入 P0 清单+证据覆盖率(ephemeral 不落 journal)——
-        // 实锤教训:长任务跑几十步后「板上写的 P0 验收」彻底脱离注意力,完工时无人核对。
+ // 落目标再锚定:每 N 步注入 P0 清单+证据覆盖率(ephemeral 不落 journal)——
+ // 注意教训:长任务跑几十步后「板上写的 P0 验收」彻底脱离注意力,完工时无人核对。
         if (this.opts.boardReminderSteps && step > 0 && step % this.opts.boardReminderSteps === 0) {
           try {
             const br = await this.opts.boardReminder?.();
             if (br && this.gate.check("remind:board", this.tokensSpent)) messages.push({ role: "user", content: br });
           } catch { /* 提醒层故障吞掉,绝不打断主链 */ }
         }
-        // 待决审批注入(2026-11-03 token 治理,step-1031 实锤 2.7M token/日):ephemeral
+ // 待决审批注入( token 治理, 注意 2.7M token/日):ephemeral
         // 不落 journal——旧口径 message.user 永久落账,已了结的审批块被 deriveMessages 无限重放。
         // 位置=历史末尾(与 todo/board 提醒同族,保前缀稳定,见下方 ephemeral 位置注释)。
-        // 2026-11-05 D4 复核定性:待决期间逐步重注是**到达性必需**——ephemeral 块不进历史,
+ // D4 复核定性:待决期间逐步重注是**到达性必需**——ephemeral 块不进历史,
         // 上一步的块下一步模型看不见;不重注=父 agent 丢失 requestId 无法应答(parent-ask-broker.test
         // 「待决步可见并应答」断言即此语义)。4159 次/7d 是积压期的到达性成本,非泄漏;
         // 了结即撤已由 ephemeral 保证(应答后 pendingQuestions 返回 null=零注入)。
@@ -1942,7 +1909,7 @@ export class AgentLoop {
               // J1 审批豁免细则(取舍 + 残余风险,写清在此):
               // key = 正文 djb2 指纹 → **正文一变就是全新 key,闸必放行**;只有「与上一步逐字相同」
               // 的待决块才会被 ≥10k token 的水位拦下。取舍理由:ephemeral 块不进历史,到达性靠重注;
-              // 但同一段 requestId 在短步里逐步复读是纯计费(实测 4159 次/7d)。
+ // 但同一段 requestId 在短步里逐步复读是纯计费(经验证 4159 次/7d)。
               // 用 hash 而非固定 key,正是为了让「新请求出现」永远不用等水位——否则父 agent 在窗口内
               // 看不到新 requestId 就无法应答(整条 ask 链卡死)。
               // 残余风险:正文逐字相同但语义更新(如同一 requestId 的等待时长变了)会被拦;
@@ -1952,13 +1919,13 @@ export class AgentLoop {
             }
           } catch { /* 注入层故障吞掉,绝不打断主链 */ }
         }
-        // ephemeral 块一律**追加在历史末尾**(2026-10-30 核查回滚,勿再前置):
+ // ephemeral 块一律**追加在历史末尾**(核查回滚,勿再前置):
         // 曾试过把它们 splice 到 system 之后(「位置与历史长度解耦」),方向是错的——
         // 块放在历史**之前**时,块一变化/消失就让其后整条历史移位,缓存从该点起全失效;
-        // 实测(todoReminderSteps=3 探针)9 步里 5 步公共前缀塌到 1 条、覆盖率 2.4%。
+ // 经验证(todoReminderSteps=3 探针)9 步里 5 步公共前缀塌到 1 条、覆盖率 2.4%。
         // 放末尾则失效区域只有「块 + 本步新增」,而块本身仅 45~85 tok。回归门:
         // test/prefix-stability.test.ts(块周期变动时前缀覆盖率必须 ≥90%)。
-        // tips 即时信息增强(2026-10-21):按上一步工具动作/装配方策略注入「做这类事之前该知道的事」,
+ // tips 即时信息增强:按上一步工具动作/装配方策略注入「做这类事之前该知道的事」,
         // ephemeral 不落 journal;tip 为空=本步零注入,异常吞掉不打断主链。
         // ctx.compacts=本会话 compact.done 计数(readSession per-session 切片,不扫全量;
         // microcompact 不落事件不计)——装配方据此在 compact 后清「已注入」状态,重注入一次。
@@ -1980,7 +1947,7 @@ export class AgentLoop {
             const tipText = typeof tip === "string" ? tip : (tip && tip.text) || "";
             if (tipText) {
               messages.push({ role: "user", content: tipText });
-              // 可见化留痕(2026-10-22 用户口径「触发了 tips 机制也要渲染出来,并显示 tips 了什么内容」):
+ // 可见化留痕:
               // 注入仍是 ephemeral(deriveMessages 白名单不读本 kind——上下文零变化),这里只旁路落一条
               // 供面板/回放展示。文本按 8000 字符截断防 journal 膨胀(原文仍在 LLM 请求里,截断只影响展示)。
               const keys = typeof tip === "string" ? [] : (tip?.keys ?? []);
@@ -1992,7 +1959,7 @@ export class AgentLoop {
                   keys, turn, step,
                   text: tipText.slice(0, TIP_LOG_MAX),
                   chars: tipText.length,
-                  // J1:留痕带当步累计 tokens —— 面板可据此算「注入密度」(每 10k token 注了几条)。
+ // 留痕带当步累计 tokens —— 面板可据此算「注入密度」(每 10k token 注了几条)。
                   tokensSpent: this.tokensSpent,
                   ...(tipText.length > TIP_LOG_MAX ? { truncated: true } : {}),
                 },
@@ -2000,7 +1967,7 @@ export class AgentLoop {
             }
           } catch { /* tips 层故障吞掉,绝不打断主链 */ }
         }
-        // 时间盒收敛提醒(只一次):子代理临到期仍只会发工具调用、从不落结论——到点前强制收口。
+ // 时间盒收敛提醒(只一次):子代理临到期仍只会发工具调用、从不落结论——到点前强制。
         if (this.opts.deadlineAt && !this.budgetWarned) {
           const remainMs = this.opts.deadlineAt - Date.now();
           if (remainMs <= (this.opts.deadlineWarnMs ?? 120_000)) {
@@ -2015,18 +1982,18 @@ export class AgentLoop {
           }
         }
         const llmT0 = Date.now();
-        // TTFT(step-031 流式遗留收口):首个增量到达时刻-发起时刻;非流式/无增量=undefined 不落。
+ // TTFT(流式遗留):首个增量到达时刻-发起时刻;非流式/无增量=undefined 不落。
         let ttftMs: number | undefined;
         this.opts.onStream?.({ type: "llm-begin" });
         const llmVendor = this.opts.llm as { model?: string; modelName?: string; describe?: () => Record<string, unknown> };
-        /** 模型名 t0 快照(2026-11-03):provider.modelName 是 getter,热切换后读出新值;
+ /** 模型名 t0 快照:provider.modelName 是 getter,热切换后读出新值;
          *  必须在发起调用前固定,否则记录的是「切换后的模型」而非「本次请求实际用的模型」。 */
         const modelAtStart = (llmVendor.modelName ?? llmVendor.model) as string | undefined;
-        // 本步广告面(2026-10-22 延迟工具):deferred 且未激活的工具不进 wire(省 schema 常驻),
+ // 本步广告面(延迟工具):deferred 且未激活的工具不进 wire(省 schema 常驻),
         // 但仍在 this.tools 里可执行——广告与执行解耦。
         const advertised = this.advertisedTools();
         let res: LlmResponse;
-        /** M29:本次 chat 的 attemptId(每次 provider 调用一个;provider 内部重试时自身派生 base#n)。 */
+ /** :本次 chat 的 attemptId(每次 provider 调用一个;provider 内部重试时自身派生 base#n)。 */
         let attemptId = `${sessionId}:${turn}:${step}:${++this.attemptSeq}`;
         /** 成功响应对应的 attemptId(流式响应回填;非流式缺省回落本次请求 id)。 */
         let chatAttemptId: string | undefined;
@@ -2038,24 +2005,24 @@ export class AgentLoop {
         const onChunk = (d: LlmDeltaChunk) => {
           if (ttftMs === undefined && (d.text || d.reasoning)) {
             ttftMs = Date.now() - llmT0;
-            if (turnTtftMs === undefined) turnTtftMs = ttftMs; // M81:turn 级首次 TTFT
+            if (turnTtftMs === undefined) turnTtftMs = ttftMs; // turn 级首次 TTFT
           }
           partialChars += (d.text?.length ?? 0) + (d.reasoning?.length ?? 0);
           if (d.text || d.reasoning) this.opts.onStream?.({ type: "llm-delta", ...d });
         };
-        /** 400 unsupported image 自愈重试计数(2026-11-05):最多 2 次,收敛保证见 repairUnsupportedImage。 */
+ /** 400 unsupported image 自愈重试计数:最多 2 次,收敛保证见 repairUnsupportedImage。 */
         let visionRepairs = 0;
-        /** 本次请求实际发出的 messages(M58):图片 offload 后换成新数组重试,**不改**本步 messages
+ /** 本次请求实际发出的 messages():图片 offload 后换成新数组重试,**不改**本步 messages
          *  (messages 供后续 output 续写与轨迹使用,保持原样)。 */
         let reqMessages: Message[] = messages;
-        /** 图片 offload 重试预算(M58):一次为限,且不占 provider 重试预算/visionRepairs 计数。 */
+ /** 图片 offload 重试预算:一次为限,且不占 provider 重试预算/visionRepairs 计数。 */
         let imageOffloadRetried = false;
         /** 是否真的做过 offload 并换过请求(只有它为真,第二次失败才附「图片已 offload」。) */
         let imageOffloadApplied = false;
-        // M81:本 step 的 llm 阶段(provider 重试/视觉自愈/锚点重开都算同一段,不拆 span)。
+ // :本 step 的 llm 阶段(provider 重试/视觉自愈/锚点重开都算同一段,不拆 span)。
         const phaseLlmToken: PhaseToken = phaseRecorder.begin("llm");
         for (;;) {
-        // 写前持久化屏障(M24):messages 组装完成、provider 调用前落盘;失败**不发起请求**。
+ // 写前持久化屏障:messages 组装完成、provider 调用前落盘;失败**不发起请求**。
         // 放在重试循环内:每次下游请求(含视觉自愈重试)前都过一道闸;同 step 无新 append 时自动跳过。
         {
           const barrier = await this.writeBarrier("llm", ac.signal);
@@ -2066,7 +2033,7 @@ export class AgentLoop {
           }
         }
         try {
-          partialChars = 0; // M29:每次 attempt 从零计数(自愈重试/锚点重开都不累计半截)
+          partialChars = 0; // 每次 attempt 从零计数(自愈重试/锚点重开都不累计半截)
           res = await this.opts.llm.chat(
             reqMessages,
             advertised,
@@ -2092,7 +2059,7 @@ export class AgentLoop {
           chatAttemptId = res.attemptId ?? attemptId;
           break; // 本次请求成功(含自愈后重试成功):跳出重试循环
         } catch (err) {
-          // M58 图片 offload 持久位置(ref #58):provider 报图片预算/尺寸错误时,先把请求里的
+ //  图片 offload 持久位置(ref #58):provider 报图片预算/尺寸错误时,先把请求里的
           // data URL 落盘 + 正文换占位行,再用新 messages **立即重试一次**——这一次重试不占
           // provider 重试预算、不增加 visionRepairs 计数(否则「重试消耗预算」的老病原样复发)。
           // 触发面严格:只认 isImageBudgetError,且本请求确实带图;其余错误行为逐字不变。
@@ -2128,7 +2095,7 @@ export class AgentLoop {
               continue;
             }
           }
-          // 视觉尺寸 400 自愈(2026-11-05 事故:10144x1146 图注入 → 每轮同样的 400,会话永久卡死)。
+ // 视觉尺寸 400 自愈(事故:10144x1146 图注入 → 每轮同样的 400,会话永久卡死)。
           // 只认「unsupported image」类可判定错误;其它 400(参数/协议/tool-pairing)原样抛出。
           if (visionRepairs < 2) {
             const rep = repairUnsupportedImage(err, reqMessages, visionRepairs);
@@ -2145,7 +2112,7 @@ export class AgentLoop {
               continue;
             }
           }
-          // M29 流中断安全锚点恢复:可重试流错误 → 从最近一次完整 tool batch 重开同一请求(每 step ≤10 次)。
+ //  流中断安全锚点恢复:可重试流错误 → 从最近一次完整 tool batch 重开同一请求(每 step ≤10 次)。
           // 半截 attempt 不提交任何 message.agent(本次 chat 调用根本没成功);已提交 tool.result 原样保留。
           const cls = classifyStreamRetry(err);
           if (cls.retryable && !ac.signal.aborted && streamReopens < STREAM_REOPEN_MAX) {
@@ -2172,7 +2139,7 @@ export class AgentLoop {
               });
             } catch { /* 持久化失败只告警 */ }
           }
-          // 2026-10-20:失败调用也落轨迹——旧实现只在成功后上报,子代理 8 路 fetch failed
+ // 失败调用也落轨迹——旧实现只在成功后上报,子代理 8 路 fetch failed
           // 在轨迹里完全不可见,只剩一句无 cause 的 finalText。
           try {
             this.opts.llmTrace?.({
@@ -2191,7 +2158,7 @@ export class AgentLoop {
           // txa4:失败调用除旁路轨迹外再落一条 **durable** journal 事件——llmTrace 只是回调
           // (装配方决定落不落盘),进程外查询/trace-stats 看不到它;llm.trace 是既有 kind,
           // payload 带非空 error 即「失败调用」(成功路径的 llm.trace 不带 error,统计侧据此区分)。
-          // 取消(用户 cancel/超时 abort)不算失败:signal 已 abort 时跳过,交给 turn 的 cancelled 收口。
+ // 取消(用户 cancel/超时 abort)不算失败:signal 已 abort 时跳过,交给 turn 的 cancelled。
           // loop 拿不到落盘路径 → 不编造 file 键。journal 自身故障不得吞掉原始 err。
           if (!ac.signal.aborted) {
             try {
@@ -2210,7 +2177,7 @@ export class AgentLoop {
           throw withOffloadNote(err, imageOffloadApplied);
         }
         }
-        // M28 输出截断续写(2026-11-07):finish_reason=length 且无工具调用、已写出内容时,
+ //  输出截断续写:finish_reason=length 且无工具调用、已写出内容时,
         // 追加一条**临时** user 提示再请求 provider,把后续输出直接拼接回本步——旧实现把截断响应
         // 当完整轮终,长回答静默丢尾。临时提示只存在于续写请求里,**绝不进 messages/journal/历史**;
         // 合并结果作为单条 message.agent 落账(message.agent/step 语义不变)。
@@ -2224,7 +2191,7 @@ export class AgentLoop {
           let stillLength = true;
           let lastFinish: LlmResponse["finishReason"] = res.finishReason;
           while (attempts < OUTPUT_CONTINUATION_MAX) {
-            // 取消:每次续写前检查(已取消立即停,由 step 的 catch 收口为 cancelled)。
+ // 取消:每次续写前检查(已取消立即停,由 step 的 catch 为 cancelled)。
             if (ac.signal.aborted) break;
             attempts += 1;
             const next = await this.opts.llm.chat(
@@ -2232,7 +2199,7 @@ export class AgentLoop {
               advertised,
               ac.signal,
               onChunk,
-              // M29:续写是独立 chat 调用,派生独立 attemptId(不与主请求的已提交 id 撞车)。
+ // :续写是独立 chat 调用,派生独立 attemptId(不与主请求的已提交 id 撞车)。
               { attemptId: `${attemptId}:cont${attempts}` },
             );
             parts.push(next.content ?? "");
@@ -2247,7 +2214,7 @@ export class AgentLoop {
             stillLength = next.finishReason === "length";
             lastFinish = next.finishReason;
             if (!stillLength) break;
-            if (!String(next.content ?? "").trim()) break; // 续写也空:再请求无益(交给正常收口)
+            if (!String(next.content ?? "").trim()) break; // 续写也空:再请求无益(交给正常)
           }
           if (ac.signal.aborted) throw new Error("cancelled:output-continuation");
           res.content = parts.join(""); // 直接拼接,不加分隔符
@@ -2258,7 +2225,7 @@ export class AgentLoop {
           // 第 4 次(原始 + 3 次续写)仍 length:停止并追加固定警告,不再请求。
           if (stillLength && attempts >= OUTPUT_CONTINUATION_MAX) res.content += `\n\n${OUTPUT_CONTINUATION_LIMIT_WARN}`;
         }
-        // M81:本 step llm 阶段定稿(res 已合并续写);usage/ttft 累到 turn 级。
+ // :本 step llm 阶段定稿(res 已合并续写);usage/ttft 累到 turn 级。
         phaseRecorder.end(phaseLlmToken);
         if (res.usage) turnUsage = addUsage(turnUsage, res.usage);
         const llmMs = Date.now() - llmT0;
@@ -2269,9 +2236,9 @@ export class AgentLoop {
         }
         this.opts.onStream?.({ type: "llm-end", text: res.content });
         this.lastAudio = res.audio; // 每步覆盖;无工具调用的最终响应即本轮直出音频
-        // 轨迹降载(2026-10-21):语音 b64(用户输入 audio/模型直出 audio)不进轨迹文件——
+ // 轨迹降载:语音 b64(用户输入 audio/模型直出 audio)不进轨迹文件——
         // 只留 format+字节数占位(占位形状非 AudioInput,显式断言),「怎么送的怎么记」保留形态而不再灌几百 KB 正文。
-        // 2026-10-25 同策略扩到 images:dataUrl 换 KB 数占位(view_image 注入图不灌轨迹文件)。
+ // 同策略扩到 images:dataUrl 换 KB 数占位(view_image 注入图不灌轨迹文件)。
         const traceMsgs = messages.map((m): Message => {
           if (m.role === "user" && m.audio)
             return { ...m, audio: { format: m.audio.format ?? "pcm16", bytes: m.audio.data.length } as unknown as AudioInput };
@@ -2280,13 +2247,13 @@ export class AgentLoop {
           return m;
         });
 
-        // step-132:轨迹旁路(全量 messages+响应落装配方);try 包裹=轨迹故障绝不打断 agent 主链。
+ // 轨迹旁路(全量 messages+响应落装配方);try 包裹=轨迹故障绝不打断 agent 主链。
         try {
           const p = this.opts.llm as { model?: string; modelName?: string; describe?: () => Record<string, unknown> };
           this.opts.llmTrace?.({
             sessionId, turn, step,
             // 模型名用 t0 快照(modelAtStart):provider.modelName 是 getter,调用途中热切换后
-            // 再读会变成「切换后的模型」,与本次请求实际用的不符(2026-11-03)。
+ // 再读会变成「切换后的模型」,与本次请求实际用的不符。
             ...(modelAtStart ? { model: modelAtStart } : {}),
             durationMs: llmMs,
             ...(ttftMs !== undefined ? { ttftMs } : {}),
@@ -2308,12 +2275,12 @@ export class AgentLoop {
             ...(ttftMs !== undefined ? { ttftMs } : {}),
             ...(res.usage ? { usage: res.usage } : {}),
             ...(res.reasoning ? { reasoning: res.reasoning } : {}),
-            // 模型名(2026-10-28 成本核算):成本=用量×该模型单价,统计侧必须能按模型分段。
-            // 用 t0 快照 modelAtStart(2026-11-03 修):调用途中热切换时,读 provider 会得到新模型。
+ // 模型名(成本核算):成本=用量×该模型单价,统计侧必须能按模型分段。
+ // 用 t0 快照 modelAtStart(修):调用途中热切换时,读 provider 会得到新模型。
             ...(typeof modelAtStart === "string" && modelAtStart ? { model: modelAtStart } : {}),
           },
         });
-        // M145 上下文构成归因(只观测):请求成功后按固定 8 类记 chars→tokens。
+ // 上下文构成归因(只观测):请求成功后按固定 8 类记 chars→tokens。
         // 总量/闸门仍只用 provider usage;本事件不参与 compact/microcompact/big-intake 决策,
         // 也不回写任何 loop 状态。落账失败静默——观测绝不打断请求。
         try {
@@ -2354,7 +2321,7 @@ export class AgentLoop {
             // 再空才接受(goal 完成校验对空终态另有拦截)。空 assistant 消息已入 journal,
             // 下次请求的历史含它,绝大多数 provider 接受空 content 的 assistant 轮。
             emptyTurnRetried = true;
-            this.trajRetries += 1; // J1:空响应重试计入轨迹 retries
+            this.trajRetries += 1; // :空响应重试计入轨迹 retries
             journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "empty-retry" } });
             continue;
           }
@@ -2379,7 +2346,7 @@ export class AgentLoop {
           } catch { /* 参数不可解析=本步无文件(模型可能下一步重试) */ }
         }
         this.lastStepFiles = stepFiles;
-        // 延迟工具激活(2026-10-22):①被调用的工具本身(模型凭记忆直接调也算用过——执行面本就
+ // 延迟工具激活:①被调用的工具本身(模型凭记忆直接调也算用过——执行面本就
         // 允许,下一步起进广告面);②tool_view(name) 查看即激活该工具(「用时再选」的正规通道)。
         for (const c of res.toolCalls) {
           this.activatedTools.add(c.name);
@@ -2391,19 +2358,19 @@ export class AgentLoop {
           }
         }
         // 激活集落 journal(跨 loop 实例持久化:P0-2)。gateway 每 turn 新建 loop,不持久化则每 turn
-        // 重演 27→29→27 的 run-start 翻转(实测单会话 10 次 = 1.47M uncached)。
+ // 重演 27→29→27 的 run-start 翻转(经验证单会话 10 次 = 1.47M uncached)。
         this.persistActivated();
 
-        // 执行工具:并发安全的一起跑,不安全的独占(designs/14 §1.3)
+ // 执行工具:并发安全的一起跑,不安全的独占( §1.3)
         const calls = res.toolCalls;
-        // 同参重复检测(2026-10-29 无限循环事故:board_read 去重存根+延迟加载的 board_upsert
+ // 同参重复检测(无限循环事故:board_read 去重存根+延迟加载的 board_upsert
         // 不在广告面,模型 20+ 步逐字重复同一调用直到人工取消)。连续 ≥3 步同一签名=死循环,
         // 结果尾部注入策略提示逼模型换路。
         const callSig = calls.map((c) => c.name + ":" + c.arguments).sort().join("|");
         this.stepCallStreak = callSig === this.lastStepCallSig ? this.stepCallStreak + 1 : 1;
         this.lastStepCallSig = callSig;
         const repeatNudge = this.stepCallStreak >= 3;
-        // M115 循环护栏(执行前):同签名已/将要 stop 或每轮配额用尽 → 该调用**不执行**,直接回固定
+ // 循环护栏(执行前):同签名已/将要 stop 或每轮配额用尽 → 该调用**不执行**,直接回固定
         // 工具 error(稳定码 GUARD_STOP / GUARD_QUOTA)。判定用 canonical args 签名,与整步签名无关。
         const guardBlocked = new Map<string, { code: string; text: string }>();
         if (this.toolGuard) {
@@ -2416,7 +2383,7 @@ export class AgentLoop {
         const safe = runnable.filter((c) => this.tools.get(c.name)?.isConcurrencySafe?.(this.parseArgs(c)) ?? false);
         const exclusive = runnable.filter((c) => !safe.includes(c));
 
-        // M81:工具批次阶段(护栏拦截 + 安全批并行 + 独占批串行同段)。
+ // :工具批次阶段(护栏拦截 + 安全批并行 + 独占批串行同段)。
         const phaseToolsToken: PhaseToken = phaseRecorder.begin("tools");
         const results: ToolExecOutcome[] = [];
         // 被护栏拦下的调用也落 tool.result(保 tool-pairing),error.origin=guard,模型据此换路。
@@ -2437,7 +2404,7 @@ export class AgentLoop {
           results.push(...rs);
           for (const c of safe) { const r0 = rs.find((x) => x.call.id === c.id); this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r0?.durationMs ?? 0 }); }
         }
-        // 独占批串行(barrier);取消后未派发的调用补写 ABORTED_BEFORE_DISPATCH 保证配对(designs/14 §1.3)
+ // 独占批串行(barrier);取消后未派发的调用补写 ABORTED_BEFORE_DISPATCH 保证配对( §1.3)
         for (const c of exclusive) {
           this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
           const r = ac.signal.aborted
@@ -2452,7 +2419,7 @@ export class AgentLoop {
         this.lastStepError = results.some((r) => Boolean(r.error));
         if (this.lastStepError) this.totalErrors += 1;
         phaseRecorder.end(phaseToolsToken);
-        // M115 循环护栏(执行后):按 calls 顺序记账(并行批的连击计数因此确定)→ notice 前置一行;
+ // 循环护栏(执行后):按 calls 顺序记账(并行批的连击计数因此确定)→ notice 前置一行;
         // 只读结果第 2 次逐字相同 → 只把**模型可见文本**换成 stub(journal tool.result 原文不动)。
         if (this.toolGuard) {
           for (const call of calls) {
@@ -2470,7 +2437,7 @@ export class AgentLoop {
         }
         // J1 轨迹卡:每 N 步 / phase 切换时旁路落一条(同 step 不重复;一轮内 ≤40 条防膨胀)。
         this.emitTrajectory(sessionId, turn, step);
-        // 激活标记(2026-10-30):回执携带 [[activate-tool:<name>]] → 点亮延迟工具进下一步广告面。
+ // 激活标记:回执携带 [[activate-tool:<name>]] → 点亮延迟工具进下一步广告面。
         // 标记从模型可见文本剥离(防模型模仿标记语法),换一句明确「下一步直接按名调用」的提示;
         // 未知工具名(不在执行面)静默忽略——标记是机制不是指令,指错名不该炸结果文本。
         const activatedNow: string[] = [];
@@ -2499,8 +2466,8 @@ export class AgentLoop {
           }
         }
 
-        // 按原顺序回写 journal(配对纪律;durationMs=工具执行耗时,step-031)。
-        // 视觉哨兵解析(2026-10-25;2026-10-30 多图化):view_image 返回 [vision-image]{json} →
+ // 按原顺序回写 journal(配对纪律;durationMs=工具执行耗时。
+ // 视觉哨兵解析(多图化):view_image 返回 [vision-image]{json} →
         // images 数组进 payload.images(derive 投影后置 user 消息),模型可见文本换确认句——
         // dataUrl 不进工具文本。旧单图形状 {dataUrl,label} 保持兼容(历史 journal 回放)。
         for (const call of calls) {
@@ -2529,19 +2496,19 @@ export class AgentLoop {
               // txa3:归属轮/步(查询侧按步过滤;content 文本一字未改)。
               turn, step,
               ...(images ? { images } : {}),
-              // M115:结果去重 stub 只换模型可见文本(deriveMessages 优先取它),原文仍在上面的 content。
+ // 结果去重 stub 只换模型可见文本(deriveMessages 优先取它),原文仍在上面的 content。
               ...(r?.modelContent !== undefined ? { modelContent: r.modelContent } : {}),
               // txa1/txa2:结构化失败归因(仅失败时出现;成功结果的 payload 无 error 键)。
               ...(r?.error ? { error: r.error } : {}),
             },
           });
         }
-        // 写前屏障失败出口(M24):工具未执行(错误框已随 tool.result 落账),本 turn 中止。
+ // 写前屏障失败出口:工具未执行(错误框已随 tool.result 落账),本 turn 中止。
         // 抛错 = 任务 failed(与取消同型:不再发起后续 LLM 请求/工具,不重派整轮)。
         if (this.writeBarrierFailed) {
           throw new WriteBarrierAbortError(this.writeBarrierFailed);
         }
-        // waterfall agent/turn-stopping:step 收尾后评估(designs/14 §1.2 第四拦截点)。
+ // waterfall agent/turn-stopping:step 收尾后评估( §1.2 第四拦截点)。
         if (this.opts.waterfall?.turnStopping) {
           const verdict = await this.opts.waterfall.turnStopping({ turn, step, finalText });
           if (verdict.stop) {
@@ -2554,14 +2521,14 @@ export class AgentLoop {
         journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: step === maxSteps - 1 ? "max-steps" : "tools-done" } });
         if (step === maxSteps - 1) turnReason = "max-steps";
       } catch (err) {
-        // 取消语义(designs/14 §1.4):LLM 请求 abort → turn 以 cancelled 收口,不当错误上抛。
+ // 取消语义( §1.4):LLM 请求 abort → turn 以 cancelled,不当错误上抛。
         if (ac.signal.aborted) {
           journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "cancelled" } });
           this.flushToolLoopGuard();
           journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: "cancelled" } });
           return finalText;
         }
-        // 写前屏障失败(M24):provider 未被调用,turn 中止(与取消同型:不再发起后续请求;
+ // 写前屏障失败:provider 未被调用,turn 中止(与取消同型:不再发起后续请求;
         // 抛出=任务 failed,gateway 不重派整轮)。
         if (this.writeBarrierFailed) {
           journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "write-barrier", error: this.writeBarrierFailed.slice(0, 300) } });
@@ -2570,7 +2537,7 @@ export class AgentLoop {
         }
         // LLM/压缩钩子/工具执行异常:补 step+turn 边界(唯一出口,防重复)后上抛。
         journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "error", error: String(err).slice(0, 300) } });
-        // M81:失败出口先收口未 end 的 span(标 interrupted),再落遥测(先于 turn.end)。
+ // :失败出口先未 end 的 span(标 interrupted),再落遥测(先于 turn.end)。
         phaseRecorder.closeAll("interrupted");
         this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
         this.flushToolLoopGuard();
@@ -2578,14 +2545,14 @@ export class AgentLoop {
         throw err;
       }
     }
-    // M81:成功出口(turn 正常收口)。
+ // :成功出口(turn 正常)。
     this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
     this.flushToolLoopGuard();
     journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: turnReason } });
     return finalText;
   }
 
-  /** M115:turn 结束时落一条护栏汇总(custom tool.loop.guard);仅在有 stop/notice/stub/quota 时落账。
+ /** :turn 结束时落一条护栏汇总(custom tool.loop.guard);仅在有 stop/notice/stub/quota 时落账。
    *  纯旁路:落账失败不影响 turn 结果。 */
   private flushToolLoopGuard(): void {
     const guard = this.toolGuard;
@@ -2599,7 +2566,7 @@ export class AgentLoop {
     } catch { /* 遥测旁路失败不打断主链 */ }
   }
 
-  /** M81:turn 级阶段遥测落账(每 turn 至多一条;任何异常静默)。
+ /** :turn 级阶段遥测落账(每 turn 至多一条;任何异常静默)。
    *  纯观测:不改提示词/决策/返回值,也不碰任何其它 journal 事件。 */
   private emitPhaseTelemetry(
     state: { emitted: boolean },
@@ -2654,8 +2621,8 @@ export class AgentLoop {
     }
   }
 
-  /** 归一层用的参数读取(M150):JSON 解析失败时**返回原字符串**,让 normalizeToolArgs
-   *  如实报「JSON 解析失败」,而不是被 parseArgs 吞成 {} 后误报「缺 required」。
+ /** 归一层用的参数读取:JSON 解析失败时**返回原字符串**,让 normalizeToolArgs
+ * 如用户反馈「JSON 解析失败」,而不是被 parseArgs 吞成 {} 后误报「缺 required」。
    *  只对 object schema 的工具生效——无 schema / 非 object 走 parseArgs 旧路径(零回归)。 */
   private parseArgsForTool(call: ToolCall, parameters: Record<string, unknown>): unknown {
     const schemaIsObject = typeof parameters === "object" && parameters !== null && parameters["type"] === "object";
@@ -2670,7 +2637,7 @@ export class AgentLoop {
   /** 本步广告面:deferred 且未激活的工具不进 wire(执行面不受限)。
    *  burst 一次性放量(2026-11 token 优化轮 01):任一 deferred 工具被激活后,**所有** deferred
    *  工具一次性进广告面——否则 tool_view 每激活一个工具就把 tools schema 改一次,提示缓存整块失效
-   *  (实测单次代价 196k uncached)。零激活时 burst=false,行为与旧版逐字一致(不广告任何 deferred)。 */
+ * (经验证单次代价 196k uncached)。零激活时 burst=false,行为与旧版逐字一致(不广告任何 deferred)。 */
   /** 本 turn 广告面:同一 turn 内复用同一数组(tools schema 逐字节恒定,不随中途激活漂移)。
    *  runTurn 开头/结尾清缓存 → 本 turn 激活的 deferred 工具下 turn 才可见(schema 一轮一冻)。
    *  执行面不受限:execOne 只用 this.tools,模型直接按名调用照旧可执行。 */
@@ -2701,7 +2668,7 @@ export class AgentLoop {
     } catch { /* 落账失败不影响执行面 */ }
   }
 
-  /** 大结果闸门落账(step-1029):看板/回放读这一条判断「这次为什么进上下文的量变小了」。 */
+ /** 大结果闸门落账:看板/回放读这一条判断「这次为什么进上下文的量变小了」。 */
   private recordIntake(tool: string, meta: IntakeMeta): void {
     try {
       this.opts.journal.append({
@@ -2715,18 +2682,18 @@ export class AgentLoop {
   private async execOne(call: ToolCall, signal?: AbortSignal): Promise<ToolExecOutcome> {
     const tool = this.tools.get(call.name);
     if (!tool) {
-      // M153:错误框附带可达候选(工具面身份来自 registry,这里只做候选建议,不改工具面)。
+ // 错误框附带可达候选(工具面身份来自 registry,这里只做候选建议,不改工具面)。
       const suggestion = describeUnknownTool(call.name, [...this.tools.keys()]);
       return { call, content: `错误:${suggestion.message}`, durationMs: 0, error: { origin: "unknown-tool", message: suggestion.message, name: call.name } };
     }
-    // 写前屏障已在同 step 失败(M24):本 step 剩余调用一律不执行(副作用无法归因),
+ // 写前屏障已在同 step 失败:本 step 剩余调用一律不执行(副作用无法归因),
     // 统一回固定错误框并保留配对(缺 tool.result 会破坏 tool-pairing)。
     if (this.writeBarrierFailed) {
       return { call, content: this.writeBarrierFailed, durationMs: 0, error: { origin: "write-barrier", message: this.writeBarrierFailed.slice(0, 600), name: call.name } };
     }
-    // waterfall tools/pre-execute(designs/14 §1.2):guard 挂点;权限闸门在内层,guard 拦截绕不过权限。
+ // waterfall tools/pre-execute( §1.2):guard 挂点;权限闸门在内层,guard 拦截绕不过权限。
     const executeInner = async (): Promise<string> => {
-      // 执行 deadline(2026-10-29):超时≠取消(文件系统停顿不可中断,底层 Promise 继续跑完),
+ // 执行 deadline:超时≠取消(文件系统停顿不可中断,底层 Promise 继续跑完),
       // loop 返回诚实错误让模型换路——防单工具无限挂死拖住整个 agent(冻结治理 P0)。
       // timeoutMs=0 自管豁免(terminal/spawn_subagent/ask_user 等自有超时/等待语义)。
       const capMs = tool.timeoutMs !== undefined ? tool.timeoutMs : this.opts.toolTimeoutMs ?? 0;
@@ -2758,11 +2725,10 @@ export class AgentLoop {
       if (this.opts.waterfall?.postExecute) {
         content = await this.opts.waterfall.postExecute(call, content, { durationMs: Date.now() - t0 });
       }
-      // 大结果闸门(step-1029,2026-11-06):**入口侧**控增量——超过本步预算且 ≥4k tok 的结果,先切块
+ // 大结果闸门:**入口侧**控增量——超过本步预算且 ≥4k tok 的结果,先切块
       // 让本地 8105 判相关性(±小模型四段摘要),全文落盘,上下文只放「选块/摘要 + 全文已落盘指针」。
       // 命中闸 = 不进 spill(两者互斥,绝不双写双定形);未命中 = 走下面既有 spill,行为逐字不变。
-      //
-      // 取回转义口(result_read,2026-11-08):这是模型/用户**显式发起**的 dump 回读,输出已被工具自身
+ // 取回转义口(result_read:这是模型/用户**显式发起**的 dump 回读,输出已被工具自身
       // maxChars/grep/limit 约束。再经 big-intake/spill 二次提炼会把 file:line 与原文换成裸 token /
       // 「第 N/M 段」分块标记——digest 的锚点在会话内就无法自查证实,必须绕开闸门另跑小窗口命令。
       // 故 result_read 原样进历史:跳过 big-intake(不产生 context.intake、不改写 content)与 spill
@@ -2793,7 +2759,7 @@ export class AgentLoop {
       // 未配置 opts.spill=完全不进此分支(行为逐字不变)。视觉哨兵不参与(它本身很小,且会被换成确认句)。
       if (!intakeDone && !isResultReadBack && this.opts.spill && !content.startsWith(VISION_TOOL_SENTINEL)) {
         try {
-          // 每步新增预算(2026-11-06 v2 用户口径 1~2%):结果超过本步预算就**提前**落盘定形,
+ // 每步新增预算( v2 1~2%):结果超过本步预算就**提前**落盘定形,
           // 不等 8k 全局阈值——「先进上下文再靠 prune 减回去」正是要治的震荡形态。
           // 预算 tokens → 字符按 ASCII 系数(0.25 tok/char)换算,即 budget×4 字符。
           const budgetChars = Math.max(0, Math.floor(this.growthBudgetTokens() / ASCII_TOKENS_PER_CHAR));
@@ -2820,7 +2786,7 @@ export class AgentLoop {
       return { call, content, durationMs: Date.now() - t0, ...(failure ? { error: failure } : {}) };
     } catch (err) {
       if (signal?.aborted) {
-        // M34:用户停止→固定停止文案;其它取消仍 [aborted]。
+ // :用户停止→固定停止文案;其它取消仍 [aborted]。
         const text = this.cancelledToolText(signal);
         return { call, content: text, durationMs: Date.now() - t0, error: { origin: "aborted", message: text, name: call.name } };
       }
@@ -2829,14 +2795,14 @@ export class AgentLoop {
     }
   }
 
-  /** 权限闸门(step-033)+ 工具执行(取消信号贯通:designs/14 §1.4 工具执行中发取消信号)。 */
+ /** 权限闸门+ 工具执行(取消信号贯通: §1.4 工具执行中发取消信号)。 */
   private async executeWithPermission(call: ToolCall, tool: Tool, signal?: AbortSignal): Promise<string> {
     // 只读豁免(isReadOnly 声明):无副作用工具在全部权限模式下直通(读类调查不设闸);
     // 写类/执行类不声明该字段,照常过闸。闸门只在规则在场时存在,豁免=与「无闸」同语义。
     if (this.opts.permission && tool.isReadOnly?.(this.parseArgs(call)) === true) {
       return await this.executeTracked(call, tool, signal);
     }
-    // 重操作闸(step-071 父子 ask-answer):子代理 + 命令参数判重(未豁免)→ 绕过 allow 规则
+ // 重操作闸(父子 ask-answer):子代理 + 命令参数判重(未豁免)→ 绕过 allow 规则
     // 强制走 onHeavyAsk 父代理审批。闸在规则求值之前(allow 规则拦不住它),deny 规则在后段
     // 仍是硬顶;无 command 参数的工具(grep/read 等)不进本闸;heavyOp 未配置=零行为变化。
     const heavy = this.opts.permission?.heavyOp;
@@ -2865,14 +2831,14 @@ export class AgentLoop {
         }
       }
     }
-    // 权限闸门(step-033):规则在场才设闸;deny/ask(缺省)拒绝时工具不执行。
+ // 权限闸门:规则在场才设闸;deny/ask(缺省)拒绝时工具不执行。
     if (this.opts.permission) {
       const { evaluatePermission } = await import("@lampgenie/core");
-      // 权限域归一(C9,step-057 四期):规则的 permission 域是权限类别名(broker ask 用 "subagent"),
+ // 权限域归一(C9, 四期):规则的 permission 域是权限类别名(broker ask 用 "subagent"),
       // 而工具名是 "spawn_subagent"——直接拿工具名匹配恒不中,「总是允许」写的 allow 规则被绕空,
       // 工具全落 ask 兜底(fail-closed)。双候选:精确工具名命中非 ask 即用;否则剥常见动词前缀
       // (spawn_/run_/meeting_)试类别名;摘要 pattern 语义由 broker 链承担。
-      // task_output→subagent(权限传递收口):后台子代理收割与派发同族——用户允许了 spawn_subagent
+ // task_output→subagent(权限传递):后台子代理收割与派发同族——用户允许了 spawn_subagent
       // (或 subagent 类别)而收割被拦,后台流会半途断死。
       const alias = TASK_OUTPUT_ALIAS[call.name];
       const stripped = call.name.replace(/^(spawn_|run_|meeting_)/, "");
@@ -2893,7 +2859,7 @@ export class AgentLoop {
       }
       if (rule.action === "ask") {
         if (this.opts.permission.onAsk) {
-          // 审批链(权限传递收口):面板/broker 裁决;异常按拒绝(fail-closed 不因回调故障放宽)。
+ // 审批链(权限传递):面板/broker 裁决;异常按拒绝(fail-closed 不因回调故障放宽)。
           let ok = false;
           try { ok = await this.opts.permission.onAsk(call); } catch { ok = false; }
           this.opts.journal.append({
@@ -2923,7 +2889,7 @@ export class AgentLoop {
       payload: { toolCallId: call.id, name: call.name, arguments: call.arguments, turn: this.curTurn, step: this.curStep },
     });
     try {
-      // 入参归一(M150):模型常把参数写成「JSON 字符串套一层」「"42"/"true"」「裸标量当数组」
+ // 入参归一:模型常把参数写成「JSON 字符串套一层」「"42"/"true"」「裸标量当数组」
       // 或 provider 化键名(file_path/oldString…)。归一 + 无歧义 coercion 后重试同一调用,
       // 比整轮重派便宜得多;不确定的保留原值交给工具(不猜、不强转)。
       // 校验失败只产出**工具结果**(固定错误框),不抛 turn 失败、不重派整轮——模型看得到
@@ -2945,18 +2911,18 @@ export class AgentLoop {
         } catch { /* 遥测落账失败不打断执行 */ }
       }
       if (!norm.ok) return renderToolArgError(call.name, norm.issues);
-      // 写前持久化屏障(M24):参数归一完成、真正执行前先把已记录事件落盘。
+ // 写前持久化屏障:参数归一完成、真正执行前先把已记录事件落盘。
       // 失败 = **不执行工具**(副作用无法归因),错误框回给模型,并标记本 turn 中止。
       const barrier = await this.writeBarrier("tool", signal);
       if (!barrier.ok) {
-        if (barrier.cancelled) return this.cancelledToolText(signal); // M34:用户停止文案
+        if (barrier.cancelled) return this.cancelledToolText(signal); // 用户停止文案
         this.writeBarrierFailed = writeBarrierToolText(barrier.reason ?? "unknown");
         return this.writeBarrierFailed;
       }
       const content = await tool.execute(norm.value, signal, { callId: call.id });
       return content;
     } catch (err) {
-      if (signal?.aborted) return this.cancelledToolText(signal); // M34:用户停止/普通取消二分
+      if (signal?.aborted) return this.cancelledToolText(signal); // 用户停止/普通取消二分
       throw err;
     }
   }

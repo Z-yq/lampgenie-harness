@@ -1,9 +1,7 @@
 /**
- * M112 网关终态投递义务(delivery obligation)。
- *
+ * 网关终态投递义务(delivery obligation)。
  * 问题:任务终态(turn 完成/回复已生成)的帧在发送途中进程死掉或客户端 ACK 丢,
  * 面板永久看不到终态;重启无条件重发又会重复显示。
- *
  * 本模块只负责「义务的状态与持久化」这一层,传输仍在 server.ts:
  *   pending → attempting → delivered / failed
  * 约束:
@@ -12,10 +10,8 @@
  * - attempts ≤ 3 且首投起 ≤ 24h,超限自动 failed;
  * - attempting 重发(attempts>1)的帧带 mayBeDuplicate,下游可去重展示;
  * - 租约:attempting 超过 claimTtlMs 未落 delivered(进程崩/发送挂住)→ sweep 回 pending 待重投。
- *
  * 分片投递(partial)不适用本仓:网关终态帧是单帧广播,没有分片重组语义,
  * 因此不存在「分片部分成功时不得整体重发」的路径;若将来引入分片,须先按分片记录进度再重投。
- *
  * 持久化:journal kind 固定 "delivery.obligation",payload=义务全量快照,后写覆盖前写;
  * 启动回放与任务快照同一遍 readAll 收集(见 app.ts),不额外扫 journal。
  */
@@ -238,8 +234,7 @@ export function createDeliveryObligationStore(opts: DeliveryObligationStoreOptio
 export function attemptDelivery(
   store: DeliveryObligationStore,
   taskId: string,
-  send: (ob: DeliveryObligation) => boolean,
-): DeliveryObligation | undefined {
+  send: (ob: DeliveryObligation) => boolean): DeliveryObligation | undefined {
   const ob = store.beginAttempt(taskId);
   if (!ob) return undefined;
   let ok = false;

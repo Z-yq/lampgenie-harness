@@ -1,38 +1,35 @@
 /**
- * Go structural adapter(designs/16 §5 二期,step-021 五期多语言)。
+ * Go structural adapter( §5 二期, 五期多语言)。
  * 括号深度栈解析(零依赖):提取包级 func/type/struct/interface/方法 声明
  * (签名行+行号+参数),函数体内调用边(接收者归属+唯一名兜底,同 python adapter 口径)。
  * tier=structural(如实标注;tree-sitter 升级待后续,接口不变)。
- *
- * step-084 RC-A(2026-10-16):接收者/包限定调用恢复跨文件候选——
+ * RC-A:接收者/包限定调用恢复跨文件候选——
  * ①包限定 `pkg.Func(`(pkg∈import 绑定)发候选(toName=Func);②接收者/局部变量类型证据
  * (接收者、struct 字段表、`x := &T{}`、参数类型、`x := f()` 同文件单返回值、`x := a.b`
  * 选择器链、range 元素类型)→链形态 `a.b.Method(` 逐段走字段表,同文件命中=ast 边,
  * miss=跨文件候选(to=""+toName+receiverType),merge 层按 Class.method 候选集解析。
  * 同名双闸语义保持:多候选=诚实弃边不回退(RC-F 原样;无类型证据的接收者调用不猜——
  * 宁缺勿错,precision=1.0 纪律)。
- *
- * step-102(2026-10-16,094 白名单重落地+interface/struct 注册区分):
+ * (094 白名单重落地+interface/struct 注册区分):
  * ①自仓 import 前缀白名单(094 存档复用)——被测仓 go.mod `module` 前缀下的 import 绑定
  * (路径==module 或 module/ 开头)是仓内包:`pkg.T` 限定类型(字段/字面量/参数/返回值/var
  * 五通道)解析为仓内类型名 T(与本地类型同权,激活 receiverType 证据链;grpc-go 生成代码
  * `cc *grpc.ClientConn` + `c.cc.Invoke(` 实形态)。module 外部绑定(protobuf 等)照旧
- * 「外部类型不猜」;无 go.mod=白名单关闭,行为与 step-084 一致。
+ * 「外部类型不猜」;无 go.mod=白名单关闭,行为与 一致。
  * ②`type X struct {}` / `type X interface {}` 注册 typeKind 区分(schema 加性字段)——
  * 094 精度门假边归因:仓内接口 balancer.Balancer 与实现体 gracefulswitch.Balancer 撞名,
  * receiverType 窄化被「唯一命中」;engine resolveStructCrossFile 撞名闸消费 typeKind,
  * 接口名 receiverType 不再窄化到实现体方法(如实弃边+台账)。
  * 类型身份锚定=本文件 import 绑定表(绑定→完整路径),限定名归属跨文件不可改变;
  * 已知残险=多个自仓包定义同名类型时 receiverType 撞名(宁缺勿错闸仍在:多候选弃边)。
- *
- * step-108(2026-10-16,grpc-go Invoke 生成代码接收者解析,诚实边界突破):
+ * (grpc-go Invoke 生成代码接收者解析,诚实边界突破):
  * 接口断言定向解析——**仅生成代码文件**(package 子句前有标准标记
  * `// Code generated ... DO NOT EDIT.`):候选 receiverType=R 且证据目录 dir 内存在
  * **唯一**编译期断言 `var _ R = (*T)(nil)`(家族形态含 `&T{}`/`T{}`/`new(T)`)时,
  * 候选改指实现体 T(grpc-go 生成代码 `cc grpc.ClientConnInterface`+clientconn.go 断言
  * 实形态;断言是编译器背书的实现声明,生成 client 的接口参数是生态契约接缝——grpc-go
  * 文档明言该接口 "is only intended to be referenced by generated code")。**手写代码不启用**:
- * 「唯一断言实现」在手写代码不蕴含「典范实现」(grpc-go mem.BufferPool 实证:5 个实现体,
+ * 「唯一断言实现」在手写代码不蕴含「典范实现」(grpc-go mem.BufferPool 验证:5 个实现体,
  * 断言的 NopBufferPool 只是哨兵默认,逐点 may-call 不可证)。0 断言(现状)/≥2 断言(歧义)/
  * 断言在他包目录/断言仅见于 _test.go(测试替身防护,cobra completions_test 实形态)一律
  * 不改写,旧行为逐位保留。泛型/限定名接口断言不识别(边界登记);engine 撞名闸对实现体名
@@ -52,10 +49,10 @@ export interface GoParseResult {
   /** 解析失败的文件进盲区(同 python adapter)。 */
   failures: { file: string; reason: string }[];
   /** 同文件解析不到的裸调用候选(to="" + toName)——Go 同包跨文件调用无需 import,
-   * 由 mergeStructAdapters 全图合并后按「同语言+全图唯一名」解析(open-code-review 实证:
+ * 由 mergeStructAdapters 全图合并后按「同语言+全图唯一名」解析(open-code-review 验证:
    * 368 个 go 文件只做同文件解析,65% 符号被误标 trunk/无人调用)。 */
   crossFileCandidates?: FlowEdge[];
-  /** step-099 RC-B2:本文件 import 路径清单(原始形态,去重;含标准库——仓内/外判定归
+ /** RC-B2:本文件 import 路径清单(原始形态,去重;含标准库——仓内/外判定归
    * 构建侧 expandGoImports 的 go.mod 锚)。impact import 通道的 Go 数据源。 */
   imports?: string[];
 }
@@ -92,7 +89,7 @@ const GO_BUILTIN_TYPES = new Set([
   "complex64", "complex128", "error", "any",
 ]);
 
-// step-102(094 存档复用):被测仓 go.mod module 路径缓存(root→module;""=无 go.mod/未识别=白名单关闭)
+// (094 存档复用):被测仓 go.mod module 路径缓存(root→module;""=无 go.mod/未识别=白名单关闭)
 const selfModuleCache = new Map<string, string>();
 async function selfModulePath(root: string): Promise<string> {
   const hit = selfModuleCache.get(root);
@@ -103,13 +100,13 @@ async function selfModulePath(root: string): Promise<string> {
     const m = /^\s*module\s+(\S+)\s*$/m.exec(text);
     if (m) mod = m[1]!;
   } catch {
-    // 无 go.mod(非法 Go 仓/测试夹具):白名单关闭,行为与 step-084 一致
+ // 无 go.mod(非法 Go 仓/测试夹具):白名单关闭,行为与 一致
   }
   selfModuleCache.set(root, mod);
   return mod;
 }
 
-/** step-102(094 存档复用):类型文本经自仓白名单解析——剥 `*`/`[]`/`...`/泛型实例化后,
+/** (094 存档复用):类型文本经自仓白名单解析——剥 `*`/`[]`/`...`/泛型实例化后,
  * 若首段是 `pkg.T` 且 pkg∈自仓绑定 → T(仓内包类型,与本地类型同权);其余(含外部包限定)
  * 走 baseType(外部类型不猜纪律不变)。 */
 function qualBase(t: string, selfPkgs: Map<string, string>): string | undefined {
@@ -123,7 +120,7 @@ function qualBase(t: string, selfPkgs: Map<string, string>): string | undefined 
   return baseType(t);
 }
 
-/** step-108:断言右值 → 裸实现名:`(*T)(nil)` / `&T{}` / `T{}` / `new(T)`;
+/** 断言右值 → 裸实现名:`(*T)(nil)` / `&T{}` / `T{}` / `new(T)`;
  * 泛型实例化/包限定/函数值等其它形态=不识别(边界,不猜)。 */
 function assertionImpl(rhs: string): string | undefined {
   const s = rhs.trim().replace(/;+\s*$/, "").trim();
@@ -137,7 +134,7 @@ function assertionImpl(rhs: string): string | undefined {
   return m ? m[1]! : undefined;
 }
 
-/** step-108:接口断言表(root→dir→iface→Set<impl>;进程级缓存同 selfModuleCache 先例——
+/** 接口断言表(root→dir→iface→Set<impl>;进程级缓存同 selfModuleCache 先例——
  * 增量索引对「断言文件变更而调用文件未变」不感知,全量 --reindex 是正确路径)。
  * 懒构建:首个带 receiverType 的未解析候选触发其证据目录一次扫描(仅该目录 *.go、
  * **排除 _test.go**——测试替身不得成为典范实现);扫描失败=空表=不改写(fail-safe)。
@@ -204,11 +201,11 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
   }
   const lines = text.split("\n");
   const relDir = relFile.includes("/") ? relFile.slice(0, relFile.lastIndexOf("/")) : "";
-  // step-102(094 复用):自仓 module 前缀(白名单判据;无 go.mod=空=关闭)
+ // (094 复用):自仓 module 前缀(白名单判据;无 go.mod=空=关闭)
   const modPrefix = await selfModulePath(root);
-  // step-108:生成代码判定(Go 约定:标记行必须在 package 子句前的注释区)——
+ // 生成代码判定(Go 约定:标记行必须在 package 子句前的注释区)——
   // 接口断言定向只在生成代码启用(生成 client 的接口参数是生态契约接缝;手写代码不启用,
-  // 「唯一断言实现」在手写代码不蕴含「典范实现」,mem.BufferPool 5 实现体实证)。
+ // 「唯一断言实现」在手写代码不蕴含「典范实现」,mem.BufferPool 5 实现体验证)。
   let isGeneratedCode = false;
   for (const l of lines) {
     if (/^\s*package\s/.test(l)) break;
@@ -218,7 +215,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
   const stripped: string[] = []; // 与 lines 平行:剥离字符串/注释后的代码(调 call 边复用)
   const openBlocks: OpenBlock[] = [];
   const funcBodies: FuncBodyRec[] = [];
-  // step-084 RC-A:类型证据收集(文件级)
+ // RC-A:类型证据收集(文件级)
   const importBindings = new Map<string, string>(); // 绑定名(别名∨路径末段)→ 完整 import 路径
   const structFields = new Map<string, Map<string, string>>(); // 类型名 → 字段 → 完整类型文本
   const rawPkgVars: { name: string; expr?: string; typeText?: string; line: number }[] = []; // 包级 var/const(表达式 Pass 2 再解析:被调函数可能在本文件后部)
@@ -266,7 +263,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
     }
     if (/^var\s*\($/.test(tcode)) { inVarBlock = true; continue; }
     if (/^var\s+/.test(tcode)) { recordVarLine(tcode.replace(/^var\s+/, ""), rawPkgVars, true, i + 1); continue; }
-    // step-089 P1:const 声明与 var 同形态(`const x T = v` / `const ( ... )`)——
+ // P1:const 声明与 var 同形态(`const x T = v` / `const ( ...)`)——
     // 显式类型项入 variable 导出;`const x = v` 无类型=expr 桶(不入索引导出)
     if (/^const\s*\($/.test(tcode)) { inVarBlock = true; continue; }
     if (/^const\s+/.test(tcode)) { recordVarLine(tcode.replace(/^const\s+/, ""), rawPkgVars, true, i + 1); continue; }
@@ -290,7 +287,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
         if (depthAfter > depthBefore) {
           openBlocks.push({ kind: "func", sym, line: i + 1, depth: depthAfter, recv: header.recv });
         } else {
-          // 单行函数体(step-084:Go 测试高频形态 func f() { x.Stop() }):提取花括号
+ // 单行函数体(Go 测试高频形态 func f { x.Stop }):提取花括号
           // 内文本作为合成体行,Pass 2 照扫(此前整函数体不可达=调用边全丢)
           const open = tcode.indexOf("{");
           const close = tcode.lastIndexOf("}");
@@ -309,7 +306,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
         kind: "class",
         file: relFile,
         line: i + 1,
-        // step-102:interface/struct 注册区分(engine 撞名闸消费;别名不设=未知)
+ // interface/struct 注册区分(engine 撞名闸消费;别名不设=未知)
         typeKind: typeM[2] === "interface" ? "interface" : "struct",
       });
       // struct 块内收集字段类型(RC-A 选择器链证据);interface 块不产字段
@@ -330,17 +327,17 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
       });
     }
   }
-  // 文件尾未闭合(语法残缺):在飞块按文件尾收口,符号保留(诚实:行号真实)
+ // 文件尾未闭合(语法残缺):在飞块按文件尾,符号保留(诚实:行号真实)
   while (openBlocks.length) {
     const b = openBlocks.pop()!;
     if (b.kind === "func") funcBodies.push({ sym: b.sym!, start: b.line, end: lines.length, recv: b.recv });
   }
 
-  // step-102(094 复用):自仓 import 前缀白名单——import 绑定表(Pass 1 已收齐)按 module
+ // (094 复用):自仓 import 前缀白名单——import 绑定表(Pass 1 已收齐)按 module
   // 前缀分类;仓内包:绑定→仓内相对目录(根包="");随后 struct 字段表的限定类型归一化
   const selfPkgs = new Map<string, string>();
-  // step-102:证据目录钉扎(撞名闸用)——目录随证据逐项携带,不按类型名全局映射
-  // (clientconn_test.go 实证:同文件裸名 *ClientConn(根包结构体)与 balancer.ClientConn
+ // 证据目录钉扎(撞名闸用)——目录随证据逐项携带,不按类型名全局映射
+ // (clientconn_test.go 验证:同文件裸名 *ClientConn(根包结构体)与 balancer.ClientConn
   // (他包接口)并存,名级映射会把接口目录错钉到裸名证据上误杀真边)。
   // 约定:证据类型文本为限定形态 pkg.T 且 pkg∈自仓 → 目录=selfPkgs[pkg];否则=relDir(裸名=同包)。
   const dirOfTypeText = (text: string): string => {
@@ -389,7 +386,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
 
   // 包级 var 类型解析(被调可能在本文件后部,Pass 1 后统一解)
   const fileVarTypes = new Map<string, string>();
-  const fileVarTypeDirs = new Map<string, string>(); // step-102:证据目录(随 var 逐项)
+  const fileVarTypeDirs = new Map<string, string>(); // 证据目录(随 var 逐项)
   for (const v of rawPkgVars) {
     const t = v.typeText ? qualBase(v.typeText, selfPkgs) : v.expr ? exprType(v.expr, typeNames, callablesByName, selfPkgs) : undefined;
     if (t) {
@@ -398,7 +395,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
       fileVarTypeDirs.set(v.name, v.typeText ? dirOfTypeText(v.typeText) : dirOfTypeText(v.expr ?? ""));
     }
   }
-  // step-089 P1:包级 var/const 显式类型项导出为 variable 符号(零边;engine merge 层
+ // P1:包级 var/const 显式类型项导出为 variable 符号(零边;engine merge 层
   // variable 不进 byName——调用解析语义不吸收变量名)。expr 推断项不入索引(typed/ 档再做)。
   {
     const seenVars = new Set<string>();
@@ -420,7 +417,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
   for (const body of funcBodies) {
     // 函数体级类型证据:参数(来自 signature)+局部(行序赋值)
     const localTypes = new Map<string, string>();
-    const localTypeDirs = new Map<string, string>(); // step-102:证据目录(随变量逐项)
+    const localTypeDirs = new Map<string, string>(); // 证据目录(随变量逐项)
     for (const p of body.sym.signature?.params ?? []) {
       if (p.type) {
         const t = qualBase(p.type, selfPkgs);
@@ -430,7 +427,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
         }
       }
     }
-    // step-102:证据目录解析——接收者基类型恒同包(Go 规则);局部/包级变量逐项登记;
+ // 证据目录解析——接收者基类型恒同包(Go 规则);局部/包级变量逐项登记;
     // 链尾段取字段声明的证据目录(字段声明在本文件:裸名=relDir,白名单限定=登记目录)。
     const typeDirOfVar = (name: string): string =>
       (body.recv && name === body.recv.varName ? relDir : undefined)
@@ -491,7 +488,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
           }
           if (!target) {
             // 同文件无此方法:发候选(接收者类型证据,宁缺勿错不回退)
-            // step-108:接口断言定向(仅生成代码)——receiverType 为接口且其包内编译期断言
+ // 接口断言定向(仅生成代码)——receiverType 为接口且其包内编译期断言
             // 实现唯一时,候选改指实现体(grpc-go 生成代码 `cc grpc.ClientConnInterface` +
             // `var _ ClientConnInterface = (*ClientConn)(nil)` 实形态);0/多断言/跨目录/
             // 测试替身断言/手写文件不改写。类型证据表不改写(证据保真,只作用于调用目标解析)。
@@ -500,14 +497,14 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
             const k = `${body.sym.id}|${method}|${effType}`;
             if (!candSeen.has(k)) {
               candSeen.add(k);
-              // step-102:候选带证据包目录(engine 撞名闸:接口与实现体撞名时按目录判定)
+ // 候选带证据包目录(engine 撞名闸:接口与实现体撞名时按目录判定)
               crossFileCandidates.push({ from: body.sym.id, to: "", toName: method, file: relFile, line: lineNo, tier: "structural", evidenceKind: "inferred", receiverType: effType, receiverTypeDir: typeDir });
             }
             continue;
           }
           continue; // target 即自身:自环跳过
         }
-        // 无类型证据:仅当头段是 import 绑定(包限定调用 pkg.Func(,RC-A 主形态)才发候选;
+ // 无类型证据:仅当头段是 import 绑定(包限定调用 pkg.Func(RC-A 主形态)才发候选;
         // 局部变量阴影优先于包名(Go 作用域),类型证据在则不走 import 通道
         if (chain === head && importBindings.has(head)
           && !(body.recv && head === body.recv.varName) && !localTypes.has(head) && !fileVarTypes.has(head)) {
@@ -543,7 +540,7 @@ export async function parseGoFile(root: string, relFile: string): Promise<GoPars
     seen.add(k);
     return true;
   });
-  // step-099 RC-B2:import 路径清单落结果(绑定名映射的值集去重;`.` 绑定是 dot-import,
+ // RC-B2:import 路径清单落结果(绑定名映射的值集去重;`.` 绑定是 dot-import,
   // 其路径同样是真实 import 语义,保留)
   const importPaths = [...new Set(importBindings.values())];
   return { symbols, edges: dedup, failures: [], crossFileCandidates, ...(importPaths.length > 0 ? { imports: importPaths } : {}) };
@@ -580,7 +577,7 @@ function recordVarLine(line: string, out: { name: string; expr?: string; typeTex
  * 函数体内局部类型证据(行序:赋值先于使用;同行调用在后续 regex 处理时已可读到)。
  * 形态:`x := &T{}` / `x := pkg.T{}` / `x = &T{}` / `x := f()`(同文件单返回值)/
  * `x := T(y)`(转换)/ `x := a.b`(选择器链字段类型)。
- * step-102(094 复用):类型文本一律经 qualBase(自仓白名单:`pkg.T`∈仓内包→T)。
+ * (094 复用):类型文本一律经 qualBase(自仓白名单:`pkg.T`∈仓内包→T)。
  */
 function collectLocalTypes(
   code: string,
@@ -704,7 +701,7 @@ function elementType(t: string): string | undefined {
 }
 
 /** 表达式 → 类型(包级 var 右值):`&T{}`/`T{}` 字面量优先;`f(...)` 同文件单返回值;其余不猜。
- * step-102(094 复用):类型文本经 qualBase(自仓白名单)。 */
+ * (094 复用):类型文本经 qualBase(自仓白名单)。 */
 function exprType(
   expr: string,
   typeNames: Set<string>,

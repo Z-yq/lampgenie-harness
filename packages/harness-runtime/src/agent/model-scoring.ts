@@ -1,14 +1,11 @@
 /**
  * Phase 1/2 上下文模型评分。
- *
  * 默认走本地 150M 的 Jev 形状:POST {providerUrl}/decide
  *   { state: {goal, candidates:[{id,tool,where,chars,preview}]},
  *     questions: { call_<id>: noul, result_<id>: noul } }
  * → { call_<id>: {label,confidence,probabilities:{true,false}}, ... }
- *
  * 也支持 OpenAI 兼容 provider(POST {base}/v1/chat/completions),给其它
  * 「提炼模型服务」留出口。所有失败 fail-soft:shadow 只留痕,active 回退确定性剪枝。
- *
  * 模型永远只处理「温区候选」:最近 N 条、认知工具、错误、不可逆回执都不送;
  * 不读整段 transcript,只读 goal + 每条结果的前 500 字,控制 150M 的输入分布。
  */
@@ -24,7 +21,7 @@ import {
 export type ModelScoringMode = "off" | "shadow" | "active";
 export type ModelScoringApiType = "jev" | "openai";
 
-/** 候选过小跳过阈值(2026-11-05 审计:今日 108 次评分里 62 次候选总 chars<20k,durationMs 合计
+/** 候选过小跳过阈值(审计:今日 108 次评分里 62 次候选总 chars<20k,durationMs 合计
  *  297s 纯浪费)。导出常量便于测试与离线复算同口径。0 = 关闭该维判定。 */
 export const MIN_SCORING_CANDIDATES = 3;
 export const MIN_SCORING_TOTAL_CHARS = 20_000;
@@ -152,8 +149,7 @@ export function scoringTotalChars(candidates: readonly ScoringCandidate[]): numb
 export function scoringSkipReason(
   candidates: readonly ScoringCandidate[],
   minCandidates: number = MIN_SCORING_CANDIDATES,
-  minTotalChars: number = MIN_SCORING_TOTAL_CHARS,
-): ScoringSkipReason | undefined {
+  minTotalChars: number = MIN_SCORING_TOTAL_CHARS): ScoringSkipReason | undefined {
   if (minCandidates > 0 && candidates.length < minCandidates) return "too-few-candidates";
   if (minTotalChars > 0 && scoringTotalChars(candidates) < minTotalChars) return "content-too-small";
   return undefined;
@@ -187,8 +183,7 @@ function djb2(text: string): string {
 export function scoringContentKey(
   sessionId: string,
   candidates: readonly ScoringCandidate[],
-  goal: string,
-): string {
+  goal: string): string {
   const shape = candidates.map((c) => `${c.id}:${c.chars}`).join("\u0001");
   return `${sessionId}\u0000${djb2(shape)}\u0000${djb2(goal.slice(0, 500))}`;
 }
@@ -220,7 +215,7 @@ function writeScoringCache(key: string, decisions: readonly ScoringDecision[], n
 
 /**
  * 去掉 message.user 尾部注入的「核心纪律卡」。它不是任务目标,送给 150M 只会稀释
- * 候选相关性判断(真实链路实测 618 字 goal 里约 270 字是纪律文本)。
+ * 候选相关性判断(真实链路经验证 618 字 goal 里约 270 字是纪律文本)。
  */
 export function stripInjectedGoalChrome(text: string): string {
   const marker = "\n## 核心纪律卡";
@@ -248,8 +243,7 @@ export function goalFromMessages(messages: readonly Message[]): string {
 export function collectScoringCandidates(
   messages: readonly Message[],
   maxCandidates = 12,
-  hotTailMessages = 6,
-): ScoringCandidate[] {
+  hotTailMessages = 6): ScoringCandidate[] {
   const list = [...messages];
   const idx = toolCallIndex(list);
   const warmBefore = Math.max(0, list.length - Math.max(0, hotTailMessages));
@@ -277,12 +271,11 @@ export function collectScoringCandidates(
 /**
  * 模型只负责给「keep/drop」;active 时只有高置信度 keep/drop 才进集合。
  * drop 采用双票:call 和 result 都必须低于阈值,避免「调用历史要留、结果可丢」时
- * 把唯一结果也压掉(2026-10-25 实测的保守化收口)。
+ * 把唯一结果也压掉(经验证的保守化)。
  */
 export function buildModelDecisionSets(
   decisions: readonly ScoringDecision[],
-  minConfidence = 0.9,
-): ModelDecisionSets {
+  minConfidence = 0.9): ModelDecisionSets {
   const keep = new Set<string>();
   const drop = new Set<string>();
   // 1-0.9 在浮点下是 0.099999...;阈值比较加 eps,否则模型给的 0.1 会被误判为“不一致”。
@@ -425,8 +418,7 @@ function parseOpenAiDecisions(body: unknown, candidates: readonly ScoringCandida
 
 /**
  * 调 150M/Jev 或 OpenAI 兼容 provider。失败返回 error,不抛(调用方决定 shadow/active 回退)。
- *
- * opts(2026-11-05 优化):
+ * opts(优化):
  *  - 候选过小(数 < minCandidates 或总 chars < minTotalChars)→ 不发 HTTP,返回 skipped 标记,durationMs=0。
  *  - 同候选集缓存(content key: sessionId+候选 ids/chars+goal 短哈希,TTL 60s,容量 32)→ 命中复用
  *    上次 decisions,durationMs=0,cacheHit=true;仅成功且 decisions 非空才写缓存(error 不写)。
@@ -447,8 +439,7 @@ export async function scoreContextCandidates(
   config: ModelScoringConfig | undefined,
   candidates: readonly ScoringCandidate[],
   goal: string,
-  opts?: ScoreContextOptions,
-): Promise<ScoringResult> {
+  opts?: ScoreContextOptions): Promise<ScoringResult> {
   const resolved = resolveModelScoringConfig(config);
   const clock = opts?.now ?? Date.now;
   const started = clock();

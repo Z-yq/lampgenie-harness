@@ -3,13 +3,13 @@ import type { Task } from "@lampgenie/protocol";
 import { taskIndexOf, taskIndexList } from "../src/task-index.js";
 
 /**
- * 列表载荷索引化(2026-10-29):hello/task.list/task.changed 只发 TaskIndex。
- * 这里锁两件事:①实锤规模下帧长有界且远小于全文(机制性断言,不靠单点魔法数);
+ * 列表载荷索引化:hello/task.list/task.changed 只发 TaskIndex。
+ * 这里锁两件事:①注意规模下帧长有界且远小于全文(机制性断言,不靠单点魔法数);
  * ②投影白名单——正文/凭证类字段一个都不许漏进列表帧。
  */
 
 function task(n: number, opts: { instruction?: string; result?: string } = {}): Task {
-  // 实锤规模:数百任务 × 每条 instruction/result 各 2000 字符;标题走中文 30 字(真实用户输入口径)。
+ // 注意规模:数百任务 × 每条 instruction/result 各 2000 字符;标题走中文 30 字(真实用户输入口径)。
   const title = "帮我检查网关服务的启动日志并汇总异常原因报告整理文档提交审阅"; // 中文 30 字
   const instruction = opts.instruction ?? `${title}\n${"细节说明".repeat(500)}`.slice(0, 2000);
   const result = opts.result ?? "输出结果".repeat(500).slice(0, 2000);
@@ -33,7 +33,7 @@ function task(n: number, opts: { instruction?: string; result?: string } = {}): 
 describe("taskIndexList 载荷索引化", () => {
   const list = Array.from({ length: 623 }, (_, i) => task(i));
 
-  it("623 条实锤规模:索引帧 ≤256KB 且 ≤ 全文的 25%", () => {
+  it("623 条实测确认规模:索引帧 ≤256KB 且 ≤ 全文的 25%", () => {
     const indexJson = JSON.stringify(taskIndexList(list));
     const fullJson = JSON.stringify(list);
     // 诊断输出:断言失败时能直接看到实际字节数,便于校准。

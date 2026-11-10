@@ -1,21 +1,17 @@
 /**
  * 自我修改台账持久层(RSI #196 闸门的落盘侧):把 self-modification 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:审批/应用/回滚是审计事实,不能被后来的写入覆盖或抹掉;单行追加 +
  * 写后非空行数校验,让「写成功了吗」变成可复核断言,而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/self-mod/requests.jsonl`,每行一条
  * - `{v:1,type:"request",at,request}` —— 自我修改请求本体(含评估出的 decision)。
  * - `{v:1,type:"approve"|"deny"|"apply"|"rollback",at,id,patch}` —— 后续动作。
- *
  * 投影语义(loadSelfModProjection):
  * - request 建底(同 id 后写覆盖基础字段并重置 applied=false),顺带补 frozenHash
  *   (`freezeSelfModification(request).hash`,不写进行里);
  * - approve/deny/apply/rollback 按行序套用 → latest wins;找不到 id 只计 badLines 并跳过;
  * - 坏行(JSON 坏 / 未知 v / 类型非法 / 缺 id)只计数,一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + `import type` 引 runtime 类型 + 两跳惰性解析 runtime 函数;
- * 只读复用 M151 的 approvalObjectHash(纯哈希工具,不引 gateway 业务模块、不引 agent loop)。
+ * 只读复用 的 approvalObjectHash(纯哈希工具,不引 gateway 业务模块、不引 agent loop)。
  * 参数错误是唯一允许 throw 的情形(TypeError);IO/投影/闸门失败一律折叠成稳定码返回。
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";

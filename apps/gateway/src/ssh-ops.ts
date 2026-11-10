@@ -1,9 +1,8 @@
 /**
- * SSH 远程操作层(2026-10-26,ZCode remote workspace 三层切片的 genie 化:
+ * SSH 远程操作层(ZCode remote workspace 三层切片的 genie 化:
  * ZCode packages/server/src/remote/{sshAuth,connect}.ts 的 CLI-ssh 等价实现——
  * ZCode 用 ssh2 连接池化+keepalive,genie 零依赖走 sshpass+OpenSSH CLI,每操作一条
  * 命令+超时保护;连接池化/资产部署(ZCode deploy.ts 系)不在本切片,由节点体系承担)。
- *
  * 凭证链复用 remote-project.ts resolveSshPassword(env→secrets 精确键→通用键);
  * 密码只进 SSHPASS env(不进 argv/日志,ps 不可见收窄)。
  * 面向三消费端:server 消息面(ssh.test/remote.ls/remote.read)、agent 工具
@@ -26,12 +25,12 @@ const execFileP = promisify(execFile);
 
 export const REMOTE_OP_TIMEOUT_MS = 20_000;
 /**
- * 连接复用(2026-10-26 复查补:ZCode ssh2 池化+keepalive 的 CLI 等价)——OpenSSH
+ * 连接复用(复查补:ZCode ssh2 池化+keepalive 的 CLI 等价)——OpenSSH
  * ControlMaster:auto+Persist 120s:首次建连走完整握手(密码认证),窗口内后续命令复用
- * 既有 master 通道(实测冷连 ~7s → 复用毫秒级)。%C=hash(host,port,user) 防多主机串槽。
+ * 既有 master 通道(经验证冷连 ~7s → 复用毫秒级)。%C=hash(host,port,user) 防多主机串槽。
  */
 // ctl 目录必须在原生文件系统:WSL 下 repoRoot 常在 /mnt/*(9p)——unix socket 无法在 9p 上
-// 创建(实测 unix_listener 报错);固定用 $HOME/.genie-ssh-ctl(ext4/tmpfs)。
+// 创建(经验证 unix_listener 报错);固定用 $HOME/.genie-ssh-ctl(ext4/tmpfs)。
 const SSH_CTL_DIR = () => join(process.env.HOME ?? "/tmp", ".genie-ssh-ctl");
 const SSH_MUX_OPTS = [
   "-o", "ControlMaster=auto",
@@ -72,7 +71,7 @@ export function setSshRunnerForTest(r: SshRunner | undefined): void {
 }
 
 /**
- * 私钥解析(2026-10-26 复查补,ZCode sshAuth privateKey/passphrase 对齐):
+ * 私钥解析(复查补,ZCode sshAuth privateKey/passphrase 对齐):
  * secrets 键 GENIE_SSHKEY_<HOST>_<USER>(私钥全文)与 GENIE_SSHKEY_PASSPHRASE_<HOST>_<USER>(可选);
  * 优先级:显式密码 > secrets 密码 > secrets 私钥。私钥落临时文件(600,用后删)传 -i。
  */
@@ -193,7 +192,7 @@ export const remoteRun: RemoteRunner = async (remote, command, opts) => {
 };
 
 /**
- * 远程写文件(2026-10-26 复查补,remote_write 工具后端):内容 base64 经 stdin 传远端解码写入
+ * 远程写文件(复查补,remote_write 工具后端):内容 base64 经 stdin 传远端解码写入
  * (内容不进 argv);自动建父目录;写入后回读字节数校验。
  */
 export async function remoteWrite(remote: RemoteProject, rel: string, content: string, opts: { password?: string } = {}): Promise<{ bytes: number } | { error: string }> {
@@ -269,7 +268,7 @@ async function remoteRunWithStdin(remote: RemoteProject, command: string, stdin:
       args = ["-e", "ssh", "-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password,keyboard-interactive", ...baseArgs];
       env = { ...env, SSHPASS: password };
     } else {
-      // 私钥模式(2026-10-27):stdin 不再把内容 base64 内联进命令(大 tar 必然超限),改用 -i 直连 + 管道
+ // 私钥模式:stdin 不再把内容 base64 内联进命令(大 tar 必然超限),改用 -i 直连 + 管道
       const pk = resolveSshPrivateKey(ssh);
       if (!pk) { resolve({ error: "无 SSH 凭证" }); return; }
       const keyFile = join(SSH_CTL_DIR(), `key-${ssh.host}-${ssh.port}-${ssh.username}`);
@@ -317,7 +316,7 @@ export interface RemoteLsEntry { name: string; kind: "dir" | "file" }
 export async function remoteLs(remote: RemoteProject, rel: string, opts: { password?: string } = {}): Promise<{ entries: RemoteLsEntry[]; truncated: boolean } | { error: string }> {
   const dir = remoteFencePath(remote, rel || ".");
   if (!dir) return { error: "路径非法(相对路径,禁止绝对路径与 ..)" };
-  // 三层:agent-stdio 通道(持久管道)→ shim → shell(2026-10-26 远端工作区服务)
+ // 三层:agent-stdio 通道(持久管道)→ shim → shell(远端工作区服务)
   try {
     const ch = await tryChannelJson(remote, "fs.list", { path: rel || "." });
     if (ch && ch.ok) {
@@ -407,7 +406,7 @@ export async function remoteExec(remote: RemoteProject, command: string, opts: {
   return { stdout: out.slice(0, REMOTE_READ_MAX_BYTES), stderr: "", truncated: out.length > REMOTE_READ_MAX_BYTES };
 }
 
-// ── 远端工作区服务(shim)优先通道(2026-10-26,ZCode/VS Code remote 的 genie 形态)──
+// ── 远端工作区服务(shim)优先通道(ZCode/VS Code remote 的 genie 形态)──
 // 部署:SSH 上传 assets/remote-workspace-shim.mjs → ~/.genie/genie-ws.mjs + selftest 验证。
 // 运行时:ls/read/write 优先走 shim(统一 JSON/远端引号收敛),shim 缺失自动回退纯 shell。
 const SHIM_REMOTE_PATH = "$HOME/.genie/genie-ws.mjs";
@@ -453,7 +452,7 @@ export function senseRemoteTarPath(): string | null {
 }
 
 /**
- * 部署远端代码认知/评审运行时(2026-10-27,连接过程中随 server 一起装):
+ * 部署远端代码认知/评审运行时(连接过程中随 server 一起装):
  * tar.gz(自带 Node 20 + code-sense CLI + 依赖闭包)经 stdin 上传解包到 `~/.genie/genie-sense`,
  * 版本=tar sha256 前 16 位;已装同版本直接跳过。装好后 code_sense/code_review 经工作区服务在远端执行。
  */
@@ -486,7 +485,7 @@ export async function deployRemoteSense(remote: RemoteProject, opts: { password?
 
 /** 部署远端工作区服务(上传 shim + selftest 验证)。返回版本信息或错误。 */
 export async function deployRemoteWorkspace(remote: RemoteProject, opts: { password?: string } = {}): Promise<{ version: number; node: string } | { error: string }> {
-  // 打包态 repoRoot=数据根:先找 gateway 运行目录旁 assets/,再回退仓库 src/assets(2026-10-27)。
+ // 打包态 repoRoot=数据根:先找 gateway 运行目录旁 assets/,再回退仓库 src/assets。
   const here = dirname(fileURLToPath(import.meta.url));
   const cands = [join(here, "assets", "remote-workspace-shim.mjs"), join(repoRoot(), "apps", "gateway", "src", "assets", "remote-workspace-shim.mjs")];
   const shimPath = cands.find((p) => existsSync(p)) ?? cands[cands.length - 1]!;
@@ -522,7 +521,7 @@ async function remoteLsViaShim(remote: RemoteProject, absDir: string): Promise<{
   return { entries: r.entries ?? [], truncated: !!r.truncated };
 }
 
-// ── 远程文件工具原语(2026-10-26,远程项目任务"同名工具"套件的后端)──
+// ── 远程文件工具原语(远程项目任务"同名工具"套件的后端)──
 
 /** 远程读(带行号窗口形态,对齐本地 read_file 契约):返回 {startLine,totalLines,content} 或错误。 */
 export async function remoteReadWindow(remote: RemoteProject, rel: string, line?: number, limit?: number, maxLines = 2000): Promise<{ startLine: number; totalLines: number; content: string } | { error: string }> {

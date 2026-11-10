@@ -4,8 +4,8 @@ import { PROVIDER_PRESETS, type PresetModel } from "../src/provider-presets.js";
 
 const nameOf = (m: PresetModel) => (typeof m === "string" ? m : m.name);
 
-/** step-125 服务商预设目录 + 一键接入 + 隐私清理的结构回归。 */
-describe("step-125 服务商预设目录", () => {
+/** 服务商预设目录 + 一键接入 + 隐私清理的结构回归。 */
+describe(" 服务商预设目录", () => {
   it("覆盖要求的服务商,每种模式有真实 URL/Key 引用/模型(本地与自定义例外)", () => {
     const ids = PROVIDER_PRESETS.map((p) => p.id);
     for (const id of [
@@ -58,7 +58,7 @@ describe("step-125 服务商预设目录", () => {
   });
 });
 
-describe("step-125 设置页面板结构", () => {
+describe(" 设置页面板结构", () => {
   it("预设对话框/双模式/密钥状态/隐私脱敏标记在;绝对路径与内部 .genie 文案不在设置页", async () => {
     const panel = servePanel(7896, () => {});
     try {

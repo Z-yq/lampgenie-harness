@@ -1,4 +1,4 @@
-/** UI 实测:评审遗留(行级回写店)面板视图(2026-10-13 遗留3 收口)——
+/** UI 经验证:评审遗留(行级回写店)面板视图(遗留3)——
  * 预置店 fixture(1 开放 blocker + 1 已解决)→ 添加激活项目 → 切洞察 → 断言分桶渲染与行点击定位。
  * 用法: PANEL_BASE=http://127.0.0.1:77xx node revstore.spec.cjs */
 const { chromium } = require("playwright-core");

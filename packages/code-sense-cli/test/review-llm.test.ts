@@ -1,5 +1,5 @@
 /**
- * review-llm 凭证链单测(step-105):resolveReviewLlm 四档(flag/env/config/ask-file/none)、
+ * review-llm 凭证链单测:resolveReviewLlm 四档(flag/env/config/ask-file/none)、
  * 部分凭证 fail-visible(LlmConfigError)、ask-file 中继的 ReviewLlm 契约形
  * (协议面=llm-config.makeAskFileLlm,该面单测在 llm-config.test.ts,此处只锚 chat 契约与清理)。
  * 全部注入 env/configFile,不打真网络、不读真实 ~/.codesense。

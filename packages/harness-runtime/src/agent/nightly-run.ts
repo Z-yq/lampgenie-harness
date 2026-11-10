@@ -1,22 +1,19 @@
 /**
  * 夜间离线整合调度(Nightly Run):把「一天的工作痕迹」收敛成一份可恢复、可复算、可验收的
  * run 记录,并从中挖出少量候选(tip / gate / tool / refactor / experiment)。
- *
  * 为什么要单独一层纯逻辑:
  * - 夜间流程会跑几十步、跨好几小时、可能被预算或在线忙碌打断。状态机(6 步 × 5 态)与
  *   稳定码必须能被单元测试逐条钉住,不能和文件读写、时钟、调度器搅在一起。
  * - 下游 store(gateway 侧)只做 IO:原子写 `<root>/.genie/rsi/nightly/<project>/<date>.json`
  *   与 append-only `queue.jsonl`。它要求本文件给的一切都是**纯函数**:同输入同输出。
- *
  * 红线:
  * - 纯逻辑:零 IO(不读文件 / 网络 / 环境 / 真实时钟)。时间一律为 epoch ms 数字,来自输入
  *   (now / at);落盘字段统一转成 ISO 字符串。
  * - 绝不 throw:任何非法输入(坏日期、空 projectId、未知步骤名、非法状态、垃圾候选)都按
  *   原值兜底并通过稳定码(NIGHTLY_CODES)表达,调用方只按码分支,不解析文案。
  * - 不 mutate 入参:每个函数都返回新对象;数组字段一律新建。
- *
  * 时间口径(重要,测试已写死):
- * - date 是「本地日历日」字符串 `YYYY-MM-DD`(合法性按本地日历回读校验,拒绝 2026-02-30)。
+ * - date 是「本地日历日」字符串 `YYYY-MM-DD`(合法性按本地日历回读校验,拒绝)。
  * - 默认 window = [date 00:00, 次日 00:00),用 date 字符串**按本地日历**构造,序列化为
  *   **不带时区偏移的本地墙钟串** `<date>T00:00:00.000`。这样同一字符串在任何机器上都按本地
  *   时区解析回同一个时刻,断言不会随 CI 的 TZ 漂移(带 Z 或带偏移都会漂)。
@@ -258,7 +255,7 @@ interface CalendarDate {
   day: number;
 }
 
-/** 严格解析 `YYYY-MM-DD`:正则 + 本地日历回读,2026-02-30 这类会被拒。 */
+/** 严格解析 `YYYY-MM-DD`:正则 + 本地日历回读, 这类会被拒。 */
 function parseCalendarDate(value: unknown): CalendarDate | null {
   if (typeof value !== "string") return null;
   const matched = DATE_PATTERN.exec(value);
@@ -388,8 +385,7 @@ export function startRun(input: StartRunInput): NightlyStartResult {
 /** 同 idempotencyKey 且已 done → 本轮跳过(不覆盖已完成的记录)。 */
 export function shouldSkipCompleted(
   existingRuns: readonly NightlyRun[] | null | undefined,
-  key: string,
-): boolean {
+  key: string): boolean {
   if (!Array.isArray(existingRuns) || typeof key !== "string" || key === "") return false;
   return existingRuns.some((run) => run?.idempotencyKey === key && run?.status === "done");
 }
@@ -552,8 +548,7 @@ function normaliseCandidate(value: unknown): NightlyCandidate | null {
 export function addCandidates(
   run: NightlyRun,
   candidates: readonly NightlyCandidate[] | null | undefined,
-  options?: AddCandidatesOptions,
-): NightlyUpdate {
+  options?: AddCandidatesOptions): NightlyUpdate {
   const limitRaw = options?.maxCandidates;
   const limit =
     typeof limitRaw === "number" && Number.isFinite(limitRaw)
@@ -583,8 +578,7 @@ export function addCandidates(
 
 export function addUnprocessed(
   run: NightlyRun,
-  items: readonly NightlyUnprocessed[] | null | undefined,
-): NightlyUpdate {
+  items: readonly NightlyUnprocessed[] | null | undefined): NightlyUpdate {
   const incoming = Array.isArray(items) ? items : [];
   const accepted: NightlyUnprocessed[] = [];
   for (const entry of incoming) {

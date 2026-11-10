@@ -1,17 +1,13 @@
 /**
  * 轨迹病理件持久层(生产侧,病理形态路由 2026-11):把 trajectory-pathology 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:detect / register 都是判断历史——「这一刻六原语命中什么、命中了哪些形态、给了哪些候选」
  * 与「某个新组合是哪一刻被登记进目录的」都值得回看,不能被后来的写入覆盖。单行追加 + 坏行只计数不 throw,
  * 让「一行坏不整文件失效」成为可复核行为而不是期望。
- *
  * 数据面:`<root>/.genie/rsi/pathology.jsonl`,每行 `{v:1,type,at,primitives?,matches?,candidates?,catalogDelta?}`
  * - detect   {primitives,matches,candidates}  一次检测的快照(evidence 不落盘,只留 hit/count)
  * - register {catalogDelta}                   一次新形态登记(全量形态,listForms 据此投影目录)
- *
  * 投影语义:listForms = DEFAULT_CATALOG + 已注册形态(按落盘顺序,同 id 去重取首个);
  * 坏行(JSON 坏 / v 不是 1 / type 未知 / 形状非法)只计入 badLines 并跳过,绝不 throw。
- *
  * 依赖纪律(照抄 gap-taxonomy-store):只用 node:fs / node:path + runtime 纯逻辑模块;
  * 不引 agent loop、不静态 import runtime(dist 可能不存在),runtime 模块两跳惰性解析:
  * ① `--conditions=development` 的运行时(vitest / 带条件的 node)走包导出 src 入口;
@@ -84,8 +80,7 @@ interface PathologyRuntime {
   };
   detectPrimitives(
     trace: PathologyTrace | undefined | null,
-    opts?: DetectOptions,
-  ): Record<PathologyPrimitive, RuntimePrimitiveHit>;
+    opts?: DetectOptions): Record<PathologyPrimitive, RuntimePrimitiveHit>;
   matchForms(
     primitives: Record<PathologyPrimitive, RuntimePrimitiveHit>,
     catalog?: PathologyForm[],
@@ -132,8 +127,7 @@ async function loadPathologyRuntime(): Promise<PathologyRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/trajectory-pathology.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     pathologyRuntime = (await import(srcUrl)) as PathologyRuntime;
   }
   return pathologyRuntime;
@@ -517,8 +511,7 @@ function registerInput(
         interventions?: { carrier: string; detail: string }[];
         description?: string;
       }
-    | PathologyForm,
-): {
+    | PathologyForm): {
   family: PathologyFamily;
   signature: PathologyPrimitive[];
   interventions?: PathologyIntervention[];
@@ -555,8 +548,7 @@ export function registerForm(
         interventions?: { carrier: string; detail: string }[];
         description?: string;
       }
-    | PathologyForm,
-): {
+    | PathologyForm): {
   ok: boolean;
   code?: string;
   codes: string[];
@@ -660,8 +652,7 @@ export function route(
     }
     const routed = rt.routeInterventions(form, opts);
     const tipForbidden = routed.codes.includes(
-      rt.PATHOLOGY_CODES.TIP_FORBIDDEN,
-    );
+      rt.PATHOLOGY_CODES.TIP_FORBIDDEN);
     return {
       ok: !tipForbidden,
       ...(tipForbidden ? { code: rt.PATHOLOGY_CODES.TIP_FORBIDDEN } : {}),

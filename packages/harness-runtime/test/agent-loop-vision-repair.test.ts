@@ -1,7 +1,6 @@
 /**
- * 400 unsupported image 自愈(2026-11-05 实锤:10144x1146 图注入 → `messages[55].image[1]:
+ * 400 unsupported image 自愈(注意:10144x1146 图注入 → `messages[55].image[1]:
  * You have uploaded an unsupported image`,坏 dataUrl 已进 journal,derive 每轮重放 → 会话永久卡死)。
- *
  * 契约:只认「unsupported image」类可判定错误;OpenAI 系下标可信(1:1 同序)时清该条 images,
  * 不可信(下标记不到/该条无图/非 chat 协议)时横扫全部带图消息;修完重试,最多 2 次;
  * 其它 400 原样抛;留 journal 可检索事件(custom what=vision.repair)。

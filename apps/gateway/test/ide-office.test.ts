@@ -1,6 +1,5 @@
 /**
  * Office 文档渲染件(assets/ide-office.js,板节点 ide-o2 PPTX / ide-o3 DOCX 的渲染半边)契约测试。
- *
  * 本仓 vitest 是 node 环境(无 DOM / 无 jsdom),不造假 DOM,分三层:
  *  ①源码契约(读文本):导出面(window.IdeOffice / globalThis.IdeOffice 四键)、EMU 常量 9525、
  *    离线红线(不含任何 url 协议)、零 innerHTML(文档文本一律 textContent / esc)、
@@ -9,7 +8,7 @@
  *    blockKind / shapeKind 分派(unsupported 一律归到占位);
  *  ③降级层:host 缺失 / ast 非对象 / DOM 不存在时 render 返回 {ok:false, reason},不抛不白屏;
  *    clear 幂等。
- * 真实版式与缩放验收走浏览器实测(容器宽 → transform scale 适配)。
+ * 真实版式与缩放验收走浏览器经验证(容器宽 → transform scale 适配)。
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -31,7 +30,7 @@ function load(extra: Record<string, unknown> = {}): Record<string, any> {
 }
 
 /** 渲染路径用的最小 DOM 桩(node 无 DOM 也不装 jsdom):只实现 ide-office 真正调用到的接口。
- *  用途是跑通 DOM 分支「不抛 + 结构在场」,不做版式断言(版式走浏览器实测)。 */
+ * 用途是跑通 DOM 分支「不抛 + 结构在场」,不做版式断言(版式走浏览器经验证)。 */
 class FakeEl {
   tagName: string;
   childNodes: any[] = [];
@@ -79,7 +78,7 @@ function makeFakeDom() {
 }
 
 describe("ide-office 源码契约", () => {
-  it("可被 JS 引擎解析(资产无 TS 护栏,坏文件会直进产线)", () => {
+  it("可被 JS 引擎解析(资产无 TS 护栏,坏文件会直进生产环境)", () => {
     expect(() => new Function(source)).not.toThrow();
   });
 
@@ -115,7 +114,7 @@ describe("ide-office 源码契约", () => {
     expect(source).toContain("ResizeObserver");
   });
 
-  // 2026-10-29 板「OOXML 文本回写」P2:编辑定位属性与编辑态导出面(面板收集 dirty 段靠它们)
+ // 板「OOXML 文本回写」P2:编辑定位属性与编辑态导出面(面板收集 dirty 段靠它们)
   it("编辑定位属性在位:PPT 文本框 slide:S:shape:I / Word 段落 block:N,且导出 setEdit/collectEdits", () => {
     expect(source).toContain("data-io-edit");
     expect(source).toContain('"slide:" + slideNo + ":shape:" + shapeIdx');

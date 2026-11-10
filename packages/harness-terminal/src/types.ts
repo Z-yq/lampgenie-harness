@@ -1,6 +1,5 @@
 /**
- * 持久终端会话(step-122)公共契约。
- *
+ * 持久终端会话公共契约。
  * 会话是进程内的:shell 进程/输出缓冲不落盘;跨工具调用的状态(cwd/env/变量/后台进程)
  * 由同一个 shell 进程保持。owner 是精确的会话键(tool 绑定 task.sessionId),不是可猜测的名字。
  */
@@ -35,7 +34,7 @@ export interface TerminalOpenInput {
   cwd: string;
   name?: string;
   /**
-   * 2026-10-26:shell 覆盖(远程项目终端=经 SSH 开远端 shell,对齐 ZCode 远端 workspace 终端语义)。
+ * shell 覆盖(远程项目终端=经 SSH 开远端 shell,对齐 ZCode 远端 workspace 终端语义)。
    * 提供时替代默认 bash/PTY 启动命令;env 并入子进程环境(如 sshpass 的 SSHPASS)。
    */
   shellOverride?: { command: string; args: string[]; env?: Record<string, string> };
@@ -118,8 +117,7 @@ export type TerminalErrorCode =
 export class TerminalError extends Error {
   constructor(
     message: string,
-    readonly code: TerminalErrorCode,
-  ) {
+    readonly code: TerminalErrorCode) {
     super(message);
     this.name = "TerminalError";
   }

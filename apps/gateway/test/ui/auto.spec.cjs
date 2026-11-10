@@ -1,4 +1,4 @@
-/** UI 实测:step-043——自动化 CRUD/立即运行/启停、AI 提交信息、cc 搜索历史、toast。 */
+/** UI 经验证:——自动化 CRUD/立即运行/启停、AI 提交信息、cc 搜索历史、toast。 */
 const { chromium } = require("playwright-core");
 const { createGatewayApp } = require("../../src/app.ts");
 const { servePanel } = require("../../src/panel.ts");
@@ -20,7 +20,7 @@ const { join } = require("node:path");
   await new Promise((r) => setTimeout(r, 400));
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--no-proxy-server"] });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  // step-090:原生 confirm 已迁 uiConfirm 页内模态(step-088),page.on("dialog") 自动应答退役;
+ // 原生 confirm 已迁 uiConfirm 页内模态,page.on("dialog") 自动应答退役;
   // 模态在触发点就地驱动(等模态→校验消息→点确定)。
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e).slice(0, 120)));
@@ -54,7 +54,7 @@ const { join } = require("node:path");
   await page.locator(".auto-row button[data-act=toggle]").click();
   await page.waitForTimeout(500);
   check("重新启用", !(((await page.locator(".auto-row .a-meta").textContent()) || "").includes("已停")));
-  // 删除(step-090:删除确认=uiConfirm 页内模态,显式确认等价原自动应答)
+ // 删除(删除确认=uiConfirm 页内模态,显式确认等价原自动应答)
   await page.locator(".auto-row button[data-act=del]").click();
   await page.locator(".uid-box .uid-msg", { hasText: "删除该自动化" }).waitFor({ state: "visible", timeout: 3000 });
   await page.locator(".uid-box .uid-ok").click();

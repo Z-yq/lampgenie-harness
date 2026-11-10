@@ -1,5 +1,5 @@
 /**
- * llm-config 单测(step-089 P2 / designs/26 §3):
+ * llm-config 单测( P2 / §3):
  * 解析链四档(flag>env>config>none)、部分凭证 fail-visible、maskKey 脱敏、
  * config 文件写入权限 600 与 merge/unset、ask-file 中继协议(应答/超时/坏答案)。
  */

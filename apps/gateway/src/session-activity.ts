@@ -1,15 +1,12 @@
 /**
- * 会话最近活动时间索引(J4,2026-11-05 用户口径:「排序要按 session 有动作更新时间」)。
- *
+ * 会话最近活动时间索引(J4, 「排序要按 session 有动作更新时间」)。
  * 病灶:侧栏会话行的时间与排序键都取 Task.updatedAt,而 Task.updatedAt 只在两处写
  * (submit 建档 task-manager.ts:79 / 状态迁移 task.ts:83)——会话里发消息、跑工具、改白板、
  * 提交 IDE 改动都不刷新它。于是「一直在干活但最近没有状态迁移」的会话被压到分页外,
  * 用户感知为「时不时漏掉最近的执行 session」。
- *
  * 本模块只做一件事:sid → 最近一次「用户可见动作」的 journal 事件时间(ms),给侧栏排序/行时间用。
  * 不改 Task.updatedAt 语义(历史时间戳是事实),也不新增广播帧(复用 session.status.changed 的
  * 200ms per-session 合并,帧内带 lastActivityAt)。
- *
  * 口径(为何是白名单而非黑名单):流式噪声事件(llm.trace/tool.tokens/step.*\/turn.*\/sense.*)
  * 每步都在落账,若一律算活动,运行中的会话时间会随每一帧抖动且排序反复跳变(panel.ts runFirstCmp
  * 注释已有同一教训);故只认「人能看到结果的动作」。
@@ -113,8 +110,7 @@ export class SessionActivityIndex {
  */
 export function sessionSortTime(
   task: { sessionId?: string; updatedAt?: number; createdAt?: number } | undefined | null,
-  activity: Map<string, number> | undefined,
-): number {
+  activity: Map<string, number> | undefined): number {
   if (!task) return 0;
   const act = activity && task.sessionId ? activity.get(task.sessionId) ?? 0 : 0;
   return Math.max(act, task.updatedAt ?? 0, task.createdAt ?? 0);

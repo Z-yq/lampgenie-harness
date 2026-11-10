@@ -9,7 +9,7 @@ import { EchoChildBackend } from "@lampgenie/executors";
 process.env.GENIE_SENSE_ORIENT = "off";
 
 /**
- * 任务协议索引化(2026-10-29):hello / task.list / task.changed 只带 TaskIndex,
+ * 任务协议索引化:hello / task.list / task.changed 只带 TaskIndex,
  * 正文按需 task.detail.get → task.detail.result 现取。锁四条:
  * ① hello 首包每条无 instruction/result 键;② 变更帧同样无正文但有 id/state/updatedAt/title;
  * ③ 详情往返正文逐字相等;④ 未知 id 回 task:null 且 taskId 回显(不抛、不回全量列表)。

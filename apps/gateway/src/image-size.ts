@@ -1,13 +1,11 @@
 /**
- * 视觉通道图片尺寸守卫(2026-11-05 事故:view_image 注入 10144x1146 PNG → 下一轮 LLM 400
+ * 视觉通道图片尺寸守卫(事故:view_image 注入 10144x1146 PNG → 下一轮 LLM 400
  * `messages[55].image[1]: You have uploaded an unsupported image...`;坏 dataUrl 已进 journal,
  * deriveMessages 每轮重放 → 会话永久卡死)。
- *
  * 零第三方依赖,只做两件事:
  *  ① readImageSize(buf)  —— 从文件头解析像素尺寸:PNG IHDR / JPEG SOF / GIF 逻辑屏 / WebP
  *     (VP8X 扩展 / VP8 有损 / VP8L 无损)。
  *  ② checkImageSize(size, label, limits) —— 长边/总像素超限判定,返回可直接给模型看的可操作文案。
- *
  * 契约:解析失败(未知格式/头被截断)= null,**调用方据此放行**——不因解析器盲区拦正常图;
  * 只有真正解析出尺寸且超限才拒注入。
  */
@@ -20,7 +18,7 @@ export interface ImageSize {
   format: ImageFormat;
 }
 
-/** 长边上限缺省 4000px(主流视觉模型单边接受上限的量级;实测 10144 直接被端点 400)。 */
+/** 长边上限缺省 4000px(主流视觉模型单边接受上限的量级;经验证 10144 直接被端点 400)。 */
 export const VISION_MAX_EDGE_DEFAULT = 4_000;
 /** 总像素上限缺省 1600 万(≈4000×4000);防「边都合规但面积巨大」的极端长图。 */
 export const VISION_MAX_PIXELS_DEFAULT = 16_000_000;

@@ -1,13 +1,11 @@
 /**
- * 自定义命令仓库(step-047 起,2026-10 ZCode 语义补全)。
- *
+ * 自定义命令仓库(起,2026-10 ZCode 语义补全)。
  * 语义来源(照搬,不自创):
  * - ZCode/apps/zcode-cli/packages/adapters/src/commands/roots.ts —— 多根 + priority(每级差 10)。
  * - ZCode/apps/zcode-cli/packages/adapters/src/commands/index.ts —— 递归扫描(≤12 层)、
  *   `dir/name.md → dir:name` 命名空间、frontmatter 扁平 YAML、名称正则、诊断、100KB 上限。
  * - ZCode/apps/zcode-cli/packages/contracts/src/commands/index.ts:114-186 —— 占位符
  *   ($ARGUMENTS / $1..$n)由面板/执行层展开,本仓库只负责「名字 + 正文 + 元数据」的发现与读写。
- *
  * 红线:
  * - 名称白名单 + 路径穿越拦截(upsert/remove 只写 project 根)。
  * - 无缓存:每次 list() 重扫磁盘(ZCode 同款,文件改动即时可见;代价是目录遍历,量级 <百文件)。

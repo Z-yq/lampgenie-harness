@@ -1,5 +1,5 @@
 /**
- * 语言路由 + 本机语言服务器探测(step-114)。
+ * 语言路由 + 本机语言服务器探测。
  * 纪律:探测纯同步文件系统检查,不执行 which 子进程;server 缺失=null(调用方 fail-soft)。
  * 覆盖口:GENIE_LSP_<FAMILY>_COMMAND(空白切分;用于自定义 server/测试 fake server)。
  */

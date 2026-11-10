@@ -1,5 +1,5 @@
 /**
- * M128 工具渐进披露与目录预算:bridge 固定(tool_view/tool_search/tool_call)、
+ * 工具渐进披露与目录预算:bridge 固定(tool_view/tool_search/tool_call)、
  * 目录 full→names→summary→bare→none 降级、tool_search 加权排序+分页、
  * tool_call 只桥接只读延迟工具(按底层 schema 校验必参)、装配失败回退原列表。
  */

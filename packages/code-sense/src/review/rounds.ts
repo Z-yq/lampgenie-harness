@@ -26,7 +26,7 @@ export interface MultiroundOptions {
   rulesRoot?: string;
   /** 每轮注入的附加上下文(变更文件全文/约定文件/code_sense 影响面)。 */
   contextNote?: string;
-  /** 提示词覆盖(step-116 全文件扫描用;缺省=diff 审查 REVIEW_PROMPT,既有行为不变)。 */
+ /** 提示词覆盖(全文件扫描用;缺省=diff 审查 REVIEW_PROMPT,既有行为不变)。 */
   promptOverride?: string;
   /** LLM 重定位第四级(纯 opt-in,透传 locateFinding;缺省=三档行为不变)。 */
   llmRelocate?: LlmRelocate;

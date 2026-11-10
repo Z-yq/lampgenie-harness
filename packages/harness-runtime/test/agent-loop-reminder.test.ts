@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildTodoReminder } from "../src/agent/loop";
 import { MemoryJournal } from "@lampgenie/core";
 
-describe("buildTodoReminder(designs/25 ZCode todo reminder)", () => {
+describe("buildTodoReminder( ZCode todo reminder)", () => {
   it("有未完成项 → 提醒含条目与更新指引", () => {
     const j = new MemoryJournal();
     j.append({ kind: "todo.updated", sessionId: "s1", payload: { items: [

@@ -17,7 +17,7 @@ import type { Journal } from "@lampgenie/core";
 import { bus } from "@lampgenie/core";
 import { readSecretValue } from "@lampgenie/core";
 import { AgentLoop, deriveMessages, type AgentStreamEvent, type LlmProvider, type Tool } from "@lampgenie/runtime/agent/loop";
-// M153 工具注册身份治理:装配后统一登记身份,冲突/保留名命中从工具面剔除。
+// 工具注册身份治理:装配后统一登记身份,冲突/保留名命中从工具面剔除。
 import { ToolIdentityRegistry } from "@lampgenie/runtime/agent/tool-identity";
 import { meetingImportTool } from "./meeting-tools.js";
 import {
@@ -25,7 +25,7 @@ import {
   PACKAGING_PREFLIGHT, type P0NodeStatus, type BoardNodeT,
 } from "./board-accept.js";
 import { loadBoard as loadBoardSync, boardPath as boardFilePath, loadBoardAsync, listBoardsExAsync, LABEL_MAX_CHARS } from "./board-store.js";
-/** audit 结果落盘目录名(相对 storeRoot,2026-11-06 N1 修复:audit 现算不落盘,事后取不到)。 */
+/** audit 结果落盘目录名(相对 storeRoot, N1 修复:audit 现算不落盘,事后取不到)。 */
 const BOARD_AUDIT_DIR = ".genie/boards-audit";
 import { boardSkillBody, parseBoardSkillName } from "./board-skills.js";
 import { boardExportPptxTool } from "./board-export-pptx-tool.js";
@@ -34,7 +34,7 @@ import { isContentNode } from "./board-content-predicate.js";
 import { makeCalleesResolver } from "./board-derive-resolver.js";
 import { composeSystemPrompt, discoverAgentsMd, renderSubagentDispatchSection, renderSkillIndex, SKILL_INDEX_MAX_CHARS, type SkillIndexEntry, type ToolHint } from "@lampgenie/runtime/agent/system-composer";
 import { ParentAskBroker, driveParentDecision, renderPendingQuestionsBlock, buildSubagentAnswerTool } from "@lampgenie/runtime/agent/parent-ask-broker";
-// M183 注意力预算:外发消息(提问/路由 note/终端交付)的用途/长度/结构化/去重门。
+// 注意力预算:外发消息(提问/路由 note/终端交付)的用途/长度/结构化/去重门。
 import { guardAskUserPayload, guardRouteNote, guardTerminalNotice } from "@lampgenie/runtime/agent/attention-budget";
 import { loadSoul, DEFAULT_SOUL_MD, MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { loadAgentProfiles, formatAgentProfiles, composeSubagentInstructions, expandToolTokens, resolveProfileTools, toolGrantMatched } from "@lampgenie/runtime/agent/agent-profiles";
@@ -44,13 +44,13 @@ import type { SessionModelFace } from "./session-model.js";
 import { makeCompactHook } from "./compact-hook.js";
 import { autoCompactGate } from "./compact-gate.js";
 import { attachToolView } from "./tool-view.js";
-// 终态正文投递(2026-10-30):message.system 直接带 output.txt 正文,免去「摘要+指针→主 agent 再发一次
+// 终态正文投递:message.system 直接带 output.txt 正文,免去「摘要+指针→主 agent 再发一次
 // 请求取正文」的额外 LLM 往返。纯函数与投递器见 subagent-result-digest.ts。
 import { deliverFinalNotice, extractDeliverableText } from "./subagent-result-digest.js";
 import { takePendingComments, renderPendingCommentsBlock } from "./board-comments.js";
-import { planTaskSurface, degradeFinalFor, GUI_ONLY_TOOLS } from "./surface-capabilities.js"; // M167 表面/通道能力包(2026-11-08)
+import { planTaskSurface, degradeFinalFor, GUI_ONLY_TOOLS } from "./surface-capabilities.js"; // 表面/通道能力包
 import { SOP_TIPS, sopTipText } from "./agent-wiring-sop-tips.js";
-// 开工前置门(M9,2026-11-08):基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
+// 开工前置门(:基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
 import { readBaselineStatus, planFreshnessSkip, planFreshnessAction, renderFreshnessLine, loadWordingTable, scanRuleWording, renderWordingLines } from "./startup-freshness.js";
 import type { FreshnessConfig } from "./startup-freshness.js";
 import { buildDefaultMicrocompactThreshold, DEFAULT_GROWTH_SPURT_TOKENS } from "@lampgenie/runtime/agent/microcompact";
@@ -82,15 +82,15 @@ import { createFileTools, fenceCommand } from "./file-tools.js";
 import { createWaitUntilTool } from "./wait-until-tool.js";
 import { teamTaskTool } from "./team-task-tool.js";
 import { createCodeModeTool, type CodeModeJournal } from "./code-mode-tool.js";
-// 视觉尺寸守卫(2026-11-05):附件注入与 view_image 共用同一解析器/限额,避免两条注入口各判一套。
+// 视觉尺寸守卫:附件注入与 view_image 共用同一解析器/限额,避免两条注入口各判一套。
 import { checkImageSize, readImageSize } from "./image-size.js";
 import { guardGitCommand, auditGitCommand, subagentGitBlockReason } from "./git-guard.js";
 import { JobRegistry, TerminalSessionService, createJobTool, createTerminalTool } from "@lampgenie/terminal";
 import { defaultWorktreeService, WorktreeError } from "./worktree-service.js";
 import { readFileSync, existsSync, statSync, appendFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
-// 板质量遥测(2026-11-05 bq1):audit 快照指纹(节点/边序列化后 sha1 前 12 位,排序稳定)。
+// 板质量遥测( bq1):audit 快照指纹(节点/边序列化后 sha1 前 12 位,排序稳定)。
 import { createHash } from "node:crypto";
-// 2026-10-29 附件链路:文档附件(docx/pptx/xlsx/pdf/zip…)先解析为纯文本再进上下文,
+// 附件链路:文档附件(docx/pptx/xlsx/pdf/zip…)先解析为纯文本再进上下文,
 // 解析器单独一层(doc-text.ts,含 64MB 上限/永不抛错),本文件只负责分类与接线。
 import { parseDocFile, isDocExt } from "./doc-text.js";
 import { createAcpBackend, type SubagentBackend } from "@lampgenie/executors";
@@ -98,11 +98,11 @@ import type { TaskSupervisor } from "./task-manager.js";
 import { appendUserStoppedMarker } from "./user-stop-marker.js";
 import type { Task } from "@lampgenie/core";
 import { setPlanDeps } from "@lampgenie/code-sense";
-// 2026-10-21 合并:代码认知唯一入口 code_sense(action 结构面 + mode 语义面)承载于 sense-tool.ts;
+// 合并:代码认知唯一入口 code_sense(action 结构面 + mode 语义面)承载于 sense-tool.ts;
 // 本文件只做装配与提示词接线(旧 code_index 已删除)。
 import { codeSenseTool } from "./sense-tool.js";
 export { codeSenseTool };
-// 全链路闭环变更(2026-11-06):概念足迹工具的装配面 + 判据纯函数(plan-gate/收尾回执共用)。
+// 全链路闭环变更:概念足迹工具的装配面 + 判据纯函数(plan-gate/收尾回执共用)。
 import {
   closeAuditVerdict,
   makeChangeSurfaceTool,
@@ -112,11 +112,11 @@ import {
   surfaceGateVerdict,
   type ChangeSurfaceJournal,
 } from "./change-surface-tool.js";
-// M107 任务级验证账本 / M170 交付物声明账本(2026-11-07):纯函数与工具各一模块,收尾钩子在本文件。
+// 任务级验证账本 / 交付物声明账本:纯函数与工具各一模块,收尾钩子在本文件。
 import { computeVerifyLedger, renderVerifyLedgerWarning, renderVerifyRetryPrompt } from "./verification-ledger.js";
-// M16 轮末变更账本(2026-11-07):纯函数采集在独立模块,终态出口(finally)在这里接线。
+//  轮末变更账本:纯函数采集在独立模块,终态出口(finally)在这里接线。
 import { captureBaseline, computeChangeLedger } from "./turn-change-ledger.js";
-// M23 指导可度量(2026-11-07):tip 元数据表 + 收尾指标汇总(纯函数;收尾钩子在本文件 finally)。
+//  指导可度量:tip 元数据表 + 收尾指标汇总(纯函数;收尾钩子在本文件 finally)。
 import { computeGuidanceMetrics, tipMetricOf, type TipMetricSpec } from "./guidance-metrics.js";
 import {
   makeDeliverableTool,
@@ -126,7 +126,7 @@ import {
   renderDeliverableWarning,
   type DeliverableJournal,
 } from "./deliverables.js";
-// M169 研究引用账本(2026-11-07):cite_source 工具 + 收尾引用审计(编号只由工具给,正文 [n] 必须已登记)。
+// 研究引用账本:cite_source 工具 + 收尾引用审计(编号只由工具给,正文 [n] 必须已登记)。
 import {
   makeCiteSourceTool,
   readCitations,
@@ -136,7 +136,7 @@ import {
   renderCitationRetryPrompt,
   type CitationJournal,
 } from "./citation-ledger.js";
-// M5 完成审计(2026-11):把上面各段收尾机制的事实聚合成一张可判定记分卡(纯函数;采集/判定接线在本文件收尾段)。
+//  完成审计(2026-11):把上面各段收尾机制的事实聚合成一张可判定记分卡(纯函数;采集/判定接线在本文件收尾段)。
 import { buildCompletionAudit, type CompletionFacts } from "./completion-audit.js";
 import { runTaskCloseout, type CloseoutState } from "./task-closeout.js";
 import { projectMainlineBlock } from "@lampgenie/code-sense/project-profile";
@@ -148,7 +148,7 @@ import { renderTemplate } from "@lampgenie/workflow/templates";
 import { join } from "node:path";
 
 /**
- * 权限规则装载(step-033):env GENIE_PERMISSION_RULES(JSON 数组,fromConfig 形态对象亦可)
+ * 权限规则装载:env GENIE_PERMISSION_RULES(JSON 数组,fromConfig 形态对象亦可)
  * > 项目 .genie/permissions.json(fromConfig 形态);无源=不设闸(行为与旧版一致)。
  * 坏 JSON 显式抛错(配置错误不该静默变成全放行)。
  */
@@ -179,7 +179,7 @@ function journalGate(journal: Journal, sessionId: string, tool: string, effect: 
   });
 }
 
-/** step-1042 关卡 Gate 风险启发式(旧主链路两处硬编码 "medium" 无信号):
+/** 关卡 Gate 风险启发式(旧主链路两处硬编码 "medium" 无信号):
  * 写/执行族=high,只读族=low,其余=medium。只影响展示与播报排序,**不改审批行为**。 */
 export function riskOfTool(tool: string): "low" | "medium" | "high" {
   const t = String(tool ?? "").toLowerCase();
@@ -188,7 +188,7 @@ export function riskOfTool(tool: string): "low" | "medium" | "high" {
   return "medium";
 }
 
-/** 子代理工具 ask 审批链(权限传递收口):进程内 LLM 子代理的工具 ask 与外部后端 ask 同语义——
+/** 子代理工具 ask 审批链(权限传递):进程内 LLM 子代理的工具 ask 与外部后端 ask 同语义——
  * env GENIE_SUBAGENT_ASK=allow-once > mode auto/readonly > 规则(matchPermissionRule "subagent")
  * > 面板 broker > fail-closed。返回 true=放行。规则咨询用原始 summary(与外部链同域,
  * 旧前缀规则仍按前缀命中);面板卡片摘要带子工具名(「总是允许」写 subagent[*] 工具级规则,C9 归一)。 */
@@ -196,7 +196,7 @@ export function makeSubagentPermissionAsker(deps: {
   sessionId: string;
   journal: Journal;
   broker?: PermissionAskPort;
-  /** 规则文件根(缺省 repoRoot;测试注入临时根隔离产线规则)。 */
+ /** 规则文件根(缺省 repoRoot;测试注入临时根隔离生产环境规则)。 */
   rulesRoot?: string;
 }): (tool: string, summary: string) => Promise<boolean> {
   return async (tool: string, summary: string) => {
@@ -212,7 +212,7 @@ export function makeSubagentPermissionAsker(deps: {
       journalGate(deps.journal, deps.sessionId, "subagent", "denied", "mode-readonly");
       return false;
     }
-    // M180 子代理免审:仅**已钉扎**会话的 delegated child 恒 approval=never,sandbox 继承父 pin。
+ // 子代理免审:仅**已钉扎**会话的 delegated child 恒 approval=never,sandbox 继承父 pin。
     // 无 pin 的会话走原规则/broker 链——否则所有子代理都跳过规则与面板审批(权限面被静默放宽)。
     const sessionPerm = resolveSessionPermission(deps.journal, deps.sessionId, currentPresetName());
     const child = sessionPerm.pinned ? childPermission(sessionPerm) : undefined;
@@ -238,7 +238,7 @@ export function makeSubagentPermissionAsker(deps: {
         summary: display.slice(0, 160),
         risk: riskOfTool(tool),
       };
-      // M151 审批对象=执行对象:ask 前冻结请求对象,面板放行后按同一对象复核(fail-closed)。
+ // 审批对象=执行对象:ask 前冻结请求对象,面板放行后按同一对象复核(fail-closed)。
       const snap = snapshotApprovalObject(request);
       const o = await deps.broker.ask(request);
       const by = o.by === "panel" ? (o.decision === "allow-once" ? "panel-approved" : "panel-denied") : "panel-" + o.by;
@@ -261,16 +261,16 @@ export function makeSubagentPermissionAsker(deps: {
   };
 }
 
-/** 子代理能力计划(step-061「一处声明、执行面真实生效」):按 agentType 查 profile,
+/** 子代理能力计划(「一处声明、执行面真实生效」):按 agentType 查 profile,
  * profile.tools=执行白名单下发 LlmLoopBackend(缺席/空=角色二分兜底);permission=deny-only
  * 时权限规则只下传父 deny(deriveChildRules,与外部后端同语义)。纯函数,对拍测试锚定。
- * step-069 收敛:declared/fallback 判定单一真源=resolveProfileTools(本函数薄委托,
+ * 收敛:declared/fallback 判定单一真源=resolveProfileTools(本函数薄委托,
  * 行为零变化;toolWhitelist 保持原样声明 tokens,组别名由后端 expandToolTokens 展开)。 */
 export interface SubagentCapabilityPlan {
   profile?: import("@lampgenie/runtime/agent/agent-profiles").AgentProfile;
   /** 执行白名单 tokens(原样声明;组别名由后端 expandToolTokens 展开)。 */
   toolWhitelist?: string[];
-  /** 写盘围栏 glob(step-138,来自 profile.writeGlobs;到场=后端 write/edit 只允许命中这些路径)。 */
+ /** 写盘围栏 glob(来自 profile.writeGlobs;到场=后端 write/edit 只允许命中这些路径)。 */
   writeGlobs?: string[];
   source: "declared" | "fallback";
   denyOnly: boolean;
@@ -278,8 +278,7 @@ export interface SubagentCapabilityPlan {
 
 export function resolveSubagentCapability(
   profiles: import("@lampgenie/runtime/agent/agent-profiles").AgentProfile[],
-  agentType: string | undefined,
-): SubagentCapabilityPlan {
+  agentType: string | undefined): SubagentCapabilityPlan {
   const profile = profiles.find((p) => p.name === (agentType ?? "worker"));
   if (!profile) return { source: "fallback", denyOnly: false }; // 未知类型:role 原样下传走兜底
   const resolved = resolveProfileTools(profile.tools, []);
@@ -287,14 +286,14 @@ export function resolveSubagentCapability(
   return {
     profile,
     ...(toolWhitelist ? { toolWhitelist } : {}),
-    // step-138:写盘围栏随能力计划下传(planner 只允许写规划稿路径)
+ // 写盘围栏随能力计划下传(planner 只允许写规划稿路径)
     ...(profile.writeGlobs?.length ? { writeGlobs: profile.writeGlobs } : {}),
     source: resolved.source,
     denyOnly: profile.permission === "deny-only",
   };
 }
 
-/** spawn journal 的 toolPolicy 快照(step-061 观测面;step-069 抽出为导出纯函数=直测锚):
+/** spawn journal 的 toolPolicy 快照(观测面; 抽出为导出纯函数=直测锚):
  * source=declared(白名单生效)/fallback(角色二分兜底);whitelist=原样声明 tokens;
  * permission 仅 deny-only 在场;warnings=声明了但与工具池零命中的池外 tokens(不改行为只补观测,
  * 池外声明白名单过滤后自然不生效——此前静默,现可从 journal 直接发现)。 */
@@ -335,13 +334,13 @@ export function buildSubagentExtraTools(
   taskRoot: string,
   mcpTools: Tool[],
   store: ExperienceStore,
-  /** 2026-10-19 用户口径:「worker 应该和 coding agent 差不多的编程/执行能力,只是不能派子代理」。
+ /** 「worker 应该和 coding agent 差不多的编程/执行能力,只是不能派子代理」。
    *  传入执行面上文(journal/父会话/子代理 owner/browser 门禁/web 工具)时,额外挂载:
-   *  terminal(持久终端,长任务/交互式)、web_fetch/web_search(资料检索)、browser(UI 实测)、
+ * terminal(持久终端,长任务/交互式)、web_fetch/web_search(资料检索)、browser(UI 经验证)、
    *  board_read(读回父会话设计板)、session_search(历史会话检索)。
    *  派发类(spawn/answer/task_output/steer/run_workflow)与用户交互类(ask_user)结构性不给。
-   *  step-138:planning=true(planner 角色)=规划面——只挂白板两件(board_upsert 写板 + board_read
-   *  读回),**不挂** terminal/web/browser/session_search(规划者不跑构建、不实测界面)。
+ * planning=true(planner 角色)=规划面——只挂白板两件(board_upsert 写板 + board_read
+ * 读回),**不挂** terminal/web/browser/session_search(规划者不跑构建、不经验证界面)。
    *  boardWrite 给 board_upsert 落板所需上下文(父会话 sessionId + 本任务 taskId + 仓根)。 */
   execCtx?: {
     journal: Journal;
@@ -356,9 +355,9 @@ export function buildSubagentExtraTools(
      *  scope 可选=写者作用域短前缀(q1):并行 planner 各带自己的前缀(如 p1x9),落板时节点 id
      *  自动加 `${scope}-`,边同步改写——同一块板上不同写者的节点分区存放、互不覆盖。 */
     boardWrite?: { taskId: string; taskRoot: string; storeRoot?: string; scope?: string };
-    /** 远程项目(SSH/WSL):code_sense 走工作区服务在远端执行(2026-10-27)。 */
+ /** 远程项目(SSH/WSL):code_sense 走工作区服务在远端执行。 */
     remote?: RemoteProject;
-    /** 产出面(ppt-master 角色,2026-11-05):挂 board_export_pptx——它的质量门是 deck 的唯一交付通道。
+ /** 产出面(ppt-master 角色:挂 board_export_pptx——它的质量门是 deck 的唯一交付通道。
      *  planner 明确不挂(分工:planner 只出结构,文件由产出角色生成,见下方 planning 分支注释)。 */
     deckExport?: { taskId: string; taskRoot: string };
   },
@@ -366,16 +365,16 @@ export function buildSubagentExtraTools(
   const base = [codeSenseTool(taskRoot, execCtx?.remote), skillViewTool(store, () => disabledBuiltins(repoRoot())), ...mcpTools];
   if (!execCtx) return base;
   if (execCtx.planning) {
-    // 规划面(step-138):白板读写是 planner 的核心产出通道。
-    // q4(2026-10-25):带 scope 的 planner 落**独立板** `<taskId>-<scope>.json`——此前它并进父任务板,
-    // 主 agent 的 audit 把自己的 P0 和别的任务的规划契约一起算,收口永远过不了。
+ // 规划面:白板读写是 planner 的核心产出通道。
+ // q4:带 scope 的 planner 落**独立板** `<taskId>-<scope>.json`——此前它并进父任务板,
+ // 主 agent 的 audit 把自己的 P0 和别的任务的规划契约一起算,永远过不了。
     // 无 scope(=拿不到写者身份)时退化为旧的「同板写」行为,不虚构分区。
     const scope = (execCtx.boardWrite?.scope ?? "").trim().replace(/[^a-zA-Z0-9-]/g, "").replace(/^-+|-+$/g, "");
     const boardId = execCtx.boardWrite && scope !== "" ? `${execCtx.boardWrite.taskId}-${scope}` : execCtx.boardWrite?.taskId;
     const plan: Tool[] = [boardReadTool(execCtx.journal, execCtx.sessionId, execCtx.boardWrite?.storeRoot, boardId ? { boardId } : {})];
     if (execCtx.boardWrite) {
       plan.push(boardUpsertTool(execCtx.journal, execCtx.sessionId, execCtx.boardWrite.taskId, execCtx.boardWrite.taskRoot, execCtx.boardWrite.storeRoot, execCtx.boardWrite.scope, { partition: true }));
-      // 2026-10-27 分工修正(用户口径):PPT 文件由 coding agent 产出,planner 只出结构——导出工具不给 planner。
+ // 分工修正:PPT 文件由 coding agent 产出,planner 只出结构——导出工具不给 planner。
     }
     return [...base, ...plan];
   }
@@ -385,7 +384,7 @@ export function buildSubagentExtraTools(
       service: getTerminalService(execCtx.journal),
       owner: execCtx.owner,
       root: taskRoot,
-      // 命令闸(子代理面,2026-11-05 g1):git 写/破坏命令**任何档位**一律拒(11-05 有子代理 git stash
+ // 命令闸(子代理面, g1):git 写/破坏命令**任何档位**一律拒(11-05 有子代理 git stash
       // 收走全仓 142 个未提交文件);workspace 档再叠加既有路径围栏(其余档路径围栏不注入=零回归)。
       fenceCommand: (c: string) => {
         const gv = guardGitCommand(c);
@@ -393,7 +392,7 @@ export function buildSubagentExtraTools(
         return permissionMode() === "workspace" ? fenceCommand(c, taskRoot) : null;
       },
     }),
-    // M27:后台命令 job(与 terminal 同 owner;通知路由回父会话)。
+ // :后台命令 job(与 terminal 同 owner;通知路由回父会话)。
     createJobTool({
       registry: getJobRegistry(execCtx.journal),
       owner: execCtx.owner,
@@ -455,16 +454,14 @@ export function plannerScopeOf(bgAgentId: string, subTaskId?: string): string {
  * 装配层再读一次会让「env 覆盖 config」出现两处口径。
  */
 export function writeBarrierOf(
-  agentConfig?: { agent?: { writeBarrier?: "off" | "hard" } } | undefined,
-): "off" | "hard" | undefined {
+  agentConfig?: { agent?: { writeBarrier?: "off" | "hard" } } | undefined): "off" | "hard" | undefined {
   const v = agentConfig?.agent?.writeBarrier;
   return v === "off" || v === "hard" ? v : undefined;
 }
 
 /**
- * M58 图片 offload 装配口径(纯函数,可单测):provider 报「图片预算/尺寸」类错误时,
+ *  图片 offload 装配口径(纯函数,可单测):provider 报「图片预算/尺寸」类错误时,
  * data URL 落盘到 `<root>/.genie/image-offload/<sessionId>/` 后用占位行立即重试一次。
- *
  * **根取 repoRoot()**(与 spill/tool-dumps/llm-trace 等 .genie 落盘根一致),不取 taskRoot:
  * taskRoot 在多项目任务下可能指向别的项目仓,落盘位置会随项目漂移;offload 产物属于运行时
  * 证据(.genie 下),统一在 harness 仓根。**默认开启**:不提供配置开关,需要关闭的调用方不传
@@ -474,18 +471,16 @@ export function imageOffloadOf(root: string = repoRoot()): { root: string } {
   return { root };
 }
 
-/** 参与「裸块 → 节」映射的一个块(2026-10-30 修 f1:此前手写两份清单,漏了 plan/workspace)。 */
+/** 参与「裸块 → 节」映射的一个块(修 f1:此前手写两份清单,漏了 plan/workspace)。 */
 export interface NamedSystemBlock { name: string; content: string }
 
 /**
- * 裸块 → 具名节(纯函数,可单测)(2026-10-30 修 f1)。
- *
+ * 裸块 → 具名节(纯函数,可单测)(修 f1)。
  * **病根**:system 全文用字符串 `+` 拼(`memBlock + goalBlock + planBlock + workspaceBlock + planFileBlock`),
  * 而给 loop 做节 diff 用的 `systemSections` 另手写一份,两份清单不同步 → 漏了 plan/workspace。
  * 后果不是「少发一点」而是**静默丢规则**:plan 模式与「工作区内」权限模式的约束文本在全文里,
  * 但节 diff 永远看不到它们变化 → `[系统提示更新]` 零追加 → 模型收不到「现在是 plan 模式,
  * 不许改代码」。省 token 绝不能换行为退化。
- *
  * **改法**:一个数组同时产出两份(全文由它 join、sections 直接展开),结构上不可能再漏。
  * 顺序 = 入参顺序,逐字节等价于旧字符串拼接(空块被过滤,与旧行为一致)。
  */
@@ -523,10 +518,10 @@ export function collectSkillIndexEntries(store: ExperienceStore): SkillIndexEntr
   return out;
 }
 
-/** 主 loop 权限闸门选项(权限传递收口):规则在场才设闸。
+/** 主 loop 权限闸门选项(权限传递):规则在场才设闸。
  * ask 处置:env GENIE_PERM_ASK_MODE=allow 或 mode=auto → allow(快路径,不变);
  * mode=ask 且 broker 在配 → onAsk 走面板审批(审批卡;超时/离线=拒绝,fail-closed 不变)——
- * 此前主 loop 的 ask 被静默 deny 且无任何审批入口(产线 journal 实锤 97 次
+ * 此前主 loop 的 ask 被静默 deny 且无任何审批入口(生产环境 journal 注意 97 次
  * 「被权限规则拒绝」,spawn_subagent/code_sense/skill_view 全中),与 permission-mode
  * 头注「ask=规则未命中→面板审批」的文档语义相悖;readonly/plan 仍直接 deny 不咨询。 */
 export function buildMainLoopPermission(
@@ -539,7 +534,7 @@ export function buildMainLoopPermission(
   const panelAsk = (permissionMode() === "ask" || permissionMode() === "workspace") && process.env.GENIE_PERM_ASK_MODE !== "allow" && brokerRef
     ? async (call: { name: string; arguments: string }) => {
         const preview = String(call.arguments ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
-        // M151 审批对象=执行对象:冻结真正要执行的调用(name+arguments);面板放行后复核,变了按拒绝。
+ // 审批对象=执行对象:冻结真正要执行的调用(name+arguments);面板放行后复核,变了按拒绝。
         const approvalObject = () => ({ name: call.name, arguments: call.arguments });
         const snap = snapshotApprovalObject(approvalObject());
         const o = await brokerRef.ask({
@@ -574,7 +569,7 @@ function getExperienceStore(): ExperienceStore {
 }
 export { getExperienceStore };
 
-/** 持久终端服务(step-122):按 journal 实例缓存——同进程多 app(测试)互不串会话;
+/** 持久终端服务:按 journal 实例缓存——同进程多 app(测试)互不串会话;
  * owner 隔离由 tool 绑定的 task.sessionId 承担。审计落 journal custom 事件(core EventKind 既有通用口)。 */
 const terminalServices = new WeakMap<object, TerminalSessionService>();
 function getTerminalService(journal: Journal): TerminalSessionService {
@@ -595,7 +590,7 @@ function getTerminalService(journal: Journal): TerminalSessionService {
   return service;
 }
 
-/** M183 父代答/路由 note 门:answer_subagent 的 reason 按 route-note(30 词)截断。
+/** 父代答/路由 note 门:answer_subagent 的 reason 按 route-note(30 词)截断。
  *  截断不拦应答——批准/拒绝语义必须照常落到 broker;只把超长理由收短。 */
 export function withAnswerAttentionGuard(tool: Tool): Tool {
   const orig = tool.execute.bind(tool) as (a: unknown, s?: AbortSignal, c?: { callId: string }) => Promise<string>;
@@ -611,7 +606,7 @@ export function withAnswerAttentionGuard(tool: Tool): Tool {
   };
 }
 
-/** M183 终端交付门:终态通知摘要标记 purpose=result,按 chat 预算校验;超长截断但**不拦任务**,
+/** 终端交付门:终态通知摘要标记 purpose=result,按 chat 预算校验;超长截断但**不拦任务**,
  *  失败/截断只 journal custom attention.blocked {code,kind,words}。正文注入(output.txt 片段)
  *  属机器内容,不受注意力预算约束,预算只覆盖人读的通知摘要。 */
 export function deliverFinalNoticeWithAttention(
@@ -630,7 +625,7 @@ export function deliverFinalNoticeWithAttention(
   return deliverFinalNotice(journal, sessionId, next, opts);
 }
 
-/** M153 工具注册身份治理:装配完成后把整张工具面登记一遍身份,冲突/保留名命中从工具面剔除,
+/** 工具注册身份治理:装配完成后把整张工具面登记一遍身份,冲突/保留名命中从工具面剔除,
  * 并把剔除证据落 journal(custom payload.type="tool.identity"),供回放/看板解释「为什么这个工具不见了」。
  * 只做剔除,不改工具行为;顺序保持原装配顺序(MCP 工具排到最后登记,保证 builtin 先占名)。 */
 export function governToolIdentity(tools: Tool[], journal: Journal, sessionId: string): Tool[] {
@@ -651,7 +646,7 @@ export function governToolIdentity(tools: Tool[], journal: Journal, sessionId: s
   return tools.filter((t) => kept.has(t)); // 保持原顺序
 }
 
-/** M27 后台命令 job 注册表:按 journal 实例缓存(与 terminal 服务同纪律)。
+/**  后台命令 job 注册表:按 journal 实例缓存(与 terminal 服务同纪律)。
  * spillDir=<repoRoot>/.genie/jobs。结算通知只投递一次:custom job.done(审计真源)+
  * message.system(唤醒);wake=false(结算被 wait 当场消费)时只落审计、不再唤醒模型。 */
 const jobRegistries = new WeakMap<object, JobRegistry>();
@@ -692,7 +687,7 @@ export function getJobRegistry(journal: Journal): JobRegistry {
   return registry;
 }
 
-/** M27 任务终态回收:本会话 owner + 绑定到该会话的子代理 owner 的 running job 全部结算(killed)。
+/**  任务终态回收:本会话 owner + 绑定到该会话的子代理 owner 的 running job 全部结算(killed)。
  * 错误吞掉:回收失败不影响任务终态。 */
 export async function disposeSessionJobs(journal: Journal, sessionId: string): Promise<number> {
   try {
@@ -703,11 +698,11 @@ export async function disposeSessionJobs(journal: Journal, sessionId: string): P
 }
 
 /** 主 agent 在场工具面(单一出处:系统提示组装与设置页共用,防两处漂移)。
- * step-060 逐环审计修复:本表必须与 runWithAgent 实际挂载的 tools 数组一一对应——
+ * 逐环审计修复:本表必须与 runWithAgent 实际挂载的 tools 数组一一对应——
  * 此前「memory」在表但从未挂载(模型被告知有该工具,调用必得「未知工具」)、
  * todo_write/import_meeting/steer_task/task_output 挂载了却不在表(标题「只列实际挂载的」双向失真)。 */
 /**
- * 视觉桥装配(2026-10-25):coding.llm.vision(缺省 true)+ coding.vlm 兜底 provider。
+ * 视觉桥装配:coding.llm.vision(缺省 true)+ coding.vlm 兜底 provider。
  * vlm 端点懒建缓存(多数部署主模型多模态,永不会触达);凭证不可解析时如实抛错 fail-visible。
  */
 const vlmProviderCache = new Map<string, LlmProvider>();
@@ -734,7 +729,7 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "answer_subagent", hint: "应答子代理的重操作执行申请(批准/拒绝+一句理由;不应答=超时自动拒绝)" },
   { name: "ask_user", hint: "向用户发问并等待答复(许愿式编程:需求有取舍/范围可能膨胀时先问再动;给 2~4 个选项+你的推断依据;问题会同时进 Super Agent 指挥台「待处理」,先答先用;离线/超时返回未答复,按最合理推断继续)" },
   { name: "read_file", hint: "读项目内文本文件(带行号,支持 offset/limit 分窗)" },
-  // 2026-10-26:远程项目任务的 read_file/write_file/edit_file/glob/grep/list_dir/run_cmd 即远端同名七件
+ // 远程项目任务的 read_file/write_file/edit_file/glob/grep/list_dir/run_cmd 即远端同名七件
   // (工具名与本地一致,效应落远端仓库)——无需单独 remote_* 提示。
   { name: "view_image", hint: "查看项目内图片(png/jpg/jpeg/gif/webp,单张≤2MB,一次≤4张,paths 数组),注入视觉通道下一轮直接看图;看截图/UI 对照/图表必须用它,禁止用代码打印像素占位" },
   { name: "write_file", hint: "写项目内文件(新建/整体重写;覆写前先 read_file)" },
@@ -755,8 +750,8 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "run_workflow", hint: "标准化任务的确定性编排(测试/评审/评测)" },
   { name: "skill_view", hint: "读一条经验全文" },
   { name: "experience_fold", hint: "沉淀/合并经验(fold-in 优先)" },
-  // fixG(2026-10-18 先骨架后丰羽翼+开发类型分治):工具索引提示补骨架先行与分治起手线
-  // fixG 收口:豁免口径绑定板规模(≤3 模块且骨架 ≤9 节点装得下)——防「任务书恰提 3 个功能模块」被读成小任务绕过分阶段
+ // fixG(先骨架后丰羽翼+开发类型分治):工具索引提示补骨架先行与分治起手线
+ // fixG :豁免口径绑定板规模(≤3 模块且骨架 ≤9 节点装得下)——防「任务书恰提 3 个功能模块」被读成小任务绕过分阶段
   { name: "board_upsert", hint: "设计白板=**面向人看的代码/内容逻辑图**:先画清**现状怎么走**(现有代码里真实存在的入口→分支→循环→出口,flow 写真实函数动作),本次要改的地方用 change+before 标在对应逻辑节点上(keep=纯读)。**计划留 step.md 不上板**(进度/第 N 步归 task_phase、todo_write;待办动作不画成节点);节点 symbolRef/targets 先经 code_sense 查真实符号;先骨架后丰满:第一版 ≤9 节点骨架,中大型任务第二版再展开细节" },
   { name: "board_read", hint: "读回本会话白板(只读):后续轮次参考此前规划的页面/模块结构与用户评论" },
   { name: "todo_write", hint: "写入/更新当前任务的工作计划(多步任务开工先建,面板进度实时展示)" },
@@ -817,15 +812,15 @@ export function memoryTool(store: MemoryStore): Tool {
 }
 
 
-// code_index 工具已删除(2026-10-21 合并):结构动作并入 code_sense(action=...),
+// code_index 工具已删除(合并):结构动作并入 code_sense(action=...),
 // 工具定义见 sense-tool.ts(唯一入口;graph/filegraph/api 三动作同步删除)。
 
-// 后台子代理注册表(step-054,ZCode async agent):agentId→输出文件与状态(spawnTool 写/task_output 读)。
-// model(step-060 子代理目录):本子代理实际使用的模型名(目录条目「当前模型」数据源)。
-// lastEventAt(2026-10-15 机制3):最近一次子代理事件时刻——task_output 据此算 stale 标记(主 agent 止损依据)。
-// cancel(2026-10-16 subagent.cancel 通路最后一步):面板目录「终止」按钮→server 查条目 cancel 句柄调用;
+// 后台子代理注册表(ZCode async agent):agentId→输出文件与状态(spawnTool 写/task_output 读)。
+// model(子代理目录):本子代理实际使用的模型名(目录条目「当前模型」数据源)。
+// lastEventAt(机制3):最近一次子代理事件时刻——task_output 据此算 stale 标记(主 agent 止损依据)。
+// cancel( subagent.cancel 通路最后一步):面板目录「终止」按钮→server 查条目 cancel 句柄调用;
 // 仅运行中条目持有(终态即摘除=「已收尾」时 server 诚实回 ok:false),各路径闭包读各自的 handle 变量。
-// spawnedAt/deadlineAt/staleWarnMs/staleNotified(2026-10-20 防死机制):watchdog 巡检输入——
+// spawnedAt/deadlineAt/staleWarnMs/staleNotified(防死机制):watchdog 巡检输入——
 // spawnedAt=派发时刻;deadlineAt=时间盒到点时刻(应收割却仍 running=后端内部收割失灵);staleNotified=预警只发一次。
 const bgAgents = new Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; staleWarnMs?: number; staleNotified?: boolean }>();
 // 供 server task_output 读取(注册表本体归 agent-wiring 所有)
@@ -834,7 +829,7 @@ const bgAgents = new Map<string, { outputFile: string; status: string; sessionId
 /** watchdog 硬收割缓冲:deadline 到点后给后端内部收割路径(deadline 定时器/backend 自身)留的宽限,
  * 超过它仍 running 才认定「收割失灵=子代理已死」(进程内 loop 崩溃/外部后端进程僵死均属此类)。 */
 const SUBAGENT_WATCHDOG_GRACE_MS = 60_000;
-// 2026-10-21 用户口径「子agent运行时间不要设置最大时间」:无时间盒条目不再有兜底硬上限——
+// 无时间盒条目不再有兜底硬上限——
 // 未设 deadlineMin 的子代理只受 stale 预警(可见性),永不被 watchdog 判死。
 
 export interface SubagentWatchdogAction {
@@ -845,11 +840,11 @@ export interface SubagentWatchdogAction {
   overMs?: number;
 }
 
-/** watchdog 扫描纯函数(2026-10-20 防死机制,直测锚):对注册表里 running 条目判两类死态——
+/** watchdog 扫描纯函数(防死机制,直测锚):对注册表里 running 条目判两类死态——
  * ①idle>staleWarnMs 且未预警过→stale-warn(只发一次,主 agent 知情后可止损重派);
  * ②设了时间盒且超过 deadline+宽限仍 running→reap-dead(收割失灵=子代理已死,必须强制终态,
  *   否则条目永远 running、父会话永远等不到通知)。未设时间盒(deadlineAt 缺席)=不限时,只①不②
- *   (2026-10-21 用户口径)。终态条目不产生任何动作。 */
+ *。终态条目不产生任何动作。 */
 export function scanBgAgentsForWatchdog(now = Date.now()): SubagentWatchdogAction[] {
   const actions: SubagentWatchdogAction[] = [];
   for (const [agentId, en] of bgAgents) {
@@ -911,7 +906,7 @@ export function runSubagentWatchdog(journal: Journal): void {
 let subagentWatchdogTimer: ReturnType<typeof setInterval> | undefined;
 /** 启动注册表巡检(幂等,60s 节律,unref 不挡进程退出)。wireAgentLoop 首次装配时调用;
  * journal 单例(app.ts 建)——进程内所有任务的子代理共用同一巡检。
- * 2026-10-21 会话 worker 模式下由 app.ts 直接调用(gateway 不走 wireAgentLoop,巡检对象=镜像注册表)。 */
+ * 会话 worker 模式下由 app.ts 直接调用(gateway 不走 wireAgentLoop,巡检对象=镜像注册表)。 */
 export function ensureSubagentWatchdog(journal: Journal): void {
   if (subagentWatchdogTimer) return;
   subagentWatchdogTimer = setInterval(() => {
@@ -920,7 +915,7 @@ export function ensureSubagentWatchdog(journal: Journal): void {
   subagentWatchdogTimer.unref?.();
 }
 
-// ── 终态后异步收尾追踪(2026-10-21 会话 worker:退出前等 distill/memory/goal 收尾落定)──
+// ── 终态后异步收尾追踪(会话 worker:退出前等 distill/memory/goal 收尾落定)──
 const postTerminalPending = new Map<string, number>();
 function trackPostTerminal(sessionId: string, p: Promise<unknown>): void {
   postTerminalPending.set(sessionId, (postTerminalPending.get(sessionId) ?? 0) + 1);
@@ -935,7 +930,7 @@ export function postTerminalInflight(sessionId: string): number {
   return postTerminalPending.get(sessionId) ?? 0;
 }
 
-// ── 任务终态档案(2026-10-20 用户口径:记录所有已实施任务/规划,compact 后可再注入快速恢复;
+// ── 任务终态档案(记录所有已实施任务/规划,compact 后可再注入快速恢复;
 // planner 基于历史规划做新规划)──append-only .genie/task-archive.jsonl,每条:任务摘要+五阶段轨迹+板摘要。
 export interface TaskArchiveEntry {
   at: number; sessionId: string; taskId: string; state: string;
@@ -973,7 +968,7 @@ export function renderTaskArchiveBlock(entries: TaskArchiveEntry[]): string {
   return "\n\n## 历史任务档案(compact 后恢复锚;做相关任务先对齐历史结论,别推翻已验证的成果)\n" + lines.join("\n");
 }
 
-/** 派发 tip(2026-10-21 自纪律卡移出:首次 spawn_subagent 时注入,不占 kickoff 纪律卡篇幅)。 */
+/** 派发 tip(自纪律卡移出:首次 spawn_subagent 时注入,不占 kickoff 纪律卡篇幅)。 */
 export const DISPATCH_TIP = [
   "## 派发 tips(首次派子代理时注入)",
   "- 派发分档:小步文件修改自己上手更快;新模块/大型/多模块开发拆子任务派 spawn_subagent;选择等待用 wait:true 或 task_output(waitFor:\"result\")(挂起零 LLM);不要重复在跑子代理任务书里的内容",
@@ -982,16 +977,14 @@ export const DISPATCH_TIP = [
 ].join("\n");
 
 /**
- * 并行 tip(2026-11-04 T-D 轨迹实测落地)。
- *
- * 实测:近 3 天 25 会话 6,590 步,85.4% 的步只发 1 个调用(并行率 11.4%)——主轨仍是严格
+ * 并行 tip( T-D 轨迹经验证落地)。
+ * 经验证:近 3 天 25 会话 6,590 步,85.4% 的步只发 1 个调用(并行率 11.4%)——主轨仍是严格
  * 「一步一动作」串行形态,而每多一轮就多付一次全量 input(34% 的步 >400k input,吃掉 59% 成本)。
  * 根因三选一已核实:①提示词强度非零(SYSTEM_A/SYSTEM_LITE 各一条并行纪律),但它是**常量**,
  * 不随步态触发,长会话里注意力衰减后形同不存在;②工具面 `isConcurrencySafe` 只在 loop 分批发
  * 那侧生效,**不进 schema/description**,模型看不见「这个工具可以配着发」;③模型默认习惯是逐条发。
  * → 落地点选「确定性触发」:上一步只发了 1 个**可配对的只读探测工具**时,下一步注入一次提醒,
  *   把静态纪律变成「恰好在最该并行的时刻出现」的短提示。
- *
  * 成本约束:tip 是 ephemeral(每步重算、只活本步),但仍要防刷屏——冷却 8 步 + 每个压缩
  * episode 至多 3 次;GENIE_TIPS=off 全关。
  */
@@ -1015,10 +1008,10 @@ export const PARALLEL_TIP_MAX_PER_EPISODE = 3;
 const VERIFY_TOOL_NAMES: ReadonlySet<string> = new Set(["run_cmd", "terminal", "run_workflow"]);
 
 /**
- * tips 即时增强引擎(2026-10-23 用户口径收敛:「每条 user message 跟一条匹配式 tips」多余且常
+ * tips 即时增强引擎( 「每条 user message 跟一条匹配式 tips」多余且常
  * 错配——模型上下文已含会话语境,code_sense 内容必须是拉取式(call 工具才返回,不推送);经验/
  * devlog/历史档案同理不再按指令匹配推送(compact 后的恢复锚仍保留在压缩路径,那是补丢失的
- * 上下文,不是重复推送)。2026-10-21 版的 code-orient/history-align 两类匹配式注入已删。
+ * 上下文,不是重复推送)。 版的 code-orient/history-align 两类匹配式注入已删。
  * 只留功能性 tip,各一次为限,由 loop 每 step 调用(ctx=上一步实际执行的工具名):
  *  - board-comments:白板新评论取走即消费(用户评论必须到达 agent——这是投递,不是增强);
  *  - dispatch:首次 spawn_subagent → 派发分档+上下文卫生(行为纪律,非匹配内容)。
@@ -1028,32 +1021,32 @@ export function buildLoopTips(deps: {
   sessionId: string;
   /** SOP 阶段信号(2026-11 tips SOP 化):不传=无阶段信号,旧调用方零行为变化。 */
   getPhase?: () => string | undefined;
-  /** 全链路变更信号(2026-11-06):plan/close 阶段卡换成盘点/残留审计卡。不传=零行为变化。 */
+ /** 全链路变更信号:plan/close 阶段卡换成盘点/残留审计卡。不传=零行为变化。 */
   changeScope?: () => string | undefined;
 }): (ctx: {
   step: number; lastStepTools: string[];
-  /** J1(token 轮):上一步工具调用涉及的文件夹具参数;旧 ctx 形态缺省=[]。 */
+ /** (token 轮):上一步工具调用涉及的文件夹具参数;旧 ctx 形态缺省=[]。 */
   lastStepFiles?: string[];
-  /** J1:本 turn 累计工具错误数;旧 ctx 形态缺省=0。 */
+ /** :本 turn 累计工具错误数;旧 ctx 形态缺省=0。 */
   totalErrors?: number;
-  /** J1:本 turn 累计 usage tokens(与 gate 对齐节奏用);旧 ctx 形态缺省=0。 */
+ /** :本 turn 累计 usage tokens(与 gate 对齐节奏用);旧 ctx 形态缺省=0。 */
   tokensSpent?: number;
-  /** J1:注入闸(见 runtime inject-gate);旧 ctx 形态缺省=undefined(不过闸,行为同旧版)。 */
+ /** :注入闸(见 runtime inject-gate);旧 ctx 形态缺省=undefined(不过闸,行为同旧版)。 */
   gate?: InjectGate;
-  /** J1:最近一条轨迹卡摘要行(loop 的 task.trajectory 旁路产物)。 */
+ /** :最近一条轨迹卡摘要行(loop 的 task.trajectory 旁路产物)。 */
   trajectory?: string;
   compacts?: number; phase?: string; lastStepError?: boolean;
 }) => { text: string; keys: string[]; metrics: TipMetricSpec[] } | null {
   const fired = new Set<string>();
-  // compact 后 tip 失忆自愈(2026-10-21):tips 是 ephemeral(不落 journal),autoCompact 之后
+ // compact 后 tip 失忆自愈:tips 是 ephemeral(不落 journal),autoCompact 之后
   // 模型看不见已注入的 tip。loop 每 step 带 compact.done 计数(ctx.compacts);计数增长=fired
   // 清空,各类 tip 允许重注入一次(严格「每次 compact 后至多一次」,不是无限重放)。
   let lastCompacts = 0;
-  // 并行 tip 的**旧**节流状态(2026-11-04):仅在 ctx 未带 gate 的旧调用方路径使用
+ // 并行 tip 的**旧**节流状态:仅在 ctx 未带 gate 的旧调用方路径使用
   // (J1 token 轮起正式路径由 InjectGate 单一机制限流,见下方注)。
   let lastParallelStep = -Infinity;
   let parallelInjects = 0;
-  // ── J1(2026-11 token 轮)任务内步态状态:动态卡(dyn:*)的判定信号源。
+ // ── (2026-11 token 轮)任务内步态状态:动态卡(dyn:*)的判定信号源。
   // fileEditStreak=每个文件「连续被改动」的步数(某步没编辑该文件即归零);verifyRounds=本任务
   // 已发生的验证轮次(跑 run_cmd/terminal/run_workflow 这类验证工具的步数);boardTouched=首次
   // 在 ctx.lastStepTools 里见到 board_upsert 即置 true(此后不再回退,语义=本任务落过板)。
@@ -1109,7 +1102,7 @@ export function buildLoopTips(deps: {
     const parts: string[] = [];
     const keys: string[] = [];
     const pushKey = (k: string) => { if (!keys.includes(k)) keys.push(k); };
-    // 白板新评论(2026-10-22):取走即消费——用户评论了就要有人接,不等 agent 自己想起 board_read。
+ // 白板新评论:取走即消费——用户评论了就要有人接,不等 agent 自己想起 board_read。
     const pendBlock = renderPendingCommentsBlock(takePendingComments(deps.sessionId));
     if (pendBlock) { parts.push(pendBlock); pushKey("board-comments"); }
     // SOP 行式卡(2026-11 tips SOP 化,恰时一次为限;放 board-comments 之后、dispatch 之前):
@@ -1118,7 +1111,7 @@ export function buildLoopTips(deps: {
     // 直接进 fired,compact 后清空自动允许重注入一次(与 dispatch 同语义,不另造机制)。
     // ctx.phase 优先(loop 的 tipsPhase 通道);ctx 未带 phase 时兜底读 deps.getPhase
     // (装配方可只接 deps 不接 loop tipsPhase,两条通道等价)。未带 phase 字段且无 getPhase
-    // 的旧 ctx 形态零注入——不是回到消息匹配式老路。
+ // 的旧 ctx 形态零注入——不是回到消息匹配式做法。
     const rawPhase = ctx.phase ?? deps.getPhase?.();
     const ph = rawPhase && SOP_TIPS[rawPhase] ? rawPhase : null;
     if (ph) {
@@ -1135,7 +1128,7 @@ export function buildLoopTips(deps: {
       const b = once("dispatch", DISPATCH_TIP);
       if (b) { parts.push(b); pushKey("dispatch"); }
     }
-    // 并行提醒(2026-11-04,J1 2026-11 token 轮改造):上一步恰好 1 个调用且该调用是可配对的
+ // 并行提醒(J1 2026-11 token 轮改造):上一步恰好 1 个调用且该调用是可配对的
     // 只读探测工具 → 提醒同发。只认「1 个」是刻意的:0 个=纯文本步(可能已收尾),≥2 个=已经
     // 在并行,都不需要提醒。
     // **J1 改动**:旧实现用「冷却 8 步 + 每 episode ≤3 次」双节流(步数口径);J1 起并行提醒改为
@@ -1188,7 +1181,7 @@ export function buildLoopTips(deps: {
     return {
       text: "<system-reminder>tips(做这类事之前的信息增强,直接利用,不要复述此段)\n" + parts.join("\n\n") + "</system-reminder>",
       keys,
-      // M23 指导可度量(2026-11-07):每条已注入 tip 带上「触发条件/预期行为/指标口径」——
+ //  指导可度量:每条已注入 tip 带上「触发条件/预期行为/指标口径」——
       // 面板与 tip.injected 留痕可直接回答「这条指导为什么出现、用哪条指标验效果」。
       metrics: metricOf(keys),
     };
@@ -1224,8 +1217,7 @@ export function progressNoteFromTrajectory(
 export function applyTrajectoryProgress(
   tm: { touch(taskId: string, patch: { phase?: string; step?: number; note?: string; at?: number }): unknown } | undefined,
   taskId: string | undefined,
-  ev: TrajectoryProgressEvent,
-): void {
+  ev: TrajectoryProgressEvent): void {
   if (!tm || !taskId) return;
   try {
     tm.touch(taskId, {
@@ -1238,7 +1230,7 @@ export function applyTrajectoryProgress(
 }
 
 /**
- * 网关启动僵尸清算(2026-10-15「僵尸 worker」根治,机制4):上一进程遗留的 spawn-无-result
+ * 网关启动僵尸清算(「僵尸 worker」根治,机制4):上一进程遗留的 spawn-无-result
  * 子代理统一补一条终态标记。journal append-only——补 subagent.result 事件,不改历史;
  * 面板目录/状态卡与投影 running 计数从此落「失败(网关重启,子代理随进程终止)」,
  * 不再永远「后台运行中 · 已工作 N 小时」。
@@ -1295,14 +1287,14 @@ export function reapOrphanSubagents(journal: Journal, opts?: { bootAt?: number }
   return reaped;
 }
 
-/** 子代理模型名读数(step-060):provider 带 modelName(openai-compat/realtime 均暴露,getter 跟热更)
+/** 子代理模型名读数:provider 带 modelName(openai-compat/realtime 均暴露,getter 跟热更)
  * 则取之;自造 provider(测试/脚本)无该字段回落「主模型」——诚实降级,不猜名字。 */
 function subagentModelNameOf(p: LlmProvider): string {
   const m = (p as { modelName?: unknown }).modelName ?? (p as { model?: unknown }).model;
   return typeof m === "string" && m !== "" ? m : "主模型";
 }
 
-// fixG(2026-10-18 先骨架后丰羽翼+开发类型分治):设计白板纪律段补流程骨架优先两阶段(≤9 节点/flow 内步骤/小任务豁免);
+// fixG(先骨架后丰羽翼+开发类型分治):设计白板纪律段补流程骨架优先两阶段(≤9 节点/flow 内步骤/小任务豁免);
 // 规划必成板段按三分法重写(UI=界面骨架先行/mixed=UI 骨架总纲+逻辑锚点/headless=流程骨架)+两阶段节奏。
 const SYSTEM_A = `你是 lampgenie-harness 的 vibe coding 主 agent(编码轨,唯一身份声明;行为纪律继承自管家 soul)。职责:理解用户任务,拆解并调度子 agent 执行;简单问题直接回答。
 - **许愿式需求深挖**(开工第一步,先于任何工具调用):用户举的例子通常是所属类别的**一个样本**——先内心三问(①同类扩展:该类别还有哪些成员 ②关联传导:改动牵动哪些上下游 ③边界条件:异常/空态/规模上限如何表现)。高把握→按扩展范围直接做,开工一句话明示;有取舍或范围可能显著膨胀→先 ask_user 给 2~4 个选项再动;用户明确「只做这个」→严格按字面。不做深挖就闷头做最小实现,也不许范围膨胀到无法交付。
@@ -1328,7 +1320,7 @@ const SYSTEM_SENSE = `
 - **code_sense 用法**(代码认知统一入口;结构面毫秒级、语义画像面秒级):**按问题选能力,别套固定几个命令**——想知道「有哪些能力、这轮该怎么传参」,先 tool_view(name="code_sense") 看全量说明再动手;下面只是索引不是白名单。常见场景:符号定义/调用方/被调方、文件符号表、改动波及面与关联测试、字面量引用面(删改字符串标识时符号面会全空)、分支与循环条件、整仓主干与分层、协议表面(WS 消息↔收发点)、变量类型清单;语义面用于调用链时序、模块导读、关键词聚合、接口/状态机/算法/页面流画像。**唯一硬约束**:符号类查询的目标必须是真实代码符号名(传目录路径/自然语言必然全空,不是工具没能力)。`;
 
 /**
- * 运行环境段(2026-11-02 减步轮):16 题评测 215 次调用里 128 次是探索,其中 31 步(14%)纯在找
+ * 运行环境段(减步轮):16 题评测 215 次调用里 128 次是探索,其中 31 步(14%)纯在找
  * node 解释器、53 步在试「怎么用 node 跑 .ts」——这些启动时就确定,不该每题重探。
  * 探测一次即缓存(模块级),只读不写:候选 = process.execPath + ~/.nvm/versions/node 下所有 bin/node,
  * 各自 `-v` 问版本,取满足 ≥22.6(--experimental-strip-types 可用的最低线)的最高版本;全不满足则回落 execPath。
@@ -1380,7 +1372,7 @@ export function runtimeEnvBlock(): string {
 export const SYSTEM = SYSTEM_A + SYSTEM_PLAN + SYSTEM_DISPATCH + SYSTEM_VERIFY + SYSTEM_TAIL + SYSTEM_SENSE + runtimeEnvBlock();
 
 /**
- * 精简档(2026-10-29 token 轮 P2):只保留安全与输出必需项,省掉流程仪式主体。
+ * 精简档( token 轮 P2):只保留安全与输出必需项,省掉流程仪式主体。
  * 口径依据:ours system prompt 4,853 字符其中中文 53%,中文 token 密度是英文 2.66×;
  * 简单任务(短任务书)不值得每步背五阶段/plan-gate/验收四步全文——精简档 ~1.1k 字符,
  * 每步省 ~2,000 tok。触发口径见 systemForTaskClass 的 opts.lite + 调用点(指令 <1450 字符)。
@@ -1398,13 +1390,13 @@ export const SYSTEM_LITE = `你是 lampgenie-harness 的 vibe coding 主 agent(�
 - 子代理/命令失败如实说失败,不编造成功。` + runtimeEnvBlock();
 
 /**
- * 按任务类别组系统纪律段(2026-10-23 用户口径:理解阶段定类,提示词按类出;类别可被
+ * 按任务类别组系统纪律段(理解阶段定类,提示词按类出;类别可被
  * task_phase(taskClass=...) 更正,更正后下一轮次起按新类)。
  * coding=全文;qa=免阶段/白板/验收仪式,保留派发+code_sense 用法(调研查代码高频);
  * office=只留通用段。两条类别注记都带更正路径——初判错类时模型自己能纠正。
  */
 export function systemForTaskClass(cls: TaskClass, opts: { lite?: boolean } = {}): string {
-  // 精简档(2026-10-29 token 轮 P2):coding 短任务书走 SYSTEM_LITE;qa/office 分支行为不变。
+ // 精简档( token 轮 P2):coding 短任务书走 SYSTEM_LITE;qa/office 分支行为不变。
   if (cls === "coding" && opts.lite) return SYSTEM_LITE;
   if (cls === "qa") {
     return SYSTEM_A + SYSTEM_DISPATCH + SYSTEM_TAIL + SYSTEM_SENSE
@@ -1414,12 +1406,12 @@ export function systemForTaskClass(cls: TaskClass, opts: { lite?: boolean } = {}
     return SYSTEM_A + SYSTEM_DISPATCH + SYSTEM_TAIL
       + "\n- **任务类别(office 办公/产出)**:本任务免五阶段;但动笔前要先落**作业思路板**(board_upsert boardType=\"composition\":主题/受众/表达结构/几章/每章主题/章间关系与顺序)或传 exemptReason 留痕豁免(确无表达结构时)——plan-gate 按此硬闸放行;先明确产出要求(格式/篇幅/受众,不清楚先问),直接制作;交付前自查内容完整/格式正确/无占位残留;若过程涉及改代码,task_phase(taskClass=\"coding\") 更正后按编码纪律执行。"
       + "\n- **研究/调研类引用账本(必做)**:每个检索来源先 web_fetch 抓到正文,再 cite_source(url+逐字出现在抓取正文里的 quote) 换编号;正文编号只用它返回的 [n](不许自己排序/改号);无检索证据的推断标 [unverified];收尾会按登记表校验,未登记/越界编号会被点名。"
-      + "\n- **产出方法论(动笔前必读)**:按产物先 skill_view 对应技能——任何产出都先读 builtin/office-writing(内核:开工四问、论点四段、禁提纲交付、去 agent 腔句式清单、能画图就别写表格);PPT 加读 builtin/office-pptx 与 builtin/ppt-master(产线:判型/四步门/版式容量表/能力边界),Word 加读 builtin/office-docx,Excel 加读 builtin/office-xlsx,周报/复盘/方案/调研报告加读 builtin/office-report。**要真正落一份 .pptx 时派子代理**:spawn_subagent(agentType=\"ppt-master\")(它带 board_export_pptx 质量门,交付前逐条过门);自己写文档/表格不必派。四条硬线:①**开工四问先答完**——面向谁报告(谁看/要拿它做什么决定)、汇报主题是什么(一句疑问句)、要突出的重点是哪 1~2 条且这次不讲哪 2~3 条、每个论点的论据与分析从哪来;答不上先问人或去查,不许边写边想;②**每个论点四段齐全**——主张 + 可溯源论据(数字/来源/口径)+ 分析(因果或排除推理,不许复述论据)+ 结论/所以呢,并主动写反证(什么条件下这条不成立);③正文按人话写,禁开场报幕、收尾谢幕、过程自述与空心副词;④流程/结构/时序/趋势一律画图(Markdown 用 mermaid 代码块,PPT 用原生形状与图表),表格只装结构化数据。";
+      + "\n- **产出方法论(动笔前必读)**:按产物先 skill_view 对应技能——任何产出都先读 builtin/office-writing(内核:开工四问、论点四段、禁提纲交付、去 agent 腔句式清单、能画图就别写表格);PPT 加读 builtin/office-pptx 与 builtin/ppt-master(生产环境:判型/四步门/版式容量表/能力边界),Word 加读 builtin/office-docx,Excel 加读 builtin/office-xlsx,周报/复盘/方案/调研报告加读 builtin/office-report。**要真正落一份 .pptx 时派子代理**:spawn_subagent(agentType=\"ppt-master\")(它带 board_export_pptx 质量门,交付前逐条过门);自己写文档/表格不必派。四条硬线:①**开工四问先答完**——面向谁报告(谁看/要拿它做什么决定)、汇报主题是什么(一句疑问句)、要突出的重点是哪 1~2 条且这次不讲哪 2~3 条、每个论点的论据与分析从哪来;答不上先问人或去查,不许边写边想;②**每个论点四段齐全**——主张 + 可溯源论据(数字/来源/口径)+ 分析(因果或排除推理,不许复述论据)+ 结论/所以呢,并主动写反证(什么条件下这条不成立);③正文按人话写,禁开场报幕、收尾谢幕、过程自述与空心副词;④流程/结构/时序/趋势一律画图(Markdown 用 mermaid 代码块,PPT 用原生形状与图表),表格只装结构化数据。";
   }
   return SYSTEM;
 }
 
-/** ask_user 工具(2026-10-19 许愿式编程):需求有取舍时向用户发问并阻塞等待。
+/** ask_user 工具(许愿式编程):需求有取舍时向用户发问并阻塞等待。
  * 有界:router 侧 10 分钟超时;离线/超时→返回「未答复」文本,agent 按最合理推断继续(不卡死)。
  * 会话上下文:只允许主 agent 使用(子代理无面板入口,不注册)。 */
 export function askUserTool(sessionId: string, askUser: { ask: (sid: string, p: { question: string; options?: string[]; context?: string }) => Promise<string | null> }): Tool {
@@ -1444,7 +1436,7 @@ export function askUserTool(sessionId: string, askUser: { ask: (sid: string, p: 
     async execute(args: unknown) {
       const a = (args || {}) as { question?: string; options?: string[]; context?: string };
       if (!a.question) return "ask_user 需要 question";
-      // M183 注意力预算:一次只问一个具体问题(结构化),外发消息必须有用途(decision);
+ // 注意力预算:一次只问一个具体问题(结构化),外发消息必须有用途(decision);
       // 不通过即回工具错误(稳定码+可操作提示),绝不落到面板消耗用户注意力。
       const gate = guardAskUserPayload({ question: a.question, options: a.options, context: a.context });
       if (!gate.ok) return gate.message;
@@ -1459,15 +1451,15 @@ export function askUserTool(sessionId: string, askUser: { ask: (sid: string, p: 
   };
 }
 
-/** M43 todo 严格整表纪律:条目状态枚举 + 内容上限。 */
+/**  todo 严格整表纪律:条目状态枚举 + 内容上限。 */
 const TODO_STATUSES = ["pending", "in_progress", "completed"] as const;
 type TodoStatus = (typeof TODO_STATUSES)[number];
 const TODO_CONTENT_MAX = 120;
 const TODO_ERROR_MAX = 600;
 
-/** todo_write 工具(step-030,ZCode TodoWrite 对应物):多步任务的工作计划落 journal,
+/** todo_write 工具(ZCode TodoWrite 对应物):多步任务的工作计划落 journal,
  * session.status 投影据此驱动面板进度小窗(todo n/m)。
- * M43 严格校验:空 items/未知键/空或超长 content/未知 status/重复 content 全部显式失败且不落
+ *  严格校验:空 items/未知键/空或超长 content/未知 status/重复 content 全部显式失败且不落
  * journal(不再静默过滤/归 pending);多个 in_progress 默认拒绝(allowParallelInProgress 放行)。 */
 export function todoTool(journal: Journal, sessionId: string, opts?: { allowParallelInProgress?: boolean }): Tool {
   const fail = (msg: string): string => `[todo_write] ${msg}`.slice(0, TODO_ERROR_MAX);
@@ -1541,24 +1533,22 @@ export function todoTool(journal: Journal, sessionId: string, opts?: { allowPara
   };
 }
 
-/** board_upsert 工具(designs/22,step-057;step-137 代码级落目标):语义流程白板——代码改动类任务「先画后改」。
+/** board_upsert 工具(代码级落目标):语义流程白板——代码改动类任务「先画后改」。
  * agent 落 BoardDoc(模块节点+干什么+改动类型+函数内语义流程,节点可挂 code_sense 查到的符号);
  * 全量覆盖语义(同 todo_write),rev 自增;落盘 .genie/boards/<sid>/<taskId>.json +
  * journal board.update + bus 广播。**fail-soft:任何失败只回话术,绝不阻塞任务**。
  * 窄 schema 是刻意的:summary/flow 强制非空,防白板写成任务复述。
- *
- * step-137 三动作(同一工具、同一板文件,免多工具漂移):
+ * 三动作(同一工具、同一板文件,免多工具漂移):
  * - action=upsert(缺省):落整板。P0 节点必须带 accept(否则拒收录板,见 P0 落板门);
- *   status=done 还要求 P0 全部有 ok=true 证据(收口门)。
+ * status=done 还要求 P0 全部有 ok=true 证据(门)。
  * - action=evidence:按 nodeId 追加 evidence(at 服务端补),回执带最新覆盖率;该节点验收全绿时顺带 done=true。
- * - action=audit:只读收口核对——返回 P0 清单+逐条证据状态+覆盖率(不写盘)。all=true 扫本会话全部板。
- *
- * q4 子写者独立板(2026-10-25 架构修复):`opts.partition=true`(planner 子代理来源)+ 有 scope 时,
+ * - action=audit:只读核对——返回 P0 清单+逐条证据状态+覆盖率(不写盘)。all=true 扫本会话全部板。
+ * q4 子写者独立板(架构修复):`opts.partition=true`(planner 子代理来源)+ 有 scope 时,
  * 本写者的板 id 变成 `<taskId>-<scope>`,即落**独立板文件** `.genie/boards/<sid>/<taskId>-<scope>.json`,
  * 不再并进调用方(主 agent)的任务板。缺陷现场:主 agent 板本只有 4 个 P0 节点,两个 planner 以
- * scope=bp/kb 并入后 `action=audit` 报 4/24(17%)——收口审计跨任务计分,主 agent 永远无法宣称完成。
+ * scope=bp/kb 并入后 `action=audit` 报 4/24(17%)——审计跨任务计分,主 agent 永远无法宣称完成。
  * 主 agent(构造时不带 partition/scope)路径逐字不变,仍是 `<taskId>.json`。 */
-/** 规划质量结构化字段(B2 P2 遗留,2026-11-06):面板任务结算直接读,不用重放板。
+/** 规划质量结构化字段(B2 P2 遗留:面板任务结算直接读,不用重放板。
  * 口径:contentNodes=非 ph- 前缀且过 isContentNode 的节点(与 plan-gate 放行判据同源);
  * anchorDensity=带 targets 或 symbolRef 的内容节点占比(0~1,四舍五入 3 位);p0Rate=P0 accept 证据通过率。 */
 export function planQualityOf(doc: { boardType?: string | null; nodes: readonly unknown[] }): {
@@ -1580,14 +1570,14 @@ export function planQualityOf(doc: { boardType?: string | null; nodes: readonly 
   };
 }
 
-/** 三位小数舍入(板质量遥测 2026-11-05):率字段统一口径,避免 0.3333333 漂进 journal。 */
+/** 三位小数舍入(板质量遥测):率字段统一口径,避免 0.3333333 漂进 journal。 */
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
-/** bq3(2026-11-05 遥测闭环):骨架采纳率纯函数——board.skeleton 事件的 landed 并集(分母)
+/** bq3(遥测闭环):骨架采纳率纯函数——board.skeleton 事件的 landed 并集(分母)
  * vs 终板 sk- 前缀节点存活数(分子)。分母 0(本会话没落过骨架)返回 null=整段不落。 */
 export function computeSkeletonAdoption(
   finNodes: readonly unknown[],
-  // 2026-11-05:journal 事件是 JournalEvent<unknown>(payload 宽类型),收 unknown 再结构断言,防逆变报错。
+ // journal 事件是 JournalEvent<unknown>(payload 宽类型),收 unknown 再结构断言,防逆变报错。
   skEvents: readonly unknown[],
 ): { generated: number; survived: number; adoptionRate: number } | null {
   const landedIds = new Set<string>();
@@ -1607,7 +1597,7 @@ export function boardUpsertTool(
   /** q4:本工具属于 planner 子代理来源(其 scope 写入落独立板)。缺省 false=单写者旧行为。 */
   opts: {
     partition?: boolean;
-    /** 豁免留痕回调(2026-11-05):agent 传 exemptReason 声明「本任务确实没有开发内容/表达结构」时
+ /** 豁免留痕回调:agent 传 exemptReason 声明「本任务确实没有开发内容/表达结构」时
      *  调用(由调用方把 boardExemptThisTask 置真 → plan-gate 放行)。只留痕,不写板。 */
     onExempt?: (reason: string, taskClass: string) => void;
     /** 当前任务类别(只进 board.exempt 留痕,供遥测归因)。 */
@@ -1741,7 +1731,7 @@ export function boardUpsertTool(
           },
         },
         planned_files: { type: "array", items: { type: "string" } },
-        /** 紧凑 DSL 主路径(2026-11-03):一行一语句,比逐节点全字段 JSON 省 60%+ 输出。 */
+ /** 紧凑 DSL 主路径:一行一语句,比逐节点全字段 JSON 省 60%+ 输出。 */
         dsl: {
           type: "string",
           description: "紧凑白板 DSL(与 nodes 同给:dsl 为准,JSON 只补 flow/evidence):\n"
@@ -1754,7 +1744,7 @@ export function boardUpsertTool(
             + "  sym: <name>@<file>:<line>\n"
             + "edge <from> -> <to> : <label>   (->call ->>data ~>verify =>nav =>>contains)",
         },
-        /** 豁免留痕(2026-11-05,可选;不新增工具、只复用本工具入参):声明「本任务确实没有开发
+ /** 豁免留痕(可选;不新增工具、只复用本工具入参):声明「本任务确实没有开发
          *  内容/表达结构」时不写板,只落 journal board.exempt → plan-gate 放行。不与 nodes/dsl 同给。 */
         exemptReason: { type: "string", description: "确无开发内容/表达结构时的豁免理由(20~200 字):为什么本任务没有可画的内容。只传它=不写板,仅 journal 留痕豁免 plan-gate" },
         docKind: { type: "string", enum: ["design", "page"] },
@@ -1806,7 +1796,7 @@ export function boardUpsertTool(
         const { computeP0Coverage, markDoneFromEvidence, renderP0Status, validateChangeContract, validateCallEdges, validateBoardTypeConformance } = await import("./board-accept.js");
         const root = storeRoot ?? repoRoot();
         const action = a.action ?? "upsert";
-        // 豁免留痕(2026-11-05 用户拍板「office 走硬闸 + 豁免留痕」):action 未指定或 upsert 且**只**带
+ // 豁免留痕(用户拍板「office 走硬闸 + 豁免留痕」):action 未指定或 upsert 且**只**带
         // exemptReason(无 nodes/dsl)= 不写板,只落 journal board.exempt 并回执 exempted。plan-gate 据此放行。
         // 校验:trim 后 <20 字拒(空话不算理由);>200 字截断(留痕够用,不撑爆 journal)。
         if ((a.action === undefined || a.action === "upsert")
@@ -1833,11 +1823,11 @@ export function boardUpsertTool(
         const scopeRaw = (typeof a.scope === "string" && a.scope.trim() !== "" ? a.scope : scope) ?? "";
         const scopeId = scopeRaw.trim().replace(/[^a-zA-Z0-9-]/g, "").replace(/^-+|-+$/g, "");
         // q4 子写者独立板:planner 子代理来源(partition)+ 有 scope → 本写者的板 id = `<taskId>-<scope>`,
-        // 即落独立板文件 `<taskId>-<scope>.json`。缺陷现场(2026-10-25):主 agent 板本只有 4 个 P0 节点,
-        // 两个 planner 以 scope=bp/kb 并进同一块板后 audit 报 4/24(17%)——收口审计跨任务计分。
+ // 即落独立板文件 `<taskId>-<scope>.json`。缺陷现场:主 agent 板本只有 4 个 P0 节点,
+ // 两个 planner 以 scope=bp/kb 并进同一块板后 audit 报 4/24(17%)——审计跨任务计分。
         // 主 agent(工具构造时不带 partition、也无 scope)boardId 恒等于 taskId,行为逐字不变。
         const boardId = opts.partition && scopeId !== "" ? `${taskId}-${scopeId}` : taskId;
-        // q4 配套(2026-10-25):planner 落独立板后,实施者(主 agent)必须能把验收证据回到**planner 的板**
+ // q4 配套:planner 落独立板后,实施者(主 agent)必须能把验收证据回到**planner 的板**
         // 上,否则「planner 画板 + 主 agent 补 evidence」只能靠把板复制一份,planner 的原始契约被架空。
         // targetTaskId 只允许本任务板/本任务分区板;planner 只允许自己的板(不能反写别人的分区)。
         const explicitTargetTid = typeof a.targetTaskId === "string" ? a.targetTaskId.trim() : "";
@@ -1855,7 +1845,7 @@ export function boardUpsertTool(
           : "";
 
 
-        // ---- action=skeleton:现状层骨架自动预填(2026-10-29)----
+ // ---- action=skeleton:现状层骨架自动预填----
         // 从 code-sense 索引快照生成 keep 节点+真实 call 边;锚经三态核验(broken 剔除、moved 刷行号
         // 后复验、targets missing/outside 剔项);planner 之后在底版上补变更层(add/modify 带 before)。
         if (action === "skeleton") {
@@ -1914,7 +1904,7 @@ export function boardUpsertTool(
             nodesCur = nodesCur.filter((n) => (n.targets?.length ?? 0) > 0);
           }
           if (nodesCur.length === 0) {
-            // bq2(2026-11-05 遥测闭环):rejected 也落账——骨架生成了多少/为何全剔,基线表要有这一行。
+ // bq2(遥测闭环):rejected 也落账——骨架生成了多少/为何全剔,基线表要有这一行。
             try {
               journal.append({
                 kind: "board.skeleton", sessionId,
@@ -1977,7 +1967,7 @@ export function boardUpsertTool(
             kind: "board.update", sessionId,
             payload: { taskId: boardId, path: sr.saved.path, rev: sr.saved.doc.rev, title: sr.saved.doc.title, nodeCount: sr.saved.doc.nodes.length, edgeCount: sr.saved.doc.edges.length, status: sr.saved.doc.status, docKind: sr.saved.doc.docKind ?? "design", skeleton: nodesCur.length },
           });
-          // bq2(2026-11-05 遥测闭环):骨架 ok 也落账——landed/剔除四桶/采纳基线(结算面
+ // bq2(遥测闭环):骨架 ok 也落账——landed/剔除四桶/采纳基线(结算面
           // task.quality 的 skeleton 维度按 landed 对账 finBoard 的 sk- 节点存活率)。
           try {
             journal.append({
@@ -2011,15 +2001,15 @@ export function boardUpsertTool(
           });
         }
 
-        // ---- action=audit:只读收口核对(P0 清单+证据+覆盖率),不写盘 ----
+ // ---- action=audit:只读核对(P0 清单+证据+覆盖率),不写盘 ----
         if (action === "audit") {
-          /** 2026-10-25:format=json 的结构化出口(execute 仍 string;JSON 是字符串内容)。 */
+ /** :format=json 的结构化出口(execute 仍 string;JSON 是字符串内容)。 */
           const jsonFormat = a.format === "json";
           const boardsOut: Array<Record<string, unknown>> = [];
           const targets: string[] = [];
           // q4 缺省只核对**本写者自己的板**(boardId);跨看必须显式 all:true
           // (缺陷现场:子写者并入主板后,主 agent 的 audit 把自己的 4 个 P0 和别人的 20 个一起算成 17%)。
-          // 2026-10-25:targetTaskId 显式指定本任务的分区板=审计 planner 的原始契约。
+ // targetTaskId 显式指定本任务的分区板=审计 planner 的原始契约。
           if (targetError) {
             if (jsonFormat) return JSON.stringify({ ok: false, grand: { total: 0, passed: 0, rate: 1, covered: 0 }, writers: {}, boards: [], contractIssues: [], typeIssues: [], symbolIssues: [], targetIssues: [], reason: "target-not-allowed", message: targetError });
             return targetError;
@@ -2037,9 +2027,9 @@ export function boardUpsertTool(
           const pickNodes = (doc: { nodes: readonly unknown[] }) =>
             scopePrefix === "" ? doc.nodes : doc.nodes.filter((n) => String((n as { id?: unknown }).id ?? "").startsWith(scopePrefix));
           const blocks: string[] = [];
-          /** 变更契约自检(2026-10-25):跨板收集,收口回执统一点名(只提示不拒收)。 */
+ /** 变更契约自检:跨板收集,回执统一点名(只提示不拒收)。 */
           const contractLines: string[] = [];
-          /** 板型一致性门(2026-10-25):与通用契约自检分开,JSON 单列 typeIssues。 */
+ /** 板型一致性门:与通用契约自检分开,JSON 单列 typeIssues。 */
           const typeLines: string[] = [];
           /** 分组累积器:id 前缀 → P0 通过/总数;`""`=无前缀(裸 n1 这类)归「(无前缀)」组。 */
           const groupAcc = new Map<string, { passed: number; total: number }>();
@@ -2047,7 +2037,7 @@ export function boardUpsertTool(
           let grandTotal = 0;
           let grandPassed = 0;
           let grandCovered = 0;
-          // 规划质量主视角板(2026-11-06):第一块成功载入的目标板;all=true 时语义见 jsonFormat 出口注释。
+ // 规划质量主视角板:第一块成功载入的目标板;all=true 时语义见 jsonFormat 出口注释。
           let pqMainDoc: { boardType?: string | null; nodes: readonly unknown[] } | null = null;
           for (const tid of targets) {
             const doc = await loadBoardA(root, sessionId, tid);
@@ -2119,10 +2109,10 @@ export function boardUpsertTool(
             : `**收口核对:P0 覆盖率合计 ${grandPassed}/${grandTotal}(${Math.round((grandPassed / grandTotal) * 100)}%)**`
               + (groupAcc.size > 0 ? "(合计跨写者,仅参考)" : "")
               + (grandPassed < grandTotal ? "——未达 100%,禁止宣称任务完成,报告须显式列出未覆盖节点。" : "——全部通过。");
-          // 收尾自检(2026-10-25 板规范 §七):symbolRef 幻影引用核对——实施后符号挪位/改名,
+ // 收尾自检(板规范 §七):symbolRef 幻影引用核对——实施后符号挪位/改名,
           // 板上的引用会断链(broken=幻影)或漂移(moved);只读盘上索引(缺席退化为文件锚判定)。
           const phantom: string[] = [];
-          // targets 真实性核对(2026-11-04):板上 targets 常是幻影路径(写错/不存在/绝对路径)。
+ // targets 真实性核对:板上 targets 常是幻影路径(写错/不存在/绝对路径)。
           // 只报不判——targetIssues 不进 ok 计算;scope 分区口径与下面 symbolRef 核对一致。
           const targetIssues: string[] = [];
           try {
@@ -2169,10 +2159,10 @@ export function boardUpsertTool(
             }
             const writers: Record<string, { passed: number; total: number }> = {};
             for (const [g, v] of groupAcc) writers[g === "" ? "(无前缀)" : g] = v;
-            // 规划质量字段(2026-11-06,B2 P2):以**本任务主视角**输出——audit 目标板里第一块成功
+ // 规划质量字段(B2 P2):以**本任务主视角**输出——audit 目标板里第一块成功
             // 载入的就是主视角板(all=true 跨板时 grand 本就只作参考;字段语义=「本任务规划质量」)。
             const pq = planQualityOf(pqMainDoc ?? { nodes: [] });
-            // audit 落盘(2026-11-06,N1 实锤「9 条清单事后取不到」):JSON 结果写
+ // audit 落盘(N1 注意「9 条清单事后取不到」):JSON 结果写
             // <storeRoot>/.genie/boards-audit/<taskId>-<ts>.json,telemetry/回归直接对账;journal 事件不变。
             let auditPath = "";
             try {
@@ -2186,7 +2176,7 @@ export function boardUpsertTool(
                 writers, boards: boardsOut, contractIssues: contractLines, typeIssues: typeLines, symbolIssues: phantom, targetIssues,
               }, null, 1));
             } catch { /* 落盘失败不影响回执(audit 本体在 journal/回执里) */ }
-            // bq1(2026-11-05 遥测闭环):audit 结果旁路落 board.audit——跨会话消费(基线表/看板)
+ // bq1(遥测闭环):audit 结果旁路落 board.audit——跨会话消费(基线表/看板)
             // 直接读事件,不必重放 boards-audit 快照文件。独立 try:遥测失败不影响回执。
             try {
               // 主视角板指纹:节点按 id 排序、边按 from,to 排序,序列化后 sha1 前 12 位(内容变=指纹变)。
@@ -2232,8 +2222,8 @@ export function boardUpsertTool(
         // ---- action=evidence:按节点回填验收证据 ----
         if (action === "evidence") {
           if (targetError) return targetError;
-          // 2026-10-31 批量回填:一次调用可回填多节点(旧 nodeId 单节点路径逐字不变)。
-          // 实测一个 3 节点板原来要 3 次 evidence 调用(每步 ~18k input token)→ 现在 1 次。
+ // 批量回填:一次调用可回填多节点(旧 nodeId 单节点路径逐字不变)。
+ // 经验证一个 3 节点板原来要 3 次 evidence 调用(每步 ~18k input token)→ 现在 1 次。
           const normEvidence = (raw: unknown) => (Array.isArray(raw) ? raw : [])
             .map((e: { cmd?: unknown; ok?: unknown; output?: unknown; note?: unknown; at?: unknown }) => ({
               cmd: typeof e?.cmd === "string" ? e.cmd : "",
@@ -2287,7 +2277,7 @@ export function boardUpsertTool(
               // 多节点里全部不存在:点名全部,同样不写盘
               return `板上没有节点 ${missing.join("、")}(现有:${doc.nodes.map((n) => n.id).join(", ")};证据未落盘,任务不受影响)。`;
             }
-            // 2026-10-25:evidence 可顺带定板状态;done 仍走收口门(P0 证据全绿)校验,避免无证据收口。
+ // evidence 可顺带定板状态;done 仍走门(P0 证据全绿)校验,避免无证据。
             let statusNote = "";
             if (a.status !== undefined) {
               if (a.status === "done") {
@@ -2332,11 +2322,11 @@ export function boardUpsertTool(
 
         // ---- action=prune:清理零痕迹残留节点(白板历史污染清理) ----
         // 背景:upsert 无删除语义(刻意,怕误删人的工作)→ planner 换 id 重画后旧节点永久残留
-        // (实测某板 42 节点里 16 个是同写者自造双份,全部 done:false/evidence:[]/comments:[] 零人的痕迹)。
+ // (经验证某板 42 节点里 16 个是同写者自造双份,全部 done:false/evidence:[]/comments:[] 零人的痕迹)。
         // 安全门:①候选必须同时给 nodeIds 或 scope;②**每个**候选都要「零痕迹」(!done && 无 evidence && 无 comments),
         // 有痕迹一律拒删并点名 protectedIds;③缺省 dryRun(只报不删),必须显式 dryRun:false + confirm:true 才写盘;
         // ④真删时同步剔除 from/to 命中被删 id 的边(否则 saveBoard 的边引用完整性校验会拒收);
-        // ⑤saveBoard 带 skipGates(删掉 P0 节点后落板门/收口门会误判)。
+ // ⑤saveBoard 带 skipGates(删掉 P0 节点后落板门/门会误判)。
         if (action === "prune") {
           // 历史板清理(h):targetTaskId 缺省=当前任务板。boardPath 本身在 session 目录下,
           // 天然按会话隔离(不必再校验「板是否属于本会话」);loadBoard 返回 null 时不写盘。
@@ -2364,7 +2354,7 @@ export function boardUpsertTool(
             const wantIds = new Set(explicitIds);
             // 候选:显式 nodeIds 优先——同时接受盘上带 scope 前缀的 id 与调用方未带前缀的 id;
             // **给了 nodeIds 就不再按 scope 前缀整片命中**(旧实现 wantIds ∪ prefix 会把同 scope
-            // 的其它节点一起删,planner 实测显式清 9 个旧节点却报「删完剩 0」)。
+ // 的其它节点一起删,planner 经验证显式清 9 个旧节点却报「删完剩 0」)。
             // 只有没给 nodeIds 时才用 scope 前缀清整片残留。
             const candidates = doc.nodes.filter((n) => {
               if (wantIds.size) {
@@ -2425,7 +2415,7 @@ export function boardUpsertTool(
         }
 
         // ---- action=upsert(缺省):落整板 ----
-        // dsl 主路径(2026-11-03):LLM 写紧凑 DSL,这里解析成 nodes/edges 再走既有落板管线。
+ // dsl 主路径:LLM 写紧凑 DSL,这里解析成 nodes/edges 再走既有落板管线。
         // dsl 与 nodes 同给时按节点 id 合并:dsl 为准(基底+顺序),JSON 只补 dsl 写不了的字段(白名单见 board-dsl.ts),
         // JSON 独有 id 不并入;edges 仍由 dsl 硬覆盖。
         let dslNodes: unknown[] | undefined;
@@ -2450,7 +2440,7 @@ export function boardUpsertTool(
             dslDiagNote = ` ⚠ dsl ${warns.length} 条警告(前 3:${warns.slice(0, 3).map((d) => `第 ${d.line} 行 ${d.code}`).join(";")})`;
           }
         }
-        // dsl 与 nodes 同给时**按节点 id 合并**(2026-11-05):dsl 为基底与顺序,JSON 只补 dsl 写不了的字段
+ // dsl 与 nodes 同给时**按节点 id 合并**:dsl 为基底与顺序,JSON 只补 dsl 写不了的字段
         // (flow/evidence/comments/wf/fileRef/done/pos);JSON 独有 id 不并入(防两版并板);edges 仍 dsl 硬覆盖。
         let dslMergedNote = "";
         let effNodes = a.nodes;
@@ -2473,7 +2463,7 @@ export function boardUpsertTool(
         // q4:子写者(boardId≠taskId)读写的都是**自己的独立板**,与主 agent 的板互不可见。
         const ur = await withBoardLock(root, sessionId, boardId, async () => {
           const existing = await loadBoardA(root, sessionId, boardId);
-          // P0-4 模板接线(step-137):参数 template=smoke|preflight 直接把模板节点并进本板(板上已有同 id 则保留人工版本)。
+ // P0-4 模板接线:参数 template=smoke|preflight 直接把模板节点并进本板(板上已有同 id 则保留人工版本)。
           // 产品/桌面/安装类任务用 smoke;打包类另加 preflight。模板本身即合格契约(P0 smoke 自带 4 条 accept)。
           let nodesIn = effNodes as unknown[];
           if (a.template === "smoke" || a.template === "preflight") {
@@ -2512,7 +2502,7 @@ export function boardUpsertTool(
               edgesInRaw = edgesInRaw.map((e) => ({ ...e, from: resolveEnd(e.from), to: resolveEnd(e.to) }));
             }
           }
-          // f2 跨写者 id 撞车硬拒(2026-10-24):并行子代理各自从 n1 顺排、共用同一块板时,
+ // f2 跨写者 id 撞车硬拒:并行子代理各自从 n1 顺排、共用同一块板时,
           // mergeBoardNodes 按 id 合并会把别人的整块节点换成自己的一版(先落的静默消失)。
           // 只要「同 id 但 label 不同」= 两个写者争同一个 id,直接拒收并点名,不落盘。
           const prevById = new Map<string, string>();
@@ -2542,7 +2532,7 @@ export function boardUpsertTool(
           const mergedNodes = mergeBoardNodes(existing?.nodes, nodesIn);
           const nodesFinal = mergedNodes.nodes as unknown[];
           // t3 同 scope 旧节点残留提示:本写者以前落过、这次没提交的节点。upsert 无删除语义(删除只能人经
-          // board.save),所以「换 id 重画」会让旧的那套永久留在板上——实测曾出现同一 planner 两套 16 节点,
+ // board.save),所以「换 id 重画」会让旧的那套永久留在板上——经验证曾出现同一 planner 两套 16 节点,
           // 旧实现只在回执里报「保留人工改动」,对自造双份一声不吭。这里点名列出并给补救路径。
           const prevMineIds = scopeId === ""
             ? []
@@ -2554,13 +2544,13 @@ export function boardUpsertTool(
           // t2 系统派生前缀提示:scope 是 plannerScopeOf 的 `p`+4 位形态,且这是本板首次落本 scope 节点
           // (=prevMineIds 为空)时提醒一次——planner 自报 scope(a/b/c)后画布上才看得出谁是谁。
           const sysScopeFirstTime = scopeId !== "" && /^p[0-9a-z]{4}$/.test(scopeId) && prevMineIds.length === 0;
-          // 板类型(step-083):显式参数优先;未传时保留板上已有值(改板不丢类型),再退 design。
+ // 板类型:显式参数优先;未传时保留板上已有值(改板不丢类型),再退 design。
           const docKindIn = (effDocKind ?? existing?.docKind ?? "design") as string;
-          // 文档体裁(2026-10-27 docs 通用机制):显式优先,未传保留已有值(改板不丢)。
+ // 文档体裁( docs 通用机制):显式优先,未传保留已有值(改板不丢)。
           const docGenreIn = (typeof a.docGenre === "string" && a.docGenre.trim() !== ""
             ? a.docGenre.trim()
             : (existing as { docGenre?: string } | null | undefined)?.docGenre ?? undefined) as string | undefined;
-          // 关系自动推导(2026-10-22 用户口径「看不出有什么关系」):显式边优先,再按
+ // 关系自动推导:显式边优先,再按
           // 符号调用/验收/同组次序补 virtual 边。索引不可用时不造 call 边(如实降级,不猜)。
           // workflow 板与读/存两路同款跳过:它自带 board.fromcode 的真实调用边,推导补的
           // nav 边会撞「普通节点只允许 1 条出边」的编译校验(结构对称防御)。
@@ -2581,7 +2571,7 @@ export function boardUpsertTool(
           const derived = [...othersEdges, ...derivedMine];
           // 悬空边自动剔除(核心修复):mergeBoardNodes 在 maxNodes(60) 上限处**只截 prev-only 尾部**,
           // 被截掉的节点如果还挂在边上(othersEdges 是别人的边原样拼回来的),saveBoard 的边引用完整性校验
-          // 就会整板拒收 → 该板之后任何写者都永久失败(upsert 无删边语义=死锁)。实测 3 个并行 planner
+ // 就会整板拒收 → 该板之后任何写者都永久失败(upsert 无删边语义=死锁)。经验证 3 个并行 planner
           // 里 2 个因此连续落板失败。这里对最终边集再滤一遍:两端都必须真实存在于 nodesFinal。
           const finalIds = new Set((nodesFinal as { id?: unknown }[]).map((n) => String(n?.id ?? "")));
           const edgesKept: typeof derived = [];
@@ -2630,7 +2620,7 @@ export function boardUpsertTool(
             updatedAt: 0,
           }, { gateExemptNodeIds: mergedNodes.keptIds, agentWrite: true, labelExemptNodeIds });
           if (!r.ok) {
-            // step-137:落板门/收口门的拒收必须说清「哪不满足」,并给出补救路径(否则 agent 只会重试同样输入)
+ // 落板门/门的拒收必须说清「哪不满足」,并给出补救路径(否则 agent 只会重试同样输入)
             return r.reason + "(白板未保存;给 P0 节点补 accept 或用 action=evidence 回填证据后重试,任务不受影响)";
           }
           const prevIdSet = new Set(
@@ -2650,8 +2640,8 @@ export function boardUpsertTool(
         bus.emit("board.changed", { sessionId, taskId: boardId });
         const cov = computeP0Coverage(r.doc);
         const p0 = cov.total ? ` · P0 落目标 ${cov.passed}/${cov.total} 已通过验收` : "";
-        // P1-1 写板回执内联状态(2026-10-30 token 优化,替代模型板后 board_read 确认):
-        // 实测 web-1793279074382 里 62 次 board_read、53 次拿到 49 字符「未变更」存根却每条付满上下文
+ // P1-1 写板回执内联状态( token 优化,替代模型板后 board_read 确认):
+ // 经验证 web-1793279074382 里 62 次 board_read、53 次拿到 49 字符「未变更」存根却每条付满上下文
         // (合计 4.0M input=该会话 2.7%);web-1793329725963 里 board_read 占会话 input 40.8%。
         // 模型回读只为确认「板真落盘了吗/新增了几个/P0 还缺什么」——这三样都在落盘回调里现成,
         // 直接内联进回执即可消掉这次回读。控制长度:只给结论与点名,不回放节点文本(那是换一种烧 token)。
@@ -2663,7 +2653,7 @@ export function boardUpsertTool(
           : "";
         const churn = `本次新增 ${ur.addedN} 个${mergedNodes.keptIds.length > 0 ? `/保留 ${mergedNodes.keptIds.length} 个` : ""}`;
         const inlineState = `[板状态]rev ${r.doc.rev} · 共 ${r.doc.nodes.length} 节点(${churn}) · ${cov.total > 0 ? `P0 ${cov.total} 个/带 accept ${p0WithAccept} 个${p0MissingNote}` : "无 P0 节点"} · 板上状态已在此回执内,无需 board_read 确认;需要看全量节点文本才读`;
-        // 变更契约自检(2026-10-25):软提示,不拒收——存量板/人工节点缺字段不能让落板失败。
+ // 变更契约自检:软提示,不拒收——存量板/人工节点缺字段不能让落板失败。
         const contract = validateChangeContract(r.doc.nodes, r.doc.docKind, r.doc.edges, { boardType: r.doc.boardType, scale: r.doc.scale });
         const callIssues = validateCallEdges(r.doc.nodes, r.doc.edges, makeCalleesResolver(taskRoot));
         const typeIssues = validateBoardTypeConformance(r.doc.nodes, r.doc.edges, r.doc.boardType, r.doc.docKind, { scale: r.doc.scale, docGenre: r.doc.docGenre });
@@ -2692,7 +2682,7 @@ export function boardUpsertTool(
           ? ` ⓘ 当前作用域前缀「${usedScopeId}」是系统派生的${/[0-9a-z]/.test(usedScopeId.slice(1)) ? "随机短码" : "短码"};下次落板可显式传 scope=a/b/c 让画布上更好认。`
           : "";
         // t3 同 scope 旧节点残留提示:本次没提交的本写者旧节点 = upsert 无删除语义下的永久残留
-        // (实测同一 planner 换 id 重画后板上出现两套 16 节点,旧实现只报「保留人工改动」没点破)。
+ // (经验证同一 planner 换 id 重画后板上出现两套 16 节点,旧实现只报「保留人工改动」没点破)。
         const staleNote = staleMine.length > 0
           ? ` ⚠ 本作用域还有 ${staleMine.length} 个你以前的节点没在本次提交里(${staleMine.slice(0, 5).join(", ")}${staleMine.length > 5 ? "…" : ""});upsert 无删除语义——若是换 id 重画,旧节点会永久留在板上(实测曾出现同一 planner 两套 16 节点);确认要清就由人经 board.save 删。`
           : "";
@@ -2706,7 +2696,7 @@ export function boardUpsertTool(
         const boardNote = boardId !== taskId
           ? ` ⓘ 本次落在**独立板**「${boardId}」(${r.path}),未并进任务板「${taskId}」;跨看用 board_read/action=audit 显式指定 taskId 或 all:true。`
           : "";
-        // 自愈更正回执(2026-10-31):kind 校正/label 截断不是静默改板——必须让模型看见改了什么,
+ // 自愈更正回执:kind 校正/label 截断不是静默改板——必须让模型看见改了什么,
         // 否则它会以为自己写的是原值,后续按错值推理。放最前,避免被后面长串提示淹没。
         const fixNote = corrections.length > 0
           ? `⚠ 写板已自动纠正 ${corrections.length} 处(已落盘,无需重试):${corrections.slice(0, 3).join("; ")}${corrections.length > 3 ? `…共 ${corrections.length} 处` : ""}。\n`
@@ -2719,10 +2709,9 @@ export function boardUpsertTool(
   };
 }
 
-/** board_read 工具(step-083 页面结构板配套):只读读回本会话白板——「后续轮 agent 不断参考」的
+/** board_read 工具(页面结构板配套):只读读回本会话白板——「后续轮 agent 不断参考」的
  * 最小方案(按需读取不占每轮 token)。返回最新板的紧凑文本(节点 id/kind/label/summary/位置/用户评论+边)。
  * 只读(plan 模式可用);无板=明确说无板,不编造。
- *
  * q4:opts.boardId=本写者自己的板 id(planner 子代理=`<taskId>-<scope>`,主 agent=`<taskId>`)。
  * 给了 boardId 时缺省**只读这块板**——没有就如实说「还不存在」(不偷偷读别人的板,那正是本次
  * 缺陷的形态:子写者的节点混进调用方的读面/审计)。要跨看请显式传 taskId(all 口径见 action=audit)。
@@ -2733,16 +2722,16 @@ export function boardReadTool(
   storeRoot?: string,
   opts: { boardId?: string; fallbackToSessionBoard?: boolean } = {},
 ): Tool {
-  // 03 同参去重(2026-10-28 token 优化):实测 93 个 session 里同目标重读 1,437 轮、其中 1,418 次
+ // 03 同参去重( token 优化):经验证 93 个 session 里同目标重读 1,437 轮、其中 1,418 次
   // 逐字节相同(最狠一块 2,160 字符的板被读 155 次),且 microcompact 的 NEVER_COMPACT_TOOLS 把
   // board_read 排除在裁剪外——重复读=纯 token 浪费。判据只用 rev(BoardDoc.rev,三处写路径
   // upsert/evidence/prune 均自增),同 key 同 rev 才走短提示。
   // key 必须含板 id 与 all 语义:只按 sessionId 缓存会让「换 taskId 读另一块板」命中旧内容(错的静默丢数据)。
   const lastRead = new Map<string, string>(); // key → 上次返回时的板指纹(rev;all 口径=板数+逐板 rev)
   const lastStep = new Map<string, number>(); // key → 上次全量返回发生在第几步(短提示里点名用)
-  // 连发逃逸计数(2026-10-29 无限循环事故:模型陷入 20+ 步同参重读,每步只拿到 49 字符存根——
+ // 连发逃逸计数(无限循环事故:模型陷入 20+ 步同参重读,每步只拿到 49 字符存根——
   // 死胡同无出口)。⚠必须挂实例作用域:放 execute() 里每次调用重建 Map,计数永远到不了 3,
-  // 逃生阀=死代码(2026-10-30 实锤:38 步 board_read 死循环里存根一次全文都没回)。
+ // 逃生阀=死代码(注意:38 步 board_read 死循环里存根一次全文都没回)。
   const stubStreak = new Map<string, number>(); // key → 连续命中存根次数(全量返回即清零)
   // 压缩失效判据(2026-11 修静默丢板内容):auto-compact 会把旧的 board_read 结果整段挤出上下文,
   // 而这张 dedup 缓存不感知压缩 → 压缩后模型再读同一块板只拿到「board 未变更…勿重读」,但正文
@@ -2801,7 +2790,7 @@ export function boardReadTool(
               return `board 未变更,但你已连续 ${n} 次重读同一块板——以下是全文(最后一次重复给出)。若这不是你要的:旧任务的板只能读;要把规划/证据带到当前任务,请 board_upsert 在当前任务 id 下落板(board_upsert 已顺手激活,下一步直接调用即可),然后停止 board_read。\n[[activate-tool:board_upsert]]\n\n` + full();
             }
             stubStreak.set(key, n);
-            // 第 2 次连续存根附激活标记:实测死锁里模型的意图是「写板」而非「读板」——读缓存
+ // 第 2 次连续存根附激活标记:经验证死锁里模型的意图是「写板」而非「读板」——读缓存
             // 存根反复说「变更后自动返回全文」,而写路径工具不在清单里,写意图被约束采样掰成
             // board_read 无限循环。此处顺手点亮 board_upsert,给写意图一个合法出口。
             return n >= 2
@@ -2872,7 +2861,7 @@ function renderBoardText(doc: NonNullable<ReturnType<typeof loadBoardSync>>): st
   const cov = computeP0Coverage(doc);
   const covOf = new Map(cov.nodes.map((s) => [s.id, s] as const));
   if (cov.total) L.push(`P0 落目标 ${cov.passed}/${cov.total} 已通过验收(有证据 ${cov.covered}/${cov.total})`);
-  // M107:过期证据提示与 audit 同源(staleSummaryOf),无 stale 时逐字不变。
+ // 过期证据提示与 audit 同源(staleSummaryOf),无 stale 时逐字不变。
   if (cov.stale.length > 0) L.push(staleSummaryOf(cov));
   for (const n of doc.nodes) {
     const pos = n.pos && isFinite(n.pos.x) ? ` @(${Math.round(n.pos.x)},${Math.round(n.pos.y)})` : "";
@@ -2891,7 +2880,7 @@ function renderBoardText(doc: NonNullable<ReturnType<typeof loadBoardSync>>): st
   return L.join("\n");
 }
 
-/** teamai 团队资产 → 系统提示块(designs/24):enforced 规则全文+文化底色+规则/技能索引(渐进披露)。 */
+/** teamai 团队资产 → 系统提示块:enforced 规则全文+文化底色+规则/技能索引(渐进披露)。 */
 export function renderTeamaiBlock(digest: Record<string, unknown> | null): string {
   if (!digest) return "";
   const NL = "\n";
@@ -2952,8 +2941,8 @@ export function wrapSkillContent(name: string, body: string, skillDir: string | 
   return lines.join("\n");
 }
 
-/** skill_view 工具(designs/18 §3):读经验全文,view 计数进遥测。
- *  停用门(2026-10-14 审计 C3):索引已过滤停用项,但全文读取无门——停用的内置技能
+/** skill_view 工具( §3):读经验全文,view 计数进遥测。
+ * 停用门(审计 C3):索引已过滤停用项,但全文读取无门——停用的内置技能
  *  仍可被 skill_view 绕过索引读全文,禁用面形同虚设。
  *  n7:三个分支(builtin/teamai/用户经验)统一走 `<skill_content name=…>` 包裹 + 变量展开 +
  *  100000 字节截断(此前 8000 字符裸 slice,长技能被腰斩且断在多字节中间)。 */
@@ -3010,10 +2999,10 @@ export function skillViewTool(store: ExperienceStore, disabledBuiltinsLookup?: (
   };
 }
 
-/** experience_fold 可写类目白名单(designs/18 §3「白名单内写」;distill 的 incidents 兜底同在表内)。 */
+/** experience_fold 可写类目白名单( §3「白名单内写」;distill 的 incidents 兜底同在表内)。 */
 export const FOLD_CATEGORY_WHITELIST = ["coding", "ops", "tooling", "workflow", "incidents"];
 
-/** experience_fold 工具(designs/18 §3):白名单内写,fold-in=同名覆盖更新(version+1)。 */
+/** experience_fold 工具( §3):白名单内写,fold-in=同名覆盖更新(version+1)。 */
 export function experienceFoldTool(store: ExperienceStore): Tool {
   return {
     name: "experience_fold",
@@ -3038,8 +3027,7 @@ export function experienceFoldTool(store: ExperienceStore): Tool {
       try {
         const fm = await store.write(
           { category: a.category, name: a.name, description: a.description, created_by: "agent" },
-          a.body,
-        );
+          a.body);
         return `已沉淀 ${a.category}/${a.name} v${fm.version}(fold-in)`;
       } catch (err) {
         return `experience_fold 错误: ${String(err).slice(0, 200)}`;
@@ -3048,7 +3036,7 @@ export function experienceFoldTool(store: ExperienceStore): Tool {
   };
 }
 
-/** run_workflow 工具(designs/19):标准化任务的确定性编排(skill 不稳的替代)。 */
+/** run_workflow 工具:标准化任务的确定性编排(skill 不稳的替代)。 */
 function runWorkflowTool(journal: import("@lampgenie/core").Journal, executor: import("@lampgenie/executors").SubagentBackend, journalSessionId: string, workflowAskRouter?: import("./workflow-ask-router.js").WorkflowAskRouter): Tool {
   return {
     name: "run_workflow",
@@ -3089,14 +3077,14 @@ function runWorkflowTool(journal: import("@lampgenie/core").Journal, executor: i
   };
 }
 
-/** code_review 工具(designs/17):确定性层必跑,LLM 深审走 models.review(未配置=确定性层 only)。
- * root=任务的项目根(项目级能力,2026-10-12):审的是该项目的工作区变更,不是 harness 仓。
+/** code_review 工具:确定性层必跑,LLM 深审走 models.review(未配置=确定性层 only)。
+ * root=任务的项目根(项目级能力:审的是该项目的工作区变更,不是 harness 仓。
  * fixG1:baseSha=本任务开工 checkpoint(既有 checkpoint.create 链)——在场且 agent 未显式给 target 时,
  * diff 基线=该 checkpoint(只审本任务变更集),不审共享工作区里别的任务/agent 的在途改动;
  * checkpoint 缺席(纯规划/干净树/快照失败)→回退全仓未提交 diff,summary 如实标注。
  * fixG1 起导出供单测直接驱动(checkpoint 基线接线测试)。
- * step-139 O1:深审不再是「有凭证就一定跑」——缺省 auto(免费层 0 blocker 且变更集小→跳过并写进 summary,
- * step-137 实测深审跑满 8 分钟时间盒零新增);fast:true=never,deep:true=always(优先于 auto)。 */
+ * O1:深审不再是「有凭证就一定跑」——缺省 auto(免费层 0 blocker 且变更集小→跳过并写进 summary,
+ * 经验证深审跑满 8 分钟时间盒零新增);fast:true=never,deep:true=always(优先于 auto)。 */
 export type ReviewLlmPolicy = "auto" | "always" | "never";
 
 export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined, journal: import("@lampgenie/core").Journal, sessionId: string, progress?: (note: string) => void, baseSha?: string | null, remote?: RemoteProject): Tool {
@@ -3108,15 +3096,15 @@ export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined,
       properties: {
         target: { type: "string", description: "commit hash 或分支名;缺省=本任务变更集(checkpoint 基线),无 checkpoint 才是全仓未提交变更" },
         fast: { type: "boolean", description: "fixG1:true=只跑确定性层(秒级,零 LLM)。修完 blocker/high findings 后复跑确认不复现时用它;只有确定性层仍报 findings 才需要不带 fast 深审" },
-        deep: { type: "boolean", description: "step-139:true=强制深审(优先于缺省 auto 档;确定性层干净且变更集小也会跑 LLM)" },
+        deep: { type: "boolean", description: "true=强制深审(优先于缺省 auto 档;确定性层干净且变更集小也会跑 LLM)" },
       },
     },
     isConcurrencySafe: () => false,
     async execute(args: unknown) {
       const target = (args as { target?: string }).target;
       const fast = Boolean((args as { fast?: boolean }).fast); // fixG1:确定性层-only 复跑
-      const deep = Boolean((args as { deep?: boolean }).deep); // step-139:强制深审
-      // 远程项目(SSH/WSL,2026-10-27):评审在远端运行时执行(codesense review --json,确定性+反模式层)。
+      const deep = Boolean((args as { deep?: boolean }).deep); // 强制深审
+ // 远程项目(SSH/WSL:评审在远端运行时执行(codesense review --json,确定性+反模式层)。
       // LLM 深审需要远端凭证(不把桌面 key 下发远端),此处只跑确定性层并如实标注。
       if (remote) {
         const where = remote.kind === "wsl" ? "WSL:" + remote.distro : "SSH:" + remote.host;
@@ -3148,7 +3136,7 @@ export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined,
           return `code_review(远端 ${where})错误: ${String(err).slice(0, 200)}`;
         }
       }
-      // step-139 O1:三档合流——fast=never > deep=always > 缺省 auto(小且干净则跳过)。
+ // O1:三档合流——fast=never > deep=always > 缺省 auto(小且干净则跳过)。
       const policy: ReviewLlmPolicy = fast ? "never" : deep ? "always" : "auto";
       const base = target ? undefined : (baseSha ?? undefined); // 显式 target 优先,不叠加基线
       try {
@@ -3160,10 +3148,10 @@ export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined,
           : reviewLlm ? (policy === "always" ? "确定性层扫描(diff/规则/反模式,秒级)→ 随后强制 LLM 深审(最多 8 分钟时间盒)" : "确定性层扫描(diff/规则/反模式,秒级)→ 干净且变更集小则跳过深审(auto,省成本)")
             : "确定性层扫描(diff/规则/反模式,秒级)")
           + (base ? `(基线=本任务 checkpoint ${base.slice(0, 10)})` : ""));
-        // 2026-10-18 用户实报卡死修复:深审=多轮 LLM(rounds+grace+逐 finding 定位,可达十几次调用),
-        // 每次调用空闲窗 10min——无整体上限时工具可挂 30min+(T3/T4 双任务同点卡死实锤)。
+ // 用户用户反馈卡死修复:深审=多轮 LLM(rounds+grace+逐 finding 定位,可达十几次调用),
+ // 每次调用空闲窗 10min——无整体上限时工具可挂 30min+(T3/T4 双任务同点卡死注意)。
         // 时间盒 8 分钟(确定性层秒级必出;深审正常 18s~4min):超时返回确定性层 findings+如实标注。
-        // step-139:auto 档的跳过判定在引擎内(免费层跑完才判),策略原样下发。
+ // auto 档的跳过判定在引擎内(免费层跑完才判),策略原样下发。
         const REVIEW_TIMEBOX_MS = 8 * 60_000;
         const run = (): Promise<Awaited<ReturnType<typeof codeReview>>> => codeReview(root, { target, llmPolicy: policy, ...(base ? { baseSha: base } : {}), ...(reviewAdapter ? { llm: reviewAdapter } : {}) });
         const r = reviewAdapter
@@ -3177,7 +3165,7 @@ export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined,
           })
           : await run(); // never/无深审凭证:确定性层 only(引擎内 auto 判定,可能落跳过说明)
         // fixG1 追加(环境噪声甄别):checkpoint 缺席回退全仓时明确告知 diff 混有并行会话在途改动,
-        // findings 需甄别归属——不属本任务的登记环境噪声,不修(实测修别人 findings 浪费 20 分钟)。
+ // findings 需甄别归属——不属本任务的登记环境噪声,不修(经验证修别人 findings 浪费 20 分钟)。
         const noBaseNote = (!target && !base)
           ? "\n⚠ 无 checkpoint 基线(回退全仓未提交):diff 含并行会话在途改动,findings 需甄别归属——不属本任务变更集的文件登记为「环境噪声(别会话在途改动)」,不要修。"
           : "";
@@ -3195,7 +3183,7 @@ export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined,
   };
 }
 
-/** soul 行为纪律剥离(step-048 审计修复②):去掉首段「你是…」身份行,只留行为纪律——
+/** soul 行为纪律剥离(审计修复②):去掉首段「你是…」身份行,只留行为纪律——
  * vibe coding 轨身份以 SYSTEM 为唯一声明(refs:身份唯一),soul 的纪律仍有益故继承。 */
 export function soulDisciplinesFor(soulText: string): string {
   const t = soulText.replace(/\r\n/g, "\n").trim();
@@ -3205,7 +3193,7 @@ export function soulDisciplinesFor(soulText: string): string {
   return t;
 }
 
-/** 任务书符号提取(step-034 F3):驼峰/下划线/Pascal 形态≥4 字符,排除中文与停用词。 */
+/** 任务书符号提取( F3):驼峰/下划线/Pascal 形态≥4 字符,排除中文与停用词。 */
 export function firstSymbolLike(text: string): string | null {
   const STOP = new Set(["true", "false", "null", "undefined", "this", "self", "test", "spec", "index", "main", "utils", "types", "node", "json", "http", "readme"]);
   const m = text.match(/\b[a-zA-Z][a-zA-Z0-9]*(?:[A-Z_][a-zA-Z0-9]*){1,}\b/g) ?? [];
@@ -3213,7 +3201,7 @@ export function firstSymbolLike(text: string): string | null {
   return cand[0] ?? null;
 }
 
-// ---- 任务类别(2026-10-23 用户口径:理解阶段定类,tips/plan-gate 全消费同一结果)----
+// ---- 任务类别(理解阶段定类,tips/plan-gate 全消费同一结果)----
 export type TaskClass = "coding" | "office" | "qa";
 
 /**
@@ -3225,7 +3213,7 @@ export type TaskClass = "coding" | "office" | "qa";
  */
 export function classifyTaskClass(instruction: string): TaskClass {
   const t = instruction.toLowerCase();
-  // 交付物锚(2026-11-04 上线观测实锚):「调研…写一篇《事故复盘》技术文章,讲清修复设计与
+ // 交付物锚(上线观测依据):「调研…写一篇《事故复盘》技术文章,讲清修复设计与
   // 排障过程」被判 coding——文章交付词「写一篇」不在 office 词表,内容词「修复/排障」把 coding
   // 判定抢先触发。「篇」量词锚定的交付物无歧义(代码功能绝不用「篇」计),故置于 coding 判定
   // **之前**:「写代码信号优先」原则针对「修 bug 顺手出文档」(交付物是代码),不针对「文章本体
@@ -3236,18 +3224,18 @@ export function classifyTaskClass(instruction: string): TaskClass {
   if (/(修改|修复|实现|新增|重构|删除|添加|接入|适配|升级|编写|写代码|写测试|加测试|修一下|改一下|改掉|重构掉|fix|refactor|implement|debug|调试|排障|报错|bug|异常|crash|编译|部署|函数|变量|组件|单元测试)/.test(t)
     || firstSymbolLike(instruction)) return "coding";
   // 办公/产出物信号(PPT/表格/文档/翻译等非代码交付)→ office
-  // 2026-10-24 实测补词:整理一份/列一份/建一份/出一份/速查/清单(此前「整理一份」≠词表
+ // 经验证补词:整理一份/列一份/建一份/出一份/速查/清单(此前「整理一份」≠词表
   // 「写一份」,办公任务落缺省 coding 交满仪式税)。「写个/做个」曾试加即误吞「做个小功能」
   // (编码任务)——过泛已移除,泛动词不进词表。
   if (/(ppt|幻灯|slides?|演示文稿|xlsx|excel|表格|word|docx|简历|海报|翻译|排版|思维导图|写一份|做一份|生成一份|整理一份|列一份|建一份|出一份|速查|清单|整理成文档|汇报材料|周报|月报|总结报告|邮件)/.test(t)) return "office";
-  // 问答/调研信号(问句/调查动词且无写代码意图;含英文问句词)。2026-10-24 实测修正:问号出现
+ // 问答/调研信号(问句/调查动词且无写代码意图;含英文问句词)。 经验证修正:问号出现
   // 即算(不再锚句尾——「。」结尾的问句让 $ 锚全部失配);补词 哪个/哪几/多少/几步/是不是。
   if (/(是什么|为什么|怎么回事|怎么理解|干什么|干啥|如何|哪些|哪个|哪几|哪里|多少|几步|有没有|能不能|是不是|区别|看看|查一下|调研|梳理|分析一下|解释|介绍|告诉我|找找|检查一下|评估|确认一下)|\b(what|why|how|where|which|explain)\b|[??]/.test(t)) return "qa";
   return "coding";
 }
 
 /**
- * 类别更正为 coding 时的纪律补发(2026-10-23 P1-1):qa/office 任务的系统提示/纪律卡不含编码
+ * 类别更正为 coding 时的纪律补发( P1-1):qa/office 任务的系统提示/纪律卡不含编码
  * 纪律,更正只武装 plan-gate 会造成「被拦却没见过规则」——规则与执法必须同时到场,全文随
  * task_phase 回执一次性送达(短句形态,与 kickoff 纪律卡同源)。
  */
@@ -3259,18 +3247,18 @@ const CODING_DISCIPLINE_REFILL = [
   "- 输出简明:结论先行、证据跟后;收尾前 P0 验收证据全绿才可宣称完成",
 ].join("\n");
 
-// ---- 扫描根预算闸(2026-10-21 立;2026-10-30 独立成 sense-root-gate.ts 并接全自动路径:超预算根
+// ---- 扫描根预算闸(立; 独立成 sense-root-gate.ts 并接全自动路径:超预算根
 // 一律不扫不建,工作区根给子仓收窄出路。re-export 保既有 import 面(sense-tool/测试)。 ----
 export { rootScanVerdict, detectWorkspaceRepos, refineRootForTarget, renderWorkspaceRepos, workspaceRefusalText, type RootScanVerdict, type WorkspaceRepo } from "./sense-root-gate.js";
 import { rootScanVerdict } from "./sense-root-gate.js"; // 本文件 warmIndex 闸消费(2997)
 
-// (2026-10-23)开工 orient 注入链已整体删除:orientWithSense/symbolsInText/orient-cache 系列
-// (scanFingerprint/orientCacheKey/readOrientCache/warmOrientCache)。用户口径:每条 user message
+// 开工 orient 注入链已整体删除:orientWithSense/symbolsInText/orient-cache 系列
+// (scanFingerprint/orientCacheKey/readOrientCache/warmOrientCache)。每条 user message
 // 跟一条「全局代码+历史匹配」tips 多余且常错配——code_sense 内容必须是拉取式(call 工具才返回);
 // 索引预热由任务开工的 warmIndex(火忘后台)独立承担,首次工具调用不吃冷启动。
 // 遗留磁盘缓存 .genie/orient-cache-*.json 成为死文件,可手删(不再有读写方)。
 
-/** step-089 P3:「项目主线」注入块(项目底座认知,防开发偏离主线)。
+/** P3:「项目主线」注入块(项目底座认知,防开发偏离主线)。
  * 委托 projectMainlineBlock(读 .genie/sense-index/profile.json;缺席=空串零注入零开销;
  * 生产者=codesense project --write;预算 ≤300 字符内部截断)。失败静默(增强件不阻塞任务)。 */
 function projectMainlineBlockOf(taskRoot: string): string {
@@ -3281,8 +3269,8 @@ function projectMainlineBlockOf(taskRoot: string): string {
   }
 }
 
-/** 子代理任务书的涉事符号上下文(step-034 F3;2026-10-12 三改收敛:读静态索引,毫秒级)。
- * 无符号/查询失败返回空串。**硬预算不阻塞派发**(2026-10-20 实锤:索引缺失时旧实现会等
+/** 子代理任务书的涉事符号上下文( F3; 三改收敛:读静态索引,毫秒级)。
+ * 无符号/查询失败返回空串。**硬预算不阻塞派发**(注意:索引缺失时旧实现会等
  * 冷构建 7+ 分钟,10 路子代理一起堵住再同时放行 → 建连洪峰 + 8 路 fetch failed)。
  * GENIE_SYMBOL_CONTEXT_BUDGET_MS 可调,缺省 2000ms;超预算按「无上下文」处理。 */
 export async function symbolContextFor(root: string, instructions: string): Promise<string> {
@@ -3314,7 +3302,7 @@ function withBudget<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, guard]).finally(() => { if (timer) clearTimeout(timer); });
 }
 
-/** LlmProvider→ArchLlm 适配(step-034 F1):两段式(解说→图 JSON)各一次 chat。
+/** LlmProvider→ArchLlm 适配( F1):两段式(解说→图 JSON)各一次 chat。
  * 类型用结构化内联(ArchLlm 在 archmap 子路径,避免跨子路径 import)。 */
 export function archLlmFromProvider(llm: LlmProvider): { generate(introPrompt: string, graphPrompt: string): Promise<{ narrative: string; graphJson: string }> } {
   return {
@@ -3327,7 +3315,7 @@ export function archLlmFromProvider(llm: LlmProvider): { generate(introPrompt: s
 }
 
 /**
- * Plan 模式系统提示(step-053,ZCode Plan Workflow 语义;2026-10-23 汉化——提示词全中文,
+ * Plan 模式系统提示(ZCode Plan Workflow 语义; 汉化——提示词全中文,
  * 收尾节标题与批准回执短语同步改为中文且与服务端注入逐字配对)。
  * 结尾适配:harness 无 ExitPlanMode 工具——以「## 实施计划」节收尾,
  * 终态后网关落计划文件并广播审批(批准=切回+按计划派实施任务)。
@@ -3349,7 +3337,7 @@ function planModePrompt(): string {
     "",
     "理解请求后设计实现方案。基于请求与阶段一的发现,产出完整实现设计,覆盖:一句话目标、总体思路、逐文件的具体改动、数据/接口变更、风险,以及验证方案(能证明它成立的测试/命令)。",
     "",
-    "规划必成板(step-083):设计定稿时把规划结构画到白板——board_upsert 属规划产物而非系统修改,plan 模式应当使用(只读的 board_read 亦可用)。页面/应用类规划用 docKind=\"page\" 的页面结构板(节点=page/section/component,边=nav/contains);模块/代码设计用默认设计板。用户会在白板上复审并拖拉修改,批准后按板上结构实施。",
+    "规划必成板:设计定稿时把规划结构画到白板——board_upsert 属规划产物而非系统修改,plan 模式应当使用(只读的 board_read 亦可用)。页面/应用类规划用 docKind=\"page\" 的页面结构板(节点=page/section/component,边=nav/contains);模块/代码设计用默认设计板。用户会在白板上复审并拖拉修改,批准后按板上结构实施。",
     "",
     "### 阶段三:评审",
     "",
@@ -3361,8 +3349,8 @@ function planModePrompt(): string {
   ].join("\n");
 }
 
-/** 计划文件注入(step-053,ZCode plan_file_reference 附件语义):存在即随系统提示带回。 */
-/** 计划文件注入(step-053;导出=审计/测试可探针)。 */
+/** 计划文件注入(ZCode plan_file_reference 附件语义):存在即随系统提示带回。 */
+/** 计划文件注入(导出=审计/测试可探针)。 */
 export async function planFileBlockFor(sessionId: string): Promise<string> {
   try {
     // ESM 安全(C19① 修复:裸 require 在 tsx-ESM 下 undefined→曾整段静默死代码);
@@ -3381,7 +3369,7 @@ export async function planFileBlockFor(sessionId: string): Promise<string> {
 }
 
 // =============================================================================
-// 附件注入(step-048;附件通道 2026:图片/视频贴进聊天窗 → 任务书如实标注)
+// 附件注入(附件通道 2026:图片/视频贴进聊天窗 → 任务书如实标注)
 // =============================================================================
 /** 视觉通道限额:单张 2MB、单轮 4 张。三处消费端硬编码 slice(0,4)(openai-provider.ts:100、
  * provider-apitypes.ts:393/…)、单张体积直通请求体——放宽会让请求体爆炸,不放松。 */
@@ -3397,7 +3385,7 @@ const IMAGE_EXT_MIME: Record<string, string> = { png: "image/png", jpg: "image/j
 const VIDEO_EXT = new Set(["mp4", "m4v", "mov", "webm", "mkv", "avi", "mpg", "mpeg", "wmv"]);
 /** 视为「mime 缺失」的通用值(此时按扩展名兜底)。 */
 const GENERIC_MIMES = new Set(["", "application/octet-stream", "binary/octet-stream"]);
-/** 纯文本类扩展名(2026-10-29 附件链路):doc-text 的 DOC_PARSE_EXT 也包含它们,但在**附件分类**语境
+/** 纯文本类扩展名(附件链路):doc-text 的 DOC_PARSE_EXT 也包含它们,但在**附件分类**语境
  * 里它们是文本类(other,走原「read_attachment 可读」文案),不能升级成 doc——否则模型会被引导去
  * 「解析」一个本来就是纯文本的文件(注:read_attachment 走 doc 分支时二者都能读,差别只在提示语义)。 */
 const TEXT_LIKE_EXT: ReadonlySet<string> = new Set([
@@ -3405,14 +3393,14 @@ const TEXT_LIKE_EXT: ReadonlySet<string> = new Set([
   "yaml", "yml", "ini", "toml", "conf", "sh", "sql", "css", "js", "ts", "py", "go", "rs", "java",
 ]);
 /** 可传进会话但 doc-text 暂无解码器的文档后缀(老式 OLE / ODF / 电子书 / 压缩包):**仍归 doc**,
- * 由 read_attachment 走解析器如实报「不支持解析的类型:xxx」。若落 other,会被标成「read_attachment 可读」,
- * 随后 isBinaryLikeMime(通用 mime)=false → readFileSync 后 utf8 硬解 = 100KB 乱码(2026-10-30 review 修)。
+ * 由 read_attachment 走解析器如用户反馈「不支持解析的类型:xxx」。若落 other,会被标成「read_attachment 可读」,
+ * 随后 isBinaryLikeMime(通用 mime)=false → readFileSync 后 utf8 硬解 = 100KB 乱码( review 修)。
  * 与 panel 的 ATT_DOC_EXT / DOC_EXT 同源(那边放行到 64MB,这边判型必须同步)。 */
 const DOC_EXT_NO_DECODER: ReadonlySet<string> = new Set([
   "doc", "xls", "ppt", "odt", "ods", "odp", "epub",
   "tar", "gz", "tgz", "7z", "rar", "pages", "numbers", "key",
 ]);
-/** 文档类 mime 白名单(2026-10-29 附件链路):命中=可选可解析文档,走 read_attachment 解析为纯文本。
+/** 文档类 mime 白名单(附件链路):命中=可选可解析文档,走 read_attachment 解析为纯文本。
  * 含 pdf/压缩包/电子书 + 三个 OOXML(docx/pptx/xlsx) + 三个老式 OLE(doc/xls/ppt);rtf 是文本但按文档类列。
  * 注意:.md/.txt/.html/.csv 等**不在此列**——它们是纯文本,继续走「read_attachment 可读」原路径。 */
 const DOC_MIMES: ReadonlySet<string> = new Set([
@@ -3466,7 +3454,7 @@ export function classifyAttachment(name: string, mime?: string): "image" | "vide
     return "doc";
   }
   if (DOC_MIMES.has(m)) return "doc";
-  if (ext && DOC_EXT_NO_DECODER.has(ext) && GENERIC_MIMES.has(m)) return "doc"; // 无解码器的不透明容器:交解析器如实报「不支持」
+  if (ext && DOC_EXT_NO_DECODER.has(ext) && GENERIC_MIMES.has(m)) return "doc"; // 无解码器的不透明容器:交解析器如用户反馈「不支持」
   if (!GENERIC_MIMES.has(m)) return "other"; // 非空且非 image/video/doc:以 mime 为准,不猜扩展名
   if (IMAGE_EXT_MIME[ext]) return "image";
   if (VIDEO_EXT.has(ext)) return "video";
@@ -3561,7 +3549,7 @@ export function buildAttachmentInjection(
         lines.push("- [图片附件读取失败] " + att.name);
         continue;
       }
-      // 尺寸守卫(2026-11-05):与 view_image 同源判定——超限图不进视觉通道(否则整轮请求永久 400)。
+ // 尺寸守卫:与 view_image 同源判定——超限图不进视觉通道(否则整轮请求永久 400)。
       // 解析失败(null)=放行,不因解析器盲区拦正常图。
       const dims = readImageSize(buf.subarray(0, Math.min(buf.length, 48 * 1024)));
       const verdict = checkImageSize(dims, att.name);
@@ -3588,7 +3576,7 @@ export function buildAttachmentInjection(
       continue;
     }
     if (kind === "doc") {
-      // 2026-10-29 附件链路:文档类只给「去解析」的指路,**注入阶段不解析**——注入每轮都跑,
+ // 附件链路:文档类只给「去解析」的指路,**注入阶段不解析**——注入每轮都跑,
       // 解析一个 64MB 文档会把主链路拖死;真正解析发生在 read_attachment 被调用时(doc-text.ts)。
       // 体积优先用任务书 size,其次 stat(不读内容),读不到=「大小未知」(与视频分支同口径)。
       let bytes = typeof att.size === "number" && att.size > 0 ? att.size : 0;
@@ -3609,11 +3597,11 @@ export function buildAttachmentInjection(
       lines.push("- [粘贴长文本] " + att.name + " → " + att.path + "(正文未内联,需要时用 read_attachment " + att.path + " 读取)");
       continue;
     }
-    // step-134(review):二进制类(pdf/zip/字体/音视频/未知 image 子类型)也走 other——
+ // (review):二进制类(pdf/zip/字体/音视频/未知 image 子类型)也走 other——
     // 别统一标「read_attachment 可读」:read_attachment 有 isBinaryLikeMime 门槛会拒解码,
     // 提示与工具语义必须一致,否则模型白调一轮工具才失败。
-    // 2026-10-25:白名单图片(png/jpeg/gif/webp)有了主动查看通道 view_image——
-    // 旧文案曾指向一个并不存在的「对应工具」,模型只能用代码打印像素占位(2026-10-29 已彻底删除该措辞)。
+ // 白名单图片(png/jpeg/gif/webp)有了主动查看通道 view_image——
+ // 旧文案曾指向一个并不存在的「对应工具」,模型只能用代码打印像素占位(已彻底删除该措辞)。
     const m = normalizeAttachmentMime(att.mime);
     const visionHint = m.startsWith("image/") && VISION_IMAGE_MIMES.has(m)
       ? "(白名单图片,可用 view_image 查看内容)"
@@ -3631,7 +3619,7 @@ export function buildAttachmentInjection(
   return { block: lines.length ? "\n\n## 附件\n" + lines.join("\n") : "", visionImages };
 }
 
-/** 请求实际 max_tokens 读数(step-139 O4):provider.describe().maxTokens;无该面=undefined
+/** 请求实际 max_tokens 读数( O4):provider.describe.maxTokens;无该面=undefined
  * (压缩钩子按 ZCode 口径回退 32000)。 */
 export function mainRequestMaxTokens(llm: LlmProvider): number | undefined {
   const d = (llm as { describe?: () => Record<string, unknown> }).describe?.();
@@ -3653,7 +3641,7 @@ export function resolveSubagentDeadlineMin(
   if (Number.isFinite(globalN) && globalN > 0) return globalN;
   if (String(agentType ?? "").toLowerCase() !== "planner") return 0;
   const plannerN = cfg?.plannerDeadlineMin;
-  // 2026-11-06 按 14 天复盘调数(docs/analysis/planner-reaper-review.md):正常完成组 p50=5.0/p90=9.2 分钟,
+ // 按 14 天复盘调数(docs/analysis/planner-reaper-review.md):正常完成组 p50=5.0/p90=9.2 分钟,
   // 19.2%(19/99)超 8 分钟——缺省 8 对约 1/5 正常任务偏紧,抬到 10 覆盖 p90;时间锚纪律同批进 PLANNER_PROMPT。
   if (plannerN === undefined) return 10;
   const n = Number(plannerN);
@@ -3685,7 +3673,7 @@ export function currentSubgoal(journal: Journal, sessionId: string, instruction:
   }
 }
 
-/** M162 开工信封闸用到的 journal 最小面(真 Journal 也满足;测试可传假 journal)。 */
+/** 开工信封闸用到的 journal 最小面(真 Journal 也满足;测试可传假 journal)。 */
 export interface EnvelopeStartJournal {
   append(e: { kind: "custom"; sessionId: string; payload: Record<string, unknown> }): unknown;
   readSession(sessionId: string): readonly { kind?: string; payload?: unknown }[];
@@ -3693,8 +3681,7 @@ export interface EnvelopeStartJournal {
 
 function failTaskForEnvelope(
   deps: { taskManager: Pick<TaskSupervisor, "get" | "setState">; task: Task },
-  reason: string,
-): void {
+  reason: string): void {
   const cur = deps.taskManager.get(deps.task.id) ?? deps.task;
   // 只有 queued/running 能迁到 failed(blocked 的合法出口不含 failed;状态机不允许就跳过,靠 journal 留证)
   if (cur.state !== "queued" && cur.state !== "running") return;
@@ -3702,7 +3689,7 @@ function failTaskForEnvelope(
 }
 
 /**
- * M162 开工前信封校验:取该 task 最近一条 task.envelope.issued → verify(当前能力目录/策略)。
+ * 开工前信封校验:取该 task 最近一条 task.envelope.issued → verify(当前能力目录/策略)。
  * - 无信封:返回 undefined(内部任务零变化,不写 journal);
  * - 漂移/篡改/结构非法:journal task.envelope {ok:false,code} + 任务 failed(403 文案)+ 返回 ok:false;
  * - 全等:journal task.envelope {ok:true} + 返回 ok:true。
@@ -3760,35 +3747,34 @@ export function wireAgentLoop(
   projects?: import("./projects.js").ProjectRegistry,
   permissionBroker?: import("./permission-broker.js").PermissionBroker,
   workflowAskRouter?: import("./workflow-ask-router.js").WorkflowAskRouter,
-  /** ask_user 面板问答路由(2026-10-19 许愿式编程;缺省=不注册该工具)。 */
+ /** ask_user 面板问答路由(许愿式编程;缺省=不注册该工具)。 */
   askUser?: import("./ask-user-router.js").AskUserRouter,
-  /** MCP 管理器(step-047):启用服务器的工具并入主 agent 工具面。 */
+ /** MCP 管理器:启用服务器的工具并入主 agent 工具面。 */
   mcp?: { allToolsForAgent(): Promise<{ serverId: string; serverName: string; name: string; description: string }[]>; callTool(serverId: string, tool: string, args: unknown): Promise<string> },
   browserConfig?: { enabled: () => boolean; allowDomains: () => string[]; idleMinutes?: () => number; profile?: () => "persistent" | "ephemeral"; profileDir?: () => string; headless?: () => boolean },
-  /** 流式出口(step-050,ZCode 流式消息展示):loop onStream 旁路→relay→WS stream 广播;不落 journal。 */
+ /** 流式出口(ZCode 流式消息展示):loop onStream 旁路→relay→WS stream 广播;不落 journal。 */
   streamSink?: (sessionId: string, ev: AgentStreamEvent) => void,
-  /** 记忆接线(step-029 收口):系统提示注入记忆上下文块+会话终态学习。 */
+ /** 记忆接线:系统提示注入记忆上下文块+会话终态学习。 */
   memory?: { contextBlock(ownerId: string): string; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
-  /** 辅助链专用轨(step-052 F2):archLlm 架构导读/压缩等辅助调用不走 realtime 主轨(会话贵且易卡),
+ /** 辅助链专用轨( F2):archLlm 架构导读/压缩等辅助调用不走 realtime 主轨(会话贵且易卡),
    * 缺省回退主轨(行为与旧版一致)。 */
   auxLlm?: LlmProvider,
   /** 任务配置对象(设置页 agent.maxSteps 热读:每任务取当前值,cfg.set 下个任务生效;
-   * agent.compactThresholdTokens=未声明窗口时的显式压缩阈值,step-058;
-   * agent.subagentDeadlineMin=子代理缺省时间盒(分钟)+agent.subagentStaleWarnMin=无产出预警阈值(2026-10-15 机制1/3);
+ * agent.compactThresholdTokens=未声明窗口时的显式压缩阈值,;
+ * agent.subagentDeadlineMin=子代理缺省时间盒(分钟)+agent.subagentStaleWarnMin=无产出预警阈值(机制1/3);
    * agent.writeBarrier=写前持久化屏障("off"|"hard";缺席=loop 内部 hard 现状;经 writeBarrierOf 取值,不读 env);
-   * coding.lsp=编辑后 LSP 诊断+保存格式化(step-114;运行时对象经 zod 解析,缺省 on))。 */
+ * coding.lsp=编辑后 LSP 诊断+保存格式化(运行时对象经 zod 解析,缺省 on))。 */
   agentConfig?: { agent?: { maxSteps?: number; compactThresholdTokens?: number; subagentDeadlineMin?: number; plannerDeadlineMin?: number; subagentStaleWarnMin?: number; todoAllowParallelInProgress?: boolean; verifyOnStop?: string; writeBarrier?: "off" | "hard" }; coding?: { lsp?: import("@lampgenie/lsp").LspSettings; llm?: { vision?: boolean }; vlm?: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number } } },
-  /** 主模型上下文窗口 tokens(step-048:容量看板分母+到阈自动 /compact)。 */
+ /** 主模型上下文窗口 tokens(容量看板分母+到阈自动 /compact)。 */
   contextWindow?: number,
   /** per-session 主模型覆盖面(缺省=无覆盖,共享 llm 现状零变化)。 */
   sessionModels?: SessionModelFace,
-  /** M162 执行信封:装配方注入当前能力目录/策略(缺省=本任务实际工具面名+内置命令名 / permissionMode+agent.maxSteps)。 */
-  envelopeDeps?: EnvelopeDeps,
-): void {
-  // archLlm 生产注入(step-034 F1):plan 剖面在产线出真架构图(此前零注入恒静态降级)。
-  // 装配期一次,全进程生效;step-052 起优先走 aux 轨(每任务两次 LLM 调用,realtime 轨下纯属占会话)。
+ /** 执行信封:装配方注入当前能力目录/策略(缺省=本任务实际工具面名+内置命令名 / permissionMode+agent.maxSteps)。 */
+  envelopeDeps?: EnvelopeDeps): void {
+ // archLlm 生产注入( F1):plan 剖面在生产环境出真架构图(此前零注入恒静态降级)。
+ // 装配期一次,全进程生效; 起优先走 aux 轨(每任务两次 LLM 调用,realtime 轨下纯属占会话)。
   setPlanDeps({ archLlm: archLlmFromProvider(auxLlm ?? llm) });
-  // 取消信号注册表(step-008 收口,designs/14 §1.4):task.cancel 落 state=cancelled 时
+ // 取消信号注册表(§1.4):task.cancel 落 state=cancelled 时
   // abort 对应 AgentLoop 的 LLM 请求与工具执行(此前 loop.cancel() 零调用方=取消只改状态不中断执行)。
   const activeLoops = new Map<string, AgentLoop>();
   /** 正在起 loop 的任务(在 activeLoops.set 之前有一段异步窗口)。touch 进度会 emit task 事件 →
@@ -3796,9 +3782,9 @@ export function wireAgentLoop(
   const startingLoops = new Set<string>();
   taskManager.onChange((task: Task) => {
     if (task.state === "cancelled") {
-      // M34(2026-11-07):先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
+ // :先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
       // 绝不让它改变取消结果(appendUserStoppedMarker 内部 try/catch + warn)。
-      // 只在**真有活跃 loop 被中断**时落标记:resumeInterrupted 把原任务收口成 cancelled
+ // 只在**真有活跃 loop 被中断**时落标记:resumeInterrupted 把原任务成 cancelled
       // (「已续跑→新任务」)不是用户停止,误标会连带堵死该会话里更早任务的续跑。
       const loop = activeLoops.get(task.id);
       if (loop) {
@@ -3810,7 +3796,7 @@ export function wireAgentLoop(
       return;
     }
     if (task.state !== "running") return;
-    // M180 会话权限钉扎:任务开工把**当时的全局预设**落成本会话快照(pinSession 幂等,已有 pin 不重写)。
+ // 会话权限钉扎:任务开工把**当时的全局预设**落成本会话快照(pinSession 幂等,已有 pin 不重写)。
     // 此后全局预设漂移不影响已开工会话的审批口径;钉扎失败只告警,绝不阻断开工(权限回落=全局预设)。
     try {
       pinSession(journal, task.sessionId, currentPresetName());
@@ -3828,14 +3814,14 @@ export function wireAgentLoop(
 }
 
 /**
- * goal 续跑循环单步(step-053):任务终态后调用。
+ * goal 续跑循环单步:任务终态后调用。
  * ZCode 语义:校验器裁决 goal 是否达成——passed→状态 complete(终);未通过→nextAction 成
  * 下一轮续跑任务标题与指引;校验器失败/坏 JSON=fail-open(passed,防无限循环);预算
  * (token/时间)超限→budget_limited(终);续跑次数硬上限(GENIE_GOAL_MAX_CONTINUES,防失控)。
  * 非 goal 驱动的任务也会触发校验(会话里目标在场即裁决——与 ZCode「会话上下文即证据源」一致)。
  */
 
-/** M26:本会话仍在跑的子代理数(bgAgents 注册表;running/spawned 视为活跃)。
+/** :本会话仍在跑的子代理数(bgAgents 注册表;running/spawned 视为活跃)。
  *  maybeContinueGoal 发轮前用它做 SUBAGENTS_ACTIVE 判据——子代理没收敛就开下一轮
  *  会在同一工作区里叠写,主 agent 拿不到前一轮结论。 */
 export function countActiveSubagents(sessionId: string): number {
@@ -3853,15 +3839,15 @@ export async function maybeContinueGoal(
   llm: LlmProvider,
   sessionId: string,
   opts?: {
-    /** M26:发起本轮时预期的目标修订号(缺省=不校验 stale;网关生产调用读的是即时目标)。 */
+ /** :发起本轮时预期的目标修订号(缺省=不校验 stale;网关生产调用读的是即时目标)。 */
     expectedRevision?: number;
-    /** M26:活跃子代理数覆盖(测试注入;缺省=按 bgAgents 注册表统计)。 */
+ /** :活跃子代理数覆盖(测试注入;缺省=按 bgAgents 注册表统计)。 */
     activeSubagents?: number;
-    /** M26:续跑上限覆盖(缺省 GENIE_GOAL_MAX_CONTINUES,25)。 */
+ /** :续跑上限覆盖(缺省 GENIE_GOAL_MAX_CONTINUES,25)。 */
     maxContinues?: number;
   },
 ): Promise<void> {
-  // 会话 worker 子进程内不本地续跑(2026-10-21):本地 submit=网关 TaskSupervisor 不可见(无
+ // 会话 worker 子进程内不本地续跑:本地 submit=网关 TaskSupervisor 不可见(无
   // task.* 事件,面板/队列失明)+worker 终态退出会截杀验证中的续跑链。网关侧 host 的
   // onTaskTerminal 统一发起(走正常队列→新 worker fork)。
   if (process.env.GENIE_SESSION_WORKER_CHILD === "1") return;
@@ -3871,7 +3857,7 @@ export async function maybeContinueGoal(
   const goal = readGoalFromJournal(events, sessionId);
   // 无目标=静默返回(每个任务终态都会走到这里;无目标还落 goal.blocked 只会把 journal 刷满噪声)。
   if (!goal) return;
-  // 会话有在跑任务→不派(ZCode active-turn 守卫)。M26(2026-11-08):「忙」不再一律静默返回——
+ // 会话有在跑任务→不派(ZCode active-turn 守卫)。:「忙」不再一律静默返回——
   // 若是在跑/排队的 [goal] 续跑任务,交给 verdict 出 GOAL_DUPLICATE_ROUND 留痕(同轮重入可见);
   // 非 goal 任务仍静默返回(既有语义:普通任务在跑时不该有任何 goal 心跳噪声)。
   const sessionTasks = [...tm.list()].filter((t) => t.sessionId === sessionId && (t.state === "running" || t.state === "queued"));
@@ -3890,12 +3876,12 @@ export async function maybeContinueGoal(
   const maxContinues = opts?.maxContinues ?? Number(process.env.GENIE_GOAL_MAX_CONTINUES ?? 25);
   // 轮次:新口径=goal.continue 事件数(goal.round);存量会话(有旧 journal、尚无 goal.continue 事件)
   // 沿用旧计数(task.progress.goalContinue / message.user 续跑前缀),否则升级后旧会话的轮次闸失效。
-  // 2026-10-23 汉化同步:续跑提示词开头改中文,前缀检测双认(中文新串+英文旧串)。
+ // 汉化同步:续跑提示词开头改中文,前缀检测双认(中文新串+英文旧串)。
   const continues = events.filter((e) => e.kind === "task.progress").filter((e) => String((e.payload as { goalContinue?: string }).goalContinue ?? "").length > 0).length;
   const isGoalContinueText = (t: string) => t.startsWith("继续推进当前会话目标。") || t.startsWith("Continue working toward the active session goal.");
   const submits = events.filter((e) => e.kind === "message.user" && isGoalContinueText(String((e.payload as { text?: string }).text ?? ""))).length;
   const round = Math.max(goal.round, continues, submits);
-  // 入口留痕(2026-11-07 修静默停摆):只有「有 goal 且非 busy」才走到这里,goal.tick 是 goal 心跳,
+ // 入口留痕(修静默停摆):只有「有 goal 且非 busy」才走到这里,goal.tick 是 goal 心跳,
   // 用来区分「没跑 goal」与「跑了但没续上」;无 goal/busy 早已 return,不落噪声。
   const tickId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   journal.append({
@@ -3903,7 +3889,7 @@ export async function maybeContinueGoal(
     sessionId,
     payload: { type: GOAL_TICK_EVENT, sessionId, tickId, round, revision: goal.revision, status: goal.status, activeSubagents, at: Date.now() },
   });
-  // M26(2026-11-08)重复轮判据 + 崩溃重试:本次要发的轮次 = round+1;
+ // M26重复轮判据 + 崩溃重试:本次要发的轮次 = round+1;
   // 已有 goal.continue 且轮次 >= 该轮 = 已经派过;该轮 claim 在、无 release、无 continue = 上次
   // 崩在派发前(未真正派出),verdict 按崩溃重试放行(其它条件照常校验)。
   const nextRound = round + 1;
@@ -3915,7 +3901,7 @@ export async function maybeContinueGoal(
   });
   const claimState = goalRoundClaimState(events, sessionId, nextRound);
   const pendingClaimRound = claimState.claimed && !claimState.released && !claimState.continued ? nextRound : undefined;
-  // M26 判据(纯函数):active / 轮次 / 子代理 / 预算 / 修订号 / 重复轮 —— 拒绝时不 submit,只留痕。
+ //  判据(纯函数):active / 轮次 / 子代理 / 预算 / 修订号 / 重复轮 —— 拒绝时不 submit,只留痕。
   const verdict = goalContinueVerdict({
     goal,
     round,
@@ -3929,7 +3915,7 @@ export async function maybeContinueGoal(
   });
   if (!verdict.allow) {
     journal.append({ kind: "custom", sessionId, payload: { type: GOAL_BLOCKED_EVENT, sessionId, code: verdict.code, reason: verdict.reason, round, revision: goal.revision, at: Date.now() } });
-    // 预算/轮次上限保留既有终态语义(用户可见提示 + 目标状态收口),其余拒因只留痕。
+ // 预算/轮次上限保留既有终态语义(用户可见提示 + 目标状态),其余拒因只留痕。
     if (verdict.code === "GOAL_BUDGET") {
       journal.append({ kind: "goal.set", sessionId, payload: { goal: goal.objective, state: "budget_limited", at: Date.now() } });
       journal.append({ kind: "message.system", sessionId, payload: { text: "会话目标已达 token 预算,状态置为 budget_limited。除非用户提高预算或设定新目标,不要继续推进该目标。" } });
@@ -3939,7 +3925,7 @@ export async function maybeContinueGoal(
     }
     return;
   }
-  // M26(2026-11-08)round claim:放行后、跑 verifier 之前立账——claim 无 release 且无 goal.continue
+ // M26round claim:放行后、跑 verifier 之前立账——claim 无 release 且无 goal.continue
   // = 上次崩溃在派发前断掉,下一轮按崩溃重试放行;verifier passed / 连续不可用暂停 / 异常 → 成对
   // release;正常派轮不 release(goal.continue 就是该轮的结账事件,再 release 会破坏成对语义)。
   journal.append({
@@ -3956,7 +3942,7 @@ export async function maybeContinueGoal(
     } catch { /* 释放留痕失败不影响主流程 */ }
   };
   try {
-    // 完成校验器(2026-11-07 修静默停摆):调用失败/超时/输出非 JSON 一律视为「校验器不可用」,
+ // 完成校验器(修静默停摆):调用失败/超时/输出非 JSON 一律视为「校验器不可用」,
     // 不再与「目标已达成」同分支静默 return——先重试一次;仍不可用则兜底续跑,连续两轮才暂停。
     const runVerifierOnce = async (attempt: 1 | 2): Promise<{ passed: boolean; reason: string; nextAction: string } | null> => {
       const ctxLimit = attempt === 1 ? 24 : 16;
@@ -4029,7 +4015,7 @@ export async function maybeContinueGoal(
       verification = { passed: false, reason: "完成校验器不可用(调用失败/超时/输出无法解析,已重试一次)", nextAction: goalVerifierFallbackNextAction(goal) };
     }
     // 未达成:派下一轮续跑(标题=nextAction,ZCode「下一轮迭代标题」语义)
-    // M26 身份行:revision + round 进任务书(放正文之后——首行前缀是存量续跑计数/识别的锚,不能挡);
+ //  身份行:revision + round 进任务书(放正文之后——首行前缀是存量续跑计数/识别的锚,不能挡);
     // messageId 只有 submit 之后才有,回填进 journal goal.continue(身份三件套:revision/round/messageId)。
     const instruction = formatGoalContinuationPrompt(goal, verification) + `\n\n[goal] revision=${goal.revision} round=${nextRound}`;
     journal.append({ kind: "task.progress", sessionId, payload: { goalContinue: verification.nextAction.slice(0, 120) } });
@@ -4058,24 +4044,23 @@ async function runWithAgent(
   mcp?: { allToolsForAgent(): Promise<{ serverId: string; serverName: string; name: string; description: string }[]>; callTool(serverId: string, tool: string, args: unknown): Promise<string> },
   browserConfig?: { enabled: () => boolean; allowDomains: () => string[]; idleMinutes?: () => number; profile?: () => "persistent" | "ephemeral"; profileDir?: () => string; headless?: () => boolean },
   streamSink?: (sessionId: string, ev: AgentStreamEvent) => void,
-  /** 取消信号注册表(step-008 收口):wireAgentLoop 持有;runWithAgent 登记/注销本任务的 loop。 */
+ /** 取消信号注册表:wireAgentLoop 持有;runWithAgent 登记/注销本任务的 loop。 */
   activeLoops?: Map<string, AgentLoop>,
-  /** 记忆接线(step-029 收口)。 */
+ /** 记忆接线。 */
   memory?: { contextBlock(ownerId: string): string; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
-  /** 辅助链专用轨(step-052 F2;压缩/导读不占 realtime 会话)。 */
+ /** 辅助链专用轨( F2;压缩/导读不占 realtime 会话)。 */
   auxLlm?: LlmProvider,
-  /** 任务配置对象(agent.maxSteps 热读;agent.compactThresholdTokens=无窗口时的显式压缩阈值,step-058;
-   * agent.subagentDeadlineMin/subagentStaleWarnMin=子代理时间盒与无产出预警,2026-10-15 机制1/3;
+ /** 任务配置对象(agent.maxSteps 热读;agent.compactThresholdTokens=无窗口时的显式压缩阈值,;
+ * agent.subagentDeadlineMin/subagentStaleWarnMin=子代理时间盒与无产出预警, 机制1/3;
    * agent.writeBarrier=写前持久化屏障("off"|"hard";缺席=loop 内部 hard 现状;经 writeBarrierOf 取值,不读 env);
-   * coding.lsp=编辑后 LSP 诊断+保存格式化,step-114)。 */
+ * coding.lsp=编辑后 LSP 诊断+保存格式化。 */
   agentConfig?: { agent?: { maxSteps?: number; compactThresholdTokens?: number; subagentDeadlineMin?: number; plannerDeadlineMin?: number; subagentStaleWarnMin?: number; todoAllowParallelInProgress?: boolean; verifyOnStop?: string; writeBarrier?: "off" | "hard" }; coding?: { lsp?: import("@lampgenie/lsp").LspSettings; llm?: { vision?: boolean }; vlm?: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number } } },
-  /** 主模型上下文窗口 tokens(step-048)。 */
+ /** 主模型上下文窗口 tokens。 */
   contextWindow?: number,
   /** per-session 主模型覆盖面(缺省=无覆盖,共享 llm 现状零变化)。 */
   sessionModels?: SessionModelFace,
-  /** M162 执行信封注入点(见 wireAgentLoop 同名字段)。 */
-  envelopeDeps?: EnvelopeDeps,
-): Promise<void> {
+ /** 执行信封注入点(见 wireAgentLoop 同名字段)。 */
+  envelopeDeps?: EnvelopeDeps): Promise<void> {
   // per-session 主模型覆盖(白板「per-session 主模型」):该会话有覆盖→派生独立 provider 实例
   // 供本任务全程使用(运行中任务持启动时引用);无覆盖→共享 llm 现状零变化。
   // 派生失败 fail-soft warn 回退共享 llm(模型选择失败不挂任务)。
@@ -4104,12 +4089,12 @@ async function runWithAgent(
       console.warn(`[session-model] 会话 ${task.sessionId} 覆盖派生异常(回退共享 llm):`, String(err).slice(0, 160));
     }
   }
-  // checkpoint 快照(designs/21):执行前留工作区快照;GENIE_CHECKPOINT=off 跳过(测试提速)。
+ // checkpoint 快照:执行前留工作区快照;GENIE_CHECKPOINT=off 跳过(测试提速)。
   // fixG1:sha 提升到本函数作用域——codeReviewTool 以它为 diff 基线(review 只审本任务变更集);
   // null(纯规划/干净树 stash-create 返回空/失败)→review 回退全仓未提交并在 summary 标注。
   let checkpointSha: string | null = null;
   if (process.env.GENIE_CHECKPOINT !== "off") {
-    // 2026-10-26 远端化:远程项目任务的快照走远端 git(通道;远端仓库才是被改的工作区)
+ // 远端化:远程项目任务的快照走远端 git(通道;远端仓库才是被改的工作区)
     const cpProj = projects?.list().find((x) => x.id === task.projectId);
     const cpRemote = cpProj ? parseRemoteProject(cpProj.path) : null;
     if (cpRemote) {
@@ -4125,11 +4110,11 @@ async function runWithAgent(
       journal.append({ kind: "checkpoint.create", sessionId: task.sessionId, payload: { taskId: task.id, sha: checkpointSha, root } });
     }
   }
-  // 聊天史语义(step-037):用户消息入 journal——**单写归 loop.runTurn**(step-052 双份修复:
+ // 聊天史语义:用户消息入 journal——**单写归 loop.runTurn**(双份修复:
   // 此处原来的无条件追加叠加 loop 内部追加,同一轮 journal 两条 message.user,面板渲染两行且模型收到双份上下文)。
   // 仅「进不了 loop」的早退分支在此补记(否则失败史缺用户消息)。
   const recordUser = () => journal.append({ kind: "message.user", sessionId: task.sessionId, payload: { text: task.instruction, ...(task.attachments?.length ? { attachments: task.attachments } : {}) } });
-  // 可达性分派守卫(R5-C11):与 executor 路径同语义。
+ // 可达性分派守卫:与 executor 路径同语义。
   if (nodes) {
     const guard = dispatchGuard(nodes, { reachability: task.resourceTags });
     if (!guard.ok) {
@@ -4141,7 +4126,7 @@ async function runWithAgent(
     if (guard.note) {
       journal.append({ kind: "task.progress", sessionId: task.sessionId, payload: { taskId: task.id, dispatch: guard.note } });
     }
-    // tunnel 委派(step-033):远端命中→任务书下发节点自己的执行器(不在本地跑 LLM 编排)。
+ // tunnel 委派:远端命中→任务书下发节点自己的执行器(不在本地跑 LLM 编排)。
     if (guard.node && guard.node.nodeId !== "local") {
       recordUser();
       const cur0 = tm.get(task.id);
@@ -4166,7 +4151,7 @@ async function runWithAgent(
   }
   // 公网工具引用(装配顺序:spawn 工具先建、webTools 后建;子代理派发在 execute 期求值)。
   const webToolsRef: { value: Tool[] } = { value: [] };
-  /** web.search 配置层热读(2026-10-21):直读项目 genie.config.json 的 web.search 块,
+ /** web.search 配置层热读:直读项目 genie.config.json 的 web.search 块,
    * 按 mtime 缓存——设置页保存即对下一次 web_search 生效,不需要重启/重建工具。
    * 不走 loadConfig 全量合并(那会连 user 层/env 一起算,这里语义=「项目级设置页写的值」)。 */
   type WebSearchCfg = { provider?: string; apiKeyEnv?: string; endpoint?: string; model?: string; disabled?: boolean };
@@ -4198,11 +4183,11 @@ async function runWithAgent(
       return null;
     }
   };
-  // 项目级根(2026-10-12 用户口径:code-sense/review 是 vibe coding 轨的项目级能力,每个项目不同):
+ // 项目级根( code-sense/review 是 vibe coding 轨的项目级能力,每个项目不同):
   // 任务带 projectId→项目根;无项目/项目不可用回退 harness 根。此前 code_sense/orient/review
-  // 全钉在 harness 根(step-035 登记边界「workflow/code_sense 根仍 harness」的收口)。
+ // 全钉在 harness 根(登记边界「workflow/code_sense 根仍 harness」的)。
   const taskRoot = projects?.resolveWorkdir(task.projectId) ?? repoRoot();
-  // 远程项目工具三件(2026-10-26,ZCode remote workspace 业务切片):任务归属 remote:ssh 项目时
+ // 远程项目工具三件(ZCode remote workspace 业务切片):任务归属 remote:ssh 项目时
   // 注入 remote_ls/remote_read/remote_exec——本地文件工具围栏在 harness 回退根,远程目录经
   // SSH 层操作(路径围栏=项目 workspacePath;exec 权限类别 remote.exec 走审批闸)。
   // 本任务的远程项目(SSH/WSL;后续 code_sense/code_review 也据此路由到远端运行时)
@@ -4214,7 +4199,7 @@ async function runWithAgent(
     const remote = taskRemoteProject;
     if (!remote) return null;
     const wsq = shQuote(remote.workspacePath);
-    // 2026-10-26:远程项目任务的工具套件 = **本地同名七件**(read_file/write_file/edit_file/glob/
+ // 远程项目任务的工具套件 = **本地同名七件**(read_file/write_file/edit_file/glob/
     // grep/list_dir + run_cmd 语义的 exec),效应真实落在远端仓库——模型零学习成本(工具名/参数
     // 与本地一致),上下游闭环(改的就是用户看到的远端文件)。
     const lsTool: Tool = {
@@ -4348,9 +4333,9 @@ async function runWithAgent(
         // 差异误判——如实登记的能力边界,不影响 Linux/WSL 远端。非 workspace 档 fenceCommand 内部即早退。
         const fenced = fenceCommand(cmd, remote.workspacePath);
         if (fenced) return "错误:" + fenced + "(workspace 模式只允许操作项目目录内的文件;需要越界请在完全访问模式执行)";
-        // git 破坏命令硬拦(g1,2026-11-05):子代理远程 run_cmd 同样不许 git 写/破坏(git stash 实锤事故)。
+ // git 破坏命令硬拦(g1:子代理远程 run_cmd 同样不许 git 写/破坏(git stash 注意事故)。
         // 远程路径不本地解析,但命令文本是同一份→解析后子命令判定与本地同口径。
-        // 作用域说明:本 execTool 是 remoteProjectTool 的一部分,只并入主 agent 的 mainTools(:5052),
+ // 作用域说明:本 execTool 是 remoteProjectTool 的一部分,只并入主 agent 的 mainTools(5052),
         // 子代理不经此路径执行 shell(子代理 run_cmd = llm-loop-backend workerWriteTools,已在源头硬拦)
         // ——故此处按「主 agent 不受限但审计」处理(11-05 事故复盘要求谁动了工作树可对账)。
         auditGitCommand(journal, task.sessionId, cmd);
@@ -4361,7 +4346,7 @@ async function runWithAgent(
     };
     return [lsTool, readTool, writeTool, editTool, globTool, grepTool, execTool];
   })();
-  // 板存储根(2026-10-21 板根错位根治):repoRoot() 是**唯一**板存储根——board_upsert/board_read
+ // 板存储根(板根错位根治):repoRoot 是**唯一**板存储根——board_upsert/board_read
   // 的写盘根(storeRoot 缺省=repoRoot())、面板 board.load(boardRoot) 都在这;taskRoot 只用于
   // 代码类工具(code_sense/review/文件围栏)。任务 projectId 指向非 harness 项目时
   // taskRoot≠repoRoot,闸门若按 taskRoot 读板将永远读不到自己刚写的板 → 同一 reason 反复拒绝死循环。
@@ -4383,7 +4368,7 @@ async function runWithAgent(
       return null;
     } catch { return null; }
   };
-  /** q4 子写者独立板「在场」探测(2026-10-25,只给 plan-gate 用,不进 P0 计分):
+ /** q4 子写者独立板「在场」探测(只给 plan-gate 用,不进 P0 计分):
    *  planner 以 scope 落板后,规划契约在 `.genie/boards/<sid>/<taskId>-<scope>.json`,
    *  主任务板可能根本不存在——plan-gate 的判据是「本任务有规划契约在场」,它必须能看见
    *  planner 的独立板,否则闸门永远拒(死循环)。只探测本 taskId 的分区板(`<taskId>-*`),
@@ -4397,8 +4382,8 @@ async function runWithAgent(
     }
     return false;
   };
-  // 静态调用索引预热(2026-10-12 三改:提前生成,不点哪个查哪个;fire-and-forget,首次 1-2 分钟后台)。
-  // 预算闸(2026-10-21):超预算根(如工作区根)冷构建实测 7 分钟后 SIGABRT 且反复重 fork——
+ // 静态调用索引预热(三改:提前生成,不点哪个查哪个;fire-and-forget,首次 1-2 分钟后台)。
+ // 预算闸:超预算根(如工作区根)冷构建经验证 7 分钟后 SIGABRT 且反复重 fork——
   // 闸拒绝后不预热(fork worker 侧另有失败冷却,这里是入口侧省掉注定失败的构建)。
   void (async () => {
     try {
@@ -4408,13 +4393,13 @@ async function runWithAgent(
     } catch { /* 预热失败容忍 */ }
   })();
 
-  // 机制3(2026-10-15):无产出预警阈值——task_output stale 标记的判定窗(进程内后端的 [warn] 行同源配置)。
+ // 机制3:无产出预警阈值——task_output stale 标记的判定窗(进程内后端的 [warn] 行同源配置)。
   const staleWarnMs = Math.max(Number(agentConfig?.agent?.subagentStaleWarnMin ?? 20) * 60_000, 250);
 
-  // 上下文治理(2026-10-20 子代理与 coding agent 同源):同一 compactHook / microcompact 实例
+ // 上下文治理(子代理与 coding agent 同源):同一 compactHook / microcompact 实例
   // 既喂主 loop 也喂 spawn 出的子 loop。此前子 loop 永不压缩——长子代理随着工具结果累积
   // 无界增长上下文,与主 agent(有阈值压缩)完全是两套工作模式。
-  // effort 档位(2026-10-22 四档联动):从 provider describe() 读(热更新后读新值),
+ // effort 档位(四档联动):从 provider describe 读(热更新后读新值),
   // xhigh=窗口口径;low/medium/high 阈值×0.35/0.55/0.75 提前压缩。
   const mainEffort = (() => { try { const d = (llm as { describe?: () => { reasoningEffort?: string } }).describe; return typeof d === "function" ? d.call(llm)?.reasoningEffort : undefined; } catch { return undefined; } })();
   const taskMicrocompact = {
@@ -4428,7 +4413,7 @@ async function runWithAgent(
     Number((agentConfig as { agent?: { growthSpurtTokens?: number } } | undefined)?.agent?.growthSpurtTokens ?? DEFAULT_GROWTH_SPURT_TOKENS) || 0);
   // 写时定形 spill(2026-11 token 轮 02):超阈工具结果在**进历史之前**落盘定形(头+标记+尾+路径),
   // 之后永不改写——旧口径是读时每步改写历史中段,提示前缀逐字变化 → prompt cache 全量失效
-  // (实测 uncached 单价 = 命中的 50 倍)。主 loop 与 spawn 出的子 loop 同源注入(spill 目录同根,
+ // (经验证 uncached 单价 = 命中的 50 倍)。主 loop 与 spawn 出的子 loop 同源注入(spill 目录同根,
   // 按各自 sessionId 分子目录),否则长子代理照旧打碎缓存。
   const taskSpill: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["spill"] = {
     dir: join(repoRoot(), ".genie", "spill"),
@@ -4438,7 +4423,7 @@ async function runWithAgent(
   const taskModelScoring = (agentConfig as {
     context?: { modelScoring?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["modelScoring"] };
   } | undefined)?.context?.modelScoring;
-  // 大结果「智能入上下文」闸门(step-1029,2026-11-06):入口侧控增量。命中闸的工具结果不再走 spill
+ // 大结果「智能入上下文」闸门:入口侧控增量。命中闸的工具结果不再走 spill
   // ——先切块让本地 8105 判相关性(±小模型四段摘要),全文落 .genie/tool-dumps,上下文只放摘要+指针。
   // 与 spill 同源装配:主 loop 与 spawn 子 loop 共用,否则长子代理照旧把大结果整段灌进去。
   const taskBigIntakeDumpDir = join(repoRoot(), ".genie", "tool-dumps");
@@ -4447,7 +4432,7 @@ async function runWithAgent(
   const taskBigIntake: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["bigIntake"] = {
     enabled: bigResultEnabledFromEnv(),
     dumpDir: taskBigIntakeDumpDir,
-    // 提炼外层超时(2026-11-08):qwen3.7-flash 对 12k 字符 diff 实测 53.4s,旧 20s 默认值在真实
+ // 提炼外层超时:qwen3.7-flash 对 12k 字符 diff 经验证 53.4s,旧 20s 默认值在真实
     // 模型上必杀(生产 journal:digestChars=0 + policy=fallback)。给 120s(≈2x 余量);
     // 外层 abort 只兜「挂死」,provider 自身超时照旧生效。
     digestTimeoutMs: 120_000,
@@ -4467,7 +4452,7 @@ async function runWithAgent(
         }
       : {}),
   };
-  // M48 压缩后正文补回配置(agent.compactRehydrate):每次压缩执行时经 getter 读,配置热改即时生效。
+ //  压缩后正文补回配置(agent.compactRehydrate):每次压缩执行时经 getter 读,配置热改即时生效。
   const taskCompactRehydrate = (agentConfig as { agent?: { compactRehydrate?: import("./compact-rehydrate.js").CompactRehydrateConfig } } | undefined)?.agent?.compactRehydrate;
   const taskCompactHook = makeCompactHook({
     contextWindow,
@@ -4486,7 +4471,7 @@ async function runWithAgent(
     onCompacted: (r) => { void broadcastTraceStatsOf()?.(r.sessionId); },
   });
 
-  // step-071 父子 ask-answer:任务级 broker——子代理重操作(build/install/全量测试/递归批处理)申请
+ // 父子 ask-answer:任务级 broker——子代理重操作(build/install/全量测试/递归批处理)申请
   // 路由给父 agent 决策(旧链路的子代理 ask 只到面板或静默拒绝,父 agent 从不参与)。
   // 两条通道共用一个 broker:①注入——结构化问题块(message.user)进父 journal,父 loop 下一 step 可见;
   // ②决策泵——driveParentDecision 直驱父 LLM 做 mini-turn 裁决(父 loop 阻塞在 spawn 工具内时唯一
@@ -4494,7 +4479,7 @@ async function runWithAgent(
   // (custom subagent.heavy-ask/-answer),审批结果以 message.system 回灌会话(面板/模型都可见)。
   const parentAskBroker = new ParentAskBroker({ journal, sessionId: task.sessionId });
   parentAskBroker.onPending = () => {
-    // 2026-11-03 token 治理(step-1031 实锤 2.7M token/日=注入总量 39.6%):不再把审批块以
+ // token 治理(注意 2.7M token/日=注入总量 39.6%):不再把审批块以
     // message.user 永久落 journal——已了结的请求块会被 deriveMessages 无限重放,还诱导模型
     // 应答已结束的请求(「无此待决请求」空转白烧往返)。改为 AgentLoop.pendingQuestions
     // ephemeral 注入(下方):待决期间逐步可见,了结即消失;审计链(custom heavy-ask/-answer
@@ -4507,67 +4492,67 @@ async function runWithAgent(
     } catch { /* 通知失败不影响应答 */ }
   };
 
-  // plan-gate(2026-10-20 用户口径「规划流程要代码级机制强制,光靠上下文靠不住」):
-  // 实锤——活跃 session 均未走 planner(planner 委托/先骨架后丰满/防目标丢失全在提示词层,
-  // flash 档模型不遵守),而板的落板门/收口门因「从未落板」根本没被触发。本闸门把入口代码化:
+ // plan-gate:
+ // 注意——活跃 session 均未走 planner(planner 委托/先骨架后丰满/防目标丢失全在提示词层,
+ // flash 档模型不遵守),而板的落板门/门因「从未落板」根本没被触发。本闸门把入口代码化:
   // **写角色子代理派发与主 agent 写文件,均需本任务白板(规划契约)在场**——板由 planner 落
-  // (board_upsert),带 P0 验收(落板门已拦缺验收);此后骨架→丰满的推进与收口由
-  // boardReminder(每 10 步 P0 再锚定)+收口门(done 必须证据全绿)+下方收尾校验三段追踪。
+ // (board_upsert),带 P0 验收(落板门已拦缺验收);此后骨架→丰满的推进与由
+ // boardReminder(每 10 步 P0 再锚定)+门(done 必须证据全绿)+下方收尾校验三段追踪。
   // 模式:hard(缺省,硬拦)/soft(只 journal 提醒不拦)/off。全程 journal 留痕可回放审计。
-  // 优先级 env > config > hard(2026-10-21):GENIE_PLAN_GATE=off/soft/hard——基础设施类测试
+ // 优先级 env > config > hard:GENIE_PLAN_GATE=off/soft/hard——基础设施类测试
   // (reaper/worktree/会话纪律等,不涉及规划流程)与应急场景显式豁免,不必逐个硬造板+阶段声明。
   const planGateMode = String(process.env.GENIE_PLAN_GATE ?? (agentConfig?.agent as { planGate?: string } | undefined)?.planGate ?? "hard");
-  // 任务类别(2026-10-23 用户口径:理解阶段定类,后续 tips/plan-gate 全消费同一结果):
+ // 任务类别(理解阶段定类,后续 tips/plan-gate 全消费同一结果):
   // 初判=启发式(classifyTaskClass,开工即出);agent 在 understand 用 task_phase(taskClass=...)
   // 更正,更正即刻生效(plan-gate 恢复/收紧、每10步锚与后续轮次按新类走)。
   const taskClassState: { value: TaskClass } = { value: classifyTaskClass(task.instruction) };
-  // 直达实施路由(2026-10-24):理解阶段判定「明确具体的小改」→ implement(route=direct) →
+ // 直达实施路由:理解阶段判定「明确具体的小改」→ implement(route=direct) →
   // plan-gate 尺度豁免;落板(board_upsert)即自然回归全流程(闸门在有板时本就放行)。
   const taskRouteState: { direct: boolean } = { direct: false };
   try {
     journal.append({ kind: "custom", sessionId: task.sessionId, payload: { type: "task.class", taskId: task.id, taskClass: taskClassState.value, source: "heuristic" } });
   } catch { /* 留痕失败不影响执行 */ }
-  // 板根对齐(2026-10-21 修正):此前注释说「board_upsert 写盘用 taskRoot」与代码不符——board_upsert
+ // 板根对齐(修正):此前注释说「board_upsert 写盘用 taskRoot」与代码不符——board_upsert
   // 实际写盘根 = storeRoot ?? repoRoot()(mainTools 只传 4 参 → storeRoot=undefined → repoRoot()),
   // 面板 board.load 也是 repoRoot()。故 repoRoot() 才是唯一板存储根;按 taskRoot 读板在
   // 「任务 projectId 指向非 harness 项目」(taskRoot≠repoRoot)时永远读不到 → plan-gate 死循环。
   // readTaskBoard:主根 boardStoreRoot 优先,taskRoot 回退(多根容忍)。
   const planBoard = () => readTaskBoard();
   let planGateAnnounced = false; // 放行事件只落一次(无→有翻转变动留痕)
-  let planGateDirectAnnounced = false; // 直达路由豁免留痕一次(2026-10-24)
-  let phaseAutoAdvancedAnnounced = false; // 阶段门自动推进只落一次(2026-11-05)
-  // 逃生阀计数(2026-10-21):只统计「无板」这一类拒绝(阶段门不计数)。实锤:板根错位时闸门
+  let planGateDirectAnnounced = false; // 直达路由豁免留痕一次
+  let phaseAutoAdvancedAnnounced = false; // 阶段门自动推进只落一次
+ // 逃生阀计数:只统计「无板」这一类拒绝(阶段门不计数)。注意:板根错位时闸门
   // 永远读不到板,模型收到同一句模板话术 5 次、反复重试仍无法脱困 → 同因第 3 次降级放行。
   let planGateDenies = 0;
   const PLAN_GATE_DENY_LIMIT = 3;
-  // 全链路变更门的独立计数(2026-11-06):与「无板」同档逃生阀,但独立计数——两类拒绝同因不同,
+ // 全链路变更门的独立计数:与「无板」同档逃生阀,但独立计数——两类拒绝同因不同,
   // 混计会让「缺盘点」把「缺板」的额度吃掉,症状变成闸门突然静默放行。
   let surfaceGateDenies = 0;
   /** 本任务的全链路变更判据(阶段回执/收尾摘要共用;hasManifest/exempt/hasChain 恒真=只取 scope,不产生拒绝)。 */
   const surfaceScopeThisTask = () =>
     surfaceGateVerdict({ taskClass: taskClassState.value, instruction: String(task.instruction ?? ""), hasManifest: true, exempt: true, hasChain: true });
-  // 规划委托判据(2026-10-25 用户口径「白板应该是 planner 自己画,不能主 agent 手工改」):
+ // 规划委托判据:
   // 本任务是否派过 planner(含被权限拦下的尝试——尝试过即允许降级内联,以免 planner 不可用时死锁)。
   // 旧实现只靠提示词,flash 档主 agent 会把 6 节点设计板内联画成流程图并直接实施;这里把
   // 「大板必须由 planner 落」变成写操作硬闸(≤3 节点轻量板仍允许主 agent 内联)。
   let plannerSpawnedThisTask = false;
   let plannerGateDenies = 0;
   const PLANNER_GATE_DENY_LIMIT = 2;
-  // 豁免留痕判据(2026-11-05 用户拍板「office 走硬闸 + 豁免留痕」,不是软提醒):本任务是否经
+ // 豁免留痕判据(用户拍板「office 走硬闸 + 豁免留痕」,不是软提醒):本任务是否经
   // board_upsert 传 exemptReason 显式声明过「确实没有开发内容/表达结构」。与 plannerSpawnedThisTask
   // 同级=只在本任务进程内有效;board 不落盘,只落 journal board.exempt(禁止静默豁免)。
   let boardExemptThisTask = false;
   const planGateBlock = async (tool: string, actor: string): Promise<string | null> => {
     if (planGateMode === "off") return null;
-    // 任务类别分流(2026-10-23 起;2026-11-05 收紧 office):qa=问答/调研免板直放;office=办公/产出类
+ // 任务类别分流(起; 收紧 office):qa=问答/调研免板直放;office=办公/产出类
     // 走硬闸(必须有作业思路板 composition 或显式豁免);coding=内容板判据。agent 用
     // task_phase(taskClass=...) 更正类别时本闸即刻按新类裁决。
     if (taskClassState.value === "qa") return null;
-    // 全链路变更硬门(2026-11-06 用户口径「用户只描述意图,harness 自动找出该意图涉及的所有链路
+ // 全链路变更硬门( 「用户只描述意图,harness 自动找出该意图涉及的所有链路
     // 节点…一次性全部改到一致,并证明没有残留」):指令含替换/迁移/改名词(coding 类)时,写操作
     // 前必须有本任务 change.surface 盘点清单(journal 事实,不是提示词自述)——否则「只改 UI 就交差」
     // 仍能过闸。exempt 通道:board_upsert exemptReason 或 change_surface action=exempt(理由必填)。
-    // 清单只回读一次(2026-11-06 链路图轮):hasManifest 与 hasChain 同源,避免两次读 journal 后口径分叉。
+ // 清单只回读一次(链路图轮):hasManifest 与 hasChain 同源,避免两次读 journal 后口径分叉。
     const surfaceManifest = readChangeSurfaceManifest(journal, task.sessionId, task.id);
     const surfaceVerdict = surfaceGateVerdict({
       taskClass: taskClassState.value,
@@ -4582,7 +4567,7 @@ async function runWithAgent(
       const attempt = surfaceGateDenies;
       // 逃生阀同「无板」档:同因第 3 次降级放行(闸门自身异常不该把任务钉死),留痕说明降级。
       const escalated = attempt >= PLAN_GATE_DENY_LIMIT;
-      // rule 按原因区分(2026-11-06 链路图轮):缺链路图是独立判据,留痕要能和缺盘点分开统计。
+ // rule 按原因区分(链路图轮):缺链路图是独立判据,留痕要能和缺盘点分开统计。
       const gateRule = surfaceVerdict.reason === "no-chain-map" ? "plan-gate/change-chain" : "plan-gate/change-surface";
       if (!escalated || attempt === PLAN_GATE_DENY_LIMIT) {
         try {
@@ -4608,22 +4593,22 @@ async function runWithAgent(
       }
     }
     const board = await planBoard();
-    // 放行判据(2026-10-20 五阶段轮收紧):板上须有**非阶段节点**(ph- 前缀是 task_phase 的流程泳道,
+ // 放行判据(五阶段轮收紧):板上须有**非阶段节点**(ph- 前缀是 task_phase 的流程泳道,
     // 纯阶段板没有规划内容)——防「只调 task_phase 建空板绕过 planner」。
     const designNodes = board ? board.nodes.filter((n) => !String(n.id).startsWith("ph-")) : [];
-    // 内容节点判据(2026-11-04 用户口径「板偏计划步骤而非实际开发内容逻辑」):长尾实锤——
+ // 内容节点判据:长尾注意——
     // 2-3 节点板全是「s1 梳理→s2 归因→s3 修复」式 TODO 序列,零 targets/symbolRef/accept/数据,
     // 过了旧判据(designNodes>0)。闸门升级:只认**内容节点**(指向实际对象或带可验验收);
     // 纯步骤板不开门——板是「变更在系统里的内容契约」,不是执行清单。
     const contentNodes = designNodes.filter((n) => isContentNode(n as never));
-    // office 判据(2026-11-05 用户口径「调研/写 PPT/汇报/写文章也可以在白板上画一下作业思路
+ // office 判据( 「调研/写 PPT/汇报/写文章也可以在白板上画一下作业思路
     // (主题/受众/结构/章节/章间关系/顺序)」+「office 走硬闸」):办公/产出类必须有**作业思路板**。
     // 宽松实现:只看 boardType==="composition" 且有效节点 ≥3(主题/受众/≥2 章节),更细的结构校验
     // (章节主题/章间关系词)由类型门 board-contract 负责——此处刻意不 import 新函数,避免跨代理编译竞态。
     const compositionNodes = board && board.boardType === "composition" ? designNodes : [];
     const hasCompositionBoard = compositionNodes.length >= 3;
     const isOffice = taskClassState.value === "office";
-    // 豁免通道(2026-11-05,用户拍板「office 走硬闸 + 豁免留痕」):本任务已用 board_upsert
+ // 豁免通道(用户拍板「office 走硬闸 + 豁免留痕」):本任务已用 board_upsert
     // exemptReason 显式声明过「确实没有开发内容/表达结构」→ 放行,且回放可见(不留静默豁免)。
     if (boardExemptThisTask) {
       try {
@@ -4631,7 +4616,7 @@ async function runWithAgent(
       } catch { /* 留痕失败不影响放行 */ }
       return null;
     }
-    // office 硬闸(2026-11-05 用户口径「白板一定是开发内容逻辑;办公任务也可以在板上画作业思路
+ // office 硬闸( 「白板一定是开发内容逻辑;办公任务也可以在板上画作业思路
     // (主题/受众/结构/章节/章间关系/顺序)」):办公/产出类必须有结构完整的作业思路板(boardType=
     // composition),否则拒绝并给两条出路(落 composition 板 / 确无表达结构用 exemptReason 留痕)。
     if (isOffice) {
@@ -4667,7 +4652,7 @@ async function runWithAgent(
         denialHint: "出路二选一:①board_upsert boardType=\"composition\"(主题/受众/≥2 章节/章间关系词);②确无表达结构→board_upsert 传 exemptReason=\"<为什么没有表达结构>\"(≥20 字)留痕豁免。",
       });
     }
-    // 尺度豁免(2026-10-24):直达实施路由——理解阶段判定的「明确具体小改」免板直写;
+ // 尺度豁免:直达实施路由——理解阶段判定的「明确具体小改」免板直写;
     // 中途落板即回归全流程语义:一旦内联了 >3 节点的板,直达豁免失效,按大板规则要求 planner
     // (旧实现先 return null,板再大也豁免,是「direct 路由 + 内联大板」的绕过口)。
     if (taskRouteState.direct && !(board && designNodes.length > 3)) {
@@ -4688,7 +4673,7 @@ async function runWithAgent(
       }
       return null;
     }
-    // 阶段门 → 自动推进(2026-11-05):7 天 telemetry(n=108 次 phase 拒绝/33 会话)显示 100% 的
+ // 阶段门 → 自动推进:7 天 telemetry(n=108 次 phase 拒绝/33 会话)显示 100% 的
     // by=plan-gate/phase 拒绝都发生在「该会话此前无任何 task_phase 声明」时,69.4% 是同会话重复被拒。
     // 规划事实由板承载:板在场且含内容节点=规划已发生,不该再用「阶段声明」这一形式拦写操作。
     // 故阶段门改为自动推进到「规划」并首次留痕,任务追踪看板(消费 task.phase)与 phaseState 保持一致。
@@ -4709,14 +4694,14 @@ async function runWithAgent(
     };
 
     if (board && contentNodes.length > 0) {
-      // 规划委托硬闸(2026-10-25):大板(>3 设计节点)必须由 planner 落盘;主 agent 只允许
-      // 内联 1~3 节点轻量板。旧实现纯提示词,实测主 agent 把 6 节点 UI 任务画成流程图后直接实施,
+ // 规划委托硬闸:大板(>3 设计节点)必须由 planner 落盘;主 agent 只允许
+ // 内联 1~3 节点轻量板。旧实现纯提示词,经验证主 agent 把 6 节点 UI 任务画成流程图后直接实施,
       // 白板失去「planner 先规划」的约束。planner 尝试过(即便失败)即放行,保留降级路径。
       if (planGateMode === "hard" && !plannerSpawnedThisTask && designNodes.length > 3) {
         plannerGateDenies += 1;
         const attempt = plannerGateDenies;
         const escalated = attempt > PLANNER_GATE_DENY_LIMIT;
-        // 记账收敛(2026-11-05):非 escalated(前 LIMIT 次)每条都落(诊断需要);escalated 只在
+ // 记账收敛:非 escalated(前 LIMIT 次)每条都落(诊断需要);escalated 只在
         // 首次(attempt=LIMIT+1)与之后每 +10 落一条,其余次数放行但不留痕——避免同因刷屏。
         const escalatedFirst = PLANNER_GATE_DENY_LIMIT + 1;
         if (!escalated || attempt === escalatedFirst || (attempt - escalatedFirst) % 10 === 0) {
@@ -4734,7 +4719,7 @@ async function runWithAgent(
           } catch { /* 留痕失败不影响裁决 */ }
         }
         if (!escalated) {
-          // 差分回执(2026-11-06 token 收敛,B2 P2 遗留):旧版整段规则说明+出路 ~230 字/次,
+ // 差分回执( token 收敛,B2 P2 遗留):旧版整段规则说明+出路 ~230 字/次,
           // escalated 会话里同文本每步重发(baseline §4.3:话术失败率 29%,重复回执纯 token 浪费)。
           // 只报「缺什么+下一步一句话」;journal 事件已含结构化字段,规则全文不进回执。
           return JSON.stringify({
@@ -4743,7 +4728,7 @@ async function runWithAgent(
           });
         }
       }
-      // 阶段门自动推进(2026-11-05):板含内容节点=规划事实已发生,不再要求先声明 task_phase。
+ // 阶段门自动推进:板含内容节点=规划事实已发生,不再要求先声明 task_phase。
       autoAdvancePhase(tool, actor);
       if (!planGateAnnounced) {
         planGateAnnounced = true;
@@ -4762,7 +4747,7 @@ async function runWithAgent(
     }
     // 「无板」类拒绝:计数 + 逃生阀(同 task 内同因累计到第 3 次降级放行,防闸门死循环)。
     planGateDenies += 1;
-    // 诊断面(2026-10-21 可诊断):把「实际读的板路径 / 两个根 / sessionId+taskId / 回退是否命中」
+ // 诊断面(可诊断):把「实际读的板路径 / 两个根 / sessionId+taskId / 回退是否命中」
     // 写进回执,模型/人能区分「真没落板」与「根错位」——旧版只给同一句模板话术,根错位时无从察觉。
     const primaryPath = boardFilePath(boardStoreRoot, task.sessionId, task.id);
     const fallbackPath = boardFilePath(taskRoot, task.sessionId, task.id);
@@ -4781,7 +4766,7 @@ async function runWithAgent(
     };
     if (planGateDenies >= PLAN_GATE_DENY_LIMIT) {
       // 逃生阀:降级放行 + 留痕(闸门自身异常不该把任务钉死)。
-      // 记账收敛(2026-11-05):只在第 LIMIT 次(首次降级)与之后每 +10 次落一条,其余次数直接放行不留痕。
+ // 记账收敛:只在第 LIMIT 次(首次降级)与之后每 +10 次落一条,其余次数直接放行不留痕。
       // 放行语义不变(planGateDenies >= LIMIT 即 return null)。
       const attempt = planGateDenies;
       if (attempt === PLAN_GATE_DENY_LIMIT || (attempt - PLAN_GATE_DENY_LIMIT) % 10 === 0) {
@@ -4798,7 +4783,7 @@ async function runWithAgent(
         payload: {
           tool, effect: "denied", by: "plan-gate",
           hint: "本任务无规划板——先 spawn planner 落规划契约",
-          // 结构化字段(2026-11-05):遥测/看板按 reason+rule+decisionBy 归因,话术本文字逐字不动。
+ // 结构化字段:遥测/看板按 reason+rule+decisionBy 归因,话术本文字逐字不动。
           reason: "no-board", rule: "plan-gate/content-board", decisionBy: "plan-gate",
           boardPath: primaryPath, boardStoreRoot, taskRoot, taskId: task.id, fallbackBoardPath: fallbackPath, denyCount: planGateDenies,
         },
@@ -4814,7 +4799,7 @@ async function runWithAgent(
 
   const spawnTool: Tool = {
     name: "spawn_subagent",
-    description: "Dispatch one subtask to a subagent and return its final text. Pass wait:true to block until it reaches a terminal state (zero LLM cost while waiting). **plan-gate: with no board in this task yet, write roles (worker/general) are rejected and pointed at planner; planner/explore/judge are exempt.** agentType picks the role (types listed in system prompt, default worker; read-only investigation → explore). title = one-line (<=30 chars) card label; required when several subagents run in parallel. deadlineMin = time box in minutes: on expiry the harness reaps the subagent and delivers its output as a partial result (explicitly marked, not a failure). Default = unbounded, run to completion — set it only to cap runaway jobs. A subagent is a child process agent inside THIS session (not a new session; it cannot create sessions). For independent subtasks, emit several spawn_subagent calls in one message so they run in parallel. step-071: when the task involves build/install/full test suite, state the expected commands and tell the subagent that heavy operations are gated and routed to the parent for approval — wait for the decision, never split commands to bypass it. Such approval requests surface in this session as questions; answer via answer_subagent with a reason for both approve and reject. step-117: backend:\"acp\" dispatches to an external ACP agent (Claude Code/Codex/Kimi/Hermes etc., adapter = claude-code/codex/kimi/hermes/qwen/opencode/dsh/minimax or a command). ACP permission requests use the same approval chain; ACP has no mid-run steer. step-123: worktree:true runs the subagent in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>) so parallel subagents do not collide and your workspace stays clean; the worktree and branch are kept for manual merge and the result carries worktreePath/branch. Non-git repos are rejected explicitly (no silent fallback; drop the flag to run in the main workspace).",
+    description: "Dispatch one subtask to a subagent and return its final text. Pass wait:true to block until it reaches a terminal state (zero LLM cost while waiting). **plan-gate: with no board in this task yet, write roles (worker/general) are rejected and pointed at planner; planner/explore/judge are exempt.** agentType picks the role (types listed in system prompt, default worker; read-only investigation → explore). title = one-line (<=30 chars) card label; required when several subagents run in parallel. deadlineMin = time box in minutes: on expiry the harness reaps the subagent and delivers its output as a partial result (explicitly marked, not a failure). Default = unbounded, run to completion — set it only to cap runaway jobs. A subagent is a child process agent inside THIS session (not a new session; it cannot create sessions). For independent subtasks, emit several spawn_subagent calls in one message so they run in parallel. when the task involves build/install/full test suite, state the expected commands and tell the subagent that heavy operations are gated and routed to the parent for approval — wait for the decision, never split commands to bypass it. Such approval requests surface in this session as questions; answer via answer_subagent with a reason for both approve and reject. backend:\"acp\" dispatches to an external ACP agent (Claude Code/Codex/Kimi/Hermes etc., adapter = claude-code/codex/kimi/hermes/qwen/opencode/dsh/minimax or a command). ACP permission requests use the same approval chain; ACP has no mid-run steer. worktree:true runs the subagent in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>) so parallel subagents do not collide and your workspace stays clean; the worktree and branch are kept for manual merge and the result carries worktreePath/branch. Non-git repos are rejected explicitly (no silent fallback; drop the flag to run in the main workspace).",
     parameters: {
       type: "object",
       properties: {
@@ -4833,7 +4818,7 @@ async function runWithAgent(
       },
       required: ["instructions"],
     },
-    // ZCode agentToolEntry concurrentSafe:true 同款(step-056):同批多条 spawn 经 loop Promise.all 并行;
+ // ZCode agentToolEntry concurrentSafe:true 同款:同批多条 spawn 经 loop Promise.all 并行;
     // 每次调用独立 LlmLoopBackend 实例+独立闭包状态,进程内子代理并发安全。
     isConcurrencySafe: () => true,
     async execute(args: unknown, signal?: AbortSignal) {
@@ -4842,21 +4827,21 @@ async function runWithAgent(
         backend?: string; adapter?: string; adapterArgs?: string[]; adapterEnv?: Record<string, string>;
         worktree?: boolean; isolation?: string; wait?: boolean;
       };
-      // ACP 后端(step-117):显式 backend 只认 "acp"(其它值 fail-visible,不静默当默认后端)。
+ // ACP 后端:显式 backend 只认 "acp"(其它值 fail-visible,不静默当默认后端)。
       const backendArg = rawArgs.backend ? String(rawArgs.backend).toLowerCase() : undefined;
       if (backendArg && backendArg !== "acp") {
         return JSON.stringify({ status: "rejected", reason: `未知 backend "${String(rawArgs.backend)}":可选 acp(缺省=服务配置 executor)` });
       }
       const acpRequested = backendArg === "acp";
-      // worktree 隔离(step-123):worktree:true 或 isolation:"worktree";未知 isolation=fail-visible。
+ // worktree 隔离:worktree:true 或 isolation:"worktree";未知 isolation=fail-visible。
       const isolationArg = rawArgs.isolation === undefined ? undefined : String(rawArgs.isolation).toLowerCase();
       if (isolationArg && isolationArg !== "none" && isolationArg !== "worktree") {
         return JSON.stringify({ status: "rejected", reason: `未知 isolation "${String(rawArgs.isolation)}":可选 none/worktree(或直接用 worktree:true)` });
       }
       const worktreeRequested = rawArgs.worktree === true || isolationArg === "worktree";
-      // plan-gate 写角色前置闸(2026-10-20):worker/general 等写角色派发需规划板在场(worktree
+ // plan-gate 写角色前置闸:worker/general 等写角色派发需规划板在场(worktree
       // 创建之前拦——拒绝不产生孤儿工作树)。planner/explore/judge/test-analyst 不受限。
-      // 2026-11-05:ppt-master 同样是写角色(产 deck.md / 调导出工具),纳入同一道闸。
+ // ppt-master 同样是写角色(产 deck.md / 调导出工具),纳入同一道闸。
       const gateRole = String(rawArgs.agentType ?? "worker").toLowerCase();
       // 规划委托硬闸:派过 planner(含后续失败/被权限拒的尝试)即视为已履行委托,允许降级内联。
       // 必须在写角色闸之前置位:同一批工具调用(先 worker 后 planner)也按到达顺序正确裁决。
@@ -4866,22 +4851,22 @@ async function runWithAgent(
         const blocked = await planGateBlock("spawn_subagent", `派发写角色子代理(${gateRole})`);
         if (blocked) return blocked;
       }
-      const subTitle = String(rawArgs.title || "").trim().slice(0, 40); // 过程卡标题(2026-10-15:多子agent并列时首行前言雷同→卡片无法区分)
-      // 机制1(2026-10-15):时间盒解析——显式参数 > 全局 agent.subagentDeadlineMin > planner 专属缺省
-      // (2026-10-25 大并发修复:planner 未配置时 8 分钟,防慢 planner 长期占并发槽;其他角色仍不限时)。
+      const subTitle = String(rawArgs.title || "").trim().slice(0, 40); // 过程卡标题(:多子agent并列时首行前言雷同→卡片无法区分)
+ // 机制1:时间盒解析——显式参数 > 全局 agent.subagentDeadlineMin > planner 专属缺省
+ // (大并发修复:planner 未配置时 8 分钟,防慢 planner 长期占并发槽;其他角色仍不限时)。
       const deadlineMin = resolveSubagentDeadlineMin(rawArgs.agentType, rawArgs.deadlineMin, agentConfig?.agent);
       const deadlineMs = deadlineMin > 0 ? Math.round(deadlineMin * 60_000) : 0;
-      // 可分离的子中止(designs/25 ZCode detachParent 语义):父取消→转发给子;一旦自动转后台→解除转发(子代理独立存活)。
+ // 可分离的子中止( ZCode detachParent 语义):父取消→转发给子;一旦自动转后台→解除转发(子代理独立存活)。
       const subAbort = new AbortController();
       const forwardAbort = () => subAbort.abort();
       signal?.addEventListener("abort", forwardAbort, { once: true });
       const instructions = composeSubagentInstructions(agentProfiles, rawArgs.agentType, String(rawArgs.instructions))
-        // planner 历史复用(2026-10-20 用户口径:新规划基于已有历史规划):任务书尾部自动带历史档案
+ // planner 历史复用(新规划基于已有历史规划):任务书尾部自动带历史档案
         //(本会话优先+近期,≤8 条)——延续已验证的结构,别推翻已交付的成果;确需重构时在板里注明理由。
         + (String(rawArgs.agentType ?? "").toLowerCase() === "planner"
           ? renderTaskArchiveBlock(readTaskArchive(taskRoot, { sessionId: task.sessionId, limit: 8 })).replace("## 历史任务档案(compact 后恢复锚;做相关任务先对齐历史结论,别推翻已验证的成果)", "## 历史任务/规划档案(规划参考:结构可延续、成果别推翻;重构需注明理由)")
           : "")
-        // 读传递(2026-11-05 D3 治理:跨 agent 读重叠 17.5%):父会话已读文件+行段随任务书注入,
+ // 读传递( D3 治理:跨 agent 读重叠 17.5%):父会话已读文件+行段随任务书注入,
         // 子代理「勿再整读父已读片段」。≤8 文件≤700 字符(≈175 tok)防反向膨胀;GENIE_READ_HANDOFF=off 关。
         // 门控=后端类型在下方判定(isInProcessBackend);ACP/echo 外部后端不注入(它们有自己的读面)。
         + (() => {
@@ -4898,14 +4883,14 @@ async function runWithAgent(
       // 用最近一次 result.ok 校正登记状态,避免「failed 却显示 running」。
       let lastResultOk: boolean | undefined;
       const spawnStartAt = Date.now();
-      // 后台子代理注册表(step-054,ZCode async agent 机制):agentId→输出文件路径与状态。
+ // 后台子代理注册表(ZCode async agent 机制):agentId→输出文件路径与状态。
       const bgAgentId = "agent_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      // 2026-10-19 修复:子代理 taskId 每次派发唯一。旧实现同父所有子代理共用 `${task.id}-sub`
+ // 修复:子代理 taskId 每次派发唯一。旧实现同父所有子代理共用 `${task.id}-sub`
       // (后台共用 `${task.id}-bg`)→ 子 loop sessionId、轨迹目录 `subagent-<taskId>-sub`、
-      // subagent.event.taskId 三者全撞在一起(实测两个并行 explore 的 159 次调用混在同一目录,
+ // subagent.event.taskId 三者全撞在一起(经验证两个并行 explore 的 159 次调用混在同一目录,
       // 无法按子代理排障)。前缀保留父任务 id 便于追溯;agentId 仍是全局唯一键。
       const subTaskId = task.id.slice(0, 8) + "-" + bgAgentId.slice(6, 14);
-      // worktree 隔离(step-123):在构造后端前创建,使 roots/workdir/子进程 cwd 全部指向派生工作树。
+ // worktree 隔离:在构造后端前创建,使 roots/workdir/子进程 cwd 全部指向派生工作树。
       // 后台名额预检前置:避免「worktree 已建、却因后台上限被拒」的孤儿工作树(正式检查在下方后台分支)。
       if (worktreeRequested && rawArgs.run_in_background === true) {
         const runningBg = [...bgAgents.values()].filter((b) => b.status === "running").length;
@@ -4935,7 +4920,7 @@ async function runWithAgent(
           return JSON.stringify({ status: "rejected", reason: `worktree 隔离不可用(${code}):${message}`, worktree: { requested: true, ok: false, code } });
         }
       }
-      // 子代理工作根(step-123):worktree 模式下所有子代理面(工具围栏/命令 cwd/code_sense 根)
+ // 子代理工作根:worktree 模式下所有子代理面(工具围栏/命令 cwd/code_sense 根)
       // 都切到派生工作树;主工作区只作为源仓被读取。
       const subRoot = worktree?.path ?? taskRoot;
       const worktreeCleanupHint = worktree
@@ -4950,27 +4935,27 @@ async function runWithAgent(
       const worktreeLine = worktree
         ? `[worktree] path=${worktree.path} branch=${worktree.branch} base=${worktree.baseCommit}\n`
         : "";
-      // 子代理实际模型名(step-060 目录;2026-10-20 用户口径「子代理与主 agent 同模型」):
+ // 子代理实际模型名(目录:
       // models.subagent 显式配置才存在(factory 未配=undefined),回退主 llm=同实例同模型同 effort,
       // 主模型热切换后新 spawn 天然用新模型(与 effectiveBackend 同判定源)。
       const subModelName = subagentModelNameOf(models?.subagent ?? llm);
       // review 抓:sessionId 来自客户端,入路径段前消毒(与 board-store seg 同纪律)
       const bgOutputDir = join(repoRoot(), ".genie", "agent-outputs", String(task.sessionId).replace(/[\\/:*?"<>|]/g, "_").replace(/\.\./g, "_"), bgAgentId);
-      // echo 占位后端 → 进程内 LLM 子代理(2026-10-13 收口:ZCode Agent 工具的本质=独立上下文
+ // echo 占位后端 → 进程内 LLM 子代理(ZCode Agent 工具的本质=独立上下文
       // +只读工具的真 loop,不再回显任务书)。真实后端(dsh/zcode/opencode)不受影响。
-      // step-117:backend=acp 显式覆盖(外部 ACP agent),不走进程内子代理分支。
+ // backend=acp 显式覆盖(外部 ACP agent),不走进程内子代理分支。
       const isInProcessBackend = !acpRequested && String((executor as { kind?: string }).kind ?? "") === "echo-child";
-      // 能力计划(step-061):profile.tools=执行白名单;deny-only=权限只下传父 deny。
+ // 能力计划:profile.tools=执行白名单;deny-only=权限只下传父 deny。
       const cap = resolveSubagentCapability(agentProfiles, rawArgs.agentType);
       // 写角色(worker/general)挂执行面:terminal/web/browser/board_read/session_search——
       // 与主 coding agent 能力对齐(除派发子代理外);只读角色(explore/judge/test-analyst)保持窄面。
       const subRoleEarly = String(rawArgs.agentType ?? "worker").toLowerCase();
       const writeRoleEarly = subRoleEarly === "worker" || subRoleEarly === "general" || subRoleEarly === "general-purpose";
-      // 产出面(2026-11-05):ppt-master = 写角色能力面(bash/写盘)+ board_export_pptx 导出通道。
+ // 产出面:ppt-master = 写角色能力面(bash/写盘)+ board_export_pptx 导出通道。
       // 与 planner 的分工一致:结构由规划出,文件由产出角色生成——但这里导出工具必须给它,
       // 否则「质量门是唯一交付通道」这条契约无法执行。
       const deckRoleEarly = subRoleEarly === "ppt-master";
-      // step-138:规划角色(planner)挂「规划面」——白板可写(board_upsert)+ 只读认知,
+ // 规划角色(planner)挂「规划面」——白板可写(board_upsert)+ 只读认知,
       // 无 terminal/web/browser/session_search;写盘由 cap.writeGlobs 限定在规划稿路径。
       const planRoleEarly = subRoleEarly === "planner";      // q1 写者作用域派生(并行 planner 各写各的分区):取本子代理 bgAgentId 的**尾部 4 个
       // [a-zA-Z0-9] 字符**做前缀(如 p1x9)。不用随机数:bgAgentId 在派发时生成并进 journal/回执,
@@ -5003,7 +4988,7 @@ async function runWithAgent(
               }
             : undefined)
         : undefined;
-      // 子代理工具池名字集(step-069 池外观测用):内置读/写+注入面(code_sense 系/skill_view/MCP)。
+ // 子代理工具池名字集(池外观测用):内置读/写+注入面(code_sense 系/skill_view/MCP)。
       const subPoolNames: string[] = capExtraTools
         ? [...SUBAGENT_READ_TOOLS, ...SUBAGENT_WRITE_TOOLS, ...capExtraTools.map((t) => t.name)]
         : [];
@@ -5011,7 +4996,7 @@ async function runWithAgent(
         && expandToolTokens(cap.toolWhitelist).includes("skill_view")
         ? renderSubagentSkillIndex(getExperienceStore())
         : undefined;
-      // ACP 外部后端(step-117):backend=acp 时按参数构造;adapter 未配置由 AcpBackend 在 spawn 时
+ // ACP 外部后端:backend=acp 时按参数构造;adapter 未配置由 AcpBackend 在 spawn 时
       // 回 spawn-failed(带内置目录),不在这里静默回退默认 executor(fail-visible)。
       const acpBackend = acpRequested
         ? createAcpBackend({
@@ -5022,7 +5007,7 @@ async function runWithAgent(
               : {}),
           })
         : undefined;
-      // 读传递(2026-11-05 D3)接线+留痕:同条件双触达——①parentReadSession 传进程内后端
+ // 读传递( D3)接线+留痕:同条件双触达——①parentReadSession 传进程内后端
       // (子读尾注+行段双写父键);②readHandoff 字段进 subagent.spawn payload,供
       // read-handoff-metrics.py 复测注入数/体积(验收要求「journal 留痕可复测」)。
       // env GENIE_READ_HANDOFF=off / ACP / echo 外部后端=零注入零接线(行为同旧版)。
@@ -5035,42 +5020,42 @@ async function runWithAgent(
         : undefined;
       const effectiveBackend: SubagentBackend = acpBackend ?? (isInProcessBackend
         ? new (await import("./llm-loop-backend.js")).LlmLoopBackend({
-            // 步数跟随主 agent 配置(2026-10-13 用户口径:取消强制结束;原硬编码 16 会腰斩真实任务)
-            // designs/25(ZCode subagent_model 语义):子代理走独立模型端点,与主链路隔离——
+ // 步数跟随主 agent 配置(取消强制结束;原硬编码 16 会腰斩真实任务)
+ // (ZCode subagent_model 语义):子代理走独立模型端点,与主链路隔离——
             // 共享端点的服务端会话串扰不再父子互染。未配置=回退主 llm。
-            // step-123:worktree 模式下 roots 只含派生工作树(主仓不可写);否则沿用项目根+harness 根。
+ // worktree 模式下 roots 只含派生工作树(主仓不可写);否则沿用项目根+harness 根。
             llm: models?.subagent ?? llm, maxSteps: agentConfig?.agent?.maxSteps ?? 80, roots: worktree ? [subRoot] : [taskRoot, repoRoot()],
             // 写前持久化屏障与主 agent 同源同值(config.agent.writeBarrier;undefined=不写键,后端/loop 缺省 hard)。
             ...(writeBarrierOf(agentConfig) ? { writeBarrier: writeBarrierOf(agentConfig) } : {}),
             role: rawArgs.agentType ?? "worker",
             workdir: subRoot,
-            // M58 图片 offload:子代理与主 loop 同根(repoRoot),不随项目 workdir 漂移。
+ //  图片 offload:子代理与主 loop 同根(repoRoot),不随项目 workdir 漂移。
             imageOffload: imageOffloadOf(repoRoot()),
-            // 编辑后 LSP 诊断/保存格式化(step-114):子代理 write/edit 与主 agent 同语义。
-            // LSP(2026-10-26):远程项目跳过(本地 tsserver 无远端代码;远端 LSP 独立工程登记)——
+ // 编辑后 LSP 诊断/保存格式化:子代理 write/edit 与主 agent 同语义。
+ // LSP:远程项目跳过(本地 tsserver 无远端代码;远端 LSP 独立工程登记)——
       // 省一次必然失败的 server 拉起
       ...(!remoteProjectTool && agentConfig?.coding?.lsp ? { lsp: agentConfig.coding.lsp } : {}),
-            // 机制1/3(2026-10-15):deadline 到点强制收割(部分结果交付)+无产出预警,由后端内部执行。
+ // 机制1/3:deadline 到点强制收割(部分结果交付)+无产出预警,由后端内部执行。
             ...(deadlineMs > 0 ? { deadlineMs } : {}),
             staleWarnMs,
-            // 能力白名单(step-061):profile.tools 声明→真实工具面;缺席=角色二分兜底(行为同旧版)。
+ // 能力白名单:profile.tools 声明→真实工具面;缺席=角色二分兜底(行为同旧版)。
             ...(cap.toolWhitelist ? { toolWhitelist: cap.toolWhitelist, extraTools: capExtraTools } : {}),
-            // 写盘围栏(step-138):profile.writeGlobs→后端 write_file/edit_file 路径白名单(planner 只写规划稿)。
+ // 写盘围栏:profile.writeGlobs→后端 write_file/edit_file 路径白名单(planner 只写规划稿)。
             ...(cap.writeGlobs ? { writeGlobs: cap.writeGlobs } : {}),
             ...(capSkillIndex ? { skillIndexText: capSkillIndex } : {}),
-            // 权限传递收口:进程内子代理默认继承父会话有效规则(已允许的传递下去;profile.permission=
+ // 权限传递:进程内子代理默认继承父会话有效规则(已允许的传递下去;profile.permission=
             // deny-only 时只下传父 deny,与外部后端同语义);ask 走与外部后端同语义的审批链
             // (未允许的仍走审批;无规则=不设闸同旧版)。
             ...(permRules ? { permissionRules: cap.denyOnly ? deriveChildRules(permRules) : permRules } : {}),
             ...(permRules ? { onPermissionAsk: makeSubagentPermissionAsker({ sessionId: task.sessionId, journal, broker: permissionBroker }) } : {}),
-            // step-071 父子 ask-answer:重操作申请路由给父 agent(broker 注入+泵;超时=拒绝 fail-closed)。
+ // 父子 ask-answer:重操作申请路由给父 agent(broker 注入+泵;超时=拒绝 fail-closed)。
             ...(parentAskBroker
               ? { parentAsk: (input: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) => parentAskBroker.ask(input) }
               : {}),
-            // 读传递(2026-11-05 D3):父会话键传子后端——子 read_file 命中父/兄弟已读行段时尾注,
+ // 读传递( D3):父会话键传子后端——子 read_file 命中父/兄弟已读行段时尾注,
             // 登记双写父键(兄弟子代理经父键即刻共享已读事实)。
             ...(readHandoff ? { parentReadSession: task.sessionId } : {}),
-            // 子代理工作区入账(2026-10-16 用户口径:点开子代理要能看到它的全部动作/消息流):
+ // 子代理工作区入账(点开子代理要能看到它的全部动作/消息流):
             // 子 loop 事件以 subagent.event 落主 journal(payload={agentId,kind,…裁剪后原字段})。
             // 面板主会话渲染过滤该 kind(不双渲染),子代理工作区 tab 专用回放;外部后端不产生
             // loop 事件,工作区对它们降级为 output.txt 进度行时间线(如实标注,不造假消息)。
@@ -5079,7 +5064,7 @@ async function runWithAgent(
                 journal.append({ kind: "subagent.event", sessionId: task.sessionId, payload: { agentId: bgAgentId, taskId: subTaskId, parentTaskId: task.id, kind: e.kind, ...e.payload } });
               } catch { /* journal 入账失败不影响子代理执行 */ }
             },
-            // 2026-10-20 子代理与 coding agent 同构(ZCode Agent 子 runtime 继承父
+ // 子代理与 coding agent 同构(ZCode Agent 子 runtime 继承父
             // modelStreaming/治理配置的语义):流式打字机走与主 agent 同一个 streamSink
             // (sessionId=subagent-<taskId>,面板工作区按 agent 实时渲染);上下文压缩与主
             // loop 共用同一 compactHook/microcompact 实例——长子代理不再无界增长上下文。
@@ -5099,30 +5084,30 @@ async function runWithAgent(
       let finalText = "";
       let subHandle: import("@lampgenie/executors").SubagentHandle | undefined;
       const pendingAsks: { requestId: string; decision: "allow-once" | "reject" }[] = [];
-      // 子代理权限收敛(step-033):外部后端协议语义=父 deny 下传、allow/ask 不放大(ask 由父侧
+ // 子代理权限收敛:外部后端协议语义=父 deny 下传、allow/ask 不放大(ask 由父侧
       // 审批链代答);进程内 LLM 子代理走整体规则继承(上方构造参数),不走 deny-only 派生。
       const childRules = permRules ? deriveChildRules(permRules) : undefined;
       journal.append({
         kind: "subagent.spawn",
         sessionId: task.sessionId,
         payload: {
-          // instructions 全文入 journal(2026-10-15 用户反馈:300 字截断让过程卡任务书齐腰断;执行层本来就是全文,截的只是展示)
+ // instructions 全文入 journal(用户反馈:300 字截断让过程卡任务书齐腰断;执行层本来就是全文,截的只是展示)
           taskId: subTaskId, parentTaskId: task.id, backend: acpRequested ? "acp" : executor.kind, instructions: instructions.slice(0, 8000),
-          // step-117:ACP 后端记录 adapter 标识(实际命令解析在 AcpBackend.spawn;env 兜底也算)
+ // ACP 后端记录 adapter 标识(实际命令解析在 AcpBackend.spawn;env 兜底也算)
           ...(acpRequested ? { acpAdapter: rawArgs.adapter ?? process.env.GENIE_ACP_ADAPTER ?? "(未配置)" } : {}),
-          // agentId(B 2026-10-14 面板过程卡):面板据此把 spawn 事件与后台注册表/output.txt tail 关联
+ // agentId(B 面板过程卡):面板据此把 spawn 事件与后台注册表/output.txt tail 关联
           agentId: bgAgentId,
           // 会话结束后 bgAgents 运行期状态丢失,派遣时生效的模型必须落 journal 才能回溯
           // (此前模型只在 bgAgents.set 的 model 字段里,靠 session.status 推送,进程重启/会话结束即不可查)。
           ...(subModelName ? { model: subModelName } : {}),
-          // step-123:worktree 隔离的路径/分支/base 落 journal(人工合并与清理的定位依据)
+ // worktree 隔离的路径/分支/base 落 journal(人工合并与清理的定位依据)
           ...(worktree ? { worktree } : {}),
           ...(subTitle ? { title: subTitle } : {}),
           ...(permRules ? { derivedPermissionRules: isInProcessBackend ? (cap.denyOnly ? deriveChildRules(permRules).length : permRules.length) : childRules!.length } : {}),
-          // 能力声明快照(step-061;step-069 抽出 buildSubagentToolPolicy=直测锚+池外 warnings 观测):
+ // 能力声明快照(抽出 buildSubagentToolPolicy=直测锚+池外 warnings 观测):
           // source=declared(白名单生效)/fallback(角色二分兜底);warnings=池外声明(不改行为只补观测)。
           ...(isInProcessBackend ? { toolPolicy: buildSubagentToolPolicy(cap, rawArgs.agentType ?? "worker", subPoolNames) } : {}),
-          // 读传递留痕(2026-11-05 D3):注入数/体积可复测(metrics.py A 段数据源)。
+ // 读传递留痕( D3):注入数/体积可复测(metrics.py A 段数据源)。
           ...(readHandoff ? { readHandoff } : {}),
         },
       });
@@ -5131,13 +5116,13 @@ async function runWithAgent(
       } else if (childRules && childRules.length > 0) {
         journal.append({ kind: "permission.gate", sessionId: task.sessionId, payload: { tool: "spawn_subagent", effect: "derived", by: "derive-child-rules", ruleCount: childRules.length } });
       }
-      // 涉事符号上下文注入(step-034 F3,调用时机②):子 agent 动手前带调用链摘要。
+ // 涉事符号上下文注入( F3,调用时机②):子 agent 动手前带调用链摘要。
       const symbolCtx = await symbolContextFor(subRoot, instructions);
 
       if (symbolCtx) {
         journal.append({ kind: "sense.preheat", sessionId: task.sessionId, payload: { kind: "spawn-context", symbol: firstSymbolLike(instructions) } });
       }
-      // 后台模式(2026-10-13,ZCode async_launched 移植):onEvent 追加写 output.txt,
+ // 后台模式(ZCode async_launched 移植):onEvent 追加写 output.txt,
       // 立即返回 agentId+输出文件;主 agent 稍后用 task_output 查进度/结果。
       // wait:true 时等待语义优先(互斥声明在参数描述里):不落后台,走下方前台挂起路径。
       if (rawArgs.run_in_background === true && rawArgs.wait !== true) {
@@ -5157,7 +5142,7 @@ async function runWithAgent(
           const en = bgAgents.get(bgAgentId);
           if (en) en.lastEventAt = lastEventAt;
         };
-        // 后台外部后端的 permission-ask 不再悬空(权限传递收口):此前 bg onEvent 只认 progress/result,
+ // 后台外部后端的 permission-ask 不再悬空(权限传递):此前 bg onEvent 只认 progress/result,
         // 外部后端(bg)的 ask 永无应答=子进程挂死——与前台同链审批后回灌 handle。
         let bgHandleRef: import("@lampgenie/executors").SubagentHandle | undefined;
         const bgAsk = makeSubagentPermissionAsker({ sessionId: task.sessionId, journal, broker: permissionBroker });
@@ -5218,12 +5203,12 @@ async function runWithAgent(
                   const entryBg = bgAgents.get(bgAgentId);
                   // 终态摘除 cancel 句柄:此后「终止」按钮经 server 诚实回 ok:false(已收尾)。
                   if (entryBg) { entryBg.status = e.result.ok ? "completed" : "failed"; delete entryBg.cancel; }
-                  // B(2026-10-14):后台子代理也落 subagent.result 终态事件——此前只有 message.system,
+ // B:后台子代理也落 subagent.result 终态事件——此前只有 message.system,
                   // 投影 running 计数只增不减、面板历史卡重启后无终态可查。纯事件补齐,不改权限语义。
                   try {
                     journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, event: { type: "result", ok: e.result.ok, finalText: String(e.result.finalText ?? e.result.error?.detail ?? "").slice(0, 300) } } });
                   } catch { /* 终态事件失败不影响子代理收尾 */ }
-                  // 完成通知注入(ZCode background-tasks notification 语义 → 2026-10-30 免独立往返):
+ // 完成通知注入(ZCode background-tasks notification 语义 → 免独立往返):
                   // 旧实现只发「300 字摘要 + 指针」,主模型必然再发一轮 task_output 取正文(每次子代理完成
                   // 多吃一次完整 LLM 往返)。改走 deliverFinalNotice:直接注入 output.txt 里 [result …] 段
                   // 之后的正文(超 GENIE_SUBAGENT_INJECT_MAX 才截断补指针),并按 session+agentId 去重、
@@ -5251,7 +5236,7 @@ async function runWithAgent(
           },
         );
         bgHandleRef = bgHandle;
-        // step-117:ACP 会话 id 落 journal(子代理工作区专用事件;主会话渲染过滤 subagent.event)
+ // ACP 会话 id 落 journal(子代理工作区专用事件;主会话渲染过滤 subagent.event)
         if (bgHandle.acpSessionId) {
           try {
             journal.append({ kind: "subagent.event", sessionId: task.sessionId, payload: { agentId: bgAgentId, taskId: subTaskId, parentTaskId: task.id, kind: "acp.session", sessionId: bgHandle.acpSessionId, adapter: bgHandle.acpAdapter ?? rawArgs.adapter ?? "acp" } });
@@ -5277,7 +5262,7 @@ async function runWithAgent(
           note: "已后台启动(异步)。由你判断:①结果是硬依赖→task_output(agentId,waitFor=\"result\")挂起等到底(等待期零 LLM 消耗);②不是硬依赖→继续推进与它任务书不重叠的其它工作(不要重复它在做的事)。完成/超时/卡死时会有系统消息通知。",
         });
       }
-      // 输出双模(designs/25):前台也会写输出文件——自动转后台后 task_output 才有完整轨迹可读。
+ // 输出双模:前台也会写输出文件——自动转后台后 task_output 才有完整轨迹可读。
       const { mkdirSync: mk, appendFileSync: ap, writeFileSync: wf } = await import("node:fs");
       mk(bgOutputDir, { recursive: true });
       const outputFile = join(bgOutputDir, "output.txt");
@@ -5318,7 +5303,7 @@ async function runWithAgent(
         {
           taskId: `${subTaskId}-sub`,
           instructions: instructions + symbolCtx,
-          // workdir 按项目解析(step-035);worktree 模式=派生工作树(step-123)。
+ // workdir 按项目解析;worktree 模式=派生工作树。
           workdir: subRoot,
           permissions: "sandbox",
           ...(permRules ? { permissionRules: childRules } : {}),
@@ -5343,7 +5328,7 @@ async function runWithAgent(
           } catch { /* 输出文件写失败不影响子代理 */ }
           if (e.type === "permission-ask") {
             journal.append({ kind: "permission.gate", sessionId: task.sessionId, payload: { tool: "subagent", effect: "asked", by: e.summary.slice(0, 120), risk: e.risk } });
-            // 三级决策(step-037 B2):env > 面板审批 > auto-fail-closed。
+ // 三级决策( B2):env > 面板审批 > auto-fail-closed。
             const applyDecision = (decision: "allow-once" | "reject", by: string) => {
               journal.append({ kind: "permission.gate", sessionId: task.sessionId, payload: { tool: "subagent", effect: decision === "allow-once" ? "allowed" : "denied", by } });
               if (subHandle) void subHandle.respondPermission(e.requestId, decision).catch(() => {});
@@ -5370,7 +5355,7 @@ async function runWithAgent(
       ).then((h): import("@lampgenie/executors").SubagentHandle => {
         subHandle = h;
         for (const a of pendingAsks.splice(0)) void h.respondPermission(a.requestId, a.decision).catch(() => {});
-        // step-117:ACP 会话 id 落 journal(子代理工作区专用事件)
+ // ACP 会话 id 落 journal(子代理工作区专用事件)
         if (h.acpSessionId) {
           try {
             journal.append({ kind: "subagent.event", sessionId: task.sessionId, payload: { agentId: bgAgentId, taskId: subTaskId, parentTaskId: task.id, kind: "acp.session", sessionId: h.acpSessionId, adapter: h.acpAdapter ?? rawArgs.adapter ?? "acp" } });
@@ -5378,21 +5363,21 @@ async function runWithAgent(
         }
         return h;
       });
-      // B(2026-10-14):前台子代理运行期也入注册表——面板过程卡的实时状态源(session.status subagentList)。
+ // B:前台子代理运行期也入注册表——面板过程卡的实时状态源(session.status subagentList)。
       // 此前仅 auto-bg 后才入表,前台运行期(最长 180s)面板无从知道「有没有在工作」;
       // result 分支既有代码本就尝试更新该条目,此处补齐登记即可闭环。终态由 result 分支改写。
       // subagent.cancel 句柄(G3 通路收尾):前台路径闭包读 subHandle;已收尾不挂。
       bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => subHandle?.cancel("graceful") }), ...(subTitle ? { title: subTitle } : {}) });
       ensureSubagentWatchdog(journal);
-      // ZCode 赛跑语义(designs/25):结果 vs 自动转后台计时器——超时→父拿 agentId 立即返回,子代理 detach 继续。
-      // wait:true(2026-10-20 用户口径「选择等待=loop 挂起,结果回来机制唤起,等待期零 LLM」):
+ // ZCode 赛跑语义:结果 vs 自动转后台计时器——超时→父拿 agentId 立即返回,子代理 detach 继续。
+ // wait:true:
       // 显式选择等待时不参加 auto-bg 赛跑——挂在本工具 promise 上直到终态(deadline 收割保证终态必达,
       // 绝对上限=max(600s, deadline+90s) 防僵尸);loop 停在工具执行上不产生任何 LLM 调用。
       const autoBgMs = (agentConfig?.agent as { subagentAutoBackgroundMs?: number } | undefined)?.subagentAutoBackgroundMs ?? 180_000;
       const waitChosen = rawArgs.wait === true;
       const hardCapMs = Math.max(600_000, deadlineMs > 0 ? deadlineMs + 90_000 : 0);
-      // 2026-10-20 生产实挂修复:旧实现靠裸 setTimeout(autoBgMs/hardCap) 触发转后台——代码正确但
-      // 生产实测 180s 定时器未 fire(前台阻塞 19 分钟,靠子代理自然完成解卡;本地不复现,疑似 WSL
+ // 生产实挂修复:旧实现靠裸 setTimeout(autoBgMs/hardCap) 触发转后台——代码正确但
+ // 生产经验证 180s 定时器未 fire(前台阻塞 19 分钟,靠子代理自然完成解卡;本地不复现,疑似 WSL
       // IO 瞬态)。改为统一轮询判定:200ms 心跳里查 result/转后台超时/硬上限——轮询通道与 result
       // 收割同源(生产已验证存活),不再依赖任何一次性长延时定时器。基准统一 spawnStartAt。
       const outcome = await new Promise<string>((resolve) => {
@@ -5421,8 +5406,8 @@ async function runWithAgent(
           ...(worktree ? { worktreePath: worktree.path, worktreeBranch: worktree.branch } : {}),
           ...(worktreeResult ? { worktree: worktreeResult } : {}),
           ...(deadlineMs > 0 ? { deadline: `时间盒 ${deadlineMin} 分钟仍有效:到点自动收割部分结果` } : {}),
-          // 2026-10-20 用户口径:等待还是继续由主 agent 自行判断,harness 只给事实与选项,不再指令「继续做其它工作」
-          //(此前指令式 note 实测诱导主 agent 在等待期重复子代理任务书的勘察=双倍成本)。
+ // 等待还是继续由主 agent 自行判断,harness 只给事实与选项,不再指令「继续做其它工作」
+ //(此前指令式 note 经验证诱导主 agent 在等待期重复子代理任务书的勘察=双倍成本)。
           note: `前台等待 ${Math.round(autoBgMs / 1000)}s 超时,子代理已转后台继续运行(agentId="${bgAgentId}")。接下来由你判断:①它的结果是后续工作的硬依赖→用 task_output(agentId="${bgAgentId}",waitFor="result")挂起等到底(等待期零 LLM 消耗);②不是硬依赖→继续推进与它任务书不重叠的其它工作(不要重复它在做的事)。完成/超时/卡死时会有系统消息通知;卡死可止损重派。下次「派了就等」可直接 spawn(wait:true) 免去这一跳。`,
         });
       }
@@ -5435,7 +5420,7 @@ async function runWithAgent(
     },
   };
 
-  // 2026-10-23 用户口径:开工不再做 orient/经验/devlog/历史档案的匹配式注入(此前每条 user
+ // 开工不再做 orient/经验/devlog/历史档案的匹配式注入(此前每条 user
   // message 都跟一条 tips,内容与会话语境常错配且冗余)。code_sense 走拉取式(工具调用才返回,
   // 索引预热由下方机制2 warmIndex 独立承担);经验/历史经 skill_view 与 compact 恢复锚到达。
   // tips 引擎只剩功能性注入(白板评论投递/首派子代理纪律),见 buildLoopTips 注释。
@@ -5449,8 +5434,8 @@ async function runWithAgent(
     changeScope: () => surfaceScopeThisTask().scope,
   });
 
-  // MCP 工具桥 + 浏览器工具先建(step-048 审计修复④:工具清单只提在场工具,含 MCP/浏览器)
-  // MCP 工具桥(step-047):启用服务器的工具以 mcp__<server>__<tool> 并入工具面(fail-soft:探测失败=空集)。
+ // MCP 工具桥 + 浏览器工具先建(审计修复④:工具清单只提在场工具,含 MCP/浏览器)
+ // MCP 工具桥:启用服务器的工具以 mcp__<server>__<tool> 并入工具面(fail-soft:探测失败=空集)。
   const mcpTools: Tool[] = [];
   if (mcp) {
     try {
@@ -5473,22 +5458,22 @@ async function runWithAgent(
       // 探测失败:主 agent 无 MCP 工具,任务照常
     }
   }
-  // 浏览器控制工具(step-048):门禁实时读 config(停用立即失效)。
+ // 浏览器控制工具:门禁实时读 config(停用立即失效)。
   /* owner(2026-11 browser-ux-redo):主 agent 用 sessionId 做稳定归属(同一会话多任务同 owner 才不互抢);
    * 拿不到 sessionId 时回落 task.id,再回落 "agent"。 */
   const browserTool = browserConfig
     ? createBrowserTool(repoRoot(), browserConfig, task.sessionId || task.id || "agent")
     : null;
-  // 公网静态读写工具(step-119):web_fetch/web_search 只读;交互操作仍归 browser。
+ // 公网静态读写工具:web_fetch/web_search 只读;交互操作仍归 browser。
   // 域名策略沿用 browser 的 allowDomains(面板热改),为空时回落 GENIE_WEB_ALLOW_DOMAINS。
-  // 2026-10-21 三层能力:①web.search 配置层(设置页写入;provider/key 从配置/secrets 现读,
+ // 三层能力:①web.search 配置层(设置页写入;provider/key 从配置/secrets 现读,
   // 面板保存即热生效——每次查询时解析,不缓存);②env provider 回退;③都无→内置静态检索
   // (DDG HTML)兜底。web_fetch 静态正文近空(JS 页)或失败时,browser 工具在场则真实渲染兜底。
   const searchRuntime = (): { provider: string; apiKey?: string; endpoint?: string; model?: string } | null => {
     try {
       const root = repoRoot();
       const web = readWebSearchConfigHot(root);
-      // 2026-10-28 用户口径:provider 缺省=默认 DeepSeek(密钥引用名取自 providers[] 里
+ // provider 缺省=默认 DeepSeek(密钥引用名取自 providers[] 里
       // id=deepseek 的 apiKeyEnv);disabled=true 或取不到密钥 → null,落内置静态检索
       // (curl 等价)+ browser 指路的降级链。语义单测在 resolveSearchRuntimeFromConfig。
       return resolveSearchRuntimeFromConfig(web, webSearchCfgCache.providers, (name) => readSecretValue(root, name));
@@ -5512,25 +5497,25 @@ async function runWithAgent(
     },
   );
   webToolsRef.value = webTools; // 子代理执行面复用同一组只读检索工具(无状态)
-  // 系统提示组装(step-028;step-048 审计修复①②):
+ // 系统提示组装(审计修复①②):
   // ①身份唯一化——SYSTEM 是唯一身份声明,soul 只贡献行为纪律(「语音管家」身份行剥离,refs:身份唯一);
   // ②AGENTS.md 随任务项目根(taskRoot,opencode findUp 就近语义)——此前钉死 harness 根=项目约定永不进提示词。
-  // soul+memory(hermes 移植):SOUL.md 行为纪律为继承块;记忆块归 companion 轨(designs/20 P4)。
+ // soul+memory(hermes 移植):SOUL.md 行为纪律为继承块;记忆块归 companion 轨( P4)。
   // 子智能体注册表(内置+ .genie/agents/*.md 覆盖,ZCode profile 模式)
   const agentProfiles = loadAgentProfiles(repoRoot());
   const soulText = loadSoul(join(repoRoot(), ".genie", "soul")).content || DEFAULT_SOUL_MD;
-  // system 瘦身(2026-10-22):toolHints/经验索引不再进 system(工具说明归 tools 参数+tool_view;
+ // system 瘦身:toolHints/经验索引不再进 system(工具说明归 tools 参数+tool_view;
   // 经验归 loopTips 按动作注入)——这里不再组装 toolHints。
-  // 子代理派发策略按后端形态定(用户实测:echo 占位下模型反复派 echo 子代理烧尽 maxSteps——
-  // step-089 P3:项目底座认知注入——「项目主线」块(≤300 字符,防开发偏离主线)。
+ // 子代理派发策略按后端形态定(用户经验证:echo 占位下模型反复派 echo 子代理烧尽 maxSteps——
+ // P3:项目底座认知注入——「项目主线」块(≤300 字符,防开发偏离主线)。
   // 读 taskRoot/.genie/sense-index/profile.json(同步,缺席=零注入零开销,不在此处触 LLM);
   // 生产者是 codesense project --write。GENIE_SENSE_PROJECT_INJECT=off 可关。
   const projectMainline = process.env.GENIE_SENSE_PROJECT_INJECT === "off"
     ? ""
     : projectMainlineBlockOf(taskRoot);
-  // system 瘦身(2026-10-22 用户口径「只保留核心提示词,细节由 tips 动态注入」;2026-10-23 起
+ // system 瘦身(起
   // 经验也不再推送——按需 skill_view 查看;工具清单由 tools 参数+tool_view 按需承载)。
-  // 提示词档位(2026-10-29 token 轮 P2):短任务书走精简档(SYSTEM_LITE),长任务书走全量。
+ // 提示词档位( token 轮 P2):短任务书走精简档(SYSTEM_LITE),长任务书走全量。
   // 阈值 1450 字符 = 任务书原文长度,已在 16 题上验证 r=0.818;GENIE_SYSTEM_LITE=on/off 可强制开/关做 A/B。
   const instrChars = String(task.instruction ?? "").length;
   const liteMode = process.env.GENIE_SYSTEM_LITE === "off" ? false
@@ -5539,17 +5524,17 @@ async function runWithAgent(
   const composed = composeSystemPrompt({
     base: systemForTaskClass(taskClassState.value, { lite: liteMode }) + "\n\n## 行为纪律(soul 继承,身份以上文为准)\n" + soulDisciplinesFor(soulText) + "\n\n" + formatAgentProfiles(agentProfiles) + projectMainline,
     agentsMd: discoverAgentsMd(taskRoot),
-    // step-071 父子 ask-answer:「子代理资源调度」节(spawn 告知义务+审批决策指引)。
+ // 父子 ask-answer:「子代理资源调度」节(spawn 告知义务+审批决策指引)。
     subagentDispatch: renderSubagentDispatchSection({ answerToolMounted: true }),
     // n6 技能索引(主 agent 也注入,ZCode context/sections/skills.ts):与子代理同源同格式,
     // 预算 20000 字符,超预算降级为 name+file 一行。空索引=不渲染该节(renderSkillIndex 返回 "")。
     skillIndex: renderSkillIndex(collectSkillIndexEntries(store), SKILL_INDEX_MAX_CHARS),
   });
-  // 保留节边界(2026-10-29 token 轮 04):旧写法 `const { text: system } = ...` 把 sections 丢掉,
-  // 导致 loop 只能整篇 26~28K 字符重发 system 变更(实测 855 次调用 / 8.3M uncached / 占未命中 39.5%)。
+ // 保留节边界( token 轮 04):旧写法 `const { text: system } = ...` 把 sections 丢掉,
+ // 导致 loop 只能整篇 26~28K 字符重发 system 变更(经验证 855 次调用 / 8.3M uncached / 占未命中 39.5%)。
   const system = composed.text;
 
-  // 附件注入(step-048;2026 附件通道):文本类=路径进任务书 + read_attachment 工具可读;图片类=转 data URL 进 vision 通道。
+ // 附件注入(2026 附件通道):文本类=路径进任务书 + read_attachment 工具可读;图片类=转 data URL 进 vision 通道。
   // 组装走纯函数 buildAttachmentInjection(可单测):类别判定=classifyAttachment,mime 缺失按扩展名兜底;
   // 图片进视觉通道要过「单张 ≤2MB」+「本轮 ≤4 张」双闸,每种未进原因各有专门文案(不静默、不混句)。
   const { block: attachmentBlock, visionImages } = buildAttachmentInjection(task.attachments, (p) => readFileSync(p), { sizeOf: (p) => statSync(p).size });
@@ -5573,7 +5558,7 @@ async function runWithAgent(
             return "[图片附件]" + att.name + " 不入文本读取:图片已作为视觉输入进模型(若「## 附件」节标注未进视觉通道,则因超单张 2MB 或超 4 张上限)。路径:" + p;
           }
           if (kind === "doc") {
-            // 2026-10-29 附件链路:文档类走解析器(doc-text.ts,永不抛错),返回解析后的纯文本。
+ // 附件链路:文档类走解析器(doc-text.ts,永不抛错),返回解析后的纯文本。
             const r = await parseDocFile(p, { name: att.name, mime: att.mime });
             if (!r.ok) return "[文档附件解析失败] " + att.name + ":" + r.reason + "\n路径:" + p;
             const head = "[文档附件] " + att.name + "(已解析为纯文本)" + (r.note ? "(注:" + r.note + ")" : "");
@@ -5598,16 +5583,16 @@ async function runWithAgent(
         },
       }
     : null;
-  // 权限闸门(step-033):规则在场才设;ask 处置 env 可调(缺省 fail-closed)。
-  // 记忆上下文注入(step-029 收口):USER.md/MEMORY.md 渲染块进系统提示(空=不加节)。
+ // 权限闸门:规则在场才设;ask 处置 env 可调(缺省 fail-closed)。
+ // 记忆上下文注入:USER.md/MEMORY.md 渲染块进系统提示(空=不加节)。
   const memBlock = memory?.contextBlock("local") ?? "";
-  // 会话目标注入(step-052 /goal):journal 最近一条 active goal → 系统提示(目标驱动跨轮任务)。
+ // 会话目标注入( /goal):journal 最近一条 active goal → 系统提示(目标驱动跨轮任务)。
   const goalEv = [...journal.readAll()].reverse().find((e) => e.sessionId === task.sessionId && e.kind === "goal.set");
   const goalPayload = (goalEv?.payload ?? {}) as { goal?: string | null; state?: string };
   const goalBlock = goalPayload.goal && goalPayload.state !== "paused"
     ? "\n\n## 会话目标(用户当前的首要目标,决策时优先对齐)\n" + goalPayload.goal
     : "";
-  // plan 模式(step-053,ZCode runtime_mode FULL 提醒逐字移植;ExitPlanMode→PLAN_COMPLETE 标记适配)。
+ // plan 模式(ZCode runtime_mode FULL 提醒逐字移植;ExitPlanMode→PLAN_COMPLETE 标记适配)。
   const planBlock = permissionMode() === "plan"
     ? planModePrompt()
     : "";
@@ -5617,20 +5602,18 @@ async function runWithAgent(
     ? "\n\n## 当前权限模式=工作区内\n只能读写当前项目目录内的文件,项目外路径(绝对路径 / .. 越界)一律被拒绝。命令/终端执行同样限在项目目录内(项目外路径会被拒绝;脚本内部的相对跳转与拼接触发器不在文本校验范围)。"
     : "";
   const planFileBlock = await planFileBlockFor(task.sessionId);
-  // teamai 团队资产(designs/24):enforced 规则/文化/技能索引进系统提示(relay 不可达=空块,零影响)。
+ // teamai 团队资产:enforced 规则/文化/技能索引进系统提示(relay 不可达=空块,零影响)。
   const teamaiBlock = renderTeamaiBlock((globalThis as { __teamView?: { teamaiDigest(): Record<string, unknown> | null } }).__teamView?.teamaiDigest() ?? null);
-  // 当前日期上下文(designs/25 ZCode current-date section 语义):模型默认不知今天几号,涉及
+ // 当前日期上下文( ZCode current-date section 语义):模型默认不知今天几号,涉及
   // 日志检索/git 考古/「最近」类任务时必备。
   const now = new Date();
   const weekday = "日一二三四五六"[now.getDay()] ?? "";
   const dateBlock = "\n\n## 当前日期\n" + now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "(周" + weekday + ")";
-  // 系统提示的**节清单**(2026-10-29 token 轮 04):与 systemWithMemory 同内容,只是保留节边界。
-  //
-  // 作用:loop 侧的 `[系统提示更新]` 从「整篇 26~28K 字符重发」改成「只发变更的节」。实测旧口径
+ // 系统提示的**节清单**( token 轮 04):与 systemWithMemory 同内容,只是保留节边界。
+ // 作用:loop 侧的 `[系统提示更新]` 从「整篇 26~28K 字符重发」改成「只发变更的节」。经验证旧口径
   // 855 次调用付了 8.3M uncached = 全部未命中 token 的 39.5%;而真实变更通常只涉及一两节
   // (AGENTS.md 摘要 / memory revision / 技能索引新增),其余节逐字节相同——重发是纯浪费。
-  //
-  // **单一真源(2026-10-30 修复)**:此前 blocksAll 用字符串 `+` 拼、systemSections 又手写一份,
+ // **单一真源(修复)**:此前 blocksAll 用字符串 `+` 拼、systemSections 又手写一份,
   // 两份清单不同步 → 漏了 planBlock/workspaceBlock。后果不是「少发一点」而是**静默丢规则**:
   // plan 模式与「工作区内」权限模式的约束文本在全文里,但节 diff 永远看不到它们变化 →
   // `[系统提示更新]` 零追加 → 模型收不到「现在是 plan 模式,不许改代码」。省 token 不能换行为退化。
@@ -5654,10 +5637,10 @@ async function runWithAgent(
     ...(teamaiBlock ? [{ name: "teamai", content: teamaiBlock }] : []),
     { name: "date", content: dateBlock },
   ];
-  // steer_task(step-045 二期收口):向在跑任务的中途 turn 注入追加指令——loop 每 step 从
+ // steer_task(二期):向在跑任务的中途 turn 注入追加指令——loop 每 step 从
   // journal 重导出消息,注入的 message.user 会出现在下一次 LLM 调用里(真转向,不是假排队)。
-  // task_output(2026-10-13,ZCode TaskOutput 语义):查后台子代理的进度与结果。
-  // waitFor:"result"(2026-10-20 用户口径「选择等待=loop 挂起,结果回来机制唤起」):挂起直到终态——
+ // task_output(ZCode TaskOutput 语义):查后台子代理的进度与结果。
+ // waitFor:"result":挂起直到终态——
   // 等待期间主循环零 LLM 消耗(loop 停在本工具 promise 上);上限不靠模型给秒数,动态对齐该子代理的
   // deadline+宽限(watchdog 同源),无时间盒用 60min 兜底——收割链保证终态必达,挂起必有尽头。
   const taskOutputTool: Tool = {
@@ -5672,7 +5655,7 @@ async function runWithAgent(
       },
       required: ["agentId"],
     },
-    // 2026-10-30 降级(终态正文已自动注入,本工具从「收割主力」退成「补查」):读注册表 + 读输出文件
+ // 降级(终态正文已自动注入,本工具从「收割主力」退成「补查」):读注册表 + 读输出文件
     // + 睡眠轮询,无副作用、无 journal 写入——与真实工作工具在**同一步**并行执行是安全的(step 成本
     // 不再多占一次往返)。停止等待由 signal 中止,不阻塞同级工具的收尾。
     isConcurrencySafe: () => true,
@@ -5682,7 +5665,7 @@ async function runWithAgent(
       const entry = bgAgents.get(id);
       if (!entry) return `错误:未找到后台代理 ${id}(可能已过期或非后台派发)`;
       const waitForTerminal = a.waitFor === "result";
-      // 挂起上限(watchdog 同源):设了时间盒=deadline+宽限;未设(2026-10-21 不限时口径)=无限等
+ // 挂起上限(watchdog 同源):设了时间盒=deadline+宽限;未设(不限时口径)=无限等
       // (子代理死活由 watchdog stale 预警兜可见性);waitSec 短等模式保持 600s 上限。
       const capMs = waitForTerminal
         ? (entry.deadlineAt != null
@@ -5705,7 +5688,7 @@ async function runWithAgent(
       let out = "";
       try { out = readFileSync(entry.outputFile, "utf-8"); } catch { /* 文件尚未写出 */ }
       const timedOut = entry.status === "running";
-      // 机制3(2026-10-15):无产出预警——运行中且超过 staleWarnMin 无任何事件→stale 标记。
+ // 机制3:无产出预警——运行中且超过 staleWarnMin 无任何事件→stale 标记。
       // 主 agent 由此可决策止损(steer 注入/重派/继续等),不再对着一个疑似卡死的子代理干等。
       const staleMs = timedOut ? Date.now() - (entry.lastEventAt ?? Date.now()) : 0;
       const isStale = timedOut && staleMs > staleWarnMs;
@@ -5725,9 +5708,9 @@ async function runWithAgent(
       });
     },
   };
-  // ── 五硬阶段追踪(2026-10-20 用户口径:理解任务→规划→开始实施→开始验收→完成,
+ // ── 五硬阶段追踪(理解任务→规划→开始实施→开始验收→完成,
   // 每阶段写出来展示到看板,不涉及的也要声明;代码级管理追踪防越做越偏)──
-  // 2026-10-21 用户口径修正:五阶段不再落白板(白板定位=设计草图)——阶段归宿与 todo_write 同形态:
+ // 修正:五阶段不再落白板(白板定位=设计草图)——阶段归宿与 todo_write 同形态:
   // journal(task.phase 事件)+「任务追踪」看板实时展示。旧板的 ph-* 节点仅作兼容渲染。
   const PHASES = [
     { key: "understand", label: "理解任务" },
@@ -5752,20 +5735,20 @@ async function runWithAgent(
       },
       required: ["phase"],
     },
-    // P1-3 账本阶段零步(2026-10-30):task_phase 今日 97 次调用、每次独占一个完整 step(实测全仓
+ // P1-3 账本阶段零步:task_phase 今日 97 次调用、每次独占一个完整 step(经验证全仓
     // 1.0 工具/步),成本占 input 4.1~4.4%、单会话 8.4M。置 true 后它能与真实工作工具在**同一步**
     // 并行执行(loop 的 safe 批 Promise.all),阶段声明不再额外占一步。安全性:只写 phaseState(纯内存)
     // + journal.append(append-only,无读改写竞争);plan-gate 判定源仍是 journal 阶段事件,口径不弱化。
     isConcurrencySafe: () => true,
     async execute(args: unknown) {
       const a = (args ?? {}) as { phase?: string; note?: string; skip?: boolean; taskClass?: string; route?: string };
-      // 直达实施路由(2026-10-24 用户口径:明确具体的需求直接实施,长链路才走完整流程):
+ // 直达实施路由(明确具体的需求直接实施,长链路才走完整流程):
       // 理解阶段判定→implement+route=direct→plan-gate 尺度豁免(免板直写);落板即回归全流程。
       if (a.route === "direct" && taskClassState.value === "coding" && !taskRouteState.direct) {
         taskRouteState.direct = true;
         try { journal.append({ kind: "custom", sessionId: task.sessionId, payload: { type: "task.route", taskId: task.id, route: "direct", source: "agent" } }); } catch { /* 留痕失败不影响 */ }
       }
-      // 任务类别更正(2026-10-23):agent 在理解阶段确认/更正初判——后续 tips/plan-gate 全消费。
+ // 任务类别更正:agent 在理解阶段确认/更正初判——后续 tips/plan-gate 全消费。
       // 更正为 coding 时随回执补发编码纪律(P1-1:qa/office 版提示从未含编码纪律,闸门恢复
       // 与规则送达必须同时发生,否则模型被拦却没见过规则)。
       let classSwitchNote = "";
@@ -5806,7 +5789,7 @@ async function runWithAgent(
       phaseState.current = key;
       if (a.note) phaseState.notes[key] = String(a.note).slice(0, 200);
       try { journal.append({ kind: "custom", sessionId: task.sessionId, payload: { type: "task.phase", taskId: task.id, phase: key, note: String(a.note ?? "").slice(0, 200), warnings: warnings.length ? warnings : undefined } }); } catch { /* 留痕失败不影响 */ }
-      // 阶段产出清单(2026-10-24 用户口径:阶段转换时刻恰时送达该阶段要点——不新增注入,随
+ // 阶段产出清单(阶段转换时刻恰时送达该阶段要点——不新增注入,随
       // 工具回执走;理解阶段=挖掘需求三问+分类+路由判定,验收阶段=四步清单补注意力衰减)。
       const phaseGuide = key === "understand" ? [
         "【理解阶段自查】①潜在需求三问:同类扩展还有哪些成员?改动牵动哪些上下游?异常/空态/规模上限如何表现?②任务类别确认(初判 " + taskClassState.value + ",不符用 taskClass 更正);③路由判定:明确具体的小改(单文件/局部)→ task_phase(phase=\"implement\", route=\"direct\") 直达实施;功能新增/删除/修改等长链路 → 进 plan 落板;简单问答/调研 → 直接回答(taskClass 改 qa 免仪式)。",
@@ -5849,18 +5832,18 @@ async function runWithAgent(
       return `已注入转向指令到任务 ${target.id}(下一个 step 生效)`;
     },
   };
-  // run_parallel 已删除(step-056,用户口径「session 无权创建新 session」):它经 tm.submit 造新任务=新会话,
+ // run_parallel 已删除:它经 tm.submit 造新任务=新会话,
   // 违反「只有音频 agent/用户入口能建会话」。并行=ZCode Agent 机制:同一条消息里发多个 spawn_subagent
   // 调用(loop 对并发安全工具 Promise.all 同跑,loop.ts:242),全部是本会话内的子代理,由本会话自己管理。
   const permRules = loadPermissionRules(repoRoot());
-  // 工具面非空门禁(step-064):空 tools 时 provider 的 toOpenAi() 不带 tools 字段=纯文本对话
+ // 工具面非空门禁:空 tools 时 provider 的 toOpenAi 不带 tools 字段=纯文本对话
   // (「工具未配置」观测的机制形态)——装配 bug 必须在首个 LLM 请求发出前 fail-visible,不静默降级。
   // 工具清单同步入 journal(task.progress.tools):此后任何「工具是否下发」质疑可直接以 journal 为证。
-  // tool_view 按需注入(2026-10-22 用户口径:像 MCP 一样用时再看):长描述工具摘要为首句+指路,
+ // tool_view 按需注入(像 MCP 一样用时再看):长描述工具摘要为首句+指路,
   // 完整说明经 tool_view(name) 查看;tools 参数从 39k chars 级降到 schema+短描述。
   const changeSurfaceTool = makeChangeSurfaceTool({ journal: journal as unknown as ChangeSurfaceJournal, sessionId: task.sessionId, taskId: task.id, root: taskRoot });
   const mainTools: Tool[] = attachToolView([spawnTool, withAnswerAttentionGuard(buildSubagentAnswerTool(parentAskBroker)), codeSenseTool(taskRoot, taskRemoteProject ?? undefined), changeSurfaceTool, sessionSearchTool(journal, task.sessionId), codeReviewTool(taskRoot, models?.review, journal, task.sessionId, streamSink ? (note) => streamSink(task.sessionId, { type: "tool-progress", callId: "code_review", name: "code_review", note }) : undefined, checkpointSha, taskRemoteProject ?? undefined), runWorkflowTool(journal, executor, task.sessionId, workflowAskRouter), skillViewTool(store, () => disabledBuiltins(repoRoot())), experienceFoldTool(store), todoTool(journal, task.sessionId, { allowParallelInProgress: agentConfig?.agent?.todoAllowParallelInProgress === true }), ...(askUser ? [askUserTool(task.sessionId, askUser)] : []), teamTaskTool(journal, task.sessionId), boardUpsertTool(journal, task.sessionId, task.id, taskRoot, undefined, undefined, { onExempt: () => { boardExemptThisTask = true; }, taskClass: () => taskClassState.value }), boardExportPptxTool(task.sessionId, task.id, taskRoot), taskPhaseTool, boardReadTool(journal, task.sessionId, undefined, { boardId: task.id, fallbackToSessionBoard: true }), meetingImportTool(llm), steerTool, taskOutputTool, (() => {
-        // 主 agent 终端(2026-10-20 卫生提醒 + 2026-10-21 绕写检测):命令含写文件形态且
+ // 主 agent 终端(卫生提醒 + 绕写检测):命令含写文件形态且
         // 规划未落地时拦截——堵「文件工具被 plan-gate 拦、改用 echo > 绕行」的流程造假口子。
         const t = createTerminalTool({
           service: getTerminalService(journal),
@@ -5873,7 +5856,7 @@ async function runWithAgent(
         const orig = t.execute.bind(t) as unknown as (a: unknown, s?: AbortSignal) => Promise<string>;
         t.execute = async (args: unknown, signal?: AbortSignal, ctx?: { callId: string }) => {
           const cmd = String((args as { command?: unknown } | null)?.command ?? "");
-          // git 审计(g1,2026-11-05):主 agent 不受限(放行),但命中 git 写/破坏命令时留痕
+ // git 审计(g1:主 agent 不受限(放行),但命中 git 写/破坏命令时留痕
           // custom/git.audit——11-05 的事故复盘要求"谁在什么时候动了工作树"可事后对账。
           // 批量 commands 逐条判(一次往返多命令时不能只看 command)。
           auditGitCommand(journal, task.sessionId, cmd);
@@ -5888,7 +5871,7 @@ async function runWithAgent(
         };
         return t;
       })(), // 主 agent 直操作文件六件套(围栏根=taskRoot;写类 readonly/plan 拒 + file.write 类别闸)
-    // M27:后台命令 job(start/list/read/wait/kill)——长任务/构建/测试的独立句柄,结算只通知一次。
+ // :后台命令 job(start/list/read/wait/kill)——长任务/构建/测试的独立句柄,结算只通知一次。
     (() => {
       const t = createJobTool({
         registry: getJobRegistry(journal),
@@ -5905,8 +5888,8 @@ async function runWithAgent(
       };
       return t;
     })(),
-    // wait_until(2026-11-08 session 实证):条件等待原语——等外部进程产出(文件出现/含串/稳定)
-    // 或终端输出静默,替代「sleep N; tail」式轮询(实测 582 次/13.4h sleep,每轮烧一次全量往返)。
+ // wait_until( session 验证):条件等待原语——等外部进程产出(文件出现/含串/稳定)
+ // 或终端输出静默,替代「sleep N; tail」式轮询(经验证 582 次/13.4h sleep,每轮烧一次全量往返)。
     // 挂起期间 loop 停在本工具 promise 上(task_output waitFor 同机制),零 LLM 消耗。
     // 远程项目任务不注册(v1 文件条件走本地围栏;远端等待待远端 exec 语义再开)。
     ...(!taskRemoteProject ? [createWaitUntilTool({ owner: task.sessionId, root: taskRoot, terminalService: getTerminalService(journal) })] : []),
@@ -5915,17 +5898,17 @@ async function runWithAgent(
       toolDumpDir: join(repoRoot(), ".genie", "tool-dumps"),
       ...(agentConfig?.coding?.lsp ? { lsp: agentConfig.coding.lsp } : {}),
       planGate: (tool) => planGateBlock(tool, `主 agent 直写(${tool})`),
-      // 视觉能力(2026-10-25):vision=false 走 coding.vlm 兜底;vlm 每任务懒建缓存(provider 带重试/准入)
+ // 视觉能力:vision=false 走 coding.vlm 兜底;vlm 每任务懒建缓存(provider 带重试/准入)
       ...(agentConfig?.coding ? { vision: visionBridgeFor(agentConfig) } : {}),
     }), ...(remoteProjectTool ?? []),
-    // M170(2026-11-07):交付物登记排在 file tools 之后(产出文件→登记路径→收尾核对)。
+ // 交付物登记排在 file tools 之后(产出文件→登记路径→收尾核对)。
     makeDeliverableTool({ journal: journal as unknown as DeliverableJournal, sessionId: task.sessionId, taskId: task.id, root: taskRoot }),
     ...mcpTools,
     ...(browserTool ? [browserTool] : []), ...webTools,
-    // M169(2026-11-07):引用账本排在 web 工具之后(先抓再引),收尾按登记表校验正文 [n]。
+ // 引用账本排在 web 工具之后(先抓再引),收尾按登记表校验正文 [n]。
     makeCiteSourceTool({ journal: journal as unknown as CitationJournal, sessionId: task.sessionId, taskId: task.id }),
     ...(readAttachmentTool ? [readAttachmentTool] : [])]);
-  // M147 工具面即 SDK(PTC/代码模式):coding 任务追加 run_code——沙箱内一次调用跑多步工具链,
+ // 工具面即 SDK(PTC/代码模式):coding 任务追加 run_code——沙箱内一次调用跑多步工具链,
   // 只回最终返回值+子调用账本,省掉每步一次推理轮。追加在 attachToolView **之后**:run_code 的
   // 描述/参数里带完整签名清单(>240 字符),走摘要化会把 SDK 清单截掉(eager 暴露是机制前提)。
   // 子调用复用正常执行管线:目标工具的 execute 自带超时/plan-gate/审批;loop 级权限规则在此以
@@ -5959,7 +5942,7 @@ async function runWithAgent(
       },
     }));
   }
-  // M153 工具注册身份治理:装配后统一登记身份,冲突/保留名命中从工具面剔除并留 journal 证据。
+ // 工具注册身份治理:装配后统一登记身份,冲突/保留名命中从工具面剔除并留 journal 证据。
   const governedTools = governToolIdentity(mainTools, journal, task.sessionId);
   if (governedTools.length !== mainTools.length) mainTools.splice(0, mainTools.length, ...governedTools);
   if (mainTools.length === 0) {
@@ -5968,60 +5951,61 @@ async function runWithAgent(
     if (curGate && (curGate.state === "running" || curGate.state === "blocked")) tm.setState(curGate, "failed", "主 agent 工具装配为空(tools=[])——拒绝以纯文本形态启动 loop(装配 bug fail-visible)");
     return;
   }
-  // M167 表面/通道能力包(2026-11-08):本 session 最后一条 client.surface 声明的能力位决定
+ // 表面/通道能力包:本 session 最后一条 client.surface 声明的能力位决定
   // ①输出契约(注入 instruction)②GUI 工具过滤 ③收尾降级。无声明=LEGACY:契约空串/工具原样/不降级。
   const surfacePlan = planTaskSurface(journal, task.sessionId, task.id, mainTools);
   journal.append({ kind: "task.progress", sessionId: task.sessionId, payload: { taskId: task.id, tools: surfacePlan.tools.map((t) => t.name), toolCount: surfacePlan.tools.length } });
   // 写前持久化屏障装配(config.agent.writeBarrier 透传;缺席/非法=undefined,loop 内部缺省 hard)。
   const writeBarrier = writeBarrierOf(agentConfig);
+  console.error("[T] AgentLoop ctor at", Date.now());
   const loop = new AgentLoop({
     journal,
     sessionId: task.sessionId,
     system: systemWithMemory,
-    // system 的节视图(2026-10-29 token 轮 04):让 loop 的 `[系统提示更新]` 只发变更节。
+ // system 的节视图( token 轮 04):让 loop 的 `[系统提示更新]` 只发变更节。
     // 不传=旧行为(整篇全文重发),故这一行本身就是「其它构造点零影响」的分界。
     systemSections,
     llm,
-    // 执行 deadline 帽(2026-10-29 冻结治理):自管工具(spawn/ask_user/terminal 等)豁免,
+ // 执行 deadline 帽(冻结治理):自管工具(spawn/ask_user/terminal 等)豁免,
     // 其余 600s——防单工具挂死拖住整个 agent;详见 llm-loop-backend withToolDeadlineDefaults。
     tools: surfacePlan.tools,
-    // step-132:每次 chat 的全量 messages+响应落 .genie/llm-trace/<sessionId>/,journal 挂 llm.trace 指针。
+ // 每次 chat 的全量 messages+响应落 .genie/llm-trace/<sessionId>/,journal 挂 llm.trace 指针。
     llmTrace: makeLlmTraceSink(journal),
     ...(streamSink ? { onStream: (ev: AgentStreamEvent) => streamSink(task.sessionId, ev) } : {}),
-    // 权限传递收口:ask 处置收进 buildMainLoopPermission(mode=ask+面板在场→审批卡,不再静默 deny)。
+ // 权限传递:ask 处置收进 buildMainLoopPermission(mode=ask+面板在场→审批卡,不再静默 deny)。
     ...(permRules ? { permission: buildMainLoopPermission(permRules, permissionBroker, { sessionId: task.sessionId, journal }) } : {}),
-    maxSteps: agentConfig?.agent?.maxSteps ?? 3000, // 设置页可配+热读(2026-10-22 用户口径上限 3000)
+    maxSteps: agentConfig?.agent?.maxSteps ?? 3000, // 设置页可配+热读(上限 3000)
     // 写前持久化屏障(config.agent.writeBarrier):只显式传"off"|"hard";undefined 不写键(留给 loop 缺省 hard)。
     ...(writeBarrier ? { writeBarrier } : {}),
-    // M58 图片 offload:装配方必须传,否则 loop 层整条分支不生效(生产默认关闭=改前行为)。
+ //  图片 offload:装配方必须传,否则 loop 层整条分支不生效(生产默认关闭=改前行为)。
     imageOffload: imageOffloadOf(repoRoot()),
-    todoReminderSteps: 6, // designs/25 ZCode todo reminder:每 6 步提醒一次未完成计划(ephemeral)
-    // step-137 上下文再锚定:每 10 步注入一次 P0 落目标清单+证据覆盖率(ephemeral 不落 journal)。
-    // 实锤教训:长任务跑几十步后板上写的 P0 验收彻底脱离注意力,完工时无人核对(桌面 exe「首启引导」事故)。
+    todoReminderSteps: 6, // ZCode todo reminder:每 6 步提醒一次未完成计划(ephemeral)
+ // 上下文再锚定:每 10 步注入一次 P0 落目标清单+证据覆盖率(ephemeral 不落 journal)。
+ // 注意教训:长任务跑几十步后板上写的 P0 验收彻底脱离注意力,完工时无人核对(桌面 exe「首启引导」事故)。
     boardReminderSteps: 10,
     // J1 轨迹卡接线(2026-11 token 轮):runtime 已实现 emitTrajectory,装配处不传 opts 则永不落卡
     // (面板轨迹条恒空 + tips 的 ctx.trajectory 恒 undefined = P0 断线)。每 5 步或 phase 切换落一条
     // `task.trajectory`(payload 只有计数/比率/子目标,不含对话正文,零上下文影响)。
-    trajectorySteps: 5, // J1:每 5 步(或 phase 切换)旁路落一条 task.trajectory 轨迹卡
+    trajectorySteps: 5, // :每 5 步(或 phase 切换)旁路落一条 task.trajectory 轨迹卡
     trajectoryTaskId: () => task.id,
     trajectoryMeta: () => ({ phase: phaseState.current, subgoal: currentSubgoal(journal, task.sessionId, task.instruction) }),
     // 轨迹 → 任务进度(J1 接线闭环,2026-11):emitTrajectory 真正 due 的那次(每 5 步/phase 切换)
     // 把 phase/step/note touch 进 TaskSupervisor,面板进度条与 task 卡据此更新。旁路:applyTrajectoryProgress
     // 内部吞异常且 tm 缺失即跳过——进度写失败绝不影响 turn 主链;不碰状态迁移(setState 调用点不改)。
     onTrajectory: (ev) => applyTrajectoryProgress(tm, task.id, ev),
-    // 待决审批 ephemeral 注入(2026-11-03 token 治理):见 parentAskBroker.onPending 注释——
+ // 待决审批 ephemeral 注入( token 治理):见 parentAskBroker.onPending 注释——
     // 旧口径 message.user 永久落 journal,已了结的审批块滞留历史每次请求重放(2.7M token/日)。
     // 现改为每步现算:待决期间可见,应答/超时后 pending 清空 → 注入自然消失,历史零滞留。
     pendingQuestions: () => renderPendingQuestionsBlock(parentAskBroker.pending().slice(0, 8)) || null,
     boardReminder: async () => {
       try {
-        // 任务类别锚(2026-10-23):非编码类不推五阶段/白板——每 10 步只锚类别约定与更正路径;
+ // 任务类别锚:非编码类不推五阶段/白板——每 10 步只锚类别约定与更正路径;
         // 更正回 coding 后自动恢复完整阶段锚+P0 清单。
         if (taskClassState.value === "qa") {
           return "<system-reminder>本任务为问答/调研类:直接调查输出结论(结论先行+出处),不改代码不落板;需要改代码时 task_phase(taskClass=\"coding\") 更正。</system-reminder>";
         }
         if (taskClassState.value === "office") {
-          // 作业思路板锚(2026-11-05 用户口径「办公任务也可以在白板上画作业思路(主题/受众/结构/
+ // 作业思路板锚( 「办公任务也可以在白板上画作业思路(主题/受众/结构/
           // 章节/章间关系/顺序)」):office 已从软提醒改为硬闸,每 10 步锚一次出路(落板 / exemptReason)。
           // 既有断言文案(office-writing/开工四问/论点四段/人话写作/交付前自查)一字不动。
           return "<system-reminder>本任务为办公/产出类:动笔前先落**作业思路板**——board_upsert 传 boardType=\"composition\",画清:主题是什么/受众是谁/表达结构/要几章/每章主题/章与章之间什么关系、顺序如何(章间关系用 data 边 label 写关系词);确无表达结构才用 exemptReason 豁免(不许拿豁免代替思路板)。然后 skill_view 对应技能(office-writing + 对应格式);开工四问先答完(面向谁报告/主题一句话/重点 1~2 条与这次不讲什么/论据与分析来源);每个论点主张+论据+分析+结论四段齐全,写反证;人话写作;流程/结构/趋势画图;交付前自查;涉及改代码时 task_phase(taskClass=\"coding\") 更正。</system-reminder>";
@@ -6029,13 +6013,13 @@ async function runWithAgent(
         if (taskRouteState.direct) {
           return "<system-reminder>本任务为直达实施路由(明确小改):聚焦改动本身,改前 impact 查影响面;发现范围超出单文件/局部 → 先落板(board_upsert)回归全流程;完成后照常 verify。</system-reminder>";
         }
-        // 五阶段锚(2026-10-20 防偏):reminder 开头带当前流程阶段——上下文再长,阶段锚每 10 步可见,
+ // 五阶段锚(防偏):reminder 开头带当前流程阶段——上下文再长,阶段锚每 10 步可见,
         // 模型偏离当前阶段该做的事时由此自我校正。阶段未声明过=提醒补声明(硬流程入口)。
         const curIdx = phaseState.current ? PHASES.findIndex((p) => p.key === phaseState.current) : -1;
         const phaseLine = curIdx >= 0
           ? `当前流程阶段:「${PHASES[curIdx]!.label}」(${curIdx + 1}/5)——只做本阶段该做的事;进入下一阶段用 task_phase 声明。`
           : `本任务尚未声明流程阶段——开工即调 task_phase(phase="understand") 进入五阶段流程(理解任务→规划→开始实施→开始验收→完成),不涉及的阶段用 skip:true 声明。`;
-        // 板根对齐(2026-10-21 修正):reminder 与 board_upsert/面板同根(boardStoreRoot=repoRoot()),
+ // 板根对齐(修正):reminder 与 board_upsert/面板同根(boardStoreRoot=repoRoot),
         // 主根读不到再回退 taskRoot。旧 repoRoot()/taskRoot 单根读在任务不在 harness 根时读不到板。
         const doc = await readTaskBoard();
         if (!doc) return "<system-reminder>" + phaseLine + "</system-reminder>";
@@ -6050,18 +6034,18 @@ async function runWithAgent(
         return null;
       }
     },
-    // tips 即时信息增强(2026-10-21):代码意识/历史对齐/派发三类,做对应类别的事之前注入(一次为限)。
+ // tips 即时信息增强:代码意识/历史对齐/派发三类,做对应类别的事之前注入(一次为限)。
     // SOP 阶段信号接线(2026-11 tips SOP 化):loop 每 step 组装 tips ctx 时调 tipsPhase 取
     // phaseState.current,phase 首见 → SOP 行式卡恰时注入(见 buildLoopTips)。
     tipsPhase: () => phaseState.current,
     tips: loopTips,
-    // 压缩钩子(R5-C9):与 spawn 子代理共用同一实例(2026-10-20 同源;构造见上方 taskCompactHook)。
+ // 压缩钩子:与 spawn 子代理共用同一实例(2026-10-20 同源;构造见上方 taskCompactHook)。
     compactHook: taskCompactHook,
-    // step-140 microcompact 阈值接线:与 spawn 子代理共用同一阈值(构造见上方 taskMicrocompact)。
+ // microcompact 阈值接线:与 spawn 子代理共用同一阈值(构造见上方 taskMicrocompact)。
     microcompact: taskMicrocompact,
     // 写时定形 spill(2026-11 token 轮 02):与 spawn 子代理同源(构造见上方 taskSpill)。
     spill: taskSpill,
-    // 大结果入口闸门(step-1029):与子代理同源(构造见上方 taskBigIntake)。
+ // 大结果入口闸门:与子代理同源(构造见上方 taskBigIntake)。
     bigIntake: taskBigIntake,
     // Phase 0 增长突增:与子代理同源;0=关闭。
     growthSpurtTokens: taskGrowthSpurtTokens,
@@ -6069,12 +6053,12 @@ async function runWithAgent(
     ...(taskModelScoring ? { modelScoring: taskModelScoring } : {}),
   });
 
-  // 取消注册表登记(step-008 收口):task.cancel → onChange → loop.cancel() 贯通。
+ // 取消注册表登记:task.cancel → onChange → loop.cancel 贯通。
   activeLoops?.set(task.id, loop);
-  // M16 轮末变更账本(2026-11-07):基线在 try 外声明——终态出口在 finally,需跨块可见。
+ //  轮末变更账本:基线在 try 外声明——终态出口在 finally,需跨块可见。
   let changeBaseline: Awaited<ReturnType<typeof captureBaseline>> | null = null;
   let changeLedgerStartSeq = -1;
-  // M5 完成审计(2026-11):变更账本结果缓存——完成审计要在终态出口之前出一行「变更账本」，
+ //  完成审计(2026-11):变更账本结果缓存——完成审计要在终态出口之前出一行「变更账本」，
   // 与 finally 的 turn.change-ledger 是同一份计算；缓存后只算一次，finally 复用（等价于原条件）。
   let changeLedgerCache: Awaited<ReturnType<typeof computeChangeLedger>> | null = null;
   const ensureChangeLedger = async () => {
@@ -6085,10 +6069,10 @@ async function runWithAgent(
     } catch { return null; }
     return changeLedgerCache;
   };
-  // M23 指导可度量:任务窗口起点(与验证账本/变更账本同口径,开工水位);finally 里算指标用。
+ //  指导可度量:任务窗口起点(与验证账本/变更账本同口径,开工水位);finally 里算指标用。
   let guidanceStartSeq = -1;
   try {
-    // 核心纪律卡(2026-10-20 起;2026-10-21 瘦身:只留系统纪律;2026-10-23 按任务类别出三版——
+ // 核心纪律卡(起; 瘦身:只留系统纪律; 按任务类别出三版——
     // QA/办公任务不再被推着走五阶段/白板/plan-gate 仪式,类别可在理解阶段更正):
     // 系统提示在长任务后期注意力衰减,纪律卡跟着消息走——每轮可见,压缩后也随消息保留。
     // 只放硬纪律的短句形态(系统提示里有完整版);displayText 保持原文,面板不渲染此卡。
@@ -6103,7 +6087,7 @@ async function runWithAgent(
     ].join("\n")
       : taskClassState.value === "office" ? [
         "## 核心纪律卡(办公/产出类任务;直接执行,不要复述此段)",
-        "- 动笔前先 skill_view:任何产出读 builtin/office-writing;PPT→office-pptx + ppt-master(产线/版式/能力边界),Word→office-docx,Excel→office-xlsx,周报/复盘/方案/调研→office-report",
+        "- 动笔前先 skill_view:任何产出读 builtin/office-writing;PPT→office-pptx + ppt-master(生产环境/版式/能力边界),Word→office-docx,Excel→office-xlsx,周报/复盘/方案/调研→office-report",
         "- 要真正产出 .pptx 时派子代理:spawn_subagent(agentType=\"ppt-master\")——它带 board_export_pptx 质量门;自己只写 md 文档/表格不必派",
         "- **开工四问先答完**:①面向谁报告(谁看、能给几分钟、要拿它做什么决定)②汇报主题是什么(写成一句疑问句)③要突出的重点是哪 1~2 条、这次不讲哪 2~3 条 ④每个论点的论据与分析从哪来。答不上先 ask_user 或去查,不许边写边想",
         "- **论点四段齐全**:主张 + 可溯源论据(数字/来源/口径)+ 分析(因果或排除推理,不是把论据换个说法)+ 结论/所以呢;每条结论主动写反证(什么条件下不成立)",
@@ -6122,14 +6106,14 @@ async function runWithAgent(
         "- 输出简明扼要,不复述过程细节",
         "- 若实际需要修改代码:task_phase(taskClass=\"coding\") 更正,全套编码纪律即刻生效",
       ].join("\n");
-    // 2026-10-21 用户口径:user message 只留用户需求+系统纪律。orient/经验/devlog/历史档案
+ // user message 只留用户需求+系统纪律。orient/经验/devlog/历史档案
     // 四块改由 loopTips 按动作类别即时注入(understand/plan 阶段或首触对应工具),不再开工全塞。
     let instruction = task.instruction + "\n\n" + disciplineCard;
-    // M167:能力位输出契约(legacy="" 不注入,零变化);task.surface 开工一次落账
+ // 能力位输出契约(legacy="" 不注入,零变化);task.surface 开工一次落账
     // (taskId/sessionId/caps/source/filteredTools/contractApplied,读侧取最新一条)。
     if (surfacePlan.contract) instruction += "\n\n" + surfacePlan.contract;
     try { journal.append({ kind: "custom", sessionId: task.sessionId, payload: surfacePlan.journalPayload }); } catch { /* 留痕失败不影响开工 */ }
-    // ── M162 执行信封:开工前比对签发时的能力目录/策略 ──────────────────────────
+ // ── 执行信封:开工前比对签发时的能力目录/策略 ──────────────────────────
     // 有信封且漂移/篡改 → 任务 failed(403 文案)+ journal task.envelope {ok:false,code},不起 loop;
     // 无信封(内部 user 任务)→ verifyTaskEnvelopeAtStart 返回 undefined,逐字零变化。
     try {
@@ -6159,7 +6143,7 @@ async function runWithAgent(
         });
       } catch { /* 留痕失败不阻断开工 */ }
     }
-    // ── 开工前置门(M9,2026-11-08)────────────────────────────────────────────
+ // ── 开工前置门(────────────────────────────────────────────
     // 两段都在任务窗口起点(taskStartSeq)之前落账,任务窗口包含前置门事件;两段各自 try/catch 兜底:
     // 前置门自身异常绝不影响开工(最多少一条注入,不会拦任务)。
     // a. 基线新鲜度:非 coding/GENIE_FRESHNESS=off/配置关闭 → skipped;behind 且 blockOnBehind
@@ -6239,10 +6223,10 @@ async function runWithAgent(
         }
       }
     } catch { /* 旧措辞扫描失败不影响开工 */ }
-    // M107 验证账本水位(2026-11-07):任务窗口起点=开工时全局水位;收尾用 readSession(sid, startSeq)
+ // 验证账本水位:任务窗口起点=开工时全局水位;收尾用 readSession(sid, startSeq)
     // 只取本任务事件(不全量 readAll,免 30MB 会话重扫,也不会把上一任务的验证算进来)。
     const taskStartSeq = journal.length;
-    // M26(2026-11-08)续跑身份护栏:开工时快照会话目标的修订号(与 taskStartSeq 同段)。终态调
+ // M26续跑身份护栏:开工时快照会话目标的修订号(与 taskStartSeq 同段)。终态调
     // maybeContinueGoal 时仅在非 null 才作为 expectedRevision 传入——任务运行期间 goal 被 clear/replace
     // (每条 goal.set 使 revision+1)→ 续跑被 GOAL_REVISION_STALE 拒,不会把旧任务的进展接到新目标上。
     // 无目标 / 读失败 = null(不阻塞开工)。用 readSession(会话索引切片),不为此全量 readAll。
@@ -6251,12 +6235,12 @@ async function runWithAgent(
       const { readGoalFromJournal: readGoalAtStart } = await import("@lampgenie/runtime/agent/goal");
       taskStartGoalRevision = readGoalAtStart(journal.readSession(task.sessionId), task.sessionId)?.revision ?? null;
     } catch { taskStartGoalRevision = null; }
-    // M23 指导可度量:同一水位(本任务窗口起点)供收尾 guidance.metrics 切片。
+ //  指导可度量:同一水位(本任务窗口起点)供收尾 guidance.metrics 切片。
     guidanceStartSeq = taskStartSeq;
-    // M16 轮末变更账本:开工建 git 基线(异步 execFile,不阻塞事件循环);失败=null 不阻塞任务。
+ //  轮末变更账本:开工建 git 基线(异步 execFile,不阻塞事件循环);失败=null 不阻塞任务。
     changeLedgerStartSeq = taskStartSeq;
     try { changeBaseline = await captureBaseline(taskRoot); } catch { changeBaseline = null; }
-    // 任务开工审计锚(2026-10-24):类别/纪律卡版本/系统提示指纹/纪律段在场标志一次性落账——
+ // 任务开工审计锚:类别/纪律卡版本/系统提示指纹/纪律段在场标志一次性落账——
     // 其它 agent 审「提示词是否按类加载正确」读这一条即确定性答案,不必解包 llm.trace 全文。
     try {
       const sys = String(systemWithMemory ?? "");
@@ -6267,11 +6251,11 @@ async function runWithAgent(
           taskId: task.id,
           taskClass: taskClassState.value,
           card: taskClassState.value === "coding" ? "coding 版" : taskClassState.value === "office" ? "office 版" : "qa 版",
-          // 2026-11-04 观测修复:coding+短任务书走 SYSTEM_LITE(五阶段/plan-gate/验收段落被有意
+ // 观测修复:coding+短任务书走 SYSTEM_LITE(五阶段/plan-gate/验收段落被有意
           // 裁掉)时,下方 flags 全 false 是**精简档的正常形态**——不记 lite 字段时审计者无法区分
           // 「精简档(正常)」与「提示词组装 bug(段落丢了)」。lite=true 即可一票定案。
           lite: taskClassState.value === "coding" && liteMode,
-          // 全链路变更判据(2026-11-06):changeScope=surface 表示本任务是替换/迁移类,
+ // 全链路变更判据:changeScope=surface 表示本任务是替换/迁移类,
           // surfaceItems=启动时盘点清单的命中行数(0=还没盘点,plan-gate 会拦写操作)。
           changeScope: surfaceScopeThisTask().scope,
           surfaceItems: readChangeSurfaceManifest(journal, task.sessionId, task.id)?.hits ?? 0,
@@ -6292,13 +6276,13 @@ async function runWithAgent(
       recordSystemPromptSnapshot(journal, task.sessionId, sys);
     } catch { /* 审计锚/快照失败不影响任务 */ }
     const out = await loop.runTurn(instruction + attachmentBlock, visionImages.length ? visionImages : undefined, {
-      // step-052:面板显示原始输入(注入块只喂模型,不再污染用户消息展示)。
+ // 面板显示原始输入(注入块只喂模型,不再污染用户消息展示)。
       displayText: task.instruction,
       ...(task.attachments?.length ? { attachments: task.attachments } : {}),
     });
     const cur = tm.get(task.id);
     if (cur && (cur.state === "running" || cur.state === "blocked")) {
-      // step-052 同族双写收口:loop 已为每个 step 落 message.agent——仅当本轮没有任何 agent 消息
+ // 同族双写:loop 已为每个 step 落 message.agent——仅当本轮没有任何 agent 消息
       // (如 pre-step 拦截直接返回空)才补终稿;否则面板把回复渲染两遍("收到/收到")。
       const events = journal.readAll();
       const lastTurn = [...events].reverse().find((e) => e.kind === "turn.start" && e.sessionId === task.sessionId);
@@ -6306,14 +6290,14 @@ async function runWithAgent(
         ? events.some((e) => e.kind === "message.agent" && e.sessionId === task.sessionId && (e.seq ?? 0) > (lastTurn.seq ?? 0))
         : false;
       if (!hasAgent) journal.append({ kind: "message.agent", sessionId: task.sessionId, payload: { text: String(out ?? "") } });
-      // plan-gate 收尾校验(2026-10-20 防目标丢失最后一道,代码级):板在场但 P0 未全绿——
+ // plan-gate 收尾校验(防目标丢失最后一道,代码级):板在场但 P0 未全绿——
       // 任务虽可完成,outcome 必须显式标注(fail-visible;不硬 block 防死锁,但目标状态不可谎报)。
       const finBoard = await planBoard();
       let finalOut = out;
       if (finBoard) {
-        // 规划质量结构化留痕(2026-11-06,B2 P2):任务结算即带 boardType/内容节点数/P0 覆盖率/锚密度,
+ // 规划质量结构化留痕(B2 P2):任务结算即带 boardType/内容节点数/P0 覆盖率/锚密度,
         // 面板/telemetry 直接读这一条,不用重放板。与 audit 出口的 planQuality 同源(planQualityOf)。
-        // bq3(2026-11-05 遥测闭环):骨架采纳维度并入 planQuality,同一 pqObj 落 task.quality
+ // bq3(遥测闭环):骨架采纳维度并入 planQuality,同一 pqObj 落 task.quality
         // 与任务对象 cur.planQuality(tm.get 活引用,setState 前挂上即随 done 带出到 task.detail.get)。
         try {
           const pqObj: { boardType: string | null; nodes: number; contentNodes: number; p0: { passed: number; total: number; rate: number }; anchorDensity: number; skeleton?: { generated: number; survived: number; adoptionRate: number } } = { ...planQualityOf(finBoard as never) };
@@ -6334,10 +6318,10 @@ async function runWithAgent(
           } catch { /* 留痕失败不影响收尾 */ }
         }
       }
-      // 全链路收尾审计(2026-11-06 用户口径「证明没有残留、没有孤儿、没有只改一半」):
+ // 全链路收尾审计:
       // surface 任务在最终 answer 前应有 passed 的 change.audit;没有/未通过 → 回执警告 +
       // 验收摘要标记「未通过全链路审计」(不硬杀任务,但状态可审计,不许静默宣称完成)。
-      // 第二批(2026-11-06):agent.changeAudit = hard|warn|off(env GENIE_CHANGE_AUDIT 优先),
+ // 第二批:agent.changeAudit = hard|warn|off(env GENIE_CHANGE_AUDIT 优先),
       // hard 时还需验收证据全通过 + 无 warning 级语义孤儿;不满足先补跑一轮审计,仍不满足 → failed。
       const changeAuditMode = String(
         process.env.GENIE_CHANGE_AUDIT
@@ -6400,7 +6384,7 @@ async function runWithAgent(
           });
         } catch { /* 留痕失败不影响收尾 */ }
       }
-      // ── M107/M169/M170/M5 公共收尾聚合(2026-11-07:抽公共函数,三条链同源)──────────
+ // ── /// 公共收尾聚合(抽公共函数,三条链同源)──────────
       const verifyMode = String(
         process.env.GENIE_VERIFY_ON_STOP
           ?? (agentConfig?.agent as { verifyOnStop?: string } | undefined)?.verifyOnStop
@@ -6477,7 +6461,7 @@ async function runWithAgent(
         tm.setState(cur, "failed", closeout.hardFail.reason);
         return;
       }
-      // task.context 快照刷新(2026-11-06):开工那条记的是启动时事实(盘点还没发生=0),
+ // task.context 快照刷新:开工那条记的是启动时事实(盘点还没发生=0),
       // 收尾再落一条同 type 事件带上最终 surfaceItems/审计结论——读取方取最后一条即最新事实。
       try {
         const m = readChangeSurfaceManifest(journal, task.sessionId, task.id);
@@ -6493,7 +6477,7 @@ async function runWithAgent(
           });
         }
       } catch { /* 留痕失败不影响收尾 */ }
-      // 任务终态档案(2026-10-20):instruction+五阶段轨迹+板摘要+结果——compact 恢复与 planner 复用的数据源。
+ // 任务终态档案:instruction+五阶段轨迹+板摘要+结果——compact 恢复与 planner 复用的数据源。
       try {
         const phases = journal.readAll().filter((e) => e.sessionId === task.sessionId && e.kind === "custom" && (e.payload as { type?: string } | undefined)?.type === "task.phase")
           .map((e) => { const pp = e.payload as { phase?: string; note?: string; skip?: boolean }; return { phase: String(pp.phase ?? ""), note: String(pp.note ?? "").slice(0, 80), ...(pp.skip === true ? { skip: true } : {}) }; });
@@ -6506,7 +6490,7 @@ async function runWithAgent(
           ...(bd ? { board: { title: bd.title.slice(0, 60), nodeTitles: bd.nodes.filter((n) => !String(n.id).startsWith("ph-")).map((n) => String(n.label).slice(0, 30)).slice(0, 15), ...(cov && cov.total > 0 ? { p0Total: cov.total, p0Passed: cov.passed } : {}) } } : {}),
         });
       } catch { /* 档案失败不影响收尾 */ }
-      // M167 收尾降级(显式,不静默):最终输出超表面 maxChars → 截断+追加标记,
+ // 收尾降级(显式,不静默):最终输出超表面 maxChars → 截断+追加标记,
       // 并 journal surface.degraded {originalChars,maxChars,degradedChars}。
       // 交付/投递用同一文本;legacy(无任何声明)不降级=改动前行为逐字不变。
       finalOut = degradeFinalFor(journal, task.sessionId, task.id, surfacePlan.caps, finalOut).text;
@@ -6514,16 +6498,16 @@ async function runWithAgent(
     }
     // 终态提炼(异步不阻塞:done 后台沉淀经验;前台优先=下个任务到来不等待)
     trackPostTerminal(task.sessionId, distillFromTask(getExperienceStore(), journal, { ...task, state: "done", result: out }));
-    // 记忆学习(step-029 收口):会话终态→extractor+observer(内部门控:少 user 轮不跑)。
+ // 记忆学习:会话终态→extractor+observer(内部门控:少 user 轮不跑)。
     if (memory) {
       const transcript = journal.readAll()
         .filter((e) => e.sessionId === task.sessionId && (e.kind === "message.user" || e.kind === "message.agent"))
         .map((e): { role: "user" | "assistant"; content: string } => ({ role: e.kind === "message.user" ? "user" : "assistant", content: String((e.payload as { text?: string }).text ?? "") }));
       trackPostTerminal(task.sessionId, memory.onSessionClose({ ownerId: "local", sessionId: task.sessionId, transcript }));
     }
-    // goal 续跑循环(step-053,ZCode target-continuation-loop 移植):任务终态→完成校验器
+ // goal 续跑循环(ZCode target-continuation-loop 移植):任务终态→完成校验器
     //(LLM JSON 裁决,fail-open)→未通过且预算未尽→自动派下一轮续跑任务。
-    // M26(2026-11-08):带任务开工时快照的目标修订号(无目标=不传),目标被 clear/replace → 拒续跑。
+ // :带任务开工时快照的目标修订号(无目标=不传),目标被 clear/replace → 拒续跑。
     void maybeContinueGoal(tm, journal, llm, task.sessionId, taskStartGoalRevision !== null ? { expectedRevision: taskStartGoalRevision } : {}).catch(() => {});
   } catch (err) {
     const cur = tm.get(task.id);
@@ -6535,7 +6519,7 @@ async function runWithAgent(
     }
   } finally {
     activeLoops?.delete(task.id);
-    // ── M16/M23 收尾聚合(2026-11-07:抽公共函数,与终态路径同一实现)──────────────
+ // ── / 收尾聚合(抽公共函数,与终态路径同一实现)──────────────
     try {
       const st = tm.get(task.id)?.state;
       const closeoutState: CloseoutState = st === "failed" || st === "cancelled" ? st : "done";
@@ -6552,7 +6536,7 @@ async function runWithAgent(
         steps: ["m16", "m23"],
       });
     } catch { /* 账本/指标失败不影响终态 */ }
-    // ── M27 后台 job 回收(2026-11-07)──────────────────────────────────────────
+ // ──  后台 job 回收──────────────────────────────────────────
     // 任务终态(done/failed/取消)回收本会话 owner 与绑定到该会话的子代理 owner 的 running job
     //(标 killed 并只通知一次);disposeSessionJobs 内部吞异常,回收失败不影响终态。
     await disposeSessionJobs(journal, task.sessionId);

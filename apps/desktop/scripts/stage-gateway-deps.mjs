@@ -1,23 +1,19 @@
 /**
- * 打包前的 gateway 外部依赖 staging(step-136 K5)。
- *
+ * 打包前的 gateway 外部依赖 staging( K5)。
  * 背景:apps/gateway build 用 `--external:ts-morph --external:playwright-core`,运行时靠真实
  * node_modules 解析;code-sense 还额外 `require.resolve('tree-sitter-wasms/out/*.wasm')`。
- *
  * 两个必须同时解决的坑:
  * ① 传递依赖漏带:ts-morph 依赖 @ts-morph/common → minimatch/path-browserify/tinyglobby →
  *    picomatch/fdir/brace-expansion/balanced-match。只拷根包时打包产物 `require('ts-morph')`
  *    直接 MODULE_NOT_FOUND(code_review 整块失效)。
  * ② 扁平化破坏多版本共存:若按「包名」去重全部摊到顶层,同名包的多主版本(minimatch@9 与
  *    minimatch@10 等)只剩一个,另一使用方 require 到错误主版本,运行时 API 不匹配。
- *
  * 做法:按 Node 的**嵌套解析**语义构建 layout ——
  *   - 先 BFS 求出完整依赖图(name@version + 各自依赖的解析结果);
  *   - 每个包名选一个版本作为**顶层共享版**(root 优先,其次被引用次数多者);
  *   - 依赖版本与顶层一致的 → 靠顶层解析,不重复拷贝;
  *     不一致的 → 巢套在该包自己的 node_modules/<name> 下,并递归处理它的依赖。
  *   这样任何包的 require 都能按 Node 的向上查找规则拿到自己需要的版本。
- *
  * pnpm 的软链/虚拟 store 在解析阶段用 realpath 消解为实体目录,产物是标准可移植 node_modules。
  * 纯 Node 内置实现;幂等(.stage 每次重建);闭包不完整则拒绝产出残包。
  */

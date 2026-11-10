@@ -1,18 +1,15 @@
 /**
- * 公网读写工具(step-119,参照 deepseek-harness tool-web / web-fetch-http / web-search-*)。
- *
+ * 公网读写工具(参照 deepseek-harness tool-web / web-fetch-http / web-search-*)。
  * 两个只读工具,与 browser 工具分工:
  * - web_fetch:静态抓取一个公网 HTTP(S) 页面 → markdown/纯文本(SSRF 防护/超时/大小/域名/类型约束);
  * - web_search:检索 API → [{title,url,snippet}](provider 由 env 配置,key 只从 env 读取)。
  * 需要登录/点击/JS 动态渲染的交互操作仍走 browser 工具。
- *
  * 安全边界(照搬 dsh 的 public HTTP 策略,按零依赖裁剪):
  * - 仅 http/https,拒 URL 内嵌凭证与 localhost;
  * - DNS 全量答案必须是公网地址(回环/私网/链路本地/组播/文档段/ULA 等一律拒),
  *   连接用自定义 lookup 钉住已校验地址(防 DNS rebinding);
  * - 重定向最多 maxRedirects 跳,每跳重新校验并重新解析;
  * - Content-Length 超限明确报错;流式超限截断并标记;content-type 白名单;charset 解码。
- *
  * 说明:allowPrivate 只作为单测注入的传输旁路(生产工具不暴露、不读取 env)。
  */
 import { lookup as dnsLookup } from "node:dns/promises";
@@ -63,15 +60,15 @@ export interface WebToolConfig {
   maxContentChars?: number;
   searchTimeoutMs?: number;
   maxResults?: number;
-  /** 搜索 provider 的配置层读取器(2026-10-21):返回 genie.config.json 的 web.search 运行时
+ /** 搜索 provider 的配置层读取器:返回 genie.config.json 的 web.search 运行时
    * 形态(provider/apiKey/endpoint/model);配置在场时优先于 env 探测,缺席=null 走 env/降级链。 */
   searchRuntime?: () => { provider: string; apiKey?: string; endpoint?: string; model?: string } | null;
-  /** browser 渲染兜底(web_fetch;2026-10-21):静态抓取正文疑似 JS 渲染(近空)或抓取失败时,
+ /** browser 渲染兜底(web_fetch:静态抓取正文疑似 JS 渲染(近空)或抓取失败时,
    * 用 browser 工具真实渲染取正文。生产接 agent-wiring 的 browserTool(action=text);缺席=不兜底。 */
   browserFetch?: (url: string) => Promise<{ ok: true; title: string; text: string } | { ok: false; error: string }>;
 }
 
-/** 一次成功抓取的结构化结果(JSON 返回,面板 step-087 卡片可直接美化渲染)。 */
+/** 一次成功抓取的结构化结果(JSON 返回,面板 卡片可直接美化渲染)。 */
 export interface WebFetchOutput {
   url: string;
   finalUrl: string;
@@ -330,8 +327,7 @@ async function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<
 export async function resolvePublicAddresses(
   hostname: string,
   signal: AbortSignal,
-  allowPrivate = false,
-): Promise<LookupAddress[]> {
+  allowPrivate = false): Promise<LookupAddress[]> {
   const bare = hostname.replace(/^\[|\]$/g, "");
   const literalFamily = isIP(bare);
   let addresses: LookupAddress[];
@@ -363,11 +359,10 @@ export async function resolvePublicAddresses(
 
 /**
  * 自定义 lookup:连接只使用已经校验过的地址,避免二次解析被 DNS rebinding 换掉。
- *
  * 回调必须**异步**(process.nextTick):`agent: false` 下同步回调会让 https.Agent 在
  * TLSSocket 尚未装配好时同步进 tls.connect,`_handle` 仍是 null → `setServername` 抛
  * TypeError;请求已提前失败返回,而那条半建成的 socket 继续连下去,失败时其 'error'
- * 无人监听 → 进程级 uncaughtException(2026-10-28 实测:web_search 的 DDG 兜底解析到
+ * 无人监听 → 进程级 uncaughtException(经验证:web_search 的 DDG 兜底解析到
  * 不可达 IPv6,ENETUNREACH 打死整个 session-worker,同 worker 下的主 agent 与所有子代理
  * 一起收尸)。Node 自带 dns.lookup 本身即异步,这里对齐同一契约。
  * 回归用例:test/web-tool-connect.test.ts。
@@ -375,8 +370,7 @@ export async function resolvePublicAddresses(
 function pinnedLookup(addresses: LookupAddress[]): (
   hostname: string,
   options: { all?: boolean },
-  callback: (error: Error | null, address: string | LookupAddress[], family?: number) => void,
-) => void {
+  callback: (error: Error | null, address: string | LookupAddress[], family?: number) => void) => void {
   const primary = addresses.find((a) => a.family === 4) ?? addresses[0];
   return (_hostname, options, callback) => {
     process.nextTick(() => {
@@ -401,8 +395,7 @@ async function requestOnce(
   maxBytes: number,
   signal: AbortSignal,
   timeoutMs: number,
-  connectTimeoutMs: number,
-): Promise<RawResponse> {
+  connectTimeoutMs: number): Promise<RawResponse> {
   const lib = url.protocol === "https:" ? httpsRequest : httpRequest;
   return await new Promise<RawResponse>((resolve, reject) => {
     let settled = false;
@@ -448,12 +441,12 @@ async function requestOnce(
     const requestOptions = {
       method: "GET",
       // 单地址连接(IPv4 优先):Node 20 的 autoSelectFamily 在多地址自定义 lookup 下会同时
-      // 发起 v4/v6 尝试,本机 v6 不可达时整组 ETIMEDOUT(实测 iana.org)。地址回退由
+ // 发起 v4/v6 尝试,本机 v6 不可达时整组 ETIMEDOUT(经验证 iana.org)。地址回退由
       // requestWithAddressFallback 串行完成,仍是「全量答案先校验、连接地址不再解析」。
       autoSelectFamily: false,
       agent: false,
       headers: {
-        "user-agent": "lampgenie-harness-web/0.1 (+step-119)",
+        "user-agent": "lampgenie-harness-web/0.1 (+)",
         accept: "text/html,application/xhtml+xml,text/plain;q=0.9,application/json;q=0.8,*/*;q=0.1",
         "accept-encoding": "identity",
       },
@@ -530,8 +523,7 @@ async function requestWithAddressFallback(
   maxBytes: number,
   signal: AbortSignal,
   timeoutMs: number,
-  deadlineAt: number,
-): Promise<RawResponse> {
+  deadlineAt: number): Promise<RawResponse> {
   let lastError: unknown;
   const limit = Math.min(addresses.length, 4);
   for (let index = 0; index < limit; index++) {
@@ -633,8 +625,7 @@ export async function fetchPublicPage(input: string, options: WebFetchOptions = 
           maxBytes,
           controller.signal,
           timeoutMs,
-          deadlineAt,
-        );
+          deadlineAt);
       } catch (error: unknown) {
         throw mapError(error);
       }
@@ -920,7 +911,7 @@ export function resolveSearchProvider(env: NodeJS.ProcessEnv = process.env): Sea
   return { ok: false, error: `web_search 未配置搜索 provider。${SEARCH_ENV_HELP}` };
 }
 
-/** web.search 配置块的面(2026-10-28 工具提供商默认 DeepSeek)。 */
+/** web.search 配置块的面(工具提供商默认 DeepSeek)。 */
 export interface WebSearchConfigLike {
   provider?: string;
   apiKeyEnv?: string;
@@ -933,7 +924,7 @@ export const DEFAULT_SEARCH_PROVIDER: SearchProviderId = "deepseek";
 export const DEFAULT_SEARCH_KEY_ENV = "DEEPSEEK_API_KEY";
 
 /** 把「设置页 web.search + providers[] + 密钥读取器」翻译成运行时 provider 参数
- * (2026-10-28 用户口径:默认 deepseek;没填则用 curl/browser 替代)。
+ * (默认 deepseek;没填则用 curl/browser 替代)。
  * 提取成纯函数的原因:默认态语义要单测,而它不是 env 解析也不是 HTTP 调用。
  * - disabled=true → null(强制走内置静态检索/browser,即便有密钥)
  * - provider 缺省 → 按 deepseek;密钥引用名取 providers[] 里 id=deepseek 的 apiKeyEnv,
@@ -942,8 +933,7 @@ export const DEFAULT_SEARCH_KEY_ENV = "DEEPSEEK_API_KEY";
 export function resolveSearchRuntimeFromConfig(
   web: WebSearchConfigLike | null,
   providers: { id: string; apiKeyEnv?: string }[],
-  readSecret: (name: string) => string | undefined,
-): { provider: string; apiKey?: string; endpoint?: string; model?: string } | null {
+  readSecret: (name: string) => string | undefined): { provider: string; apiKey?: string; endpoint?: string; model?: string } | null {
   if (web && web.disabled === true) return null;
   const explicit = String(web?.provider ?? "").trim().toLowerCase();
   const provider = explicit || DEFAULT_SEARCH_PROVIDER;
@@ -962,13 +952,12 @@ export function resolveSearchRuntimeFromConfig(
   };
 }
 
-/** 配置层优先的 provider 解析(2026-10-21):genie.config.json 的 web.search 在场时
+/** 配置层优先的 provider 解析:genie.config.json 的 web.search 在场时
  * 直接构造(「有提供搜索工具时直接用搜索工具」),env 只作回退。key 由调用方从 secrets/env
  * 解析好传入(本模块不读密钥文件)。 */
 export function resolveSearchProviderWithRuntime(
   env: NodeJS.ProcessEnv,
-  runtime: { provider: string; apiKey?: string; endpoint?: string; model?: string } | null,
-): SearchProviderResolution {
+  runtime: { provider: string; apiKey?: string; endpoint?: string; model?: string } | null): SearchProviderResolution {
   if (runtime && runtime.provider && runtime.apiKey) {
     const id = runtime.provider.toLowerCase() as SearchProviderId;
     if (id === "exa" || id === "perplexity" || id === "deepseek" || id === "custom") {
@@ -993,7 +982,7 @@ export function resolveSearchProviderWithRuntime(
   return resolveSearchProvider(env);
 }
 
-/** 内置静态检索兜底(2026-10-21):无 provider 时用自身 HTTP 能力查 DuckDuckGo HTML 版
+/** 内置静态检索兜底:无 provider 时用自身 HTTP 能力查 DuckDuckGo HTML 版
  * (无 JS、结构稳定)并解析结果。「没有提供搜索工具时使用自身的 curl/browser 能力」的 curl 侧;
  * browser 侧由 agent 直接调 browser 工具(工具面在场,web_search 失败文案里显式指路)。 */
 export async function searchViaDdgHtml(
@@ -1223,7 +1212,7 @@ async function postJson(options: SearchHttpOptions): Promise<unknown> {
         headers: {
           "content-type": "application/json",
           "accept": "application/json",
-          "user-agent": "lampgenie-harness-web/0.1 (+step-119)",
+          "user-agent": "lampgenie-harness-web/0.1 (+)",
           ...options.headers,
         },
         body: JSON.stringify(options.body),
@@ -1377,7 +1366,7 @@ export function createWebFetchTool(config: WebToolConfig = {}): Tool {
           allowDomains: allowDomains(),
           ...(signal ? { signal } : {}),
         });
-        // 2026-10-21 browser 渲染兜底:静态抓取成功但正文近空(典型=SPA/JS 渲染页,HTML 里
+ // browser 渲染兜底:静态抓取成功但正文近空(典型=SPA/JS 渲染页,HTML 里
         // 只剩脚本壳)时,若接了 browser 工具则真实渲染取正文——「没有提供时用自身 browser 能力」。
         if (config.browserFetch && String(output.content ?? "").trim().length < 200) {
           try {
@@ -1458,8 +1447,7 @@ export function createWebSearchTool(config: WebToolConfig = {}): Tool {
       const requested = Number(a.max_results ?? configuredMax);
       const maxResults = Math.min(
         Math.max(Number.isFinite(requested) ? Math.floor(requested) : configuredMax, 1),
-        WEB_SEARCH_MAX_RESULTS,
-      );
+        WEB_SEARCH_MAX_RESULTS);
       if (!resolution.ok) {
         // 无任何 provider:自身能力兜底——先静态检索(等价 curl),失败指路 browser 工具。
         try {
@@ -1520,7 +1508,7 @@ export function createWebSearchTool(config: WebToolConfig = {}): Tool {
                 + "需要登录/JS 页面时用 browser 工具。",
             });
           }
-        } catch { /* 双路皆败:下面如实报 provider 原始错误 */ }
+        } catch { /* 双路皆败:下面如用户反馈 provider 原始错误 */ }
         return `错误: ${reason}`
           + `(可用「设置-模型设置-工具提供商」检查 ${resolution.config.id} 的 Key/端点,或改用 terminal 执行 curl、browser 工具直接检索)`;
       }

@@ -1,14 +1,11 @@
 /**
- * ACP 子代理后端(step-117):把外部 ACP agent(Claude Code / Codex / Kimi / Hermes / Qwen Code …)
+ * ACP 子代理后端:把外部 ACP agent(Claude Code / Codex / Kimi / Hermes / Qwen Code …)
  * 作为一类 SubagentBackend 驱动。
- *
  * 协议:JSON-RPC 2.0 over stdio,一行一帧(ACP v1 稳定词汇):
  *   initialize → session/new → session/prompt → session/update 通知流
  *   → session/request_permission 反向请求 → session/cancel 通知(取消)
- *
  * 零依赖手写 wire:资源纪律不引入 @agentclientprotocol/sdk(仓内未安装,且 ACP client 面很小);
- * 字段与参考实现逐点对齐(见 tasks/step-117-acp-backend/step.md「参考实现」表)。
- *
+ * 字段与参考实现逐点对齐(见 「参考实现」表)。
  * 契约与 LlmLoopBackend/DshSdkBackend 同语义:
  * - 事件经 onEvent 流(ready/progress/permission-ask/result);结果只发一次(settled 守卫)。
  * - finalText = 全部 agent_message_chunk 文本拼接(上限 64k,与 DshSdkBackend 同口径)。
@@ -26,7 +23,7 @@ const DEFAULT_INIT_TIMEOUT_MS = 20_000;
 const DEFAULT_PROMPT_TIMEOUT_MS = 600_000;
 /** 权限请求等待上限(超时=fail-closed,cancelled)。 */
 const DEFAULT_PERMISSION_TIMEOUT_MS = 300_000;
-/** 取消时 graceful 等待 adapter 自行收口的宽限。 */
+/** 取消时 graceful 等待 adapter 自行的宽限。 */
 const DEFAULT_KILL_GRACE_MS = 1_500;
 /** finalText 上限(与 DshSdkBackend 的 64k 一致)。 */
 const TEXT_CAP = 64_000;
@@ -120,7 +117,7 @@ export interface AcpBackendOptions {
   permissionTimeoutMs?: number;
   /** 权限策略:ask=经 SubagentEvent.permission-ask 回流(缺省);allow/reject=自动应答。 */
   permissionPolicy?: AcpPermissionPolicy;
-  /** graceful cancel 等待 adapter 收口的宽限(缺省 1500ms)。 */
+ /** graceful cancel 等待 adapter 的宽限(缺省 1500ms)。 */
   killGraceMs?: number;
   /** false=不剔除父进程凭证(缺省 true;仅测试/受控场景关闭)。 */
   scrubEnv?: boolean;
@@ -159,8 +156,7 @@ export function listAcpAdapters(): string[] {
 export function resolveAcpAdapter(
   input?: string,
   extraArgs: string[] = [],
-  env: NodeJS.ProcessEnv = process.env,
-): AcpAdapterSpec | null {
+  env: NodeJS.ProcessEnv = process.env): AcpAdapterSpec | null {
   const raw = (input ?? env.GENIE_ACP_ADAPTER ?? "").trim();
   if (!raw) return null;
   const envExtra = parseStringArray(env.GENIE_ACP_ADAPTER_ARGS, "GENIE_ACP_ADAPTER_ARGS");
@@ -619,7 +615,7 @@ export class AcpBackend implements SubagentBackend {
       },
     };
 
-    // 父中止信号 → 同一取消路径(designs/25 父子取消语义)。
+ // 父中止信号 → 同一取消路径(父子取消语义)。
     onParentAbort = (): void => { void handle.cancel("graceful"); };
     if (spec.parentSignal) {
       if (spec.parentSignal.aborted) onParentAbort();

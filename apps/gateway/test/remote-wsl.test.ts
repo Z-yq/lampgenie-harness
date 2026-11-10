@@ -1,5 +1,5 @@
 /**
- * WSL 远程工作区(2026-10-27):与 SSH 同构的「发行版内装 server」形态单测。
+ * WSL 远程工作区:与 SSH 同构的「发行版内装 server」形态单测。
  * 锚点:UNC→identity 转换、identity 构造/解析、wsl.exe 命令形态、通道 spawn 参数、
  * 远端执行器按 kind 分流、remoteLs 经通道/回退链在 WSL 项目上工作(注入执行器,不真跑 wsl)。
  */

@@ -1,6 +1,6 @@
-/** task-resume spec 的网关子进程(2026-11-05):
+/** task-resume spec 的网关子进程:
  *  .mjs 形态=ESM import 链,绕开在途 sense-index-manager.ts top-level await 的
- *  cjs transform 失败(并行任务 step-166/167 在途改动,以其为准,不回滚);
+ * cjs transform 失败(并行任务 /167 在途改动,以其为准,不回滚);
  *  注入 interrupted/done/cancelled 三任务后 READY 行打印素材 id 给 spec 端。
  *  环境:SELF_PORT(默认 7757)/RESUME_RUN(运行标识)。 */
 process.env.GENIE_CHECKPOINT = process.env.GENIE_CHECKPOINT || "off";

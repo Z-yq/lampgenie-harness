@@ -25,13 +25,12 @@ export function wireExecutor(
   nodes?: NodeRegistry,
   nodeDispatch?: NodeDispatch,
   projects?: ProjectRegistry,
-  permissionBroker?: PermissionBroker,
-): void {
+  permissionBroker?: PermissionBroker): void {
   taskManager.onChange((task: Task) => {
     if (task.state !== "running") return;
     void runTask(taskManager, journal, backend, task, nodes, nodeDispatch, false, projects, permissionBroker);
   });
-  // 失联重派(step-033 P5,designs/09 工况 N 系):扫描已委派任务,节点 stale→RESCHEDULE。
+ // 失联重派( P5, 工况 N 系):扫描已委派任务,节点 stale→RESCHEDULE。
   if (nodes && nodeDispatch) {
     const watch = setInterval(() => {
       for (const stale of nodeDispatch.staleAssignments()) {
@@ -67,9 +66,8 @@ async function runTask(
   nodeDispatch?: NodeDispatch,
   rescheduled = false,
   projects?: ProjectRegistry,
-  permissionBroker?: PermissionBroker,
-): Promise<void> {
-  // 可达性分派守卫(R5-C11):带 resourceTags 的任务必须命中在线节点,否则显式失败。
+  permissionBroker?: PermissionBroker): Promise<void> {
+ // 可达性分派守卫:带 resourceTags 的任务必须命中在线节点,否则显式失败。
   if (nodes) {
     const guard = dispatchGuard(nodes, { reachability: task.resourceTags });
     if (!guard.ok) {
@@ -80,7 +78,7 @@ async function runTask(
     if (guard.note) {
       journal.append({ kind: "task.progress", sessionId: task.sessionId, payload: { taskId: task.id, dispatch: guard.note, ...(rescheduled ? { rescheduled: true } : {}) } });
     }
-    // tunnel 委派(step-033):命中非本机节点且有委派通道→任务书下发远端代执行。
+ // tunnel 委派:命中非本机节点且有委派通道→任务书下发远端代执行。
     if (guard.node && guard.node.nodeId !== "local") {
       if (!nodeDispatch) {
         const cur = tm.get(task.id);
@@ -103,12 +101,12 @@ async function runTask(
       return;
     }
   }
-  // 开工回顾(designs/18 §3:主执行路径统一注入)
+ // 开工回顾( §3:主执行路径统一注入)
   const store = new ExperienceStore(join(repoRoot(), ".genie", "experiences"));
   const recalled = recallExperiences(store, task.instruction);
   const devlogs = recallDevlogs(join(repoRoot(), "devlog"), task.instruction);
   const instruction = task.instruction + renderRecallBlock(recalled) + renderDevlogBlock(devlogs);
-  // checkpoint 快照(designs/21):执行前留工作区快照;GENIE_CHECKPOINT=off 跳过(测试提速)。
+ // checkpoint 快照:执行前留工作区快照;GENIE_CHECKPOINT=off 跳过(测试提速)。
   if (process.env.GENIE_CHECKPOINT !== "off") {
     const { checkpointCreate } = await import("./git-service.js");
     const root = projects?.resolveWorkdir(task.projectId) ?? repoRoot();
@@ -116,7 +114,7 @@ async function runTask(
     try { sha = await checkpointCreate(root); } catch { sha = null; }
     journal.append({ kind: "checkpoint.create", sessionId: task.sessionId, payload: { taskId: task.id, sha, root } });
   }
-  // 聊天史语义(step-037):用户消息与最终回复入 journal(此前只在 task.done payload,史里不可见)。
+ // 聊天史语义:用户消息与最终回复入 journal(此前只在 task.done payload,史里不可见)。
   journal.append({ kind: "message.user", sessionId: task.sessionId, payload: { text: task.instruction } });
   journal.append({
     kind: "subagent.spawn",
@@ -127,20 +125,20 @@ async function runTask(
   let handle: import("@lampgenie/executors").SubagentHandle | undefined;
   // ask 可能先于 handle 就绪到达(spawn 未 resolve 事件已回调)——挂起队列,handle 就绪后补发
   const pendingAsks: { requestId: string; decision: "allow-once" | "reject" }[] = [];
-  // M151 审批对象=执行对象:派发入参只构造一次;审批前冻结、放行前按同一份可执行面复核。
+ // 审批对象=执行对象:派发入参只构造一次;审批前冻结、放行前按同一份可执行面复核。
   const spawnSpec = {
     taskId: task.id,
     instructions: instruction,
-    // workdir 按项目解析(step-035):项目在且可用→项目路径;否则 harness 根。
+ // workdir 按项目解析:项目在且可用→项目路径;否则 harness 根。
     workdir: projects?.resolveWorkdir(task.projectId) ?? repoRoot(),
     permissions: "sandbox" as const,
   };
   const done = new Promise<void>((resolve) => {
     const onEvent = (e: SubagentEvent) => {
-      // 权限请求自动应答(step-033):缺省 reject(fail-closed,解除子进程挂死);
-      // env GENIE_SUBAGENT_ASK=allow-once 本地放行。人工审批=面板审批中心+弹窗(step-037 B2/step-010 收口),事件全落 journal。
+ // 权限请求自动应答:缺省 reject(fail-closed,解除子进程挂死);
+ // env GENIE_SUBAGENT_ASK=allow-once 本地放行。人工审批=面板审批中心+弹窗( B2/),事件全落 journal。
       if (e.type === "permission-ask") {
-        // M151:ask 前冻结可执行面(事件字段 + 真正派发的 spec),asked 事件带 objectHash。
+ // ask 前冻结可执行面(事件字段 + 真正派发的 spec),asked 事件带 objectHash。
         const approvalObject = () => ({
           requestId: e.requestId,
           summary: e.summary,
@@ -166,11 +164,11 @@ async function runTask(
             ...(snap.ok ? {} : { snapshotError: snap.code }),
           },
         });
-        // 三级决策(step-037 B2):env 放行 > 面板审批(broker) > auto-fail-closed。
+ // 三级决策( B2):env 放行 > 面板审批(broker) > auto-fail-closed。
         const applyDecision = (decision: "allow-once" | "reject", by: string) => {
           let finalDecision = decision;
           let finalBy = by;
-          // M151 fail-closed:放行前用同一上下文复核,入参变了按 denied 处理。
+ // fail-closed:放行前用同一上下文复核,入参变了按 denied 处理。
           if (decision === "allow-once") {
             const verdict = snap.ok
               ? verifyApprovalObject(snap.frozen, approvalObject())

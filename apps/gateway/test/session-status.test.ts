@@ -76,7 +76,7 @@ describe("session.status 聚合(D3)", () => {
     expect(res.todo.total).toBe(3);
     expect(res.todo.items[1]!.status).toBe("in_progress");
     expect(res.subagents).toEqual({ spawnCount: 2, resultCount: 2, running: 0 });
-    // 启动僵尸清算(2026-10-15,机制4)改变了投影基线:t2 的 spawn 是无 result 的上进程遗留 →
+ // 启动僵尸清算(机制4)改变了投影基线:t2 的 spawn 是无 result 的上进程遗留 →
     // server 启动即补一条 ok:false 终态(网关重启,子代理随进程终止);t1 的 spawn 已有 result
     // (无 agentId 旧形态按 FIFO 配对)不被重收。故 resultCount 1→2、running 1→0。
     const reapCount = () => (journal.readAll().filter((e) => e.kind === "subagent.result")).length;
@@ -90,7 +90,7 @@ describe("session.status 聚合(D3)", () => {
   }, 10_000);
 });
 
-describe("trace.stats 命令(step-031 D3)", () => {
+describe("trace.stats 命令( D3)", () => {
   it("预置 loop 追踪事件 → WS 聚合返回", async () => {
     const { parseClientMessage: parse } = await import("@lampgenie/protocol");
     expect(parse('{"v":1,"type":"trace.stats","sessionId":"s"}')?.type).toBe("trace.stats");
@@ -101,7 +101,7 @@ describe("trace.stats 命令(step-031 D3)", () => {
     journal.append({ kind: "turn.start", sessionId: "ts", payload: { turn: 1 } });
     journal.append({ kind: "step.start", sessionId: "ts", payload: { turn: 1, step: 0 } });
     journal.append({ kind: "message.agent", sessionId: "ts", payload: { text: "hi", turn: 1, step: 0, llmMs: 1200, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } } });
-    // 2026-10-22:子代理消耗(子 loop 事件以 subagent.event 入主 journal,内层 kind=message.agent)
+ // 子代理消耗(子 loop 事件以 subagent.event 入主 journal,内层 kind=message.agent)
     journal.append({ kind: "subagent.spawn", sessionId: "ts", payload: { agentId: "sa1", taskId: "sub-1", title: "子任务" } });
     journal.append({ kind: "subagent.event", sessionId: "ts", payload: { agentId: "sa1", taskId: "sub-1", kind: "message.agent", llmMs: 800, usage: { inputTokens: 2000, outputTokens: 300, totalTokens: 2300, cachedTokens: 1500 } } });
     journal.append({ kind: "step.end", sessionId: "ts", payload: { turn: 1, step: 0, reason: "completed" } });

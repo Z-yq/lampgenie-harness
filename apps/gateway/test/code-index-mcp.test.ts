@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { buildC2fIndex, saveIndex, srcFingerprint } from "@lampgenie/code-sense";
 import { createCodeIndexMcp, type CodeIndexMcp } from "../src/code-index-core";
 
-// 多仓路由语义回归(2026-10-13 修复:此前「第一个就绪仓先到先得」让字母序靠前的仓
-// 永久占住服务,其余仓查询恒空——工作区实证 lampgenie-harness 永远轮不到)。
+// 多仓路由语义回归(修复:此前「第一个就绪仓先到先得」让字母序靠前的仓
+// 永久占住服务,其余仓查询恒空——工作区验证 lampgenie-harness 永远轮不到)。
 // 夹具=临时工作区两仓,同名文件 src/dup.ts 制造跨仓歧义,预建索引后进程内调工厂。
 
 let ws = "";
@@ -56,7 +56,7 @@ describe("code-index MCP 多仓路由", () => {
     }
   });
 
-  it("impact:改动影响面清单(签名/闭包/文件/测试一单,step-066)", () => {
+  it("impact:改动影响面清单(签名/闭包/文件/测试一单)", () => {
     const out = text(mcp.dispatchTool("code_index_impact", { name: "alphaTrunk" }));
     expect(out).toContain("改动影响面: alphaTrunk");
     expect(out).toContain("上游调用方");

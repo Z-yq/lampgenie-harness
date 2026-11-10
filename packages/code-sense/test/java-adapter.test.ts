@@ -47,13 +47,13 @@ function javaFixture(): { dir: string; rel: string } {
 // 行号断言基准:fixture 按行数组构造,行号=索引+1(元素含缩进,用 includes 匹配)。
 const ln = (needle: string): number => JAVA_SRC.findIndex((l) => l.includes(needle)) + 1;
 
-describe("Java structural adapter(designs/16 §5 二期)", () => {
+describe("Java structural adapter( §5 二期)", () => {
   it("class/interface/构造器/方法/抽象方法 提取+行号+容器正确", async () => {
     const { dir, rel } = javaFixture();
     const r = await parseJavaFile(dir, rel);
     const byId = new Map(r.symbols.map((s) => [s.id, s]));
     expect(r.symbols.map((s) => `${s.container ? s.container + "." : ""}${s.name}`).sort()).toEqual(
-      // step-089 P1:类字段(repo)入索引为 variable 符号(带 dataType+container)
+ // P1:类字段(repo)入索引为 variable 符号(带 dataType+container)
       ["OrderService", "OrderService.OrderService", "OrderService.place", "OrderService.save", "OrderService.repo", "Repo", "Repo.find"].sort(),
     );
     expect(byId.get("OrderService.java#OrderService")!.line).toBe(ln("public class OrderService {"));
@@ -117,8 +117,8 @@ describe("Java structural adapter(designs/16 §5 二期)", () => {
   });
 });
 
-// step-084 RC-A:跨文件候选出口(此前 JavaParseResult 无 crossFileCandidates,全部锚 callers R=0)
-describe("Java RC-A:字段/参数/局部类型证据跨文件候选(step-084)", () => {
+// RC-A:跨文件候选出口(此前 JavaParseResult 无 crossFileCandidates,全部锚 callers R=0)
+describe("Java RC-A:字段/参数/局部类型证据跨文件候选", () => {
   it("字段类型字段走表:b.help( 跨文件解析到 B.help;this miss 发容器候选", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-java-xfile-"));
     try {
@@ -189,10 +189,10 @@ describe("Java RC-A:字段/参数/局部类型证据跨文件候选(step-084)", 
         const c = [...g.symbols.values()].find((s) => s.name === callerName)!;
         expect((g.outEdges.get(c.id) ?? []).find((x) => x.toName === "run" && x.to)).toBeUndefined();
       }
-      // viaStatic:Util.run( 静态形态候选 receiverType=Util → 同样落重载组不猜(诚实)
+ // viaStatic:Util.run(静态形态候选 receiverType=Util → 同样落重载组不猜(诚实)
       const viaStatic = [...g.symbols.values()].find((s) => s.name === "viaStatic")!;
       expect((g.outEdges.get(viaStatic.id) ?? []).find((x) => x.toName === "run" && x.to)).toBeUndefined();
-      // new Util( 走默认构造器(源码无 ctor 声明):裸名候选解析到类节点(实例化关联,
+ // new Util(走默认构造器(源码无 ctor 声明):裸名候选解析到类节点(实例化关联,
       // 唯一指涉;有显式 ctor 时类节点与 ctor 同名双形态=不猜)
       const viaLocal = [...g.symbols.values()].find((s) => s.name === "viaLocal")!;
       const ctorEdge = (g.outEdges.get(viaLocal.id) ?? []).find((x) => x.toName === "Util" && x.to);
@@ -235,7 +235,7 @@ describe("Java RC-A:字段/参数/局部类型证据跨文件候选(step-084)", 
       const e = (g.outEdges.get(get.id) ?? []).find((x) => x.toName === "find");
       expect(e).toBeTruthy();
       expect(e!.to).toContain("Repo.java#Repo.find");
-      // 无类型证据的 cached.hashCode(:merge 后不得有解析边
+ // 无类型证据的 cached.hashCode(merge 后不得有解析边
       expect((g.outEdges.get(get.id) ?? []).find((x) => x.toName === "hashCode" && x.to)).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });

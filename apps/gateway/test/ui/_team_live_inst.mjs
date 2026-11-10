@@ -1,12 +1,10 @@
 /**
- * 团队页实测实例(designs/30 §3 验收 e2):**不改 7700、不重启网关**。
- *
+ * 团队页经验证实例( §3 验收 e2):**不改 7700、不重启网关**。
  * 关键点:7700 上跑的是旧 dist(团队仓 digest 还没有 roles/counts/memberRoles 字段),
  * 所以这里用**源码**起一套独立实例:
  *   真实团队仓(.genie/team/team-repo.git) → 新代码 TeamRelay(临时 workdir,只读轮询)
  *   → 新代码 TeamView(仓内身份) → 新 panel.ts 临时端口。
  * 团队页因此渲染真实虚拟组织数据(4 个 demo 成员 + 三角色 + 3 规则 3 技能 + demo-app 绑定)。
- *
  * 用法:cd apps/gateway && SELF_PORT=7719 npx tsx test/ui/_team_live_inst.mjs
  * (必须 .mjs:src 里有 top-level await,.cjs 会被 tsx 转成 CJS 而报 ERR_REQUIRE_ASYNC_MODULE)
  */

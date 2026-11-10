@@ -256,8 +256,7 @@ describe("versionChange", () => {
     expect(addSample(root, raw("v2", { at: T0 + 1 })).ok).toBe(true);
     // 版本升级后新样本排在末尾:最后一条是 m2/p2,但基线仍是样本多数的 m1/p1。
     expect(
-      addSample(root, raw("v3", { signature: { modelVersion: "m2", providerVersion: "p2" }, at: T0 + 2 })).ok,
-    ).toBe(true);
+      addSample(root, raw("v3", { signature: { modelVersion: "m2", providerVersion: "p2" }, at: T0 + 2 })).ok).toBe(true);
     const result = versionChange(root, { modelVersion: "m3", providerVersion: "p3" });
     expect(result.prev).toEqual({ modelVersion: "m1", providerVersion: "p1" });
     expect(result.result.changed).toBe(true);
@@ -270,8 +269,7 @@ describe("markStale", () => {
   it("版本不同的样本全标 stale", () => {
     expect(addSample(root, raw("old1")).ok).toBe(true);
     expect(addSample(root, raw("new1", { signature: { modelVersion: "m2", providerVersion: "p2" } })).ok).toBe(
-      true,
-    );
+      true);
     const result = markStale(root, { modelVersion: "m2", providerVersion: "p2" });
     expect(result.ok).toBe(true);
     expect(result.stale).toEqual(["old1"]);
@@ -282,11 +280,9 @@ describe("markStale", () => {
 describe("confounders / survivorBias", () => {
   it("四因子恒在,混杂时记 CONF_CONFOUNDERS_PRESENT", () => {
     expect(
-      addSample(root, raw("p1", { projectId: "proj-a", durationMs: 100, signature: { taskClass: "impl" } })).ok,
-    ).toBe(true);
+      addSample(root, raw("p1", { projectId: "proj-a", durationMs: 100, signature: { taskClass: "impl" } })).ok).toBe(true);
     expect(
-      addSample(root, raw("p2", { projectId: "proj-b", durationMs: 900, signature: { taskClass: "review" } })).ok,
-    ).toBe(true);
+      addSample(root, raw("p2", { projectId: "proj-b", durationMs: 900, signature: { taskClass: "review" } })).ok).toBe(true);
     const result = confounders(root);
     expect(result.ok).toBe(true);
     expect(result.result.items.map((item) => item.factor)).toEqual([

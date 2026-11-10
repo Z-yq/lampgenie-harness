@@ -1,5 +1,5 @@
 /**
- * 白板渲染层三件(2026-10-25 任务 A/B/C)契约测试:
+ * 白板渲染层三件(任务 A/B/C)契约测试:
  *  A. 宽设计板列换行(面板侧裁决 cvFlowWrapWanted:refactor 不强扭 / page 不折 / 小板不折);
  *  B. research 板决策矩阵纯函数 researchMatrixRows(从真实面板内联脚本提取执行):
  *     候选×五维、flow 优先 summary 兜底、矩阵/结论注脚、无候选/无维度优雅降级;

@@ -1,9 +1,9 @@
-/** step-1011 白板卡片文字清晰度:字号下限 + 对比度令牌(源码契约)。
+/** 白板卡片文字清晰度:字号下限 + 对比度令牌(源码契约)。
  *  背景:白板方块里原有 87 条 <10px 小字,叠加画布适配缩放(k≈0.7~0.9)后实际只有 5~7px。
  *  本契约只做源码面断言:
  *   a) 白板 CSS 区**不允许**出现 <10px 的 font-size 声明(负例可失败);
  *   b) 六套主题必须给 --bcv-lane-h-fg-strong / --bcv-lane-seg-fg 赋非默认值(浅底主题的强对比档);
- *   c) type-chip / 泳道标题不得再走淡彩字面量(:root 默认档与原字面量逐字相等 → 默认主题零漂移)。
+ * c) type-chip / 泳道标题不得再走淡彩字面量(root 默认档与原字面量逐字相等 → 默认主题零漂移)。
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -20,7 +20,7 @@ function boardCss(): string {
   return src.slice(a, b);
 }
 
-/** 取某主题的 --bcv-* 覆写块正文(step-1010 覆写块以 `body.X{` + `--bcv-canvas-bg` 开头)。 */
+/** 取某主题的 --bcv-* 覆写块正文(覆写块以 `body.X{` + `--bcv-canvas-bg` 开头)。 */
 function themeBcvBlock(sel: string): string {
   const i = src.indexOf(`  ${sel}{\n    --bcv-canvas-bg:`);
   expect(i, `${sel} 缺少 --bcv-* 覆写块`).toBeGreaterThan(0);
@@ -118,7 +118,7 @@ describe("白板卡片文字清晰度:对比度令牌", () => {
       expect(i, `缺少规则 .cv-type-chip.${cls}`).toBeGreaterThan(0);
       expect(css.slice(i, i + 90)).toContain("var(--bcv-chip-");
     }
-    // 泳道编号兜底底色:不得落到「深字压深底」(实测 1.07:1)
+ // 泳道编号兜底底色:不得落到「深字压深底」(经验证 1.07:1)
     const b = css.slice(css.indexOf(".cv-lane-h b{"), css.indexOf(".cv-lane-h b{") + 260);
     expect(b).toContain("background:var(--bcv-lane-");
   });

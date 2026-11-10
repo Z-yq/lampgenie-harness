@@ -1,5 +1,5 @@
 /**
- * codesense wiki(step-118):持久 repo wiki 的 CLI 面。
+ * codesense wiki:持久 repo wiki 的 CLI 面。
  * list/get/rebuild/audit/ask;rebuild 的 LLM 走既有凭证链(flag>env>config>ask-file),
  * 无凭证=确定性骨架(显式降级,不冒充)。
  */
@@ -90,7 +90,7 @@ export async function wikiCommand(p: ParsedArgs, json: boolean): Promise<WikiCmd
     const r = await askWiki(root, q);
     const symbols = r.symbols ?? [];
     const lines = [`问题: ${r.question}`, `关键词: ${r.keywords.join(", ") || "(无)"}`, ""];
-    // 符号优先(2026-10-21):页面零命中时不再只回「(无)」——符号候选 + 源码行兜底。
+ // 符号优先:页面零命中时不再只回「(无)」——符号候选 + 源码行兜底。
     if (symbols.length > 0) {
       lines.push("候选符号:");
       for (const s of symbols.slice(0, 8)) {

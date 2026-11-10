@@ -1,5 +1,5 @@
 /**
- * step-064 主 loop 工具面门禁回归:「工具未配置」观测的机制形态=空 tools 时 provider 不带
+ * 主 loop 工具面门禁回归:「工具未配置」观测的机制形态=空 tools 时 provider 不带
  * tools 字段(纯文本对话)。本套锚定两件事:
  * 1) 主 loop 每任务开工必落 task.progress.tools 清单(journal 一手证据面,供任何质疑回查);
  * 2) 主 loop 工具面含文件六件套与派发工具(装配非空的可执行断言;空面分支是防御性 fail-visible,
@@ -23,7 +23,7 @@ it("主 loop 开工落 tools 清单进 journal(task.progress.tools);装配含文
     useExternalHttp: true,
   });
   try {
-    app.taskManager.submit("user", "s064-gate-1", "报告你的工具面(此任务由 step-064 门禁测试驱动)");
+    app.taskManager.submit("user", "s064-gate-1", "报告你的工具面(此任务由  门禁测试驱动)");
     for (let i = 0; i < 100; i++) {
       const t = app.taskManager.list().find((x) => x.sessionId === "s064-gate-1");
       if (t && (t.state === "done" || t.state === "failed")) break;

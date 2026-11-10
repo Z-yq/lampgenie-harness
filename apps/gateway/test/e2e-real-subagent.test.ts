@@ -1,14 +1,11 @@
 /**
  * 真实子代理验收(P1-4 产出纪律):进程内用真模型跑 LlmLoopBackend。
- *
  * 为什么必须进程内:主 agent 的 spawn_subagent 走 7700 网关进程(那里的 dist 是旧代码),
  * 拿它验证等于验证旧代码。这里直接 new LlmLoopBackend(src) 才是改后路径。
- *
  * 判定逻辑(避免把「模型很爱说话」误判成失败):
  *   - 模型连续 ≥N 步都给不出实质产出(≥200 字)→ **必须**注入 [产出纪律];
  *   - 模型每步都有实质产出 → 不注入才是对的(计数器被正确清零)。
  *   - 唯一算 bug 的形态:连续多步只有短文(<200)却一次都没注入(= 旧的永久锁)。
- *
  * 默认 skip(真调模型有成本)。开门:
  *   GENIE_E2E_REAL=1 npx vitest run test/e2e-real-subagent.test.ts
  */
@@ -47,7 +44,7 @@ it.skipIf(!REAL_E2E)("真实子代理:P1-4 连续无实质产出必注入 [产�
   const SCRIPTED_TOOL_ONLY = 6;       // 前 6 步脚本化为「只调工具不出文本」
   const realChat = (real as { chat: (m: unknown, o?: unknown) => Promise<{ content?: string }> }).chat.bind(real);
 
-  // 混合驱动(2026-10-30):真实模型 5 次里有 4 次会即时吐文本,靠它自然凑出
+ // 混合驱动:真实模型 5 次里有 4 次会即时吐文本,靠它自然凑出
   // 「连续多步零产出」不可控。这里前 N 步脚本化为**只调工具、content 为空**——
   // 这正是真实 trace 里 89 步零产出 run 的形态;第 N 步之后完全交回真实模型。
   // 被测代码路径(loop、tips 注入、计数器、工具执行、journal)全部是真的。

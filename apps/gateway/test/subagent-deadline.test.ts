@@ -1,8 +1,8 @@
 /**
- * 子代理时间盒解析(2026-10-25 大并发修复):
+ * 子代理时间盒解析(大并发修复):
  * 显式 deadlineMin > 全局 agent.subagentDeadlineMin > planner 专属缺省(8 分钟,0=关闭)。
  * planner 缺省时间盒用于防止单个慢 planner 长期占住 TaskSupervisor 全局并发槽,导致大批任务排队看起来「挂住」;
- * 其他子代理角色未配置时仍不限时(2026-10-21 口径)。
+ * 其他子代理角色未配置时仍不限时(口径)。
  */
 import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
@@ -39,7 +39,7 @@ describe("resolveSubagentDeadlineMin", () => {
 });
 
 /**
- * P1-4 产出纪律强制提醒(2026-10-29):连续 25 步只调工具、零文本 → 下一次请求注入 [产出纪律] 块;
+ * P1-4 产出纪律强制提醒:连续 25 步只调工具、零文本 → 下一次请求注入 [产出纪律] 块;
  * 每 25 步最多一次;已产出过文本=不再提醒(negative,不打断正常推进)。
  * 判据=message.agent.payload.text 为空;通道=tips(ephemeral,与 deadlineWarn 同机制)。
  */
@@ -92,7 +92,7 @@ describe("产出纪律硬注入(P1-4)", () => {
     const dir = mkdtempSync(join(tmpdir(), "p14-nudge-lock-"));
     const call = () => ({ content: "", toolCalls: [{ id: "c", name: "list_dir", arguments: JSON.stringify({ path: dir }) }] });
     // 旧实现:`p.text.trim()` 非空即 seenText=true → 闸门永久焊死,一个都不触发。
-    // 实测今日 18 个大 run 里 16 个「有文本步 <15%」却全不触发,最高 89 步零产出。
+ // 经验证今日 18 个大 run 里 16 个「有文本步 <15%」却全不触发,最高 89 步零产出。
     const { llm, nudgedAt } = probe((i) => (i === 0
       ? { content: "我先看看目录。", toolCalls: call().toolCalls }
       : i < 35 ? call() : { content: "最终报告:" + "证据已核。".repeat(50) }));

@@ -1,5 +1,5 @@
 /**
- * review.inject(评审评论一键回注聊天窗,step-074):WS 往返——
+ * review.inject(评审评论一键回注聊天窗:WS 往返——
  * 注入 → review.inject.result{sessionId,taskId,count} + task.submitted;
  * 任务指令含逐条 file:line/severity/title/detail;journal 落 review.inject 事件;
  * 同 idempotencyKey 重发不重复立任务(同 board.continue 语义)。

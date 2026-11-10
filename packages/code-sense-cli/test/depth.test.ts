@@ -1,5 +1,5 @@
 /**
- * depth 参数测试(2026-10-15 二期):--depth N=关系遍历层数上限。
+ * depth 参数测试(二期):--depth N=关系遍历层数上限。
  * ①工具面 schema 向后兼容(可选参数,file/graph 工具不加);
  * ②缺省(不给 depth)=现行为逐字节(无 d 标注、无 depth 字段);
  * ③depth=1 vs depth=2 差异:多层链 alphaHelper ← alphaTrunk ← mainEntry 上,

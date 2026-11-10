@@ -1,22 +1,18 @@
 /**
- * sensing/crosslang-bridge(step-103 / designs/27):跨语言桥边——HTTP api 桥原型。
- *
- * 把 step-081 bridge.mjs 的「前后端路径对账计数」升级为「桥边」一等数据结构:
+ * sensing/crosslang-bridge( /):跨语言桥边——HTTP api 桥原型。
+ * 把 bridge.mjs 的「前后端路径对账计数」升级为「桥边」一等数据结构:
  * 每条边 = 前端调用点(file:line + 字面量) → 后端路由(file:line + method + handler),
- * 带 kind="bridge" / confidence / tier×evidence 双诚实轴标注(designs/16 v8)。
- *
+ * 带 kind="bridge" / confidence / tier×evidence 双诚实轴标注( v8)。
  * 配对语义与 bridge.mjs 全等(段级通配规范化 + 同文件 const 折叠),per-endpoint exact
- * 覆盖率可与 step-081/100 的桥证据逐仓对账(grafana 360/523 等为回归基线)。
- *
+ * 覆盖率可与 /100 的桥证据逐仓对账(grafana 360/523 等为回归基线)。
  * 防幻觉红线:
  *  ① 双端证据行(前端 file:line + 后端 file:line)齐备才出边;
  *  ② exact/exact-folded 才进正式边;first2 = candidates 区(medium),1 段前缀命中只聚合
  *     计数(low,不出边)——低置信不混入确定性边清单;
  *  ③ 折叠字面量 match="exact-folded" 独立标注,不冒充原生字面量;
  *  ④ C 档形态(运行时反射/动态注册/中间件改写/数据流派发)只登记 knownLimits,不产边。
- *  ⑤ 2026-10-25:LLM 消歧候选区独立导出(matchBridgeCandidates/queryBridgeCandidates/
+ * ⑤ :LLM 消歧候选区独立导出(matchBridgeCandidates/queryBridgeCandidates/
  *     includeCandidates)——tier=semantic、带双端证据链,确定性边整体排除,两区不混。
- *
  * 本模块是 http-api 的纯消费方(extractApiSurface/queryApiSurface 零改动),不修改任何
  * 既有 sensing 文件;桥边不进 c2f 索引(独立数据结构+查询面,入索引另立项)。
  */
@@ -57,7 +53,7 @@ export interface BridgeEdgeTo {
 
 export interface BridgeEdge {
   kind: "bridge";
-  bridge: "http-api";                 // 连接器形态(A2-A6 扩展位,designs/27 §4)
+  bridge: "http-api";                 // 连接器形态(A2-A6 扩展位, §4)
   from: BridgeEdgeFrom;
   to: BridgeEdgeTo;
   match: "exact" | "exact-folded";
@@ -75,7 +71,7 @@ export interface BridgeCandidate {
   note?: string;
 }
 
-/** LLM 消歧候选(2026-10-25):候选区独立数据结构,与确定性 BridgeEdge 严格分离。
+/** LLM 消歧候选:候选区独立数据结构,与确定性 BridgeEdge 严格分离。
  * 语义 = 前端 file:line+literal ↔ 后端 file:line+method+handler,附 reason + 双端 evidence 链;
  * tier=semantic 表示「语义层待消歧」——不入索引、不进 edges、不冒充 grep 证据。
  * 形态:first2(前 2 段一致,medium/low)与 prefix1(仅首段一致,low,需显式开启)。 */
@@ -150,13 +146,13 @@ export interface BridgeSurface {
   /** 未参与任何配对的前端字面量数(词法全量扫描含非 fetch 语境,如实计数不猜语义)。 */
   unmatchedLiteralCount: number;
   truncated: string[];                // 各帽命中登记(哪一项被截断)
-  /** C 档形态登记(designs/27 §6):静态不可行,永不产边。 */
+ /** C 档形态登记( §6):静态不可行,永不产边。 */
   knownLimits: string[];
-  /** 非产品路径过滤呈报(2026-10-20):filtered=被丢弃的前端字面量条数,docs/examples/
+ /** 非产品路径过滤呈报:filtered=被丢弃的前端字面量条数,docs/examples/
    * tutorial/mocks 下的「前端调用」不再算桥边证据;缺席=零过滤。 */
   pathFilter?: { filtered: number; note: string };
   degraded?: { reason: string };
-  /** 2026-10-25(includeCandidates=true 才在场):LLM 消歧候选区,与 edges 严格分离。
+ /** (includeCandidates=true 才在场):LLM 消歧候选区,与 edges 严格分离。
    * 缺省不产出 → 既有 JSON/文本输出逐字节兼容。 */
   semanticCandidates?: BridgeSemanticCandidate[];
   semanticCandidateStats?: BridgeCandidateStats;
@@ -171,7 +167,7 @@ const KNOWN_LIMITS = [
 
 // ============================ 前端字面量收集 ============================
 
-/** 路径形字面量模式(与 step-081 bridge.mjs 同口径):引号/反引号紧跟 / 开头的串。 */
+/** 路径形字面量模式(与 bridge.mjs 同口径):引号/反引号紧跟 / 开头的串。 */
 const LIT_PATTERN = "[\"'`]/[A-Za-z0-9_][A-Za-z0-9_\\-./:{}$]*";
 
 let rgAvailable: boolean | null = null;
@@ -242,8 +238,7 @@ const MAX_FOLD_FILES = 2000;
 
 /** 前端路径字面量收集:rg -o -n 带行号(bridge.mjs 无行号,桥边的证据行即此处增量)。
  * 导出供探针/审计脚本复用(queryBridgeEdges 内部同一入口,语义单一出处)。
- *
- * 非产品路径过滤(2026-10-20):poly-grafana 的 public/test/mocks/** 与 docs/** 里出现的前端
+ * 非产品路径过滤:poly-grafana 的 public/test/mocks/** 与 docs/** 里出现的前端
  * 路径字面量不是「这个前端真的在调后端」的证据——按文件路径在收集期直接丢弃,并如实统计
  * 被丢弃的「字面量条数」(filtered.literals),调用方据此输出过滤注记,不得静默清零。
  * opts.all=true 原样放行(逃生口);该参数为可选第四参,不改变既有三参调用面。 */
@@ -296,8 +291,8 @@ export async function collectFrontendLiterals(
     const key = `${file}:${m[2]}:${raw}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // 非产品路径文件里的字面量不作为前端证据(grafana public/test/mocks/** 实锤);
-    // 测试文件同样不作前端证据(2026-10-21:owncast 的 test/automated/** 前端 fixture 曾
+ // 非产品路径文件里的字面量不作为前端证据(grafana public/test/mocks/** 注意);
+ // 测试文件同样不作前端证据(owncast 的 test/automated/** 前端 fixture 曾
     // 混进「正式边」而注记里却说已过滤——rg 只按扩展名扫,isNonProductPath 不认 test/ 段,
     // 滤网与注记不同源)。丢弃但计数——调用方输出「已过滤 N 条」,不静默清零。
     if (!opts?.all && isNonProductEvidencePath(file)) {
@@ -313,7 +308,7 @@ export async function collectFrontendLiterals(
     if (literals.length >= MAX_LITERALS) { truncated.push(`literals@${MAX_LITERALS}`); break; }
   }
 
-  // 同文件 const 折叠(step-085 RC-N 通道移植):字面量里的 ${CONST} 内联 + const 路径值本身入账
+ // 同文件 const 折叠( RC-N 通道移植):字面量里的 ${CONST} 内联 + const 路径值本身入账
   let filesRead = 0;
   const uniqueNative = new Set(literals.map((l) => l.raw));
   for (const [file, lits] of byFile) {
@@ -363,7 +358,7 @@ function segMatch(a: string[], b: string[]): boolean {
   return a.every((s, i) => s === "*" || b[i] === "*" || s === b[i]);
 }
 /** 配对可信度闸(防幻觉):除段级通配配对成立外,要求至少一段「双侧实体且相等」——
- * 否则纯通配互吸出假边(grafana 实锤:折叠字面量 "${k8sGroup}/v0alpha1"(首段未解析)
+ * 否则纯通配互吸出假边(grafana 注意:折叠字面量 "${k8sGroup}/v0alpha1"(首段未解析)
  * 通配配对上 GET /login/:name——login 与 k8sGroup 毫无关系)。 */
 function segMatchCredible(a: string[], b: string[]): boolean {
   if (!segMatch(a, b)) return false;
@@ -446,7 +441,7 @@ export function matchBridgeEdges(
     if (anyExact) continue;
     if (edges.length >= MAX_EDGES) break; // 总帽命中即停(后续端点只会反复撞帽)
     // first2 档(候选区,medium)——命中判定与候选清单截断解耦:帽满只停记录,不停判定,
-    // 否则 endpointsFirst2Only/unmatched 统计被帽污染(grafana 实证 61 vs 107 假缺口)。
+ // 否则 endpointsFirst2Only/unmatched 统计被帽污染(grafana 验证 61 vs 107 假缺口)。
     let perEpCand = 0;
     let hasFirst2 = false;
     for (const l of lits) {
@@ -508,7 +503,6 @@ export function matchBridgeEdges(
 
 /**
  * LLM 消歧候选区(纯函数,fixture 可单测;2026-10-25)。
- *
  * 与 matchBridgeEdges 的 candidates 区别:此处是**独立导出数据结构**(tier=semantic),
  * 每条候选带 reason+双端 evidence 链,且**已有确定性 exact 边的端点整体排除**(不与确定性边混)。
  * 口径:
@@ -638,7 +632,7 @@ export interface QueryBridgeOptions {
   /** true=不做非产品路径过滤(docs/examples/tutorial/mocks 下前端字面量与后端端点都放行;
    * 逃生口,缺省 false=过滤)。 */
   all?: boolean;
-  /** 2026-10-25:同时产出 LLM 消歧候选区(semanticCandidates;缺省不产出,输出与既有逐字节兼容)。 */
+ /** :同时产出 LLM 消歧候选区(semanticCandidates;缺省不产出,输出与既有逐字节兼容)。 */
   includeCandidates?: boolean;
   /** 候选区口径:first2(缺省)=仅前 2 段;all=追加 1 段前缀(low)。 */
   candidateMode?: "first2" | "all";
@@ -740,7 +734,7 @@ export function bridgeCandidateSurfaceOf(r: BridgeSurface): BridgeCandidateSurfa
 }
 
 /**
- * 独立候选区查询(2026-10-25):一次 queryBridgeEdges(includeCandidates)后取候选视图。
+ * 独立候选区查询:一次 queryBridgeEdges(includeCandidates)后取候选视图。
  * 候选 tier=semantic、带双端证据链;确定性边不进 candidates(消费方无需再去重)。
  * includePrefix1=true 追加 1 段前缀(low,高噪声,显式开关)。
  */
@@ -767,7 +761,7 @@ function emptyStats(endpoints: ApiEndpoint[]): BridgeStats {
   };
 }
 
-/** rg/grep 通用行扫描(step-107 A2-A6 共用):pattern 命中行带 file:line:content。
+/** rg/grep 通用行扫描( A2-A6 共用):pattern 命中行带 file:line:content。
  * 仅 rg 通道(A2-A6 是新增形态,不为它们实现 grep 兜底——无 rg=显式降级,与 A1 的
  * grep 兜底存量语义无涉)。返回 null=rg 缺席(降级);[] =零命中。 */
 async function rgLines(
@@ -802,7 +796,7 @@ async function rgLines(
   return out;
 }
 
-/** 前端证据行路径过滤(ws/ipc 通道面共享;2026-10-21 D2)。
+/** 前端证据行路径过滤(ws/ipc 通道面共享; D2)。
  * 这两面用 rgLines 直扫前端扩展名,没有经过 http-api 的 collectFrontendLiterals 滤网,
  * 于是 test/ 与 .next/_next 产物里的 `new WebSocket(...)`/`ipcRenderer.invoke(...)` 会冒充
  * 前端证据——与 http-api 面口径漂移。此处按同一 path-filter 判定丢弃并计数(计数走
@@ -810,8 +804,7 @@ async function rgLines(
 function filterFrontendRows<T extends { file: string }>(
   rows: T[],
   state: { filtered: number; samples: string[] },
-  all?: boolean,
-): T[] {
+  all?: boolean): T[] {
   if (all) return rows;
   const kept: T[] = [];
   for (const r of rows) {
@@ -870,7 +863,7 @@ function firstArgSpan(text: string, openParenIdx: number): string {
   return cur.trim();
 }
 
-// ============================ A2 ws-channel(designs/27 §4) ============================
+// ============================ A2 ws-channel( §4) ============================
 
 export interface WsConnectionPoint {
   file: string;
@@ -904,7 +897,7 @@ export interface WsChannelSurface {
   stats: { wsEndpoints: number; connectionPoints: number; resolvedPoints: number; edges: number; pathLiteralHits: number };
   truncated: string[];
   knownLimits: string[];
-  /** 前端证据行路径过滤呈报(可选,缺席=零过滤;2026-10-21 D2 加性字段)。 */
+ /** 前端证据行路径过滤呈报(可选,缺席=零过滤; D2 加性字段)。 */
   pathFilter?: { filtered: number; note: string };
   degraded?: { reason: string };
 }
@@ -1102,7 +1095,7 @@ export function renderWsChannelEdges(r: WsChannelSurface): string {
   return lines.join("\n");
 }
 
-// ============================ A3 spec-reconcile(designs/27 §4) ============================
+// ============================ A3 spec-reconcile( §4) ============================
 
 export interface SpecBridgeEdge {
   kind: "bridge";
@@ -1277,7 +1270,7 @@ export function renderSpecBridgeEdges(r: SpecBridgeSurface): string {
   return lines.join("\n");
 }
 
-// ============================ A4 ipc-channel(designs/27 §4) ============================
+// ============================ A4 ipc-channel( §4) ============================
 
 export type IpcSide = "main" | "renderer";
 
@@ -1319,7 +1312,7 @@ export interface IpcChannelSurface {
   stats: { enumTables: number; enumMembers: number; sites: number; mainSites: number; rendererSites: number; channels: number; edges: number };
   truncated: string[];
   knownLimits: string[];
-  /** 调用点路径过滤呈报(可选,缺席=零过滤;2026-10-21 D2 加性字段)。 */
+ /** 调用点路径过滤呈报(可选,缺席=零过滤; D2 加性字段)。 */
   pathFilter?: { filtered: number; note: string };
   degraded?: { reason: string };
 }
@@ -1327,7 +1320,7 @@ export interface IpcChannelSurface {
 const IPC_KNOWN_LIMITS = [
   "C3 动态拼接通道名(运行时变量/插值无静态前缀)——登记 unresolved,不产边",
   "仓内自定义 wrapper(electron 的 handleMessage 族)不进缺省面——opts.extraWrappers 显式登记后才收",
-  "webContents.send ↔ ipcRenderer.on 方向(主→渲染)不在本形态配对面(designs/27 §4 只设计 invoke/send ↔ handle/on)",
+  "webContents.send ↔ ipcRenderer.on 方向(主→渲染)不在本形态配对面( §4 只设计 invoke/send ↔ handle/on)",
 ];
 
 /** TS 枚举表解析:`enum X { A = 'a', B = "b" }`(const enum 同)。返回 MEMBER→{value,line}。 */
@@ -1388,7 +1381,7 @@ export async function queryIpcChannelEdges(
   const patterns = [`\\b(?:ipcMain|ipcMainInternal|ipcRenderer|ipcRendererInternal)\\.${IPC_METHODS}\\s*\\(`];
   for (const w of wrapperNames) patterns.push(`\\b${w}\\s*\\(`);
   // 前端证据行路径过滤(与 http-api 面同一 path-filter 口径;测试夹具与产物目录里的
-  // ipcRenderer.invoke 不是「这个应用真的在用的通道」——2026-10-21 D2)
+ // ipcRenderer.invoke 不是「这个应用真的在用的通道」—— D2)
   const ipcFilterState = { filtered: 0, samples: [] as string[] };
   const rawHits: { file: string; line: number; text: string }[] = [];
   for (const pat of patterns) {
@@ -1438,7 +1431,7 @@ export async function queryIpcChannelEdges(
     const lineStart = offs[h.line - 1];
     if (lineStart === undefined) continue;
     // 定位本行的调用形态——模式定位必须限定在命中行本身(rg 的行级命中语义),
-    // 禁用跨行窗口(实锤:declare 行的 lineTail 含后续行的 canonical 调用,会冒名错配);
+ // 禁用跨行窗口(注意:declare 行的 lineTail 含后续行的 canonical 调用,会冒名错配);
     // 首参解析(firstArgSpan)仍可跨行。
     const lineText = h.text;
     let side: IpcSide | undefined;
@@ -1478,7 +1471,7 @@ export async function queryIpcChannelEdges(
     if (site.channelKind === "unresolved") base.unresolved.push(site);
   }
 
-  // 配对(designs/27 §4 口径):渲染侧发起调用 {invoke,send,sendSync,sendToHost} × 主侧注册
+ // 配对( §4 口径):渲染侧发起调用 {invoke,send,sendSync,sendToHost} × 主侧注册
   // {handle,handleOnce,on,once};wrapper 按 opts 声明的 side 归位。渲染侧 .on 监听(配
   // webContents.send,本形态不收)不进配对——如实落入 rendererOnly 清单。
   const RENDERER_CALL = new Set(["invoke", "send", "sendSync", "sendToHost"]);
@@ -1567,7 +1560,7 @@ export function renderIpcChannelEdges(r: IpcChannelSurface): string {
   return lines.join("\n");
 }
 
-// ============================ A5 abi-py-capi(designs/27 §4) ============================
+// ============================ A5 abi-py-capi( §4) ============================
 
 export interface PyCapiEntry {
   pyName: string;            // Python 侧导出名(PyMethodDef 表项首字段)
@@ -1604,7 +1597,7 @@ export interface PyCapiSurface {
 
 const CAPI_KNOWN_LIMITS = [
   "宏生成的 C 函数(PyArray_ 族宏展开)——静态不可见,定义定位失败入 unresolved,不猜",
-  "Python 侧 模块.name( 调用点属 c2f 族内解析覆盖面(designs/27 §4),桥边只把 py_name 解析到 c_fn",
+  "Python 侧 模块.name(调用点属 c2f 族内解析覆盖面( §4),桥边只把 py_name 解析到 c_fn",
   "跨语言 C 变体(neovim luaL_Reg 数组)同族未收——表形态按 PyMethodDef 专型",
 ];
 
@@ -1669,7 +1662,7 @@ function isCDefinition(lines: string[], li: number, nameIdx: number): boolean {
           const rest = l.slice(j + 1).trim();
           if (rest.startsWith("{")) return true;
           if (rest === "") {
-            // 本行 ) 后空:下一非空行须以 { 开头(返回类型/参数换行形态)
+ // 本行) 后空:下一非空行须以 { 开头(返回类型/参数换行形态)
             for (let q = k + 1; q < Math.min(lines.length, k + 4); q++) {
               const t = lines[q]!.trim();
               if (!t) continue;
@@ -1691,7 +1684,7 @@ function isCDefinition(lines: string[], li: number, nameIdx: number): boolean {
  */
 export async function queryPyCapiEdges(root: string, opts?: { cExts?: string[] }): Promise<PyCapiSurface> {
   const truncated: string[] = [];
-  // numpy 实锤:C-API 定义落在 .cpp(unique.cpp:505 array__unique_hash)——c/h 缺省会漏定义
+ // numpy 注意:C-API 定义落在 .cpp(unique.cpp:505 array__unique_hash)——c/h 缺省会漏定义
   const cexts = (opts?.cExts ?? ["c", "h", "cpp", "cc", "cxx", "hpp"]).flatMap((e) => [`*.${e}`]);
   const base: Omit<PyCapiSurface, "state"> = {
     edges: [], ambiguous: [], unresolved: [],
@@ -1810,7 +1803,7 @@ export function renderPyCapiEdges(r: PyCapiSurface): string {
   return lines.join("\n");
 }
 
-// ============================ A6 rpc-proto(designs/27 §4) ============================
+// ============================ A6 rpc-proto( §4) ============================
 
 export interface ProtoRpc {
   service: string;
@@ -1838,7 +1831,7 @@ export interface GrpcProtoSurface {
   state: "grpc-connected" | "no-proto" | "no-stubs" | "no-edges";
   protos: { file: string; services: number; rpcs: number }[];
   edges: GrpcProtoEdge[];
-  /** 客户端调用点(.RpcName(,非生成文件)——medium 候选,帽 50。 */
+ /** 客户端调用点(.RpcName(非生成文件)——medium 候选,帽 50。 */
   clientCalls: { file: string; line: number; rpc: string; service: string }[];
   /** 有 rpc 但未配到任何生成桩的 proto(只检入 proto 的仓态,如实登记)。 */
   protosWithoutStubs: string[];
@@ -1996,7 +1989,7 @@ export async function queryGrpcProtoEdges(root: string): Promise<GrpcProtoSurfac
   const rpcNames = [...new Set(allRpcs.map((r) => r.name))];
   const serviceOfRpc = new Map<string, string>();
   for (const r of allRpcs) if (!serviceOfRpc.has(r.name)) serviceOfRpc.set(r.name, r.service);
-  // rpc 名跨 service 重复(go-grpc-go 实锤:Search ∈ SearchService/SearchServiceV3)——
+ // rpc 名跨 service 重复(go-grpc-go 注意:Search ∈ SearchService/SearchServiceV3)——
   // 方法名配对归属不可分,实现边降 medium+note(桩边有 service 限定常量,不受影响)
   const rpcNameServices = new Map<string, Set<string>>();
   for (const r of allRpcs) {
@@ -2030,7 +2023,7 @@ export async function queryGrpcProtoEdges(root: string): Promise<GrpcProtoSurfac
         protosWithEdges.add(rpc.file);
       }
     }
-    // 客户端调用点候选(.RpcName(,非生成、非定义行)
+ // 客户端调用点候选(.RpcName(非生成、非定义行)
     const callHits: { file: string; line: number; text: string }[] = [];
     for (let i = 0; i < rpcNames.length; i += 60) {
       const chunk = rpcNames.slice(i, i + 60);

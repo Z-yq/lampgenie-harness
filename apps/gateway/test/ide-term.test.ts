@@ -3,7 +3,6 @@
  * 语义:owner="panel:<连接标识>";open(cwd 项目内 realpath 校验)→ send(写入即返回)→
  * read(cursor 增量)→ close;WS 断开回收该 owner 全部会话(审计事件观测)。
  * git.show:HEAD 内容正确;未跟踪文件回 error。
- *
  * 测试基建纪律(与 ide-fs.test.ts 同款):端口 listen(0);waitType 消费式;
  * server/http 关闭全进 finally。PTY/进程 spawn 在 9p 盘秒级 → 用例显式放宽超时。
  */

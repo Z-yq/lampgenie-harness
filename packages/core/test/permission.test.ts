@@ -3,7 +3,7 @@ import {
   wildcardMatch, expandHome, evaluatePermission, permissionRulesFromConfig, deriveChildRules,
 } from "../src/permission/permission";
 
-describe("core/permission(step-033 F1)", () => {
+describe("core/permission( F1)", () => {
   it("wildcard:* 任意/? 单字符/精确;expandHome 展开 $HOME", () => {
     expect(wildcardMatch("spawn_subagent", "*")).toBe(true);
     expect(wildcardMatch("spawn_subagent", "spawn_*")).toBe(true);

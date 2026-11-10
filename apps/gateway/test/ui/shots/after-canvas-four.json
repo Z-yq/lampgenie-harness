@@ -766,11 +766,11 @@
   }
  },
  "shots": [
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-add-300ms.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-add-done.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-pan-node.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-edge-labels.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-link-menu.png"
+  "apps/gateway/test/ui/shots/after-add-300ms.png",
+  "apps/gateway/test/ui/shots/after-add-done.png",
+  "apps/gateway/test/ui/shots/after-pan-node.png",
+  "apps/gateway/test/ui/shots/after-edge-labels.png",
+  "apps/gateway/test/ui/shots/after-link-menu.png"
  ],
  "errors": [],
  "port": 7796,

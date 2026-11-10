@@ -1,12 +1,10 @@
 /**
  * tool-settlement:工具 Promise 的显式结算面(eager fork / 并发上限 / 观察标记 / 排空 / 竞速 / 超时 / 批量)。
- *
  * 背景:工具调用一旦 `void` 掉 Promise,失败就变成 unhandledRejection,而「谁观察过这次失败」在
  * 事后完全不可知——日志里只剩一条无人认领的栈。本模块把「fork → 观察 → 排空」变成显式的三步:
  * ①eagerFork 立刻为每个 task 生成一个句柄(带 AbortController 与 id)并按并发上限调度;
  * ②awaitHandle 观察(置 observed、记 AWAITED),drain 只对「从未被观察的 rejected 句柄」出诊断;
  * ③raceSettle / withTimeout / settleBatch / cancelAll 负责中断其余句柄并**等它们真的停下**。
- *
  * 口径:
  * - 句柄 promise 只创建一次,run 只执行一次(排队中被 abort 的句柄 run 永不执行);
  * - 内部对每个句柄 promise 挂一个吞异常的 `.catch`,不再依赖调用方兜底;
@@ -175,8 +173,7 @@ function runDoneOf(h: SettleHandle): Promise<void> {
   if (internals) return internals.runDone;
   return h.promise.then(
     () => undefined,
-    () => undefined,
-  );
+    () => undefined);
 }
 
 /**
@@ -289,14 +286,12 @@ export function abortHandle(h: SettleHandle, code: SettleCode = SETTLE_CODES.CAN
 
 async function drainInternals(
   handles: ReadonlyArray<SettleHandle>,
-  now: () => number,
-): Promise<SettlementLog> {
+  now: () => number): Promise<SettlementLog> {
   await Promise.all(
     handles.map((h) =>
       h.promise.then(
         () => undefined,
-        () => undefined,
-      ),
+        () => undefined),
     ),
   );
   const diagnostics: UnobservedRejectionDiagnostic[] = [];
@@ -358,8 +353,7 @@ export function raceSettle<T>(
  */
 export function withTimeout(
   handles: ReadonlyArray<SettleHandle>,
-  ms: number,
-): Promise<
+  ms: number): Promise<
   { status: "completed"; log: SettlementLog } | { status: "timeout"; code: "SETTLE_TIMEOUT_ABORTED"; aborted: string[] }
 > {
   if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) {

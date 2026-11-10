@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 
 /**
- * 内置浏览器视图协议(2026-10-21 移植 ZCode browser-use)。
+ * 内置浏览器视图协议(移植 ZCode browser-use)。
  * 断言两件事:①5 条消息的 zod 校验正/负例;②挂载进 Client/Server union 后
  * discriminatedUnion 能正确分派(不与被其它消息类型吞掉)。
  */

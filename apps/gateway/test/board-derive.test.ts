@@ -1,6 +1,5 @@
 /**
  * 白板「关系自动推导引擎」(board-derive.ts)单测。
- *
  * 每条断言锚一条规则的可证事实:R0 显式边原样优先 / R2 同组次序 nav /
  * R3 符号调用仅在 resolver 给答案时连边 / R4 验收子串命中 verify /
  * R5 自环与板外 id 不入推导 / 上限 120 且按 R0>R3>R4>R2 截断。
@@ -143,7 +142,7 @@ describe("deriveBoardEdges:R4 验收关系", () => {
   });
 
   it("同一 target 被两个节点引用(共享路径不唯一)→ 不造 verify 边", () => {
-    // 实测病灶:apps/gateway/src/panel.ts 这类文件被多个节点共同改,任何 accept 命中它都会连出一串跨组假边
+ // 经验证病灶:apps/gateway/src/panel.ts 这类文件被多个节点共同改,任何 accept 命中它都会连出一串跨组假边
     const shared = "apps/gateway/src/panel.ts";
     const nodes: Node[] = [
       { id: "gate", accept: [{ cmd: "npx vitest run " + shared }] },

@@ -1,20 +1,17 @@
 /**
- * 版本检查与更新引导(2026-11-09,新用户价值轮:能力面设计参考 ZCode 项目 autoUpdater /
+ * 版本检查与更新引导(新用户价值轮:能力面设计参考 ZCode 项目 autoUpdater /
  * forceUpdateGuard 语义,致谢;本仓独立实现,不依赖 electron-updater)。
- *
  * 为什么自研而不是直接引入 electron-updater:
  * - 当前发布物是「手动分发的 NSIS 安装包」,没有 latest.yml 发布通道、也没有代码签名;
  *   electron-updater 的价值主要在差分下载与发布通道,引进来只会多一层配置黑洞;
  * - 新用户真正需要的是:启动后知道有没有新版本、看得懂改了什么、一键下载并校验、装完重启。
  *   这些用一个小的状态机就能闭环,且完全可单测。
- *
  * 语义(与 ZCode 对齐的部分):
  * - 自动检查:启动后延迟首查 + 固定间隔;手动检查不受间隔限制;
  * - 状态机:idle/disabled/checking/up-to-date/available/downloading/downloaded/error;
  * - 强制更新:清单里的 minVersion > 当前版本时,面板提示不可忽略(forceUpdateGuard 语义);
  * - 下载落盘后校验 sha256/size,再允许「安装并重启」;绝不执行未经校验且不在更新目录内的文件;
  * - 索引/状态落盘仅记录「上次检查时间 + 最新版本」,不写凭证。
- *
  * 纯逻辑:fetch / 时钟 / 日志 / 落盘目录全部注入,可 `node --test` 脱离 electron 直接跑。
  */
 const { createHash, verify: verifySignature } = require("node:crypto");
@@ -38,7 +35,7 @@ const KEEP_INSTALLERS = 1;
 /** 桌面壳自己的更新配置(不写 genie.config.json,避免与 gateway 的并发写互相覆盖)。 */
 const DESKTOP_UPDATE_CONFIG = join(".genie", "update-config.json");
 /**
- * 更新源 Ed25519 公钥(2026-11-09,无代码签名证书下的真实性替代方案):
+ * 更新源 Ed25519 公钥(无代码签名证书下的真实性替代方案):
  * 发布方用对应私钥对清单的规范化字段签名;壳内置公钥验签。私钥不入库(本地 .smoke/keys)。
  * 轮换:替换本常量(或 env GENIE_UPDATE_PUBLIC_KEY 提供 PEM)后发新版本。
  */
@@ -468,7 +465,7 @@ function sha256FileAsync(file) {
 }
 
 /**
- * 更新目录清理(2026-11-09 残留收口 + 断点续传):
+ * 更新目录清理(残留 + 断点续传):
  * - `.part` + 同名 `.meta.json`(可续传)保留 RESUMABLE_PART_MS(7 天);
  *   没有 meta 的半成品超过 stalePartMs(默认 30 分钟)视为中断残留删除;
  * - 失去 `.part` 的孤儿 meta 删除;

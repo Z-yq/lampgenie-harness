@@ -1,5 +1,5 @@
 /** 仓根解析:环境变量 > 向上找 pnpm-workspace.yaml > cwd。
- * bundle 部署形态下 cwd 可能是任意目录(R4 后实测:apps/gateway 下启动导致 sense root 错位)。 */
+ * bundle 部署形态下 cwd 可能是任意目录(R4 后经验证:apps/gateway 下启动导致 sense root 错位)。 */
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 

@@ -2,11 +2,11 @@ import { describe, it, expect } from "vitest";
 import { BUILTIN_SKILLS, mergeSkillIndex, builtinSkillBody } from "../src/builtin-skills.js";
 
 describe("builtin-skills", () => {
-  it("12 个内置技能(7 通用 + 4 办公产出 + 1 演示产线),每条有出处注记", () => {
+  it("12 个内置技能(7 通用 + 4 办公产出 + 1 演示生产环境),每条有出处注记", () => {
     expect(BUILTIN_SKILLS.length).toBe(12);
     expect(BUILTIN_SKILLS.every((s) => s.body.includes("出处:"))).toBe(true);
   });
-  it("ppt-master 演示产线技能:判型/两道门/版式容量表/能力边界/反模式齐备,且不照搬上游脚本", () => {
+  it("ppt-master 演示生产环境技能:判型/两道门/版式容量表/能力边界/反模式齐备,且不照搬上游脚本", () => {
     const b = builtinSkillBody("ppt-master")!;
     expect(b).toBeTruthy();
     // 判型按产物生命周期(迁移自上游 routing.md:22 的判据),不按话题
@@ -40,7 +40,7 @@ describe("builtin-skills", () => {
     expect(core).toContain("禁的句式");
     expect(core).toContain("mermaid");
     expect(core).toContain("so-what");
-    // 2026-10-28 用户口径:动笔前先想清「面向谁报告/主题是什么/重点是什么/论据与分析从哪来」
+ // 动笔前先想清「面向谁报告/主题是什么/重点是什么/论据与分析从哪来」
     expect(core).toContain("开工四问");
     expect(core).toContain("面向谁报告");
     expect(core).toContain("汇报主题是什么");

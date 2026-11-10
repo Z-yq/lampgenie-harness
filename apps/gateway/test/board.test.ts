@@ -1,5 +1,5 @@
 /**
- * 语义流程白板(step-057,designs/22)单测:
+ * 语义流程白板单测:
  * schema 校验 / 存储回路 / 边完整性 / 三态解析 / anchor 重定位 / 索引过期双段 / 工具 fail-soft / WS 回路。
  */
 import { describe, it, expect, afterEach } from "vitest";
@@ -114,7 +114,7 @@ describe("board-store 存储回路", () => {
   });
 });
 
-describe("symbolRef 三态解析(designs/22 §5)", () => {
+describe("symbolRef 三态解析( §5)", () => {
   const fileText = ["// 头", "function helper() {}", "export function wbRender(doc) {", "  return doc;", "}"].join("\n");
   it("anchor 命中同行=linked;行漂移=moved 并给新行号", () => {
     const linked = resolveLinkState(fileText, { name: "wbRender", line: 3, anchor: "export function wbRender" }, true);
@@ -149,7 +149,7 @@ describe("symbolRef 三态解析(designs/22 §5)", () => {
 });
 
 describe("symbolRef 定位假阳性修复(maskNonCode,2026-10-29)", () => {
-  // 背景:N1 实测 9 条 symbolIssues「漂移」全是假阳性——旧实现在整行**原文**上匹配,
+ // 背景:N1 经验证 9 条 symbolIssues「漂移」全是假阳性——旧实现在整行**原文**上匹配,
   // 注释里/字符串字面量里提到同名符号就算命中。下面 a~d 是同类形态构造;
   // 「真实样本」三条取自盘上板的 symbolRef(来源文件名与 ref 原文写在用例注释里)。
   // 注:N1 原始审计输出里的那 9 条 symbolIssues 清单不可得(audit 只按需现算,板文件里没存),
@@ -227,7 +227,7 @@ describe("symbolRef 定位假阳性修复(maskNonCode,2026-10-29)", () => {
     // 旧实现命中 apps/gateway/src/agent-wiring.ts:234(块注释里提到 board_upsert 写板),判成 moved=假阳性。
     const excerpt = [
       "  /**",
-      "   *  step-138:planning=true(planner 角色)=规划面——只挂白板两件(board_upsert 写板 + board_read 读回)",
+      "   *  planning=true(planner 角色)=规划面——只挂白板两件(board_upsert 写板 + board_read 读回)",
       "   */",
       "  const spawnTool: Tool = {",
     ].join("\n");
@@ -264,7 +264,7 @@ describe("symbolRef 定位假阳性修复(maskNonCode,2026-10-29)", () => {
   });
 });
 
-describe("索引过期双段判定(c2f,step-057 修复)", () => {
+describe("索引过期双段判定(c2f, 修复)", () => {
   function fakeIndex(over: Partial<C2fIndex>): C2fIndex {
     // 默认带 1 个占位节点:2026-10-14 起 0 节点索引+仓有源文件=过期(空索引自愈档),
     // 纯新鲜度判定用例不卷入该语义;要测空索引自愈须显式传 nodes: []。
@@ -340,7 +340,7 @@ describe("索引过期双段判定(c2f,step-057 修复)", () => {
 describe("三期缺陷修复(B1/B3)", () => {
   it("F: sha=null 无可信基线——不回填不翻 status(他人改动不算「计划外」),重建照走", async () => {
     const r = tmp();
-    // 造 git 仓:基线提交后树上留「他人」的在途未提交改动(共享仓常态,体验官 A P2 复现形态)
+ // 造 git 仓:基线提交后树上留「他人」的在途未提交改动(共享仓常态,复现形态)
     const g = (args: string) => execSync(`git ${args}`, { cwd: r, stdio: ["ignore", "pipe", "ignore"] }).toString();
     g("init -q"); g('config user.email "t@t"'); g('config user.name "t"');
     writeFileSync(join(r, "a.ts"), "export const x = 1;\n");
@@ -467,7 +467,7 @@ describe("board_upsert 工具(agent 面,fail-soft 纪律)", () => {
   });
 });
 
-describe("页面结构板工具面(step-083:board_upsert docKind=page + board_read 读回)", () => {
+describe("页面结构板工具面(board_upsert docKind=page + board_read 读回)", () => {
   const pageNodes = [
     { id: "p1", kind: "page", label: "签署首页", summary: "发起签署 · 路由 /" },
     { id: "s1", kind: "section", label: "文件上传区", summary: "「签署首页」页面的区块" },
@@ -745,7 +745,7 @@ describe("五期实时面板(comment/done/continue 含评论)", () => {
       expect(d?.nodes[0]?.comments).toEqual(["这里改成批量处理"]);
       expect(d?.nodes[1]?.comments).toEqual(["B 要加错误重试"]);
       expect(d && d.rev).toBe(2); // 初始 0,两条评论各自 +1
-      // 2b. 2026-10-22 未处理评论:board.list 回包带 pendingComments(面板 chip 数据源),peek 不消费
+ // 2b. 未处理评论:board.list 回包带 pendingComments(面板 chip 数据源),peek 不消费
       ws.send(JSON.stringify({ v: 1, type: "board.list", sessionId: sid }));
       const lst = await wait(inbox, (m) => m.type === "board.list.result", "pending list");
       const item = (lst.items as { taskId: string; pendingComments?: number; docKind?: string }[]).find((i) => i.taskId === "tq1");
@@ -831,7 +831,7 @@ describe("WS 回路(board.list/board.get)", () => {
       ws.send(JSON.stringify({ v: 1, type: "board.list", sessionId: sid }));
       const lst = await wait((m) => m.type === "board.list.result");
       expect((lst.items as { taskId: string }[]).map((i) => i.taskId)).toContain("tt1");
-      // 2026-10-22:列表项带 docKind(多板类型过滤数据源);无待读评论时不带 pendingComments
+ // 列表项带 docKind(多板类型过滤数据源);无待读评论时不带 pendingComments
       const tt1 = (lst.items as { taskId: string; docKind?: string; pendingComments?: number }[]).find((i) => i.taskId === "tt1")!;
       expect(tt1.docKind).toBe("design");
       expect(tt1.pendingComments).toBeUndefined();

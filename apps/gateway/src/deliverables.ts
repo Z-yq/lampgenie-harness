@@ -1,9 +1,7 @@
 /**
- * 交付物声明账本(M170):deliverable 工具 + 回读/核对/渲染纯函数(2026-11-07)。
- *
- * 用户口径:「说交付了就必须真交付」——模型产出报告/PPT/图片/导出件后登记路径,收尾
+ * 交付物声明账本:deliverable 工具 + 回读/核对/渲染纯函数。
+ * 「说交付了就必须真交付」——模型产出报告/PPT/图片/导出件后登记路径,收尾
  * 自动核对文件是否还在(声明后删除、改成目录、变成符号链接都算缺失)。
- *
  * 落 journal `custom/deliverable.declared`(append-only,同 taskId+processPath 幂等:
  * 重复 declare 不新增行,只刷新 at/size);收尾核对结论落 `custom/deliverable.verified`。
  */

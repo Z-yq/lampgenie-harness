@@ -1,5 +1,5 @@
 /**
- * 会话 worker 库(2026-10-21):IPC 基座 + ProxyJournal(本地副本读源/批量上行写)+
+ * 会话 worker 库:IPC 基座 + ProxyJournal(本地副本读源/批量上行写)+
  * 权限·wfAsk·askUser·MCP 代理工厂。与入口(session-worker.ts)分离=可单测、无副作用。
  */
 import type { Journal, JournalEvent, NewEvent, EventListener } from "@lampgenie/core";
@@ -77,7 +77,7 @@ export class ProxyJournal implements Journal {
       console.error("[session-worker] journal 种子拉取失败(空副本继续)", err);
     }
   }
-  /** 水位补拉(2026-10-21 四轮复审 R4-1:ZCode SUBAGENTS.md「先订阅后读史+只应用水位以上」——
+ /** 水位补拉(四轮复审 R4-1:ZCode SUBAGENTS.md「先订阅后读史+只应用水位以上」——
    *  种子快照→ready 之间 gateway 侧新事件(steer/系统消息)既不在种子、又被转发器 ready 门丢弃,
    *  恰好落窗的指令会永久丢失。ready 后按 maxGatewaySeq+1 补拉一次,键去重并入(push 与补拉
    *  双到达的安全网);此后转发器已在推,无窗口。 */
@@ -95,10 +95,10 @@ export class ProxyJournal implements Journal {
       const e = raw as JournalEvent;
       if (!e || typeof e !== "object") continue;
       if (String(e.sessionId ?? "") !== this.sessionId) continue; // 只保本会话副本(读面只用本会话)
-      // 回声去重键(2026-10-22 修复):**不含 time**——gateway 落账会重分配 seq/time(权威),
+ // 回声去重键(修复):**不含 time**——gateway 落账会重分配 seq/time(权威),
       // 推回事件的 time 与本地 append 的 time 必不相同,旧键(time|kind|payload 前 200 字)对
       // 回声永不命中 → worker 自身事件全部双入 → 重复 assistant(toolCalls) 触发端点 400
-      // 「insufficient tool messages following tool_calls」(生产实锤;与 repairToolPairing
+ // 「insufficient tool messages following tool_calls」(生产注意;与 repairToolPairing
       // 第 0 遍重复 assistant 去重构成双保险)。payload 用全文:截断会碰撞同前缀的不同 tool.result。
       const key = `${e.kind}|${JSON.stringify(e.payload ?? null)}`;
       if (this.recentKeys.has(key)) continue; // 回声去重(自己上行又推回来的)
@@ -122,7 +122,7 @@ export class ProxyJournal implements Journal {
     const full = { ...event, seq: this.replica.length, time: event.time ?? Date.now() } as JournalEvent<T>;
     this.replica.push(full);
     if (key) this.seenIds.add(key);
-    // 回声去重键(自己的 append 被 gateway 推回来时不双入;2026-10-22 与 ingestRemote 键
+ // 回声去重键(自己的 append 被 gateway 推回来时不双入; 与 ingestRemote 键
     // 对齐:kind+payload 全文,不含被网关落账重赋的 time)。
     this.recentKeys.add(`${full.kind}|${JSON.stringify((full as { payload?: unknown }).payload ?? null)}`);
     if (this.recentKeys.size > 500) this.recentKeys.clear();
@@ -148,7 +148,7 @@ export class ProxyJournal implements Journal {
   }
   get length(): number { return this.replica.length; }
 
-  /** 写前持久化屏障(M24 生产态,2026-11-07):把待上行事件**同步送到 gateway** 落账并由
+ /** 写前持久化屏障(生产态:把待上行事件**同步送到 gateway** 落账并由
    *  gateway FileJournal flushStrict 落盘,host ack(ok)之后才返回——loop 的 await 因此真正成为屏障。
    *  - 有事件:发 journal.appendSync(批内剥掉本地 seq,gateway 重分配权威 seq);host 落账 + flush 都成功才 ack;
    *  - 无事件:发 journal.flushStrict,让 host 清掉此前 notify 批(journal.append)在 FileJournal 队列里的尾巴;

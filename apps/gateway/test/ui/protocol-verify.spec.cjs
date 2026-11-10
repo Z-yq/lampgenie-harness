@@ -1,4 +1,4 @@
-/** 真实浏览器面板验收(step-1036:任务协议索引化 + session.status 增量化改造后的三面回归)。
+/** 真实浏览器面板验收(任务协议索引化 + session.status 增量化改造后的三面回归)。
  * 跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs --opts ./test/ui/_protocol-verify.opts.cjs test/ui/protocol-verify.spec.cjs
  * 纯界面操作取证(不读服务端实现判行为);必检四组:
  *  ① 侧栏会话/任务行标题非空、非 "undefined"、非空串(= TaskIndex.title 生效);
@@ -7,14 +7,14 @@
  *  ④ console 无 session.status 相关报错。
  * 附加诊断(非任务书必检,如实记录):本页发出的 session.status 是否带 sinceSeq(= 增量化握手),
  * 以及回包 session.status.result 是否带 sessionId(水位键的依赖)。
- * 证据截图落 tasks/step-1036-session-status-incremental/evidence/(EV_DIR 可覆盖)。 */
+ * 证据截图落 (EV_DIR 可覆盖)。 */
 const { chromium } = require("playwright-core");
 const fs = require("node:fs");
 const path = require("node:path");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7721";
 const SID = "proto-verify-sess";
 const HARNESS_ROOT = path.resolve(__dirname, "../../../..");
-const EV_DIR = process.env.EV_DIR || path.join(HARNESS_ROOT, "tasks/step-1036-session-status-incremental/evidence");
+const EV_DIR = process.env.EV_DIR || path.join(HARNESS_ROOT, "tasks/-session-status-incremental/evidence");
 const FINAL = "协议验收终态:本任务以失败收尾,正文由 task.detail.get 按需取回。";
 const TASK_TITLE = "协议验收:索引化标题面";
 

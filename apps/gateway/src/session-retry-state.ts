@@ -1,11 +1,9 @@
 /**
- * 重试/重连态跨会话保活(batch1b,照抄 ZCode apiRetry 语义)。
- *
+ * 重试/重连态跨会话保活(batch1b,照设计参考 ZCode(致谢) apiRetry 语义)。
  * 现状问题:模型请求失败重试(429/5xx/建连超时)的「重新连接中」状态此前只活在当前渲染里——
  * 面板切走会话再切回来就丢,用户以为任务卡死。这里在 gateway 侧按 sessionId 做**纯内存**镜像
  * (不落盘:临时运行时态,进程重启由下一次重试重新登记),session.status.result 快照装配时回填
  * apiRetry,面板据此恢复重试条。
- *
  * 语义对齐(只读参考 ZCode/packages/services/src/zcode-session/zcodeSessionApiRetry.ts,
  * Apache-2.0,不 import):
  *  - attempt 从 1 起,maxRetries ≥ attempt;

@@ -1,5 +1,5 @@
 /**
- * typed/go(step-089 P1 / designs/26 §2.2):Go 逐文件 typed 提取——
+ * typed/go( P1 / §2.2):Go 逐文件 typed 提取——
  * var/const 显式类型(structural)+ `:=` 字面量推断(lexical)+struct 字段+func/type token。
  * 与 adapters/go.ts 的关系:索引档只收包级 var/const 显式类型;本档补 :=/字段/span。
  */
@@ -108,7 +108,7 @@ export async function extractGoTyped(root: string, relFile: string): Promise<Typ
       push({ name: td[1]!, kind: "type", file: relFile, line: i + 1, span: { character: t.indexOf(td[1]!), length: td[1]!.length }, tier: "structural" });
       continue;
     }
-    // := 短赋值字面量推断(lexical 如实;函数体内也收——typed 档面向文件阅读)
+ // = 短赋值字面量推断(lexical 如实;函数体内也收——typed 档面向文件阅读)
     const sa = SHORT_ASSIGN_RE.exec(code);
     if (sa) {
       const t2 = inferGoLiteral(sa[3]!.split("#")[0] ?? "");

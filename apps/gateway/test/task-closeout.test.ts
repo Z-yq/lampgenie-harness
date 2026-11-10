@@ -1,5 +1,5 @@
 /**
- * 公共收尾聚合(M5/M16/M23/M107/M169/M170)纯单元测试:
+ * 公共收尾聚合(/////)纯单元测试:
  * 六项有无数据 / na 不追加 / sub·super warn-only / 去重 / 段长 ≤1200。
  */
 import { describe, it, expect } from "vitest";
@@ -112,7 +112,7 @@ describe("task-closeout 纯聚合", () => {
     expect(r.appendedEvents).toContain("completion.audit.hard-fail");
   });
 
-  it("M170:声明交付物 → 追加「## 交付物」;声明后缺失 → 点名 + 警告", async () => {
+  it(":声明交付物 → 追加「## 交付物」;声明后缺失 → 点名 + 警告", async () => {
     const dir = mkdtempSync(join(tmpdir(), "closeout-d-"));
     const good = join(dir, "report.md");
     writeFileSync(good, "# ok");

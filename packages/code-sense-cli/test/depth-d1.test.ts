@@ -1,7 +1,7 @@
 /**
- * step-066 A4 回归:querySymbolDeep 的 d1 完整性不被深层封顶回噬。
+ * A4 回归:querySymbolDeep 的 d1 完整性不被深层封顶回噬。
  * 旧版全局 CAP=24 被 d1 吃满即 return——`callers cn --depth 2` 直接关系 35→24 缩水且零 d2 行
- * (step-065 三仓评测实锤)。修复后:d1 恒完整(与 querySymbol 同语义),d≥2 每层各自封顶 24。
+ * (三仓评测注意)。修复后:d1 恒完整(与 querySymbol 同语义),d≥2 每层各自封顶 24。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -31,7 +31,7 @@ beforeAll(async () => {
 
 afterAll(() => { rmSync(ws, { recursive: true, force: true }); }, 60_000);
 
-describe("querySymbolDeep d1 完整性(step-066 A4)", () => {
+describe("querySymbolDeep d1 完整性( A4)", () => {
   it("depth=2 时直接关系 30 条全量(不被 24 封顶回噬),d2 行在场且封顶 24", () => {
     const out = text(mcp.dispatchTool("code_index_symbol", { name: "hubFn", depth: 2 }));
     expect(out).toContain("被调用(30)");       // d1 完整:30 条(旧版此处=24)

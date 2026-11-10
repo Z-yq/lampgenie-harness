@@ -1,6 +1,5 @@
 /**
  * 概念足迹面(surface):一个标识符/概念在全仓「七类表面」上的落点清单。
- *
  * 解决的问题:替换/迁移/下线一个字符串标识(消息名、事件 kind、配置键、面板文案、
  * 静态资源名、测试引用、文档章节)时,symbol/impact 都是空的——只能靠人肉 grep 逐个类别
  * 拼清单,且「改完到底还漏没漏哪一类」无从判定。本模块把它做成一等能力:
@@ -8,7 +7,6 @@
  *   分类 = 纯函数 classifySurfaceHit(file, text) 单测覆盖,
  *   审计 = audit.ts(逐条 resolution:resolved/removed/keep-legacy+理由),
  *   scope = change-scope.ts(「这是不是一次全面替换」的确定性判定,不调 LLM)。
- *
  * 确定性纪律:
  *  - 不调 LLM、不加三方依赖、id 不含时间/随机(`<category>:<file>:<line>:<concepts>`),
  *    同一份输入两跑 id 全等;
@@ -29,7 +27,7 @@ export type SurfaceSuggest = "change" | "remove" | "keep-legacy";
 
 /**
  * 渲染/统计的固定顺序(统计头与 markdown 分类计数都按它,避免逐 run 漂移)。
- * 2026-11-06 起改为「改动依赖层序」:定义与数据源头在前(protocol/db/journal/config),
+ * 起改为「改动依赖层序」:定义与数据源头在前(protocol/db/journal/config),
  * 代码居中,资源/部署在外围,tests/docs 收尾。顺序即截断优先级——hits 超上限时先丢末位类别,
  * 故「被截断的都是回改面」而不是定义面。与 chain.ts 的 SURFACE_LAYER_ORDER 必须逐字相同
  * (两边各自成字面量:index↔chain 有 re-export 环,若在初始化期求值对方 const 会撞 TDZ;
@@ -187,7 +185,6 @@ const MAX_PATH_FILES = 50_000;
 
 /**
  * 路径名命中的分类(纯函数,无文件系统)。
- *
  * 为什么需要这条通道:删 `dh-video.mp4` 这类二进制资产时,内容通道恒零命中(二进制不读),
  * 唯一落点是文件名本身;`app-config.yaml`、`.dockerignore` 这类文件也可能不被内容 glob 覆盖。
  * 返回 null=不算路径名命中(concept 太短或不出现),否则给出该路径的类别
@@ -317,7 +314,7 @@ export async function scanSurface(
   let truncated = false;
   for (const concept of list) {
     // 默认走 refs 的 grep 通道(与 codesense refs 同源,整仓毫秒级);walk 是降级档,
-    // 千级文件的仓会到分钟级(实测本仓 walk 单概念 ~210s),故只按需开启,并顺带得到 scannedFiles。
+ // 千级文件的仓会到分钟级(经验证本仓 walk 单概念 ~210s),故只按需开启,并顺带得到 scannedFiles。
     const res = await scanLiteralRefs(resolvedRoot, concept, {
       ...(opts.engine ? { engine: opts.engine } : {}),
       maxHits,

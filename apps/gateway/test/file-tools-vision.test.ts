@@ -1,5 +1,5 @@
 /**
- * view_image 工具单测(2026-10-25 主动读图通道;2026-10-30 多图化 paths 数组):
+ * view_image 工具单测(主动读图通道; 多图化 paths 数组):
  * 白名单/超限/防穿越/多图失败隔离/哨兵返回格式;视觉哨兵由 loop 侧解析(桥测试在 harness-runtime)。
  */
 import { describe, it, expect } from "vitest";

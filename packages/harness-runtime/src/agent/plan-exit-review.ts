@@ -1,6 +1,5 @@
 /**
  * 计划退出评审(plan-exit review,纯逻辑,零 IO,#10)。
- *
  * 为什么需要它:计划审批只在回合结束之后发生,模型可能已经开工;「继续规划」的反馈要到
  * 下一回合才到达;没有 UI 时又容易静默离开计划模式。于是把「要求退出计划模式」变成一次
  * **阻塞评审调用**:
@@ -9,14 +8,12 @@
  *              keep-planning(返回失败调用 + 用户反馈,回到同一调用点继续规划)
  *   无交互通道 → BLOCKED_NO_CHANNEL(fail-closed,不静默退出)
  *   超时       → failed(fail-closed,绝不自动 approve)
- *
  * 关键不变量:
  * 1. 完整计划才可提交:goal 非空 + steps≥1 + acceptance≥1。
  * 2. 只有 pending 能 decide;approve / keep-planning 都回到同一调用点。
  * 3. approve 只记 pendingExitAt,**不立即生效**(不存在「回合结束后才生效」的隐式路径)。
  * 4. applyPendingExit 需 preStepAt >= pendingExitAt,且只生效一次(exitApplied)。
  * 5. keep-planning 必须带非空 feedback,否则 FEEDBACK_REQUIRED 且状态不变。
- *
  * 依赖纪律:零 import、不读时钟/环境;非法入参折叠成 PLANEXIT_INVALID。
  */
 
@@ -338,7 +335,7 @@ export function applyPendingExit(state: ReviewState, input: ApplyPendingExitInpu
 
 /**
  * 同一调用点续跑判定:只有 rejected 能 resume(把反馈原样回灌给模型)。
- * pending 仍阻塞;approved 等 pre-step;failed 已收口。
+ * pending 仍阻塞;approved 等 pre-step;failed 已。
  */
 export function resumeAtSameCall(state: ReviewState): PlanExitResult {
   if (!isReviewState(state)) return fail(PLANEXIT_INVALID, "state 形状非法");

@@ -1,6 +1,6 @@
 /**
- * M33 模型错误策略表(纯函数层)分类表逐类锚定。
- * 机制:M33。
+ *  模型错误策略表(纯函数层)分类表逐类锚定。
+ * 机制:。
  */
 import { describe, it, expect } from "vitest";
 import {

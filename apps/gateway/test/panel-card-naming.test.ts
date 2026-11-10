@@ -1,13 +1,11 @@
 /**
- * 看板(无限画布卡片)命名一致性守卫(2026-10-21 命名质感轮)。
- *
+ * 看板(无限画布卡片)命名一致性守卫(命名质感轮)。
  * 单一来源 = panel.ts CV_CARDS 的 title/tag(命名约定:「中文意象 + 英文锚点」,见 CV_CARDS 上方注释)。
  * 本测试把三个消费面钉死在同一份 title 上,改 CV_CARDS 漏同步任何一处即红:
  *   ① 经典布局侧栏 sb-act:显示名与 title tooltip 都 = 卡片 title(与画布定位栏 tooltip 同串);
  *   ② 有 vw-head 的视图:vw-title = 卡片 title;无 vw-head 的自定义 chrome 视图走豁免表(豁免按
- *      chrome 标记实证,防止"视图改出 vw-head 却忘了进豁免表"静默腐烂);
+ * chrome 标记验证,防止"视图改出 vw-head 却忘了进豁免表"静默腐烂);
  *   ③ 经典态 header 的 VIEW_NAMES = 卡片 title(chat 例外:主视图不亮名)。
- *
  * 另守底:每卡 title/tag 非空、title 无重名(画布上两张同名卡=定位栏/命令中心无法分辨)。
  */
 import { describe, it, expect } from "vitest";
@@ -19,7 +17,7 @@ import { fileURLToPath } from "node:url";
 interface Card { name: string; node: string; title: string; tag: string }
 
 /** sb-act 按钮 id → 卡片 name(侧栏入口历史映射:act-sense 开的是档案不是透镜)。
- *  n3 看板融合(2026-10-22):「分身 Agents」卡与 act-subagents 按钮已删(能力并入子agent会话流),
+ * n3 看板融合:「分身 Agents」卡与 act-subagents 按钮已删(能力并入子agent会话流),
  *  映射表同步移除——留着会让「按钮存在」断言拿旧卡名去查已删视图。 */
 const SB_ACT_TO_CARD: Record<string, string> = {
   "act-git": "git", "act-sense": "project", "act-wf": "wf", "act-exp": "exp", "act-market": "market",
@@ -28,11 +26,11 @@ const SB_ACT_TO_CARD: Record<string, string> = {
   // 2026-11 人机随时可用轮:左栏「网页 Webview」恢复(CV_TRAY_ACT 也加 browser → act-web)。
   // 侧栏 title/显示名直接取 CV_CARDS.browser.title 同串,快捷键只放 .sb-kbd,故不需要另立文案。
   "act-web": "browser",
-  // step-1041:指挥台画布卡(聊天渲染区+调度看板;CV_TRAY_ACT 同步 super → act-super)。
+ // 指挥台画布卡(聊天渲染区+调度看板;CV_TRAY_ACT 同步 super → act-super)。
   "act-super": "super",
 };
 
-/** 无 vw-head 的自定义 chrome 视图:view-* 节点 → chrome 存在性标记(实证豁免,防静默漂移)。 */
+/** 无 vw-head 的自定义 chrome 视图:view-* 节点 → chrome 存在性标记(验证豁免,防静默漂移)。 */
 const CUSTOM_CHROME: Record<string, RegExp> = {
   chat: /id="wsTabbar"/,         // 会话列(无标题条;工作区 tab 条即头)
   git: /class="git-bar"/,          // 分支条即头
@@ -62,10 +60,10 @@ describe("看板卡片命名一致性(单一来源 = CV_CARDS.title)", () => {
       await srv.close();
     }
     const cards = html2cards(html);
-    // n3 看板融合(2026-10-22):「分身 Agents」独立卡已删(能力并入子agent会话流),卡片数 20 → 19。
-    // step-1535:轨迹拆成独立看板视图(#view-traj + CV_CARDS.traj)→ 19 → 20。
-    // step-1041:指挥台画布卡(#view-super + CV_CARDS.super,聊天渲染区+调度看板四区)→ 20 → 21。
-    expect(cards.length, "画布卡片数(21:18 模块 + 子agent会话流 + 轨迹 + 指挥台;step-141 增 ide,n3 删分身 Agents 卡,step-1535 增 traj,step-1041 增 super)").toBe(21);
+ // n3 看板融合:「分身 Agents」独立卡已删(能力并入子agent会话流),卡片数 20 → 19。
+ // 轨迹拆成独立看板视图(#view-traj + CV_CARDS.traj)→ 19 → 20。
+ // 指挥台画布卡(#view-super + CV_CARDS.super,聊天渲染区+调度看板四区)→ 20 → 21。
+    expect(cards.length, "画布卡片数(21:18 模块 + 子agent会话流 + 轨迹 + 指挥台; 增 ide,n3 删分身 Agents 卡, 增 traj, 增 super)").toBe(21);
 
     // ---- 底线:非空 + 无重名(name 也不许撞,防定位栏 data-name 失真) ----
     for (const c of cards) {

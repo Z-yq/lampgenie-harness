@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { MemoryJournal } from "@lampgenie/core";
@@ -7,7 +8,7 @@ import {
   sequenceOfSymbol,
 } from "../src/sequence/index";
 
-const REPO = "/mnt/e/workship/genie/lampgenie-harness";
+const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("D19 状态机:TRANSITIONS 金标准", () => {
   it("六态+全部迁移边被抽出", () => {

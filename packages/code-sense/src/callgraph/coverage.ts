@@ -1,5 +1,5 @@
 /**
- * 语言覆盖报告(step-067 fail-visible 三面之一,承 step-065 B1):
+ * 语言覆盖报告( fail-visible 三面之一,承 B1):
  * 「磁盘源文件数 / 有索引符号文件数」按扩展名分列——磁盘口径=engine listSourceFiles 同一扫描
  * (扩展名/跳过目录/上限一致,杜绝两处口径漂移)。
  * 消费面:① index manifest(C2fIndex.coverage,构建期落盘);② doctor 覆盖率核对;
@@ -13,10 +13,10 @@ import { join } from "node:path";
  * 三处字面量保持一致是登记过的耦合,改动须同步)。 */
 export const C_CPP_EXTS = new Set([".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"]);
 
-/** step-084 RC-H:已知编程语言扩展名中未被任何 adapter 覆盖的部分——磁盘存在即必须
+/** RC-H:已知编程语言扩展名中未被任何 adapter 覆盖的部分——磁盘存在即必须
  * 显式告警(此前纯 Rust/C#/Ruby/PHP 仓 totalDisk=0,doctor「磁盘无源文件」+「通过」假绿,
- * audit 2026-10-16 实锤)。与 engine 扫描口径解耦:本清单只服务覆盖报告,不改变索引行为。
- * 2026-10-25:Rust/C#/Ruby/PHP 已接入结构 adapter(engine GRAPH_STRUCT_EXT),移出本清单——
+ * audit 注意)。与 engine 扫描口径解耦:本清单只服务覆盖报告,不改变索引行为。
+ * Rust/C#/Ruby/PHP 已接入结构 adapter(engine GRAPH_STRUCT_EXT),移出本清单——
  * 留着会把已索引文件重复算成「不支持语言」。 */
 export const KNOWN_UNSUPPORTED_EXTS = new Set([
   ".lua", ".kt", ".kts", ".swift", ".scala",
@@ -59,7 +59,7 @@ export async function unsupportedCodeFileCount(root: string): Promise<{ byExt: M
   return { byExt, capped };
 }
 
-/** 分层覆盖逐文件 outcome(step-079,designs/25 §1):full=结构档提取到符号/lexical=词法兜底
+/** 分层覆盖逐文件 outcome(§1):full=结构档提取到符号/lexical=词法兜底
  * 档/empty=解析成功确认无声明/skipped=跳过(必须带原因)。coverage=(full+lexical+empty)/磁盘源文件数。 */
 export type FileOutcome = { tier: "full" | "lexical" | "empty" | "skipped"; reason?: string };
 
@@ -68,12 +68,12 @@ export interface ExtCoverage {
   diskFiles: number;
   /** 其中产出 ≥1 个索引符号的文件数(legacy 口径,恒=full+lexical 当分层数据在场)。 */
   indexedFiles: number;
-  /** step-079 分层计数(可选:旧索引/无 outcome 扩展名无此字段=legacy 语义)。 */
+ /** 分层计数(可选:旧索引/无 outcome 扩展名无此字段=legacy 语义)。 */
   full?: number;
   lexical?: number;
   empty?: number;
   skipped?: number;
-  /** step-084 RC-H:该扩展名属已知编程语言但无 adapter 覆盖(索引侧整体 skipped)。 */
+ /** RC-H:该扩展名属已知编程语言但无 adapter 覆盖(索引侧整体 skipped)。 */
   unsupported?: boolean;
 }
 
@@ -82,7 +82,7 @@ export interface LanguageCoverage {
   byExt: Record<string, ExtCoverage>;
   totalDisk: number;
   totalIndexed: number;
-  /** step-079 分层口径(可选字段,旧索引无=查询侧 legacy 语义):
+ /** 分层口径(可选字段,旧索引无=查询侧 legacy 语义):
    * totalCovered=Σ(full+lexical+empty),layeredDisk=分层适用扩展名的磁盘数,
    * coveragePct=totalCovered/layeredDisk×100。skippedReasons=跳过逐文件原因(capped 50,
    * 计数不受 cap 影响);truncated=上限/RSS 护栏截断登记;layeredScope=full(全量重建)/
@@ -93,10 +93,10 @@ export interface LanguageCoverage {
   skippedReasons?: Record<string, string>;
   truncated?: { reason: string; limit?: number };
   layeredScope?: "full" | "partial";
-  /** step-084 RC-H:已知编程语言但不被任何 adapter 覆盖的扩展名 → 文件数
+ /** RC-H:已知编程语言但不被任何 adapter 覆盖的扩展名 → 文件数
    * (与 byExt 的 unsupported 行同源冗余,便于单字段消费)。 */
   unsupportedByExt?: Record<string, number>;
-  /** 2026-11-08 全覆盖:文件级去向汇总(仅新索引;scanned=indexed+symbolLess+skipped+error)。
+ /** 全覆盖:文件级去向汇总(仅新索引;scanned=indexed+symbolLess+skipped+error)。
    * 让「1019/1110」这种按符号计的分母能把「其余文件去哪了」一次说清。 */
   fileStatus?: { scanned: number; indexed: number; symbolLess: number; skipped: number; error: number };
 }
@@ -118,7 +118,7 @@ export async function diskFileCountByExt(root: string): Promise<{ byExt: Map<str
 /**
  * 覆盖报告:indexedFiles = 有 ≥1 符号的文件(传 index.byFile 的键,相对路径)。
  * 按扩展名分列;索引中没有的扩展名但磁盘有 → indexedFiles=0(fail-visible 的核心数据)。
- * step-079 分层(opts.outcomes 在场时):full/lexical/empty/skipped 分档计数、
+ * 分层(opts.outcomes 在场时):full/lexical/empty/skipped 分档计数、
  * skippedReasons 逐文件(capped 50)、coveragePct=(full+lexical+empty)/分层适用磁盘数;
  * 无 outcome 的扩展名(ts/js 语义档,其「0 符号」不可判 empty=RC-C)不进分层口径。
  */
@@ -169,7 +169,7 @@ export async function computeLanguageCoverage(
       totalCovered += lay.full + lay.lexical + lay.empty;
     }
   }
-  // step-084 RC-H:已知但不支持的语言——磁盘计数如实进报告(0 索引 + 整档 skipped +
+ // RC-H:已知但不支持的语言——磁盘计数如实进报告(0 索引 + 整档 skipped +
   // 分层分母计入,coveragePct 如实下降);adapter 永不为这些扩展名产 outcome,合成聚合档。
   // 索引行为不变(不索引不扫描),改变的只是覆盖报告的诚实度。
   const unsupportedByExt: Record<string, number> = {};
@@ -257,7 +257,7 @@ export function languageCoverageCachedSync(root: string, indexedRelFiles: Iterab
         const ext = e.name.slice(e.name.lastIndexOf("."));
         if (GRAPH_SOURCE_EXT.has(ext)) { // 源扩展名过滤=engine 同口径(漏了会把 .md/.bin 全算成「零覆盖语言」)
           byDisk.set(ext, (byDisk.get(ext) ?? 0) + 1);
-        } else if (KNOWN_UNSUPPORTED_EXTS.has(ext)) { // step-084 RC-H:不支持语言同步口径对齐
+        } else if (KNOWN_UNSUPPORTED_EXTS.has(ext)) { // RC-H:不支持语言同步口径对齐
           unsupByDisk.set(ext, (unsupByDisk.get(ext) ?? 0) + 1);
         }
       }
@@ -298,7 +298,7 @@ export function languageCoverageCachedSync(root: string, indexedRelFiles: Iterab
 // engine GRAPH_SKIP_DIRS 单一真相(直接复用,不再抄清单)
 const SKIP_DIRS = GRAPH_SKIP_DIRS;
 
-/** 覆盖率判定(step-079 doctor/entrypoints 共用阈值):
+/** 覆盖率判定( doctor/entrypoints 共用阈值):
  * - "zero":磁盘有文件、覆盖分子为 0——语言不适配或解析全失败(假绿根治对象);
  *   分层口径在场时分子=full+lexical+empty,否则=indexedFiles(legacy);
  * - "low":C/C++ 扩展覆盖 <0.5(解析降级/边界,如实告警;TS/Python 不套低覆盖阈,避免存量噪音);
@@ -313,7 +313,7 @@ export function coverageVerdict(ext: string, c: ExtCoverage): "zero" | "low" | "
 }
 
 /** 文本形态覆盖行(index/init/roots/doctor 共用):".c 6/6 · .cpp 7/7(磁盘→已索引)"。
- * 分层数据在场时附 coveragePct 与四档计数(step-079)。 */
+ * 分层数据在场时附 coveragePct 与四档计数。 */
 export function formatCoverageLine(cov: LanguageCoverage | undefined): string | undefined {
   if (!cov) return undefined;
   const parts = Object.entries(cov.byExt)
@@ -336,9 +336,9 @@ export function formatCoverageLine(cov: LanguageCoverage | undefined): string | 
   return line;
 }
 
-/** 不支持语言的诚实诊断文案(step-141 P0-2):查询侧此前对空索引统一说「已触发后台重建,
- * 稍后重试」——对 Lua/Kotlin/Swift 这类**无 adapter** 的仓,重试永远不会成功(实测
- * rust-ripgrep / php-guzzle / ruby-jekyll 三仓每次查询都刷这句;三语言 2026-10-25 已接入
+/** 不支持语言的诚实诊断文案( P0-2):查询侧此前对空索引统一说「已触发后台重建,
+ * 稍后重试」——对 Lua/Kotlin/Swift 这类**无 adapter** 的仓,重试永远不会成功(经验证
+ * rust-ripgrep / php-guzzle / ruby-jekyll 三仓每次查询都刷这句;三语言 已接入
  * adapter,不再是本清单成员)。doctor 侧已有诚实口径
  * (coverageWarnings 的「语言不支持(无 adapter)」),查询侧与之对齐:同一事实、同一措辞,
  * 并明确点破「重建无用」,不再许诺后台重建。 */
@@ -356,7 +356,7 @@ export function unsupportedLanguageTextSync(root: string, indexedRelFiles: Itera
 
 /** 覆盖告警(zero/low 判定全扩展名过一遍;空数组=覆盖健康)。
  * fail-visible 核心:索引「形式成功实为空」从 exit 0 无告警变为显式告警行。
- * step-084 RC-H:已知但不支持的语言单独措辞(「语言不适配或解析全失败」的二义
+ * RC-H:已知但不支持的语言单独措辞(「语言不适配或解析全失败」的二义
  * 升级为确定性事实:无 adapter 覆盖,非解析失败)。 */
 export function coverageWarnings(cov: LanguageCoverage): string[] {
   const out: string[] = [];

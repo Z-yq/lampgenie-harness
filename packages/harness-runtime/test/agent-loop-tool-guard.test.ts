@@ -1,5 +1,5 @@
 /**
- * M115 循环护栏 × AgentLoop 端到端:执行前 stop/配额拦截(不执行)、执行后 notice 前置、
+ * 循环护栏 × AgentLoop 端到端:执行前 stop/配额拦截(不执行)、执行后 notice 前置、
  * 只读结果第 2 次 stub(只换模型可见文本,journal 原文不变)、成功 mutation 重置连击、
  * turn 结束 custom tool.loop.guard 落账、跨 turn 状态清零。
  */

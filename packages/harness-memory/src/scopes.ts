@@ -1,6 +1,5 @@
 // @ts-nocheck — 记忆双文档的范围词表(本仓自研;「双文档 + kind 语义分型」的模型
 // 参考 qwen-audio-agent,Apache-2.0,致谢;strict 类型化列入 backlog)。
-//
 // scope 字段保留历史拼写;kind 是语义分型——directive=用户亲授的长期指令,以
 // 权威姿态注入;data=被动素材,模型当数据读。两者不得混写。
 

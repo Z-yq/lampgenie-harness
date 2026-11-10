@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 /**
  * 面板内真实站点视觉校验(2026-11 真实站点解析,bilibili 样本)。
- *
- * 复跑(仓根执行,勿碰 7700 产线网关 —— 本脚本自起 7821,不需要夹具页):
+ * 复跑(仓根执行,勿碰 7700 生产环境网关 —— 本脚本自起 7821,不需要夹具页):
  *   node --import tsx apps/gateway/test/ui/browser-visual-check.cjs
  * 可选环境变量:CHROME_PATH(缺省 /usr/bin/google-chrome)、VIS_GW_PORT(7821)、
  *             VIS_SITE(缺省 https://www.bilibili.com)。
- *
  * 断言链(a..g,逐步打 ✓/✗):
  *  a 面板 → #act-web → .gbv-url 填真实站点 → 回车;
  *  b 等 6-8s → 截图 bili-1-fit.png(适配缩放首屏);
@@ -14,8 +12,7 @@
  *  d 切 100% → 截图 bili-2-100.png;
  *  e 回默认适配缩放 → 滚轮下滑 ×2 → getState scrollY>0 → 截图 bili-3-scrolled.png;
  *  f 点一个视频卡片(面板 .gbv-hit 命中区,真人路径)→ URL/标题变化 → 截图 bili-4-open-video.png;
- *  g 打印每步结果并清理(screenshot 落 tasks/step-browser-ux-redo/evidence/)。
- *
+ * g 打印每步结果并清理(screenshot 落)。
  * 装配与 browser-ux-e2e.cjs 同款:单进程 servePanel + createGatewayApp(useExternalHttp)+
  * playwright-core 真 chrome 开面板页 + node 侧 WS 客户端直说 browser.view.command 协议;
  * profile 固定 ephemeral(不污染持久 profile 目录)。

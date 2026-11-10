@@ -1,14 +1,11 @@
 /**
  * 外部事件源登记簿的落盘层(source store):kind / instance / claim / 事件流水的唯一 IO 面。
- *
  * 落盘布局(硬约定):单文件 `<root>/.genie/rsi/sources.json`,内容
  * `{ version, kinds, instances, claims, events, nextSeq }` —— 事件流水与 `nextSeq` 同一个快照持久化,
  * 重启后 replay 水位与 seq 续得上(nextSeq 是流水的续号锚点,不能只活在内存里)。
- *
  * 语义全在 packages/harness-runtime/src/agent/source-registry.ts(纯逻辑零 IO,已全绿);
  * 本文件只负责 IO:读盘 → 调 runtime 纯函数 → 内容确有变化才原子写回(tmp + rename),
  * 失败一律零变更、绝不 throw(热加载:每次调用都重读盘,进程内不缓存 registry)。
- *
  * 依赖纪律:只 import node:fs / node:path + 两跳解析的 runtime 模块;不 import agent loop、
  * 不 import gateway 其它业务模块。全部导出函数同步签名(顶层 await 解析 runtime)。
  */
@@ -105,8 +102,7 @@ interface SourceRuntime {
   createRegistry(): SourceRegistry;
   registerKind(
     registry: SourceRegistry,
-    kind: unknown,
-  ): { ok: boolean; code: string; codes: string[]; kind?: SourceKind; reason?: string };
+    kind: unknown): { ok: boolean; code: string; codes: string[]; kind?: SourceKind; reason?: string };
   registerInstance(
     registry: SourceRegistry,
     input: { id: string; kind: string; config?: Record<string, unknown>; enabled?: boolean },
@@ -238,8 +234,7 @@ function fingerprint(registry: SourceRegistry): string {
 function persist(
   root: string,
   registry: SourceRegistry,
-  before: string,
-): { ok: boolean; code?: string; path: string; error?: string } {
+  before: string): { ok: boolean; code?: string; path: string; error?: string } {
   const path = sourcesPath(root);
   if (fingerprint(registry) === before) return { ok: true, path };
   const saved = saveSources(root, registry);
@@ -252,8 +247,7 @@ function persist(
 /** 登记一个 kind:校验失败零变更(连文件都不创建)。 */
 export function registerSourceKind(
   root: string,
-  kind: unknown,
-): { ok: boolean; code: string; codes: string[]; path: string; kind?: SourceKind; reason?: string } {
+  kind: unknown): { ok: boolean; code: string; codes: string[]; path: string; kind?: SourceKind; reason?: string } {
   const registry = loadSources(root);
   const before = fingerprint(registry);
   const result = rt.registerKind(registry, kind);

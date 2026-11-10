@@ -1,22 +1,18 @@
 /**
  * 改进提案持久层(生产侧,RSI #208):把 change-request 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:提案的每一次流转、发版、发版核对都是判断的历史——「当初为什么把它标 shipped」
  * 「核对时到底还看不看得见」必须能回看,不能被后来的写入抹掉。单行追加 + 写后重读行数校验让
  * 「写成功了吗」成为可复核断言,而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/change-requests.jsonl`,每行 `{v:1,type,at,id,request,payload?}`
  * - create     {request}                       新建提案
  * - merge      {request,payload:{reason,candidateId}}  判重合并(证据/复现并入既有条目)
  * - transition {request,payload:{to,by?,note?,version?}} 状态流转(含 ship:to=shipped + version)
  * - verify     {request,payload:{observed,note?}}        发版后核对
  * - supersede  {request,payload:{byId}}                  被另一条取代
- *
  * 投影语义(loadChangeRequests):
  * - 按行序归并,同 id latest-wins(每行都带完整 request,投影即替换)。
  * - 坏行(JSON 坏 / v 不是 1 / type 未知 / 既缺 request 又缺 id)只计入 parseErrors 并跳过:
  *   一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
  * runtime 模块按 defect-lineage-store 的两跳惰性解析:
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -120,8 +116,7 @@ interface ChangeRequestRuntime {
   createProposal(input: unknown, opts?: { at?: number }): { request?: ChangeRequestLike; codes: string[] };
   findDuplicate(
     existing: ChangeRequestLike[],
-    candidate: ChangeRequestLike,
-  ): { match?: ChangeRequestLike; reason?: "dedupeKey" | "similarity"; codes: string[] };
+    candidate: ChangeRequestLike): { match?: ChangeRequestLike; reason?: "dedupeKey" | "similarity"; codes: string[] };
   mergeProposal(
     existing: ChangeRequestLike,
     candidate: ChangeRequestLike,
@@ -433,8 +428,7 @@ function commitLine(
   root: string,
   line: ChangeRequestLine,
   codes: string[],
-  id: string,
-): ChangeRequestResult {
+  id: string): ChangeRequestResult {
   const request = line.request;
   if (request === undefined) return { ok: false, code: CODE_INVALID };
   const code = codes[0];

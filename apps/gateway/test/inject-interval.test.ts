@@ -1,10 +1,8 @@
 /**
  * 注入间隔闸(J1 2026-11 token 轮)契约测试:同一 key 两次注入间隔 ≥10k token。
- *
  * 分工:闸本体在 runtime(`@lampgenie/runtime/agent/inject-gate`,`inject-gate` 自己的单测覆盖
  * 水位/回退语义);本文件验**装配侧接线**——buildLoopTips 收到 ctx.gate 后是否真的「每步尝试、
  * 由闸限流」,以及 fired(一次为限)与 gate(token 间隔)两层如何串联。
- *
  * 断言口径:`tip.injected` 的 payload.tokensSpent 由 runtime loop 落账(loop.ts 里 tips 调用处),
  * gateway 侧的 buildLoopTips 拿不到那次落账事件——所以这里只断言「注入了/没注入」的次数,
  * tokensSpent 字段本身由 runtime 单测覆盖。

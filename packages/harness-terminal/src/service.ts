@@ -1,6 +1,5 @@
 /**
- * owner-scoped 终端会话注册表(step-122)。
- *
+ * owner-scoped 终端会话注册表。
  * 服务拥有:会话 id、owner 授权、上限/空闲回收、审计出口、进程退出兜底清理。
  * 会话本身(进程/缓冲)由 TerminalSession 拥有。
  */

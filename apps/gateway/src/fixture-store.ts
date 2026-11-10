@@ -2,17 +2,14 @@
  * 夹具录制/回放的落盘层(#110 生产侧):把 fixture-replay 的纯逻辑接到
  * `<root>/.genie/fixtures/<name>.json`,让「这个 scope 期望哪几个请求、录到了第几条、
  * 关没关、是不是 CI 缺夹具」成为可复核的事实。
- *
  * 文件形状(v=1):
  *   { v, name, mode:"record"|"replay", expected[], entries[], cursor, status, createdAt, updatedAt }
  * - `mode` 是**打开时的决议结果**,只作留痕:回放/录制时一律重新按 modeOf 判(否则夹具从
  *   record 转 replay 后旧文件会自称 record,读的人会误判);
  * - `cursor` 落盘,使得 CLI 每次进程启动后仍能接着上一条继续——不做内存缓存,磁盘是唯一真源。
- *
  * 原子 append:写临时文件(同目录,避免跨设备 rename)+ rename 覆盖。这样「写到一半进程被杀」
  * 不会留下半截 JSON:要么是旧文件,要么是新文件。写入前先 scanForSecrets:
  * 命中即**不写盘**,内存与旧文件都保持原样(调用方据 FIXTURE_SECRET_DETECTED 拒绝覆盖)。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(两跳惰性解析:先包 spec,vitest 的
  * `--conditions=development` 走 src 入口;`node --experimental-strip-types` 直接跑 CLI 时
  * spec 解析不到 dist,回退仓内相对 src URL,与 tool-pins-store 同口径)。

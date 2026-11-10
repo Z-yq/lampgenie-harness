@@ -1,6 +1,6 @@
 /**
- * bq4(板质量遥测闭环)UI 实测:任务结算卡的「规划质量」行——真实 chromium 无头。
- * 层级=浏览器 DOM 实测(非源级断言):servePanel 独立 7716(无 WS 后端),经 window.__mature
+ * bq4(板质量遥测闭环)UI 经验证:任务结算卡的「规划质量」行——真实 chromium 无头。
+ * 层级=浏览器 DOM 经验证(非源级断言):servePanel 独立 7716(无 WS 后端),经 window.__mature
  * 测试钩子注入带/不带 planQuality 的假 task + 假 task.done 事件,断言结算卡 DOM 出/不出「规划质量」行。
  * WebSocket 连接失败重试是环境产物,不计入错误;wsSafeSend 对无 WS 环境安全(排队/丢弃)。
  */

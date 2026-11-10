@@ -1,5 +1,5 @@
 /**
- * DevLog 检索注入(step-009 P5 补账,R5-C9 修复):压缩落盘的 devlog/*.json
+ * DevLog 检索注入( P5 补账, 修复):压缩落盘的 devlog/*.json
  * 按关键词命中注入新任务 instructions(与经验 recall 并列的第二条历史回顾通道)。
  * 零 embedding:query 分词 × summary 子串计分(grep 纪律)。
  */

@@ -1,15 +1,13 @@
 /**
  * RSI 成本与 ROI 门(纯逻辑零 IO,RSI 成本 2026-11)。
- *
  * 为什么需要它:自我改进循环(RSI)每次挖掘/归因/实验/复盘都在烧 token 与墙钟,但「省了多少」往往没口径——
  * 于是循环可以长期负净值运行而没人察觉。本模块把「花」与「省」统一成两条台账(CostEntry / SavingEntry),
  * 按周期(cycleId)折成净值,再给出三个结论:
  * - cycleReport:单周期账本(costTokens / savingTokens / netTokens / roi),roi = saving/cost(cost=0 → null)。
  * - evaluateRoiGate:按传入顺序(旧→新)只数**末尾连续**净负周期;达到 downshiftAfter → 降频(两个配额因子打折),
  *   达到 pauseAfter → 停摆(优先于降频)。netTokens===0 不算负,转正即清零。
- * - adoptRoiGate:实验采纳前的硬门——没有实测 ROI 直接拒(adopt 不允许拿估算当证据),
- *   实测低于 minRoi 或估算为负也拒。
- *
+ * - adoptRoiGate:实验采纳前的硬门——没有经验证 ROI 直接拒(adopt 不允许拿估算当证据),
+ * 经验证低于 minRoi 或估算为负也拒。
  * 依赖纪律:零 import(不读文件/环境/网络/时间),所有函数不 throw:
  * 非法 entry(缺 id/cycleId/at、tokens 非有限数、stage 不在枚举…)只计入 invalid 计数后跳过。
  * 码表顺序固定(便于自动化按码断言):NEGATIVE_STREAK 在前,动作码在后。
@@ -412,8 +410,7 @@ function mergeMaps(into: Record<string, number>, from: Record<string, number>): 
 export function summarizeCycles(
   cycleIds: readonly string[] | undefined,
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined,
-): { reports: CycleReport[]; total: CycleTotals } {
+  savings: readonly unknown[] | undefined): { reports: CycleReport[]; total: CycleTotals } {
   const ids = Array.isArray(cycleIds) ? cycleIds : [];
   const reports: CycleReport[] = [];
   const total: CycleTotals = {
@@ -518,7 +515,7 @@ export function evaluateRoiGate(
 }
 
 /**
- * 采纳门:没有实测 ROI 直接拒(估算不能当证据);实测低于 minRoi(缺省 0.1)或估算为负也拒。
+ * 采纳门:没有经验证 ROI 直接拒(估算不能当证据);经验证低于 minRoi(缺省 0.1)或估算为负也拒。
  * 缺省 minRoi 取 policy.adoptMinRoi 的缺省值,可被入参覆盖。
  */
 export function adoptRoiGate(input: {
@@ -639,15 +636,13 @@ function allocate(
 /** 按机制(mechanismId)分摊;costTokens 降序、同值 key 升序。 */
 export function allocateByMechanism(
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined,
-): AllocationRow[] {
+  savings: readonly unknown[] | undefined): AllocationRow[] {
   return allocate(costs, savings, "mechanism");
 }
 
 /** 按项目(projectId)分摊;costTokens 降序、同值 key 升序。 */
 export function allocateByProject(
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined,
-): AllocationRow[] {
+  savings: readonly unknown[] | undefined): AllocationRow[] {
   return allocate(costs, savings, "project");
 }

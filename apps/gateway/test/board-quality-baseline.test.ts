@@ -76,8 +76,7 @@ describe("aggregateBoardQuality 板型质量表", () => {
             p0: { passed: 4, total: 4, rate: 1 },
           },
         },
-        -HOUR,
-      ),
+        -HOUR),
       ev(
         "board.audit",
         {
@@ -93,8 +92,7 @@ describe("aggregateBoardQuality 板型质量表", () => {
           },
           issueCounts: { contract: 2, type: 0, symbol: 0, target: 0 },
         },
-        -HOUR,
-      ),
+        -HOUR),
     ];
     const md = aggregateBoardQuality(lines, NOW, 7);
     // code:audits=2 ok率=0.5 契约均次=(1+0)/2=0.5 板型门=(0+1)/2=0.5 幻影=(2+0)/2=1 targets=(1+3)/2=2
@@ -123,8 +121,7 @@ describe("aggregateBoardQuality 板型质量表", () => {
             p0: { passed: 0, total: 0, rate: 0 },
           },
         },
-        -HOUR,
-      ),
+        -HOUR),
     ];
     const md = aggregateBoardQuality(lines, NOW, 7);
     // audits=2(第二条 grand.total=0 也计入);ok/issueCounts 未覆盖用默认值→均次=默认值本身
@@ -209,7 +206,7 @@ describe("aggregateBoardQuality 边界", () => {
 });
 
 describe("默认 journal 目录发现(2026-11-05 实测缺陷:", () => {
-  // 实测现场:apps/gateway/.genie/journals 是 10-18 残留(只有旧 gateway.jsonl+shots/),
+ // 经验证现场:apps/gateway/.genie/journals 是 10-18 残留(只有旧 gateway.jsonl+shots/),
   // 真源在仓根 .genie/journals(global.jsonl)。只判"目录存在"会把数据源指错并静默出空表。
   it("⑧cwd 向上有多个候选时,优先含 global.jsonl/sessions 数据者(而非最近的空壳)", () => {
     const root = fs.mkdtempSync(path.join(tmpdir(), "gh-bq-default-"));

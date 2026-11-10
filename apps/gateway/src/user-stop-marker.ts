@@ -1,12 +1,10 @@
 /**
- * M34 用户停止标记(2026-11-07)。
- *
+ *  用户停止标记。
  * 问题:用户点停止后,取消只改任务状态 + abort loop,journal 里没有任何「用户已停止」事实——
  * 冷恢复分不清「用户取消」与「普通失败/重启中断」,于是重启后会把用户主动停掉的任务
  * 当 interrupted 续跑,面板一键续跑也会复活它。
- *
  * 方案:取消时落一条 journal custom(`payload.type="task.user_stopped"`),恢复/续跑入口读它。
- * - 写点唯一:agent-wiring 的 task.cancel 收口(onChange state=cancelled 且有活跃 loop),
+ * - 写点唯一:agent-wiring 的 task.cancel (onChange state=cancelled 且有活跃 loop),
  *   **先落标记再 abort**(标记失败只告警,绝不改取消结果——取消是用户意图,不能被落账失败阻塞)。
  * - 读点:server.ts task.resume / app.ts resumeTask / 启动 restore / autoResumeInterrupted。
  * - 走通用 `custom` kind + payload.type:不新增 core 的 EventKind 联合成员,worker 子进程与
@@ -58,7 +56,7 @@ export function readUserStoppedMarkers(journal: Journal, sessionId: string): Use
 }
 
 /**
- * 该任务能否续跑:M34 口径=「本任务或本会话存在 at >= 任务 createdAt 的停止标记 → 不能」。
+ * 该任务能否续跑: 口径=「本任务或本会话存在 at >= 任务 createdAt 的停止标记 → 不能」。
  * 取会话级(而非严格 taskId 级)是因为一个会话里用户停过一次之后,同会话早先那些任务的
  * 续跑同样不该再自动复活;`at >= createdAt` 保证「停完再提新任务」不受历史标记影响。
  */

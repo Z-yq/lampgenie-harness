@@ -1,5 +1,5 @@
 /**
- * code_sense 统一入口(2026-10-21 合并):agent 面只保留一个代码认知工具。
+ * code_sense 统一入口(合并):agent 面只保留一个代码认知工具。
  * 旧 code_index 的结构动作并入本工具 action 面,旧 code_sense 的语义画像面保留在 mode 面:
  *  - action(结构面,毫秒级静态索引):symbol | file | impact | entrypoints | project | wire | refs | surface | vars | branches | flow
  *    (refs=字面量引用面:删字符串标识的动作/查错误串与提示词引用时用;
@@ -79,7 +79,7 @@ export function dispatchSenseArgs(args: unknown): SenseDispatch {
       : undefined;
     const effTarget = target || query;
     const rootOverride = typeof a.root === "string" && a.root.trim() ? a.root.trim() : undefined;
-    // 入参纠偏(2026-10-29 token 轮 P2):实测 code_sense 硬失败 21.4%——典型错法是拿
+ // 入参纠偏( token 轮 P2):经验证 code_sense 硬失败 21.4%——典型错法是拿
     // 「目录路径」当符号名查 symbol/impact。旧口径会把 `/src/agent` 当符号名查,索引里当然零命中,
     // 回一段「未找到符号」的表面成功(带空清单),模型只能自己悟,于是重试或改用 read_file 整读。
     // 这里前置识别并给出**确定性的替代调用**(不是笼统建议),把一次空转变成一次正确调用。
@@ -96,7 +96,7 @@ export function dispatchSenseArgs(args: unknown): SenseDispatch {
     return { kind: "invalid", reason: `未知 mode: ${mode}(可选 ${SENSE_MODES.join("/")})\n` + usage() };
   }
   if (!query) return { kind: "invalid", reason: "语义面需要 query(代码符号名/关键词);结构面请传 action\n" + usage() };
-  // mode=debug 要求符号名;传目录/文件路径必然零命中(实测这是 21.4% 硬失败的另一半)。
+ // mode=debug 要求符号名;传目录/文件路径必然零命中(经验证这是 21.4% 硬失败的另一半)。
   const debugHint = semanticQueryHint(m, query);
   if (debugHint) return { kind: "invalid", reason: debugHint };
   const rootOverride = typeof a.root === "string" && a.root.trim() ? a.root.trim() : undefined;
@@ -104,7 +104,6 @@ export function dispatchSenseArgs(args: unknown): SenseDispatch {
 }
 
 /** 结构面 target 形态校验:返回纠偏文本(=不执行),undefined=放行。
- *
  *  只拦**确定会零命中**的形态(目录路径 / 带扩展名的文件名 → 当符号名查),
  *  不拦「符号名可能不存在」(那是正常查询,空结果是有效信息)。 */
 export function structuralTargetHint(action: SenseAction, target: string): string | undefined {
@@ -135,13 +134,13 @@ export function semanticQueryHint(mode: SenseMode, query: string): string | unde
     + `  · 不确定符号名:action=file, target="<所在文件>" 先看符号表`;
 }
 
-/** a1(2026-11-03 命中率三修):root 收窄后需要剥冗余前缀的结构动作(file/vars/branches/flow——
+/** a1(命中率三修):root 收窄后需要剥冗余前缀的结构动作(file/vars/branches/flow——
  *  target 都是路径形态)。不含 refs(字面量匹配,前缀即语义)/symbol/impact(路径形态已被
  *  structuralTargetHint 前置拦下,到不了这里)。 */
 const ROOT_NARROW_TARGET_ACTIONS = new Set<SenseAction>(["file", "vars", "branches", "flow"]);
 
 /** root 显式收窄后,target 仍带「工作区根→子仓」相对前缀/绝对路径时剥成相对子仓路径。
- * 实锤:root="packages/harness-workflow" + target="packages/harness-workflow/src/engine.ts"
+ * 注意:root="packages/harness-workflow" + target="packages/harness-workflow/src/engine.ts"
  * → 子仓索引 byFile 键是相对路径,不剥必零命中「文件无索引符号」死路(11-03 seq 427487-427530)。 */
 export function stripRedundantTargetPrefix(repoRoot: string, effRoot: string, target: string): string {
   const norm = (s: string): string => s.replaceAll("\\", "/").replace(/^\.\//, "");
@@ -173,7 +172,7 @@ async function runStructural(root: string, action: SenseAction, target: string, 
   }
   if (action === "surface") {
     if (!target) return "action=surface 需要 target=概念词或符号名(多个用逗号分隔,如 SuperAgent,dh-video)";
-    // 概念足迹(2026-10-29):替换/迁移/改名一个概念时 11 类表面(protocol/db/journal/config/symbol/
+ // 概念足迹:替换/迁移/改名一个概念时 11 类表面(protocol/db/journal/config/symbol/
     // ui/assets/deploy/i18n/tests/docs)一次列全,替掉「协议面 grep 一轮 + 配置面一轮 + 文档面一轮」的多轮试错。
     // 括号内分类清单与 code-sense 的 SURFACE_CATEGORIES 同步维护(此处写死,避免为文案新增跨包 import)。
     const { scanSurface, renderSurfaceMarkdown } = await import("@lampgenie/code-sense/surface");
@@ -183,7 +182,7 @@ async function runStructural(root: string, action: SenseAction, target: string, 
   }
   if (action === "branches") {
     if (!target) return "action=branches 需要 target=文件相对路径(如 modules/asr/qwen_asr.py / src/engine/loop.cpp)";
-    // 分支/循环骨架(2026-10-21):if/elif/else 条件+while/for/switch 循环语义,每点带条件文本/
+ // 分支/循环骨架:if/elif/else 条件+while/for/switch 循环语义,每点带条件文本/
     // 迭代目标/分支直接调用/所属函数——条件关系(「这个调用在什么条件下发生」)不必回源码。
     const { scanDecisionFile, renderDecisionSkeleton } = await import("@lampgenie/code-sense/sensing/decision");
     const r = await scanDecisionFile(root, target.replace(/\\/g, "/"));
@@ -211,11 +210,11 @@ async function runStructural(root: string, action: SenseAction, target: string, 
     return out.text.slice(0, 14_000) || `未提取到变量类型: ${target}`;
   }
   if (action === "flow") {
-    // 整仓 code flow(2026-10-26):与 codesense flow / MCP code_index_flow 同核。
+ // 整仓 code flow:与 codesense flow / MCP code_index_flow 同核。
     // target=scope(目录/文件前缀),level/maxNodes 可选;索引缺失=显式降级,不冻结构建。
-    // 2026-10-30 冻结治理:loadIndex→loadIndexAsync(索引 JSON 29-40MB,同步读在 9p 停顿时冻事件循环)。
+ // 冻结治理:loadIndex→loadIndexAsync(索引 JSON 29-40MB,同步读在 9p 停顿时冻事件循环)。
     const { loadIndexAsync } = await import("@lampgenie/code-sense/callgraph/c2f");
-    // 首查等待(2026-11-03 ①同口径):未索引子仓轮询等构建落地(上限同 GENIE_SENSE_INDEX_WAIT_MS;
+ // 首查等待( ①同口径):未索引子仓轮询等构建落地(上限同 GENIE_SENSE_INDEX_WAIT_MS;
     // 500ms 间隔让出事件循环),到点未完才降级,带已等待时长与上限。
     let index = await loadIndexAsync(root);
     if (!index) {
@@ -252,7 +251,7 @@ async function runStructural(root: string, action: SenseAction, target: string, 
   return (await codeIndexQuery(root, action, target)).slice(0, 14_000);
 }
 
-/** root 参数解析(2026-10-30 巨根治理):子仓名/相对路径/绝对路径 → 绝对根;必须落在工作区内。
+/** root 参数解析(巨根治理):子仓名/相对路径/绝对路径 → 绝对根;必须落在工作区内。
  *  失败给确定性纠偏(不静默忽略——模型给了 root 却被丢掉会以为已收窄)。 */
 function resolveRootOverride(base: string, override?: string): { ok: true; root: string } | { ok: false; reason: string } {
   if (!override) return { ok: true, root: base };
@@ -261,7 +260,7 @@ function resolveRootOverride(base: string, override?: string): { ok: true; root:
   const nb = normalize(base);
   const abs = isAbsolute(t) ? normalize(t) : resolve(nb, t);
   if (abs !== nb && !abs.startsWith(nb + sep)) {
-    return { ok: false, reason: `root="${override}" 解析到工作区之外(${abs})——root 只接受工作区内的子仓名/子路径(如 root="genie-voice")。` };
+    return { ok: false, reason: `root="${override}" 解析到工作区之外(${abs})——root 只接受工作区内的子仓名/子路径(如 root="services")。` };
   }
   if (abs !== nb && !existsSync(abs)) {
     return { ok: false, reason: `root="${override}" 指向不存在的路径(${abs})——用子仓名或其下真实路径。` };
@@ -277,8 +276,8 @@ function targetRelToSub(sub: WorkspaceRepo, target: string): string {
   return t.startsWith(sub.name + "/") ? t.slice(sub.name.length + 1) : t;
 }
 
-/** 结果短 TTL 缓存(2026-11-08):同 (root, action/mode, target/query) 30s 内复用。
- *  7700 审计实锤:近 3.5 天 22 组完全重复调用(部分同一步双发),在 9p 慢盘上每次 3-14s。
+/** 结果短 TTL 缓存:同 (root, action/mode, target/query) 30s 内复用。
+ * 7700 审计注意:近 3.5 天 22 组完全重复调用(部分同一步双发),在 9p 慢盘上每次 3-14s。
  *  只缓存非错误结果;容量 64(结果 ≤14K 字符);TTL 短到不会掩盖源码变更。 */
 const SENSE_RESULT_TTL_MS = 30_000;
 const senseResultCache = new Map<string, { at: number; value: string }>();
@@ -286,7 +285,7 @@ function senseCacheKey(root: string, d: Exclude<SenseDispatch, { kind: "invalid"
   return root + "\u0000" + JSON.stringify(d);
 }
 
-/** 闸内执行(2026-10-30 巨根治理核心):根在预算内=原行为;超预算=工作区分流,拒绝必须带路。 */
+/** 闸内执行(巨根治理核心):根在预算内=原行为;超预算=工作区分流,拒绝必须带路。 */
 async function runGated(root: string, d: Exclude<SenseDispatch, { kind: "invalid" }>): Promise<string> {
   const key = senseCacheKey(root, d);
   const hit = senseResultCache.get(key);
@@ -311,7 +310,7 @@ async function runGatedUncached(root: string, d: Exclude<SenseDispatch, { kind: 
     const r = await codeSense(root, d.query, { mode: d.mode });
     return renderForLlm(r).slice(0, 14_000) || JSON.stringify(r).slice(0, 14_000);
   }
-  // ---- 超预算根:不再裸扫/裸建(实锤:巨根采样重建压垮 9p 拖死全系统)。工作区感知分流 ----
+ // ---- 超预算根:不再裸扫/裸建(注意:巨根采样重建压垮 9p 拖死全系统)。工作区感知分流 ----
   const repos = await detectWorkspaceRepos(root);
   if (d.kind === "semantic") {
     return workspaceRefusalText(root, verdict, repos, "语义扫描")
@@ -368,7 +367,7 @@ async function runGatedUncached(root: string, d: Exclude<SenseDispatch, { kind: 
     + `\n(${action} 支持 root 收窄:本调用加 root="<子仓名>" 后在子仓上执行。)`;
 }
 
-/** 远端 code_sense 映射(2026-10-27):结构面/语义面 → codesense CLI argv。
+/** 远端 code_sense 映射:结构面/语义面 → codesense CLI argv。
  *  远端运行时(自带 Node 20 + CLI)由连接安装到 ~/.genie/genie-sense,经工作区服务执行。 */
 export type RemoteSensePlan = { argv: string[] } | { unsupported: string };
 
@@ -386,7 +385,7 @@ export function senseArgvFor(d: SenseDispatch, root: string): RemoteSensePlan {
       case "wire": return { argv: ["wire", "--root", root] };
       case "refs": return { argv: ["refs", t, "--root", root] };
       case "surface": {
-        // 概念足迹(2026-11-06):CLI 语义是 `codesense surface <概念1> [概念2 …]`,
+ // 概念足迹:CLI 语义是 `codesense surface <概念1> [概念2 …]`,
         // 故 target 里的逗号拆成多个位置参数(不是一次传一个逗号串)。
         const concepts = t.split(",").map((x) => x.trim()).filter(Boolean);
         if (concepts.length === 0) return { unsupported: "action=surface 需要 target=概念词或符号名(多个用逗号分隔)" };
@@ -399,7 +398,7 @@ export function senseArgvFor(d: SenseDispatch, root: string): RemoteSensePlan {
         if (typeof o.maxNodes === "number" && Number.isFinite(o.maxNodes) && o.maxNodes > 0) argv.push("--max-nodes", String(Math.floor(o.maxNodes)));
         return { argv };
       }
-      // 穷举兜底(2026-11-06):action 联合新增成员时若忘补 case,控制流会穿透到下面的
+ // 穷举兜底:action 联合新增成员时若忘补 case,控制流会穿透到下面的
       // semantic 分支,TS 无法把 d 收窄 → 3 条「Property 'query'/'mode' does not exist」。
       // default 让编译器检查形参类型(不再是 never),新增 action 漏接会在类型层暴露。
       default: return { unsupported: "未知 structural action:" + String((d as { action?: unknown }).action) };
@@ -491,7 +490,7 @@ export function codeSenseTool(repoRoot: string, remote?: RemoteProject): Tool {
         },
         maxNodes: { type: "number", description: "Narrow the node count for action=flow (default: no cap, honest full output)" },
         query: { type: "string", description: "Input for a semantic mode: symbol name, keywords or a natural-language intent (debug requires a code symbol)" },
-        root: { type: "string", description: "Narrow the query root (needed in multi-repo workspaces): a workspace root holding several sub-repos is not indexed as one — pass root=\"<subrepo>\" (e.g. genie-voice) and this call runs inside that sub-repo (supports symbol/impact/file/vars/branches/flow/refs/wire/semantic faces). A target prefixed with a subrepo path narrows automatically; bare symbol/impact only fans out over already-indexed sub-repos" },
+        root: { type: "string", description: "Narrow the query root (needed in multi-repo workspaces): a workspace root holding several sub-repos is not indexed as one — pass root=\"<subrepo>\" (e.g. services) and this call runs inside that sub-repo (supports symbol/impact/file/vars/branches/flow/refs/wire/semantic faces). A target prefixed with a subrepo path narrows automatically; bare symbol/impact only fans out over already-indexed sub-repos" },
       },
       required: [],
     },
@@ -500,16 +499,16 @@ export function codeSenseTool(repoRoot: string, remote?: RemoteProject): Tool {
     async execute(args: unknown) {
       const d = dispatchSenseArgs(args);
       if (d.kind === "invalid") return d.reason;
-      // 远程项目(SSH/WSL,2026-10-27):结构面/语义面经工作区服务在远端 CLI 执行(索引也在远端建)。
+ // 远程项目(SSH/WSL:结构面/语义面经工作区服务在远端 CLI 执行(索引也在远端建)。
       if (remote) return await runRemoteSense(remote, d, repoRoot);
       try {
-        // root 收窄(2026-10-30 巨根治理):显式 root=子仓名/子路径 → 按新根走全流程(闸/索引按子仓判定)。
+ // root 收窄(巨根治理):显式 root=子仓名/子路径 → 按新根走全流程(闸/索引按子仓判定)。
         const ro = resolveRootOverride(repoRoot, d.rootOverride);
         if (!ro.ok) return ro.reason;
         const effRoot = ro.root;
-        // a1(2026-11-03 命中率三修):root 显式收窄后,target 仍带「工作区根→子仓」相对前缀/绝对
+ // a1(命中率三修):root 显式收窄后,target 仍带「工作区根→子仓」相对前缀/绝对
         // 路径时剥成相对子仓路径,否则 file/vars/branches/flow 在子仓索引内零命中
-        // (实锤 11-03 seq 427487-427530:「文件无索引符号」死路)。symbol/impact 的路径形态已被
+ // (注意 11-03 seq 427487-427530:「文件无索引符号」死路)。symbol/impact 的路径形态已被
         // dispatchSenseArgs→structuralTargetHint 前置拦下;refs 按字面量匹配,前缀即语义,不剥。
         if (effRoot !== repoRoot && d.kind === "structural" && ROOT_NARROW_TARGET_ACTIONS.has(d.action)) {
           d.target = stripRedundantTargetPrefix(repoRoot, effRoot, d.target);

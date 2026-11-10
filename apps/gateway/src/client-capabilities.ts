@@ -1,15 +1,12 @@
 /**
- * M72 能力暴露 allowlist(机制矩阵 #72)。
- *
+ *  能力暴露 allowlist(机制矩阵 #72)。
  * 现状问题(机制 #72「能力暴露 allowlist」):server.ts 的 WS 分发是
  * 一个 190 case 的巨型 switch——服务注册即对所有连接类型开放,denylist 漏一个就是越权;
  * 只读消费者(监控/看板)也能调写/终端;UI 隐藏但 RPC 仍可调。
- *
  * 这里把「谁能调什么」收敛成三张显式白名单(不是 denylist):
  * - panel:  当前 switch 全部既有 channel(面板 legacy 消费者零变化;测试对拍 server.ts case 集合)
  * - readonly: 只读子集(监控/看板/外部只读观察者)
  * - agent:  task/session/permission 最小集(外部 agent 连接,无 cfg.set / git 写 / 终端 / 插件安装)
- *
  * 两条硬规则:
  * 1. 表外 channel / 未知 type 一律拒(新 channel 默认拒绝,必须显式登记才算「已审阅能力」)。
  * 2. 高权限 channel 再走 per-method 判定(cfg.set 只允许白名单顶层键、git 写按档位)。
@@ -65,7 +62,7 @@ export const PANEL_CHANNELS: readonly string[] = [
   "team.p2p.status",
   "team.p2p.send",
   "permission.pending",
-  "permission.history", // step-1042 关卡 Gate 历史面
+  "permission.history", // 关卡 Gate 历史面
   "task.group",
   "exp.distill",
   "checkpoint.list",
@@ -283,7 +280,7 @@ export const READONLY_CHANNELS: readonly string[] = [
   "companion.history",
   // 审批与权限观察(只读 pending 列表+最近决定,不能 respond)
   "permission.pending",
-  "permission.history", // step-1042 关卡 Gate 历史面(只读)
+  "permission.history", // 关卡 Gate 历史面(只读)
   // 目录/代码感知只读
   "workers.list",
   "subagents.list",

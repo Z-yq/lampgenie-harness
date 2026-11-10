@@ -243,7 +243,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
     expect(seen.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.id === "c0"))).toBe(true);
     const ev = journal.readAll().find((e) => e.kind === "context.model.score")!;
     expect((ev.payload as { mode: string }).mode).toBe("active");
-    // 2026-11-04 审计口径:生效集合大小与阈值必须落账,否则「评分跑过但零生效」无从查询
+ // 审计口径:生效集合大小与阈值必须落账,否则「评分跑过但零生效」无从查询
     // (旧实现只能靠离线复算 1271 次评分才看出来)。
     expect(ev.payload).toMatchObject({ minConfidence: 0.9, effectiveKeep: 0, effectiveDrop: 1 });
   });
@@ -326,7 +326,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
   });
 });
 
-// 2026-11-05 优化轮:候选过小跳过 / 同候选集缓存 / 失败降级 / 落账补全。
+// 优化轮:候选过小跳过 / 同候选集缓存 / 失败降级 / 落账补全。
 const scoringCand = (id: string, chars: number): ScoringCandidate => ({
   id, tool: "read_file", where: `src/${id}.ts`, chars, preview: "x".repeat(20),
 });

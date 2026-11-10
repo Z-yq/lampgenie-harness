@@ -13,7 +13,7 @@ const digest = {
   envVars: [], secretKeys: [], hooks: [], mcpRaw: "", modelsRaw: "", agentsRaw: [], pulledAt: 1,
 };
 
-describe("renderTeamaiBlock(designs/24 系统提示注入)", () => {
+describe("renderTeamaiBlock(系统提示注入)", () => {
   it("enforced 规则全文+culture+松规则/技能索引;渐进披露提示 skill_view", () => {
     const block = renderTeamaiBlock(digest);
     expect(block).toContain("# 团队资产(teamai · 神眸精灵系统)");

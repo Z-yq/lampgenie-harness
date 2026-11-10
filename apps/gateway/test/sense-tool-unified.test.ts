@@ -1,5 +1,5 @@
 /**
- * code_sense 统一入口回归(2026-10-21 合并):agent 面只留一个代码认知工具。
+ * code_sense 统一入口回归(合并):agent 面只留一个代码认知工具。
  * 断言四件事:
  * ① schema:唯一工具名 code_sense,action(结构面)+ mode(语义面)同场,target/query 各归其位;
  * ② 参数面:action 优先走结构面(impact/symbol/file...),无 action 才走语义 mode(state...);
@@ -35,7 +35,7 @@ describe("code_sense schema(唯一入口:action/mode 双面同场)", () => {
     expect(Object.keys(params.properties).sort()).toEqual(["action", "level", "maxNodes", "mode", "query", "root", "target"]);
     expect(params.properties.action!.enum).toEqual([...SENSE_ACTIONS]);
     expect(params.properties.mode!.enum).toEqual([...SENSE_MODES]);
-    // action 面:结构动作保留(2026-10-21 +branches;2026-10-26 +flow;2026-11-06 +surface),graph/filegraph/api 已删
+ // action 面:结构动作保留( +branches; +flow; +surface),graph/filegraph/api 已删
     expect(params.properties.action!.enum).toEqual(["symbol", "file", "impact", "entrypoints", "project", "wire", "refs", "surface", "vars", "branches", "flow"]);
     expect(params.properties.action!.enum).not.toContain("api");
     expect(params.properties.action!.enum).not.toContain("graph");
@@ -64,7 +64,7 @@ describe("参数面分派(action 结构面优先,无 action 走语义 mode)", ()
     expect(dispatchSenseArgs({ action: "file", target: "apps/gateway/src/agent-wiring.ts" })).toEqual({ kind: "structural", action: "file", target: "apps/gateway/src/agent-wiring.ts" });
     expect(dispatchSenseArgs({ action: "entrypoints" })).toEqual({ kind: "structural", action: "entrypoints", target: "" });
     expect(dispatchSenseArgs({ action: "wire" })).toEqual({ kind: "structural", action: "wire", target: "" });
-    // 2026-10-21:分支/循环骨架(条件关系)
+ // 分支/循环骨架(条件关系)
     expect(dispatchSenseArgs({ action: "branches", target: "modules/asr/qwen_asr.py" })).toEqual({ kind: "structural", action: "branches", target: "modules/asr/qwen_asr.py" });
     // 旧习惯兼容:结构动作把目标写进 query 也按 target 兜住
     expect(dispatchSenseArgs({ action: "symbol", query: "AgentLoop" })).toEqual({ kind: "structural", action: "symbol", target: "AgentLoop" });

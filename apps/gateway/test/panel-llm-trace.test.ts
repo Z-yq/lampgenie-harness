@@ -1,5 +1,5 @@
 /**
- * GET /api/llm-trace 契约测试(step-1026):轨迹看板卡体的全文读取口。
+ * GET /api/llm-trace 契约测试:轨迹看板卡体的全文读取口。
  * 安全面:正例 200、越界 403、非 .json 403、不存在 404、超 8MB 413。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

@@ -110,8 +110,7 @@ describe("缺口2:ping 转在线触发离线队列补发", () => {
           const headers = init.headers as Record<string, string>;
           const r = await b.handleRequest(
             { url: "/team/p2p/message", headers, on: (ev: string, cb: (d?: Buffer) => void) => { if (ev === "data") cb(Buffer.from(body)); if (ev === "end") cb(); } } as never,
-            { writeHead: () => undefined, end: (payload: string) => { (fwd as unknown as { last: string }).last = payload; } } as never,
-          );
+            { writeHead: () => undefined, end: (payload: string) => { (fwd as unknown as { last: string }).last = payload; } } as never);
           return new Response((fwd as unknown as { last: string }).last ?? "{}", { status: String((fwd as unknown as { last?: string }).last ?? "").includes('"ok":false') ? 403 : 200 });
         }
         return new Response("{}", { status: 404 });
@@ -154,8 +153,7 @@ describe("缺口3/5/观测:入站去重 + 验签拒绝事件 + fallback 事件",
         const headers = alice.signHeaders(body);
         void bob.handleRequest(
           { url: "/team/p2p/message", headers, on: (ev: string, cb: (d?: Buffer) => void) => { if (ev === "data") cb(Buffer.from(body)); if (ev === "end") cb(); } } as never,
-          { writeHead: (c: number) => { status = c; }, end: (p: string) => { payload = p; } } as never,
-        );
+          { writeHead: (c: number) => { status = c; }, end: (p: string) => { payload = p; } } as never);
         return new Promise<{ status: number; payload: string }>((r) => setTimeout(() => r({ status, payload }), 10));
       };
       const body = JSON.stringify({ id: "fixed-id-1", to: "bob", text: "hello" });
@@ -189,8 +187,7 @@ describe("缺口3/5/观测:入站去重 + 验签拒绝事件 + fallback 事件",
       let payload = "";
       void bob.handleRequest(
         { url: "/team/p2p/message", headers: h, on: (ev: string, cb: (d?: Buffer) => void) => { if (ev === "data") cb(Buffer.from(body)); if (ev === "end") cb(); } } as never,
-        { writeHead: (c: number) => { status = c; }, end: (p: string) => { payload = p; } } as never,
-      );
+        { writeHead: (c: number) => { status = c; }, end: (p: string) => { payload = p; } } as never);
       const ev = await rejected;
       expect(status).toBe(403);
       expect(JSON.parse(payload).reason).toContain("成员不在目录");
@@ -203,8 +200,7 @@ describe("缺口3/5/观测:入站去重 + 验签拒绝事件 + fallback 事件",
       const rejected2 = once<{ reason: string }>("team.p2p.rejected");
       void bob.handleRequest(
         { url: "/team/p2p/message", headers: staleH, on: (e2: string, cb: (d?: Buffer) => void) => { if (e2 === "data") cb(Buffer.from(body)); if (e2 === "end") cb(); } } as never,
-        { writeHead: () => undefined, end: () => undefined } as never,
-      );
+        { writeHead: () => undefined, end: () => undefined } as never);
       expect((await rejected2).reason).toContain("时间戳");
     } finally {
       rmSync(root, { recursive: true, force: true });

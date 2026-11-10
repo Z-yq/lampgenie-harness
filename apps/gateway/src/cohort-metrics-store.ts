@@ -1,16 +1,12 @@
 /**
  * 一次通过率与缺陷逃逸度量的持久层(RSI #212):把 cohort-metrics 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:交付与修复是审计事实——「这条修复算不算逃逸」「它归到哪次交付」是判断的历史,
  * 后来的写入不该覆盖;单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言(而不是信任 append 没抛)。
- *
  * 数据面:`<root>/.genie/rsi/cohort.jsonl`,每行 `{v:1,type,at,...}`
  * - delivery {delivery}   一次交付(module/taskClass/boardType/signature/changeNodes)
  * - fix      {fix}        一次修复(relatedDeliveryId/defectClass/foundAt/changeNodes)
- *
  * 投影语义:按行序读全部行;坏行(JSON 坏 / v 不是 1 / type 未知 / 载荷不合法)只计入 parseErrors 并跳过:
  * 一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 defect-lineage-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -153,8 +149,7 @@ interface CohortRuntime {
   linkFixes(input: { deliveries?: unknown; fixes?: unknown }, options?: { windowDays?: number }): LinkResult;
   computeCohortMetrics(
     input: { deliveries?: unknown; fixes?: unknown },
-    options?: ComputeOptions,
-  ): ComputeResult;
+    options?: ComputeOptions): ComputeResult;
   compareBeforeAfter(
     pair: { before: CohortMetrics; after: CohortMetrics },
     options?: { minDeltaPct?: number },
@@ -342,8 +337,7 @@ export function compute(root: string, options: ComputeOptions = {}): CohortCompu
   const projection = loadCohort(base);
   const result = rt.computeCohortMetrics(
     { deliveries: projection.deliveries, fixes: projection.fixes },
-    options,
-  );
+    options);
   return {
     ok: true,
     cohorts: result.cohorts,

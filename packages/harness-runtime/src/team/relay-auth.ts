@@ -1,5 +1,5 @@
 /**
- * relay 鉴权(designs/05 §5.5):连接=出示设备私钥签名挑战;
+ * relay 鉴权( §5.5):连接=出示设备私钥签名挑战;
  * relay 校验指纹在 roster.keys 内且未吊销。relay 不存私钥、不存口令。
  */
 import { generateKeyPairSync, sign, verify, randomBytes } from "node:crypto";
@@ -27,8 +27,7 @@ export function newChallenge(): string {
 export function verifyChallenge(
   publicKeyPem: string,
   nonce: string,
-  sigB64: string,
-): boolean {
+  sigB64: string): boolean {
   try {
     return verify(null, Buffer.from(nonce, "utf8"), publicKeyPem, Buffer.from(sigB64, "base64"));
   } catch {

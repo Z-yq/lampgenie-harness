@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { servePanel } from "../src/panel.js";
 
-/** IDE 媒体地基(2026-10-28 /ide/asset):Range(206/416/accept-ranges)+ 媒体类型白名单 + 沙箱不回归。
+/** IDE 媒体地基( /ide/asset):Range(206/416/accept-ranges)+ 媒体类型白名单 + 沙箱不回归。
  *  - 范式抄 test/panel-attachments.test.ts 的 /uploads Range 用例(临时面板实例 + 真 HTTP 断言);
  *  - 项目根用临时目录(绝不在真实仓里造媒体文件),pid 固定 "vitest-ide";
  *  - 图片行为逐字不变(image/png + 无 Range 也带 accept-ranges),媒体(视频/音频)按后缀给 content-type。 */

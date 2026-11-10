@@ -1,5 +1,5 @@
 /**
- * Ruby structural adapter(2026-10-25):tree-sitter wasm 主路径 + 文本回退。
+ * Ruby structural adapter:tree-sitter wasm 主路径 + 文本回退。
  * 覆盖:module/class/实例方法/singleton 方法/隐式 self 裸调用/赋值类型证据/跨文件候选。
  */
 import { describe, it, expect } from "vitest";

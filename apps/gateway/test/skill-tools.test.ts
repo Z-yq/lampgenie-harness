@@ -13,7 +13,7 @@ function freshStore(): ExperienceStore {
   return new ExperienceStore(join(dir, "experiences"));
 }
 
-describe("skill_view 工具(step-028 D4)", () => {
+describe("skill_view 工具( D4)", () => {
   it("读全文+view 计数;未知名返回提示", async () => {
     const store = freshStore();
     await store.write({ category: "coding", name: "echo-quirk", description: "echo 执行器任务书要写清楚动词", created_by: "user" }, "echo-child 对模糊指令返回空;任务书必须包含明确动作词。");
@@ -58,7 +58,7 @@ describe("skill_view 工具(step-028 D4)", () => {
   });
 });
 
-describe("experience_fold 工具(step-028 D4)", () => {
+describe("experience_fold 工具( D4)", () => {
   it("白名单外拒绝;合法写入 fold-in 同名 version+1;超 60 字 description 报错不落库", async () => {
     const store = freshStore();
     const tool = experienceFoldTool(store);

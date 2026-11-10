@@ -1,24 +1,19 @@
 /**
  * #198 注入安全边界台账(生产侧):把 rsi-injection-guard 的纯判定落到 append-only jsonl。
- *
  * 为什么 append-only:准入/批准/拉黑都是审计事实,后来的写入不能覆盖先前的判定;
  * 单行追加 + 写后行数校验(重读统计非空行)让「真的写进去了吗」变成可复核断言,
  * 而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/injection.jsonl`,每行一条 `{"v":1,"type":...,"at":ISO,...}`
  * - `evaluate{id,ok,codes,sourceId,channel,templateId?,textHash,riskFlags?}` —— 一次准入判定。
  * - `approve{id,sourceId,channel,textHash,by,kind}` —— 人类批准(id 指向 evaluate 行)。
  * - `blacklist{sourceId,by,reason}` —— 来源拉黑。
- *
  * **绝不落原文**:evaluate 行只落 `sha256(text)`(textHash)加结构化字段;原文可能含密钥、
  * 机密片段或注入载荷本身,落盘就等于把问题复制进审计日志。审阅靠 sanitizedText 即时返回,
  * 不靠日志回读。
- *
  * 投影语义(读时折叠,不写回):
  * - blacklisted = 有 blacklist 行的 sourceId;
  * - 已批 = 存在同 id 的 approve 行;pendingApproval = 含高风险码且无 approve 行的 evaluate 数;
  * - 坏行(JSON 坏 / v 不认识 / type 不认识 / 缺字段)只计 corruptLines 后跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path / node:crypto + runtime 纯逻辑(惰性 URL 解析,.ts 后缀,
  * 与 rsi-breaker-store 同一跑法);不 import agent loop / gateway server。
  * 参数错误(TypeError)是唯一允许 throw 的情形;IO 失败一律折叠成稳定码返回。
@@ -50,8 +45,7 @@ async function loadGuard(): Promise<GuardModule> {
   if (guardModule) return guardModule;
   const srcUrl = new URL(
     "../../../packages/harness-runtime/src/agent/rsi-injection-guard.ts",
-    import.meta.url,
-  ).href;
+    import.meta.url).href;
   guardModule = (await import(srcUrl)) as GuardModule;
   return guardModule;
 }
@@ -263,7 +257,6 @@ export interface LedgerApproval {
 
 /**
  * 从台账投影解析「已有人类批准」。
- *
  * 绑定口径:先按 sourceId + textHash **完全匹配**找回 evaluate 行(内容换了就找不到,
  * 来源换了也找不到),再找针对该 auditId 的 approve 行且 approver.kind==="human"。
  * agent 批准行不采信(approveInjection 本来就拒了 agent,这里再守一次防线)。
@@ -272,8 +265,7 @@ export interface LedgerApproval {
 function findHumanApproval(
   lines: InjectionAuditLine[],
   sourceId: string,
-  textHash: string,
-): LedgerApproval | undefined {
+  textHash: string): LedgerApproval | undefined {
   if (!sourceId || !textHash) return undefined;
   for (let i = lines.length - 1; i >= 0; i--) {
     const row = lines[i]!;
@@ -284,8 +276,7 @@ function findHumanApproval(
         l.id === row.id &&
         l.kind === "human" &&
         typeof l.by === "string" &&
-        l.by.trim().length > 0,
-    );
+        l.by.trim().length > 0);
     if (approval) return { auditId: row.id, by: (approval.by as string).trim() };
   }
   return undefined;
@@ -293,10 +284,8 @@ function findHumanApproval(
 
 /**
  * 准入闸门(解析台账批准 → 查黑名单 → 判定 → 落 evaluate 行)。
- *
  * 顺序说明:黑名单必须在判定**之前**查好并传入纯逻辑,否则被拉黑的来源会拿到 ok:true 的
  * 判定结果;落盘失败不算「通过」,返回 ok:false + INJ_STORE_WRITE_FAILED(宁可挡住也不静默放过)。
- *
  * 人工批准闭环:调用方显式 options.approver 优先;没给时回放台账里「同 sourceId + 同 textHash」
  * 的 human 批准,以 {kind:"human", id:by} 传入纯逻辑。没有这一步,approve 永远无法让内容通过。
  */
@@ -377,8 +366,7 @@ export interface StoreActionResult {
 export async function approveInjection(
   root: string,
   auditId: string,
-  input: ApproveInput,
-): Promise<StoreActionResult> {
+  input: ApproveInput): Promise<StoreActionResult> {
   assertRoot(root);
   if (typeof auditId !== "string" || !auditId.trim()) throw new TypeError("auditId 必填");
   if (typeof input !== "object" || input === null) throw new TypeError("input 必填");
@@ -421,8 +409,7 @@ export interface BlacklistInput {
 export async function blacklistSource(
   root: string,
   sourceId: string,
-  input: BlacklistInput,
-): Promise<StoreActionResult> {
+  input: BlacklistInput): Promise<StoreActionResult> {
   assertRoot(root);
   if (typeof sourceId !== "string" || !sourceId.trim()) throw new TypeError("sourceId 必填");
   if (typeof input !== "object" || input === null) throw new TypeError("input 必填");

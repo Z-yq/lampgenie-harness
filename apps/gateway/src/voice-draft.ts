@@ -1,11 +1,9 @@
 /**
- * 聊天窗语音任务书(2026-11-08):录音 → coding.models.voice 角色模型(qwen3.8-omni-flash 形态
+ * 聊天窗语音任务书:录音 → coding.models.voice 角色模型(qwen3.8-omni-flash 形态
  * 的 OpenAI 兼容端点,支持 input_audio)→ 任务书文本。
- *
  * 与 annotate-voice.ts(逐字转写)同源但提示词不同:那里是「逐字记录不许改写」,
  * 这里是「听懂 + 结合项目/已有草稿整理成一份可执行任务书」——单次 omni 调用直接产出,
  * 不做两段式(先转写再撰写)。
- *
  * 音频形态解析/上限复用 annotate-voice 的 parseAudioDataUrl(同一套 audio/* 白名单与 8MB 上限);
  * 返回体抽取复用 extractContent。纯函数 + 可注入 fetch,便于单测(mock fetch 覆盖段落/超时/HTTP 错)。
  */
@@ -124,7 +122,7 @@ export function createVoiceDrafter(opts: VoiceDrafterOptions): VoiceDrafter {
             content: [
               { type: "text", text: buildVoiceDraftPrompt(ctx) },
               // DashScope qwen-omni 系的 input_audio.data 要 Data URI 形态(data:;base64,xxx):
-              // 裸 base64 实测 400「The provided URL does not appear to be valid」(2026-11-08 产线实锚;
+ // 裸 base64 经验证 400「The provided URL does not appear to be valid」(生产环境验证;
               // 与 OpenAI 标准的裸 base64 不同,是这个端点族的已知差异)。
               { type: "input_audio", input_audio: { data: "data:;base64," + audio.bytes.toString("base64"), format: audio.format } },
             ],

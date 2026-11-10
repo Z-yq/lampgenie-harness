@@ -1,4 +1,4 @@
-/** step-083 e2e 驱动(真实 LLM,gateway 7803,journal /tmp/j-s083):
+/** e2e 驱动(真实 LLM,gateway 7803,journal /tmp/j-s083):
  * phaseA 规划电子签(非 coding)→ 白板页面结构板 + 零 review.findings(黄框场景)
  * phaseB 同会话追问规划内容 → agent 调 board_read 引用板
  * phaseC scratch 项目 coding 任务(真实改码)→ agent 自主调 code_review 产 findings

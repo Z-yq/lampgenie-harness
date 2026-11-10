@@ -1,15 +1,12 @@
 /**
- * M9 开工前置门:基线新鲜度校验 + 规则旧措辞同步(零外部依赖,只 import node:*)。
- *
+ *  开工前置门:基线新鲜度校验 + 规则旧措辞同步(零外部依赖,只 import node:*)。
  * 背景:任务从上一轮会话继承的本地分支常常落后上游多个提交/分叉,主 agent 在旧基线上
  * 开工 → 改的代码与上游冲突、审阅/合并全白做。故开工第一轮前先量一次「基线 vs 上游」:
  *   - behind(上游独有提交)/ ahead(本分支独有)/ diverged(两边都有)→ 拦或警告;
  *   - 计数用 `git rev-list --left-right --count <base>...<upstream>`(左=本分支独有=ahead,
- *     右=上游独有=behind;git 实测口径,写反会把「落后」当「领先」而放过门)。
- *
+ * 右=上游独有=behind;git 经验证口径,写反会把「落后」当「领先」而放过门)。
  * 另附「规则旧措辞」扫描:仓内 .genie/rule-wording.json 声明了「旧说法 → 现行规则」,
  * docs/ 与 AGENTS.md 里仍写着旧说法的行会给模型一份提示清单(不阻塞)。
- *
  * 纪律:本模块**绝不抛错给调用方**——git 不可用/坏仓/超时一律降级 unknown + reason;
  * 所有决策也都在这里做成纯函数(planFreshnessSkip/planFreshnessAction/render*),
  * agent-wiring 只做「取 cfg → 调函数 → 落 journal → 拼 instruction」的薄接线(可测)。
@@ -141,7 +138,7 @@ export function readBaselineStatus(opts: {
   let behind = 0;
   let ahead = 0;
   try {
-    // 口径修正(git 实测):`git rev-list --left-right --count A...B` 输出「左=仅 A 可达 右=仅 B 可达」,
+ // 口径修正(git 经验证):`git rev-list --left-right --count A...B` 输出「左=仅 A 可达 右=仅 B 可达」,
     // A=HEAD(base) → **左=本分支独有(ahead)、右=上游独有(behind)**。写反会把「落后」当「领先」放过门。
     const out = run(["rev-list", "--left-right", "--count", `${baseRef}...${upstreamRef}`], { cwd, timeoutMs });
     const nums = out.trim().split(/\s+/).map((s) => Number(s));
@@ -208,8 +205,7 @@ export type FreshnessEffect = "proceed" | "blocked" | "warn-block-override";
 export function planFreshnessAction(
   status: BaselineStatus,
   cfg?: FreshnessConfig,
-  env: Record<string, string | undefined> = process.env,
-): { effect: FreshnessEffect; message?: string; note?: string } {
+  env: Record<string, string | undefined> = process.env): { effect: FreshnessEffect; message?: string; note?: string } {
   if (status.state !== "behind") return { effect: "proceed" };
   const upstream = status.upstreamRef ?? "(unknown)";
   const remote = status.upstreamRef ? remoteOf(status.upstreamRef) : "origin";
@@ -302,7 +298,7 @@ export function loadWordingTable(repoRoot: string): { ok: true; rules: WordingRu
 
 function skipPathSegments(relPath: string): boolean {
   const segs = relPath.split("/");
-  // tasks/=历史计划(旧说法在那里的出现是记录,不是现行规则);archive 任意大小写=归档。
+ // =历史计划(旧说法在那里的出现是记录,不是现行规则);archive 任意大小写=归档。
   return segs.some((s) => s === "tasks" || s.toLowerCase().includes("archive"));
 }
 
@@ -329,7 +325,7 @@ function collectWordingFiles(repoRoot: string): string[] {
 
 /**
  * 扫 docs/**\/*.md 与仓根 AGENTS.md 里的「旧说法」(逐行字面包含 old 即命中):
- * 同文件同 old 只报首处;总上限 50;跳过 tasks/ 与 *archive* 目录;文件读失败静默跳过。
+ * 同文件同 old 只报首处;总上限 50;跳过 与 *archive* 目录;文件读失败静默跳过。
  */
 export function scanRuleWording(opts: { repoRoot: string; rules?: WordingRule[] }): { ok: boolean; hints: WordingHit[]; error?: string } {
   let rules = opts.rules;

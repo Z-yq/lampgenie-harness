@@ -191,7 +191,7 @@ describe("CodeupProvider(云效 REST v4 同源形态)", () => {
   });
 });
 
-describe("成员种子导入(designs/06 R7-2)", () => {
+describe("成员种子导入( R7-2)", () => {
   it("生成种子条目:pending 指纹+pendingInvite;已有条目不 clobber;非法用户名拒绝", async () => {
     const roster = mkdtempSync(join(tmpdir(), "gh-seed-"));
     try {

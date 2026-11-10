@@ -1,5 +1,5 @@
 /**
- * FileJournal write-behind(2026-10-21 卡顿修复):网关开异步批量落盘。
+ * FileJournal write-behind(卡顿修复):网关开异步批量落盘。
  * ①默认模式(不开 writeBehind)语义零变化:append 后文件立即可读;
  * ②write-behind 模式:内存为权威源(readAll/readSession 立即可见),文件在微任务冲刷后完整落盘,
  *   顺序与内容逐字节一致;appendMany 合批;进程退出清队不在此测(exit 钩子)。

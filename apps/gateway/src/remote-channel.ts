@@ -1,5 +1,5 @@
 /**
- * 远端工作区通道(2026-10-26,ZCode「stdio over SSH + 远端 agent runtime」的 genie 形态):
+ * 远端工作区通道(ZCode「stdio over SSH + 远端 agent runtime」的 genie 形态):
  * 每个远程 SSH 主机一条持久管道——spawn `ssh <host> node ~/.genie/agent-stdio.mjs <workspace>`
  * (ControlMaster 复用连接),stdin/stdout JSON-Lines 请求/响应。
  * 生命周期:懒启动(首请求拉起)→ 崩溃自动重启(下请求懒拉);请求 30s 超时;
@@ -37,7 +37,7 @@ const channels = new Map<string, Channel>();
 const agentDeployed = new Map<string, boolean>();
 
 function hostKeyOf(r: RemoteProject): string {
-  // 2026-10-27:key 必须含 workspace——agent-stdio 的 cwd/fence 在启动时固定;
+ // key 必须含 workspace——agent-stdio 的 cwd/fence 在启动时固定;
   // 只按主机做 key 会让同主机第二个项目复用第一个项目的根(exec 跑错目录),
   // 连接向导(根 "/")与项目通道也要分开。
   return r.kind === "wsl"
@@ -67,7 +67,7 @@ export function channelSpawnArgs(remote: RemoteProject, agentPath: string): { cm
 }
 
 /** 本地 agent-stdio bundle 目录:优先 gateway 运行目录旁(dist/gateway.mjs → dist/downloads),
- *  回退仓库布局(dev/测试:apps/gateway/dist/downloads)。2026-10-27 打包态 repoRoot=数据根修正。 */
+ * 回退仓库布局(dev/测试:apps/gateway/dist/downloads)。 打包态 repoRoot=数据根修正。 */
 function localAgentBundlePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const beside = join(here, "downloads");
@@ -110,7 +110,7 @@ function spawnChannel(remote: SshRunLike, opts: { password?: string } = {}): Cha
   });
   ch.proc.stderr.on("data", () => { /* 远端 stderr:日志混流,忽略 */ });
   // spawn 失败(Windows 无 wsl.exe / 无 ssh)是 error 事件而非异常:必须消费,
-  // 否则进程级 uncaught(2026-10-27 WSL 通道补齐)。
+ // 否则进程级 uncaught( WSL 通道补齐)。
   ch.proc.on("error", () => {
     for (const [, p] of ch.pending) { clearTimeout(p.timer); p.resolve({ ok: false, error: "远端服务启动失败" }); }
     ch.pending.clear();
@@ -148,7 +148,7 @@ async function agentReady(remote: SshRunLike, opts: { password?: string } = {}):
   const hit = agentDeployed.get(key);
   if (hit !== undefined) return hit;
   const r = await remoteRun(remote, `for f in ${REMOTE_AGENT_DIR}/agent-stdio.mjs ${REMOTE_AGENT_DIR}/agent-stdio.cjs; do test -f $f && node $f selftest 2>/dev/null | grep -q '"ok":true' && { echo "yes:$f"; break; }; done; echo no`, opts);
-  // 2026-10-27 修复:命令末尾恒有 "no"(在 for 循环外),旧实现取最后一行 → 永远判未部署,
+ // 修复:命令末尾恒有 "no"(在 for 循环外),旧实现取最后一行 → 永远判未部署,
   // 通道从未启用(SSH 侧静默退化到 shim/shell)。改为找第一条 yes:<path>。
   const yesLine = (r.ok ? r.stdout : "").split("\n").map((s) => s.trim()).find((s) => s.startsWith("yes:")) ?? "";
   const ok = yesLine.length > 0;
@@ -167,7 +167,7 @@ export function invalidateRemoteAgentCache(hostKey?: string): void {
  * bundle 缺失(dist 未 build)时报错指路。成功后标记该主机已部署。
  */
 export async function deployRemoteWorkspaceAgent(remote: SshRunLike, opts: { password?: string } = {}): Promise<{ version: string; remotePath: string } | { error: string }> {
-  // bundle 解析(2026-10-27):桌面/打包态 repoRoot=数据根,`apps/gateway/dist/downloads` 不存在;
+ // bundle 解析:桌面/打包态 repoRoot=数据根,`apps/gateway/dist/downloads` 不存在;
   // 优先取 gateway 运行目录旁的 downloads/ 再回退仓库布局(dev)。
   const dl = dirname(localAgentBundlePath());
   // 远端 node 版本探测(major>=12 → ESM .mjs;老 node → CJS .cjs,target=node8 转译)

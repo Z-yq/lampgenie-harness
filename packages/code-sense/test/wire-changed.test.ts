@@ -2,7 +2,7 @@
  * wire --changed 精度(fixture + 本仓真实工作区):
  *  - fixture:只新增 1 条消息 → 精确报 1 条;只删除 1 条 → 精确报 1 条。
  *    旧实现按 changed 行收集大写标识符,union 成员数组行含全部声明名,任意一次协议改动
- *    都会把整条 union 报成 changed(fixture 实测 4 types、真实仓 153 types)。
+ * 都会把整条 union 报成 changed(fixture 经验证 4 types、真实仓 153 types)。
  *  - 真实仓:工作区当前有大量未提交改动,故不断言 0;断言「不是整条 ClientMessage 全量」,
  *    并核对 stats 与过滤后的集合一致(干净工作区时应为 0)。
  */
@@ -121,7 +121,7 @@ describe("wire --changed:type 字面量集合 diff", () => {
     const c = r.changed!;
     const clientMembers = full.unions.find((u) => u.name === "ClientMessage")?.members.length ?? 0;
     expect(clientMembers).toBeGreaterThan(100);
-    // 旧实现实测 153 types(≈整条 ClientMessage);新实现只报字面量真实增删改的行
+ // 旧实现经验证 153 types(≈整条 ClientMessage);新实现只报字面量真实增删改的行
     expect(c.types.length).toBeLessThan(clientMembers);
     expect(c.types).toEqual([...new Set([...c.added, ...c.removed, ...c.touched])].sort());
     expect(r.stats.uniqueTypes).toBe(r.types.length);

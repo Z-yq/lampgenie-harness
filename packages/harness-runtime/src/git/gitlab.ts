@@ -1,7 +1,6 @@
 /**
- * GitLabProvider(designs/06 多平台修订:GitLab@192.168.8.60 一等 provider)。
+ * GitLabProvider(多平台修订:GitLab@192.168.8.60 一等 provider)。
  * REST API v4(与自建 GitLab 兼容形态同源):MR/成员/群组走 HTTP,clone/push 走 git CLI。
- *
  * 令牌纪律(诚实登记):
  * - token 只用于 HTTP 头(PRIVATE-TOKEN)与 git 子进程环境(askpass,见 ./askpass);
  *   任何错误文案/日志经 redactSecret 清洗,token 绝不出现在异常消息里。
@@ -238,5 +237,5 @@ export class RestV4ProviderBase implements GitProvider {
   }
 }
 
-/** GitLab 一等 provider(designs/06 §R7-5:二期首版;kind="gitlab" 继承自底座)。 */
+/** GitLab 一等 provider( §R7-5:二期首版;kind="gitlab" 继承自底座)。 */
 export class GitLabProvider extends RestV4ProviderBase {}

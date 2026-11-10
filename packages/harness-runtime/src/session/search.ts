@@ -1,14 +1,12 @@
 /**
- * 会话全文检索(step-115,hermes-agent session FTS × deepseek-harness session-query)。
- *
+ * 会话全文检索(hermes-agent session FTS × deepseek-harness session-query)。
  * 纯 TS 增量倒排索引:journal 是唯一事实源,本模块不写 journal、不引原生 SQLite/embedding。
  *  - 文档 = 一个有文本的 journal 事件(message/tool/task/todo/plan/board/review/subagent)。
- *  - 中文按 unigram+bigram、英文/数字按词与复合词(step-111 / a1_adapter)切分。
+ * - 中文按 unigram+bigram、英文/数字按词与复合词( / a1_adapter)切分。
  *  - `readAll()` 冷构建 + `subscribe()` 增量;可选磁盘缓存(身份校验失败即重建)。
  *  - 三形态:discover(跨会话找会话)/ scroll(会话内命中上下文)/ read(会话原文分页)。
  *  - 排序 = 词频 + kind 权重 + 时间衰减 + 来源权重;自动化(auto-*)只降权不排除。
- *
- * 设计稿与验收记录:tasks/step-115-session-search/step.md。
+ * 设计稿与验收记录:。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";

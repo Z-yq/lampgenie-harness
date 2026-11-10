@@ -1,5 +1,5 @@
 /**
- * 审计日志(designs/10 §6):统一 schema、JSONL append-only、与 session journal 分离。
+ * 审计日志( §6):统一 schema、JSONL append-only、与 session journal 分离。
  * 红线:明细脱敏后 hash(detail_hash 可对账);只记网络段标签不记具体 IP;只增不改。
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
-/** 动作全集(designs/10 §6 枚举)。live=已有真实产生点;pending=登记待接线(不造假)。 */
+/** 动作全集( §6 枚举)。live=已有真实产生点;pending=登记待接线(不造假)。 */
 export const AUDIT_ACTIONS = [
   "config.change",
   "member.invite",

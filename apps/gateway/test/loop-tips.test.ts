@@ -1,5 +1,5 @@
 /**
- * tips 即时增强引擎(2026-10-23 用户口径收敛:「每条 user message 跟一条匹配式 tips」多余且
+ * tips 即时增强引擎( 「每条 user message 跟一条匹配式 tips」多余且
  * 常错配——模型上下文已含会话语境,code_sense 内容必须是拉取式)。契约:
  * - buildLoopTips 只剩功能性 tip:dispatch(首触 spawn_subagent)/board-comments(白板评论投递);
  * - code-orient/history-align 两类匹配式注入已删(回归锚:代码工具/规划工具/阶段事件都不再触发);
@@ -14,13 +14,13 @@ import { buildLoopTips } from "../src/agent-wiring.js";
 const apps: ReturnType<typeof createGatewayApp>[] = [];
 afterEach(async () => { for (const a of apps.splice(0)) await a.close(); delete process.env.GENIE_PERMISSION_RULES; });
 
-/** 2026-10-22 可见化:buildLoopTips 返回 {text,keys}(keys 供 tip.injected 留痕分类展示)。 */
+/** 可见化:buildLoopTips 返回 {text,keys}(keys 供 tip.injected 留痕分类展示)。 */
 const txt = (r: { text: string } | null) => (r ? r.text : null);
 
 it("buildLoopTips:dispatch 首触 spawn_subagent 注入一次;代码/规划工具不再触发任何 tip(2026-10-23 回归锚)", () => {
   const tips = buildLoopTips({ sessionId: "s1" });
   expect(tips({ step: 1, lastStepTools: [] })).toBeNull();
-  // 代码类/规划类工具:2026-10-21 版的 code-orient/history-align 已删——零注入
+ // 代码类/规划类工具: 版的 code-orient/history-align 已删——零注入
   expect(tips({ step: 1, lastStepTools: ["edit_file", "code_sense", "code_review"] })).toBeNull();
   expect(tips({ step: 1, lastStepTools: ["board_upsert", "run_workflow"] })).toBeNull();
   // 首触 spawn_subagent → dispatch(唯一留存的动作类 tip)
@@ -32,7 +32,7 @@ it("buildLoopTips:dispatch 首触 spawn_subagent 注入一次;代码/规划工�
 });
 
 it("buildLoopTips:compact 后 fired 清空,dispatch 允许重注入一次(compact 计数增长触发)", () => {
-  // compact 后 tip 失忆自愈(2026-10-21):tips 是 ephemeral 不落 journal,autoCompact 之后模型
+ // compact 后 tip 失忆自愈:tips 是 ephemeral 不落 journal,autoCompact 之后模型
   // 看不见已注入的 tip;loop 每 step 带 ctx.compacts(compact.done 计数),计数增长=fired 清空。
   const tips = buildLoopTips({ sessionId: "s1" });
   expect(txt(tips({ step: 1, lastStepTools: ["spawn_subagent"], compacts: 0 }))).toContain("派发 tips");
@@ -55,7 +55,7 @@ it("buildLoopTips:GENIE_TIPS=off 全关", () => {
 });
 
 it("buildLoopTips:并行提醒(2026-11-04)——上一步恰好 1 个只读探测调用时注入,冷却 8 步、每 episode ≤3 次", () => {
-  // 实测:85.4% 的步只发 1 个调用(并行率 11.4%);静态并行纪律在长会话里注意力衰减。
+ // 经验证:85.4% 的步只发 1 个调用(并行率 11.4%);静态并行纪律在长会话里注意力衰减。
   // 这里把「上一步只发 1 个可配对探测」变成确定性触发,冷却窗防刷屏。
   const tips = buildLoopTips({ sessionId: "s1" });
   // 单调用 + 可配对工具 → 注入
@@ -138,7 +138,7 @@ it("e2e:kickoff 任务书瘦身(只留原文+纪律卡);首派子代理后 dispa
   // 首派子代理后的下一步请求里出现 dispatch tip(ephemeral)
   const afterPhase = seen[1] ?? "";
   // 2026-11 tips SOP 化:understand 首见恰时注入 SOP·理解卡(原断言「阶段声明零 tip」锚的是
-  // 2026-10-23 删匹配式 tips 的旧世界,已被 phase 首见 SOP 卡特性取代;此处仍断言无匹配式残留)
+ // 删匹配式 tips 的旧世界,已被 phase 首见 SOP 卡特性取代;此处仍断言无匹配式残留)
   expect(afterPhase).toContain("SOP·理解");
   expect(afterPhase).not.toContain("派发 tips");
   expect(afterPhase).not.toContain("## 代码全局意识");

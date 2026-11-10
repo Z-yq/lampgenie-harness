@@ -113,7 +113,7 @@ describe("D3 distill 确定性兜底", () => {
 });
 
 describe("skill 索引过滤 candidate(2026-10-29 token 轮 P3)", () => {
-  // 实测病灶:incidents/task-* 9 条全是 distill.ts 确定性兜底的 candidate 条目,
+ // 经验证病灶:incidents/task-* 9 条全是 distill.ts 确定性兜底的 candidate 条目,
   // description = `失败任务候选经验:${instruction.slice(0,50)}`——被截断的用户原话,
   // 出现过「做个小功能」「不对不对，反而更加矛盾了」这种零信息描述;
   // 正文是 journal 原文转储。它们占索引行额度却无法据以选择技能。
@@ -201,7 +201,7 @@ describe("D5/D6 遥测+curator", () => {
   });
 });
 
-describe("designs/23 项目维度沉淀", () => {
+describe(" 项目维度沉淀", () => {
   it("write 带 project → frontmatter 落盘且可读回;不带则字段缺席", async () => {
     const { s, dir } = store();
     await s.write({ category: "coding", name: "proj-bound", description: "带项目归属的经验", created_by: "agent", project: "lampgenie-harness" }, "正文");

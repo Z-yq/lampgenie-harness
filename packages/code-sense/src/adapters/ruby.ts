@@ -1,9 +1,7 @@
 /**
- * Ruby structural adapter(2026-10-25,legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
- *
+ * Ruby structural adapter(legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
  * 主路径:tree-sitter-ruby wasm(tree-sitter-wasms 自带),tier=structural、source=tree-sitter;
  * wasm 不可用/解析异常 → 文本回退(source=text,只出符号零边,如实降级)。
- *
  * 提取子集(诚实边界):
  * - 符号:class/module(module 也记 class 容器;Liquid 式模块方法与类共用容器语义)/method/
  *   singleton_method(`def self.x`/`def K.x`)。嵌套类/模块的类符号容器=最近外层类/模块,
@@ -14,7 +12,6 @@
  *   `Klass.new(..).m` 链式构造识别。无类型证据的变量接收者不猜(动态语言,猜必假边)。
  * - 跨文件候选:常量接收者/有赋值类型证据的接收者/无目标的隐式 self 裸调用(带 receiverType
  *   的证据交 merge 层按同扩展名+唯一名(+容器)解析)。
- *
  * 未覆盖(登记):动态 define_method/send/public_send、method_missing、mixin(include/extend)
  *   带来的方法归属、Struct/OpenStruct 动态字段、块/yield 内部的接收者类型、同名 instance 与
  *   singleton 方法的符号 id 冲突(先到者保留)。

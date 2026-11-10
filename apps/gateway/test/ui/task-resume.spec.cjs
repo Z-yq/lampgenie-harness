@@ -1,4 +1,4 @@
-/** UI 实测(2026-11-05 状态机 interrupted 一键续跑):
+/** UI 经验证(状态机 interrupted 一键续跑):
  *  真实 gateway(子进程 .mjs,注入 interrupted/done/cancelled 素材)+ 真实 chromium,零桩:
  *  A interrupted 任务卡出现「续跑」按钮(侧栏 t-row 行内动作);
  *  B 点击→ws 发 task.resume 帧→服务端幂等重提→新任务回 queued→running→done(Echo);

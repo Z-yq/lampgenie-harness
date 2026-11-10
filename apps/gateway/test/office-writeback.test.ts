@@ -11,11 +11,10 @@ import { startGatewayServer } from "../src/server.js";
 import { TaskSupervisor } from "../src/task-manager.js";
 import type { ProjectRegistry } from "../src/projects.js";
 
-/** Office 文本级回写(2026-10-29 板节点「OOXML 文本回写」P2):
+/** Office 文本级回写(板节点「OOXML 文本回写」P2):
  *  - 现场 jszip 造 2 页 pptx(每页一个文本框)与 docx(2 段 + 1 表格),不依赖仓内二进制;
  *  - 改一处 → 重新 parseOffice 断言目标块已变、**其它块逐字不变**;
  *  - 负例:下标越界抛错(不静默返回原 buf);文本含 & < > " ' → 转义后能原样读回(不破 XML)。
- *
  *  字节口径(**不骗自己**):zip 重新打包后整体字节必然与原文件不同(DEFLATE 流/条目顺序/时间戳),
  *  所以这里断言的是「其它条目的**解压后内容**不变」,不是「zip 字节不变」。
  */

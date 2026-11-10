@@ -1,5 +1,5 @@
 /**
- * tool_view 装配契约(2026-10-22):长描述摘要化 + wire 体量超阈值的工具打 deferred 标
+ * tool_view 装配契约:长描述摘要化 + wire 体量超阈值的工具打 deferred 标
  * (loop 不进广告面,用时激活);核心工具与短体量工具豁免;tool_view 目录列出延迟工具。
  */
 import { describe, it, expect } from "vitest";
@@ -103,7 +103,7 @@ describe("attachToolView 延迟加载", () => {
     const by = new Map(out.map((t) => [t.name, t]));
     expect(by.get("big")!.deferred).toBe(true);
     expect(by.get("small")!.deferred).toBeUndefined();
-    // board_upsert 在核心豁免集(2026-10-30 死锁事故):它是 plan-gate 的指定出口,
+ // board_upsert 在核心豁免集(死锁事故):它是 plan-gate 的指定出口,
     // 延迟它=闸门要求一个清单里不存在的工具,写意图被约束采样掰成 board_read 死循环
     expect(by.get("board_upsert")!.deferred).toBeUndefined();
     expect(by.has("tool_view")).toBe(true);

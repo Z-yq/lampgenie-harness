@@ -1,4 +1,4 @@
-// step-056 会话纪律(用户口径「session 没有权创建新 session,只能 super agent 创建 session;
+// 会话纪律(「session 没有权创建新 session,只能 super agent 创建 session;
 // session 只能创建子进程 agent 并自己管理」+ ZCode Agent 机制):
 // 1) run_parallel(经 tm.submit 造新会话)已删除——agent 调它必须吃「未知工具」,且全程零新任务;
 // 2) 并行=同一条消息里多个 spawn_subagent 同批并发(loop Promise.all),子代理全在本会话内。
@@ -6,7 +6,7 @@ import { it, expect } from "vitest";
 import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
 
-// plan-gate 豁免(2026-10-21):本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
+// plan-gate 豁免:本文件测 reaper/worktree/会话纪律基础设施,不涉及规划流程
 process.env.GENIE_PLAN_GATE = "off";
 
 
@@ -77,7 +77,7 @@ it("并行=同批多个 spawn_subagent 并发跑:同会话、零新任务、maxI
   expect(t?.state, "主任务应终态").toBe("done");
   // 会话纪律:任务表只多出用户提交的一个(子代理不是任务/会话)
   expect(app.taskManager.list().length - before, "子代理不得登记为任务").toBe(1);
-  // 并发实证:两个子代理的 LLM 调用时间重叠
+ // 并发验证:两个子代理的 LLM 调用时间重叠
   expect(maxInFlight, "spawn 同批应并行(两个子代理 LLM 调用重叠)").toBeGreaterThanOrEqual(2);
   await app.close();
 }, 60_000);

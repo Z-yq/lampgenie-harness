@@ -1,6 +1,5 @@
 /**
  * 回归锁:「捕获 config.browser 子对象」vs「每次调用现读」。
- *
  * cfg.set 走 main.ts 的 `Object.assign(config, next)`,会**整体替换** config.browser 为新对象;
  * 旧实现把子对象捕获进闭包,于是面板「一键启用浏览器」写完配置后 cfg.enabled() 仍返回 false。
  * 本文件的第 2 条用例就是那条回归锁:同一个 cfg 对象必须读到替换后的新子对象。

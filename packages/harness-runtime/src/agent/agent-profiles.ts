@@ -1,15 +1,14 @@
 /**
  * 子智能体注册表(照 ZCode subagent/profile.ts + opencode agent 表的裁剪版):
  * - 内置类型:worker(通用执行)/explore(只读探索)/judge(评审判分)/test-analyst(测试失败分析)/
- *   planner(规划:需求深挖→骨架→白板落板→DoD/风险/未决问题,step-138)
+ * planner(规划:需求深挖→骨架→白板落板→DoD/风险/未决问题
  *   —— judge/test-analyst 与 workflow 模板(agent("judge")/agent("test-analyst"))同名对齐。
  * - Markdown 发现:<repo>/.genie/agents/*.md,frontmatter(name/description/tools/writeGlobs 逗号分隔)
  *   +正文=systemPrompt;同名覆盖内置(ZCode「内置打底,用户同名覆盖」模式)。
  * - formatAgentProfiles 注入主 agent 系统提示(ZCode formatAgentProfilesForPrompt 同格式)。
  * 提示词语义参考:ZCode general-purpose.ts(完全完成任务/不复读过场/绝不主动建文档)
  * 与 explore.ts(READ-ONLY 横幅/并行扇出/绝对路径)。
- *
- * tools 语义(step-061 收口)=**真实执行白名单**,不再是纯提示文案:LlmLoopBackend 按它装配
+ * tools 语义=**真实执行白名单**,不再是纯提示文案:LlmLoopBackend 按它装配
  * 子代理工具面(缺席/空=角色二分兜底,行为同旧版)。声明粒度:
  * - 具体工具名:read_file/glob/grep/list_dir/write_file/edit_file/run_cmd/code_sense/skill_view
  * - 组别名(展开见 SUBAGENT_TOOL_GROUPS):read=读四件/write=写两件/exec=run_cmd/code_sense=code_sense(唯一入口:action 结构面+mode 语义面)
@@ -17,7 +16,7 @@
  * - skill_view=「查看技能/经验全文」(纯读+遥测,本系统技能=提示词片段,不存在执行形态)。
  * permission 字段(可选):inherit(缺省)=继承父会话有效规则快照;deny-only=只下传父 deny
  * (与外部后端 deriveChildRules 同语义,敏感自定义角色用)。
- * writeGlobs 字段(step-138,可选):写盘路径白名单——与 tools 白名单共同构成 planner 的双重围栏
+ * writeGlobs 字段(可选):写盘路径白名单——与 tools 白名单共同构成 planner 的双重围栏
  * (提示词 + 执行面);越界写由 LlmLoopBackend 的 write_file/edit_file 直接拒绝。
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -35,7 +34,7 @@ export interface AgentProfile {
   permission?: "inherit" | "deny-only";
   /** 写盘围栏(可选):白名单 glob 列表,相对子代理工作根。在场=write_file/edit_file 只允许命中
    *  这些路径(越界即拒);缺席=只做工作根前缀校验(旧行为)。典型用途:planner 只允许写规划稿
-   *  tasks/step-NNN-<slug>/step.md,业务代码结构性不可写(见 globMatchPath)。 */
+ * <slug>/step.md,业务代码结构性不可写(见 globMatchPath)。 */
   writeGlobs?: string[];
   /** 内置 or 用户定义。 */
   builtin: boolean;
@@ -71,10 +70,10 @@ const ANALYST_PROMPT = `你是测试失败分析子 agent。给定失败的测�
 - 输出:根因一句话 + 证据(文件:行) + 最小修复建议。不重跑测试,只分析。`;
 
 /**
- * planner 提示词(step-138:把「规划逻辑 + 白板使用」从主 agent 抽出成独立角色)。
+ * planner 提示词(把「规划逻辑 + 白板使用」从主 agent 抽出成独立角色)。
  * 四段闭环:需求深挖(许愿式三问)→ 现状逻辑图规划 → 白板落板(改动节点必带 accept)→ 交付实施计划
  * (step.md + DoD + 风险 + 未决问题)。它不是执行者:不写业务代码、不跑构建/测试、不派子代理。
- * 与 step-137 落目标机制衔接:P0 accept 由父代理实施后回填 evidence。
+ * 与 落目标机制衔接:P0 accept 由父代理实施后回填 evidence。
  */
 const PLANNER_PROMPT = `你是规划子 agent(planner)。你的产出是**一块讲清现状逻辑的白板 + 一份实施计划**:白板画现有代码/内容怎么走、
 要动的地方标在对应节点上;你的实施计划(先后顺序、写测试、跑验证)写进 step.md——计划留在文本里,不上板。另交未决问题清单。
@@ -178,7 +177,7 @@ edge n1 -> n3 : 调用
 - **验收门算术自查(数值阈值类 accept 的硬前置,零例外)**:写任何含 ≥/≤/== 数字的 accept 之前,先把「目标值 × 实测系数」
   乘出来写进 expect,并确认这个不等式**真的成立**——先定方案数值、再补断言阈值、中间不验算,是规划返工的头号原因。
   正面示范:字号 13px、实测 k=0.724 → 13×0.724=9.41 ≥9 ✓ 可过;反例:12px×0.724=8.69 <9 ✗ 这条门永远过不去。
-  **禁止出现「DoD 说要 PASS、但按门算下来必然 FAIL」的自相矛盾**;系数来自实测(适配比 k/行高比/耗时比)就把实测出处
+ **禁止出现「DoD 说要 PASS、但按门算下来必然 FAIL」的自相矛盾**;系数来自经验证(适配比 k/行高比/耗时比)就把经验证出处
   (文件:行 或可执行命令)写进 note,不许估个能凑过门的数。一并检查连带数值:抬字号/尺寸后,padding/gap/卡高/阈值是否还成立。
 - 只有本轮真的要动的节点才标 P0(keep 节点不标 P0,也不挂 accept);余力项标 P1/P2。产品/桌面/打包类必须挂 P0 用户旅程冒烟节点
   (启动→配置→执行真实任务→负面断言;负面断言显式写「不得出现 echo 回显/llm=off/占位执行器」)。
@@ -208,7 +207,7 @@ edge n1 -> n3 : 调用
   3. **落板前预检三条会被整板拒收的原因**(工具说明都写了,不预检=白耗一次调用):节点 id 必须带唯一前缀(禁裸 n1..n9);label 不超过 14 字;accept 的 cmd 不超过 500 字符(超了就把长命令拆成多条 accept 或改写成明确动作)。
 - **产出优先**:任何时刻被收割都必须已有板 + step.md。顺序固定为 先落骨架板 → 再写 step.md → 最后补细节;
   不要「先勘察完再落板」——勘察没有尽头,收尾窗口只有一次。
-- **时间锚(14 天复盘实锤:19 例 deadline 收割中 7 例零板、10 例零文本;正常完成组 p50=5.0 分钟——
+- **时间锚(14 天复盘实测确认:19 例 deadline 收割中 7 例零板、10 例零文本;正常完成组 p50=5.0 分钟——
   被收割的不是「查得慢」而是「落板晚」)**:时间盒过半时,无论勘察到哪,下一次动作必须是 board_upsert
   落骨架板;已落板的立即转去写 step.md 交稿。时间盒提醒到达时不再有任何「再查一条」的余地。
 - **并发纪律**:同一会话可能有多个 planner 共用一块板,节点 id 必须带各自唯一前缀(如 a1-/b1-,配合你的角色/任务短名),
@@ -228,7 +227,7 @@ edge n1 -> n3 : 调用
 - 你不实施:任务书若要求「顺便把代码改了」,拒绝并把改动项写进计划交回父代理。`;
 
 /**
- * 内置声明(step-061 最小够用分配;step-138 加 planner):
+ * 内置声明(最小够用分配; 加 planner):
  * - worker=*(内置全集,不含 MCP);explore=读+代码认知+技能查看;judge/test-analyst=读+代码认知。
  * - planner=读+代码认知+技能查看+write_file(仅规划稿)+board_upsert/board_read;结构性无
  *   run_cmd/terminal/edit_file/spawn_subagent/answer_subagent/task_output(不跑构建、不改代码、不派活)。
@@ -297,7 +296,7 @@ export function resolveProfileTools(
 }
 
 /**
- * 写盘围栏匹配(step-138 纯函数,无 IO):相对路径是否命中白名单 glob 之一。
+ * 写盘围栏匹配(纯函数,无 IO):相对路径是否命中白名单 glob 之一。
  * glob 语义刻意极简(够 profile 声明用,不引依赖):`*` 单层任意字符、`**` 跨层、`?` 单字符;
  * 其余字符字面。路径比较前统一为正斜杠;绝对路径由调用方先转相对(转不了=越界)。
  */

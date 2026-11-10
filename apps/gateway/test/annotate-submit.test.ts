@@ -13,7 +13,7 @@ import { parseClientMessage, ClientMessage, ServerMessage } from "@lampgenie/pro
 import { createGatewayApp, type GatewayApp } from "../src/app.js";
 import { EchoChildBackend } from "@lampgenie/executors";
 
-/** 截图标注(2026-10-26 面板自有能力)的服务端契约回归。
+/** 截图标注(面板自有能力)的服务端契约回归。
  * 锁四件事:①PNG 解析与尺寸上限;②几何规整规则(
  * 取整/夹边/x2≥x1+1);③feedback-minimal-4 兼容导出结构(id/kind/annotations 编号/image 描述符);
  * ④协议消息双向可解析。UI 面在 panel.ts 模板字符串内,这里锁结构性锚点(按钮/覆盖层/提交链)。 */
@@ -305,16 +305,14 @@ describe("processAnnotateSubmit 全链(依赖注入+真实临时目录)", () => 
     d.deps.tm.submit = (_s, _sid, instruction, o) => { seen.submitted = o; return { id: "task-att" }; };
     const out = await processAnnotateSubmit(
       { ...d.deps, prepareAttachments: (info) => (info.previewPath ? [{ name: "a.annotated.jpg", path: "/uploads/x.jpg", mime: "image/jpeg", size: 123 }] : undefined) },
-      { ...MSG, previewDataUrl: PREVIEW }, realIo,
-    );
+      { ...MSG, previewDataUrl: PREVIEW }, realIo);
     expect(out.ok).toBe(true);
     expect((seen.submitted as { attachments?: unknown[] }).attachments).toHaveLength(1);
     // 忙会话同路
     const d2 = deps({ running: true });
     const out2 = await processAnnotateSubmit(
       { ...d2.deps, prepareAttachments: () => [{ name: "x", path: "/y" }] },
-      MSG, realIo,
-    );
+      MSG, realIo);
     expect(out2.ok).toBe(true);
     expect(d2.enqueued[0]).toMatchObject({ attachments: [{ name: "x" }] });
     // 钩子抛错:反馈照常投递
@@ -387,7 +385,7 @@ describe("annotate.submit 经真实 WS 网关(echo 执行器,不经 LLM)", () =>
     // 聊天侧可见性:预览复制进 /uploads 白名单根(.genie/uploads/<sid>/annotate-*)
     const uploadsDir = join(WS_ROOT, ".genie", "uploads", "ann-e2e-1");
     expect(fs.readdirSync(uploadsDir).some((f) => f.startsWith("annotate-") && f.endsWith(".annotated.jpg"))).toBe(true);
-    // 列表帧只带索引(2026-10-29 协议索引化):正文改按 id 走 task.detail.get 往返。
+ // 列表帧只带索引(协议索引化):正文改按 id 走 task.detail.get 往返。
     ws.send(JSON.stringify({ v: 1, type: "task.list" }));
     const tl = await wait((m) => m.type === "task.list" && Array.isArray(m.tasks) && m.tasks.some((t: { sessionId: string }) => t.sessionId === "ann-e2e-1"), "task.list");
     const annRow = (tl.tasks as { sessionId: string; id: string; instruction?: string }[]).find((t) => t.sessionId === "ann-e2e-1")!;

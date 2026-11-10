@@ -4,7 +4,7 @@ import { DEFAULT_POLICY_CONFIG, type PolicyConfig } from "../../src/router/polic
 
 const configOf = (over: Partial<PolicyConfig> = {}): PolicyConfig => ({ ...DEFAULT_POLICY_CONFIG, ...over });
 
-describe("router intake 三判据(step-0143 sr2)", () => {
+describe("router intake 三判据( sr2)", () => {
   it("正常路径返回 stored", () => {
     const store = createIntakeStore(configOf());
     const t = buildTrigger({ source: "panel", sessionId: "s1", instruction: "写个 README", now: () => 1000 });
@@ -38,8 +38,8 @@ describe("router intake 三判据(step-0143 sr2)", () => {
   });
 });
 
-// 2026-11-04 修复回归:Trigger.instruction 携带全文——200 字「预览截断」曾把任务书截成
-// 214 字(硬纪律段全丢,五任务实锤);预览语义只允许在渲染层,不进数据本体。
+// 修复回归:Trigger.instruction 携带全文——200 字「预览截断」曾把任务书截成
+// 214 字(硬纪律段全丢,五任务注意);预览语义只允许在渲染层,不进数据本体。
 it("buildTrigger 超长指令不截断(全文进 Trigger,派发与 agent 任务书同源)", () => {
   const long = "任".repeat(559) + "尾部标记";
   const t = buildTrigger({ source: "panel", sessionId: "s-x", instruction: long, now: () => 1 });

@@ -1,7 +1,6 @@
 /**
  * 团队功能端到端(W4):seed 虚拟组织 → 真实身份入册 → relay 认证 → 角色/权限位分离 →
  * 团队仓 push/MR 合并/pull 双向一致 → 活动流 → contribute 回流 → remove → issue 协作 → 一键清理。
- *
  * 覆盖边界(不假装):
  * 1. 成员加入用「roster 落盘模拟」:两个真实 ed25519 身份(loadOrCreateIdentity)的指纹写进
  *    roster/members 后提交推送;invite 兑换路径由既有 team-native-rest / team-provider-relay-e2e 测试覆盖。
@@ -308,7 +307,7 @@ describe("团队功能 e2e(seed 虚拟组织 + 真 relay + 真身份)", () => {
     // 两视角内容一致(同一份投影,pulledAt 除外)。
     expect(stripPulledAt(digestA)).toBe(stripPulledAt(digestB));
     // 规则本体以团队仓 main 的字节为权威;digest.rules 同时投影扁平 rules/<name>.md 与
-    // 命名空间 rules/<ns>/<name>.md(2026-11-05 修:此前只扫扁平层,嵌套规则进得了团队仓、
+ // 命名空间 rules/<ns>/<name>.md(修:此前只扫扁平层,嵌套规则进得了团队仓、
     // 出不来投影,counts.rules 恒 0)。故这里断言 A 侧 rule 已进两视角 digest。
     expect(await gitOut(["show", "origin/main:rules/e2e/from-a.md"], clone)).toContain("from-a —— e2e 规则");
     expect((digestB.rules ?? []).map((r) => r.name)).toContain("e2e/from-a");
@@ -388,7 +387,7 @@ describe("团队功能 e2e(seed 虚拟组织 + 真 relay + 真身份)", () => {
     expect(await gitTry(["cat-file", "-e", "origin/main:docs/from-b.md"], clone)).not.toBeNull();
 
     // 等「remove 之后的投影」而不是「下一个 digest」:relay 在 remove 前后可能连推两帧,
-    // baseB 之后的第一个帧仍可能是 remove 前的快照(实测偶发,非产品缺陷)。
+ // baseB 之后的第一个帧仍可能是 remove 前的快照(经验证偶发,非产品缺陷)。
     const digest = await peerB.waitDigest(
       baseB,
       (d) => (d.rules ?? []).some((r) => String(r.name).startsWith("demo/")) && !(d.rules ?? []).some((r) => String(r.name).includes("e2e/from-a")),

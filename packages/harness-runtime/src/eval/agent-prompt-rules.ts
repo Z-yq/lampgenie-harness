@@ -1,6 +1,6 @@
 /**
- * 主 agent 提示系统常驻契约规则(step-028,designs/10 L1 常驻化):
- * 之前只有 contract-eval.test.ts 里两条临时规则,step-015 声称的「关键纪律锁定」未沉淀为资产——
+ * 主 agent 提示系统常驻契约规则(L1 常驻化):
+ * 之前只有 contract-eval.test.ts 里两条临时规则, 声称的「关键纪律锁定」未沉淀为资产——
  * 本模块是单一出处的规则集,由 agent-prompt-rules.test.ts 对真文件执行。
  * 纪律:改提示措辞必须同步改规则(规则锁的是「纪律句」不是全文,允许措辞微调的空间之外的关键结构)。
  */
@@ -18,10 +18,10 @@ export const AGENT_PROMPT_RULES: ContractRule[] = [
     mustNotContain: ["sk-proj", "sk-ant", "sk_live"],
   },
   {
-    name: "经验工具挂载(designs/18 §3)",
+    name: "经验工具挂载( §3)",
     target: "apps/gateway/src/agent-wiring.ts",
     mustContain: [
-      "skillViewTool(store, () => disabledBuiltins(repoRoot()))", // 停用门接线(2026-10-14 审计 C3)
+      "skillViewTool(store, () => disabledBuiltins(repoRoot()))", // 停用门接线(审计 C3)
       "experienceFoldTool(store)",
       "FOLD_CATEGORY_WHITELIST",
     ],

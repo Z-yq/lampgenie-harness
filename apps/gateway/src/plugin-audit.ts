@@ -1,7 +1,6 @@
 /**
  * 插件清单 ABI 校验 / 能力白名单 / 授权指纹(consent hash)/ 安装审计 / kill list。
  * 纯函数模块(零 IO、零依赖,唯一实现):plugins.ts 只做接线,便于单测与外部复用。
- *
  * 设计要点(fail-closed):
  * - 清单结构错了就拒装(PLUGIN_ABI_INVALID),不写任何资产;
  * - componentTypes 出现白名单外的组件类型即拒装(PLUGIN_CAPABILITY_UNKNOWN);

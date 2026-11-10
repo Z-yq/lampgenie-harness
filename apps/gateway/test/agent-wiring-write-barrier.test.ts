@@ -1,6 +1,5 @@
 /**
  * config.agent.writeBarrier 从 gateway 装配面透传到 AgentLoop 的回归锚(2026-11 验收)。
- *
  * 契约:
  * a.wireBarrierOf 是装配层唯一取值口径:只认 "off"/"hard",其它值/缺席 → undefined
  *   (undefined = 不写键,把缺省留给 loop 内部的 hard = 现状行为);不读 env。
@@ -9,7 +8,6 @@
  * d.静态断言(llm-loop-backend 首跑+重派两处 / super-agent / agent-wiring 主构造点):
  *   口径=源码静态断言,非端到端 —— 装配面链路起不来(需真 provider/executor),
  *   故用「源码必须含传递式」把断线钉死,行为面由 b/c 的 loop 级用例兜。
- *
  * env 说明:GENIE_WRITE_BARRIER 由 loop 内部**优先于** opts 解析(见
  * packages/harness-runtime/test/agent-loop-write-barrier.test.ts:150 一带),测试环境若残留
  * 会掩盖 opts 的效果 —— 故块首先 delete,块末恢复原值。

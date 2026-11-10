@@ -1,4 +1,4 @@
-/** UI 实测:项目级代码洞察端到端(审计 R1-C15b 补)——
+/** UI 经验证:项目级代码洞察端到端(审计 补)——
  * 面板添加项目→激活→洞察查询,证明查询走的是项目根而非 harness 根。
  * 用法: PANEL_BASE=http://127.0.0.1:77xx node sensproj.spec.cjs */
 const { chromium } = require("playwright-core");

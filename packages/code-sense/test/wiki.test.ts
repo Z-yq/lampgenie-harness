@@ -1,5 +1,5 @@
 /**
- * wiki 单测(step-118):确定性骨架/引用回查/缓存/增量/LLM 注入与降级/词法问答。
+ * wiki 单测:确定性骨架/引用回查/缓存/增量/LLM 注入与降级/词法问答。
  * 不依赖真实 LLM 与网络。
  */
 import { describe, it, expect, afterEach } from "vitest";
@@ -76,7 +76,7 @@ describe("确定性骨架 + 引用回查", () => {
     expect(res.manifest.pages.map((p) => p.id)).toEqual([
       "overview", "flow", "file-tree", "modules/packages-alpha", "modules/packages-beta", "entrypoints", "dependencies", "guide", "features",
     ]);
-    // 2026-10-26:无索引时 flow 明确降级为词法级(页面/manifest 同口径)
+ // 无索引时 flow 明确降级为词法级(页面/manifest 同口径)
     expect(res.manifest.flow?.source).toBe("lexical");
     const flowPage = readFileSync(join(wikiOut(dir), "flow.md"), "utf-8");
     expect(flowPage).toContain("全仓代码流");

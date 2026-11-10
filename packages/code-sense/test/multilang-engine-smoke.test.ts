@@ -1,5 +1,5 @@
 /**
- * 四语言 adapter 引擎注册冒烟(2026-10-25):GRAPH_STRUCT_EXT 注册 + mergeStructAdapters
+ * 四语言 adapter 引擎注册冒烟:GRAPH_STRUCT_EXT 注册 + mergeStructAdapters
  * 按扩展名分派 + 跨文件候选解析(每语言一条最小闭环)。
  */
 import { describe, it, expect } from "vitest";

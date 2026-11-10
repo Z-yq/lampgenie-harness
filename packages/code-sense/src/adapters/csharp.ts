@@ -1,10 +1,8 @@
 /**
- * C# structural adapter(2026-10-25,legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
- *
+ * C# structural adapter(legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
  * 主路径:tree-sitter-c_sharp wasm(tree-sitter-wasms 自带;语言键 csharp → wasm 文件名
  * c_sharp 由 adapters/tree-sitter.ts 映射),tier=structural、source=tree-sitter;
  * wasm 不可用/解析异常 → 文本回退(source=text,只出符号零边,如实降级)。
- *
  * 提取子集(诚实边界):
  * - 类型符号:class/struct/record/interface(interface 记 kind=interface)/enum(记 kind=enum);
  *   namespace 不登记(命名空间不是类型容器)。
@@ -16,7 +14,6 @@
  * - 跨文件候选(to=""+toName[+receiverType]):本地无目标的类型证据调用;static 形态
  *   `Other.Run()`(首字母大写且非局部变量)按 receiverType 发候选。无类型证据的小写接收者
  *   不猜(宁缺勿错)。
- *
  * 未覆盖(登记):泛型约束/委托/LINQ 扩展方法/`?.` 条件访问、partial 类跨文件合并、
  *   局部函数(local function)独立符号、record 主构造器合成 ctor、显式接口实现名。
  * 文本回退边界(source=text):泛型方法签名/表达式体局部类型不解析,字段/属性符号不导出。
@@ -254,7 +251,7 @@ export async function parseCsharpFile(root: string, relFile: string): Promise<Cs
       if (local) return local;
       const ft = containerFields?.get(name);
       if (ft) return baseType(ft, "csharp");
-      if (typeNames.has(name)) return name; // 静态类名形态 Util.Run()
+      if (typeNames.has(name)) return name; // 静态类名形态 Util.Run
       return undefined;
     };
     const typeOfExpr = (node: LangNode): string | undefined => {

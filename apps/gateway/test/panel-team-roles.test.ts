@@ -1,4 +1,4 @@
-// 团队页角色/同步面静态断言(2026-11-05 teamai 移植 p1):
+// 团队页角色/同步面静态断言( teamai 移植 p1):
 // panel.ts 是 ~29.7k 行内联脚本大文件(grep 对其静默零命中),按 panel-git-sync 的既有模式做源码级契约锚。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";

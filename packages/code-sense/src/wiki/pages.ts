@@ -1,5 +1,5 @@
 /**
- * wiki 页面骨架(step-118):确定性事实 + 可校验 file:line 引用 + 可选 LLM 叙述拼接。
+ * wiki 页面骨架:确定性事实 + 可校验 file:line 引用 + 可选 LLM 叙述拼接。
  * 页面里的 `path:line` 由面板 CITE_RE 自动变成可点击引用(点开走 file.read 查看器)。
  */
 import { extname } from "node:path";
@@ -81,8 +81,7 @@ export async function citeAt(
   cache: SourceCache,
   file: string,
   line: number,
-  endLine = line,
-): Promise<WikiCitation | null> {
+  endLine = line): Promise<WikiCitation | null> {
   const lines = await cache.load(file);
   if (!lines || lines.length === 0) return null;
   const start = Math.max(1, Math.min(line, lines.length));
@@ -105,11 +104,11 @@ const DECL_RE = /^\s*(package\s|import\s|export\s|func\s|def\s|class\s|public\s|
 export async function anchorOfFile(cache: SourceCache, file: string): Promise<WikiCitation | null> {
   const lines = await cache.load(file);
   if (!lines) return null;
-  const usable = (l: string) => anchorable(l) && !/^\s*(\/\/|#!\s|\/\*|\*|--|<!--)/.test(l) && !/^\s*[{}()[\];,]+\s*$/.test(l);
+  const usable = (l: string) => anchorable(l) && !/^\s*(\/\/|#!\s|\/\*|\*|--|<!--)/.test(l) && !/^\s*[{}[\];,]+\s*$/.test(l);
   for (let i = 0; i < lines.length; i++) {
     if (usable(lines[i]!) && DECL_RE.test(lines[i]!)) {
       return { file, startLine: i + 1, endLine: i + 1, anchor: lines[i]!.trim() };
-    }
+  }
   }
   for (let i = 0; i < lines.length; i++) {
     if (usable(lines[i]!)) return { file, startLine: i + 1, endLine: i + 1, anchor: lines[i]!.trim() };
@@ -190,7 +189,7 @@ async function readmeParagraph(cache: SourceCache, file: string): Promise<{ text
     if (!raw || raw.startsWith("#") || raw.startsWith("[![") || raw.startsWith("![") || /^<[^>]+>/.test(raw)) {
       if (start >= 0 && buf.length > 0 && !raw) break;
       continue;
-    }
+  }
     if (start < 0) start = i + 1;
     end = i + 1;
     buf.push(raw.replace(/^>\s*/, ""));
@@ -204,8 +203,7 @@ export async function buildOverview(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
-  narrative?: WikiNarrative,
-): Promise<PageDraft> {
+ narrative?: WikiNarrative): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const sections: string[] = [];
   sections.push(`# ${input.displayName} 仓库概览`, "", metaLine(input, narrative ? "LLM+引用回查" : "确定性骨架"), "");
@@ -262,8 +260,7 @@ function readmeParaFallback(input: WikiInput): string {
 export async function buildFileTree(
   input: WikiInput,
   cache: SourceCache,
-  config: WikiConfig,
-): Promise<PageDraft> {
+ config: WikiConfig): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 文件树`, "", metaLine(input, "确定性骨架"), "", `深度上限 ${config.treeDepth};目录后括号为文件数。`, "", "```text"];
   lines.push(...renderTree(input.allFiles, config.treeDepth));
@@ -303,7 +300,7 @@ function renderTree(files: string[], maxDepth: number): string[] {
       cur = n;
     }
     if (segs.length - 1 <= maxDepth) cur.files.push(segs.slice(Math.min(segs.length - 1, maxDepth)).join("/") || segs[segs.length - 1]!);
-  }
+    }
   const out: string[] = [];
   const walk = (node: Node, prefix: string, depth: number) => {
     if (out.length > 220) return;
@@ -326,8 +323,7 @@ export async function buildModulePage(
   cache: SourceCache,
   config: WikiConfig,
   moduleName: string,
-  narrative?: WikiNarrative,
-): Promise<PageDraft> {
+ narrative?: WikiNarrative): Promise<PageDraft> {
   const slug = slugify(moduleName);
   const files = (input.moduleFiles.get(moduleName) ?? []).slice().sort();
   const cites: WikiCitation[] = [];
@@ -350,8 +346,8 @@ export async function buildModulePage(
     for (const sym of syms) {
       if (symbolRows.some((r) => r.name === sym.name && r.file === s.file)) continue;
       symbolRows.push({ name: sym.name, kind: sym.kind, file: s.file, line: sym.line });
-      if (symbolRows.length >= config.maxSymbols) break;
-    }
+    if (symbolRows.length >= config.maxSymbols) break;
+  }
     if (symbolRows.length >= config.maxSymbols) break;
   }
   out.push("## 关键符号(词法级,非语义确证)", "", "| 符号 | 类型 | 定义 |", "| --- | --- | --- |");
@@ -380,7 +376,7 @@ export async function buildModulePage(
       const cur = deps.get(toMod);
       if (cur) cur.count++;
       else deps.set(toMod, { count: 1, file: imp.file, line: t.line });
-    }
+  }
   }
   out.push("## 依赖", "");
   if (deps.size === 0) out.push("- 未解析到跨模块 import 边(单一模块/外部依赖)");
@@ -418,15 +414,15 @@ export async function buildEntrypoints(
 ): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const out: string[] = [`# 入口与运行`, "", metaLine(input, "确定性骨架"), ""];
-  // 2026-10-27:真实可运行/服务入口置顶(交互面信号:进程入口+HTTP 服务文件),读者第一问。
+ // 真实可运行/服务入口置顶(交互面信号:进程入口+HTTP 服务文件),读者第一问。
   if (runnable && runnable.length > 0) {
     out.push("## 可运行 / 服务入口(先看这里)", "");
     for (const r of runnable.slice(0, 14)) {
       const c = await citeAt(cache, r.file, r.line);
-      if (c) cites.push(c);
+    if (c) cites.push(c);
       out.push(`- ${r.name} — ${r.kindLabel} @ ${r.file}:${r.line}${r.detail ? `(${quoteAnchor(r.detail, 80)})` : ""}`);
-    }
-    out.push("");
+  }
+  out.push("");
   }
   out.push("## 清单字段", "");
   const seenIdentity = new Set<string>();
@@ -447,7 +443,7 @@ export async function buildEntrypoints(
   if (input.hints.run.length === 0) out.push("- 未在 README/清单中识别到运行命令");
   out.push("", "## 入口文件", "");
   const entrySeen = new Set<string>();
-  // 2026-10-27:__init__.py 是包文档不是可运行入口(genie-memory 实锚:静态推导把 14 个
+ // __init__.py 是包文档不是可运行入口(依据:静态推导把全部
   // __init__ 排在真入口前面,读者第一眼全是噪声)——过滤掉,真入口才有机会露头。
   const entryFiles = input.hints.entryFiles.filter((e) => !/(^|\/)__init__\.py$/.test(e.file));
   for (const e of entryFiles.slice(0, config.maxFilesPerPage)) {
@@ -495,7 +491,7 @@ export async function buildDependencies(
       if (c) cites.push(c);
       out.push(`| ${e.from} | ${e.to} | ${e.count} | ${e.evidence ? `${e.evidence.file}:${e.evidence.line}` : "—"} |`);
       rows++;
-    }
+  }
   }
   if (rows === 0) out.push("| — | — | 0 | 未解析到内部 import 边 |");
   const unresolved = input.imports.reduce((n, x) => n + x.unresolved, 0);

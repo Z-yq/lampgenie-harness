@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createOpenAiCompatProvider } from "../src/agent/openai-provider";
 
 /**
- * apiType 协议适配层端到端(step-127):node:http 真 mock server(127.0.0.1 随机端口)
+ * apiType 协议适配层端到端:node:http 真 mock server(127.0.0.1 随机端口)
  * + 真 fetch(非 mock-fetch)——协议级验证:握手凭证头/请求体 wire 形态/流式 SSE 事件序列/
  * tool 往返/usage 归一/错误归一。归一出口与 chat 模式同构(LlmResponse)。
  * wire 形态锚 opencode packages/llm/src/protocols/{anthropic-messages,openai-responses}.ts。
@@ -104,7 +104,7 @@ describe("apiType=anthropic 端到端(mock server)", () => {
     expect(req.headers["authorization"]).toBeUndefined();
     expect(req.headers["content-type"]).toBe("application/json");
     // 请求体:system 用 blocks 形态(官方兼容 string,blocks 亦为官方形态;Z.ai/智谱 anthropic 兼容
-    // 端点是否接受 blocks+cache_control 未实证——按 Anthropic 规范缓存字段应被忽略而非报错,登记待实测)
+ // 端点是否接受 blocks+cache_control 未验证——按 Anthropic 规范缓存字段应被忽略而非报错,登记待经验证)
     expect(req.body.system).toEqual([{ type: "text", text: "你是助手", cache_control: { type: "ephemeral" } }]);
     const msgs = req.body.messages as { role: string; content: { type: string; text?: string; source?: { type: string; media_type: string; data: string }; cache_control?: unknown }[] }[];
     expect(msgs).toHaveLength(1);
@@ -127,7 +127,7 @@ describe("apiType=anthropic 端到端(mock server)", () => {
   });
 
   it("同一 assistant 的多个 tool_use → tool_result 必须合并进**同一条** user 消息(deepseek 严格校验 400 实测)", async () => {
-    // 2026-10-31 缺陷:旧实现每条 tool 消息各自 push 一条 user → 产生「只含部分 tool_result 的
+ // 缺陷:旧实现每条 tool 消息各自 push 一条 user → 产生「只含部分 tool_result 的
     // user 消息」。Anthropic 协议要求同一 assistant 那批 tool_use 的 tool_result 出现在紧随其后的
     // 一条消息里;strict 端点直接 400:
     //   tool_use ids were found without tool_result blocks immediately after: call_x, call_y
@@ -228,8 +228,8 @@ describe("apiType=anthropic 端到端(mock server)", () => {
   });
 
   it("usage 原生口径 cache_read_input_tokens=0 必须显式下发 cachedTokens:0(区分「provider 说没命中」与「provider 没报字段」)", async () => {
-    // 2026-10-31 修:旧实现 `cached > 0 ? {cachedTokens} : {}` 把两者压成同一个「无字段」,
-    // 导致命中率分析无法判断冷启动首调是真未命中还是计量缺失(实测 cold run step0/step1 都无此字段)。
+ // 修:旧实现 `cached > 0 ? {cachedTokens} : {}` 把两者压成同一个「无字段」,
+ // 导致命中率分析无法判断冷启动首调是真未命中还是计量缺失(经验证 cold run step0/step1 都无此字段)。
     const m = await startMock((req, res) => {
       void req;
       json(res, 200, {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
-// step-137 消息流视觉分层:内联脚本语法门 + 板色令牌/板式类名齐备 + 行调子与 JSON 着色真实行为。
+// 消息流视觉分层:内联脚本语法门 + 板色令牌/板式类名齐备 + 行调子与 JSON 着色真实行为。
 // 契约守卫:面板是单文件模板页,样式层任何改动都必须先保证页面脚本可解析、七主题令牌不缺项。
 
 // 从页面 HTML 里切出顶层函数源码(花括号配平),塞进 sandbox 执行——用于验证页面内函数真实行为。
@@ -18,7 +18,7 @@ function extractFn(html: string, name: string): string {
   return html.slice(i, j);
 }
 
-describe("step-137 视觉分层校验", () => {
+describe(" 视觉分层校验", () => {
   it("页面脚本可解析 + 令牌/板式齐备 + 行调子与 JSON 着色行为正确", async () => {
     const p = servePanel(7897, () => {});
     const res = await fetch("http://127.0.0.1:7897/");
@@ -33,7 +33,7 @@ describe("step-137 视觉分层校验", () => {
       expect(() => new Script(code), "script#" + i + " 语法错误").not.toThrow();
     });
 
-    // 2) 板色令牌(:root + light + 五套主题,至少 7 处定义)
+ // 2) 板色令牌(root + light + 五套主题,至少 7 处定义)
     for (const tok of ["--surf-code", "--surf-term", "--surf-json", "--surf-hit", "--surf-card", "--surf-fail"]) {
       const n = (html.split(tok).length - 1);
       expect(n, tok + " 定义次数").toBeGreaterThanOrEqual(7);
@@ -50,8 +50,7 @@ describe("step-137 视觉分层校验", () => {
       JSON_BS: String.fromCharCode(92), JSON_DQ: String.fromCharCode(34),
     };
     const api = new Function("sb", "with(sb){" + src + "\n;return {lineToneOf: lineToneOf, jsonLineHtml: jsonLineHtml};}")(
-      sandbox,
-    ) as {
+      sandbox) as {
       lineToneOf: (l: string, kind?: string) => string;
       jsonLineHtml: (l: string) => string;
     };
@@ -82,8 +81,8 @@ describe("step-137 视觉分层校验", () => {
     expect(escq).toContain("say");
 
     // 5) 板式真实产物:切出 codeLinesBlock/trBlockPreview/trRunCmd 及最小依赖桩,验终端板真的带上类名
-    // foldTermFrames 必须一并切出:trBlockPreview 的 kind:"term" 路径直调它(2026-10-20 加入),
-    // 漏切=沙箱里 ReferenceError(实测曾现);它自身零外部依赖,纯函数直切即可。
+ // foldTermFrames 必须一并切出:trBlockPreview 的 kind:"term" 路径直调它(加入),
+ // 漏切=沙箱里 ReferenceError(经验证曾现);它自身零外部依赖,纯函数直切即可。
     const rsrc = ["codeLinesBlock", "trBlockPreview", "trRunCmd", "lineToneOf", "foldTermFrames"]
       .map((n) => extractFn(html, n)).join("\n");
     const stub = {

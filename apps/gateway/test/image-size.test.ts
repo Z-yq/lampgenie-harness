@@ -1,5 +1,5 @@
 /**
- * 视觉通道尺寸守卫单测(2026-11-05 事故:10144x1146 PNG 注入 → 每轮 400 unsupported image)。
+ * 视觉通道尺寸守卫单测(事故:10144x1146 PNG 注入 → 每轮 400 unsupported image)。
  * 覆盖:PNG IHDR / JPEG SOF0 / GIF 逻辑屏 / WebP VP8X 解析;长边与总像素双阈值;
  * 解析失败(null)= 放行(解析器盲区不拦正常图);env 可覆盖缺省限额。
  */

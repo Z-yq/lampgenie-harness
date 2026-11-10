@@ -1,9 +1,8 @@
 /**
- * LLM 调用轨迹落盘(step-132,2026-10-19 用户口径:glm-5.3-flash 会话「不知道在干什么,
+ * LLM 调用轨迹落盘(glm-5.3-flash 会话「不知道在干什么,
  * 每次调用的 message 和 output 都要记录方便 debug」)。此前 journal 只有 message.agent 摘要
  * (text+toolCalls)——请求侧喂了什么(system/历史/注入提醒)、原始响应、模型档全不可见,
  * 弱模型会话排障只能靠行为倒推。
- *
  * 形态:每次 chat 一文件 <baseDir>/<sessionId>/call-<seq>-t<turn>s<step>.json,内容=「怎么送给
  * LLM 服务的就怎么记」——全量请求 messages+**工具完整规格 schema**+provider 参数面
  * (baseUrl/apiType/maxTokens/reasoningEffort/timeoutMs,复现 wire 请求的全部输入;apiKey 永不落)+
@@ -11,7 +10,6 @@
  * (file+meta,不带 payload)——journal 不膨胀,全文在文件,两者按 sessionId+turn+step 对齐。
  * 子代理 loop 配 MemoryJournal 时指针事件是 no-op,但文件照落(sessionId=subagent-<taskId>
  * 自成目录,ls 可发现);子代理的每步行动(工具调用与结果)随 messages 历史全量在场。
- *
  * 旁路纪律:写失败静默(轨迹绝不打断主链);messages 里无凭证(请求体同 dumpRequestBody 口径,
  * apiKey 只在 headers 永不落盘)。
  */
@@ -23,7 +21,7 @@ import type { LlmCallTrace } from "@lampgenie/runtime/agent/loop";
 import { rawTokens, calibrate, calibrationOf } from "@lampgenie/runtime/agent/token-estimate";
 import { repoRoot } from "./repo-root.js";
 import { pruneLlmTrace } from "./llm-trace-retention.js";
-// 前缀算法复用 panel-traj-model(step-1026 已实现 msgKeyOf/commonPrefixLen),不重写。
+// 前缀算法复用 panel-traj-model(已实现 msgKeyOf/commonPrefixLen),不重写。
 import { commonPrefixLen } from "./panel-traj-model.js";
 
 /**
@@ -45,8 +43,7 @@ function redactDeep<T>(v: T): T {
 }
 
 /**
- * prune 节流常量(轨迹追踪 P1 接线,2026-10-29)。
- *
+ * prune 节流常量(轨迹追踪 P1 接线。
  * 为什么不是每次写完都 prune:`pruneLlmTrace` 要 `readdir` 全树 + 每个 `call-*.json` 一次
  * `stat`(会话几百个目录 × 几百个文件 = 上万次 syscall;.genie 常落在 9p 上,单次 stat 是
  * 毫秒级)→ 每次 LLM 调用都跑会把旁路成本变成主链成本。双条件「写满 N 次」**或**「距上次
@@ -80,16 +77,15 @@ function maybePrune(root: string, protectPath: string): void {
   void pruneLlmTrace(root, { protectPath }).catch(() => { /* 旁路优化:清理失败无害,静默 */ });
 }
 
-// ===================== step-1027:本地估算 + 前缀缓存估算 + 用量异常标记 =====================
+// ===================== 本地估算 + 前缀缓存估算 + 用量异常标记 =====================
 /**
- * 为什么需要本地估算(step-1027):provider 上报的 usage 不可全信——实测有会话报
+ * 为什么需要本地估算:provider 上报的 usage 不可全信——经验证有会话报
  * `input 111976 / cached 110848`,下一步只追加一条小工具回执却报 `input 166159 / cached 150528`
  * (增量 54283 ≫ 实际新增内容),「缓存命中」甚至超过上一步的整个 input。没有本地独立口径就无法
  * 判定「上报值是不是假的」,于是统计/成本/命中率全跟着漂。这里给一个**离线可算**的估算:
  * 与 wire 请求同源(messages+tools),不依赖 provider,用来做上报值的对照基准与异常标记。
- *
  * 口径纪律:是**量级估算**,不是计费口径(与 panel-traj-model.approxTokens 同源思路)——
- * 非 ASCII 码点各 1 tok(中文/emoji 一字≈1 tok),其余 4 字符 1 tok;累加完 Math.ceil 收口。
+ * 非 ASCII 码点各 1 tok(中文/emoji 一字≈1 tok),其余 4 字符 1 tok;累加完 Math.ceil。
  * 空输入=0(不返回 NaN/负数),永不对调用方抛(估算失败不打断主链)。
  */
 function safeJsonOf(v: unknown): string {
@@ -202,7 +198,7 @@ function finiteOf(v: unknown): number {
  * 上报 usage 的可疑判据(任一命中即标记;缺值/0 的判据不参与,避免「provider 不报 cached」
  * 被误判成异常)。返回一句中文可读原因(带具体数字),正常时 undefined。
  * - 上报 input 远超/远低于本地估算(>1.25 倍 / <0.6 倍):口径漂移或串号;
- * - 上报 cached > 上一步的整个 input:缓存命中不可能超过上一次请求的全部输入(实锤造假/串会话);
+ * - 上报 cached > 上一步的整个 input:缓存命中不可能超过上一次请求的全部输入(注意造假/串会话);
  * - 上报 cached > 本次估算的 1.1 倍:命中量超过本请求全部内容。
  */
 function usageAnomalyOf(a: {
@@ -231,12 +227,10 @@ function usageAnomalyOf(a: {
 // ===================== 指针事件入账(2026-11 修「文件在、事件永久缺失」) =====================
 /**
  * 病灶:此前只在文件写成功后 `journal.append({kind:"llm.trace"})`,append 抛错被外层 try 静默吞掉
- * → 轨迹文件落在盘上、journal 里却没有指针事件,事件永久缺失且无人知道(实测本会话 23 个 call
+ * → 轨迹文件落在盘上、journal 里却没有指针事件,事件永久缺失且无人知道(经验证本会话 23 个 call
  * 文件只有 21 条 llm.trace)。
- *
  * 修法:一次入账 = 一次同步 append,失败**立即重试一次**;仍失败则异步把一行 JSON 追加到 drop 日志
  * (旁路诊断,不抛不 await)。不变量不变:先写文件、再发指针;任何失败都不得让主链抛错。
- *
  * 幂等:**以 file 路径为键**,同一 file 在进程内只成功入账一次。键在**首次 append 之前**就占用
  * (claim)——因为 append 可能「先落地再抛错」,若等成功后再记账,重试就会双写。
  */
@@ -288,13 +282,13 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
   const dropLog = dropLogPath || process.env?.GENIE_LLM_TRACE_DROP_LOG || defaultDropLogPath(root);
   const seqByDir = new Map<string, number>();
   return (info) => {
-    // 同步段只做 CPU 工作(提醒扫描+stringify);**落盘异步**(2026-10-30 冻结实锤:writeFileSync
+ // 同步段只做 CPU 工作(提醒扫描+stringify);**落盘异步**(冻结注意:writeFileSync
     // 把全量请求体(几十 KB~数 MB)同步写 9p,停顿时 worker 事件循环冻在半截文件上 196s 被收割
     // ——.genie/llm-trace/.../call-0005-t2s4.json 76KB 半截即物证)。fire-and-forget:轨迹是
     // 旁路,乱序/迟到无害;指针事件(journal llm.trace)在文件写完后才发——「指针在⇒文件在」
     // 的不变量保持。
     try {
-      // step-1027:本地估算+前缀命中估算+上报值异常标记。**只做 CPU**(与提醒扫描/stringify 同一
+ // 本地估算+前缀命中估算+上报值异常标记。**只做 CPU**(与提醒扫描/stringify 同一
       // 同步段纪律):估算 = 遍历 messages 数码点,几十 KB 级别是微秒量级;绝不能在这里新增 await。
       // 顺序:先取 baseline(上一请求)再写本次缓存——先写会把「上一步」变成自己,前缀命中恒等于全量。
       // token 口径统一见 agent/token-estimate.ts:本地估算走 rawTokens(cl100k 真分词),
@@ -335,7 +329,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
       // 文件名带毫秒时戳兜底:sink 每实例独立(子代理每派发新建 loop+sink,seq 归零),
       // turn 号又来自进程级静态计数器——同名撞写会静默丢轨迹,时戳保证永不覆盖。
       const file = join(dir, `call-${String(seq).padStart(4, "0")}-t${info.turn}s${info.step}-${Date.now()}.json`);
-      // 注入提醒普查(2026-10-24 会话审计增强):本请求实际携带了哪些 ephemeral 提醒块——
+ // 注入提醒普查(会话审计增强):本请求实际携带了哪些 ephemeral 提醒块——
       // tips/todo/已读清单/board 锚/时间盒。审「提示词是否加载正确/有无冗余复读」不必再解包
       // messages 全文,journal 指针事件上一眼可见。
       const reminders: string[] = [];
@@ -343,7 +337,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
         if (m.role !== "user") continue;
         const c = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
         if (!c.includes("<system-reminder>")) continue;
-        // J1(2026-11 token 轮):任务内轨迹回看块(loop 的 task.trajectory 旁路产物经 tips 注入)。
+ // (2026-11 token 轮):任务内轨迹回看块(loop 的 task.trajectory 旁路产物经 tips 注入)。
         // 必须先于 tips 分类判定:tips 块是本条的包封壳,先命中 >tips( 会把轨迹块一并吞成 tips,
         // 审计时就分不出「注了纪律」还是「注了轨迹回看」。
         if (c.includes("任务内轨迹")) reminders.push("trajectory");
@@ -397,7 +391,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
                 model: info.model,
                 durationMs: info.durationMs,
                 ...(info.response.usage ? { usage: info.response.usage } : {}),
-                // 构型摘要(2026-10-19 用户实报「journal 里看不到 system/构型」):journal 侧可见的
+ // 构型摘要(用户用户反馈「journal 里看不到 system/构型」):journal 侧可见的
                 // 有界速览——角色链/system 头部/输出头部/工具调用名;全文仍在 file(指针哲学不变)。
                 messageRoles: info.messages.map((m) => m.role),
                 systemHead: String(info.messages[0]?.content ?? "").slice(0, 120),
@@ -405,7 +399,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
                 ...(reminders.length ? { reminders } : {}),
                 ...(info.error ? { error: info.error.slice(0, 300) } : {}),
                 ...(info.response.toolCalls?.length ? { toolCalls: info.response.toolCalls.map((c) => c.name) } : {}),
-                // step-1027 采集层:本地估算(input/前缀命中)+ 上报值异常标记。总是给前两项
+ // 采集层:本地估算(input/前缀命中)+ 上报值异常标记。总是给前两项
                 // (首调 cached=0、失败调用也给)——下游按字段名消费,不用猜「没这键=旧版本还是正常」。
                 estimatedInputTokens: estInput,
                 // 前缀命中同样乘 ratio(与 estInput 同尺):ratio 恒 1 时逐值等于 raw。

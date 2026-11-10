@@ -1,6 +1,5 @@
 /**
  * RSI #224 熔断器(Circuit Breaker,纯逻辑零 IO)。
- *
  * 为什么需要熔断器:自我改进循环(RSI)能改工具/提示/图谱,但「连续变差」往往不是单点事故,
  * 而是方向性错误(假设错、评测口径漂移、上下文被污染)。这时最贵的动作不是继续试,而是**停下**:
  * 暂停夜间改进与实验投放、把已投放实验隔离回滚、用基线还原现场。本模块把这套判断做成纯函数:
@@ -13,7 +12,6 @@
  *   (只读观测永远不该被熔断挡住,否则事故期间失去眼睛)。
  * - takeBaseline / diffBaselines / planRollback / verifyRollback:基线快照(稳定 hash)+ 差异 +
  *   固定顺序的回滚计划(隔离实验 → 还原五个面 → 校验基线)。回滚计划不执行、只描述,执行由上层负责。
- *
  * 依赖纪律:只 import node:crypto(基线 hash);不读写文件/网络/环境,不引 agent loop 与 gateway。
  * canonical JSON 内联一份(键升序、数组保序、undefined 键省略),与 experiment-ledger 的 canonicalJSON 同语义;
  * 本模块不 import 台账,避免熔断器被台账改动波及。
@@ -396,8 +394,7 @@ export function takeBaseline(input: {
  */
 export function diffBaselines(
   prev: BaselineSnapshot,
-  next: BaselineSnapshot,
-): { changed: BaselineSurface[]; metrics: Array<{ metric: string; from: number; to: number; delta: number }> } {
+  next: BaselineSnapshot): { changed: BaselineSurface[]; metrics: Array<{ metric: string; from: number; to: number; delta: number }> } {
   const changed: BaselineSurface[] = [];
   for (const surface of BASELINE_SURFACES) {
     if (prev?.versions?.[surface] !== next?.versions?.[surface]) changed.push(surface);
@@ -459,8 +456,7 @@ export function planRollback(
 /** 回滚校验:hash 一致 → RSI_ROLLBACK_VERIFIED,否则 RSI_ROLLBACK_TARGET_MISMATCH。 */
 export function verifyRollback(
   current: BaselineSnapshot,
-  target: BaselineSnapshot,
-): { ok: boolean; codes: string[] } {
+  target: BaselineSnapshot): { ok: boolean; codes: string[] } {
   const same = typeof current?.hash === "string" && current.hash === target?.hash;
   return same ? { ok: true, codes: [RSI_ROLLBACK_VERIFIED] } : { ok: false, codes: [RSI_ROLLBACK_TARGET_MISMATCH] };
 }

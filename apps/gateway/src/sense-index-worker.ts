@@ -5,15 +5,15 @@ import { buildC2fIndex, saveIndex, indexDir } from "@lampgenie/code-sense";
 
 // Emscripten(web-tree-sitter)wasm 装载失败会以**独立的 unhandled rejection**逃逸——
 // loadTsParser 的 try/catch 接不到(Node 对 unhandled rejection 默认策略=杀进程)。
-// 2026-10-14 实锤:bundle 形态下 wasm 相对定位落空(dist/ 无 tree-sitter.wasm),Python 仓
+// 注意:bundle 形态下 wasm 相对定位落空(dist/ 无 tree-sitter.wasm),Python 仓
 // 构建即崩、全部语言陪葬。worker 契约=「建索引,失败退出码 1」:可选增强(tree-sitter 补盲)
 // 失败必须回退纯文本形态,不允许炸掉整个构建。
 process.on("unhandledRejection", (reason) => {
   process.stderr.write(`[sense-index-worker] unhandledRejection(不中断构建): ${String(reason).slice(0, 300)}\n`);
 });
 
-// ---- step-086 父生命周期绑定(根治孤儿 worker) ----
-// 事故基线:2026-10-16 实测 3 个孤儿 worker 并发重复索引同一仓根,各 ~1.3GB——父 gateway 被
+// ---- 父生命周期绑定(根治孤儿 worker) ----
+// 事故基线: 经验证 3 个孤儿 worker 并发重复索引同一仓根,各 ~1.3GB——父 gateway 被
 // kill 后 fork 出的 worker 独立存活跑完整场构建(ts-morph 全仓 101s 级)。
 // 机制:①fork IPC 断开('disconnect',覆盖父正常退出与 kill -9);②看门狗周期核对初始 ppid
 // (覆盖 IPC 异常形态;父死后 worker 被 init 收养,process.ppid 变化是最硬信号)。

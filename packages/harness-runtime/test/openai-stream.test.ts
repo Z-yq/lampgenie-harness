@@ -28,7 +28,7 @@ function installFetch() {
   (globalThis as { fetch?: unknown }).fetch = streamFetch;
 }
 
-describe("openai-compat 流式分支(step-050)", () => {
+describe("openai-compat 流式分支", () => {
   it("content/reasoning/tool_calls/usage 聚合与非流式同构;onDelta 逐块透出", async () => {
     installFetch();
     streamFetch.mockResolvedValue(sseResponse(sseBody([
@@ -96,7 +96,7 @@ describe("openai-compat 流式分支(step-050)", () => {
     expect(body.stream).toBeUndefined();
   });
 
-  it("finish_reason 归一(M28):流式取最后一个非空值;非流式读 choices[0].finish_reason", async () => {
+  it("finish_reason 归一:流式取最后一个非空值;非流式读 choices[0].finish_reason", async () => {
     installFetch();
     // 流式:length 在末包(其后带 usage 的包无 finish_reason,不得覆盖)
     streamFetch.mockResolvedValueOnce(sseResponse(sseBody([

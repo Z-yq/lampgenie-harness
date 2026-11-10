@@ -52,7 +52,7 @@ describe("fenceCommand(workspace=工作区内)", () => {
       "cd packages/core && pnpm build",
       "cat src/../src/foo.ts", // .. 段但 resolve 后仍在根内
       `ls ${root}`, // 根内绝对路径
-      // 重定向到系统 I/O 黑洞是 shell 日常写法,不构成越权(实测最易误伤的一条)
+ // 重定向到系统 I/O 黑洞是 shell 日常写法,不构成越权(经验证最易误伤的一条)
       "pnpm test 2>/dev/null",
       "npx vitest run test/a.test.ts > /dev/null 2>&1",
       // 引号内含空白的散文(提交说明/echo 文案)不是路径参数

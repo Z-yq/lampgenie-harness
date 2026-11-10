@@ -1,10 +1,8 @@
 /**
- * 虚拟组织协作开发流 e2e(tasks/step-1525-j3-team-collab):temp 模式真跑一轮。
- *
+ * 虚拟组织协作开发流 e2e:temp 模式真跑一轮。
  * 全链路:seed 虚拟组织 → enrollRealMembers 真身份入册 → 4 名成员 relay 鉴权 → 派单 →
  * MR 提交 → 评审合入 → 评审意见 → 修订 → 经验回流 → 资产下线 → 角色变更 → 体检 →
  * 活动流可见性 → 周报聚合。真 git 仓 / 真 ed25519 签名验签 / 随机端口 relay / 真文件写入。
- *
  * 断言纪律:每条 check 一例,ok=false 即失败(detail 里带现象与证据);不 skip、不 todo、不放宽。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

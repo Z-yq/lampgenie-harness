@@ -1,15 +1,12 @@
 /**
  * 闲时算力票据持久层(生产侧,#175):把 idle-ticket 的纯状态机落到单一 JSON 账本。
- *
  * 数据面:`<root>/.genie/rsi/idle-tickets.json`
  *   { "v": 1, "tickets": { "<id>": {...} }, "bySession": { "<sessionId>": ["id..."] } }
- *
  * 为什么是单文件整账本(而不是 append-only):
  * 票据是**状态机**(queued→ready→active→expired 外加结算终态),读时只关心每张票的当前状态,
  * 追加事件流会让「当前是否还有 pending」变成每次全量折叠的开销。整账本 + 原子替换
  * (写临时文件 → fsync 由 rename 语义保证 → renameSync)让「读到的永远是某一完整代」成立:
  * 崩溃最多丢掉最后一次未 rename 的写,不会读到半张票。
- *
  * 失败口径:
  * - 参数错误(TypeError)是唯一 throw 的情形。
  * - 读失败(文件不存在 / JSON 坏 / 形状坏到无法恢复)→ 折叠成 IDLE_STORE_ERROR,**写操作拒写**:
@@ -17,7 +14,6 @@
  * - 写后校验(ticket 数一致)不过 → IDLE_STORE_WRITE_MISMATCH(不 throw,失败可见)。
  * - 状态机拒绝(PENDING_EXISTS / QUOTA_EXHAUSTED / NOT_SCHEDULABLE / EXPIRED / DISPATCH_REJECTED)
  *   直接透传 runtime 稳定码,且不写盘(拒收前零副作用)。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(经 workspace 子路径导入)。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -212,8 +208,7 @@ function storeError(root: string, read: ReadTicketStoreResult, detail: Record<st
 /** 通用「读—裁决—写」：裁决 ok 才写盘；读失败或裁决失败都零写入。 */
 function withStore(
   root: string,
-  act: (store: TicketStore) => TicketResult,
-): StoreTicketResult {
+  act: (store: TicketStore) => TicketResult): StoreTicketResult {
   const read = readTicketStore(root);
   if (!read.ok) return storeError(root, read, {});
   // 变更判定用整账本快照比对(幂等重放不算变更 → 不重写磁盘)。
@@ -275,7 +270,7 @@ export function claimOnDisk(root: string, opts: { id: string; now?: number; expe
   return withStore(root, (store) => claim(store, { id: opts.id, now: defaultNow(opts.now), expectRevision: opts.expectRevision }));
 }
 
-/** 过期收口。 */
+/** 过期。 */
 export function expireOnDisk(root: string, opts: { id: string; now?: number }): StoreTicketResult {
   requireRoot(root);
   return withStore(root, (store) => expire(store, { id: opts.id, now: defaultNow(opts.now) }));

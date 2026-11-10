@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -6,7 +7,7 @@ import { codeSense, setPlanDeps } from "../src/index";
 import { sampleFiles, buildSourceIndex, validateGraph, graphToMermaid, generateArchitecture, gitHotspots, type ArchLlm, type Graph } from "../src/archmap/index";
 import { deriveModules } from "../src/modulemap/index";
 
-const REPO = "/mnt/e/workship/genie/lampgenie-harness";
+const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
 function fixtureRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "gh-plan-"));
@@ -136,7 +137,7 @@ describe("plan 剖面接线", () => {
     const r = await codeSense(REPO, "架构", { mode: "plan" });
     expect(r.architecture).toBeTruthy();
     expect(r.architecture!.mermaid).toContain("flowchart TD");
-    expect(r.architecture!.mermaid).toContain("-->"); // 实证边实线
+    expect(r.architecture!.mermaid).toContain("-->"); // 验证边实线
     setPlanDeps({});
   }, 60_000);
 
@@ -144,5 +145,5 @@ describe("plan 剖面接线", () => {
     const hs = await gitHotspots(REPO, 30, 5);
     // 本仓今天有大量提交,应非空;但断言宽松(无 git 环境=空数组合法)
     expect(Array.isArray(hs)).toBe(true);
-  }, 30_000); // 套件并行重载下 git log 子进程偶发超默认 5s(step-022 ts-morph 挤压同类,放宽)
+  }, 30_000); // 套件并行重载下 git log 子进程偶发超默认 5s( ts-morph 挤压同类,放宽)
 });

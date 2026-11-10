@@ -1,7 +1,7 @@
 /**
- * 进程级 env 互斥(2026-10-20):vitest threads pool 的 worker 线程共享 process.env 但
+ * 进程级 env 互斥:vitest threads pool 的 worker 线程共享 process.env 但
  * 不共享模块状态(globalThis 每线程独立,内存锁无效)——并行文件各自 set/delete
- * GENIE_PERMISSION_RULES 等进程级开关会互相拆台(实锤:background-subagent-e2e 与
+ * GENIE_PERMISSION_RULES 等进程级开关会互相拆台(注意:background-subagent-e2e 与
  * plan-gate 并行时 afterEach 删掉对方正依赖的 rules → 间歇假红)。
  * 用文件锁(O_EXCL 原子创建,跨线程/进程可见):动 env 的测试文件 beforeAll 抢锁、
  * afterAll 归还,同批并行文件在这类测试上退化为串行。

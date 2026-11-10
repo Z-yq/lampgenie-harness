@@ -1,5 +1,5 @@
 /**
- * 本机负载采样(step-1042 节点 Fleet「真实负载」):
+ * 本机负载采样(节点 Fleet「真实负载」):
  * 旧路径 gateway 本机心跳与 node-agent 心跳都硬编码 {cpu:0,mem:0,runningTasks:0}——面板渲染的
  * 负载是恒零占位。本函数给两边同一口径:cpu=1 分钟负载均值/核数(0..1),mem=1-可用/总量(0..1),
  * runningTasks 由调用方传(gateway=运行中任务数;node-agent=委派执行并发数)。

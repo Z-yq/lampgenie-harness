@@ -1,5 +1,5 @@
 /**
- * 团队角色(designs/30 §2.1/§2.7):roster/roles.yaml 的解析与读取。
+ * 团队角色( §2.1/§2.7):roster/roles.yaml 的解析与读取。
  * 形状参照 teamai-cli/src/roles.ts,MIT,自有实现(零 yaml 依赖,逐行状态机解析,
  * 风格照抄 teamai-bridge.ts 的 parseHookList)。
  * 注意:此处的 role 是「资源命名空间集合」,与 member.role(owner/reviewer/member 权限位)同名不同义,
@@ -33,7 +33,6 @@ function flowList(val: string): string[] {
 
 /**
  * roster/roles.yaml 解析:块式列表。
- *
  * ```yaml
  * roles:
  *   - id: dev
@@ -42,7 +41,6 @@ function flowList(val: string): string[] {
  *     skills: [demo-team-style]
  *     rules: [demo-typescript]
  * ```
- *
  * skills/rules 同时支持块式(`- item` 缩进行)与流式(`[a, b]`)两种写法。
  * fail-soft:缺 id 的条目跳过,未知键忽略,坏行不抛错。
  */

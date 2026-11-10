@@ -5,7 +5,6 @@
  *   ③ 显式持有 Notification 对象到 click/close——只存在局部变量里会被 GC,点击监听丢失,
  *      出现「有通知但点了没反应」。
  * 另:click 负责 restore/show/focus 三步(最小化/隐藏时能真正回到前台),并回传 renderer 任务 id。
- *
  * 纯逻辑:Notification 构造器、窗口焦点/恢复、renderer 发送全部注入,可 node --test 单测。
  */
 const DEDUPE_WINDOW_MS = 3000;

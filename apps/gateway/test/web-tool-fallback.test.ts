@@ -1,6 +1,5 @@
 /**
- * web_search/web_fetch 降级链与配置层(2026-10-21 用户口径:
- * 「有提供搜索工具时直接用搜索工具,没有时用自身 curl/browser 能力」):
+ * web_search/web_fetch 降级链与配置层( * 「有提供搜索工具时直接用搜索工具,没有时用自身 curl/browser 能力」):
  * ①配置层 provider(genie.config.json web.search)优先于 env 探测;
  * ②无任何 provider → 内置静态检索(DuckDuckGo HTML)兜底,fallback 标注如实;
  * ③DDG 失败 → 错误文案指路 browser 工具与设置页;
@@ -24,7 +23,7 @@ import { applyConfigPatch, type Config } from "@lampgenie/core";
 // 走 createWebSearchTool 的 fallback 分支需要 mock fetchPublicPage 的传输层——改为
 // 直接对 DDG 解析正则的核心(通过工具执行 + stub global fetch 不影响 fetchPublicPage)。
 // 结论:解析正则的行为由 resolveSearchProviderWithRuntime + 工具层 fallback 文案测试覆盖,
-// DDG 实网行为留待产线实测(本文件不发起真实网络请求)。
+// DDG 实网行为留待生产环境经验证(本文件不发起真实网络请求)。
 
 const baseCfg = {
   coding: { llm: {}, models: {}, disabledModels: [], lsp: {} },
@@ -147,7 +146,7 @@ describe("配置 schema 与面板入口", () => {
       expect(html).toContain('id="wsSave"');
       expect(html).toContain("默认(DeepSeek)");
       expect(html).toContain("关闭(curl/browser)");
-      // 2026-10-28 故障回归:分段按钮必须有 click 绑定,否则点选不生效、保存读到的永远是旧 .on
+ // 故障回归:分段按钮必须有 click 绑定,否则点选不生效、保存读到的永远是旧 .on
       expect(html).toContain('$("ws-provider").onclick');
       // 保存后必须重拉配置刷新状态行(否则用户看到「点了没反应」)
       expect(html).toContain("wsSavePending");

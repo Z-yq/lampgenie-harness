@@ -1,9 +1,7 @@
 /**
- * PHP structural adapter(2026-10-25,legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
- *
+ * PHP structural adapter(legacy 待办「Rust/C#/Ruby/PHP 适配器」落地)。
  * 主路径:tree-sitter-php wasm(tree-sitter-wasms 自带),tier=structural、source=tree-sitter;
  * wasm 不可用/解析异常 → 文本回退(source=text,只出符号零边,如实降级)。
- *
  * 提取子集(诚实边界):
  * - 类型符号:class/interface(interface 记 kind=interface)/enum(记 kind=enum)/trait
  *   (trait 记 class——可复用方法集,容器语义与类同);namespace 不登记。
@@ -14,7 +12,6 @@
  *   属性类型表;`new T()` 连构造器(`__construct`)或类节点。
  * - 跨文件候选:本地无目标的类型证据调用;未知 `T::m()` 按 receiverType 发候选;
  *   未知裸函数按唯一名候选。无类型证据的 `$var->m()` 不猜(宁缺勿错)。
- *
  * 未覆盖(登记):动态 `$obj->$name()`/`call_user_func`/`__call`、trait 使用点的
  *   `use TraitName` 方法归属、PHPDoc 类型(`@var`/`@param`)、联合/交集类型窄化、
  *   enum case 独立符号、匿名类。

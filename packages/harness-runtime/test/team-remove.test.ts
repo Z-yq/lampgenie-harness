@@ -1,5 +1,5 @@
 /**
- * relay.teamai.remove(designs/30 §2.3):main 上删除资源 → commit → push origin;
+ * relay.teamai.remove( §2.3):main 上删除资源 → commit → push origin;
  * not-found 时零写入(不 commit 不 push),非法入参 code=invalid。
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";

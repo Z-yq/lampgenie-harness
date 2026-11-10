@@ -1,7 +1,7 @@
 /**
- * board-workflow(step-121,参照 dify 工作流语义):工作流板(docKind=workflow)↔ harness-workflow 引擎。
+ * board-workflow(参照 dify 工作流语义):工作流板(docKind=workflow)↔ harness-workflow 引擎。
  * - compileWorkflowBoard:纯函数编译器——画布 BoardDoc(nodes=wf-* 类型化配置,edges=执行顺序/分支)
- *   → 引擎 TS 脚本(designs/19 原生形态,facade=agent/world/report/log/now);编译错误 fail-visible 全列出。
+ * → 引擎 TS 脚本(原生形态,facade=agent/world/report/log/now);编译错误 fail-visible 全列出。
  * - 图规则:①DAG(环=错误);②普通节点出边≤1,wf-parallel 出边≥2(全并发),wf-condition 恰 2 条
  *   出边(label 真/假);③多源=Promise.all 并发;④扇入(多入边)暂不支持(错误提示,不静默错跑);
  *   ⑤必填配置缺失=错误;⑥非 wf-* 节点混入=错误(design/page 板不编)。
@@ -9,7 +9,6 @@
  *   state∈start/taken/done/fail;引擎 onLog 回调实时上抛(引擎加性扩展),runner 解析→journal
  *   workflow.node 事件→WS board.workflow.progress 广播→面板节点高亮。
  * - runWorkflowBoard:服务端 runner(journal+executor+可选面板直答路由+广播注入)。
- *
  * 引擎纪律如实继承:world.run 白名单(测试运行器/node/git 只读/ls/cat/grep/tail);
  * 脚本静态禁令(源文本不得含 require(/process./import()——命令文本以字符串字面量嵌进脚本源,
  * 含 process. 的命令会被引擎拒,属引擎既有安全边界,不绕)。
@@ -202,7 +201,7 @@ export function compileWorkflowBoard(doc: BoardDoc): WfCompileResult {
     ? emitChain(sources[0]!)
     : sources.map((s) => `(async () => {\n${emitChain(s)}\n})()`).join(",\n");
   const header = [
-    `// workflow 板「${doc.title}」(${doc.taskId})· step-121 board-workflow 编译产物`,
+    `// workflow 板「${doc.title}」(${doc.taskId})·  board-workflow 编译产物`,
     `// 节点结果域:R["<id>"];状态标记:WFN|<id>|<state>|<detail>`,
     `const R = {};`,
     `async function __wfn(id, fn) {`,

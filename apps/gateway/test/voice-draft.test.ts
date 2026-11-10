@@ -11,7 +11,7 @@ import { parseClientMessage, ServerMessage } from "@lampgenie/protocol";
 import { createGatewayApp, type GatewayApp } from "../src/app.js";
 import { EchoChildBackend } from "@lampgenie/executors";
 
-/** 聊天窗语音任务书(2026-11-08)契约回归。
+/** 聊天窗语音任务书契约回归。
  * 锁四件事:①撰写提示词(项目语境/已有草稿并入/纪律行);②撰写器请求形态
  * (input_audio base64+format、Bearer、超时口径)与返回体抽取;③协议双向可解析;
  * ④真实 WS 全链:未配置=指路报错;配置了 coding.models.voice + mock fetch=任务书回填。
@@ -61,7 +61,7 @@ describe("createVoiceDrafter", () => {
     expect(msg.content.some((c) => c.type === "input_audio")).toBe(true);
     const ia = msg.content.find((c) => c.type === "input_audio") as { input_audio: { data: string; format: string } };
     expect(ia.input_audio.format).toBe("webm");
-    // DashScope qwen-omni 系要 Data URI 形态(裸 base64 实测 400 URL not valid)
+ // DashScope qwen-omni 系要 Data URI 形态(裸 base64 经验证 400 URL not valid)
     expect(ia.input_audio.data.startsWith("data:;base64,")).toBe(true);
   });
   it("返回体对象/分段数组形态可抽取;```markdown 围栏剥掉", async () => {
@@ -143,7 +143,7 @@ describe("面板锚点(panel.ts 源码面)", () => {
 });
 
 describe("真实 WS 全链(voice.draft)", () => {
-  const WS_ROOT = mkdtempSync(join(tmpdir(), "genie-voice-draft-"));
+  const WS_ROOT = mkdtempSync(join(tmpdir(), "voice-draft-"));
   const PORT = 7975;
   const OLD_ROOT = process.env.GENIE_REPO_ROOT;
   const apps: GatewayApp[] = [];

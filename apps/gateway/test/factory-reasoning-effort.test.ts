@@ -1,14 +1,14 @@
 /**
- * reasoningEffort 装配面直测(step-069 起源;step-139 O2 语义更新;2026-10-20 subagent 语义再更新):
+ * reasoningEffort 装配面直测(起源; O2 语义更新; subagent 语义再更新):
  * 旧语义(仅显式配置携带)→ 新语义:
  *  - 主实施轨 effort = coding.llm.implementationEffort(缺省 high 恒携带;""=显式关;唯一权威,
  *    旧 coding.llm.reasoningEffort 对主轨不再生效——2026-10-20 用户拍板);
  *  - review 未显式配置也建 provider,effort 缺省 xhigh,可经 coding.models.review.reasoningEffort
  *    显式覆盖(""=关);
- *  - subagent(2026-10-20 用户口径「子代理与主 agent 同模型」)未显式配 model=undefined 回退主
+ * - subagent未显式配 model=undefined 回退主
  *    provider(同实例同模型同档位,主模型热切天然跟随);显式配 model 才按 review 同语义建独立实例。
- * explicitReasoningEffort 纯函数(audio.chat 轨仍在用)保持 step-069 语义不变。
- * fetch 桩捕获请求体(无网络;端到端 dump 见 tasks/step-069-gateway-loop-fixes/)。
+ * explicitReasoningEffort 纯函数(audio.chat 轨仍在用)保持 语义不变。
+ * fetch 桩捕获请求体(无网络;端到端 dump 见)。
  */
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { buildLlmFromConfig, buildModelProviders, explicitReasoningEffort } from "../src/factory.js";
@@ -60,7 +60,7 @@ describe("explicitReasoningEffort 判定(纯函数,audio.chat 轨沿用)", () =>
   });
 });
 
-describe("buildLlmFromConfig 装配(主实施轨=implementationEffort,step-139 O2)", () => {
+describe("buildLlmFromConfig 装配(主实施轨=implementationEffort, O2)", () => {
   it("未配置 → 请求体恒带 reasoning_effort=high(实施轨缺省档)", async () => {
     const state = captureBody();
     const llm = buildLlmFromConfig(baseConfig(), "/tmp")!;
@@ -98,7 +98,7 @@ describe("buildLlmFromConfig 装配(主实施轨=implementationEffort,step-139 O
   });
 });
 
-describe("buildModelProviders 角色分档(step-139 O2;2026-10-20 subagent 改跟随主轨)", () => {
+describe("buildModelProviders 角色分档( O2;2026-10-20 subagent 改跟随主轨)", () => {
   it("subagent 未显式配 model → undefined(回退主 provider=同实例同模型同 effort,与主 agent 完全一致)", () => {
     const providers = buildModelProviders(baseConfig(), "/tmp");
     expect(providers.subagent).toBeUndefined();

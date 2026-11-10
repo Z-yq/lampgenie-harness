@@ -2,7 +2,6 @@
  * 白板现状层骨架生成器(纯函数,零 IO):
  * 从 code-sense C2fIndex 快照按符号名清单生成 keep 节点 + 真实 call 边——
  * planner 之后在底版上补变更层(add/modify 带 before),不再手抄 file:line。
- *
  * 设计纪律(与工具侧 action=skeleton 分工):
  * - 本文件只做「索引→节点/边候选」的确定性转换;行号三态核验(linked/moved/broken)在
  *   agent-wiring 的 skeleton 分支用 resolveBoardLinksAsync 复核——生成侧不编造任何索引外事实。
@@ -15,7 +14,7 @@ import type { C2fIndex, C2fNode } from "@lampgenie/code-sense";
 
 /** 板节点上限的骨架占用钳(板 60,给 planner 变更层留 20 位)。 */
 export const SKELETON_MAX_NODES = 40;
-/** symbols 入参上限:超则截断并如实报。 */
+/** symbols 入参上限:超则截断并如用户反馈。 */
 export const SKELETON_MAX_SYMBOLS = 20;
 
 export interface SkeletonRequest {
@@ -156,7 +155,7 @@ export function buildSkeleton(index: C2fIndex, req: SkeletonRequest): SkeletonRe
     }
     if (!advanced) break;
   }
-  // 溢出者如实报:候选总量(去重后)超过 maxNodes 的部分进 truncated。
+ // 溢出者如用户反馈:候选总量(去重后)超过 maxNodes 的部分进 truncated。
   const candidateCount = new Set(candidateGroups.flat().map((n) => n.id)).size;
   if (candidateCount > maxNodes) {
     truncated.push(`candidates:${candidateCount}>maxNodes:${maxNodes}(保留枢纽优先的 ${maxNodes} 个)`);

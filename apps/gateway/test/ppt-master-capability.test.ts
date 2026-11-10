@@ -1,6 +1,5 @@
 /**
- * ppt-master 产出角色(2026-11-05)装配对拍。
- *
+ * ppt-master 产出角色装配对拍。
  * 两处契约(S 级改动,但都是「声明写对了、执行面没生效」的典型坑,必须真 spawn 验):
  *  ①白名单声明的 board_export_pptx / board_read 来自 extraTools,不在内置池里——
  *    如果 agent-wiring 不按角色挂导出工具,声明会被静默过滤,子代理永远拿不到质量门;
@@ -80,7 +79,7 @@ describe("真 spawn:ppt-master 工具面 = 读四件 + 写两件 + exec + 认知
       } as never,
     });
     await backend.spawn({ taskId: "t", instructions: "探针任务", workdir: dir, permissions: "sandbox" }, () => {});
-    // M128:bridge 三件套恒定追加
+ // bridge 三件套恒定追加
     expect(seen.sort()).toEqual([
       "board_export_pptx", "board_read", "code_sense", "edit_file", "glob", "grep",
       "list_dir", "read_file", "run_cmd", "skill_view", "tool_call", "tool_search", "tool_view", "write_file",

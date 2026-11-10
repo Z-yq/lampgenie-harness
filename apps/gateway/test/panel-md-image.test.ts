@@ -1,8 +1,7 @@
 /**
- * IDE markdown 预览「可点击图片」契约测试(2026-11-06)。
+ * IDE markdown 预览「可点击图片」契约测试。
  * 坏例:`[![图 1 全景服务架构](30-service-architecture.png)](30-service-architecture.png)`
- * (genie-memory/docs/code-flow/README.md 的 14 张全是这个写法)——旧实现整张图不显示。
- *
+ * (docs 站点流程图 README 的 14 张全是这个写法)——旧实现整张图不显示。
  * 做法照抄同目录 panel-ide-deep.test.ts:servePanel 起真面板取 HTML → 正则/花括号配平切出
  * PAGE 内函数源码 → new Function 求值(零构建链),再用真 ideMdIo(路径 docs/code-flow/README.md)
  * 跑 mdInlineScan,断言生成的 HTML。
@@ -42,8 +41,7 @@ beforeAll(async () => {
   // PAGE 顶部常量(反引号走 fromCharCode,与页面同口径)
   const pre = "const BT = String.fromCharCode(96);\n";
   const factory = new Function("ideRoot", pre + src + "\nreturn { esc, mdInlineScan, ideMdIo };") as (
-    root: unknown,
-  ) => { esc: (s: string) => string; mdInlineScan: (s: string, d: number, io: unknown) => string; ideMdIo: (t: { path: string }) => unknown };
+    root: unknown) => { esc: (s: string) => string; mdInlineScan: (s: string, d: number, io: unknown) => string; ideMdIo: (t: { path: string }) => unknown };
   const built = factory({ pid: "vitest-pid" });
   api = { esc: built.esc, mdInlineScan: built.mdInlineScan, io: built.ideMdIo({ path: MD }) };
 }, 30_000);

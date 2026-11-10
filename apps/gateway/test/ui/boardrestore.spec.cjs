@@ -1,5 +1,5 @@
-/** step-072 白板持久化恢复闭环实测(真实 chromium + 真实 gateway 子进程,journalDir 固定可重启)。
- * 跑法(不碰产线):npx tsx test/ui/_restore_runner.cjs
+/** 白板持久化恢复闭环经验证(真实 chromium + 真实 gateway 子进程,journalDir 固定可重启)。
+ * 跑法(不碰生产环境):npx tsx test/ui/_restore_runner.cjs
  * 覆盖三场景+三边界+多尺寸:
  *   S1 刷新页面恢复 / S2 重启 gateway 恢复 / S3 侧栏切历史 session 重放 chip 点回
  *   B1 多 task 多板 / B2 板被删(显式降级,不静默滑到别的板)/ B3 板文件损坏(显式降级,不冒充「无板」)
@@ -65,7 +65,7 @@ const B2 = {
 
   // ---------- 搭台:会话1 + 任务 T1/T2 + 板 B1(新)/B2(旧) ----------
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
-  // 2026-10-21 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
+ // 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
   // 会话流不渲染子代理过程卡——本规格守经典契约(浮窗/工作区 tab/会话流过程卡),先切经典布局。
   await page.waitForTimeout(600);
   await page.evaluate(() => { try { if (document.body.classList.contains("cv-shell")) CanvasShell.setMode("classic"); } catch (e) {} });
@@ -94,7 +94,7 @@ const B2 = {
 
   // 进白板视图(刷新前停在板视图,验视图还原)
   await page.click("#act-board");
-  // step-101:A6 序无关化(与 S1 轮 101-104 同口径)——自动选板=「updatedAt 最新」,而收官回填
+ // A6 序无关化(与 S1 轮 101-104 同口径)——自动选板=「updatedAt 最新」,而收官回填
   // 重写两板的先后差随机器负载翻转(094 四跑 3 次 FAIL 集中此断言,修前修后同红=时序翻牌);
   // 「选中甲还是乙」不构成恢复正确性,正确性=选中板内容与盘上该板 JSON 节点数对账(数据同源)。
   // poll 窗 15s→30s:任务 done 触发的 ensureIndex(harness 根)在同机负载下可阻塞 WS 回包(094 环境)。
@@ -207,7 +207,7 @@ const B2 = {
 
   // ---------- VW:多尺寸不破版(恢复干净板) ----------
   fs.writeFileSync(path.join(boardDirOf(sid1), T1 + ".json"), JSON.stringify({ ...B1, updatedAt: Date.now() }));
-  // 续作轮:单页面复用+setViewportSize(逐视口 newPage 在负载下第二页 goto 60s 超时实测×2)
+ // 续作轮:单页面复用+setViewportSize(逐视口 newPage 在负载下第二页 goto 60s 超时经验证×2)
   const p2 = await browser.newPage();
   p2.on("pageerror", (e) => errors.push("vw" + ": " + String(e).slice(0, 120)));
   p2.on("dialog", (d) => d.dismiss().catch(() => {}));
@@ -217,7 +217,7 @@ const B2 = {
     await p2.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
     await p2.waitForTimeout(2600);
     // 面板自身可能触发导航(svc 重启兜底 reload)——evaluate 撞上下文销毁就重试;
-    // step-101:重试条件从「evaluate 成功」收紧为「板真正渲出(nodes===3)」——094 实测 VW 档
+ // 重试条件从「evaluate 成功」收紧为「板真正渲出(nodes===3)」——094 经验证 VW 档
     // nodes:-1(boardDoc 尚未到达就读取)翻牌;轮次 3→8(约 12s/档)覆盖重负载冷启动。
     let vw = null;
     for (let r = 0; r < 8; r++) {

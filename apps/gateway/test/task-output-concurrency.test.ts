@@ -1,12 +1,10 @@
 /**
- * task_output 降级回归(2026-10-30,task_output 免独立往返)。
- *
+ * task_output 降级回归(task_output 免独立往返)。
  * **级别说明:本文件是源码级断言,不是行为级。** task_output 工具对象定义在 wireAgentLoop
  * 函数体内部(`const taskOutputTool: Tool = {`,agent-wiring.ts:4156),构造它需要 Journal/executor/
  * 子代理注册表等全套 gateway 依赖——单测里没有可构造入口,硬启 gateway 会把纯断言变成 e2e。
  * 因此这里从**源文件文本**截取 taskOutputTool 定义块断言(与 panel-trace-error.test.ts 同一手法),
  * 验的是真身代码;若将来重命名/移动该工具,本测试会直接报「抽取失败」而不是静默通过。
- *
  * 锁四件:
  *  ① 工具对象带 isConcurrencySafe: () => true(能与其他工具同一步并行,不再独占一个 step);
  *  ② description 口径改成「终态自动注入,通常无需调用」+「补查」,同时保留 waitFor/waitSec 语义;

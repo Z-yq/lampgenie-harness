@@ -1,10 +1,8 @@
 /**
  * 增量索引引擎(code-sense-cli 独有;code-sense 核心库零改动,只消费其导出):
- *
- * 目标(2026-10-15 G4 补充):`init ./aa` → `init ./bb` → `init ./` 的重叠子树不得重复探索——
+ * 目标( G4 补充):`init ./aa` → `init ./bb` → `init ./` 的重叠子树不得重复探索——
  * 按「相对路径 + 文件指纹(mtime+size)」粒度复用既有文件数据:同一文件直接搬运其节点/边,
  * 变了/新出现才重扫;init/index 输出「复用 N 文件 / 新扫 M 文件」。
- *
  * 正确性边界(如实):
  *  - 节点:按文件归属搬运,文件未变=节点逐字段等价。
  *  - 边:搬运「调用方文件未变」的边;其 to 指向已变/已删文件的,先降级 unresolved,
@@ -18,7 +16,7 @@
  *    自建走查的 4000 上限/深度语义与库有微差,会造出「永远差一个文件」的假过期,必须同源。
  *  - 指纹=mtimeMs+size:drvfs/网络盘不引 hash(全量 hash 4k 文件在慢盘代价过高);
  *    mtime 粒度足够区分编辑,size 兜底截断误判。指纹 sidecar 与索引同目录,同进退。
- *  - 版本闸(2026-10-21):指纹只证明源码没变,不证明抽取结果没过期——sidecar/索引须同时
+ * - 版本闸:指纹只证明源码没变,不证明抽取结果没过期——sidecar/索引须同时
  *    记录当前 INDEX_EXTRACTOR_VERSION 才允许搬运;旧版产物=一次全量重扫迁移(随后恢复增量)。
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -43,7 +41,7 @@ import {
 import { acquireBuildLock, releaseBuildLock, type LockInfo } from "./build-lock.js";
 import { estimateIndexMemory, applyBudgetReduce } from "./heap-budget.js";
 
-/** 同根已有索引在飞时的礼貌拒绝(step-086 单飞锁;cli.ts 捕获后 exit 3)。 */
+/** 同根已有索引在飞时的礼貌拒绝(单飞锁;cli.ts 捕获后 exit 3)。 */
 export class IndexBusyError extends Error {
   constructor(root: string, info: LockInfo | null, waitedMs: number) {
     const who = info
@@ -121,7 +119,7 @@ function priorMapping(target: string, priorRoot: string): PriorMapping | null {
 }
 
 /** 扫描 root 文件集与指纹(engine 同口径走 listSourceFilesDetailed:扩展名/跳过目录/上限一致,
- * 截断元数据如实透出进 coverage manifest——step-079 RC-G)。
+ * 截断元数据如实透出进 coverage manifest—— RC-G)。
  * 指纹键=规范化绝对路径(realpath):同一物理目录经不同父 cwd/路径拼写(符号链接)发起的
  * init/增量命中同一批键;rel 列表仍是 engine 口径(喂 buildCallGraphFromFiles/报告)。 */
 interface ScanEntry { rel: string; abs: string; fp: FileFingerprint }
@@ -149,9 +147,9 @@ async function scanFingerprints(root: string): Promise<{ rels: string[]; entries
 
 interface Carried { nodes: C2fNode[]; edges: C2fEdge[]; classes: Set<string>; classesKnown: boolean }
 
-/** 大数组 push(step-085:spread 形态在 16 万+元素时超 V8 调用栈参数上限 → RangeError
- * 「Maximum call stack size exceeded」整仓索引死;grafana 6000 文件 16.7 万边实测,
- * step-081 4000 文件 11.2 万边属贴线幸存)。逐条循环 push,行为等价。 */
+/** 大数组 push(spread 形态在 16 万+元素时超 V8 调用栈参数上限 → RangeError
+ * 「Maximum call stack size exceeded」整仓索引死;grafana 6000 文件 16.7 万边经验证,
+ * 4000 文件 11.2 万边属贴线幸存)。逐条循环 push,行为等价。 */
 function pushAll<T>(dst: T[], src: Iterable<T>): void {
   for (const x of src) dst.push(x);
 }
@@ -165,7 +163,7 @@ interface ReuseCollection {
   /** 被拒来源的旧抽取器版本(取最大;无旧版/无被拒=undefined)。 */
   oldExtractorVersion?: number;
   /** 目标自身旧产物的抽取器版本(存在且与当前不一致;无自身产物=undefined)。
-   * 用于纯类型文件等「旧索引 0 节点、无文件可搬运」的根:仍能如实报告版本迁移。 */
+ * 用于纯类型文件等「旧索引 0 节点、无文件可搬运」的根:仍能如用户反馈告版本迁移。 */
   selfExtractorVersion?: number;
 }
 
@@ -173,8 +171,7 @@ interface ReuseCollection {
  * 按「近者优先(路径更深)」认领。自复用不需要 init 登记——`codesense index` 单独跑也有增量。
  * 指纹命中=规范绝对路径直查(sidecar v2);prior 索引内容定位仍按 prior 相对路径
  * (索引 id/路径是 prior 根相对口径,搬运时经 seg/dir 重映射)。
- *
- * 版本闸(2026-10-21 验收缺口 1):指纹只证明「源码没变」,不证明「抽取结果仍是最新」——
+ * 版本闸(验收缺口 1):指纹只证明「源码没变」,不证明「抽取结果仍是最新」——
  * sidecar 与索引都必须记录当前 INDEX_EXTRACTOR_VERSION 才允许搬运。旧产物(无字段=
  * 隐式 v1)一律拒绝复用,由调用方触发一次全量重扫并落新版本。 */
 function collectReusables(root: string, entries: ScanEntry[]): ReuseCollection {
@@ -248,8 +245,8 @@ function addToSetMap(m: Map<string, Set<string>>, key: string, val: string): voi
 }
 
 /** 合并后重算出入度与 trunk/leaf/regular(语义=c2f classify:namedIn 排除 <module> 虚调用方;
- * 类节点豁免恒 regular;step-079:lexical 档与 typedef/variable 符号同样豁免——它们没有调用边,
- * 落 trunk 会污染 entrypoints,与 classify 的 isAux 规则同源镜像;2026-10-21:interface/type/enum
+ * 类节点豁免恒 regular;lexical 档与 typedef/variable 符号同样豁免——它们没有调用边,
+ * 落 trunk 会污染 entrypoints,与 classify 的 isAux 规则同源镜像;:interface/type/enum
  * 同列声明豁免(isNonCallableSymbolKind 单一真相)。 */
 function recount(nodes: C2fNode[], edges: C2fEdge[], classIds: Set<string>): void {
   const outTargets = new Map<string, Set<string>>();
@@ -269,9 +266,9 @@ function recount(nodes: C2fNode[], edges: C2fEdge[], classIds: Set<string>): voi
 
 /** relink:unresolved 边按唯一裸名+同扩展名解析(镜像 engine 的唯一名兜底;
  * 压制名单=各快照不兜底语义的并集,被引擎压制的调用绝不借此还魂)。返回 relink 数。
- * step-079:lexical/typedef/variable 节点不作解析目标——调用边的语义目标是函数/方法,
+ * lexical/typedef/variable 节点不作解析目标——调用边的语义目标是函数/方法,
  * 同名词法声明吸收边=假边(lexical 不参与 callers/callees 精度口径)。
- * 2026-10-21:interface/type/enum 同列(isNonCallableSymbolKind)。 */
+ * interface/type/enum 同列(isNonCallableSymbolKind)。 */
 function relink(nodes: C2fNode[], edges: C2fEdge[], suppressed: Set<string>): number {
   const extOf = (f: string) => f.slice(f.lastIndexOf("."));
   const byBare = new Map<string, string[]>();
@@ -285,7 +282,7 @@ function relink(nodes: C2fNode[], edges: C2fEdge[], suppressed: Set<string>): nu
   let hits = 0;
   for (const e of edges) {
     if (e.to || !e.toName || suppressed.has(e.toName)) continue;
-    // 2026-10-26 作用域闸:属性调用(x.trim()/fs.readFile)、局部参数/变量、外部包 import
+ // 作用域闸:属性调用(x.trim/fs.readFile)、局部参数/变量、外部包 import
     // 不得按全仓唯一同名跨文件兜底——engine 语义早已如此,relink 旧实现绕过它造出
     // code-sense→harness-terminal ×422 的假主干。工作区 import(callForm=import)保留 relink:
     // ts-morph 解析不到 @lampgenie/* 源文件时,唯一名兜底是真实跨包边的最后通道。
@@ -368,8 +365,8 @@ function heuristicClassIds(nodes: C2fNode[], onlyFiles: Set<string> | null): Set
  *  - force=true:全量重建(仍走 buildCallGraph+classify 单一真相,只是不做搬运)。
  *  - 默认:重叠 root 的 sidecar 指纹比对 → 未变文件搬节点/边,变更文件子图重扫 → 合并+
  *    revalidate+relink+重分类。无可复用先验=退化为全量(mode="full")。
- *  - step-086 单飞锁:全程持同根 build.lock(跨进程单飞;忙则等待复用在飞结果,超时礼貌拒绝);
- *  - step-086 堆预算:构建前估算内存,超预算自动按 RC-L 公平采样降数(GENIE_SENSE_MAX_FILES,
+ * - 单飞锁:全程持同根 build.lock(跨进程单飞;忙则等待复用在飞结果,超时礼貌拒绝);
+ * - 堆预算:构建前估算内存,超预算自动按 RC-L 公平采样降数(GENIE_SENSE_MAX_FILES,
  *    截断如实登记进 coverage)——heapBudget="off" 可关(测试/确知小仓)。
  */
 export async function buildIndexWithReuse(root: string, opts: { force?: boolean; onProgress?: (msg: string) => void; heapBudget?: "auto" | "off"; lockWaitMs?: number } = {}): Promise<BuildOutcome> {
@@ -409,7 +406,7 @@ export async function buildIndexWithReuse(root: string, opts: { force?: boolean;
   }
 }
 
-/** 采样索引的删除/编辑检出取样集(step-141):按字典序排序后等距取 ≤64 条(相对路径+mtime)。
+/** 采样索引的删除/编辑检出取样集:按字典序排序后等距取 ≤64 条(相对路径+mtime)。
  * 目的不是「覆盖全部文件」而是「采样对应集的删除/编辑能被廉价检出」——采样集外的变化在采样
  * 索引上不可靠检出(采样统计口径与查询期全量 walk 不可比),由 samplingNote 如实说明。 */
 export function sampleCheckSet(rels: readonly string[], mtimeOf: (rel: string) => number, cap = 64): { rel: string; mtime: number }[] {
@@ -492,18 +489,18 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
   const { byFile, byName } = buildMaps(nodes);
   const relinked = relink(nodes, edges, await relinkSuppression());
   recount(nodes, edges, classIds);
-  // step-098(RC-096-A2②):JSX 使用证据降权——必须在 recount 之后(recount 会按边集把
+ // (RC-096-A2②):JSX 使用证据降权——必须在 recount 之后(recount 会按边集把
   // 搬运节点的 kind 重算回 trunk,JSX 降权最后跑才不被覆盖;单一实现=code-sense 导出)。
   applyJsxComponentUsage(root, rels, nodes);
 
-  // importers(step-066 impact 的 import 通道):精确增量语义——
+ // importers( impact 的 import 通道):精确增量语义——
   // 全量=全图 imports;增量=上一版 importers 剔除本轮变更文件的贡献,再并上变更文件的新贡献
   // (freshGraph 只解析变更文件,其 imports 恰好只含变更文件的边,两边拼起来仍是全量真值)。
   // 旧版索引无该字段=undefined,impact 查询侧显式降级。
-  // step-099 RC-B2 两点修正:①Go 结构档 import 经同一 expandGoImports(与全量 buildC2fIndex
+ // RC-B2 两点修正:①Go 结构档 import 经同一 expandGoImports(与全量 buildC2fIndex
   // 同函数同口径)并入——展开用的目标文件集=合并后 byFile 全量键(含未变更文件,跨包映射
   // 不因增量视野收窄);②字段恒写(空也写 {}):字段在场=构建版本支持 import 通道,
-  // 纯 Go 仓 fresh 重建不再被误判「旧格式索引」(096 评测 RC-B2 实锤)。
+ // 纯 Go 仓 fresh 重建不再被误判「旧格式索引」(096 评测 RC-B2 注意)。
   const prev = loadIndex(root);
   let importers: Record<string, string[]> | undefined = prev?.importers
     ? Object.fromEntries(Object.entries(prev.importers).map(([k, v]) => [k, [...v]]))
@@ -538,7 +535,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     }
   }
 
-  // step-099 RC-B5:弃边台账增量合并——语义折衷如实登记:逐名字粒度「变更文件碰到即整条剔除,
+ // RC-B5:弃边台账增量合并——语义折衷如实登记:逐名字粒度「变更文件碰到即整条剔除,
   // 再并本轮新台账」。同名候选横跨未变更文件时,其旧计数会一并剔除(样本只存 ≤3 不足反推),
   // 该名字的计数在下次全量重建前可能偏低——接受(诊断面非正确性面;全量重建是权威)。
   let dropped: C2fIndex["dropped"];
@@ -573,7 +570,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
 
   // srcMtime/srcCount 必须与 indexStale 的指纹口径同源(srcFingerprint),否则假过期抖动
   const fp = srcFingerprint(root);
-  // step-141 采样口径落盘:构建期扫描被截断/降数时,srcCount 是采样集计数(与磁盘全量天然不等),
+ // 采样口径落盘:构建期扫描被截断/降数时,srcCount 是采样集计数(与磁盘全量天然不等),
   // indexStale 靠本字段知道「count 比对不可用」并退化为 mtime/HEAD;checkSet=确定性抽样相对路径
   // (≤64 条,按字典序等距取),用于廉价检出采样集内的删除(新增/编辑由 maxMtime 覆盖)。
   const sampledBuild = Boolean(scanTruncated || freshGraph?.structTruncated);
@@ -585,14 +582,14 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
         checkSet: sampleCheckSet(rels, (rel) => mtimeOfRel.get(rel) ?? 0),
       }
     : undefined;
-  // 堆预算降数的截断登记(step-086):无论来源(引擎 structTruncated/扫描截断),追加坡预算段,
+ // 堆预算降数的截断登记:无论来源(引擎 structTruncated/扫描截断),追加坡预算段,
   // 如实区分「引擎上限」与「堆预算采样」。
   const withHeapNote = (t?: { reason: string; limit?: number }): { reason: string; limit?: number } | undefined => {
     if (!heapNote) return t;
     if (!t) return { reason: `堆预算自适应采样${heapNote}` };
     return { ...t, reason: t.reason + heapNote };
   };
-  // 语言覆盖报告(step-067 fail-visible;step-079 分层):
+ // 语言覆盖报告( fail-visible; 分层):
   // - 全量(mode=full):结构档逐文件 outcome 齐备 → 分层计数+coveragePct+skippedReasons;
   // - 增量零变更:上一版 coverage 对当前盘面仍逐字成立 → 原样 carry(附最新截断登记);
   // - 增量有重扫:outcome 只覆盖重扫文件,分层不可归因 → legacy 口径(layeredScope 缺省,如实)。
@@ -610,9 +607,9 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     const carried = withHeapNote(scanTruncated);
     coverage = await computeLanguageCoverage(root, Object.keys(byFile), carried ? { truncated: carried } : {});
   }
-  // step-106:桥边段(designs/27 §7 落地)——零变更且上一版有桥边=原样 carry(与 coverage
+ // 桥边段( §7 落地)——零变更且上一版有桥边=原样 carry(与 coverage
   // carry 同口径:桥边是整仓确定性行扫描的函数,文件零变更→产物逐字节可复现);否则重算
-  // (旧格式索引 prev 无 bridge=升级重算一次;全量/有变更=权威重算)。秒级(103 实测
+ // (旧格式索引 prev 无 bridge=升级重算一次;全量/有变更=权威重算)。秒级(103 经验证
   // grafana ≤4.4s);失败由 computeIndexBridge 兜成字段内 degraded 标注,不毙索引构建。
   let bridge: C2fIndex["bridge"];
   if (!opts.force && changed.length === 0 && prev?.bridge) {
@@ -623,7 +620,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     if (bridge?.degraded) progress(`桥边段降级: ${bridge.degraded}`);
     else if (bridge) progress(`桥边段: ${bridge.edges.length} 条(state=${bridge.state},${Date.now() - t0b}ms)`);
   }
-  // 2026-10-22 P0:解析含语法错误的文件面(增量语义:上版已知错误文件剔除本轮变更文件,
+ // P0:解析含语法错误的文件面(增量语义:上版已知错误文件剔除本轮变更文件,
   // 再并本轮重扫文件的 errors;计数在已知面内权威,旧面曾截断时按上一版计数保守继承)。
   let errorSet = new Set(prev?.errorFiles ?? []);
   let errorFileCount = prev?.errorFileCount ?? errorSet.size;
@@ -642,7 +639,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     }
     errorFileCount = Math.max(errorSet.size, errorFileCount - removed);
   }
-  // 2026-11-08:解析守卫/结构档跳过清单(与 c2f.buildC2fIndex 同口径)。增量语义:未变更文件
+ // 解析守卫/结构档跳过清单(与 c2f.buildC2fIndex 同口径)。增量语义:未变更文件
   // 从上一版 carry;本轮重扫文件按 freshGraph 重建(guardSkips + structOutcomes.skipped)。
   const skippedMap = new Map<string, string>();
   if (mode !== "full" && prev?.skippedFiles) {
@@ -656,7 +653,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     }
   }
   const skippedFiles = [...skippedMap.entries()].slice(0, 200).map(([rel, reason]) => ({ rel, reason }));
-  // 2026-11-08 全覆盖:rels 是每轮完整扫描清单(含复用文件),据此重建文件级状态表。
+ // 全覆盖:rels 是每轮完整扫描清单(含复用文件),据此重建文件级状态表。
   // 缺省 symbol-less,有符号→indexed,守卫/结构档跳过→skipped,装载失败→error。
   const fileStatus: Record<string, { status: "indexed" | "symbol-less" | "skipped" | "error"; reason?: string }> = {};
   for (const rel of rels) fileStatus[rel] = { status: "symbol-less" };
@@ -690,7 +687,7 @@ async function buildLocked(root: string, opts: { force?: boolean }, progress: (m
     headSha: gitHeadSha(root),
     srcMtime: fp.maxMtime,
     srcCount: fp.count,
-    // step-099:importers 恒写(空也写 {})——字段在场=版本标记,缺席=旧格式索引
+ // importers 恒写(空也写 {})——字段在场=版本标记,缺席=旧格式索引
     importers: importers ?? {},
     ...(dropped ? { dropped } : {}),
     ...(droppedNames !== undefined ? { droppedNames } : {}),

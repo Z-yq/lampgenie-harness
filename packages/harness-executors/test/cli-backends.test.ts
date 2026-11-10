@@ -40,7 +40,7 @@ async function waitPidGone(pid: number, budgetMs = 5000): Promise<boolean> {
   return dead();
 }
 
-describe("CLI 后端(designs/09 §2.2 zcode-headless / opencode-run)", () => {
+describe("CLI 后端( §2.2 zcode-headless / opencode-run)", () => {
   it("opencode 缺省策略:指令拼进 run 参数,stdout trim 即 finalText", async () => {
     const backend = new OpencodeCliBackend({ bin: process.execPath, args: [fake, "print"] });
     expect(backend.kind).toBe("opencode-run");

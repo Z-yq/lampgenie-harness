@@ -1,15 +1,12 @@
 /**
- * 系统上下文代(M125)。
- *
+ * 系统上下文代。
  * 改前基线:loop.ts 的节 diff 只有「sha 相等/不等」二元判定 + 「名单里没有就删」——
  *  ① 没有 per-source 的 key + codec,只能对文本算 sha;
  *  ② removal 三态缺失:`unavailable`(源暂时读不到)与 `absent`(源明确不存在)同归「不一致」,
  *     于是「一次读失败」会被当成「这一节被删除」;
  *  ③ 基线冻结在 node0,压缩越过基线后没有「重开代」的手段。
- *
  * 本模块把三态判定、单块合成、代重开做成纯函数,可独立测试;loop.ts 只做最小接线
  * (systemSectionDelta),node0 冻结基线与 journal 节基线语义保持不变。
- *
  * 关键不变量:
  *  - 基线**永不原地改写**:update 只进 block,`next.entries[key]` 仍是旧基线(否则下一轮 diff
  *    变空 → 模型静默收不到变更,见 loop.ts systemSectionDelta 的长注释)。
@@ -91,9 +88,8 @@ export function sectionSha(content: string): string {
 }
 
 /** 渲染一个「新出现 / 已变更」的节片段。
- *
  *  内容已经以 `## ` 开头(允许前导空白/换行)时不再加 `## key`——此时内容自带语义标题,
- *  key 只是内部 diff 的键,不必暴露给模型(避免双层标题:实测 `## date` + `## 当前日期`)。
+ * key 只是内部 diff 的键,不必暴露给模型(避免双层标题:经验证 `## date` + `## 当前日期`)。
  *  与原 loop.ts renderSectionDelta 逐字一致。 */
 function renderSection(key: string, content: string): string {
   const trimmed = content.replace(/^\s+/, "");
@@ -109,14 +105,12 @@ function renderRemoved(key: string): string {
 
 /**
  * 三态 reconcile。
- *
  *  ok + sha 与基线一致   → unchanged(不进 block)
  *  ok + sha 不同         → update(进 block;基线**不**原地改写)
  *  unavailable           → kept-unavailable(保留旧值/旧基线,**绝不**产出 removed)
  *  absent 且基线有该 key  → removed(明确消失才算删除,并从基线剔除)
  *  absent 且基线无该 key  → 从未存在,不产出 op
  *  基线无该 key 的首次 ok → baseline(进 block:该 key 出现得比基线晚,模型尚未见过)
- *
  *  load() 抛错按 unavailable 处理(一次读失败 ≠ 删除)。
  *  同一 key 重复给多次:首个胜出(顺序确定性)。
  *  基线里有、本次 sources 里没有的 key:不产出任何 op——「没问它」不是「它没了」。
@@ -194,15 +188,13 @@ export function renderGenerationBaseline(state: SystemContextState, keysInOrder:
 /**
  * 压缩越过基线后重开新代:generation+1,基线收窄为 keysInOrder 指定的条目(即「当前渲染文本」
  * 的组成),其余条目丢弃(它们不属于这一代基线)。
- *
  * baselineSeq 缺省 = 上一代 +1(模块内无 journal,用单调代序号充当时钟);接线方有真实
  * journal seq 时显式传入。
  */
 export function openNewGeneration(
   state: SystemContextState,
   keysInOrder: readonly string[],
-  baselineSeq?: number,
-): SystemContextState {
+  baselineSeq?: number): SystemContextState {
   const entries: Record<string, SystemContextEntry> = {};
   for (const key of keysInOrder) {
     const e = state.entries[key];

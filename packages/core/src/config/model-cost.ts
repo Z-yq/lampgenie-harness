@@ -1,6 +1,5 @@
 /**
- * 成本核算(2026-10-28 用户口径「显示成本消耗多少元:缓存多少、未命中多少、输出多少」)。
- *
+ * 成本核算。
  * 口径来源(与 provider 层产出严格对齐,不自己发明分段):
  *   usage.inputTokens  = 输入总量(input + 缓存命中读取 + 缓存写入;Anthropic 原生口径三者求和,
  *                        OpenAI 兼容口径 prompt_tokens 本身已含 cached —— 见
@@ -9,7 +8,6 @@
  *   usage.cacheCreationTokens = 缓存写入量(cache_creation_input_tokens;仅 Anthropic 原生下发)
  *   usage.outputTokens = 输出量
  * 于是三段互斥:未命中输入 = max(0, input - cached - cacheWrite)。
- *
  * 单价缺失(nulls)不按 0 算:该段金额返回 null 并列入 missing,由 UI 如实显示「该段未配单价」。
  */
 import type { ModelPriceRow } from "./model-prices.js";
@@ -93,8 +91,7 @@ export function computeCost(usage: UsageSplit, price: ModelPriceRow | null): Cos
 }
 
 /**
- * 计费门 + 成本 的单点判定(2026-10-28 用户口径「只有 API 调用的才显示多少元,token plan 的不用显示」)。
- *
+ * 计费门 + 成本 的单点判定。
  * 计费门逻辑收敛在此处而不是散在 server.ts 里,保证「哪里出账」只有一份口径:
  *   providers[].authMode === "token-plan"(订阅套餐)→ billed=false,price/cost 都为 null,
  *   前端据此**不渲染任何金额**(套餐已包月,再算「花了多少钱」是假账);
@@ -114,8 +111,7 @@ export interface ModelBilling {
 export function billingForModel(
   config: Config | undefined,
   model: string,
-  usage: UsageSplit,
-): ModelBilling {
+  usage: UsageSplit): ModelBilling {
   const owner = findModelProvider(config as never, model);
   const authMode = owner?.authMode === "token-plan" ? "token-plan" : "api";
   if (authMode !== "api") return { model, authMode, billed: false, price: null, cost: null };

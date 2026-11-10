@@ -1,5 +1,5 @@
 /**
- * 设计沉淀(step-058)单测:done 板 → 项目级沉淀索引(board-archive.json)。
+ * 设计沉淀单测:done 板 → 项目级沉淀索引(board-archive.json)。
  * 覆盖:登记形状(files=节点 symbolRef.file 去重)/upsert 幂等/读容错/项目过滤/
  *       收官链路组合(finalize→archiveDoneBoard)/WS 回路(board.archive.list)/app 收官钩子集成。
  */
@@ -176,7 +176,7 @@ describe("app 收官钩子集成(任务 done → 自动沉淀)", () => {
     saveBoard(rr, doneDoc({ sessionId: sidA, taskId: t.id, title: "钩子沉淀板" }));
     release!();
     // 收官钩子是异步链(diffstat→回填→登记):轮询索引直到条目出现。
-    // 窗口 20s:diffstat 跑在慢盘 drvfs 的真实仓根,负载下秒级抖动实测存在(生产是异步钩,不涉及时序)。
+ // 窗口 20s:diffstat 跑在慢盘 drvfs 的真实仓根,负载下秒级抖动经验证存在(生产是异步钩,不涉及时序)。
     const t0 = Date.now();
     let hit: { title: string; projectId: string } | null = null;
     while (Date.now() - t0 < 20000) {

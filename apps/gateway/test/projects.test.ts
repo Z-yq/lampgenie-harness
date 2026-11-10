@@ -1,5 +1,5 @@
 /**
- * step-035 添加项目(ZCode workspace 移植):注册表单元+WS e2e+面板冒烟。
+ * 添加项目(ZCode workspace 移植):注册表单元+WS e2e+面板冒烟。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import WebSocket from "ws";
@@ -110,7 +110,7 @@ describe("ProjectRegistry 单元", () => {
     expect(reg.resolveWorkdir(a.project.id)).toBe(harnessRoot);
   });
 
-  it("step-056 重命名:显示名持久化;空名/未知项目拒;path 不动", () => {
+  it(" 重命名:显示名持久化;空名/未知项目拒;path 不动", () => {
     const projDir = join(dir, "app3");
     mkdirSync(projDir);
     const file = join(dir, "p4.json");
@@ -253,7 +253,7 @@ describe("已移除项目·关联引用清理(2026-10-14 残留根治)", () => {
   });
 });
 
-// 会话归属继承(2026-10-21 归属漂移根治):实锤 web-1792572143140 前 5 任务 projectId=__harness__,
+// 会话归属继承(归属漂移根治):注意 web-1792572143140 前 5 任务 projectId=__harness__,
 // 用户期间切 active 项目后第 6 个任务突变成新项目。语义:显式 > 会话既有 owner > active。
 describe("会话归属继承(切项目不改写老会话归属)", () => {
   it("同会话第一条任务定 owner:active 切到别的项目后,不带 projectId 的追问仍贴原项目", async () => {
@@ -280,7 +280,7 @@ describe("会话归属继承(切项目不改写老会话归属)", () => {
     ws.send(JSON.stringify({ v: 1, type: "project.activate", projectId: projP.id }));
     await nextMessage(ws, "project.list.result", 5000, 3);
     ws.send(JSON.stringify({ v: 1, type: "task.submit", sessionId: "owner-sess", instruction: "第一条" }));
-    // 并发跑多个测试文件(各起 gateway+loop)时 CPU 打满,5s 内偶发回不来 → 放宽到 20s(flaky 修复,2026-10-28)
+ // 并发跑多个测试文件(各起 gateway+loop)时 CPU 打满,5s 内偶发回不来 → 放宽到 20s(flaky 修复
     const first = (await nextMessage(ws, "task.submitted", 20_000)).task as { id: string; projectId?: string };
     expect(first.projectId).toBe(projP.id);
     for (let i = 0; i < 50 && app.taskManager.get(first.id)?.state !== "done"; i++) await new Promise((r) => setTimeout(r, 100));
@@ -412,7 +412,7 @@ describe("项目 WS e2e(连接即推+四消息+workdir 生效)", () => {
     ws.close();
   }, 15_000);
 
-  it("step-056:fs.list 目录浏览/锚点 + project.rename 广播", async () => {
+  it("fs.list 目录浏览/锚点 + project.rename 广播", async () => {
     const d = realpathSync(mkdtempSync(join(tmpdir(), "genie-fsws-")));
     mkdirSync(join(d, "sub"));
     try {

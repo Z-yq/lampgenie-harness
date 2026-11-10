@@ -1,6 +1,5 @@
 /**
  * 重试态跨会话保活(batch1b)单测:锁住 gateway 侧 per-session 内存镜像的语义边界。
- *
  * 语义来源(只读参考,不 import):ZCode/packages/services/src/zcode-session/zcodeSessionApiRetry.ts
  *  — attempt 从 1 起;retry 开始不清旧态;首个模型进展才清;会话终态清零。
  * 为什么必须有这层:重试态此前只活在当前渲染里,面板切走会话再切回来就丢(用户以为任务卡死)。

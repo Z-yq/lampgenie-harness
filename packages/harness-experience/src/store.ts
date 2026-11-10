@@ -1,7 +1,6 @@
 /**
- * 经验库 store(designs/18 §2,Hermes skills 树形态 TS 重写):
+ * 经验库 store( §2,Hermes skills 树形态 TS 重写):
  * SKILL.md 目录树+frontmatter 校验+.usage.json sidecar+JSONL ledger(可回滚)。
- *
  * n5 多根发现(ZCode adapters/skills:多根 + priority):读路径看全部根(priority 高者赢),
  * 写路径只落最高优先级根(project)。旧单根构造 `new ExperienceStore(root)` 行为逐字不变,
  * 多根走 `ExperienceStore.fromRoots(resolveSkillRoots({projectRoot, home}))`。
@@ -24,7 +23,7 @@ export interface ExperienceFrontmatter {
   created_at: string;
   /** 何时用(ZCode `when_to_use`):手写技能的多行触发说明,进索引行 `(当: …)`。 */
   whenToUse?: string;
-  /** 项目归属(designs/23 项目绑定团队:/team share 沉淀时由激活项目写入)。 */
+ /** 项目归属(项目绑定团队:/team share 沉淀时由激活项目写入)。 */
   project?: string;
 }
 
@@ -97,7 +96,7 @@ export interface UsageTelemetry {
   last_patched_at?: string;
 }
 
-/** 原子写(2026-10-21 四轮复审 R4-4:多 worker 并发 distill 防互吞)——tmp+rename,同文件系统原子替换。 */
+/** 原子写(四轮复审 R4-4:多 worker 并发 distill 防互吞)——tmp+rename,同文件系统原子替换。 */
 function atomicWrite(file: string, data: string): void {
   const tmp = file + ".tmp-" + process.pid + "-" + Date.now().toString(36);
   writeFileSync(tmp, data, "utf-8");
@@ -169,7 +168,7 @@ export class ExperienceStore {
   }
 
   /** upsert 一条经验(fold-in:同 category+name 即覆盖更新,version+1)。
-   * R4-C8 修复:写路径整体挂文件锁(多实例并发写 ledger 交错);异步化(内部实现移 writeLocked)。 */
+ * 修复:写路径整体挂文件锁(多实例并发写 ledger 交错);异步化(内部实现移 writeLocked)。 */
   async write(fm: Omit<ExperienceFrontmatter, "version" | "created_at" | "status"> & { status?: "candidate" | "active" }, body: string): Promise<ExperienceFrontmatter> {
     // 自旋等锁(withLock 是非阻塞尝试,拿不到返回 undefined;并发写方等待而非失败)
     const lockPath = join(this.root, ".write.lock");
@@ -272,7 +271,7 @@ export class ExperienceStore {
     atomicWrite(join(dir, ".usage.json"), JSON.stringify(u, null, 2));
   }
 
-  /** 已禁用清单(step-044 恢复入口)。注意:disabled 条目被 index 过滤,故这里独立扫根。 */
+ /** 已禁用清单(恢复入口)。注意:disabled 条目被 index 过滤,故这里独立扫根。 */
   disabledEntries(): { category: string; name: string }[] {
     const out: { category: string; name: string }[] = [];
     const seen = new Set<string>();
@@ -338,10 +337,9 @@ export class ExperienceStore {
           const fm = parsed.fm;
           if (!fm) continue;
           if (fm.status === "archived" || fm.status === "disabled") continue;
-          // candidate 不进索引(2026-10-29 token 轮 P3)。
-          //
+ // candidate 不进索引( token 轮 P3)。
           // candidate 是 distill.ts 的**确定性兜底**产出:failed 任务的 journal 原文转储 +
-          // description = `失败任务候选经验:${task.instruction.slice(0,50)}`。实测剩余 9 条全是这种,
+ // description = `失败任务候选经验:${task.instruction.slice(0,50)}`。经验证剩余 9 条全是这种,
           // 索引行长这样:「incidents/task-24fb3f55: 失败任务候选经验:做个小功能」——
           // ① 描述是被截断的用户原话,不含任何知识,模型无法据它判断「该不该读」;
           // ② 正文是 `subagent.event {...}` 这类原始事件,读了也没有可复用规则;

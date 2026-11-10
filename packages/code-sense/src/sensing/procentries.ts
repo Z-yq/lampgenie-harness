@@ -1,11 +1,9 @@
 /**
- * 进程入口扫描(2026-10-22 P1):「这个仓怎么跑起来/业务入口在哪」的第一屏答案。
- *
- * 背景(用户拷问实锚):agent_alpha 的生产启动器 webrtc_multiprocess_server.py(main@94 →
+ * 进程入口扫描( P1):「这个仓怎么跑起来/业务入口在哪」的第一屏答案。
+ * 背景(用户拷问依据):agent_alpha 的生产启动器 webrtc_multiprocess_server.py(main@94 →
  * run_master,master/worker 多进程)在 entrypoints top-300 之外——扇出排序天然沉底(启动器的
  * 职责是运行时动态 spawn,静态扇出≈0),榜首反而是 UI 渲染函数与审计脚本。「图上无入边且
  * 扇出大」≠「进程入口」,本模块按语言各自的启动约定做确定性提取,与扇出榜解耦成节:
- *
  * 形态面(按语言):
  * - python:`if __name__ == "__main__":` 守卫(单双引号两形态)→ 守卫块内被调符号(缩进块,
  *   ≤48 行;asyncio.run(fn) 特判点名),符号经索引 byName 解析(同文件优先);
@@ -14,7 +12,6 @@
  * - go:package main 的 `func main`(读索引;cmd 子目录形态天然覆盖);
  * - java:`static void main(String[])`(读索引,method 形态);
  * - manifest:package.json `bin` 字段(声明式 CLI 入口;console_scripts/pyproject 属已知边界)。
- *
  * 纪律:纯确定性(零 LLM)、**同步**(dispatchTool 同步渲染约束;rg spawnSync 一次调用);
  * 非产品路径(scripts/docs/examples)默认过滤并如实计数(--all 放行,与 entrypoints 同口径);
  * 索引缺席时行扫描面(py/js/bin)仍可用,c/go/java 面显式降级。rg 缺席回退系统 grep。
@@ -57,7 +54,7 @@ const PY_BUILTIN = new Set([
   "if", "else", "elif", "while", "for", "try", "except", "finally", "with", "assert", "raise", "return",
 ]);
 
-/** 命中行是否像真守卫(2026-10-26 假阳性修复):本模块自己的文档注释/模式串里就写着
+/** 命中行是否像真守卫(假阳性修复):本模块自己的文档注释/模式串里就写着
  * `require.main === module`、`import.meta.main`——旧版按「文件首个命中行」直接采信,把
  * procentries.ts 自己标成了 bin 守卫(整仓 flow 的入口节因此把 packages/code-sense 当启动器)。
  * 判据:①注释/docstring 行(// /* * # 开头)不算;②模式串前面有**落单引号**(在字符串字面量里)
@@ -225,7 +222,7 @@ export function scanProcessEntriesSync(root: string, index: C2fIndex | null, opt
     if (/(^|\/)(scripts?|demos?|examples?|bench)\//.test(e.file)) return 1;
     return 0;
   };
-  // 深度优先:仓库根/浅层文件更可能是启动器(实锚 agent_alpha:根目录 web_chat_server.py 与
+ // 深度优先:仓库根/浅层文件更可能是启动器(依据 agent_alpha:根目录 web_chat_server.py 与
   // webrtc_multiprocess_server.py 曾被字典序排到 24 条之外),同深度再按字典序。
   const depth = (e: ProcessEntry): number => e.file.split("/").length;
   const kindRank = (e: ProcessEntry): number => (e.kind === "pkg-bin" ? 1 : 0);

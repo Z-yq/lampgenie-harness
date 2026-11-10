@@ -1,5 +1,5 @@
 /**
- * dsh-sdk 后端(step-007 P3 复活,2026-10-12):spawn 构建好的 dsh CLI(--profile sdk),
+ * dsh-sdk 后端( P3 复活:spawn 构建好的 dsh CLI(--profile sdk),
  * JSON-RPC over stdio(@deepseek-ai/dsh-sdk-protocol:initialize → session/prompt →
  * session.event 通知流 → session.status 终态)。
  * 与 NdjsonChildBackend 的 spawn/ready/progress 协议不同,直接实现 SubagentBackend。
@@ -35,7 +35,7 @@ export class DshSdkBackend implements SubagentBackend {
   constructor(private readonly opts: DshSdkOptions) {}
 
   async spawn(spec: TaskSpec, onEvent: (e: SubagentEvent) => void): Promise<SubagentHandle> {
-    // PATH 修复(step-048):dsh 引擎要求 node≥22,父进程 PATH 里可能是 node20——
+ // PATH 修复:dsh 引擎要求 node≥22,父进程 PATH 里可能是 node20——
     // 把所用 node 的 bin 目录前插,子进程 shell 出的辅助进程拿对版本。
     // profile 参数由本后端补齐(launch 语义=bin --profile sdk;DSH_SDK_CLI 显式帧里已含则不重复)
     const baseArgs = this.opts.command.args.filter((a, i) => !(a === "--profile" || this.opts.command.args[i - 1] === "--profile"));
@@ -54,7 +54,7 @@ export class DshSdkBackend implements SubagentBackend {
       stderrTail.push(d.toString());
       if (stderrTail.length > 20) stderrTail.shift();
     });
-    // 连接级 error 必须接住(进程被杀时 emit,无监听=unhandled 崩宿主,R5-C26 同款)
+ // 连接级 error 必须接住(进程被杀时 emit,无监听=unhandled 崩宿主, 同款)
     child.on("error", () => {});
 
     const pending = new Map<string, PendingEntry>();
@@ -105,7 +105,7 @@ export class DshSdkBackend implements SubagentBackend {
         const params = (msg.params ?? {}) as Record<string, unknown>;
         if (method === "session.event") {
           const ev = params.event as Record<string, unknown> | undefined;
-          // dsh session-log 信封:字段是 type(非 kind),负载字段在顶层(server.ts 实证)
+ // dsh session-log 信封:字段是 type(非 kind),负载字段在顶层(server.ts 验证)
           const kind = String(ev?.type ?? "");
           if (kind === "assistant/message") {
             const blocks = (ev?.message as { content?: { type?: string; text?: string }[] } | undefined)?.content ?? [];
@@ -126,7 +126,7 @@ export class DshSdkBackend implements SubagentBackend {
             if (/error|fail/i.test(streamText)) lastError = streamText;
           }
         } else if (method === "session.status") {
-          // 整 agent 生命周期(idle|running),非回合终态——不结算,只播进度(step-048 语义修正)
+ // 整 agent 生命周期(idle|running),非回合终态——不结算,只播进度(语义修正)
           onEvent({ type: "progress", note: "agent " + String(params.status ?? "") });
         }
       }
@@ -162,7 +162,7 @@ export class DshSdkBackend implements SubagentBackend {
     // 结束时清预算(事件回调里包一层)
     onEvent = (e: SubagentEvent) => { if (e.type === "result") clearWall(); origOnEvent(e); };
 
-    // 派任务:session/prompt 入队;回合由 session.status 通知收口
+ // 派任务:session/prompt 入队;回合由 session.status 通知
     void request("session/prompt", {
       sessionId: "sdk-" + spec.taskId,
       contentBlocks: [{ type: "text", text: spec.instructions }],
@@ -211,7 +211,7 @@ export function resolveDshCliCommand(repoRoot: string): { cmd: string; args: str
     return { cmd: parsed.cmd, args: parsed.args ?? [] };
   }
   const candidates = [
-    process.env.HOME + "/dsh-build/apps/cli/lib/bin.js", // 实测构建产物路径(2026-10-12)
+    process.env.HOME + "/dsh-build/apps/cli/lib/bin.js", // 实测构建产物路径
     process.env.HOME + "/dsh-build/apps/cli/dist/bin.mjs",
     process.env.HOME + "/dsh-build/apps/cli/dist/bin.js",
     join3(repoRoot, "deepseek-harness/apps/cli/lib/bin.js"),

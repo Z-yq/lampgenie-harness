@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * genie 远端工作区服务(2026-10-26,ZCode/VS Code remote 的 genie 形态):
+ * genie 远端工作区服务(ZCode/VS Code remote 的 genie 形态):
  * 部署到远端 ~/.genie/genie-ws.mjs,由本地网关经 SSH 复用通道逐命令调用。
  * 与"直接拼 shell"相比:统一 JSON 输出/错误码、路径与引号处理收敛在远端、grep/tree 等
  * 复合操作一次往返。自检:node genie-ws.mjs selftest。
- *
  * 用法(全部输出单行 JSON,失败 {ok:false,error}):
  *   node genie-ws.mjs ls <absDir> [--limit N]
  *   node genie-ws.mjs read <absFile> [--max N]        (base64 内容)

@@ -1,7 +1,7 @@
 /**
  * board_upsert action=prune(白板历史污染清理)单测。
  * 缺陷背景:upsert 刻意无删除语义(怕误删人的工作)→ planner 换 id 重画后旧节点永久残留
- * (实测某板 42 节点里 16 个是同写者自造双份,全部 done:false / evidence:[] / comments:[] 零人的痕迹)。
+ * (经验证某板 42 节点里 16 个是同写者自造双份,全部 done:false / evidence:[] / comments:[] 零人的痕迹)。
  * 因此提供「只删零痕迹节点」的清污动作,并加两道安全门:
  * - 候选来源只认显式 nodeIds 或 scope 前缀(无模糊匹配/无按 group 删);
  * - 每个候选都要「零痕迹」(!done && 无 evidence && 无 comments),有痕迹一律拒删并点名;

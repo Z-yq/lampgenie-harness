@@ -1,9 +1,8 @@
 /**
- * code-index MCP 核心逻辑(单一真相版,2026-10-15 从 apps/gateway/src/code-index-core.ts 迁入
+ * code-index MCP 核心逻辑(单一真相版, 从 apps/gateway/src/code-index-core.ts 迁入
  * code-sense-cli 包——CLI / MCP stdio / gateway 三方共用同一份工具面与格式化,gateway 侧只剩
  * 再导出薄壳)。上游纪律原样保留:
- *
- * 多仓路由语义(2026-10-13 修复:此前「第一个就绪仓先到先得」,工作区里字母序靠前且
+ * 多仓路由语义(修复:此前「第一个就绪仓先到先得」,工作区里字母序靠前且
  * gitHead 不再变化的仓会永久占住服务,其余仓永远查不到):
  *   - 全部工具带可选 repo 参数(仓目录名,如 lampgenie-harness);
  *   - 路径类工具:显式 repo > 路径首段命中子仓名(剥前缀) > 跨仓搜索(byFile 命中的首个就绪仓,命中多个标注「另见」);
@@ -33,7 +32,7 @@ export interface McpToolResult { content: { type: string; text: string }[]; isEr
 export interface CodeIndexMcp {
   tools: unknown[];
   dispatchTool(name: string, args: Record<string, unknown>): McpToolResult;
-  /** 异步分派全量面:api/state/algo(step-080,sensing 行扫描,天然 async)在此处理,
+ /** 异步分派全量面:api/state/algo(sensing 行扫描,天然 async)在此处理,
    * 其余工具委托 dispatchTool(同步契约零变更——query.ts/CLI 同步链与四个既有测试依赖它)。 */
   dispatchToolAsync(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
 }
@@ -123,32 +122,32 @@ const ALL_TOOLS = [
   },
   {
     name: "code_index_impact",
-    description: "改动影响面清单(step-066):改/删/重构一个函数前必查——完整签名与参数+双向调用闭包(逐跳 dN 标注)+受影响文件(调用+import 双通道)+关联测试定位+跨语言桥边段(索引含 bridge 段时:后端 handler 的前端调用点/前端符号触达的后端端点,带置信度与双端 file:line 证据),一次查询全出。改函数前先查影响面",
+    description: "改动影响面清单:改/删/重构一个函数前必查——完整签名与参数+双向调用闭包(逐跳 dN 标注)+受影响文件(调用+import 双通道)+关联测试定位+跨语言桥边段(索引含 bridge 段时:后端 handler 的前端调用点/前端符号触达的后端端点,带置信度与双端 file:line 证据),一次查询全出。改函数前先查影响面",
     inputSchema: { type: "object", properties: { name: { type: "string", description: "符号名(函数/方法/类)" }, depth: { type: "number", description: "可选,闭包深度(缺省 2;d1 恒完整,深层每层封顶 24)" }, ...REPO_ARG }, required: ["name"] },
   },
   {
     name: "code_index_api",
-    description: "HTTP 接口表面(step-077,确定性行扫描,不触发索引构建):服务有哪些接口(method/path/handler/file:line,六框架族)+OpenAPI 规范对账三态(一致/仅规范/仅代码)+handler 影响面摘要(静态索引在场时挂载;缺席=显式降级说明,清单不受影响)",
+    description: "HTTP 接口表面(,确定性行扫描,不触发索引构建):服务有哪些接口(method/path/handler/file:line,六框架族)+OpenAPI 规范对账三态(一致/仅规范/仅代码)+handler 影响面摘要(静态索引在场时挂载;缺席=显式降级说明,清单不受影响)",
     inputSchema: { type: "object", properties: { ...SENSING_REPO_ARG } },
   },
   {
     name: "code_index_state",
-    description: "状态机表面(step-077,五形态确定性提取,不触发索引构建):TRANSITIONS 字面量表/switch+联合类型双条件收敛/状态模式类族/XState createMachine/Redux slice(弱化产物如实标注不冒充状态机),转移带触发与 file:line 证据",
+    description: "状态机表面(,五形态确定性提取,不触发索引构建):TRANSITIONS 字面量表/switch+联合类型双条件收敛/状态模式类族/XState createMachine/Redux slice(弱化产物如实标注不冒充状态机),转移带触发与 file:line 证据",
     inputSchema: { type: "object", properties: { ...SENSING_REPO_ARG } },
   },
   {
     name: "code_index_algo",
-    description: "算法画像(step-077,框架 API 模式识别,不触发索引构建):模型定义/训练/推理/数据管线/CV-DSP/评估指标六类管线角色分布(信号带 file:line 证据行,类定义加权防误报),附目录级角色汇总。file 参数与 CLI algo [file] 同参(只影响 LLM 导读粒度,确定性清单不按文件过滤)",
+    description: "算法画像(,框架 API 模式识别,不触发索引构建):模型定义/训练/推理/数据管线/CV-DSP/评估指标六类管线角色分布(信号带 file:line 证据行,类定义加权防误报),附目录级角色汇总。file 参数与 CLI algo [file] 同参(只影响 LLM 导读粒度,确定性清单不按文件过滤)",
     inputSchema: { type: "object", properties: { file: { type: "string", description: "可选,文件路径(与 CLI algo [file] 同参;仅影响 LLM 导读粒度,确定性清单不过滤)" }, ...SENSING_REPO_ARG } },
   },
   {
     name: "code_index_vars",
-    description: "文件变量类型清单(step-089,声明时数据类型,不触发索引构建):类型分组的变量/字段/枚举常量/typedef 清单,每条带 dataType(int/char*/struct X/数组/函数指针、TS 泛型与联合、Py 注解、Go/Java 静态类型)+行号;按类型分组输出。支持 c/cpp/python/typescript/go/java,其余扩展名如实降级",
+    description: "文件变量类型清单(,声明时数据类型,不触发索引构建):类型分组的变量/字段/枚举常量/typedef 清单,每条带 dataType(int/char*/struct X/数组/函数指针、TS 泛型与联合、Py 注解、Go/Java 静态类型)+行号;按类型分组输出。支持 c/cpp/python/typescript/go/java,其余扩展名如实降级",
     inputSchema: { type: "object", properties: { file: { type: "string", description: "相对路径(可带仓前缀 lampgenie-harness/packages/…)或配合 repo 参数的仓内相对路径" }, ...REPO_ARG }, required: ["file"] },
   },
   {
     name: "code_index_project",
-    description: "项目底座画像(step-089):这个项目大概是干什么的(purpose)+主线能力+偏离主线提示+技术栈/框架指纹/入口/目录拓扑,全带证据行。读 .genie/sense-index/profile.json manifest(生产者:在项目根跑 codesense project --write;确定性骨架无 LLM 也可用);manifest 缺席=显式提示不猜",
+    description: "项目底座画像:这个项目大概是干什么的(purpose)+主线能力+偏离主线提示+技术栈/框架指纹/入口/目录拓扑,全带证据行。读 .genie/sense-index/profile.json manifest(生产者:在项目根跑 codesense project --write;确定性骨架无 LLM 也可用);manifest 缺席=显式提示不猜",
     inputSchema: { type: "object", properties: { ...REPO_ARG } },
   },
   {
@@ -208,7 +207,7 @@ const ALL_TOOLS = [
 ];
 
 /**
- * MCP 工具面(tools/list,2026-10-26 起十四件;2026-11-06 +surface=十五件)——code_index_graph/code_index_filegraph
+ * MCP 工具面(tools/list, 起十四件; +surface=十五件)——code_index_graph/code_index_filegraph
  * 移出 agent 面(mermaid 关系图 agent 几乎不消费,反而增加工具选择负担;图给人看走 CLI
  * `codesense symbol <name> --graph` / `codesense file <path> --graph`);code_index_modules
  * 新增(模块清单+跨模块交互矩阵——架构级问题此前无面);code_index_branches 新增
@@ -222,12 +221,12 @@ export const CODE_INDEX_TOOLS = ALL_TOOLS.filter(
 // ---- 格式化函数(导出:CLI 人类可读输出与 MCP 工具面逐字同一份,防双实现漂移) ----
 
 /** 符号查询结果 → MCP/CLI 同源文本(单一真相;--json 形态由 CLI 直接序列化 SymbolQueryResult)。
- * step-099(RC-096-B5):弃边可见性与 impact 面对齐——命中名有构建期弃边台账或索引内未解析边时
+ * (RC-096-B5):弃边可见性与 impact 面对齐——命中名有构建期弃边台账或索引内未解析边时
  * 追加一行诚实计量(此前弃边只在对照 grep 时才可见)。 */
 export function formatSymbolHit(s: RepoState, h: SymbolQueryResult): string {
   const sym = h.symbol;
-  // step-098(RC-096-B6):trunk 标签不过度声明——索引看不见≠无人调用(getCompletions/
-  // User.has_access 两例实锤);弃边/未解析同名调用在场时直说「存在未解析同名调用」
+ // (RC-096-B6):trunk 标签不过度声明——索引看不见≠无人调用(getCompletions/
+ // User.has_access 两例注意);弃边/未解析同名调用在场时直说「存在未解析同名调用」
   const kind = sym.kind === "trunk" ? "入口(trunk,索引内无调用方)" : sym.kind === "leaf" ? "叶子(leaf,不调用他人)" : "常规";
   const ref = (c: { name: string; file: string; line: number }) =>
     c.line > 0 ? `${c.name}@${c.file}:${c.line}` : `${c.name}@${c.file}`; // <module> 虚调用方无行号
@@ -260,7 +259,7 @@ export function formatSymbolHit(s: RepoState, h: SymbolQueryResult): string {
 export interface DeepRef { id: string; name: string; file: string; line: number; depth: number }
 
 /** N 层关系遍历(symbol/callers/callees 的 depth 语义,单一真相):
- * d1=直接调用方/被调方(与 querySymbol 同一去重语义,**完整不封顶**——step-066 A4 修复:
+ * d1=直接调用方/被调方(与 querySymbol 同一去重语义,**完整不封顶**—— A4 修复:
  * 旧版全局 CAP=24 被 d1 吃满即 return,直接关系 35→24 缩水且零 d2 行,请求更大深度反而
  * 丢失直接关系);d≥2 沿 index.edges 做 id 级 BFS,每层各自封顶 DEEP_CAP_PER_LEVEL 防爆炸,
  * 某层封顶=停止向更深扩展并如实标 truncated(不静默)。`<module>` 虚调用方与 c2f 消费面
@@ -342,7 +341,7 @@ export function parseDepthArg(args: Record<string, unknown>): { depth: number; l
   return { depth: n, labeled: true };
 }
 
-/** 同名多定义消歧提示(step-066 C3):>1 处命中时头部列出全部定义,点破「同名多处」事实,
+/** 同名多定义消歧提示( C3):>1 处命中时头部列出全部定义,点破「同名多处」事实,
  * agent 不必从并列输出里自行数行数。 */
 export function formatAmbiguityHeader(hits: { symbol: { name: string; file: string; line: number } }[]): string {
   if (hits.length <= 1) return "";
@@ -350,10 +349,10 @@ export function formatAmbiguityHeader(hits: { symbol: { name: string; file: stri
     hits.map((h) => `  - ${h.symbol.name} @ ${h.symbol.file}:${h.symbol.line}`).join("\n");
 }
 
-/** 符号未命中建议(2026-10-21 B,单一真相):大小写归一/编辑距离≤2 近似候选,
+/** 符号未命中建议( B,单一真相):大小写归一/编辑距离≤2 近似候选,
  * 跨仓聚合去重(逐仓 suggestSymbolNames,大小写命中排前、组内 inCount 降序)。
  * CLI 文本面(dispatchTool)与 --json suggestions 字段同源消费——agent 拼错一个
- * 字符不再断链(实锤:INIT_DETECTOR / initdetect 双双「未找到符号」)。 */
+ * 字符不再断链(注意:INIT_DETECTOR / initdetect 双双「未找到符号」)。 */
 export function symbolSuggestions(sts: RepoState[], name: string, limit = 5): string[] {
   if (sts.length === 0 || !name) return [];
   const seen = new Set<string>();
@@ -376,7 +375,7 @@ export function symbolMissText(sts: RepoState[], name: string, why = "", stale =
   return base + (suggest.length ? `;你是不是想找: ${suggest.join(", ")}` : "") + why + stale;
 }
 
-/** 文件符号表 → 同源文本(2026-10-21:symKind 如实标注——interface/type/enum/arrow/class
+/** 文件符号表 → 同源文本(symKind 如实标注——interface/type/enum/arrow/class
  * 不再与普通函数混为一谈;name 已含 parent 限定名,嵌套符号可直接看出所在处)。 */
 export function formatFileNodes(s: RepoState, nodes: C2fNode[]): string {
   return nodes
@@ -385,18 +384,18 @@ export function formatFileNodes(s: RepoState, nodes: C2fNode[]): string {
 }
 
 /** 单仓入口清单块(`## <repo>` 头,跨仓分组语义的一部分)。
- * step-067 fail-visible:语言覆盖缺口时显式状态行(零覆盖/低覆盖告警),不再输出无告警的误导视图——
- * step-065 实测:C 仓仅 1 个 py 文件被索引,entrypoints 只报 get_rank1 而工具看似健康。 */
+ * fail-visible:语言覆盖缺口时显式状态行(零覆盖/低覆盖告警),不再输出无告警的误导视图——
+ * 经验证:C 仓仅 1 个 py 文件被索引,entrypoints 只报 get_rank1 而工具看似健康。 */
 export function formatEntrypointsBlock(st: RepoState, limit = 15, perRepo = 8, opts: { all?: boolean } = {}): string {
   // 覆盖状态(manifest 有则用,旧索引现场重算;同步缓存路径,dispatchTool 同步约束)
   const cov = st.index.coverage ?? languageCoverageCachedSync(st.root, Object.keys(st.index.byFile));
   const warns = coverageWarnings(cov);
   const statusLines = warns.map((w) => `  ⚠️ 覆盖缺口: ${w}`)
     .concat(warns.length > 0 ? ["  (以上语言未进索引,入口清单只覆盖已索引语言——如实呈报,非全仓视图)"] : []);
-  // 2026-10-22 P1:进程入口首节(启动器/进程 main,与扇出榜解耦)——「这个仓怎么跑起来」
+ // P1:进程入口首节(启动器/进程 main,与扇出榜解耦)——「这个仓怎么跑起来」
   // 的第一屏答案;扇出榜语义不变,在其后。同步扫描(rg spawnSync 一次,~百 ms 级)。
   const procSection = renderProcessEntries(scanProcessEntriesSync(st.root, st.index, opts), 8);
-  // step-141 P1-1:非产品路径(docs/tutorial/examples/test mocks)默认过滤,过滤条数如实呈报
+ // P1-1:非产品路径(docs/tutorial/examples/test mocks)默认过滤,过滤条数如实呈报
   const meta = queryEntryPointsMeta(st.index, limit, opts);
   const eps = meta.kept;
   const filterLine = meta.note ? [`  [路径过滤] ${meta.note}`] : [];
@@ -405,7 +404,7 @@ export function formatEntrypointsBlock(st: RepoState, limit = 15, perRepo = 8, o
     const unsupported = unsupportedLanguageText(cov);
     const head = st.index.nodes.length === 0
       ? `## ${st.name}\n  索引为空(${unsupported ?? "无源码文件被索引——语言覆盖缺口或索引残缺"}${
-        // step-141 P0-2:无 adapter 的语言不问「重建」——重建永不会成功(诚实口径,与 doctor 对齐)
+ // P0-2:无 adapter 的语言不问「重建」——重建永不会成功(诚实口径,与 doctor 对齐)
         unsupported ? ";该仓可索引的源码文件为 0" : ";后台重建中,稍后重试"})`
       : `## ${st.name}\n  无扇出入口(入度全>0,闭环/库形态)${meta.filtered > 0 ? `(已过滤 ${meta.filtered} 条非产品路径入口,--all 查看)` : ""}`;
     const lines = [...head.split("\n"), ...procSection, ...filterLine, ...statusLines];
@@ -416,7 +415,7 @@ export function formatEntrypointsBlock(st: RepoState, limit = 15, perRepo = 8, o
   return lines.join("\n");
 }
 
-/** 索引后台重建的 worker 候选(跨平台定位,2026-10-15 迁移时修掉 URL().pathname 的 Windows 假设):
+/** 索引后台重建的 worker 候选(跨平台定位, 迁移时修掉 URL.pathname 的 Windows 假设):
  * ① gateway dist 形态:sense-index-worker.mjs/.js 与本模块同目录(bundle/tsc 两种落点);
  * ② 本包 dist 形态:cli.js/cli.mjs 同目录(codesense index 作为 worker,退出码 0=成功);
  * ③ 本包 dev(src)形态:../dist/cli.js。
@@ -493,7 +492,7 @@ export function createCodeIndexMcp(root: string, opts: { autoBuild?: boolean } =
   function repoByName(name: string): string | null {
     const direct = roots.find((r) => basename(r) === name || resolve(r) === resolve(name));
     if (direct) return direct;
-    // --repo 回查注册表(2026-10-21 E④):cd 进 ~/sense-eval/agent_alpha 不带 --root 能查,
+ // --repo 回查注册表( E④):cd 进 ~/sense-eval/agent_alpha 不带 --root 能查,
     // 但 --repo agent_alpha 从别的根报「未知仓」——repo 参数只认当前进程已加载的就绪集,
     // 注册表(~/.codesense/registry.json)才是跨根路由的真相源。命中即纳入本工作区
     //(索引未建=显式「尚未就绪」,不误报未知仓)。
@@ -536,7 +535,7 @@ export function createCodeIndexMcp(root: string, opts: { autoBuild?: boolean } =
     return { content: [{ type: "text", text }], isError: false };
   }
 
-  /** 工具入参 required 校验(2026-10-20 修):单一真相=CODE_INDEX_TOOLS[].inputSchema.required。
+ /** 工具入参 required 校验(修):单一真相=CODE_INDEX_TOOLS[].inputSchema.required。
    * 缺陷现场:tools/call 传 {"symbol":"Execute"}(参数名写错)时旧实现拿空名去查,返回
    * 「未找到符号: (已查就绪仓: go-cobra)」且 isError:false——调用方 agent 会把「参数名打错」
    * 误读成「符号不存在」并继续错下去。现在缺参/空串/参数名不符一律 isError:true,不进查询。
@@ -572,15 +571,15 @@ export function createCodeIndexMcp(root: string, opts: { autoBuild?: boolean } =
     const bits: string[] = [];
     if (building.length) bits.push(`索引后台更新中: ${building.join(", ")}`);
     else if (stale.length) bits.push(`索引可能过期: ${stale.join(", ")}`);
-    // step-141 P0-1:采样索引不静默——count 比对已退化的口径要说出来,否则「新鲜」结论看起来比实际强
+ // P0-1:采样索引不静默——count 比对已退化的口径要说出来,否则「新鲜」结论看起来比实际强
     const sampled = sts.map((s) => s.index).map((idx) => samplingNote(idx)).filter((x): x is string => !!x);
     if (sampled.length) bits.push([...new Set(sampled)].join(";"));
     return bits.length ? `\n(${bits.join(";")})` : "";
   }
 
-  /** 空索引的真实原因(step-141 P0-2,单一真相;五处调用点共用,禁止各自拼措辞)。
+ /** 空索引的真实原因( P0-2,单一真相;五处调用点共用,禁止各自拼措辞)。
    * 无 adapter 的语言(Rust/PHP/Ruby/C#…)永不会被索引——说「已触发后台重建,稍后重试」
-   * 是把用户送进死循环(实测 rust-ripgrep/php-guzzle/ruby-jekyll 每查必刷)。措辞与 doctor
+ * 是把用户送进死循环(经验证 rust-ripgrep/php-guzzle/ruby-jekyll 每查必刷)。措辞与 doctor
    * 的 coverageWarnings 对齐:同一事实、同一说法。 */
 function emptyIndexWhy(sts: RepoState[]): string {
     const unsupported = [...new Set(sts.map((s) => unsupportedLanguageTextSync(s.root, Object.keys(s.index.byFile))).filter((x): x is string => !!x))];
@@ -588,7 +587,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
     return "——就绪仓的索引全为空(源码语言未被索引覆盖或索引残缺,已触发后台重建,稍后重试)";
   }
 
-  /** 2026-11-08 全覆盖:file miss 先查文件级状态表(与 gateway formatQuery 同口径)——
+ /** 全覆盖:file miss 先查文件级状态表(与 gateway formatQuery 同口径)——
    * skipped/symbol-less/error 都有可操作原因,不再统一「文件无索引符号」。 */
   function fileStatusMiss(index: C2fIndex, rel: string): string | null {
     const table = index.fileStatus;
@@ -698,7 +697,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
         return toolResult(parts.join("\n") + staleNote(sts));
       }
       case "code_index_modules": {
-        // 2026-10-22 P1:模块视图(与 CLI codesense modules 同源渲染)
+ // P1:模块视图(与 CLI codesense modules 同源渲染)
         const { sts, err, missing } = pickForced(args);
         if (err) return toolResult(err);
         if (missing) return toolResult(notReady(missing));
@@ -791,7 +790,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
     }
   }
 
-  /** sensing 三工具的分派(step-080 B①)。与 CLI queryApiCmd/queryStateCmd/queryAlgoCmd
+ /** sensing 三工具的分派( B①)。与 CLI queryApiCmd/queryStateCmd/queryAlgoCmd
    * 同核:同一 query* 主入口 + 同一 render* 渲染函数(不复制逻辑);缺省输出=渲染函数逐字
    * 输出(无前缀/无注记),与 `codesense api|state|algo --root <同一根>` 逐字节同源。
    * repo 参数=定向该仓目录扫描;未知仓与 pickForced 同文案。扫描失败 isError 兜底,
@@ -818,7 +817,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       return { content: [{ type: "text", text: missingArg + usage }], isError: true };
     }
     if (name === "code_index_wire") {
-      // 2026-10-21:WS 消息协议表面(纯行扫描,索引非前置)。root=可选覆盖,
+ // WS 消息协议表面(纯行扫描,索引非前置)。root=可选覆盖,
       // repo=定向子仓目录;changed=true 只列 git 工作区改动涉及的 type。
       let scanRoot = root;
       const rootArg = args?.root;
@@ -842,7 +841,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       }
     }
     if (name === "code_index_refs") {
-      // 2026-10-21:字面量引用面(纯行扫描,索引非前置;所属符号读现成索引,缺席留空)。
+ // 字面量引用面(纯行扫描,索引非前置;所属符号读现成索引,缺席留空)。
       // root=可选覆盖,repo=定向子仓目录;includeTests/includeDocs 缺省 true。
       let scanRoot = root;
       const rootArg = args?.root;
@@ -870,7 +869,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       }
     }
     if (name === "code_index_branches") {
-      // 2026-10-23:分支/循环骨架(与 CLI branches 命令同源;纯 tree-sitter 扫描,索引非前置)。
+ // 分支/循环骨架(与 CLI branches 命令同源;纯 tree-sitter 扫描,索引非前置)。
       let scanRoot = root;
       const rootArg = args?.root;
       if (typeof rootArg === "string" && rootArg.trim()) scanRoot = resolve(root, rootArg.trim());
@@ -898,7 +897,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       }
     }
     if (name === "code_index_surface") {
-      // 2026-11-06:概念足迹面(与 CLI surface 命令同源;纯行扫描,索引非前置)。
+ // 概念足迹面(与 CLI surface 命令同源;纯行扫描,索引非前置)。
       // concept=逗号分隔多个,concepts=数组形态(两者可同时给,合并去重);root=可选覆盖,
       // repo=定向子仓目录。
       const conceptArg = typeof args?.concept === "string" ? args.concept : "";
@@ -932,7 +931,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       }
     }
     if (name === "code_index_vars") {
-      // step-089 P1:文件变量类型清单(逐文件深提取,索引非前置)。路径=根内相对路径;
+ // P1:文件变量类型清单(逐文件深提取,索引非前置)。路径=根内相对路径;
       // 多仓工作区首段命中子仓名时自动剥前缀定向;显式 repo 参数优先。
       const rawPath = String(args?.file ?? "").replace(/\\/g, "/");
       if (!rawPath) return toolResult("vars 需要 file 参数(相对路径)");
@@ -963,7 +962,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
       }
     }
     if (name === "code_index_project") {
-      // step-089 P3:项目底座画像(读 manifest,索引/LLM 均非前置;缺席=显式提示)
+ // P3:项目底座画像(读 manifest,索引/LLM 均非前置;缺席=显式提示)
       let scanRoot = root;
       const ra = args?.repo ? String(args.repo) : null;
       if (ra) {
@@ -975,7 +974,7 @@ function emptyIndexWhy(sts: RepoState[]): string {
         const pp = await import("@lampgenie/code-sense/project-profile");
         const loaded = pp.loadProjectProfile(scanRoot);
         if (!loaded) {
-          // 2026-10-22 P0:与其它工具一致按需生成确定性骨架,不再要求先跑 project --write。
+ // P0:与其它工具一致按需生成确定性骨架,不再要求先跑 project --write。
           const profile = await pp.queryProjectProfile(scanRoot, { withLlm: false });
           return toolResult(pp.renderProjectProfile(profile) + "\n(确定性骨架按需生成,未落盘;需要 LLM 解读与缓存请运行 codesense project --write)");
         }

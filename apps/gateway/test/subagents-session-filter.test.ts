@@ -1,5 +1,5 @@
 /**
- * 分身目录会话过滤(2026-10-21 用户口径:分身卡只显示当前进度中的 session 的子代理):
+ * 分身目录会话过滤(分身卡只显示当前进度中的 session 的子代理):
  * subagents.list 带 sessionId → running(注册表)与 past(journal 终态)两区都按会话过滤。
  */
 import { describe, it, expect } from "vitest";

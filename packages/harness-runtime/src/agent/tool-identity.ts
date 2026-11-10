@@ -1,9 +1,8 @@
 /**
- * M153 工具注册身份治理(纯逻辑,零依赖:本文件不 import 任何模块)。
- *
+ * 工具注册身份治理(纯逻辑,零依赖:本文件不 import 任何模块)。
  * 目的:工具面上的「身份」只有一套真源。builtin / mcp / plugin / alias / subagent 五类来源
  * 登记到同一个 ToolIdentityRegistry,冲突按固定优先级裁决,而不是靠装配顺序谁后谁覆盖:
- * - 保留名(read_file/write_file/... )只许 builtin 占用,插件/MCP 同名一律拒绝(否则影子工具可劫持核心行为);
+ * - 保留名(read_file/write_file/...)只许 builtin 占用,插件/MCP 同名一律拒绝(否则影子工具可劫持核心行为);
  * - 非 alias 同名二次注册 → DUPLICATE_NAME;
  * - alias 只许一跳解引用,且不许遮蔽保留名/已注册真名/已有 alias(防「换个名字等价于替换」)。
  * loop 的未知工具分支用 describeUnknownTool 给出可达候选(前缀优先 + 编辑距离),让模型能自我纠错。
@@ -127,8 +126,7 @@ export class ToolIdentityRegistry {
     // 必须暴露并剔除,不能被幂等悄悄吞掉)。
     if (reg.ownerId !== undefined) {
       const same = this.all.find(
-        (r) => r.name === name && r.source === reg.source && r.canonical === reg.canonical && r.ownerId === reg.ownerId,
-      );
+        (r) => r.name === name && r.source === reg.source && r.canonical === reg.canonical && r.ownerId === reg.ownerId);
       if (same) return { ok: true, registration: same, idempotent: true };
     }
 

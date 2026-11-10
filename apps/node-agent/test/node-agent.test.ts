@@ -14,7 +14,7 @@ describe("node-agent", () => {
     agent.close();
   });
 
-  // R5-C26 回归(step-064 补强):CONNECTING 态 close()→ws.terminate() 会异步 emit
+ // 回归(补强):CONNECTING 态 close→ws.terminate 会异步 emit
   // "WebSocket was closed before the connection was established"(已在裸 ws 复现为
   // unhandled 'error' 事件炸进程)。契约:error 监听必须在位,进程级零未捕获异常。
   it("CONNECTING 态 close 不产生 unhandled error(进程级零未捕获,连接拒绝也被吞)", async () => {

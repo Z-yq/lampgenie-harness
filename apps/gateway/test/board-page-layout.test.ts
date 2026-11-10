@@ -1,4 +1,4 @@
-/** step-111 单测:白板页面结构板语义级布局引擎(src/assets/board-page-layout.js 纯函数)。
+/** 单测:白板页面结构板语义级布局引擎(src/assets/board-page-layout.js 纯函数)。
  * fixture=test/fixtures/board-esign.json(真实电子签规划板 45 节点/55 边的精简形态,
  * 7 page+38 section;nav 17 含 1 自环与 7 回边)。
  * 跑法:pnpm -F gateway test -- board-page-layout --maxWorkers=1(单文件免批)。 */
@@ -180,7 +180,7 @@ describe("board-page-layout 语义级布局(电子签 45 节点 fixture)", () =>
   });
 
   it("嵌套 contains:section 的 component 子孙收进 section 槽内(不再落 (0,0) 孤位)", () => {
-    // 2026-10-18 体验官B P1:孙节点进 childrenOf 却无人布局→渲染 (0,0)、不随容器拖动
+ // 孙节点进 childrenOf 却无人布局→渲染 (0,0)、不随容器拖动
     const r = BPL.layout({
       docKind: "page",
       nodes: [

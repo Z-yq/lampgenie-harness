@@ -1,5 +1,5 @@
 /**
- * SSH 远程操作层单测(2026-10-26,ZCode remote workspace 切片):
+ * SSH 远程操作层单测(ZCode remote workspace 切片):
  * 路径围栏/ls 解析与截断/read 二进制判定与截断/exec 输出限流/错误归一(setSshRunnerForTest 注入)。
  */
 import { describe, it, expect, afterEach } from "vitest";

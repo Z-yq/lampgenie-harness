@@ -1,5 +1,5 @@
 /**
- * voice 包骨架(designs/07):播报协议+分级+面板状态机+改写器。
+ * voice 包骨架:播报协议+分级+面板状态机+改写器。
  * 渲染/TTS 一期降级为文字;音频链路二期(需真实模型与设备)。
  */
 
@@ -14,7 +14,7 @@ export interface SpeakRequest {
   anchor?: { taskId?: string; event?: string };
 }
 
-/** 面板状态机(designs/07 §3.4)。 */
+/** 面板状态机( §3.4)。 */
 export type PanelState = "idle" | "listening" | "thinking" | "speaking" | "interrupted";
 
 /** 播报改写器:markdown/代码块→口语化→限长(规则先行;小模型兜底已接=server voice.tts 的 GENIE_VOICE_POLISH opt-in,失败回退本规则版)。 */

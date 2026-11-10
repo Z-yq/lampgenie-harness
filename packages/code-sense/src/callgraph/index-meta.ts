@@ -1,16 +1,13 @@
 /**
- * 索引元数据面(2026-11-08):indexDir / meta.json / fp.json 的单一实现。
- *
- * 背景(7700 会话审计实锤):①根预算闸每次冷启动要全仓 walk 判大小,9p 慢盘 15s deadline
+ * 索引元数据面:indexDir / meta.json / fp.json 的单一实现。
+ * 背景(7700 会话审计注意):①根预算闸每次冷启动要全仓 walk 判大小,9p 慢盘 15s deadline
  * 随机超时 → 正常 monorepo 被误判「巨根」降级成工作区扇出;②过期判定依赖的全量指纹在
- * 冷进程 2s 预算内永远走不完(实测 7.5s)→ indexStale 恒「不过期」,索引可静默陈旧 8 天。
- *
+ * 冷进程 2s 预算内永远走不完(经验证 7.5s)→ indexStale 恒「不过期」,索引可静默陈旧 8 天。
  * 本模块提供两块小而持久的事实:
  *  - meta.json:构建产物身份(builtAt/srcCount/nodes/edges),根预算闸读 1KB 即可判「已知小仓」,
  *    不必再走全仓;也让外部工具/诊断面不必解析 30MB index.json。
  *  - fp.json:最近一次完整源文件指纹(at/count/maxMtime)。冷启动直接读盘上结论,把「未知→
  *    暂不过期」换成「有据可依」;后台异步 walk 完成后刷新,跨进程复用。
- *
  * 零重依赖(只用 node:fs/crypto/path):gateway 的 sense-root-gate 可静态 import,
  * 不会把 ts-morph/engine 拉进启动路径。
  */
@@ -35,7 +32,7 @@ export interface IndexMeta {
   nodes: number;
   edges: number;
   extractorVersion?: number;
-  /** 2026-11-08 全覆盖:文件级去向计数(scanned = indexed + symbolLess + skipped + error)。 */
+ /** 全覆盖:文件级去向计数(scanned = indexed + symbolLess + skipped + error)。 */
   fileStatus?: { scanned: number; indexed: number; symbolLess: number; skipped: number; error: number };
 }
 

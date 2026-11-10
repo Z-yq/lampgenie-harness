@@ -1,6 +1,5 @@
 /**
- * M58 图片 offload 在 gateway 的**生产装配**接通回归(2026-11 验收)。
- *
+ * 图片 offload 在 gateway 的**生产装配**接通回归(2026-11 验收)。
  * 背景:runtime 侧 loop 已实现 `imageOffload` 分支(首调报图片预算/尺寸错误 → data URL 落盘
  * `<root>/.genie/image-offload/<sessionId>/` + 占位行 → 立即重试一次),但 gateway 构造 AgentLoop
  * 时没传 = 生产行为等于改前。本文件锁三件事:
@@ -9,7 +8,6 @@
  *  b. 装配层取值口径 `imageOffloadOf(root)` 是纯函数,缺省根 = repoRoot()(与 .genie 其它落盘根一致);
  *  c. **行为级**:真走 wireAgentLoop 主 agent 路径,假 provider 首调抛图片错误 → offload 后次调成功,
  *     文件真落盘 + journal 有 image.offloaded —— 证明装配层确实把选项传进了 loop,而不是看起来传了。
- *
  * 隔离:repoRoot() 优先读 GENIE_REPO_ROOT,故测试内把它指到临时目录,offload 产物落临时根,
  * 不污染真仓 .genie。块首备份、块末恢复。
  */
@@ -92,8 +90,7 @@ describe("行为级:主 agent 路径(真走 wireAgentLoop)offload 生效", () =>
       tm as never, journal as never, llm as never, new EchoChildBackend() as never,
       undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined,
-      {} as never,
-    );
+      {} as never);
     // 附件图片:内容不必是真 PNG(尺寸解析失败=放行,与 readImageSize 口径一致)
     const imgPath = join(root, "pic.png");
     writeFileSync(imgPath, Buffer.from("QUJD", "base64"));
@@ -141,8 +138,7 @@ describe("行为级:主 agent 路径(真走 wireAgentLoop)offload 生效", () =>
       tm as never, journal as never, llm as never, new EchoChildBackend() as never,
       undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined,
-      {} as never,
-    );
+      {} as never);
     const sid = "gw-img-offload-neg";
     // 附件目录必须存在(构造注入阶段会 stat);用临时根下的子目录
     mkdirSync(join(root, "att"), { recursive: true });

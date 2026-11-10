@@ -1,6 +1,5 @@
 /**
- * agent 工具 `terminal`(step-122):open/send/read/close/list。
- *
+ * agent 工具 `terminal`:open/send/read/close/list。
  * 设计纪律:
  * - owner 由工具工厂硬绑定(主 agent 任务 sessionId),模型无法在参数里伪造 owner;
  * - read/list 声明只读(权限闸豁免);open/send/close 是写/执行类,过既有权限规则/ask 链;
@@ -29,7 +28,7 @@ export interface CreateTerminalToolOptions {
   owner: string;
   /** cwd 围栏根(生产=taskRoot)。 */
   root: string;
-  /** 上下文卫生提醒(2026-10-20 用户口径):开=send/read 输出超过阈值时附 hygieneNote,
+ /** 上下文卫生提醒:开=send/read 输出超过阈值时附 hygieneNote,
    * 提醒调用方(主 coding agent)把大输出工作拆子任务派子代理。子代理装配不传=不打扰(它就是干活的)。 */
   contextHygiene?: { thresholdBytes?: number };
   /** 命令围栏(workspace=工作区内):send 分支**下发前**调用,返回非 null=拒因 → 命令不下发,
@@ -49,7 +48,7 @@ interface TerminalToolArgs {
   cwd?: string;
   name?: string;
   command?: string;
-  /** 批量命令(2026-11-03):一次往返内按序执行多条,逐条回执合并。
+ /** 批量命令:一次往返内按序执行多条,逐条回执合并。
    *  用途:多条探测/验证命令不必各占一轮 LLM(长会话每轮都要重发全量上下文)。
    *  与 command 互斥:同时给则以 commands 为准。任一条失败即停(默认),stopOnError=false 可继续。 */
   commands?: string[];
@@ -188,7 +187,7 @@ export function createTerminalTool(opts: CreateTerminalToolOptions): TerminalToo
           }
           const timeoutMs =
             typeof a.timeout === "number" && Number.isFinite(a.timeout) ? Math.floor(a.timeout * 1000) : undefined;
-          // 批量模式(2026-11-03):一次往返按序跑多条,遇错默认即停。
+ // 批量模式:一次往返按序跑多条,遇错默认即停。
           if (batch.length > 0) {
             const stopOnError = a.stopOnError !== false;
             const runs: Array<{ command: string; ok: boolean; exitCode: number | null; output: string; durationMs: number }> = [];
@@ -289,7 +288,7 @@ export function createTerminalTool(opts: CreateTerminalToolOptions): TerminalToo
   };
 }
 
-/* ───────────────────────────── M27:job 工具 ───────────────────────────── */
+/* ───────────────────────────── :job 工具 ───────────────────────────── */
 
 export interface CreateJobToolOptions {
   registry: JobRegistry;

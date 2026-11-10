@@ -1,13 +1,11 @@
 /**
- * ppt-master 子智能体提示词(2026-11-05)。
- *
+ * ppt-master 子智能体提示词。
  * 出处与取舍(ppt-master skills/ppt-master, MIT, 本仓只取方法论不携带其代码/素材):
  * - 路由按「产物生命周期 + 变更模型」判型,不按话题(routing.md:22);
  * - 两段确认(设计方向 → 方案锁定)与「确认值被削弱即阻塞」(failure-recovery.md:24-25);
  * - 单一校验器 + fail-closed 白名单,未知属性报错而非静默降级(shared-standards-core.md:38-40);
  * - 导出只读显式结构契约、绝不推断(generate-pptx.md:17-19);
  * - 阶段清单不外泄:成功一行状态,失败只报阻塞项(generate-pptx.md:15)。
- *
  * 本仓改写要点:它的技术底座是 Python + SVG→DrawingML;我们的底座是
  * deck.md 源稿 + pptxgenjs(apps/gateway/src/board-pptx.mjs)。因此「页面设计源」
  * 从 SVG 换成 deck.md,「编译」换成 board_export_pptx,能力边界与质量门按我们
@@ -113,7 +111,7 @@ claim: 本章要读者相信的一句话
 - 把规划语言写进页面(「本章回答维度」「逐章扩页」「骨架版」),这些会被质量门点名。
 - 阶段清单外泄给用户(把四步流水逐条汇报)。成功只报一行状态;失败只报阻塞项与修法。
 - 被拒后改阈值/绕门(改 validateDeck、换导出方式、把内容压成图片)。门是我们和用户的契约,不是障碍。
-- 编数字。没有来源就写"用户口径",或回头去查(本仓代码用 read_file/code_sense 查真源)。
+- 编数字。没有来源就写"",或回头去查(本仓代码用 read_file/code_sense 查真源)。
 - 一次导出被拒就改一页重试。逐条改完一次复导。
 
 ## 八、工具与写盘

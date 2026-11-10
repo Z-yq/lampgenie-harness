@@ -1,6 +1,6 @@
 /**
  * `codesense serve`——MCP stdio 模式:把 code-sense 静态索引作为 MCP 工具暴露给任意客户端
- * (codex / trae / dsh / zcode / claude 系等,协议=JSON-RPC 2.0 over stdio,MCP 2024-11-05 基线)。
+ * (codex / trae / dsh / zcode / claude 系等,协议=JSON-RPC 2.0 over stdio,MCP 基线)。
  * 工具面与 gateway 的 code-index-mcp 完全同源(同一 mcp-core),serverInfo 名不同而已。
  * stdout 是协议通道:一切日志走 stderr。
  */
@@ -28,8 +28,8 @@ export function serveMain(argv: string[], opts: ServeOptions = {}): void | Promi
   const mcp = createCodeIndexMcp(root);
 
   let buf = "";
-  /** 在飞异步分派计数(step-080):api/state/algo 行扫描秒级,一次性管道场景 stdin 关闭
-   * 早于响应写出——旧逻辑 10ms/2s 兜底退出会吃掉在飞响应(stdio 三连实测 1/4 行实锤)。 */
+ /** 在飞异步分派计数:api/state/algo 行扫描秒级,一次性管道场景 stdin 关闭
+ * 早于响应写出——旧逻辑 10ms/2s 兜底退出会吃掉在飞响应(stdio 三连经验证 1/4 行注意)。 */
   let pendingCalls = 0;
   input.setEncoding("utf-8");
   input.on("data", (chunk: string) => {
@@ -92,7 +92,7 @@ export function serveMain(argv: string[], opts: ServeOptions = {}): void | Promi
         return;
       }
       if (method === "tools/call") {
-        // step-080:api/state/algo 是 async sensing 分派,统一走 dispatchToolAsync
+ // api/state/algo 是 async sensing 分派,统一走 dispatchToolAsync
         //(其余工具在其内部委托同步 dispatchTool,行为零变)。响应按 id 关联,异步到达不破坏协议。
         pendingCalls++;
         Promise.resolve(mcp.dispatchToolAsync(String(params?.name ?? ""), params?.arguments ?? {}))
@@ -120,9 +120,9 @@ export function isMainEntry(metaUrl: string): boolean {
   const argv1 = process.argv[1] ? resolve(process.argv[1]) : "";
   if (argv1 === "") return false;
   if (metaUrl === pathToFileURL(argv1).href) return true;
-  // step-109:npm/pnpm 安装态 bin 是符号链接(.bin/codesense → 包内 dist/cli.js),
+ // npm/pnpm 安装态 bin 是符号链接(.bin/codesense → 包内 dist/cli.js),
   // Node 对主入口默认 realpath 化 import.meta.url,而 argv[1] 保留链接路径——
-  // 不补 realpath 比对时主守卫静默不触发(进程零输出 exit 0,tarball 安装实测实锤)。
+ // 不补 realpath 比对时主守卫静默不触发(进程零输出 exit 0,tarball 安装经验证注意)。
   try {
     return metaUrl === pathToFileURL(realpathSync(argv1)).href;
   } catch {

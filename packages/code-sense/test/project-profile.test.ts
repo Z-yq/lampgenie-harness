@@ -1,5 +1,5 @@
 /**
- * project-profile 单测(step-089 P3 / designs/26 §4):
+ * project-profile 单测( P3 / §4):
  * 确定性骨架(README 首段/包清单/框架指纹/目录拓扑,全带证据行)、entrypoints 缺席显式降级、
  * LLM purpose 层(runSemanticBatch 管线:正常/引用伪造拒收/无 LLM 显式 off)、
  * manifest 落盘与指纹缓存、≤300 字符注入块与缺席零注入。
@@ -107,7 +107,7 @@ describe("确定性骨架(永不依赖 LLM)", () => {
   });
 });
 
-describe("LLM purpose 层(step-077 管线复用)", () => {
+describe("LLM purpose 层(管线复用)", () => {
   it("无 LLM=off 显式降级(骨架独立可用,不冒充)", async () => {
     const dir = fixture(REPO);
     const profile = await queryProjectProfile(dir, { withLlm: true });
@@ -217,7 +217,7 @@ describe("manifest 落盘与注入块", () => {
   });
 });
 
-// 2026-10-20 多仓实测:README 首段提取把语言切换行/安装代码块/badge alt 当 purpose,
+// 多仓经验证:README 首段提取把语言切换行/安装代码块/badge alt 当 purpose,
 // LLM 只能顺着噪声总结(dify 只写出「名为 Dify 的项目」、opencode 写成「curl 安装工具」)。
 describe("README 首段抗导航噪声", () => {
   it("语言切换行/logo 行不算首段,取真正的描述段(ZCode 形态)", () => {
@@ -349,7 +349,7 @@ describe("README 首段抗导航噪声", () => {
   });
 });
 
-// 2026-10-20 实报:lampgenie-harness「总路线」把项目总结成「code-sense 框架指纹识别 + Python 解析」。
+// 用户反馈:lampgenie-harness「总路线」把项目总结成「code-sense 框架指纹识别 + Python 解析」。
 // 根因=指纹表自指 12 族假框架 + 无 README/description 时 LLM 硬猜 + 任务探针进产品入口。
 describe("总路线失真修复:只认真实导入与产品级 purpose", () => {
   it("指纹表/任务文档/夹具字符串里的字面量不算框架(自指不再回 12 族)", async () => {
@@ -361,7 +361,7 @@ describe("总路线失真修复:只认真实导入与产品级 purpose", () => {
         '  { name: "React", literals: [\'from "react"\'] },',
         "];",
       ].join("\n"),
-      "tasks/step-001/step.md": "from fastapi import FastAPI\n",
+      "tasks//step.md": "from fastapi import FastAPI\n",
       "docs/guide.md": "import torch\n",
       "src/fixture.ts": "const s = 'from \"react\"'; // 字符串不是导入\n",
       "src/py-fixture.ts": "const PY = `\nimport torch\nfrom flask import Flask\n`;\n", // 模板字符串里的 Python 片段
@@ -439,7 +439,7 @@ describe("总路线失真修复:只认真实导入与产品级 purpose", () => {
   });
 
   it("tasks/docs/vendor 路径判为非产品(入口与框架证据都不取)", () => {
-    expect(isNonProductPath("tasks/step-124/evidence/probe.cjs")).toBe(true);
+    expect(isNonProductPath("tasks//evidence/probe.cjs")).toBe(true);
     expect(isNonProductPath("docs/reference/x.ts")).toBe(true);
     expect(isNonProductPath("vendor/some-lib/tool.ts")).toBe(true);
     expect(isNonProductPath("apps/gateway/src/server.ts")).toBe(false);

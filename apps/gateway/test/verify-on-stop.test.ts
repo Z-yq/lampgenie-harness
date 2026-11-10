@@ -1,6 +1,5 @@
 /**
- * M107 任务级验证账本(verify-on-stop,2026-11-07)。
- *
+ * 任务级验证账本(verify-on-stop。
  * A. 纯函数:computeVerifyLedger 的判据(成功验证/失败结果/watch/文档抑制/stale 原因);
  * B. 收尾钩子(agent-wiring 实际终态):warn 追加提示不拦任务;hard 补跑一轮仍 stale → failed + journal。
  */

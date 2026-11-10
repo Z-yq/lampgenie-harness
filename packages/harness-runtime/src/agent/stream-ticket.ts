@@ -1,6 +1,5 @@
 /**
- * M30 一次性流票据(mechanisms「WebView 直连 WS 的一次性票据鉴权」)。
- *
+ *  一次性流票据(mechanisms「WebView 直连 WS 的一次性票据鉴权」)。
  * 问题:WebView / 移动端直连 WS 时带不了 Basic Auth;把长期密码拼进 URL 参数会随日志、
  * 历史、代理缓存外泄,并且换终端、换工作目录后仍然有效(重放面很大)。
  * 口径:
@@ -13,7 +12,6 @@
  *  - pruneExpired 只清「过期且从未消费」的票;已消费票保留(可回答 replay 而不是 not-found,
  *    也符合"过期票也被标记"的口径);
  *  - stats.active 只是「consumedAt === undefined」的计数,**不判 TTL**(纯视图,不是可用性判定)。
- *
  * 本文件全是纯逻辑:无 IO、不取 Date.now(),时间一律由参数 now 传入,便于单测与回放。
  * store 一律不可变更新:每次写入都复制 tickets 记录(既有 ticket 对象不被原地改写),
  * 入参 binding 也先复制再落库。
@@ -145,8 +143,7 @@ function writeTicket(store: TicketStore, ticket: StreamTicket): void {
  */
 export function issueTicket(
   store: TicketStore,
-  options: IssueTicketOptions,
-): IssueTicketResult {
+  options: IssueTicketOptions): IssueTicketResult {
   const { binding, now, ttlMs, idFactory } = options ?? ({} as IssueTicketOptions);
 
   if (!isTicketBinding(binding)) {
@@ -198,8 +195,7 @@ export function issueTicket(
  */
 export function consumeTicket(
   store: TicketStore,
-  options: ConsumeTicketOptions,
-): ConsumeTicketResult {
+  options: ConsumeTicketOptions): ConsumeTicketResult {
   const { ticketId, binding, now } = options ?? ({} as ConsumeTicketOptions);
   const id = typeof ticketId === "string" ? ticketId : "";
 

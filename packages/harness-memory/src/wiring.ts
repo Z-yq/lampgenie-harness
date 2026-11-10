@@ -1,5 +1,4 @@
 // Gateway-facing integration glue for @lampgenie/memory.
-//
 // createMemoryWiring() bundles the four memory pieces (context renderer,
 // session-end extractor, profile observer, preference pool/promoter; their
 // domain model design-references the qwen-audio-agent project — attribution
@@ -8,9 +7,7 @@
 // actually needs: render a prompt context block, feed a closed session's
 // transcript to the learning pipelines, and promote confirmed profile
 // candidates into USER.md.
-//
 // PORTING NOTES (read before "fixing" anything here):
-//
 // 1. MarkdownDocumentStore is a behavior-preserving typed port of
 //    src/providers/markdown/context-store.ts. The original cannot be imported:
 //    it does `import ... from '../../../../../shared/file-transaction-lock'`,
@@ -20,7 +17,6 @@
 //    lock is dropped (single-process gateway assumption); writes stay atomic
 //    via tmp file + rename, mode 0600, directory 0700, exactly like the
 //    original persist().
-//
 // 2. ProfileWatcher is a behavior-preserving typed port of
 //    src/learning/profile-observer.ts. The original cannot be imported either:
 //    it imports `@lampgenie/runtime/src/core/sensitive-content`, which the
@@ -35,7 +31,6 @@
 //    interaction fields must point at the assistant, unknown answers are
 //    digested silently, list values are split before validation, and the
 //    sensitive-content gate stays on the single runtime implementation.
-//
 // 3. PreferencePoolFileStore implements the store contract
 //    PreferenceDraftPool expects (load/save/health/configured/enabled)
 //    with the same v2 snapshot format as learning/preference-candidate-store.ts
@@ -45,7 +40,6 @@
 //    out-of-repo shared module). Corruption is quarantined to
 //    `<file>.corrupt-<ts>`; I/O failures disable persistence instead of
 //    throwing, matching JsonCheckpointStore's fail-soft contract.
-//
 // The real MemoryMiner / PreferenceDraftPool / PreferenceAdvancer /
 // MarkdownMemoryStore classes ARE importable and are used directly; their
 // @ts-nocheck declarations expose hostile constructor types (e.g. `llmCall?:
@@ -117,8 +111,7 @@ export interface TranscriptBatch {
 export interface ConversationSyncPort {
   pendingRecords(
     query: { ownerId: string; sessionId?: string },
-    component?: unknown,
-  ): TranscriptBatch
+    component?: unknown): TranscriptBatch
 }
 
 export interface SessionCloseInput {
@@ -155,8 +148,7 @@ export interface MemoryProviderInstance {
     ownerId: string,
     changes: MemoryChange[],
     context?: unknown,
-    isCurrent?: unknown,
-  ): { changed: number; documents: unknown[] }
+    isCurrent?: unknown): { changed: number; documents: unknown[] }
   health(): { ok: boolean; documents: Record<string, unknown> }
 }
 
@@ -280,8 +272,7 @@ function digest(value: string): string {
 function publicDocument(
   scope: string,
   content: string,
-  revisionSource: string = content,
-): MemoryDocumentLike {
+  revisionSource: string = content): MemoryDocumentLike {
   return {
     id: `${scope}_document`,
     scope,
@@ -316,8 +307,8 @@ function normalizeMarkdown(content: string): string {
       seenBullets.add(item)
       return true
     })
-  // 空节清理(2026-10-19 用户实报「空标题污染」):标题后紧跟标题/EOF=无内容节,整节丢弃。
-  // 实测 USER.md 曾积累 69 个空「## 用户明确要求」——每个都进 system 提示词白烧 token。
+ // 空节清理(用户用户反馈「空标题污染」):标题后紧跟标题/EOF=无内容节,整节丢弃。
+ // 经验证 USER.md 曾积累 69 个空「## 用户明确要求」——每个都进 system 提示词白烧 token。
   return dropEmptySections(deduped)
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -735,8 +726,7 @@ function bareText(value: unknown): string {
 
 function buildTranscript(
   messages: TranscriptMessage[],
-  maxChars: number,
-): { lines: string[]; userText: string } {
+  maxChars: number): { lines: string[]; userText: string } {
   const lines: string[] = []
   const userParts: string[] = []
   let used = 0
@@ -933,8 +923,7 @@ export class ProfileWatcher {
     if (typeof this.conversationSync?.pendingRecords !== 'function') return null
     const batch = this.conversationSync.pendingRecords(
       { ownerId: safeOwnerId, sessionId: input?.sessionId },
-      this,
-    )
+      this)
     const userMessages = batch.messages.filter(message => message.role === 'user')
     if (userMessages.length < this.minUserMessages) return null
     // Claim fresh evidence before yielding so repeated close hooks cannot reuse it.
@@ -1276,8 +1265,7 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
   async function guard(
     stage: string,
     ownerId: string,
-    run: () => unknown,
-  ): Promise<unknown> {
+    run: () => unknown): Promise<unknown> {
     try {
       return await run()
     } catch (error) {

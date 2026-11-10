@@ -1,8 +1,7 @@
 /**
- * 编辑后检查编排(step-114 / M108)。
+ * 编辑后检查编排( /)。
  *   write/edit 落盘前 → baseline 诊断(旧内容,同一 checker) → 落盘 → 格式化(LSP→本机命令)
  *   → 诊断(server / TS 编译器兜底) → delta 对消(只报新增 ERROR) → 渲染 <diagnostics>。
- *
  * 全部 fail-soft:任何异常返回空 suffix,不影响工具成功结果;server 缺失静默跳过。
  */
 import { readFileSync, writeFileSync, statSync } from "node:fs";
@@ -21,11 +20,11 @@ import {
   type RenderDiagnosticsOptions,
 } from "./types.js";
 
-/** 行位移对消容差(±2 行,M108)。 */
+/** 行位移对消容差(±2 行。 */
 const LINE_TOLERANCE = 2;
 
 /**
- * 写前 baseline 诊断(M108):对**旧内容**跑同一检查器,得到写前诊断集。
+ * 写前 baseline 诊断:对**旧内容**跑同一检查器,得到写前诊断集。
  * 调用约束:必须在落盘前调用(tsc 兜底按磁盘内容建 program,写后磁盘已是新内容)。
  * @returns 数组=baseline(空数组=新文件/非代码文件);null=检查器不可用(调用方标 unavailable,不阻塞写)。
  */
@@ -150,7 +149,7 @@ export async function checkEditedFile(input: EditCheckInput): Promise<EditCheckR
     }
   }
 
-  // ---- delta(M108):只报写前不存在的新增;行号按新旧文本做位移对消 ----
+ // ---- delta:只报写前不存在的新增;行号按新旧文本做位移对消 ----
   const enabledDelta = settings.baseline && input.baseline !== undefined;
   const baselineState: EditCheckResult["baseline"] = !enabledDelta
     ? "off"
@@ -190,7 +189,7 @@ export async function editCheckSuffix(input: EditCheckInput): Promise<string> {
 }
 
 /* ------------------------------------------------------------------ *
- * delta 引擎(M108)
+ * delta 引擎
  * ------------------------------------------------------------------ */
 
 /**
@@ -203,8 +202,7 @@ export function subtractBaseline(
   baseline: DiagnosticItem[],
   current: DiagnosticItem[],
   baselineText?: string,
-  currentText?: string,
-): DiagnosticItem[] {
+  currentText?: string): DiagnosticItem[] {
   if (baseline.length === 0) return current;
   const map = makeLineMapper(baselineText, currentText);
   const pool = new Map<string, number[]>();
@@ -282,7 +280,7 @@ function normalizeLine(line: string): string {
 }
 
 /* ------------------------------------------------------------------ *
- * 渲染(M108:只报 ERROR / 条数与字符上限 / 控制字符与 HTML 转义)
+ * 渲染(只报 ERROR / 条数与字符上限 / 控制字符与 HTML 转义)
  * ------------------------------------------------------------------ */
 
 const MAX_MESSAGE_CHARS = 400;

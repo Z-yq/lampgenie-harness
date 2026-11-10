@@ -1,13 +1,12 @@
 /**
- * 浏览器控制工具(step-048 建立;2026-10-19 对齐 ZCode control-browser 重写;2026-10-22 命令面扩写 + 视图 hub):
+ * 浏览器控制工具(建立; 对齐 ZCode control-browser 重写; 命令面扩写 + 视图 hub):
  * 持久 tab 会话 + 快照 ref 定位 + Playwright 操作 + cua 坐标兜底。
  * 形态对齐 ZCode browser-use:tab 是跨调用连续性边界(不再每次 launch 即弃),
  * snapshot(可交互元素清单 e1..eN + aria 树)是页面感知主通道,screenshot 只在视觉确需时用,
  * canvas/非 DOM 目标走 cua 坐标路。裁剪掉多后端(iab/extension)/录像(单进程 headless 用不上)。
  * 门禁不变:config.browser.enabled 实时生效;allowDomains 白名单(open/navigate?op=url 校验,页面内导航不拦)。
  * 纪律:fail-soft 返回错误文本;截图落 .genie/browser-shots/;idle tab 10min 回收。
- *
- * 池与视图(2026-10-22):browser 实例 + tab 表提到模块级共享池——面板内置浏览器视图与 agent
+ * 池与视图:browser 实例 + tab 表提到模块级共享池——面板内置浏览器视图与 agent
  * 必须同池才能「人机同看」;BrowserViewHub 是只读观察面(帧 + 事件 + 白名单命令)。
  */
 import { createHash } from "node:crypto";
@@ -355,7 +354,7 @@ interface PageLike {
   waitForLoadState: (s: string, o?: unknown) => Promise<void>;
   screenshot: (o: unknown) => Promise<Buffer>;
   locator: (sel: string) => LocatorProbe;
-  /* playwright 通道(op=locator 的 getBy* 家族与 waitForURL;可选——探针页未实现时如实报不支持)。 */
+ /* playwright 通道(op=locator 的 getBy* 家族与 waitForURL;可选——探针页未实现时如用户反馈不支持)。 */
   getByRole?: (role: string, o?: { name?: string; exact?: boolean }) => LocatorProbe;
   getByText?: (t: string, o?: { exact?: boolean }) => LocatorProbe;
   getByLabel?: (t: string, o?: { exact?: boolean }) => LocatorProbe;
@@ -574,7 +573,7 @@ const callLocSync = (loc: LocatorProbe, method: string, ...xs: unknown[]): Locat
 };
 
 /* playwright 通道常量(形态来源: ZCode/apps/zcode-cli/packages/core/src/browser-client/playwright.ts
- * :447-585 getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/first/last/nth/filter)。 */
+ * 447-585 getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/first/last/nth/filter)。 */
 const PW_STEP_BYS = ["role", "text", "label", "placeholder", "testid", "alt", "title"];
 const PW_THEN_OPS = ["click", "fill", "type", "press", "hover", "check", "uncheck", "selectOption",
   "textContent", "innerText", "getAttribute", "isVisible", "isEnabled", "count", "screenshot"];
@@ -590,7 +589,7 @@ const mostRecentTab = (owner?: string): TabEntry | null => {
   return scoped ?? best;
 };
 
-/** SPA 渲染轮询(沿用 step-048 用户实测口径):正文非空即停,最多 ~9s,仍空如实报空。 */
+/** SPA 渲染轮询(沿用 用户经验证口径):正文非空即停,最多 ~9s,仍空如用户反馈空。 */
 const waitForBody = async (page: PageLike) => {
   for (let i = 0; i < 30; i++) {
     const len = Number(await page.evaluate<number>("(() => document.body ? document.body.innerText.trim().length : 0)()").catch(() => 0));
@@ -661,7 +660,7 @@ function hookDialogListener(entry: TabEntry): void {
       };
     });
     entry.dialogHooked = true;
-  } catch { /* 探针页不支持事件:留 false,getDialog/handleDialog 如实报无监听 */ }
+  } catch { /* 探针页不支持事件:留 false,getDialog/handleDialog 如用户反馈无监听 */ }
 }
 
 /** 默认 tab = 最近活跃(owner 给了优先该 owner 的最近 tab);也可显式 tabId。找不到给可操作错误(带在场 tab 清单)。 */
@@ -676,7 +675,7 @@ const resolveTab = (tabId: unknown, owner?: string): TabEntry | null => {
   return best;
 };
 
-/** tabs 清单(2026-10-22 详化):每行 `* t1  active  <owner>  <title>  <url>`;`*` 前缀 + active/idle 字段双标记,
+/** tabs 清单(详化):每行 `* t1 active <owner> <title> <url>`;`*` 前缀 + active/idle 字段双标记,
  * owner 列(2026-11 browser-ux-redo)标归属("human"/"agent" 等),人机抢 tab 时一眼可见。
  * 生命周期标记(第二批之二):deliverable/handoff 的 tab 行尾追加 `[deliverable]`/`[handoff]`(active 缺省不标)。 */
 const tabsLine = (owner?: string): string => {
@@ -791,7 +790,7 @@ const bodyText = async (entry: TabEntry, max: number): Promise<string> => {
   return text.replace(/[ \t]+/g, " ").slice(0, max);
 };
 
-/** shot 出文(2026-10-19 面板预览):路径行之外附 markdown 图片行——面板 mdToHtml 渲染 /uploads? 白名单 src;
+/** shot 出文(面板预览):路径行之外附 markdown 图片行——面板 mdToHtml 渲染 /uploads? 白名单 src;
  * 工具描述引导模型把该行原样保留进最终汇报,聊天流里即出截图预览。screenshots 复用同一格式。 */
 const shotOutput = (f: string, entry: TabEntry): string => {
   const md = "![浏览器截图 " + entry.id + "](/uploads?path=" + encodeURIComponent(f) + ")";
@@ -1589,8 +1588,8 @@ async function runBrowserActionCore(root: string, cfg: BrowserToolConfig, args: 
 
       /* ───────── playwright 通道(直连 Playwright 原生 API 面) ─────────
        * 形态来源: ZCode/apps/zcode-cli/packages/core/src/browser-client/playwright.ts
-       * (:16-75,:447-585 getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/first/last/nth/filter;
-       * :652-676 waitForLoadState/waitForURL/evaluate)。
+ * (16-75,:447-585 getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/first/last/nth/filter;
+ * 652-676 waitForLoadState/waitForURL/evaluate)。
        * 裁剪:downloadPath/fileChooserSetFiles(安全红线:下载/文件选择)、domSnapshot(已有 action=snapshot)、
        * frameLocator(无 iframe 穿透)一律明确拒绝。不进 VIEW_COMMANDS(面板白名单不加 playwright)。 */
       if (action === "playwright") {

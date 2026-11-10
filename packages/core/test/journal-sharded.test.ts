@@ -1,5 +1,5 @@
 /**
- * FileJournal sharded(2026-10-21 抄 ZCode session-store):按会话分文件持久化。
+ * FileJournal sharded(设计参考 ZCode(致谢) session-store):按会话分文件持久化。
  * ①kind 路由:跨会话 kind→global.jsonl,会话肥 kind→sessions/<sid>.jsonl,legacy gateway.jsonl 冻结只读;
  * ②混合 load:legacy 段+global+sessions 按全局 seq 归并,readAll/readSession 语义与单文件一致;
  * ③单会话文件坏行=只截断该文件,其余文件不受污染;幂等键跨全文件生效;

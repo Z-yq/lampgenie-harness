@@ -1,6 +1,6 @@
 /**
- * 符号名容错建议单测(2026-10-21 批次 B):suggestSymbolNames——
- * 实锤:symbol INIT_DETECTOR --root py-mmdetection 与 symbol initdetect 都直接
+ * 符号名容错建议单测(批次 B):suggestSymbolNames——
+ * 注意:symbol INIT_DETECTOR --root py-mmdetection 与 symbol initdetect 都直接
  * 「未找到符号」断链,无大小写归一、无近似建议。修复面=精确未命中时
  * ①大小写归一命中 ②编辑距离≤2 近似(候选≤5,inCount 降序)。
  */
@@ -31,11 +31,11 @@ describe("suggestSymbolNames(大小写归一+编辑距离≤2)", () => {
     { name: "unrelatedThing", inCount: 99 },
   ]);
 
-  it("实锤 1:INIT_DETECTOR → 大小写归一命中 init_detector", () => {
+  it("实测确认 1:INIT_DETECTOR → 大小写归一命中 init_detector", () => {
     expect(suggestSymbolNames(idx, "INIT_DETECTOR")).toContain("init_detector");
   });
 
-  it("实锤 2:initdetect → 编辑距离≤2 近似建议(含 init_detector)", () => {
+  it("实测确认 2:initdetect → 编辑距离≤2 近似建议(含 init_detector)", () => {
     const s = suggestSymbolNames(idx, "initdetect");
     expect(s.length).toBeGreaterThan(0);
     expect(s).toContain("init_detector");

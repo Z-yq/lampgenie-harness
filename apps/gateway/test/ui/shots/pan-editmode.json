@@ -98,10 +98,10 @@
   "verdict": "PASS"
  },
  "shots": [
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-A-nonedit.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-before.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-after.png",
-  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-C-blank.png"
+  "apps/gateway/test/ui/shots/pan-editmode-A-nonedit.png",
+  "apps/gateway/test/ui/shots/pan-editmode-before.png",
+  "apps/gateway/test/ui/shots/pan-editmode-after.png",
+  "apps/gateway/test/ui/shots/pan-editmode-C-blank.png"
  ],
  "errors": [],
  "port": 7794,

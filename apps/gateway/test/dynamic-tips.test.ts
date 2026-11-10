@@ -1,10 +1,8 @@
 /**
  * 任务内动态指导卡(J1 2026-11 token 轮)契约测试:三信号各一例 + 零信号不注入 + GENIE_TIPS=off 全关。
- *
  * 为什么放在 buildLoopTips 层测:判定口径写在 agent-wiring-dynamic-tips.ts(纯函数 dynTipKeys),
  * 但「信号怎么从 ctx 累积出来」(连续改同一文件 = 编辑类工具步的连续计数、验证轮次 = 验证工具步数、
  * 落板 = 见过 board_upsert)是 buildLoopTips 的闭包职责——本文件按真实 ctx 序列驱动它,验的是真身。
- *
  * 零反斜杠纪律:断言全用 includes 字面串。
  */
 import { it, expect, afterEach } from "vitest";

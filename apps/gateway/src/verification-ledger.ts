@@ -1,10 +1,8 @@
 /**
- * 任务级验证账本(M107),纯函数层(2026-11-07)。
- *
+ * 任务级验证账本,纯函数层。
  * 口径:任务收尾时回答「本次任务最后一次成功跑验证/测试命令之后,是否又改过代码」。
  * 数据源只有本任务的 journal 事件(调用方用 `journal.readSession(sessionId, taskStartSeq)` 切片,
  * 不全量 readAll):terminal 工具调用 + 对应 tool.result 成败 + 文件写工具调用的 path。
- *
  * 三条判据(全部确定性,不调 LLM):
  *  1) 验证命令:name="terminal" 且 command 命中 vitest/jest/pytest/go test/cargo test/npm test/
  *     pnpm test/yarn test/tsc/eslint/lint/build/playwright(词边界、大小写不敏感),排除 --watch;
@@ -12,7 +10,6 @@
  *  2) 代码写:edit_file/write_file/apply_patch 的 path 扩展名属代码集;文档(.md/.mdx/.txt/.rst)
  *     不计(文档改动不需要跑测试,抑制提示);
  *  3) stale:存在代码写 seq > 最后一次成功验证 seq;无验证命令且有代码写 → stale(no-verification)。
- *
  * 子代理的 spawn_subagent 不算验证(子代理内部的 terminal 事件不在本事件流里,如实 false)。
  */
 import { extname, isAbsolute, relative, sep } from "node:path";

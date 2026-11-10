@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 /**
- * restart-and-resume.cjs(2026-10-28):重启网关后**把正在跑的这个会话自己捞回来**。
- *
+ * restart-and-resume.cjs:重启网关后**把正在跑的这个会话自己捞回来**。
  * 问题:主 agent 跑在 session-worker 里,worker 是网关 fork 的子进程(ppid 看门狗 + disconnect 自退)。
  * 「重启网关」= 把自己所在的进程树连根拔起:当前任务被 task-manager.restore() 标成
  * cancelled「网关重启中断(可重发)」,没有人在线,任务就此停摆。
- *
  * 解法:把重启动作交给**脱离进程树**的本脚本(setsid 启动,网关死了它照活),它按序做:
  *   1. 落交接文件(.genie/restart-handoff/*.json)——重启前的现场 + 复活后要干的事;
  *   2. 静默 watchdog(否则窗口期它会跟我们抢着起进程;结束后原样重新武装);
@@ -13,14 +11,12 @@
  *   4. **用新网关的 WS 提交一条续跑任务**(同 sessionId + 幂等键),让新 session-worker 起来;
  *   5. 轮询 task.list 确认这条任务真的出现并进入 running,写结果文件。
  * 结果:用户视角只是「面板闪了一下」,agent 自己接着干。
- *
  * 用法(必须由外部 setsid 脱离启动,否则网关一死它跟着死):
  *   setsid nohup node scripts/restart-and-resume.cjs \
  *     --session <sessionId> --instruction-file <abs path> [选项] >/dev/null 2>&1 &
  *   选项:--port <n> --settle-ms <n> --wait-ms <n> --verify-ms <n> --dry-run --no-watchdog
  *   (--instruction 可直接给一句话,与 --instruction-file 二选一)
  * 退出码:0 复活成功;1 参数错误;4 重启失败;5 续跑任务提交失败;6 提交了但没确认到 running。
- *
  * 纪律:--help / --dry-run / 参数不全 一律**不碰进程**;所有杀/起动作只在 main() 里发生。
  */
 "use strict";

@@ -1,6 +1,5 @@
 /**
- * M27 Job registry 测试:真跑 sh 命令(不 mock 进程)。
- *
+ *  Job registry 测试:真跑 sh 命令(不 mock 进程)。
  * 覆盖:start/wait/read 增量、spill + 绝对 offset、kill 一次结算、owner fence、
  * 并发上限、cwd 围栏、job 工具五路 action。
  */

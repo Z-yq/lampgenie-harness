@@ -1,4 +1,4 @@
-/** ask-aware 契约子进程(step-033 F4):spawn→ready→permission.ask→等 permission.respond→按决议 result。 */
+/** ask-aware 契约子进程( F4):spawn→ready→permission.ask→等 permission.respond→按决议 result。 */
 import { createInterface } from "node:readline";
 const rl = createInterface({ input: process.stdin });
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");

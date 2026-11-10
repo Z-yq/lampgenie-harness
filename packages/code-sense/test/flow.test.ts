@@ -1,5 +1,5 @@
 /**
- * 整仓 code flow(2026-10-26):分层聚合(module/file/function)+ code2flow 语义
+ * 整仓 code flow:分层聚合(module/file/function)+ code2flow 语义
  * (root/trunk/leaf/regular、File/Class 分组、默认裁零连接、目标上下游子图、DOT/mermaid)。
  */
 import { describe, it, expect } from "vitest";
@@ -72,7 +72,7 @@ const index = mkIndex(
     ["apps/gateway/src/server.ts#<module>", "packages/core/src/util.ts#noop"], // 组合根跨文件调用=入口证据
     ["apps/gateway/src/server.ts#start", "apps/gateway/src/server.ts#handle", 2],
     ["apps/gateway/src/server.ts#handle", "packages/core/src/store.ts#Store.read", 4],
-    ["apps/gateway/src/server.ts#handle", "packages/core/src/store.ts#Store", 2], // new Store()
+    ["apps/gateway/src/server.ts#handle", "packages/core/src/store.ts#Store", 2], // new Store
     ["tests/gateway.test.ts#t", "apps/gateway/src/server.ts#handle", 9],
     ["tasks/probe.ts#p", "apps/gateway/src/server.ts#handle", 7],
     ["packages/core/src/util.ts#noop", ""], // 未解析(外部调用)

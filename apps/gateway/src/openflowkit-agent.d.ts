@@ -1,8 +1,8 @@
 /**
  * 手写声明: `@openflowkit/openflowkit-mcp@0.2.4` 只发布纯 JS 产物(dist/generated/*.js),
  * 无 .d.ts(package.json 亦无 exports/types 字段),TS 直引会报 TS7016。
- * 这里只声明 board 出图链路实际用到的 5 个入口,签名按实测调用方式给宽松 any,
- * 语义细节由 board-diagram.ts 收口,不在此处扩散。
+ * 这里只声明 board 出图链路实际用到的 5 个入口,签名按经验证调用方式给宽松 any,
+ * 语义细节由 board-diagram.ts,不在此处扩散。
  */
 declare module "@openflowkit/openflowkit-mcp/dist/generated/openflowkit-agent.js" {
   /** 新建空白 agent 文档(返回 { pages: [{ id, ... }], ... })。 */

@@ -1,7 +1,6 @@
 /**
  * board-ofk 内容层级单测:「是什么(label)→ 有什么用(summary 首句)→ 在哪(锚 chip)」。
- *
- * 背景(17 节点真板实测):一个节点 `<text>` 宽 933px、节点卡 790px,desc 被 flowkit 硬切且
+ * 背景(17 节点真板经验证):一个节点 `<text>` 宽 933px、节点卡 790px,desc 被 flowkit 硬切且
  * 没有省略号——读者看不出摘要被截了、也看不到锚段。本文件锁三件事:
  *   1) summary 只取首句,并按 DESC_LABEL_BUDGET 显式截断(带 `…`);
  *   2) 锚段(<⟩file⟨>)与 flow 概述在任何 summary 长度下都完整保留;

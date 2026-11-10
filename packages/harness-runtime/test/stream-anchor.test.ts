@@ -1,5 +1,5 @@
 /**
- * M29 流中断安全锚点恢复:纯函数层 + loop 接线(10 次上限 / 冷恢复过滤)。
+ *  流中断安全锚点恢复:纯函数层 + loop 接线(10 次上限 / 冷恢复过滤)。
  * 口径见 src/agent/stream-anchor.ts 文件头。
  */
 import { describe, it, expect } from "vitest";

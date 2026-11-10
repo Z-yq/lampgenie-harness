@@ -1,5 +1,5 @@
 /**
- * 板质量结算消费面(bq3,2026-11-05 板质量遥测闭环):
+ * 板质量结算消费面(bq3, 板质量遥测闭环):
  * - computeSkeletonAdoption 纯函数:landed 并集为分母、终板 sk- 存活为分子;
  *   分母 0(无骨架事件)=null(整段不落);多事件 landed 去重合并;round3 三位小数。
  * - PlanQualityZ schema:不带 skeleton 过/带 skeleton 过/坏类型拒。

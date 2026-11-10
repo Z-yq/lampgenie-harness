@@ -1,5 +1,5 @@
 /**
- * step-071 父子 ask-answer 接线锚(llm-loop-backend.parentAsk):子代理 run_cmd 重操作命中
+ * 父子 ask-answer 接线锚(llm-loop-backend.parentAsk):子代理 run_cmd 重操作命中
  * →onHeavyAsk→parentAsk 回调(生产=ParentAskBroker.ask);批准放行/拒绝阻断/轻命令不过闸。
  * 生产 agent-wiring 构造形态(parentAsk 直通 broker.ask)同构锚定。
  */
@@ -23,7 +23,7 @@ async function runBackend(backend: LlmLoopBackend, taskId: string, dir: string) 
   return { result, handle };
 }
 
-describe("llm-loop-backend parentAsk(step-071 父子 ask-answer 接线)", () => {
+describe("llm-loop-backend parentAsk(父子 ask-answer 接线)", () => {
   it("批准分支:build 命令被闸拦→broker.ask→父批准→真实执行;journal 问答成对", async () => {
     const dir = mkdtempSync(join(tmpdir(), "pa-ok-"));
     const broker = new ParentAskBroker();
@@ -55,7 +55,7 @@ describe("llm-loop-backend parentAsk(step-071 父子 ask-answer 接线)", () => 
       parentAsk: (input) => broker.ask(input),
     });
     const { result } = await runBackend(backend, "pa-no-1", dir);
-    expect(result?.ok).toBe(true); // 子代理如实报告拒绝,任务可收口
+    expect(result?.ok).toBe(true); // 子代理如用户反馈告拒绝,任务可
     expect(result?.finalText).toContain("拒绝");
     const asks = broker.pending();
     expect(asks).toHaveLength(0); // 已应答了结

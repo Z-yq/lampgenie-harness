@@ -2,7 +2,6 @@
  * 模块简报 store(IO 层):把磁盘上的模块身份 / 契约 / 一层依赖 / 公开入口 / 允许边采出来,
  * 交给 runtime 纯逻辑 `buildBrief` 组装成有界简报。语义全在
  * packages/harness-runtime/src/agent/module-brief.ts(纯逻辑,已全绿),本文件只做 IO 与定位。
- *
  * 设计口径:
  * - 定位三态:绝对路径 / 相对 root 的路径 / 包名(packages/*、apps/* 及其下一层 package.json name 反查)。
  *   绝对与相对路径 resolve 后必须落在 root 内(path.relative 判定),越界不抛,返回 BRIEF_INVALID + missing 文本。
@@ -12,7 +11,6 @@
  * - 契约缺失 / owner 缺失 / layer 缺失 / 未托管 / 依赖契约缺失的「码」一律由 buildBrief 产出,store 不重复造码;
  *   store 只把本地采集事实(越界、包名无法解析、arch-policy 缺失、已过滤 N 个外部依赖、入口文件缺失)追加进 missing。
  * - 不 throw 到调用方(参数类型错误除外);不 import agent loop;不写仓库 .genie。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑模块;runtime 按 store 既有两跳惰性解析:
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
  * ② 裸 tsx/dist 缺该文件时回退仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
@@ -364,8 +362,7 @@ interface DepCollection {
 function collectDeps(
   ctx: CollectContext,
   manifest: ManifestView,
-  ownerModule: PolicyModuleView | undefined,
-): DepCollection {
+  ownerModule: PolicyModuleView | undefined): DepCollection {
   const deps: DepRef[] = [];
   const unresolved: string[] = [];
   let droppedExternal = 0;
@@ -399,8 +396,7 @@ function collectDeps(
 function resolveAllowedEdge(
   policy: PolicyView | undefined,
   ownerModule: PolicyModuleView | undefined,
-  depModule: PolicyModuleView | undefined,
-): boolean | undefined {
+  depModule: PolicyModuleView | undefined): boolean | undefined {
   if (!policy || !ownerModule) return undefined;
   if (ownerModule.allowImport.length > 0 && depModule && ownerModule.allowImport.includes(depModule.id)) return true;
   if (!depModule?.layer || !ownerModule.layer) return undefined;
@@ -652,8 +648,7 @@ export async function runModuleBriefCli(argv: string[], cwd: string): Promise<Mo
         codes,
       },
       null,
-      2,
-    );
+      2);
   } else {
     output = brief.rendered;
   }

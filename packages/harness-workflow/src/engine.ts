@@ -1,5 +1,5 @@
 /**
- * Workflow 引擎(designs/19,ZCode dynamic-workflow 编排本体思想 TS 重写,Apache-2.0):
+ * Workflow 引擎(ZCode dynamic-workflow 编排本体思想 TS 重写,Apache-2.0):
  * 模型写 TS 脚本编排子 agent;vm 沙箱+facade;journal-first(resume=replay);
  * 失败保留已 report 成果;world.run 确定性白名单。
  */
@@ -16,10 +16,10 @@ import type { SubagentBackend } from "@lampgenie/executors";
 
 const execFileP = promisify(execFile);
 
-/** esbuild 必须外置(step-027/L-124 同族):静态 import 会被 gateway 的 esbuild bundle 内联,
+/** esbuild 必须外置(/L-124 同族):静态 import 会被 gateway 的 esbuild bundle 内联,
  * 内联后 esbuild 自身的 CJS __filename/__dirname 在 ESM bundle 中未定义,首次 transform() 即抛
- * 「The esbuild JavaScript API cannot be bundled」/「__filename is not defined」(2026-10-18 实证:
- * 产线 dist/gateway.mjs 下 run_workflow 任何脚本必失败,含最小单行脚本)。
+ * 「The esbuild JavaScript API cannot be bundled」/「__filename is not defined」(验证:
+ * 生产环境 dist/gateway.mjs 下 run_workflow 任何脚本必失败,含最小单行脚本)。
  * 修法同 harness-lsp/typescript.ts 的 loadTs():createRequire + 变量调用 → bundler 无法静态解析,
  * 保持外部依赖,运行时按 bundle 所在目录解析到 node_modules/esbuild。
  * ⚠ 两处是独立副本(跨包无共享 helper),改 esbuild 加载方式时须两处人工同步。 */
@@ -70,8 +70,8 @@ export interface WorkflowWorld {
   glob(pattern: string): Promise<string[]>;
 }
 
-/** 白名单命令(designs/19 §2.3:确定性世界读取)。
- * 分解校验:命令按 && ; | 拆段,每段独立过白名单——防「pnpm test && curl evil」类拼接注入。 */
+/** 白名单命令( §2.3:确定性世界读取)。
+ * 分解校验:命令按 &&; | 拆段,每段独立过白名单——防「pnpm test && curl evil」类拼接注入。 */
 const SEGMENT_ALLOW = /^(npx\s+(vitest|tsx|tsc|playwright)\b|pnpm\s+([\w@/.=-]+\s+)*(test|run|exec)\b|npm\s+([\w@/.=-]+\s+)*(test|run)\b|node\s|git\s+(status|log|diff|show)\b|tail\b|head\b|ls\b|cat\b|echo\b|true\b|rg\b|grep\b)/;
 
 export function commandAllowed(cmd: string): boolean {
@@ -140,7 +140,7 @@ export interface WorkflowEngineOptions {
   dispatch?: (instructions: string) => Promise<string>;
   /** 脚本可用的预注册 zod schema(vm 沙箱内无 import,schema 由外部注入)。 */
   schemas?: Record<string, z.ZodType>;
-  /** step-121 工作流板:log 流式回调(脚本内 log()/console.log 每条实时上抛;缺省=只入 this.logs 终值)。
+ /** 工作流板:log 流式回调(脚本内 log/console.log 每条实时上抛;缺省=只入 this.logs 终值)。
    * 加性可选——board-workflow runner 用它解析节点状态标记(WFN|id|state|detail),面板实时高亮。 */
   onLog?: (msg: string) => void;
 }
@@ -151,7 +151,7 @@ export class WorkflowEngine {
   private logs: string[] = [];
   /** 超时/失败时通知 dispatch 链停止(L-092)。 */
   private abort?: AbortController;
-  private worldBridge = createWorld("."); // run() 时按 root 重建
+  private worldBridge = createWorld("."); // run 时按 root 重建
   /** ask 缓存身份:(actor, seq, inputHash) → result(ZCode 命名复用的基础)。 */
   private cache = new Map<string, unknown>();
   private seqByActor = new Map<string, number>();
@@ -235,7 +235,7 @@ export class WorkflowEngine {
   log(msg: string): void {
     const s = String(msg).slice(0, 300);
     this.logs.push(s);
-    // step-121:流式回调(异常吞掉——观测面故障不能打断脚本执行)
+ // 流式回调(异常吞掉——观测面故障不能打断脚本执行)
     if (this.opts.onLog) { try { this.opts.onLog(s); } catch { /* 忽略 */ } }
   }
 

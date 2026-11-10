@@ -1,4 +1,4 @@
-/** UI 实测(2026-10-16 用户口径:「点击其中运行的一个智能体后,要弹出它的工作区tab页,显示它的所有动作
+/** UI 经验证( 「点击其中运行的一个智能体后,要弹出它的工作区tab页,显示它的所有动作
  * 和消息(就如vibe coding agent的工作区一样)」)。自启跑法:
  * npx tsx test/ui/_ui_selfhost.cjs --opts test/ui/_subws.opts.cjs test/ui/subws.spec.cjs
  * 断言面:①目录条目「工作区」按钮开 tab(主会话恒第一位不可关/激活态)②运行中子代理事件实时进 tab
@@ -29,7 +29,7 @@ const HIST_MARKER = "hist-only-marker-4242";
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const gotoSession = async (sid) => {
     await page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 30000 });
-  // 2026-10-21 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
+ // 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
     // 会话流不渲染子代理过程卡——本规格守经典契约(浮窗/工作区 tab/会话流过程卡),先切经典布局。
       await page.waitForTimeout(600);
       await page.evaluate(() => { try { if (document.body.classList.contains("cv-shell")) CanvasShell.setMode("classic"); } catch (e) {} });
@@ -60,7 +60,7 @@ const HIST_MARKER = "hist-only-marker-4242";
   check("子代理过程卡出现(spawn 成功)", card);
   if (!card) { await page.screenshot({ path: "/tmp/ui-subws-fail.png" }); await browser.close(); process.exit(1); }
 
-  // 3. 目录打开 → 点条目主区域(一级入口,step-062)开 tab;「详情」钮=下钻轻展开新挂点
+ // 3. 目录打开 → 点条目主区域(一级入口开 tab;「详情」钮=下钻轻展开新挂点
   await page.click("#subDirBtn");
   let entry = false;
   for (let i = 0; i < 16 && !entry; i++) { await sleep(500); entry = (await page.locator("#subDirBody .sd-item", { hasText: "渲染勘察" }).count()) >= 1; }

@@ -1,12 +1,10 @@
 /**
- * 面板 usage 双口径显示层(step-1027)契约测试。
- *
+ * 面板 usage 双口径显示层契约测试。
  * 取码范式照抄 panel-trace-full.test.ts:面板是单 HTML 模板字符串,浏览器侧函数就在源码里 ——
  * GET / 拿真 HTML → 花括号配平抽函数源码 → 与 TRAJ_MODEL_JS 一起 new Function 求值,
  * 断「真函数真渲染」而不是源码里有没有这几个字。
- *
- * 覆盖(用户口径逐条):
- *  ①卡头主数字=API 实测 usage(输入/缓存原值,命中率=cached/input);本地估算只作次级「估算 Z(触发用)」;
+ * 覆盖(逐条):
+ * ①卡头主数字=API 经验证 usage(输入/缓存原值,命中率=cached/input);本地估算只作次级「估算 Z(触发用)」;
  *    usageSuspect 只出「上游usage异常」徽标(title 带 anomaly 原文),不改写主数字(85.8% 也照显示);
  *    input=0/缺值 → 「输入 —」(不写 0%)。无估算的旧行 → 同一 API 形态,不出估算/徽标
  *  ②汇总条:输入/命中率主值=API 合计(input=0 → 「—」),估算单列「估算(触发用)」,「异常 N」保留
@@ -101,7 +99,7 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-/** 新字段齐全的 llm.trace 事件(step-1027 数据契约)。 */
+/** 新字段齐全的 llm.trace 事件(数据契约)。 */
 function traceEvent(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     seq: 10, kind: "llm.trace", time: 1793888000000, sessionId: "web-1",
@@ -115,7 +113,7 @@ function traceEvent(over: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
-describe("面板 usage 双口径显示层(step-1027)", () => {
+describe("面板 usage 双口径显示层", () => {
   it("①卡头:有估算→(估)/(报)+异常徽标(title 带原文);无估算→旧形态且无 undefined/NaN", async () => {
     await withPanel(7971, (html) => {
       const fn = loadCardFns(html);
@@ -124,7 +122,7 @@ describe("面板 usage 双口径显示层(step-1027)", () => {
       expect(est.cachedTokensEst).toBe(150000);
       expect(est.usageSuspect).toBe(true);
       const head = fn.trajBoardCardHeadHtml(est, 7, false);
-      // 主数字 = API 实测(input/cached 原值,命中率=cached/input),估算只在次级「估算 Z(触发用)」
+ // 主数字 = API 经验证(input/cached 原值,命中率=cached/input),估算只在次级「估算 Z(触发用)」
       expect(head).toContain("输入 112.0K tok(缓存 150.5K,命中 134.4%)");
       expect(head).toContain("估算 188.0K(触发用)");
       expect(head).not.toContain("(估)");
@@ -155,7 +153,7 @@ describe("面板 usage 双口径显示层(step-1027)", () => {
       const fn = loadCardFns(html);
       const h1 = fn.trajBoardCardHeadHtml(row({ inputTokens: 56240, cachedTokens: 53376 }), 1, false);
       expect(h1).toContain("命中 94.9%");
-      // 「不可能」样本(cached > 输入)也照实测显示,usageSuspect 只加徽标
+ // 「不可能」样本(cached > 输入)也照经验证显示,usageSuspect 只加徽标
       const h2 = fn.trajBoardCardHeadHtml(row({ inputTokens: 80457, cachedTokens: 68992, usageSuspect: true, usageAnomaly: "上报 cached 68992 > 上一步 input 70000" }), 1, false);
       expect(h2).toContain("命中 85.8%");
       expect(h2).toContain("输入 80.5K tok(缓存 69.0K,命中 85.8%)");

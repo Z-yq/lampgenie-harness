@@ -1,5 +1,5 @@
 /**
- * M81 阶段遥测合同:纯逻辑(注入假时钟保证确定性)+ loop 接线(真 journal + 假 provider)。
+ *  阶段遥测合同:纯逻辑(注入假时钟保证确定性)+ loop 接线(真 journal + 假 provider)。
  */
 import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";
@@ -313,7 +313,7 @@ function telemetryEvents(journal: MemoryJournal): TelemetryPayload[] {
     .map((e) => e.payload as TelemetryPayload);
 }
 
-describe("AgentLoop 接线(M81)", () => {
+describe("AgentLoop 接线", () => {
   it("一轮成功 → 恰 1 条 telemetry.phase,含 llm+tools span、quality complete、usage 透传", async () => {
     let round = 0;
     const llm: LlmProvider = {

@@ -1,16 +1,13 @@
 /**
  * 会话查询游标的持久层:把 session-cursor 的纯逻辑落到单一 JSON state 文件。
- *
  * 数据面:`<root>/.genie/rsi/cursor-state.json`
  * {v:1, generation, issued:[{id,generation,queryFingerprint,at}], bumps:[{cause,from,to,at}]}
  * - generation 是当前语料版本,读时不存在 / 坏 JSON / 坏字段一律回落 1:单条坏文件不能杀死整个 CLI。
  * - issued 是已签发游标的台账(只增),用来回答「这个游标是不是我们发的」与观察膨胀;
  * - bumps 是 generation 推进留痕,回答「什么时候因为什么变过」。
- *
  * 为什么原子写:直接覆盖 state 文件时若写一半崩溃/被 kill,留下的就是坏 JSON,下次读回落 1 会让
  * 所有在途游标凭空 stale。所以先写同目录临时文件再 renameSync 覆盖(rename 在同一文件系统内是原子的),
  * 成功后目录里不留 `.tmp`(失败路径主动 rmSync 清理)。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块(不引 agent loop、不引 gateway 其余业务模块)。
  * runtime 模块按 cohort-signature-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -150,8 +147,7 @@ async function loadCursorRuntime(): Promise<CursorRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/session-cursor.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     cursorRuntime = (await import(srcUrl)) as CursorRuntime;
   }
   return cursorRuntime;

@@ -1,7 +1,6 @@
 /**
  * codesense 管理注册表(用户级):~/.codesense/registry.json。
- *
- * 存储位置决策(2026-10-15):
+ * 存储位置决策:
  *  - 注册表=用户级(os.homedir()):root 的价值在「任何目录下就近解析出所属项目」——
  *    项目内 .codesense/ 有先有鸡问题(init 之前不存在、无法被发现),且 aa/bb/整仓的
  *    跨目录复用天然是用户态视角;lampgenie-harness 同类先例(.zcode/config.json)也是
@@ -133,7 +132,7 @@ export interface FileFingerprint { mtime: number; size: number }
 export interface FingerprintSidecar {
   /** v2:键=规范化绝对路径(realpath)——同一物理目录经不同父 cwd/路径拼写(符号链接)发起
    * 的 init/增量命中同一批指纹键;root=构建时的规范化绝对根。v1(相对路径键)载入即拒,
-   * 诚实走全量并落 v2(2026-10-15 二期)。 */
+ * 诚实走全量并落 v2(二期)。 */
   version: 2;
   root: string;
   builtAt: number;
@@ -141,7 +140,7 @@ export interface FingerprintSidecar {
   files: Record<string, FileFingerprint>;
   /** 产出这批指纹的抽取器版本(engine INDEX_EXTRACTOR_VERSION;旧 sidecar 无此字段=
    * 隐式 v1)。增量复用闸必须比对它:源码未变但抽取器升级时指纹仍「相等」,不能复用
-   * 旧抽取结果(2026-10-21 验收缺口 1);不一致=版本迁移,全量重扫一次后落本字段。 */
+ * 旧抽取结果(验收缺口 1);不一致=版本迁移,全量重扫一次后落本字段。 */
   extractorVersion?: number;
   /** 全量构建时已知的类节点 rel id(增量合并重分类时的类豁免集;缺省=启发式兜底)。 */
   classes?: string[];

@@ -1,5 +1,4 @@
 /* browser-view.js —— 面板内置浏览器视图(agent 驱动态 + 人接管态),零构建、纯浏览器端资产。
- *
  * 形态来源:
  *  - ZCode/packages/ui/src/browser-use/UnifiedBrowserView.tsx(统一视图双态:agent 通道驱动 / 人类接管)
  *  - ZCode/packages/ui/src/browser-use/BrowserViewportToolbar.tsx(地址栏 / 前进后退刷新 / 缩放档选择)
@@ -13,13 +12,11 @@
  *  - ZCode/packages/ui/src/embeddedBrowserHelpers.ts(URL 协议白名单 / about:blank 默认值)
  *  - ZCode/packages/ui/src/EmbeddedBrowserPaneParts.tsx(工具栏可禁用按钮 / 刷新旋转 /
  *     空态·加载态·错误态·崩溃态四态渲染 / ⋮ 更多菜单 / 元素拾取按钮)
- *
  * 与 ref 的关键差别(如实降级,不假装):ref 里网页像素由 Electron <webview> guest 直接渲染;
  * 本仓浏览器是服务端 headless(协议见 browser.view.*),面板只能拿服务端下发的截图帧。
  * 因此这里是「截图 canvas + 覆盖层」形态:看得见、e1..eN 高亮可点、视口可拖;真正的页面交互
  * 一律回落成命令消息(browser.view.command),或人接管到本机浏览器窗口。
  * DevTools 不做:无 guest 可挂调试器,ref 的 devtools 面板在本仓没有对应物,菜单里如实缺省。
- *
  * 对外(window.GenieBrowserView):
  *   mount(hostEl, ctx)  容器 + {send,openExternal,subscribe}
  *   unmount()           清 DOM/定时器/监听
@@ -387,7 +384,7 @@
     vpCommitTimer: 0,     // 键盘调视口 200ms 防抖句柄
     stateTimer: 0,        // nav 后 getState 轮询句柄
     subFail: false,       // 订阅失败(常见原因 browser.enabled=false)→ 显示「一键启用并打开」
-    typeDraft: ""         // 人类输入条当前草稿(state() 里可见,便于诊断人到底打了什么)
+    typeDraft: ""         // 人类输入条当前草稿(state 里可见,便于诊断人到底打了什么)
   };
 
   var listeners = [];
@@ -753,7 +750,7 @@
 
   function openExternal(url) {
     var target = String(url || "");
-    // 安全洞收口:系统浏览器出口只放 http/https/file(about:/data:/javascript: 一律拒收)
+ // 安全洞:系统浏览器出口只放 http/https/file(about:/data:/javascript: 一律拒收)
     if (!isExternalOpenable(target)) {
       setStatus("该地址不能在系统浏览器打开");
       return;
@@ -915,7 +912,7 @@
     return id || "标签页";
   }
 
-  /** owner 小徽标文案:human → [人];agent(:taskId) → [agent];其余原样括起。 */
+ /** owner 小徽标文案:human → [人];agent(taskId) → [agent];其余原样括起。 */
   function ownerBadgeText(owner) {
     var v = String(owner || "");
     if (!v) return "";
@@ -1028,7 +1025,7 @@
     }
     if (el.urlInput) el.urlInput.readOnly = !!S.humanMode;
     // badge 的 CSS 基础态就是 display:none:setDisplay 用 "" 只会回落到这条规则,
-    // 所以这里必须显式给 inline-block,否则「人工模式」徽标永远看不见(实测踩过)。
+ // 所以这里必须显式给 inline-block,否则「人工模式」徽标永远看不见(经验证踩过)。
     if (el.badge) el.badge.style.display = S.humanMode ? "inline-block" : "none";
     if (el.human) el.human.textContent = S.humanMode ? "回到 agent 模式" : "人接管";
   }
@@ -1205,7 +1202,7 @@
     });
     /* 2026-11 实修:抢到滚轮后必须 stopPropagation——画布模式外壳(canvas-shell.js)在祖先上
      * 也挂了 wheel 做「无限画布平移」,只 preventDefault 拦不住它(JS 监听照跑),面板整卡
-     * 会被滚出视口(E2E 实测 stage top 348 → -252)。两者互斥:指针在页面画布上时滚轮归页面。 */
+ * 会被滚出视口(E2E 经验证 stage top 348 → -252)。两者互斥:指针在页面画布上时滚轮归页面。 */
     var handled = decision === "zoom" || decision === "scroll";
     if (handled) {
       if (typeof ev.preventDefault === "function") ev.preventDefault();

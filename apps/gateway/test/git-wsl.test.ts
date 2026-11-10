@@ -1,5 +1,5 @@
 /**
- * git 执行形态单测(2026-10-27):WSL 项目(UNC cwd)必须回发行版内执行,
+ * git 执行形态单测:WSL 项目(UNC cwd)必须回发行版内执行,
  * 不能用 Windows git 隔着 \\wsl.localhost 共享操作 Linux 仓库(行尾/权限语义会错)。
  */
 import { describe, it, expect } from "vitest";

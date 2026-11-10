@@ -1,10 +1,9 @@
 /**
- * Java structural adapter(designs/16 §5 二期,step-021 五期多语言)。
+ * Java structural adapter( §5 二期, 五期多语言)。
  * 括号深度栈解析(零依赖):提取 class/interface/enum/record 与方法/构造器声明
  * (签名行+行号+参数),方法体内调用边(this.x 同类归属+唯一名兜底,同 python adapter 口径)。
  * tier=structural(如实标注;tree-sitter 升级待后续,接口不变)。
- *
- * step-084 RC-A(2026-10-16):跨文件候选出口补齐(此前 JavaParseResult 无 crossFileCandidates,
+ * RC-A:跨文件候选出口补齐(此前 JavaParseResult 无 crossFileCandidates,
  * 全部锚 callers R=0)——Java 是静态类型语言,类型证据直读:
  * ①字段表(类体内 `Type name =/;` 形态)+②方法参数(signature)+③局部变量(`Type name =`)/
  * 增强 for(String s : list)+④import 名单(静态调用 Cls.method( 形态)+⑤import static 裸名。
@@ -47,7 +46,7 @@ const JAVA_METHOD_RE = new RegExp(
     "([\\w$][\\w$.<>\\[\\],\\s?]*?\\s+)?" + // 返回类型(须以空白结尾)
     "([A-Za-z_$][\\w$]*)\\s*\\(([^)]*)\\)\\s*" +
     "(?:throws\\s+[^{;]+)?" +
-    "[;{]", // 声明终止符(单行方法 `{ body }` 的体内文本另行提取;step-084 前此形态整体失配)
+    "[;{]", // 声明终止符(单行方法 `{ body }` 的体内文本另行提取; 前此形态整体失配)
 );
 // 控制流/语句关键字:永不是方法声明(双保险,regex 守卫之外显式排除)
 const JAVA_NON_DECL = new Set([
@@ -80,10 +79,10 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
   const stripped: string[] = [];
   const openBlocks: OpenBlock[] = [];
   const methodBodies: { sym: JavaSymbol; start: number; end: number; inline?: string }[] = [];
-  // step-084 RC-A:类型证据(文件级)
+ // RC-A:类型证据(文件级)
   const importedNames = new Set<string>(); // import 末段(静态调用 Cls.method( 的类名证据)
   const classFields = new Map<string, Map<string, string>>(); // 容器类名 → 字段 → 原始类型文本
-  // step-089 P1:类字段声明行(level=variable 符号导出数据源)
+ // P1:类字段声明行(level=variable 符号导出数据源)
   const fieldDecls: { className: string; name: string; dataType: string; line: number }[] = [];
 
   const containerOf = (): string | undefined => {
@@ -144,7 +143,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
     const top = openBlocks[openBlocks.length - 1];
     if (top?.kind === "class") {
       const fld = recordField(probe, top.name, classFields);
-      // step-089 P1(designs/26 §2.2):类字段导出为 variable 符号(零边、不进 byName;
+ // P1( §2.2):类字段导出为 variable 符号(零边、不进 byName;
       // dataType=声明类型文本;container=类名)
       if (fld && !fieldDecls.some((x) => x.className === top.name && x.name === fld.name)) {
         fieldDecls.push({ className: top.name, name: fld.name, dataType: fld.typeText, line: i + 1 });
@@ -156,7 +155,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
     if (!container) continue;
     const firstWord = probe.split(/\s/)[0]!;
     if (JAVA_NON_DECL.has(firstWord)) continue;
-    // 赋值/初始化语句不冒充声明(step-084:`Field f = new F();`/`x = f()` 此前被
+ // 赋值/初始化语句不冒充声明(`Field f = new F;`/`x = f` 此前被
     // JAVA_METHOD_RE 误登记成同名假方法,污染 byName 唯一名闸——裸名候选通道下即假边)
     const firstParen = probe.indexOf("(");
     const eqIdx = probe.indexOf("=");
@@ -181,7 +180,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
       if (depthAfter > depthBefore) {
         openBlocks.push({ kind: "method", name, sym, line: i + 1, depth: depthAfter });
       } else {
-        // 单行方法体(step-084:`public int run() { return x; }` 此前整体失配):提取
+ // 单行方法体(`public int run { return x; }` 此前整体失配):提取
         // 花括号内文本作为合成体行,Pass 2 照扫
         const tail = probe.slice(m.index + m[0].length);
         if (m[0].endsWith("{") && tail.endsWith("}") && tail.length > 1) {
@@ -190,7 +189,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
       }
     }
   }
-  // 文件尾未闭合(语法残缺):在飞方法体按文件尾收口
+ // 文件尾未闭合(语法残缺):在飞方法体按文件尾
   while (openBlocks.length) {
     const b = openBlocks.pop()!;
     if (b.kind === "method" && b.sym) methodBodies.push({ sym: b.sym, start: b.line, end: lines.length });
@@ -283,7 +282,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
           }
           continue; // target 即自身:自环跳过
         }
-        // 无类型证据:仅静态形态 Cls.method( 发候选(Cls=本文件类 ∪ import 名单;
+ // 无类型证据:仅静态形态 Cls.method(发候选(Cls=本文件类 ∪ import 名单;
         // 未知变量接收者不猜——宁缺勿错)
         if (chain === head && (fileClassNames.has(head) || importedNames.has(head))) {
           pushCandidate(body.sym.id, method, lineNo, head);
@@ -314,7 +313,7 @@ export async function parseJavaFile(root: string, relFile: string): Promise<Java
     seen.add(k);
     return true;
   });
-  // step-089 P1:类字段 → variable 符号(零边;不进 byName 由 engine merge 层纪律承担)
+ // P1:类字段 → variable 符号(零边;不进 byName 由 engine merge 层纪律承担)
   for (const f of fieldDecls) {
     symbols.push({
       name: f.name,
@@ -343,13 +342,13 @@ function javaBaseType(t: string): string | undefined {
 
 /** 类体字段行:`private final Repo repo;` / `Map<String, Foo> cache = ...;`——修饰符可选,
  * 类型首 token 大写或原始类型;方法声明(name 后跟 `(`)天然失配。 */
-/** step-089 P1:recordField 返回提取信息(name+typeText),调用方同时登记 variable 符号。 */
+/** P1:recordField 返回提取信息(name+typeText),调用方同时登记 variable 符号。 */
 function recordField(probe: string, className: string, out: Map<string, Map<string, string>>): { name: string; typeText: string } | null {
   if (!/[;=]$/.test(probe) && !/[;=]\s*$/.test(probe)) return null; // 字段行以 ; 收尾或 = 续行
   if (/[{}]/.test(probe)) return null; // 数组初始化/匿名类:保守不判
   // 修饰符全剥(单条正则 * 量词;^+/g 只剥第一个——"final" 残留会破坏类型判定)
   const noMods = probe.replace(/^(?:(?:public|protected|private|static|final|transient|volatile)\s+)*/, "").trim();
-  // 初始化器剥除(step-089 P1:`String host = "localhost";` 的串字面量会破坏「末 token=名字」;
+ // 初始化器剥除( P1:`String host = "localhost";` 的串字面量会破坏「末 token=名字」;
   // 取 = 前段——数组初始化 `int[] a = {1,2};` 同型)
   const noInit = noMods.split("=")[0]!.trim();
   const toks = noInit.split(/\s+/).filter(Boolean);
@@ -371,8 +370,7 @@ function collectLocalTypes(
   code: string,
   localTypes: Map<string, string>,
   fields: Map<string, Map<string, string>>,
-  typeOfVar: (name: string) => string | undefined,
-): void {
+  typeOfVar: (name: string) => string | undefined): void {
   const fe = JAVA_FOR_EACH_RE.exec(code);
   if (fe) {
     const t = javaBaseType(fe[1]!);

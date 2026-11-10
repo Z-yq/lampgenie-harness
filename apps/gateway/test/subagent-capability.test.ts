@@ -1,5 +1,5 @@
 /**
- * 子代理能力一致性对拍(step-061「一处声明、执行面真实生效」):
+ * 子代理能力一致性对拍(「一处声明、执行面真实生效」):
  * ①profile.tools 声明 × 实际装配对拍——四内置型+自定义 .md 的声明经 resolveSubagentCapability
  *   下发 LlmLoopBackend,真实 spawn(脚本化 LLM 记录 chat 收到的工具面)断言「声明=执行」;
  * ②声明粒度:组别名展开/"*"不含 MCP/MCP 显式开启(默认不下发=爆炸面关);
@@ -105,9 +105,9 @@ describe("声明×执行对拍(真实 spawn:chat 收到的工具面=声明展开
     const { cap, options } = backendOptions(BUILTIN_AGENT_PROFILES, "worker", dir, { mcpTools: [fakeMcpTool("mcp__demo__lookup")] });
     expect(cap.source).toBe("declared");
     const got = await offeredTools(options, dir);
-    // tool_view(2026-10-22 工具面契约统一):子代理面与主 loop 同款由 attachToolView 无条件追加
+ // tool_view(工具面契约统一):子代理面与主 loop 同款由 attachToolView 无条件追加
     // (长描述摘要化+大 schema 延迟加载的激活入口),不算声明展开集成员但会出现在 chat 收到的工具面。
-    // M128:bridge 三件套(tool_view/tool_search/tool_call)无条件追加,故期望数组含它们
+ // bridge 三件套(tool_view/tool_search/tool_call)无条件追加,故期望数组含它们
     expect(got.sort()).toEqual(["code_sense", "deliverable", "edit_file", "glob", "grep", "list_dir", "read_file", "run_cmd", "skill_view", "tool_call", "tool_search", "tool_view", "write_file"]);
   }, 20_000);
 
@@ -233,7 +233,7 @@ describe("skill_view 语义=查看(索引注入+授予才可见)", () => {
 });
 
 describe("权限档:inherit vs deny-only + 读类豁免 + 类别别名", () => {
-  /** 脚本 LLM:首步调指定工具,次步收口;onLoopEvent 取该工具的真实结果内容。 */
+ /** 脚本 LLM:首步调指定工具,次步;onLoopEvent 取该工具的真实结果内容。 */
   const runOnce = async (opts: { dir: string; tool: string; args: Record<string, unknown>; rules?: PermissionRule[]; denyOnly?: boolean; ask?: (t: string, s: string) => Promise<boolean> }) => {
     let i = 0;
     const toolContent: Record<string, string> = {};

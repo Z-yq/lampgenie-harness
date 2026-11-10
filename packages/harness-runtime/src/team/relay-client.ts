@@ -1,6 +1,6 @@
 /**
  * TeamRelayClient:gateway/桌面端连 relay 的客户端。
- * 红线(designs/05 工况 I4):relay 不可达=静默降级,本地与 Git 功能零影响——
+ * 红线(工况 I4):relay 不可达=静默降级,本地与 Git 功能零影响——
  * 构造与 connect 均不抛错,断线退避重连, revoked/永久拒绝才停止。
  */
 import WebSocket from "ws";

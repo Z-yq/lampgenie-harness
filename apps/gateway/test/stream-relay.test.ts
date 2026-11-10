@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createStreamRelay } from "../src/stream-relay.js";
 
-describe("stream-relay(step-050)", () => {
+describe("stream-relay()", () => {
   it("llm-delta 合批(80ms 窗内多块→一条);控制事件先冲刷待发增量再直发(保序)", async () => {
     vi.useFakeTimers();
     const sent: Record<string, unknown>[] = [];

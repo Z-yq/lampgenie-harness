@@ -96,7 +96,7 @@ describe("microcompact(2026-10-18 重写:默认全量,只占位超大结果)", (
     const { compacted } = microcompactMessages(msgs);
     expect(compacted).toBe(0);
   });
-  it("step-058:不写 journal compact 事件(纯读取侧)——旧实现每加一条工具结果就写无摘要 compact.done,被 deriveMessages 当真压缩边界硬截断(模型失忆)+面板渲染「上下文已压缩」+压缩闸门清零", () => {
+  it("不写 journal compact 事件(纯读取侧)——旧实现每加一条工具结果就写无摘要 compact.done,被 deriveMessages 当真压缩边界硬截断(模型失忆)+面板渲染「上下文已压缩」+压缩闸门清零", () => {
     const j = new MemoryJournal();
     for (let i = 0; i < 7; i++) {
       j.append({ kind: "tool.result", sessionId: "s", payload: { toolCallId: `c${i}`, content: "x" } });
@@ -106,11 +106,11 @@ describe("microcompact(2026-10-18 重写:默认全量,只占位超大结果)", (
       { role: "user", content: "q" },
       ...Array.from({ length: 7 }, (_, i) => ({ role: "tool" as const, toolCallId: `c${i}`, content: `结果${i}` })),
     ]);
-    expect(compacted).toBe(0); // 2026-10-18 新语义:普通体量结果零占位(旧滚动语义已废)
+    expect(compacted).toBe(0); // 新语义:普通体量结果零占位(旧滚动语义已废)
     // journal 零 compact 事件:压缩边界语义只留给真压缩(autoCompact 恒带摘要)
     expect(j.readAll().filter((e) => e.kind === "compact.start" || e.kind === "compact.done")).toHaveLength(0);
   });
-  it("step-058:deriveMessages 只认带摘要的真压缩边界——旧 journal 里的无摘要 compact.done(microcompact 遗留)不再清空上下文", () => {
+  it("deriveMessages 只认带摘要的真压缩边界——旧 journal 里的无摘要 compact.done(microcompact 遗留)不再清空上下文", () => {
     const j = new MemoryJournal();
     j.append({ kind: "message.user", sessionId: "s", payload: { text: "原始任务" } });
     j.append({ kind: "message.agent", sessionId: "s", payload: { text: "进展" } });
@@ -120,13 +120,13 @@ describe("microcompact(2026-10-18 重写:默认全量,只占位超大结果)", (
     const msgs = deriveMessages(j, "s");
     expect(msgs.map((m) => m.content)).toContain("原始任务");
     expect(msgs).toHaveLength(3);
-    // 带摘要的真边界仍硬截断(step-048 语义不回退)
+ // 带摘要的真边界仍硬截断(语义不回退)
     j.append({ kind: "compact.done", sessionId: "s", payload: { summary: "任务摘要", tokensBefore: 100 } });
     expect(deriveMessages(j, "s")).toHaveLength(0);
   });
 });
 
-describe("step-140:阈值触发组清理(对齐 ZCode:达到阈值才触发+keepRecent 5+minSavings 回滚)", () => {
+describe("阈值触发组清理(对齐 ZCode:达到阈值才触发+keepRecent 5+minSavings 回滚)", () => {
   const bigGroups = (n: number): Message[] =>
     Array.from({ length: n }, (_, i) => toolGroup(i, "read_file", 2_000)).flat();
   const tinyGroups = (n: number): Message[] =>
@@ -205,7 +205,7 @@ describe("step-140:阈值触发组清理(对齐 ZCode:达到阈值才触发+keep
   });
 });
 
-describe("step-140 主链路:AgentLoop 接线(组装消息时占位生效,journal 原文不动)", () => {
+describe(" 主链路:AgentLoop 接线(组装消息时占位生效,journal 原文不动)", () => {
   /** 预置 10 组大结果工具历史进 journal(message.agent 带 toolCalls + tool.result)。 */
   function seed(journal: MemoryJournal): void {
     journal.append({ kind: "message.user", sessionId: "s-mc", payload: { text: "q" } });
@@ -217,7 +217,7 @@ describe("step-140 主链路:AgentLoop 接线(组装消息时占位生效,journa
       journal.append({ kind: "tool.result", sessionId: "s-mc", payload: { toolCallId: `c${i}`, content: `结果${i}:` + "x".repeat(2_000) } });
     }
   }
-  /** 记录喂给 LLM 的消息的 mock provider(一步纯文本收口)。 */
+ /** 记录喂给 LLM 的消息的 mock provider(一步纯文本)。 */
   function recordingLlm(seen: Message[]): LlmProvider {
     return { async chat(messages) { seen.push(...messages); return { content: "done" }; } };
   }
@@ -228,7 +228,7 @@ describe("step-140 主链路:AgentLoop 接线(组装消息时占位生效,journa
     const seen: Message[] = [];
     const loop = new AgentLoop({
       journal, sessionId: "s-mc", system: "sys", llm: recordingLlm(seen),
-      // cacheAware:false = 显式选旧「每步增量清」行为(2026-11-06 新策略默认开启:
+ // cacheAware:false = 显式选旧「每步增量清」行为(新策略默认开启:
       // 小上下文被门槛跳过、缺批量则 defer,旧用例断言的正是被新策略替换掉的行为)。
       microcompact: { thresholdTokens: 1_000, cacheAware: false },
     });
@@ -269,7 +269,7 @@ describe("step-140 主链路:AgentLoop 接线(组装消息时占位生效,journa
     const seen: Message[] = [];
     const loop = new AgentLoop({
       journal, sessionId: "s-mc", system: "sys", llm: recordingLlm(seen),
-      // cacheAware:false = 显式选旧「每步增量清」行为(2026-11-06 新策略默认开启:
+ // cacheAware:false = 显式选旧「每步增量清」行为(新策略默认开启:
       // 小上下文被门槛跳过、缺批量则 defer,旧用例断言的正是被新策略替换掉的行为)。
       microcompact: { thresholdTokens: 1_000, cacheAware: false },
     });
@@ -657,7 +657,7 @@ describe("读侧历史裁剪(2026-11-03):arguments 计入估算 / 写入正文�
     ];
     const withArgs = estimateMessagesTokens(plain);
     const withoutArgs = estimateMessagesTokens(tiny);
-    // token 口径改为 cl100k 真分词,值随之更新:10KB 重复字符 arguments 实测差 ≈1257 tok
+ // token 口径改为 cl100k 真分词,值随之更新:10KB 重复字符 arguments 经验证差 ≈1257 tok
     // (旧系数按 4 字符 1 token 估 ≈2500)。
     expect(withArgs - withoutArgs).toBeGreaterThanOrEqual(1_000);
     // 旧口径(content-only)会把它算成 ~0
@@ -755,7 +755,7 @@ describe("读侧历史裁剪(2026-11-03):arguments 计入估算 / 写入正文�
     expect(JSON.stringify(off.messages)).toBe(JSON.stringify(msgs));
   });
 
-  // ---- 净收益门(2026-11-03):裁历史中段会作废前缀缓存,省得不够就不裁 ----
+ // ---- 净收益门:裁历史中段会作废前缀缓存,省得不够就不裁 ----
   function longHistory(turns: number): Message[] {
     const msgs: Message[] = [{ role: "user", content: "q" }];
     for (let i = 0; i < turns; i++) {

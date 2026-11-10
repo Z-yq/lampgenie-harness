@@ -1,11 +1,9 @@
 /**
- * 本地虚拟组织 CLI(designs/30 §3):可重复创建/idempotent 的演示团队 + demo git 项目。
- *
+ * 本地虚拟组织 CLI( §3):可重复创建/idempotent 的演示团队 + demo git 项目。
  * 用法:
  *   node --experimental-strip-types scripts/team-demo.ts seed    # 建组织(二次运行零写入)
  *   node --experimental-strip-types scripts/team-demo.ts status  # 只读查看
  *   node --experimental-strip-types scripts/team-demo.ts clean   # 一键清理(poc: 只删 demo- 数据)
- *
  * 根目录缺省 = <repo>/.genie/team(与内嵌 relay 同根,推上去后 relay 30s 轮询自动吸收进团队页)。
  * 加 --dry-run 只打印将做的动作(clean 用);加 --root=<path> 指定别的根(测试用)。
  */

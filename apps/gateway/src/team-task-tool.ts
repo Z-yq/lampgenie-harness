@@ -1,9 +1,7 @@
 /**
- * agent 工具 `team_task`(机制 M90):团队任务 DAG 的模型面。
- *
+ * agent 工具 `team_task`(机制):团队任务 DAG 的模型面。
  * 一个工具 8 个动作,名字/参数/错误码是硬契约(与 team-task-store 同名方法一一对应):
  *   list/create/claim/heartbeat/complete/fail/reassign/delete
- *
  * 返回纪律:
  * - 一律 JSON 文本(字符串);成功 `{ok:true, ...}`;
  * - 失败 **不吞**:TeamTaskError 的 code 原样进 JSON(`{ok:false, code, message, details}`),
@@ -50,8 +48,7 @@ function errorJson(err: unknown): string {
     return JSON.stringify(
       { ok: false, code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
       null,
-      2,
-    );
+      2);
   }
   const message = err instanceof Error ? err.message : String(err);
   return JSON.stringify({ ok: false, code: "TEAM_TASK_INVALID", message }, null, 2);
@@ -114,8 +111,7 @@ export function teamTaskTool(journal: Journal, sessionId: string, opts?: { store
                 ...(Array.isArray(a.blockedBy) ? { blockedBy: a.blockedBy as string[] } : {}),
                 ...(Array.isArray(a.writeScopes) ? { writeScopes: a.writeScopes as string[] } : {}),
               },
-              expectedRevision,
-            );
+              expectedRevision);
             return JSON.stringify({ ok: true, task: summarize(task), revision: task.revision }, null, 2);
           }
           case "claim": {
@@ -123,8 +119,7 @@ export function teamTaskTool(journal: Journal, sessionId: string, opts?: { store
             return JSON.stringify(
               { ok: true, task: summarize(r.task), revision: r.task.revision, warnings: r.warnings },
               null,
-              2,
-            );
+              2);
           }
           case "heartbeat": {
             const task = store.heartbeat(id, owner, { ...(expectedRevision !== undefined ? { expectedRevision } : {}), now, ...(typeof a.ttlMs === "number" ? { ttlMs: a.ttlMs } : {}) });

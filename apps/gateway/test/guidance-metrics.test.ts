@@ -1,6 +1,5 @@
 /**
- * M23 指导可度量(guidance-metrics,2026-11-07)。
- *
+ * 指导可度量(guidance-metrics。
  * A. 纯函数:tip 元数据表覆盖 + computeGuidanceMetrics 的 counters/rates/tips 口径(含未知 key 不丢、
  *    空事件全 0、step 区间归组、read_file 同路径重复读、验证命令复用 isVerificationCommand);
  * B. 注入侧:buildLoopTips 返回 metrics(不改文本/keys);

@@ -1,14 +1,12 @@
 /**
- * 子代理终态「可投递正文」摘要(2026-10-30):此前终态通知只有 300 字摘要 + 指针
+ * 子代理终态「可投递正文」摘要:此前终态通知只有 300 字摘要 + 指针
  * (task_output agentId=…),主 agent 必然再发一次请求取正文——每次子代理完成额外吃一次
  * 完整 LLM 往返。本模块把 output.txt 的正文(最后一个 [result ...] 段之后)直接塞进
  * message.system,主模型下一 step 即读到结果本体;指针只在「正文被截断/为空」时补。
- *
  * 三个旋钮(全部 env 可调,非法值一律退缺省):
  *  - GENIE_SUBAGENT_INJECT_MAX(缺省 4000;0=关闭注入 → 退化旧行为「摘要+指针」)
  *  - GENIE_SUBAGENT_INJECT_BATCH_MAX(缺省 8000;单条 message.system 的正文总上限)
  *  - GENIE_SUBAGENT_INJECT_MERGE_MS(缺省 500;0=关闭合并窗口,每条立即投递)
- *
  * 纯函数(extractDeliverableText / buildFinalNoticeText)与投递器(deliverFinalNotice)分置:
  * 前者可直测,后者只管去重 + 合并窗口 + journal.append。
  */

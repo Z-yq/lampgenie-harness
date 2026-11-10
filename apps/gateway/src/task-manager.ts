@@ -33,7 +33,7 @@ function deriveTitle(instruction: string): string | undefined {
 export class TaskSupervisor {
   private tasks = new Map<string, Task>();
   private idempotency = new Map<string, string>(); // key -> taskId
-  /** 墓碑集(2026-10-19「删不掉」根治):删除过的任务 id。内存侧只有 tasks Map 时,运行中任务
+ /** 墓碑集(「删不掉」根治):删除过的任务 id。内存侧只有 tasks Map 时,运行中任务
    * 的后续 setState / 重启 restore 都能把已删任务塞回 Map;墓碑是删除的唯一权威,入队路径一律先查。 */
   private tombstones = new Set<string>();
   private listeners = new Set<TaskListener>();
@@ -77,7 +77,7 @@ export class TaskSupervisor {
       state: "queued",
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      // 短标题派生(step-042,ZCode deriveSessionTitle 裁剪):首 40 字符;显式 title 覆盖。
+ // 短标题派生(ZCode deriveSessionTitle 裁剪):首 40 字符;显式 title 覆盖。
       title: extra.title ?? deriveTitle(instruction),
       ...extra,
     };
@@ -134,12 +134,12 @@ export class TaskSupervisor {
   /**
    * 宕机恢复:批量装载任务登记表(不发变更事件、不触发调度)。
    * 非终态任务=被重启打断,收编为 cancelled 并注明原因。
-   * 2026-10-19 用户实报修复(侧栏历史会话时间全变「刚刚」):**收编不得篡改 updatedAt**——
+ * 用户用户反馈修复(侧栏历史会话时间全变「刚刚」):**收编不得篡改 updatedAt**——
    * 原实现写 Date.now(),且不落 journal,导致每次重启僵尸任务时间戳被刷成启动时刻,
    * 历史会话在侧栏集体显示「刚刚」。时间戳是事实,收编只改状态+注明原因,时间保持原值。
    * 返回被收编的任务列表(调用方据此回写 journal 终态,防下次重启重复收编)。
    */
-  /** 非终态原样注入(2026-10-21 会话 worker 专用):restore 会把非终态强翻 cancelled(重启收编
+ /** 非终态原样注入(会话 worker 专用):restore 会把非终态强翻 cancelled(重启收编
    *  语义),worker 需要「同 id+queued」入表走正常状态机(queued→running 合法迁移);
    *  墓碑命中仍拒(已删任务不可复活)。终态入参直接原样入表(与 restore 终态分支同)。 */
   inject(task: Task): Task {
@@ -153,14 +153,14 @@ export class TaskSupervisor {
     const collected: Task[] = [];
     for (const t of tasks) {
       if (this.tombstones.has(t.id)) continue; // 墓碑命中:已删除任务不得回填(重启回放复活根治)
-      // 2026-11-05 状态机恢复语义(11-04 三次 OOM 实锤痛点):
+ // 状态机恢复语义(11-04 三次 OOM 注意痛点):
       //  - queued=尚未开始,重启不是它的"中断":原样入表等 drain 重排队(不收编、不改写、不回写 journal);
       //  - running/blocked=被外因打断:语义诚实标 interrupted(非人为取消),可续跑;回执带原任务 id+sessionId;
       //  - interrupted(上次重启已收编)幂等原样保留,不重复收编;
-      //  - 2026-10-19 教训保留:不篡改 updatedAt(时间戳是事实,收编只改状态+注明原因)。
+ // - 教训保留:不篡改 updatedAt(时间戳是事实,收编只改状态+注明原因)。
       let finalTask: Task = t;
       if (!TERMINAL_STATES.has(t.state) && t.state !== "interrupted" && t.state !== "queued") {
-        // M34:用户已停止(running/blocked 且会话在任务创建后有停止标记)→ 收编 cancelled,
+ // :用户已停止(running/blocked 且会话在任务创建后有停止标记)→ 收编 cancelled,
         // 结果注明「用户已停止」;不得写成 interrupted(否则面板一键续跑/自动恢复会复活它)。
         const stopped = opts?.userStopped?.(t) === true;
         finalTask = {
@@ -181,7 +181,7 @@ export class TaskSupervisor {
   }
 
   /**
-   * 续跑 interrupted 任务(2026-11-05 状态机恢复,两级恢复的共用内核):
+ * 续跑 interrupted 任务(状态机恢复,两级恢复的共用内核):
    * 复用幂等 submit 重提同 session 续跑指令;idempotencyKey=resume:<原id>——自动恢复与面板一键
    * 共用同一键,并发/双击/跨重启重入都命中同一新任务,天然不双跑。
    * 原任务转 cancelled(interrupted→cancelled 合法迁移,"被续跑替代"而非"被取消")。
@@ -189,7 +189,7 @@ export class TaskSupervisor {
    * buildInstruction 由调用方注入:自动恢复带 journal 步数,面板一键带原任务书。
    */
   resumeInterrupted(id: string, buildInstruction: (t: Task) => string): Task | undefined {
-    // 幂等先行(2026-11-05):同任务已续跑过(双击/重连/自动+手动竞争)→直接返回既有新任务。
+ // 幂等先行:同任务已续跑过(双击/重连/自动+手动竞争)→直接返回既有新任务。
     // 必须在状态判定之前:首次续跑后原任务已转 cancelled(result=已续跑→…),走 legacy 判定会误拒。
     const priorId = this.idempotency.get(`resume:${id}`);
     if (priorId) {
@@ -211,7 +211,7 @@ export class TaskSupervisor {
         ...(t.attachments ? { attachments: t.attachments } : {}),
       },
     );
-    // 原任务收口:仍 interrupted 才迁移(重入时已 cancelled,跳过——cancelled→cancelled 非法)。
+ // 原任务:仍 interrupted 才迁移(重入时已 cancelled,跳过——cancelled→cancelled 非法)。
     const cur = this.tasks.get(t.id);
     if (cur && cur.state === "interrupted") {
       this.setState(cur, "cancelled", `已续跑→新任务 ${nt.id}`);
@@ -229,7 +229,7 @@ export class TaskSupervisor {
     const out: Task[] = [];
     for (const t of [...this.tasks.values()]) {
       if (t.state !== "interrupted") continue;
-      if (opts.blocked?.(t)) continue; // M34:用户停止过的会话不再自动续跑
+      if (opts.blocked?.(t)) continue; // 用户停止过的会话不再自动续跑
       if (now - (t.updatedAt ?? t.createdAt) > opts.windowMs) continue;
       const nt = this.resumeInterrupted(t.id, opts.buildInstruction);
       if (nt) out.push(nt);
@@ -237,8 +237,8 @@ export class TaskSupervisor {
     return out;
   }
 
-  /** 保留期(step-005 二期能力收口):终态且超期(非置顶)清除;返回清除数。days≤0=不启用。
-   * 2026-10-19「删不掉」配套:保留期清理与面板删除同属删除路径,必须一并登记墓碑
+ /** 保留期(二期能力):终态且超期(非置顶)清除;返回清除数。days≤0=不启用。
+ * 「删不掉」配套:保留期清理与面板删除同属删除路径,必须一并登记墓碑
    * (code_review findings:此前直接 tasks.delete 绕开墓碑,journal 里 task.* 快照仍在,重启即复活)。
    * 返回被清理任务快照,调用方据此落 task.deleted。 */
   applyRetentionTasks(days: number): Task[] {
@@ -264,7 +264,7 @@ export class TaskSupervisor {
   rename(id: string, title: string): Task | undefined {
     const t = this.tasks.get(id);
     if (!t) return undefined;
-    // step-165 gaps3.1/3.2(ref taskIndexRepo.ts:1328 agent 只管核心标题+session-mgmt.ts:132-136 用户侧
+ // /3.2(ref taskIndexRepo.ts:1328 agent 只管核心标题+session-mgmt.ts:132-136 用户侧
     // 不冲 agent 时间线):rename 不再把 updatedAt 推成 now(旧会话不因重命名被顶到最新);
     // titleCustom 标记=用户改名粘性,面板据此免被后续任务派生标题顶掉;空 title=清除标记回默认派生。
     const next: Task = { ...t, title: title.trim() || undefined, updatedAt: t.updatedAt, ...(title.trim() ? { titleCustom: true } : { titleCustom: undefined }) };
@@ -301,7 +301,7 @@ export class TaskSupervisor {
     return next;
   }
 
-  /** 清除某项目全部任务的 projectId 引用(项目移除后的关联引用清理,2026-10-14「已移除项目」残留根治)。
+ /** 清除某项目全部任务的 projectId 引用(项目移除后的关联引用清理,「已移除项目」残留根治)。
    * 静默变更不 emit:终态任务若重 emit,通用落 journal 监听会以同 kind(task.done 等)重复计数,
    * 且幂等键(task.<id>.<state>)命中去重导致纠偏不落盘——持久化由调用方落专用事件(见 server.ts/app.ts)。
    * updatedAt 不动(与 rename 同拍):清引用不是任务活动,不应把旧会话顶到列表最新。 */
@@ -317,11 +317,11 @@ export class TaskSupervisor {
     return touched;
   }
 
-  /** 删除任务(step-042;幂等,幂等键与登记一并清)。
-   * 2026-10-19「删不掉」根治:删除同时登记墓碑——① 在跑任务的后续 setState 不得把它塞回 Map;
+ /** 删除任务(幂等,幂等键与登记一并清)。
+ * 「删不掉」根治:删除同时登记墓碑——① 在跑任务的后续 setState 不得把它塞回 Map;
    * ② 重启回放时 restore 跳过;③ 返回被删任务快照给调用方落 task.deleted 事件(持久化删除意图)。
    * 删掉的是 running 任务时必须 drain:并发槽是靠 running 计数算的,不补一次调度排队任务会一直卡到
-   * 下一个无关的 drain 触发点(code_review 2026-10-19 findings:删运行中任务释放槽却不 drain)。 */
+ * 下一个无关的 drain 触发点(code_review findings:删运行中任务释放槽却不 drain)。 */
   delete(id: string): Task | undefined {
     const t = this.tasks.get(id);
     if (!t) return undefined;
@@ -350,7 +350,7 @@ export class TaskSupervisor {
     return [...this.tombstones];
   }
 
-  /** 批量清空归档(step-042,ZCode DeleteAllArchivedTasks 等价);返回被删快照。 */
+ /** 批量清空归档(ZCode DeleteAllArchivedTasks 等价);返回被删快照。 */
   clearArchived(): Task[] {
     const out: Task[] = [];
     for (const [id, t] of [...this.tasks]) {

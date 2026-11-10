@@ -1,5 +1,5 @@
 /**
- * M48 压缩后文件正文补回(compact-rehydrate)单测:
+ * 压缩后文件正文补回(compact-rehydrate)单测:
  * 名额/排序、单文件截断、总量预算、读失败、deny vs ask、enabled=false 接线、journal 字段。
  */
 import { describe, it, expect } from "vitest";

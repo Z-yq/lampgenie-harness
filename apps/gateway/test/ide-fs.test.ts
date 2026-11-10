@@ -1,8 +1,7 @@
 /**
- * step-142 IDE 文件操作后端单测:fs.mkdir / fs.remove / fs.rename / fs.grep。
+ * IDE 文件操作后端单测:fs.mkdir / fs.remove / fs.rename / fs.grep。
  * 沙箱口径与 file.write 完全一致(realpath 前缀比对 + 拒 .git 段 + 拒 ../ 越界);
  * 失败走回包式 fs.*.result { ok:false, error }(非 error 帧),面板据此 toast 且不刷新树。
- *
  * 测试基建纪律(与 file-write-sandbox.test.ts 同款):
  * - 端口:http listen(0) 真实绑定取空闲口(不硬编码,合跑/并行零 EADDRINUSE);
  * - waitType 消费式(命中即从 inbox 移除),同 type 多次请求各取各的响应;

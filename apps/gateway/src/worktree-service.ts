@@ -1,13 +1,11 @@
 /**
- * git worktree 隔离服务(step-123;参照 deepseek-harness packages/experimental/worktree
+ * git worktree 隔离服务(参照 deepseek-harness packages/experimental/worktree
  * 与 opencode packages/opencode/src/worktree 的形态,不搬实现):
- *
  * - 子代理可运行在基于当前分支 pin commit 的临时 worktree 里,并行互不踩文件;
  * - 生命周期:成功/失败都保留 worktree + 分支(供人工合并/诊断),不自动改主工作区;
  * - remove/cleanup 默认**保留分支**,只有显式 deleteBranch 才删本服务创建的 `genie/` 分支;
  * - 安全:目录池围栏(<repo>/.genie/worktrees)、名字清洗、分支 check-ref-format、
  *   创建失败回滚(只删本次产物且只在池内)。
- *
  * 纯 Node 内置依赖(child_process/fs/path),不引入新包。
  */
 import { execFile } from "node:child_process";
@@ -32,8 +30,7 @@ export class WorktreeError extends Error {
   constructor(
     public readonly code: WorktreeErrorCode,
     message: string,
-    public readonly detail?: string,
-  ) {
+    public readonly detail?: string) {
     super(message);
     this.name = "WorktreeError";
   }
@@ -484,7 +481,7 @@ export class WorktreeService {
       const cur = existsSync(excludeFile) ? await readFile(excludeFile, "utf-8") : "";
       const lines = cur.split(/\r?\n/).map((l) => l.trim());
       if (lines.includes(EXCLUDE_LINE)) return;
-      const next = `${cur}${cur && !cur.endsWith("\n") ? "\n" : ""}# lampgenie-harness subagent worktrees(step-123)\n${EXCLUDE_LINE}\n`;
+      const next = `${cur}${cur && !cur.endsWith("\n") ? "\n" : ""}# lampgenie-harness subagent worktrees()\n${EXCLUDE_LINE}\n`;
       await writeFile(excludeFile, next, "utf-8");
     } catch {
       // 兜底失败不阻塞创建:仓自己的 .gitignore 可能已覆盖 .genie/。
@@ -556,8 +553,7 @@ export class WorktreeService {
   private async rollbackCreate(
     repoRoot: string,
     chosen: { id: string; branch: string; path: string },
-    addSucceeded: boolean,
-  ): Promise<string> {
+    addSucceeded: boolean): Promise<string> {
     const notes: string[] = [];
     const pool = this.poolFor(repoRoot);
     try {

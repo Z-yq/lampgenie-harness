@@ -1,5 +1,5 @@
 /**
- * sensing/crosslang-bridge A2-A6 测试(step-107 / designs/27 §4):
+ * sensing/crosslang-bridge A2-A6 测试( / §4):
  * 每形态独立 fixture:配对成立(双端证据行)/ 无配对诚实清单 / 动态与歧义形态不产边(防幻觉)。
  * A1(crosslang-bridge.test.ts)不动。
  */

@@ -23,7 +23,7 @@ export function loadPermissionsConfig(root: string): PermissionsConfig {
 }
 
 /** 追加 always-allow 规则(合并同 permission 的 pattern 表;幂等)。
- * pattern 归一(C9,step-057 四期):面板传的 pattern=ask 摘要首词(如 "safe-cmd"),而 agent loop
+ * pattern 归一(C9, 四期):面板传的 pattern=ask 摘要首词(如 "safe-cmd"),而 agent loop
  * 工具闸门按 evaluatePermission(call.name, "*") 评估——非通配 pattern 永不命中,用户点「总是允许」
  * 反而把该工具其余调用全锁进 ask 兜底(fail-closed 拒绝)。规则文件的 pattern 域统一存 "*"=工具级放行;
  * 摘要前缀的精细语义由 broker ask 摘要匹配链(matchPermissionRule)承担。 */

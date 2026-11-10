@@ -1,8 +1,7 @@
 /**
- * 全文件扫描(step-116,参照 open-code-review `ocr scan` / internal/scan/provider.go):
+ * 全文件扫描(参照 open-code-review `ocr scan` / internal/scan/provider.go):
  * 枚举 → 过滤(.gitignore+include/exclude+默认排除)→ 预算(文件数/单文件/总 token)→
  * 每文件生成 `@@ -0,0 +1,N @@` 全 `+` 伪 diff,让下游确定性层/定位器/LLM 无感复用。
- *
  * 诚实登记纪律:被过滤/跳过的文件按原因计数并留样本;单文件超限是「截断+登记」,
  * 不是静默丢弃;总 token 预算只在深审分批扣减,确定性层仍覆盖全部入选文件。
  */

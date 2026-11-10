@@ -1,5 +1,5 @@
 /**
- * 变更契约自检(2026-10-25「白板=变更契约图」规范的板校验面):
+ * 变更契约自检(「白板=变更契约图」规范的板校验面):
  * 机器可判定的硬规则在 upsert 回执与 action=audit 里确定性点名——
  * modify/delete 缺 before、变更节点缺 targets/symbolRef、flow 的 then/else/body、
  * P0 accept 缺 expect/type、页面板状态/nav 边、显式边 label、call 边与索引不符。

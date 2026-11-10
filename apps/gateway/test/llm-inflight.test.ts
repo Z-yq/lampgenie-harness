@@ -1,5 +1,5 @@
 /**
- * 子代理派遣的 LLM 在飞限流(2026-10-20 实锤回归):
+ * 子代理派遣的 LLM 在飞限流(注意回归):
  * 10 路并发首调智谱端点 → 8 路 `TypeError: fetch failed`(ConnectTimeoutError 10s);
  * 同 Key 低并发全部 200。observer 只观测不排队,故在此按端点做信号量。
  */
@@ -97,7 +97,7 @@ describe("装配接线:buildModelProviders 的请求真的过限流", () => {
     writeFileSync(join(root, ".genie", "secrets.json"), JSON.stringify({ K: "test-key" }), "utf-8");
     const cfg = ConfigSchema.parse({
       providers: [{ id: "p", baseUrl: "https://inflight.wiring.test", apiKeyEnv: "K", models: ["m1"] }],
-      coding: { llm: { providerId: "p", model: "m1" }, models: { subagent: { model: "m1" } } }, // 2026-10-20:子代理未配置不再恒建,显式配 model 才有独立 provider——测试本意(角色 provider 过限流)保持
+      coding: { llm: { providerId: "p", model: "m1" }, models: { subagent: { model: "m1" } } }, // :子代理未配置不再恒建,显式配 model 才有独立 provider——测试本意(角色 provider 过限流)保持
     });
     const providers = buildModelProviders(cfg, root, {});
     expect(providers.subagent).toBeTruthy();

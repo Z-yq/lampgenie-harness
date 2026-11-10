@@ -1,4 +1,4 @@
-/** 闭环端到端(step-074 D5):真实 LLM + 生产 gateway(PANEL_BASE)——
+/** 闭环端到端( D5):真实 LLM + 生产 gateway(PANEL_BASE)——
  * 夹具项目植入 ghp_ 假凭证(blocker)→ 任务1 调 code_review 出评论卡 → 一键「全部注入」→
  * 任务2 agent 按评论修复 → 再跑 code_review → finding 消失。
  * 取证:journal(/tmp/j-s074)事件链 + 文件内容世界验证 + 截图。
@@ -26,7 +26,7 @@ function journalEvents() {
   execSync("git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init", { cwd: projDir });
   writeFileSync(join(projDir, "config.ts"), "export const appName = \"demo\";\nexport const token = \"" + FAKE_TOKEN + "\";\n");
 
-  const shotDir = join(__dirname, "../../../../tasks/step-074-review-inject-chat/shots");
+  const shotDir = join(__dirname, "../../../../tasks/-review-inject-chat/shots");
   mkdirSync(shotDir, { recursive: true });
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-proxy-server"] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

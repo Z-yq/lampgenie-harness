@@ -14,7 +14,7 @@
  *   - 图表走纯 DOM(百分比绝对定位 + conic-gradient 饼图),不用 canvas(无需释放)、不用 SVG(不引外部命名空间)。
  * 安全:文档内容是不可信输入 —— 全程 textContent + createElement,零 HTML 字符串拼接(不碰 inner-markup 接口);
  *   颜色/填充/图片地址走白名单校验(safeColor / safeFill / safeSrc),样式注入与协议注入都挡在纯函数里
- *   (渐变串落 style 前再兜一次 url( / javascript: / expression( / ;position 黑名单)。
+ * (渐变串落 style 前再兜一次 url( / javascript: / expression( /;position 黑名单)。
  * 降级:render 全程 try/catch,host 缺失 / ast 非对象 / kind 未知 / DOM 不可用 → {ok:false, reason}
  *   并在 host 写一行降级文案;绝不抛未捕获异常、绝不白屏。表格单元格 / 图表数据点 / SmartArt 节点数
  *   超 200 时降级为占位文案(防炸)。
@@ -125,7 +125,7 @@
   /** fill 白名单:字符串走 safeColor;渐变对象走 gradient.stops → CSS linear-gradient。
    *  - angle:强制 Number() 后夹到 0~360,非有限数回 0(挡 "0;background:url(...)" 这类注入);
    *  - stop:颜色逐个过 safeColor,非法色直接丢该 stop;pos 夹到 0~1 后 ×100 转百分比;
-   *  - 单 stop 不是合法渐变 → 退纯色;最终串再兜一次 CSS_BAD_RE(url( / javascript: / expression( / ;position)。
+ * - 单 stop 不是合法渐变 → 退纯色;最终串再兜一次 CSS_BAD_RE(url( / javascript: / expression( /;position)。
    *  返回 { css, isGradient }(不直接进 style,便于测试断言与上层决定是否落 style)。 */
   function safeFill(fill) {
     var out = { css: "", isGradient: false };
@@ -684,7 +684,7 @@
     return wrap;
   }
 
-  /** 段落块。idx=该块在 ast.blocks 里的下标(2026-10-29 文本回写:输出 data-io-edit 定位属性,
+ /** 段落块。idx=该块在 ast.blocks 里的下标( 文本回写:输出 data-io-edit 定位属性,
    *  面板进入编辑态时按它收集 dirty 段落的 textContent 组 edits[blockIndex])。 */
   function docxParagraph(block, idx) {
     var lvl = headingLevel(block.style);
@@ -847,7 +847,7 @@
     }
     root.appendChild(page);
     safeAppend(host, root);
-    applyEdit(host); // 编辑态保持(2026-10-29 文本回写):重渲后按 host.dataset.ioEdit 重新挂 contenteditable
+    applyEdit(host); // 编辑态保持( 文本回写):重渲后按 host.dataset.ioEdit 重新挂 contenteditable
 
     // A4 比例:min-height 随页宽走(210:297),容器变化时重算。
     function fit() {
@@ -882,7 +882,7 @@
 
   /* ---------------- PPTX ---------------- */
 
-  /** 文本框节点。slideNo/shapeIdx(2026-10-29 文本回写):输出 data-io-edit="slide:S:shape:I"
+ /** 文本框节点。slideNo/shapeIdx( 文本回写):输出 data-io-edit="slide:S:shape:I"
    *  定位属性(面板编辑态按它组 edits[slideIndex, shapeIndex];与 parseOffice 的 shapes 下标同源)。 */
   /** 形状填充:字符串/渐变都过 safeFill;dflt 只在 fill 无有效值时兜底。 */
   function applyFill(el, fill, dflt) {
@@ -1579,7 +1579,7 @@
         slideEl.appendChild(shapeNode(shape, pageW, pageH, slideNo, i));
       }
       if (label) txt(label, cur + 1 + "/" + slides.length);
-      applyEdit(host); // 编辑态跨页保持(2026-10-29 文本回写):重画后重新挂 contenteditable
+      applyEdit(host); // 编辑态跨页保持( 文本回写):重画后重新挂 contenteditable
       fit();
     }
 
@@ -1781,7 +1781,7 @@
     }
   }
 
-  /** 编辑态开关(2026-10-29 文本回写 P2):给 host 打 dataset.ioEdit 标记,并给所有可编辑文本节点
+ /** 编辑态开关( 文本回写 P2):给 host 打 dataset.ioEdit 标记,并给所有可编辑文本节点
    *  (带 data-io-edit 的 PPT 文本框 / Word 段落)加 contenteditable;进编辑态时把该节点的原始文本
    *  记进 store.orig(面板据此判断某段是否真的改过,只回传 dirty 段),并把 store.text 回填到
    *  新画出来的节点上(翻页回来/重渲后改动不丢)。

@@ -1,10 +1,8 @@
 /**
  * 白板 → SVG 出图(node 侧,无 DOM):serializeBoard → openflowkit create_diagram → export svg。
- *
  * 设计约束(白板族最痛的一条):**绝不向上抛**。面板/HTTP 侧拿到的是「出图失败卡片」而不是
  * 500/未捕获 rejection,所以这里 catch 一切(动态 import 失败 / flowkit 抛错 / files[0].text 缺失 /
  * 编译诊断 error),统一收敛成 ok:false + diagnostics。
- *
  * flowkit 包(@openflowkit/openflowkit-mcp@0.2.4)是 ~800KB 纯 ESM,首调用 import 有百毫秒级开销,
  * 故模块内缓存 import promise(warmupBoardDiagram 供 server 启动预热),失败不缓存(下次重试)。
  */
@@ -105,8 +103,7 @@ export interface BoardDiagramOptions {
  */
 export async function renderBoardSvg(
   doc: BoardDoc,
-  opts?: BoardDiagramOptions,
-): Promise<BoardDiagramResult> {
+  opts?: BoardDiagramOptions): Promise<BoardDiagramResult> {
   const t0 = performance.now();
   const done = (ok: boolean, svg: string, diagnostics: BoardDiagramDiagnostic[]): BoardDiagramResult => ({
     ok,
@@ -130,7 +127,7 @@ export async function renderBoardSvg(
     }));
 
     const ofkMod = await loadOfk();
-    // 布局优先级(2026-11-07):wrapping 布局(自实现 layered + MULTI_EDGE 折行 + aspectRatio)
+ // 布局优先级:wrapping 布局(自实现 layered + MULTI_EDGE 折行 + aspectRatio)
     // → headlessElkLayout(写死 INCLUDE_CHILDREN、无 wrapping,长链板会排成单列长条)
     // → deterministicLayout(compileWorkspace 默认;只按声明顺序串行摆放,最差但绝不白屏)。
     // 任何一级抛错都降一级并记诊断,绝不让整张图出不来。

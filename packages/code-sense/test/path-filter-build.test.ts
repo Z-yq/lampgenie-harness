@@ -1,5 +1,5 @@
 /**
- * path-filter 构建产物判定测试(step-142,2026-10-21):
+ * path-filter 构建产物判定测试:
  * ① 正例:_next/static 编译产物、bundle 哈希名、根级 out/ 判为构建产物;
  * ② 负例(不误伤):static/ 与 web/ 下的手写源码、internal/cache 源码目录、短名 main.js;
  * ③ 面级确认:state 面不再从 chunks 产物里提状态机;
@@ -26,7 +26,7 @@ describe("isBuildArtifactPath:构建产物路径判定", () => {
     expect(isBuildArtifactPath("static/web/build/app.9f8a7b6c5d.js")).toBe(true);
     expect(isBuildArtifactPath("assets/styles.b3c4d5e6f7.css")).toBe(true);
     // 混大小写的驼峰名不是哈希:poly-grafana/scripts/cli/reportI18nStats.mjs 是手写统计脚本
-    // (i 标志会把「1 + 8nStats」当哈希段——基线全仓扫描实锤)
+ // (i 标志会把「1 + 8nStats」当哈希段——基线全仓扫描注意)
     expect(isBuildArtifactPath("scripts/cli/reportI18nStats.mjs")).toBe(false);
   });
 
@@ -62,7 +62,7 @@ describe("isBuildArtifactPath:构建产物路径判定", () => {
     // web/ 是 owncast 手写前端源码;public/ 是静态资源入口
     expect(isNonProductPath("web/services/chat-service.ts")).toBe(false);
     expect(isNonProductPath("public/index.ts")).toBe(false);
-    // 裸 cache/tmp 段是源码目录(go-grpc-go/internal/cache 等实锤),不整段剔除
+ // 裸 cache/tmp 段是源码目录(go-grpc-go/internal/cache 等注意),不整段剔除
     expect(isNonProductPath("internal/cache/x.go")).toBe(false);
     // 本仓自身路径不被新规则吃掉
     expect(isNonProductPath("apps/gateway/src/server.ts")).toBe(false);

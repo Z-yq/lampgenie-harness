@@ -1,6 +1,5 @@
 /**
  * 情境签名与反事实比较:纯逻辑、零 IO。
- *
  * 为什么:一个指标只有在「情境可比」时才能相减。同一条指标(平均回合数、一次通过率)
  * 在不同任务类、不同模型/供应商版本下不能直接对比,否则版本漂移、任务难度变化会被
  * 误读成「优化生效」。本模块把「情境」定义成六维签名(taskClass / phase / toolSurface /
@@ -14,7 +13,6 @@
  * - 版本治理(stratifyByVersion / detectVersionChange / markStale):版本一变基线须重估,
  *   旧实验标过期,而不是继续当证据;
  * - 混杂与幸存者偏差(confounders / survivorBias):把「这批样本算不上证据」的原因说出来。
- *
  * 纪律:不抛异常(非法样本计数跳过、缺字段给占位)、不做 IO、不依赖其它模块;
  * 均值与差值四舍五入到 2 位,保证同输入同输出。
  */
@@ -669,8 +667,7 @@ export function detectVersionChange(input: VersionChangeInput): VersionChangeRes
  */
 export function markStale(
   experiments: readonly SignatureExperiment[],
-  target: VersionPair,
-): MarkStaleResult {
+  target: VersionPair): MarkStaleResult {
   const goal = versionPairOf(target);
   const stale: string[] = [];
   const active: string[] = [];

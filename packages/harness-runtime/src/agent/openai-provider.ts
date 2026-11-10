@@ -3,10 +3,10 @@
  * 凭证从 keyRef 解析(引用名,值不过日志)。
  */
 
-/** 请求体诊断 dump(step-064 排查「工具未配置」观测;默认关):GENIE_LLM_DUMP_DIR 在场时
+/** 请求体诊断 dump(排查「工具未配置」观测;默认关):GENIE_LLM_DUMP_DIR 在场时
  * 把每次 chat 的 OpenAI 请求体落 <dir>/<序号>-<模型名>.json(只含 body;headers 带 apiKey 永不落盘,
  * 请求体本身无凭证字段)。排查面开关,非业务逻辑;目录不可写=静默跳过(dump 失败不影响主链)。
- * step-127 export:apiType 协议适配器(provider-apitypes.ts)同享诊断出口。 */
+ * export:apiType 协议适配器(provider-apitypes.ts)同享诊断出口。 */
 export function dumpRequestBody(model: string, body: Record<string, unknown>): void {
   const dir = process.env.GENIE_LLM_DUMP_DIR;
   if (!dir) return;
@@ -42,7 +42,7 @@ export interface OpenAiCompatOptions {
   baseUrl: string;
   apiKey: string;
   model: string;
-  /** 接口协议分派(step-127,ZCode provider api.type 对齐):缺省/chat=OpenAI
+ /** 接口协议分派(ZCode provider api.type 对齐):缺省/chat=OpenAI
    * chat/completions(现状路径,wire 逐字节不变);anthropic=Anthropic Messages
    * /v1/messages(x-api-key 头+系统分离+内容块流式);responses=OpenAI Responses
    * POST /v1/responses(input 数组+function_call 形态)。协议适配在 provider-apitypes.ts。 */
@@ -51,12 +51,12 @@ export interface OpenAiCompatOptions {
   timeoutMs?: number;
   /** 请求级 max_tokens;缺省=端点默认。 */
   maxTokens?: number;
-  /** 思考力度(step-046):low/medium/high;未设不发送该参数(端点默认,多为关)。 */
+ /** 思考力度:low/medium/high;未设不发送该参数(端点默认,多为关)。 */
   reasoningEffort?: string;
-  /** 429/502/503/504 自动重试次数(step-008 二期收口;缺省 2,0=关)。
+ /** 429/502/503/504 自动重试次数(二期;缺省 2,0=关)。
    * Retry-After 头优先(封顶 15s),否则指数退避(0.5s 起,封顶 8s)。 */
   retry?: number;
-  /** 模型请求准入(step-008 二期收口):注入协调器 passthrough 准入时,每次尝试
+ /** 模型请求准入(二期):注入协调器 passthrough 准入时,每次尝试
    * 取票(计入在飞)、状态经票据喂 AIMD(429→throttled 降 cap),finally release。
    * 缺省=不设闸(行为与旧版一致)。 */
   admission?: RequestAdmission;
@@ -65,7 +65,7 @@ export interface OpenAiCompatOptions {
 }
 
 /** 把我们的 Message 翻译成 OpenAI chat.completions 格式。 */
-/** usage 提取(step-048:兼容 OpenAI(prompt_tokens_details.cached_tokens)/DeepSeek(prompt_cache_hit_tokens)/realtime(input_tokens+input_token_details) 三形态) */
+/** usage 提取(兼容 OpenAI(prompt_tokens_details.cached_tokens)/DeepSeek(prompt_cache_hit_tokens)/realtime(input_tokens+input_token_details) 三形态) */
 export function extractUsage(u: Record<string, unknown> | undefined | null): LlmResponse["usage"] | undefined {
   if (!u || typeof u !== "object") return undefined;
   const details = (u.prompt_tokens_details ?? u.input_token_details ?? {}) as { cached_tokens?: number };
@@ -79,7 +79,7 @@ export function extractUsage(u: Record<string, unknown> | undefined | null): Llm
 
 /** 清洗孤立 UTF-16 代理码元(替换为 U+FFFD)。孤立代理经 JSON.stringify 变成 \ud83c 形态转义后,
  * 上游 serde_json 系解析器(DeepSeek/OpenAI)在高位代理后找 \uXXXX 低位代理落空即 400
- * "unexpected end of hex escape"(2026-10-29 实锤:grep 行截断切在 🎙 代理对中间)。
+ * "unexpected end of hex escape"(注意:grep 行截断切在 🎙 代理对中间)。
  * 这是 provider 出口的最后防线——任何工具层截断/拼接 bug 产生的孤立代理都在此拦下。
  * 快路径:文本不含任何代理码元时原样返回,零开销。 */
 export function sanitizeLoneSurrogates(s: string): string {
@@ -106,7 +106,7 @@ function toOpenAi(messages: Message[], tools: ToolSpec[]) {
         return {
           role: "assistant",
           content: (m.content && sanitizeLoneSurrogates(m.content)) || null,
-          // thinking 模式续跑必须回传 reasoning_content,否则端点 400(2026-11-07)。
+ // thinking 模式续跑必须回传 reasoning_content,否则端点 400。
           // 只在实际有值时才带字段:空串会撞「不支持该字段」的思考关闭模型/未知字段校验。
           ...(m.reasoning && sanitizeLoneSurrogates(m.reasoning) ? { reasoning_content: sanitizeLoneSurrogates(m.reasoning) } : {}),
           tool_calls: m.toolCalls.map((c) => ({
@@ -116,9 +116,9 @@ function toOpenAi(messages: Message[], tools: ToolSpec[]) {
           })),
         };
       }
-      // 多模态(step-048):user 消息带 images(data URL 数组)→ OpenAI content 数组(text+image_url)。
-      // 音频直入(2026-10-21 omni-query 形态,qwen3.8-omni* 一次 query 口径):audio → input_audio
-      // 内容件,pcm16 裸流自动包 WAV 容器(genie-voice omni 实证:data URL + format:"wav")。
+ // 多模态:user 消息带 images(data URL 数组)→ OpenAI content 数组(text+image_url)。
+ // 音频直入( omni-query 形态,qwen3.8-omni* 一次 query 口径):audio → input_audio
+ // 内容件,pcm16 裸流自动包 WAV 容器(omni 接口实测验证:data URL + format:"wav")。
       if (m.role === "user" && ((m as { images?: string[] }).images?.length || (m as { audio?: unknown }).audio)) {
         const parts: Record<string, unknown>[] = [{ type: "text", text: sanitizeLoneSurrogates(m.content) }];
         for (const img of (m as { images?: string[] }).images?.slice(0, 4) ?? []) parts.push({ type: "image_url", image_url: { url: img } });
@@ -153,7 +153,7 @@ type ChatJson = {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 };
 
-/** OpenAI finish_reason → LlmResponse.finishReason(M28)。未知/缺失一律 undefined(不触发任何行为)。 */
+/** OpenAI finish_reason → LlmResponse.finishReason()。未知/缺失一律 undefined(不触发任何行为)。 */
 export function mapOpenAiFinishReason(raw: unknown): LlmResponse["finishReason"] {
   if (typeof raw !== "string") return undefined;
   switch (raw) {
@@ -190,8 +190,8 @@ export function describeFetchError(err: unknown): string {
   return cause && !base.includes(cause) ? `${base} (${cause})` : base;
 }
 
-/** 指数退避 + ±25% 抖动(2026-10-20):固定退避会让一批同时失败的请求在同一毫秒一起重试,
- * 撞上同一个拥塞窗口(实测 10 路首调 8 路建连超时)。抖动把重试摊开。 */
+/** 指数退避 + ±25% 抖动:固定退避会让一批同时失败的请求在同一毫秒一起重试,
+ * 撞上同一个拥塞窗口(经验证 10 路首调 8 路建连超时)。抖动把重试摊开。 */
 function backoffWithJitter(attempt: number): number {
   const base = Math.min(500 * 2 ** attempt, 8_000);
   const jitter = 0.75 + Math.random() * 0.5;
@@ -199,7 +199,7 @@ function backoffWithJitter(attempt: number): number {
 }
 
 /** 建连类错误(与普通网络抖动区分):端点对突发新建 TCP 连接敏感时,短退避的重试会
- * 连续撞在同一限流窗口里(实测 10 路首调 8 路 ConnectTimeout,3 次尝试全失败)。 */
+ * 连续撞在同一限流窗口里(经验证 10 路首调 8 路 ConnectTimeout,3 次尝试全失败)。 */
 function isConnectError(err: unknown): boolean {
   const code = String((err as { cause?: { code?: string } })?.cause?.code ?? "");
   return /CONNECT_TIMEOUT|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|UND_ERR/i.test(code);
@@ -212,10 +212,10 @@ function connectBackoffWithJitter(attempt: number): number {
   return Math.max(500, Math.round(base * jitter));
 }
 
-/** 带重试的 POST(step-008 二期收口):429/5xx 按 Retry-After/指数退避重试;
+/** 带重试的 POST(二期):429/5xx 按 Retry-After/指数退避重试;
  * 网络层异常(建连超时/连接重置)同样重试——建连类错误额外多给 2 次机会 + 更长退避。
  * 每次重试发 model_retry_scheduled(governor AIMD 的降 cap 信号源,此前零生产者)。
- * step-127 export:anthropic/responses 协议适配器(provider-apitypes.ts)复用同一
+ * export:anthropic/responses 协议适配器(provider-apitypes.ts)复用同一
  * 重试/AIMD 语义,不复制漂移。 */
 export interface PostRetryOptions {
   retry: number;
@@ -238,8 +238,7 @@ async function peekBody(res: Response): Promise<string> {
 
 export async function postWithRetry(
   post: () => Promise<Response>,
-  opts: PostRetryOptions,
-): Promise<Response> {
+  opts: PostRetryOptions): Promise<Response> {
   const budget = opts.budget ?? defaultUnknownBudget;
   const budgetKey = opts.budgetKey ?? "default";
   for (let attempt = 0; ; attempt++) {
@@ -247,7 +246,7 @@ export async function postWithRetry(
     try {
       res = await post();
     } catch (err) {
-      // 网络层异常(非 HTTP 状态):按 M33 分类决定重试/停止。
+ // 网络层异常(非 HTTP 状态):按  分类决定重试/停止。
       const decision = classifyModelError({ err, signalAborted: opts.signal.aborted });
       const detail = describeFetchError(err);
       // 取消直抛(上游 abort / AbortError)。
@@ -304,7 +303,7 @@ export async function postWithRetry(
   }
 }
 
-/** 准入票据生命周期(step-008):admission 注入时取票→started→(成功 completed|终败 failed)→release。 */
+/** 准入票据生命周期:admission 注入时取票→started→(成功 completed|终败 failed)→release。 */
 async function withAdmission<T>(
   admission: RequestAdmission | undefined,
   modelId: string,
@@ -330,7 +329,7 @@ async function withAdmission<T>(
   }
 }
 
-/** 流空闲超时守卫(2026-10-18):语义=任意 SSE chunk 到达即重置计时,空闲窗超时才 abort
+/** 流空闲超时守卫:语义=任意 SSE chunk 到达即重置计时,空闲窗超时才 abort
  * (原因 MODEL_STREAM_IDLE_TIMEOUT)。window = max(30s, cur.timeoutMs ?? 600s)——与 chat 流式
  * 分支(chatStreamed)同源,anthropic/responses 适配器共用同一实现,避免语义漂移。
  * 为什么不是整体墙钟:大上下文(1M 窗口全量历史)prefill 可达数分钟,墙钟会杀死健康慢流。 */
@@ -360,7 +359,7 @@ export function chatCompletionsUrl(baseUrl: string): string {
 }
 
 /** 流中途错误(SSE data 里带 error 对象,如 "Inference engine abort. Finish reason: [UNKNOWN]")。
- * 2026-10-20 实锤:服务端推理引擎瞬时 abort,HTTP 层是 200(postWithRetry 重试不到),
+ * 注意:服务端推理引擎瞬时 abort,HTTP 层是 200(postWithRetry 重试不到),
  * 旧实现直接 throw → 整个任务 task.fail。这类错误与 5xx 同类(服务端过载/抖动),应当重试。 */
 class StreamMidFlightError extends Error {}
 /** 流中断重试(区分于 HTTP 状态码重试):mid-flight SSE 错误/断流最多 N 次,指数退避。
@@ -376,14 +375,14 @@ async function chatStreamedWithRetry(
 ): Promise<LlmResponse> {
   // postWithRetry 同语义:retry=N = 原始 1 次 + 最多 N 次重试;封顶 4 次(mid-flight 错误抖动场景再多无益)。 */
   const attempts = Math.max(1, Math.min(retryCtx.retry + 1, 4));
-  /** M29:每次流式 attempt 的独立 id——首个=调用方给的 base,重试=base#n。
+ /** :每次流式 attempt 的独立 id——首个=调用方给的 base,重试=base#n。
    *  只有成功的那次会回填到 LlmResponse(→message.agent),被作废的半截 attempt 永不与已提交消息撞 id,
    *  冷恢复按 discarded 标记剔除时不会误删成功消息。 */
   const attemptIdOf = (attempt: number) =>
     opts.attemptId ? (attempt === 0 ? opts.attemptId : `${opts.attemptId}#${attempt}`) : undefined;
   let lastErr: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
-    // M29:半截累加器(content/reasoning/toolAcc)在 chatStreamed 内**每次 attempt 新建**——
+ // :半截累加器(content/reasoning/toolAcc)在 chatStreamed 内**每次 attempt 新建**——
     // 重试必然从空开始,不会把新增量接在失败 attempt 的尾巴后面。progress 只用于作废留痕的 partialChars。
     const progress = { chars: 0 };
     try {
@@ -409,7 +408,7 @@ async function chatStreamedWithRetry(
         throw new ModelRequestError(stopDecision, { detail: decision.detail, cause: err });
       }
       if (attempt === attempts - 1) break;
-      // M29:将重试 → 先告知调用方「这次 attempt 已作废」(attemptId + 已吐出的半截字符数),再退避重开。
+ // :将重试 → 先告知调用方「这次 attempt 已作废」(attemptId + 已吐出的半截字符数),再退避重开。
       // 回调异常吞掉:留痕失败只告警,绝不改变重试/恢复结果。
       const deadId = attemptIdOf(attempt);
       if (deadId) {
@@ -439,7 +438,7 @@ async function chatStreamedWithRetry(
   throw finalErr;
 }
 
-/** 流式 chat(SSE)聚合(step-050):content/reasoning/tool_calls/usage 与非流式同构;增量经 onDelta 透出。 */
+/** 流式 chat(SSE)聚合:content/reasoning/tool_calls/usage 与非流式同构;增量经 onDelta 透出。 */
 async function chatStreamed(
   cur: { baseUrl: string; apiKey: string; timeoutMs?: number },
   body: Record<string, unknown>,
@@ -496,7 +495,7 @@ async function chatStreamed(
   const dec = new TextDecoder();
   let buf = "";
   const emit = (d: { text?: string; reasoning?: string }) => { try { onDelta(d); } catch { /* 回调异常不断流 */ } };
-  // 2026-10-18 用户实报+对照 ZCode:超时语义从「整体墙钟」改为「流空闲超时」——大上下文(1M 窗口
+ // 用户用户反馈+对照 ZCode:超时语义从「整体墙钟」改为「流空闲超时」——大上下文(1M 窗口
   // 全量历史)的 prefill 可达数分钟,墙钟 abort 会杀死健康的慢流(observe3 AbortError 根因)。
   // ZCode:DEFAULT_MODEL_STREAM_IDLE_TIMEOUT_MS=600s,重试每轮+30s。这里 timeoutMs 即空闲窗:
   // 首个 chunk 前与 chunk 间隔超窗才 abort;chunk 持续到达时永不超时。
@@ -556,14 +555,14 @@ async function chatStreamed(
 
 export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvider & { update(patch: Partial<OpenAiCompatOptions>): void; readonly modelName: string; describe(): Record<string, unknown> } {
   const cur = { ...opts };
-  // M33 未知错误预算:实例级(provider 实例)= 一个 provider/model 组合的连续计数;
+ //  未知错误预算:实例级(provider 实例)= 一个 provider/model 组合的连续计数;
   // 热切换模型后键随 cur.model 变,旧键不污染新模型。与模块级缺省实例分开,避免多 provider 串扰。
   const unknownBudget = new UnknownErrorBudget();
   const budgetKey = () => `${cur.baseUrl}|${cur.model}`;
   return {
-    /** 模型名读数(step-060 子代理目录):registry/面板展示用;getter=热更新(update)后读到新值。 */
+ /** 模型名读数(子代理目录):registry/面板展示用;getter=热更新(update)后读到新值。 */
     get modelName() { return cur.model; },
-    /** 参数面读数(step-132 轨迹扩容):复现 wire 请求所需的全部端点/参数;apiKey 永不出。 */
+ /** 参数面读数(轨迹扩容):复现 wire 请求所需的全部端点/参数;apiKey 永不出。 */
     describe() {
       return {
         baseUrl: cur.baseUrl, apiType: cur.apiType ?? "chat", model: cur.model,
@@ -585,21 +584,21 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
     },
     async chat(messages, tools, signal, onDelta, opts) {
       const controller = new AbortController();
-      // 2026-10-18:整体墙钟改 30 分钟宽松上限(流式空闲超时在每个流式分支内接管,语义=timeoutMs:
+ // 整体墙钟改 30 分钟宽松上限(流式空闲超时在每个流式分支内接管,语义=timeoutMs:
       // chatStreamed 与 anthropic/responses 适配器共用 createStreamIdleGuard)——大上下文 prefill 不再被墙钟误杀;
       // 仅非流式路径仍以 timeoutMs 原语义为实际超时窗。
       const timer = setTimeout(() => controller.abort(), Math.max(cur.timeoutMs ?? 60_000, 1_800_000));
-      // 2026-10-18 泄漏修复:外部 signal(任务级 AbortController,长生命周期)上的 abort listener
-      // 每请求累积(MaxListenersExceededWarning 实锤)——请求结束必须摘除。
+ // 泄漏修复:外部 signal(任务级 AbortController,长生命周期)上的 abort listener
+ // 每请求累积(MaxListenersExceededWarning 注意)——请求结束必须摘除。
       const onOuterAbort = () => controller.abort();
       if (signal) signal.addEventListener("abort", onOuterAbort);
       const retryCtx = { retry: cur.retry ?? 2, emit: (e: ModelLifecycleEvent) => { try { cur.onNetworkStatus?.(e); } catch { /* 观察者异常不影响主链 */ } } };
       try {
-        // 准入+重试(step-008 二期收口):票据状态喂 AIMD;信号贯通(controller.signal)。
+ // 准入+重试(二期):票据状态喂 AIMD;信号贯通(controller.signal)。
         return await withAdmission(cur.admission, cur.model, controller.signal, retryCtx.emit, async (ticket) => {
           const emit: StatusEmit = ticket ? (e) => { ticket.emit(e); retryCtx.emit(e); } : retryCtx.emit;
           const rctx = { retry: retryCtx.retry, emit, budget: unknownBudget, budgetKey: budgetKey() };
-          // apiType 协议分派(step-127):anthropic/responses 走 provider-apitypes 适配层
+ // apiType 协议分派:anthropic/responses 走 provider-apitypes 适配层
           // (消息转换/凭证头/SSE 解析在适配器内消化,归一出口与本 provider chat 同构);
           // 缺省/chat 落回下方现有路径(wire 逐字节不变)。onDelta 在场即流式(两协议同语义)。
           if (cur.apiType === "anthropic") {
@@ -611,11 +610,11 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
           const body = toOpenAi(messages, tools);
           body.model = cur.model;
           if (cur.maxTokens !== undefined && cur.maxTokens > 0) body.max_tokens = cur.maxTokens;
-          // 思考力度(step-046):OpenAI o 系/GLM reasoning_effort;空串=显式关(不发)。
+ // 思考力度:OpenAI o 系/GLM reasoning_effort;空串=显式关(不发)。
           if (cur.reasoningEffort) (body as Record<string, unknown>).reasoning_effort = cur.reasoningEffort;
-          // 请求体诊断 dump(step-064;GENIE_LLM_DUMP_DIR 门控,缺省零开销)。
+ // 请求体诊断 dump(GENIE_LLM_DUMP_DIR 门控,缺省零开销)。
           dumpRequestBody(cur.model, body as Record<string, unknown>);
-          // 流式分支(step-050,ZCode 流式消息展示):onDelta 在场才启用——压缩/评审/导读等
+ // 流式分支(ZCode 流式消息展示):onDelta 在场才启用——压缩/评审/导读等
           // 内部调用保持非流式旧路径零风险;流式下增量经 onDelta 透出,聚合结果与非流式同构。
           if (onDelta) return await chatStreamedWithRetry(cur, body, controller.signal, onDelta, rctx, controller, opts);
           const res = await postWithRetry(() => fetch(chatCompletionsUrl(cur.baseUrl), {
@@ -633,7 +632,7 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
           }
         const data = (await res.json()) as {
           choices: { finish_reason?: string | null; message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[];
-          /** OpenAI 兼容 usage(step-031 追踪:此前被丢弃);字段缺失按 0 并保留 total 原值。 */
+ /** OpenAI 兼容 usage(追踪:此前被丢弃);字段缺失按 0 并保留 total 原值。 */
           usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
         };
         const msg = data.choices[0]?.message ?? {};
@@ -648,7 +647,7 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
             name: c.function.name,
             arguments: c.function.arguments,
           })),
-          usage: extractUsage((data as { usage?: Record<string, unknown> }).usage), // step-127 拍板修复:原顶层展开使 usage 从未进 r.usage(smoke 实证非流式无 usage);嵌套契约与流式/两新协议一致
+          usage: extractUsage((data as { usage?: Record<string, unknown> }).usage), // 拍板修复:原顶层展开使 usage 从未进 r.usage(smoke 验证非流式无 usage);嵌套契约与流式/两新协议一致
         } satisfies LlmResponse;
         });
       } finally {

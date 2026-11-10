@@ -1,7 +1,6 @@
 /**
  * Source Registry 纯逻辑直测:kind 校验与保留名 / 实例 config 与 claim / 事件写面与 policy /
  * 重放(含 JSON 往返续 seq)/ 健康声明去重 / 失效 / 只读 scope / 上下文写面。全内存零 IO。
- *
  * 断言一律用稳定码(SOURCE_*),reason 只做 includes 的可选断言;不读实现私有字段。
  */
 import { describe, expect, it } from "vitest";
@@ -52,8 +51,7 @@ function addInstance(
   registry: SourceRegistry,
   id: string,
   config: Record<string, unknown> = { ...MAIL_CONFIG },
-  enabled?: boolean,
-) {
+  enabled?: boolean) {
   const input: { id: string; kind: string; config?: Record<string, unknown>; enabled?: boolean } = {
     id,
     kind: "mail",

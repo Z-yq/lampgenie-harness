@@ -1,13 +1,11 @@
 /**
- * 轨迹链路深度优化的正确性回归(2026-11-03)。
- *
+ * 轨迹链路深度优化的正确性回归。
  * 背景:
- * - trace.stats / trace.query 曾用 journal.readAll().filter(sid) 全库扫(实测 median 12.2ms@28万条),
- *   现改走 readSession(sid) 的会话索引(O(log n),实测 2.62ms)。
+ * - trace.stats / trace.query 曾用 journal.readAll.filter(sid) 全库扫(经验证 median 12.2ms@28万条),
+ * 现改走 readSession(sid) 的会话索引(O(log n),经验证 2.62ms)。
  * - trace.stats 另加水位 memo(照 session.status 范式),事件数不变直接复用上次聚合。
- *
  * 本文件验的是**缓存/索引不会让数据变旧**:同水位复用、追加事件后必须立刻反映新数据、
- * 无此会话时不崩。性能收益本身由 bench 实测证明(见 tasks/step-1029 留痕),这里只管正确性。
+ * 无此会话时不崩。性能收益本身由 bench 经验证证明(见 留痕),这里只管正确性。
  */
 import { describe, it, expect } from "vitest";
 import { MemoryJournal } from "@lampgenie/core";

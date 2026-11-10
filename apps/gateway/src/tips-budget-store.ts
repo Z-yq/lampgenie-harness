@@ -1,18 +1,14 @@
 /**
  * Tips 组合预算的持久层:把 tips-budget 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:预算消耗是「这一轮为什么只给这两条 tip」的审计事实;reset 不擦历史,
  * 而是追加一条 reset 行划分新窗口,重放同一文件就能复算任意时刻的 usage。
  * 单行追加 + 写后重读行数校验,让「写成功了吗」成为可复核断言(而不是信任 append 没抛)。
- *
  * 数据面 `<root>/.genie/rsi/tips.jsonl`:
  * - rule    {rule}                            一条规则(同 id 后写为准)
  * - resolve {result}                          一次选择(selected/dropped/codes + nodeId,可重放 usage)
  * - reset   {}                                预算窗口清零标记
- *
  * 投影语义:按行序读全部行;坏行(JSON 坏 / v 不是 1 / type 未知 / 载荷不合法)只计入
  * badLines 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 其余业务模块。
  * runtime 模块按 decision-quality-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
@@ -49,8 +45,7 @@ async function loadTipsRuntime(): Promise<TipsRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/tips-budget.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     tipsRuntime = (await import(srcUrl)) as TipsRuntime;
   }
   return tipsRuntime;
@@ -354,8 +349,7 @@ export function usage(root: string): TipsUsage {
  */
 function normalizeCandidates(
   candidates: unknown,
-  explicitNodeId: string | undefined,
-): { ok: boolean; nodeId: string; candidates: unknown[] } {
+  explicitNodeId: string | undefined): { ok: boolean; nodeId: string; candidates: unknown[] } {
   const list = Array.isArray(candidates) ? candidates : [];
   if (explicitNodeId !== undefined) {
     return {

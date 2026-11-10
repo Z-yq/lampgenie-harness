@@ -1,22 +1,17 @@
 /**
- * 一次性流票据的持久层(M30):把 runtime 的纯逻辑票据库落到单个 JSON 文件。
- *
+ * 一次性流票据的持久层:把 runtime 的纯逻辑票据库落到单个 JSON 文件。
  * 数据面:`<root>/.genie/rsi/tickets.json`,内容 `{ version: 1, tickets: Record<id, StreamTicket> }`。
  * 为什么是整文件快照而不是 append-only:票据的语义是「现在还能不能用」,消费/过期/prune 都是
  * 对同一张票的状态迁移,历史行反而会让「一张票只能换一次流」的判定变复杂;而一次性票据
  * 的生命周期(60s)也不需要审计留痕。
- *
  * 写纪律:**原子写**(先写 `${path}.tmp-<pid>-<rand>` 再 renameSync 覆盖),目录 mkdirSync recursive;
  * 半截文件永远不会出现在正式路径上,并发读者要么看旧快照要么看新快照。
- *
  * 读纪律:文件不存在 → 空 store(首次使用是正常路径);坏 JSON / 结构不合法 → 折叠成
  * `TICKET_STORE_ERROR`(不 throw、不清空、**不允许写操作覆盖坏文件**——宁可报错也不静默丢票)。
- *
  * 依赖纪律:runtime 纯逻辑模块按 cohort-signature-store 的既有套路两跳惰性解析
  * (① 带 `--conditions=development` 的运行时走包导出 src 入口;② 裸 tsx/dist 缺该文件时回退
  * 到仓内源文件 new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。顶层 await 取到 rt,
  * 所有导出函数保持同步签名。
- *
  * 参数纪律:root 必须是非空字符串,非法 root **抛错**(与 cohort-signature-store 的 assertRoot 一致);
  * 除该参数错误外不 throw,IO/解析失败一律折叠成稳定码。
  */
@@ -62,8 +57,7 @@ async function loadStreamTicketRuntime(): Promise<StreamTicketRuntime> {
   } catch {
     const srcUrl = new URL(
       "../../../packages/harness-runtime/src/agent/stream-ticket.ts",
-      import.meta.url,
-    ).href;
+      import.meta.url).href;
     streamTicketRuntime = (await import(srcUrl)) as StreamTicketRuntime;
   }
   return streamTicketRuntime;
@@ -238,7 +232,7 @@ export interface StoreIssueOptions {
   idFactory?: () => string;
 }
 
-/** 换票:读 → runtime 签发 → 成功才写盘(写失败如实报 persisted:false,票不入库)。 */
+/** 换票:读 → runtime 签发 → 成功才写盘(写失败如用户反馈 persisted:false,票不入库)。 */
 export function issue(root: string, options: StoreIssueOptions): StoreIssueResult {
   const base = assertRoot(root);
   const loaded = loadTickets(base);

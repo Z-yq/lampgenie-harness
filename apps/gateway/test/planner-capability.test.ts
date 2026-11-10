@@ -1,11 +1,11 @@
 /**
- * planner 内置子智能体(step-138):把「规划逻辑 + 白板使用」抽成独立角色。
+ * planner 内置子智能体:把「规划逻辑 + 白板使用」抽成独立角色。
  * 契约四点,每点都有断言:
  * ① 声明面:BUILTIN_AGENT_PROFILES 含 planner(工具白名单=读+认知+技能+write_file+白板两件),
  *    写盘围栏 writeGlobs 只到规划稿路径;
  * ② 执行面(toolPolicy 硬件锁):白名单展开后**没有** terminal/run_cmd/edit_file/spawn_subagent/
  *    answer_subagent/task_output/browser/web_*;真实 spawn 时 chat 收到的工具面=上面那个集合;
- * ③ 围栏:planner 角色 write_file 写 tasks/step-NNN-x/step.md 成功、写 src/x.ts 被拒(越界拦在写盘层,
+ * ③ 围栏:planner 角色 write_file 写 成功、写 src/x.ts 被拒(越界拦在写盘层,
  *    不依赖模型自律);
  * ④ 提示词:planner systemPrompt 含需求深挖三问 + accept 要求 + "不写业务代码";主 agent SYSTEM 含
  *    planner 路由纪律(规划类先派 planner / 超时降级内联)。
@@ -49,7 +49,7 @@ async function offeredTools(dir: string, agentType: string, opts: { systemSeen?:
   return seen;
 }
 
-/** 脚本 LLM:首步调指定工具一次,次步收口;返回该工具的真实结果文本。 */
+/** 脚本 LLM:首步调指定工具一次,次步;返回该工具的真实结果文本。 */
 async function runOneTool(dir: string, agentType: string, tool: string, args: Record<string, unknown>): Promise<string> {
   const cap = resolveSubagentCapability(BUILTIN_AGENT_PROFILES, agentType);
   const journal = new MemoryJournal();
@@ -118,7 +118,7 @@ describe("planner 声明面(agent-profiles)", () => {
     expect(s).toContain("不写业务代码");
     expect(s).toContain("未决问题");
     expect(s).toContain("DoD");
-    // 内容来源层二期(2026-11-04):现状节点实证锚 / before 真实锚 / 验收带命令。
+ // 内容来源层二期:现状节点验证锚 / before 真依据 / 验收带命令。
     expect(s).toContain("内容三问");
     expect(s).toContain("现状从哪来");
     expect(s).toContain("file:line");
@@ -145,10 +145,10 @@ describe("planner 执行面(真实 spawn:chat 收到的工具面)", () => {
   it("工具面=读四件+认知两件+skill_view+write_file+board_read(+tool_view 代取延迟的 board_upsert);无 terminal/run_cmd/edit_file/spawn", async () => {
     const dir = mk();
     const got = await offeredTools(dir, "planner").catch((e) => { throw e; });
-    // board_upsert 自 2026-10-30 起在 CORE_NEVER_DEFER(tool-view.ts:28)——它是 plan-gate 指定出口,
-    // 延迟它=闸门要求一个清单里不存在的工具(实测 38 步同参死循环),所以它常驻 wire 广告面,
+ // board_upsert 自 起在 CORE_NEVER_DEFER(tool-view.ts:28)——它是 plan-gate 指定出口,
+ // 延迟它=闸门要求一个清单里不存在的工具(经验证 38 步同参死循环),所以它常驻 wire 广告面,
     // tool_view 仍保留(其余大 schema 工具按需取)。
-    // M128:bridge 三件套恒定追加(tool_view/tool_search/tool_call)
+ // bridge 三件套恒定追加(tool_view/tool_search/tool_call)
     expect(got.sort()).toEqual([
       "board_read", "board_upsert", "code_sense", "glob", "grep", "list_dir",
       "read_file", "skill_view", "tool_call", "tool_search", "tool_view", "write_file",
@@ -165,11 +165,11 @@ describe("planner 执行面(真实 spawn:chat 收到的工具面)", () => {
 
   it("写盘围栏:规划稿路径可写;业务代码路径被拒且不落盘", async () => {
     const dir = mk();
-    mkdirSync(join(dir, "tasks", "step-900-demo"), { recursive: true });
-    const ok = await runOneTool(dir, "planner", "write_file", { path: join(dir, "tasks", "step-900-demo", "step.md"), content: "# 规划稿\n" });
+    mkdirSync(join(dir, "tasks", "-demo"), { recursive: true });
+    const ok = await runOneTool(dir, "planner", "write_file", { path: join(dir, "tasks", "-demo", "step.md"), content: "# 规划稿\n" });
     expect(ok).toContain("已写入");
-    expect(existsSync(join(dir, "tasks", "step-900-demo", "step.md"))).toBe(true);
-    expect(readFileSync(join(dir, "tasks", "step-900-demo", "step.md"), "utf-8")).toContain("规划稿");
+    expect(existsSync(join(dir, "tasks", "-demo", "step.md"))).toBe(true);
+    expect(readFileSync(join(dir, "tasks", "-demo", "step.md"), "utf-8")).toContain("规划稿");
 
     const bad = await runOneTool(dir, "planner", "write_file", { path: join(dir, "src", "evil.ts"), content: "export const x = 1;\n" });
     expect(bad).toContain("写盘越界");

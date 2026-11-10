@@ -1,13 +1,11 @@
 /**
- * 白板「节点勾选派发」+「flow 折叠态摘要」契约测试(2026-10-23)。
- *
+ * 白板「节点勾选派发」+「flow 折叠态摘要」契约测试。
  * 锁住两条面:
  *  ①勾选派发:节点卡头 `.bd-sel` 复选框 + 工具条「已选 N 个」/「派发选中」(#bdDispatchSel,N=0 disabled)
  *    + 点派发走 board.continue 且带 nodeIds(照抄 boardContinue 的写法,只多一个字段)+ 成功清空/失败保留;
  *    勾选态只在模块级 Set(bdSel)里,不进 board.save 的 nodes(纯 UI 态,重绘后从 Set 恢复)。
  *  ②flow 可见性:节点卡折叠态就能看到「分支 N / 循环 M」(bdFlowStat 递归统计),点开复用 bdFlowHtml;
  *    cond/over 为空串时不出现「如果」这类空标签。
- *
  * 与 panel-board-live.test.ts 同构:页面函数从真实面板 HTML 里花括号配平切出后 new Function 执行,
  * 既断源码关键字也跑真实语义(MVP 行为)。零反斜杠纪律:全部 includes 字面断言。
  */

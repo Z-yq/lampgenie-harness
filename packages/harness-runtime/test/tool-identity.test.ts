@@ -1,5 +1,5 @@
 /**
- * M153 工具注册身份治理:注册规则(保留名/重复/alias 一跳/遮蔽)+ override 授权 +
+ * 工具注册身份治理:注册规则(保留名/重复/alias 一跳/遮蔽)+ override 授权 +
  * 未知工具可达候选。纯内存、零依赖,直接单测规则优先级。
  */
 import { describe, it, expect } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * Team Relay 服务核心(designs/05 §5):每个 org 一个的轻中继。
+ * Team Relay 服务核心( §5):每个 org 一个的轻中继。
  * 职责正面清单:presence 交换/活动流路由/邀请码兑换/团队仓同步通知;
  * 红线:不存会话正文、不做成员资格判定(那是 roster MR 的事)、不接触凭证。
  * 权威数据全部在 Git 仓——roster 镜像只是缓存,挂了可重建。
@@ -43,7 +43,7 @@ export interface TeamRelayOptions {
   providerOpts?: GitProvider;
   /** 团队主分支(缺省自动探测 ls-remote HEAD;团队仓可能是 master,如 teamai 形态)。 */
   mainBranch?: string;
-  /** 上游权威仓(designs/24:TEAM_REPO_URL 为本地镜像时的上游同步源;teammate 推送经此进来)。 */
+ /** 上游权威仓(TEAM_REPO_URL 为本地镜像时的上游同步源;teammate 推送经此进来)。 */
   upstreamUrl?: string;
   /** learnings 专用分支名(teamai Context 层约定,缺省 teamai-learnings)。 */
   learningsBranch?: string;
@@ -67,7 +67,7 @@ interface RosterMirror {
 
 const DEFAULT_MAIN = "main";
 
-/** teamai 可推送/删除的资源类别(designs/30 §2.2)。 */
+/** teamai 可推送/删除的资源类别( §2.2)。 */
 export type TeamaiResourceKind = "skill" | "rule" | "doc";
 
 /** kind → 团队仓落点相对路径(§2.2);ns/name 非法返回 null(写路径防穿越)。 */
@@ -99,7 +99,7 @@ export class TeamRelay {
   private lastPresenceBroadcast = new Map<string, string>();
   private timers: NodeJS.Timeout[] = [];
   private wss: WebSocketServer;
-  /** 审计日志(designs/10 §6:member.invite/roster.merge 产生点;默认 $HOME/audit/)。 */
+ /** 审计日志( §6:member.invite/roster.merge 产生点;默认 $HOME/audit/)。 */
   private audit: AuditLog;
   readonly cloneDir: string;
 
@@ -179,7 +179,7 @@ export class TeamRelay {
       first = true;
     }
     await git(["fetch", "origin"], this.cloneDir);
-    // 上游同步(designs/24):teammate 推上游权威仓→镜像必须跟上,否则上游内容永远进不来。
+ // 上游同步:teammate 推上游权威仓→镜像必须跟上,否则上游内容永远进不来。
     if (this.opts.upstreamUrl) {
       try {
         await git(["fetch", "upstream"], this.cloneDir).catch(async () => {
@@ -236,7 +236,7 @@ export class TeamRelay {
     }
     const prev = this.roster;
     this.roster = { members, projects, pulledAt: Date.now() };
-    // 项目注册表变化即广播(designs/23;roster MR 合并落地后 gateway 侧绑定键更新)。
+ // 项目注册表变化即广播(roster MR 合并落地后 gateway 侧绑定键更新)。
     // 前后用同一投影比较(直接比原始对象会因形状差异恒不等)。
     if (JSON.stringify(TeamRelay.projectRegistryOf(projects)) !== JSON.stringify(TeamRelay.projectRegistryOf(prev.projects))) {
       this.broadcastAll({ v: 1, type: "relay.projects", projects: this.projectsRegistry() });
@@ -255,13 +255,13 @@ export class TeamRelay {
       }
       this.enforceRosterOnConnections();
     }
-    // roster 每次刷新都全量重播 presence(2026-10-27 实锤:diff 按 state 抑制,projects 投影
+ // roster 每次刷新都全量重播 presence(注意:diff 按 state 抑制,projects 投影
     // 变化——如项目绑定种子/成员增减——不触发 state 变化,客户端永远持旧投影=「项目成员空」)。
     this.lastPresenceBroadcast.clear();
     this.broadcastPresenceDiff();
   }
 
-  /** 吊销即时性(designs/05 工况 I3):roster 更新后,已认证但被吊销/移除的连接立即断开。 */
+ /** 吊销即时性(工况 I3):roster 更新后,已认证但被吊销/移除的连接立即断开。 */
   private enforceRosterOnConnections(): void {
     for (const c of this.conns) {
       if (!c.fingerprint) continue;
@@ -391,14 +391,14 @@ export class TeamRelay {
     this.send(conn, { v: 1, type: "relay.auth.ok", member: { username: member.username, role: member.role } });
     // 全量快照:diff 只发变化项,新连接没有基线(首屏 presence 恒空直到有人变化)——认证后先发全量。
     this.send(conn, { v: 1, type: "relay.presence.diff", states: this.presenceStates() });
-    // 项目注册表(designs/23):gateway 绑定「激活项目 git remote ↔ roster projects.repo」的数据源。
+ // 项目注册表:gateway 绑定「激活项目 git remote ↔ roster projects.repo」的数据源。
     this.send(conn, { v: 1, type: "relay.projects", projects: this.projectsRegistry() });
-    // teamai 团队仓资产投影(designs/24)。
+ // teamai 团队仓资产投影。
     this.sendTeamaiDigest(conn);
     this.broadcastPresenceDiff();
   }
 
-  // ---- 邀请流(designs/05 §3) ----
+ // ---- 邀请流( §3) ----
 
   private async handleInviteCreate(conn: ConnState, msg: { projects?: string[] }): Promise<void> {
     const member = conn.fingerprint ? this.memberByFingerprint(conn.fingerprint) : undefined;
@@ -406,7 +406,7 @@ export class TeamRelay {
       this.send(conn, { v: 1, type: "error", code: "forbidden", message: "只有 owner/reviewer 可发邀请码" });
       return;
     }
-    // designs/23:邀请绑定激活项目——兑换产生的 roster 条目自动带 projects(不依赖兑换者自觉申报)。
+ // 邀请绑定激活项目——兑换产生的 roster 条目自动带 projects(不依赖兑换者自觉申报)。
     const projects = (msg.projects ?? []).map(String).filter(Boolean).slice(0, 10);
     const { code, expiresAt } = (await import("../identity/identity.js")).createInviteCode();
     const rec = this.invites.issue(code, member.username, expiresAt, projects);
@@ -478,7 +478,7 @@ export class TeamRelay {
       fingerprint,
       keys: [fingerprint],
       role: "member",
-      projects, // designs/23:邀请绑定的项目归属(邀请时定,不由兑换者申报)
+      projects, // :邀请绑定的项目归属(邀请时定,不由兑换者申报)
       invitedBy,
       registeredAt: new Date().toISOString(),
       revoked: false, // 显式默认态:吊销 MR 的 diff 可读(改 true),不靠字段缺省
@@ -529,7 +529,7 @@ export class TeamRelay {
       .filter((m) => !m.revoked)
       .map((m) => {
         const conn = [...this.conns].find((c) => c.fingerprint && (c.fingerprint === m.fingerprint || m.keys.includes(c.fingerprint)));
-        // 已认证连接默认 online(WS 活着即在线,designs/04 §2);facts 上行后按状态机细化。
+ // 已认证连接默认 online(WS 活着即在线, §2);facts 上行后按状态机细化。
         const state = conn ? (conn.facts ? derivePresence(conn.facts, now) : "online") : "offline";
         return { fingerprint: m.fingerprint, username: m.username, state, lastActiveAt: conn?.lastSeen ?? 0, projects: m.projects };
       });
@@ -543,7 +543,7 @@ export class TeamRelay {
     this.broadcastAll({ v: 1, type: "relay.presence.diff", states: diff });
   }
 
-  // ---- 活动流+隐私红线(designs/04 §6) ----
+ // ---- 活动流+隐私红线( §6) ----
 
   private pushActivity(event: ActivityEvent): void {
     this.activity.push(event);
@@ -571,7 +571,7 @@ export class TeamRelay {
       this.send(conn, { v: 1, type: "relay.query.result", notFound: true, card: null });
       return;
     }
-    // 「在干什么」只透 team 可见项目;personal 任务的名称对他人不可见(designs/04 §6)。
+ // 「在干什么」只透 team 可见项目;personal 任务的名称对他人不可见( §6)。
     let currentTask: string | null = null;
     for (let i = this.activity.length - 1; i >= 0; i--) {
       const e = this.activity[i]!;
@@ -593,12 +593,12 @@ export class TeamRelay {
     });
   }
 
-  // ---- teamai 团队仓资产(designs/24) ----
+ // ---- teamai 团队仓资产 ----
 
   private teamaiJsonCache = "";
 
   /** learnings 补挂(teamai Context 约定:learnings 走专用分支,不一定在 master)。
-   * 有 upstreamUrl → `upstream/<branch>` 优先(上游权威);无 upstreamUrl → `origin/<branch>`(designs/30 §2.4:
+ * 有 upstreamUrl → `upstream/<branch>` 优先(上游权威);无 upstreamUrl → `origin/<branch>`( §2.4:
    * 内嵌 bare 无上游,contribute 写的就是本仓 origin 的 learnings 分支)。 */
   private async learningsFromGit(): Promise<TeamaiLearning[]> {
     const branch = this.learningsBranchName();
@@ -731,7 +731,7 @@ export class TeamRelay {
     return branch;
   }
 
-  /** teamai remove:main 上 `git rm -r <path>` → commit → push origin(designs/30 §2.3)。 */
+ /** teamai remove:main 上 `git rm -r <path>` → commit → push origin( §2.3)。 */
   private async handleTeamaiRemove(
     conn: ConnState,
     msg: { kind: TeamaiResourceKind; ns: string; name: string },
@@ -788,7 +788,7 @@ export class TeamRelay {
     return true;
   }
 
-  /** teamai contribute:经验写 learnings 分支(designs/30 §2.4;git plumbing,不碰 cloneDir 工作树)。 */
+ /** teamai contribute:经验写 learnings 分支( §2.4;git plumbing,不碰 cloneDir 工作树)。 */
   private async handleTeamaiContribute(
     conn: ConnState,
     msg: { title: string; body: string; tags?: string[]; project?: string },

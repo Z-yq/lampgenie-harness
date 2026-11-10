@@ -7,7 +7,7 @@ import { BUILTIN_AGENT_PROFILES, loadAgentProfiles, formatAgentProfiles, compose
 const tmp = () => mkdtempSync(join(tmpdir(), "zh-agents-"));
 
 describe("agent-profiles", () => {
-  it("内置 6 型:worker/explore/judge/test-analyst/planner/ppt-master(与 workflow 模板名对齐;planner=step-138;ppt-master=2026-11-05)", () => {
+  it("内置 6 型:worker/explore/judge/test-analyst/planner/ppt-master(与 workflow 模板名对齐;planner=;ppt-master=2026-11-05)", () => {
     expect(BUILTIN_AGENT_PROFILES.map((p) => p.name)).toEqual(["worker", "explore", "judge", "test-analyst", "planner", "ppt-master"]);
     expect(BUILTIN_AGENT_PROFILES.every((p) => p.systemPrompt.length > 40 && p.description.length > 5)).toBe(true);
   });
@@ -69,8 +69,8 @@ describe("agent-profiles", () => {
     expect(s).toContain("pqa6e");
   });
   it("worker 勘察预算:步数上限 + 产出优先 + 到线先交(2026-10-29 token 轮 P2)", () => {
-    // 实测驱动:24h 内 spawn_subagent 61 次,多个因无限勘察被时间盒收割、零文本产出
-    // (其中 2/2 本轮实测的 worker 都超时零产出)。planner 早有预算纪律,worker 一直没有。
+ // 经验证驱动:24h 内 spawn_subagent 61 次,多个因无限勘察被时间盒收割、零文本产出
+ // (其中 2/2 本轮经验证的 worker 都超时零产出)。planner 早有预算纪律,worker 一直没有。
     const p = BUILTIN_AGENT_PROFILES.find((x) => x.name === "worker")!;
     const s = p.systemPrompt;
     expect(s).toContain("勘察预算");

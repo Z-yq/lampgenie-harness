@@ -89,7 +89,7 @@ describe("ocr CLI 子进程评审引擎(真实 jsonOutput 协议,v1.12.13 实跑
   it("codeReview 接入:env opt-in 合并 source=cli;cli:false 显式关(env 在也不跑);不设 env 则不跑", async () => {
     const dir = gitRepo();
     const { bin, cleanup } = fakeCli(`process.stdout.write(${JSON.stringify(ENVELOPE)});\n`);
-    // step-058 引用孤儿检查:发现引用的文件必须真实存在(untracked 收集会进审查目标)——
+ // 引用孤儿检查:发现引用的文件必须真实存在(untracked 收集会进审查目标)——
     // 夹具世界自洽=CLI 回报的 calc.ts/tmp_dbg.py/x.ts 都落盘
     for (const [name, body] of [["calc.ts", "export function add(a: number, b: number): number {\n  return a - b;\n}\n"], ["tmp_dbg.py", "import os\n"], ["x.ts", "export const x = 1;\n"]] as const) {
       writeFileSync(join(dir, name), body);

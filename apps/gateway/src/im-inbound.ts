@@ -1,5 +1,5 @@
 /**
- * IM 入站 HTTP 面(step-013 二期收口):POST /webhook/feishu 独立小服务(env 门控)。
+ * IM 入站 HTTP 面(二期):POST /webhook/feishu 独立小服务(env 门控)。
  * 未配 GENIE_FEISHU_VERIFICATION_TOKEN=不启动(零行为变化);挂了=本地功能不受影响。
  */
 import { createServer, type Server } from "node:http";

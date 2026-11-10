@@ -181,7 +181,7 @@ describe("LLM 失败落 durable 事件(txa4)", () => {
 describe("取消/未派发归因", () => {
   it("[ABORTED_BEFORE_DISPATCH] 合成结果带 error.origin=aborted(端到端:前一工具内取消)", async () => {
     const journal = new MemoryJournal();
-    // 第一个独占工具执行时取消 → 同批后续未派发调用走合成结果(designs/14 §1.3 配对纪律)。
+ // 第一个独占工具执行时取消 → 同批后续未派发调用走合成结果( §1.3 配对纪律)。
     const cancelTool: Tool = {
       name: "cancel_tool",
       description: "执行中取消整个 turn",

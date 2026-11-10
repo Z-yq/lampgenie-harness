@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * Team Relay 生产 CLI(designs/06 R1「team={provider, groupPath}」落地):
+ * Team Relay 生产 CLI( R1「team={provider, groupPath}」落地):
  * 按 providers.yaml 把 Git 平台开发组织绑成 team——此前 main.ts 只能 custom 裸 git。
  * 部署点起一个 relay=建一个 team(权威数据在 Git 团队仓;relay 只是实时面缓存)。
- *
  * 读取:
  *   providers.yaml(providersPath 显式 > RELAY_PROVIDERS_PATH > RELAY_WORKDIR/providers.yaml):
  *     { "team": { "provider": "gitlab|codeup|custom", "groupPath": "my-org",

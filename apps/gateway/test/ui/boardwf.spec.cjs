@@ -1,4 +1,4 @@
-/** UI 实测:step-121 工作流板(docKind=workflow)——真实 chromium 无头 + 自起实例(_boardwf_selfhost.cjs)。
+/** UI 经验证: 工作流板(docKind=workflow)——真实 chromium 无头 + 自起实例(_boardwf_selfhost.cjs)。
  * 覆盖:A0 新建工作流板;A1 三节点流(script→test→notify)编译执行→节点状态依次点亮+journal 留痕;
  *      A2/A3 condition 真/假分支 + 配置抽屉改 cond→重编译执行生效;A4 编译错误 fail-visible(环);
  *      A7 存为自动化(automation.create 落一条);A5 多尺寸截图 + 0 pageerror。 */

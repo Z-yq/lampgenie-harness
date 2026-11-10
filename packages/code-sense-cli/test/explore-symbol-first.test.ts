@@ -1,5 +1,5 @@
 /**
- * explore / wiki ask 符号优先召回的 CLI 面单测(2026-10-21):
+ * explore / wiki ask 符号优先召回的 CLI 面单测:
  *  - explore 输出先给「候选符号」块(名称/位置/被谁调/调谁/原因),再给 grep 行命中,
  *    最后给可复制的下一步命令;--json 增 symbols[]/symbolCount/nextSteps(既有字段不删)
  *  - wiki ask 页面零命中时用符号命中兜底(不再只回「无」),--json 带 symbols[]

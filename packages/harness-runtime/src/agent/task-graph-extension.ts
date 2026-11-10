@@ -1,6 +1,5 @@
 /**
  * 运行时任务图扩展(Task Graph Extension)。
- *
  * 为什么需要它:
  * - 静态计划一次定死:collection 节点的产出可能少于目标,或执行过程中出现计划外的新完成节点,
  *   这时必须能「再问一次 planner」,否则前沿停滞也只能干等到全部结束。
@@ -9,7 +8,6 @@
  * - critic 说「这步不过」,但没有受控重开就是死局;无上限重开则是预算黑洞。
  *   因此重开只允许对终态节点(completed/failed/skipped)、每个节点有次数上限、整轮有轮数上限;
  *   重开只重置 exec/critic 两阶段,已完成的其它工作靠 replay 跳过。
- *
  * 纯逻辑:零 IO,不读文件/网络/环境,不依赖真实时钟;所有函数不抛异常——
  * 非法输入返回 { ok: false, code },调用方按稳定码断言,不解析文案。
  */
@@ -305,8 +303,7 @@ function findCycle(ids: string[], adjacency: Map<string, string[]>): string[] {
  */
 export function validateExtension(
   graph: TaskGraph,
-  output: PlannerOutput,
-): { ok: boolean; codes: TaskGraphCode[]; issues: ExtensionIssue[] } {
+  output: PlannerOutput): { ok: boolean; codes: TaskGraphCode[]; issues: ExtensionIssue[] } {
   const issues: ExtensionIssue[] = [];
   if (!isRecord(output) || !Array.isArray(output.nodes) || !Array.isArray(output.edges) || !Array.isArray(output.collectionNodeIds)) {
     return { ok: false, codes: [TASKGRAPH_CODES.INVALID], issues: [{ code: TASKGRAPH_CODES.INVALID, reason: "invalid-output" }] };
@@ -390,8 +387,7 @@ export interface ExtensionDelta {
  */
 export function applyExtension(
   graph: TaskGraph,
-  output: PlannerOutput,
-): { ok: boolean; graph: TaskGraph; code: TaskGraphCode; added?: ExtensionDelta; issues?: ExtensionIssue[] } {
+  output: PlannerOutput): { ok: boolean; graph: TaskGraph; code: TaskGraphCode; added?: ExtensionDelta; issues?: ExtensionIssue[] } {
   const validation = validateExtension(graph, output);
   if (!validation.ok) {
     return { ok: false, graph: cloneTaskGraph(graph), code: TASKGRAPH_CODES.BAD_EDGE, issues: validation.issues };

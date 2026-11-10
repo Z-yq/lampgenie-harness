@@ -1,4 +1,4 @@
-/** step-118 repo wiki(并入代码档案)面板实测:结构/文件钻取/Wiki 三 tab、导航/正文/引用回源/
+/** repo wiki(并入代码档案)面板经验证:结构/文件钻取/Wiki 三 tab、导航/正文/引用回源/
  * 模块页→结构 tab、引用→文件钻取跳转链、依赖图 mermaid、多尺寸布局、缓存命中、0 pageerror。
  * 跑法:cd apps/gateway && NODE_OPTIONS=--conditions=development npx tsx test/ui/_ui_selfhost.cjs test/ui/wiki.spec.cjs */
 const { chromium } = require("playwright-core");
@@ -31,7 +31,7 @@ const OUT = process.env.WIKI_SHOTS || "/tmp/step118-shots";
   await page.evaluate(() => openProfileEntry());
   await page.locator("#view-project.on").waitFor({ timeout: 8000 });
   const tabs = await page.locator("#ppTabs .pp-tab").count();
-  // step-131:总路线并入代码档案 → 四 tab(结构/总路线/文件钻取/Wiki)
+ // 总路线并入代码档案 → 四 tab(结构/总路线/文件钻取/Wiki)
   check("代码档案四 tab(结构/总路线/文件钻取/Wiki)", tabs === 4, tabs + " 个");
   check("总路线 tab 在位", (await page.locator('#ppTabs .pp-tab[data-ptab="roadmap"]').count()) === 1);
   check("默认结构 tab", await page.locator("#ppTab-structure.on").count() === 1);

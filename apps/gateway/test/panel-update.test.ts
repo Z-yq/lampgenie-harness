@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { servePanel } from "../src/panel.js";
 
 /**
- * 版本检查/应用内更新面板侧(2026-11-09):桌面壳 update-check 状态机驱动。
+ * 版本检查/应用内更新面板侧:桌面壳 update-check 状态机驱动。
  * 这里锁「面板只渲染状态、动作全部走白名单 IPC」的契约,避免出现第二套更新判断。
  */
 describe("面板版本更新横幅", () => {

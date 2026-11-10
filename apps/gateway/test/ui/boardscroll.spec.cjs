@@ -1,5 +1,5 @@
-/** 白板滚轮作用域探针(自起临时实例 7790,不碰产线 7700)。
- * 目的:四处实测「滚轮到底滚了谁」——画布空白 / 节点卡清单(.bd-card) / 明细区(#boardDetail) / 小地图(.bf-minimap)。
+/** 白板滚轮作用域探针(自起临时实例 7790,不碰生产环境 7700)。
+ * 目的:四处经验证「滚轮到底滚了谁」——画布空白 / 节点卡清单(.bd-card) / 明细区(#boardDetail) / 小地图(.bf-minimap)。
  * 每处记录三值:页面(scrollingElement/window) scrollTop、容器 scrollTop、cvPan.k。
  * 判定:画布上滚=只缩放(k 变、任何容器 scrollTop 不变);清单/明细上滚=只滚该容器(k 不变)。
  * 无 chrome/无 playwright-core/无真实板文件时打印 skipped: <reason> 并 exit 0(不谎报通过)。

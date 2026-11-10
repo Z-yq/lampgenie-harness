@@ -1,11 +1,9 @@
 /**
- * 单会话实现(step-122):一个保活的 bash + 有界输出缓冲 + 命令完成 marker。
- *
+ * 单会话实现:一个保活的 bash + 有界输出缓冲 + 命令完成 marker。
  * 实现形态:
  * - Linux 默认 `script -qefc "stty -echo; exec bash --norc --noprofile" /dev/null`——bash 看到真 tty,
  *   交互式提示(`read -p`)与行缓冲程序可用;不依赖 node-pty/原生编译。
  * - 其它平台或显式 pipe 模式:`bash --norc --noprofile` + stdio 管道(无 tty,命令/cwd/后台进程仍可用)。
- *
  * 完成判定:send 在命令后追加唯一 marker 行(`printf '\n<token>:%s\n' "$?"`),等待 marker 出现;
  * 超时返回部分输出(waitReason=timeout),命令可能仍在运行,后续 read 继续取增量。
  */
@@ -99,7 +97,7 @@ export interface TerminalSessionOptions {
   initTimeoutMs: number;
   closeGraceMs: number;
   now?: () => number;
-  /** 2026-10-26:shell 覆盖(远程 SSH shell;提供时替代默认 bash/PTY 启动)。 */
+ /** :shell 覆盖(远程 SSH shell;提供时替代默认 bash/PTY 启动)。 */
   shellOverride?: { command: string; args: string[]; env?: Record<string, string> };
 }
 
@@ -202,8 +200,7 @@ export class TerminalSession {
     // 前一条失败不阻断后续命令(把链保持在 resolved 态)。
     this.sendChain = run.then(
       () => undefined,
-      () => undefined,
-    );
+      () => undefined);
     return run;
   }
 
@@ -253,7 +250,7 @@ export class TerminalSession {
 
   private beginShell(kind: TerminalShellKind): void {
     const gen = ++this.generation;
-    // 2026-10-26:shellOverride(远程 SSH shell)优先于默认 bash/PTY 启动
+ // shellOverride(远程 SSH shell)优先于默认 bash/PTY 启动
     const launch = this.opts.shellOverride
       ? { command: this.opts.shellOverride.command, args: this.opts.shellOverride.args }
       : kind === "pty" && process.platform === "linux"
@@ -343,8 +340,7 @@ export class TerminalSession {
     const timeoutMs = clamp(
       Math.floor(input.timeoutMs ?? DEFAULT_SEND_TIMEOUT_MS),
       MIN_SEND_TIMEOUT_MS,
-      MAX_SEND_TIMEOUT_MS,
-    );
+      MAX_SEND_TIMEOUT_MS);
     const startCursor = this.buffer.endCursor;
     if (this.status === "exited") {
       return this.finishSend(startCursor, "session-exit", this.exitCode, startedAt);
@@ -372,8 +368,7 @@ export class TerminalSession {
     startCursor: number,
     waitReason: TerminalWaitReason,
     exitCode: number | null,
-    startedAt: number,
-  ): TerminalSendResult {
+    startedAt: number): TerminalSendResult {
     const read = this.buffer.readFrom(startCursor, MAX_RETURN_CHARS);
     this.consumedCursor = Math.max(this.consumedCursor, read.nextCursor);
     return {
@@ -389,8 +384,7 @@ export class TerminalSession {
 
   private async waitForMarker(
     token: string,
-    timeoutMs: number,
-  ): Promise<{ reason: TerminalWaitReason; exitCode: number | null }> {
+    timeoutMs: number): Promise<{ reason: TerminalWaitReason; exitCode: number | null }> {
     const deadline = (this.opts.now ?? Date.now)() + timeoutMs;
     let searchFrom = this.buffer.startCursor;
     while (true) {

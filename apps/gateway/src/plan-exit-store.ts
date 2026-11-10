@@ -1,19 +1,15 @@
 /**
  * 计划退出评审持久层(生产侧,#10):把 plan-exit-review 的纯状态机落到单一 JSON 账本。
- *
  * 数据面:`<root>/.genie/rsi/plan-exits.json`
  *   { "v": 1, "reviews": { "<planId>": ReviewState } }
- *
  * 为什么是单文件整账本:评审是状态机(pending→approved/rejected/failed,approved 再→applied),
  * 读时只关心每条评审的当前状态;整账本 + 原子替换(写临时文件 → rename)保证「读到的永远是
  * 某一完整代」。崩溃最多丢最后一次未 rename 的写,不会读到半条评审。
- *
  * 失败口径:
  * - 参数/业务拒绝直接透传 runtime 的 PLANEXIT_* 码,**拒收前零副作用**(不写盘)。
  * - 坏账本(JSON 坏/形状坏)→ PLANEXIT_STORE_ERROR,写操作一律拒写。
  * - 写后校验(条数一致)不过 → PLANEXIT_STORE_WRITE_MISMATCH(不 throw,失败可见)。
  * - 同一 planId 已有 pending 时重复 request → PLANEXIT_PENDING,不覆盖原账本。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(经 workspace 子路径导入)。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -135,8 +131,7 @@ let tmpSeq = 0;
  */
 export function writePlanExitStore(
   root: string,
-  store: PlanReviewStore,
-): { ok: boolean; code: PlanExitStoreCode; file: string } {
+  store: PlanReviewStore): { ok: boolean; code: PlanExitStoreCode; file: string } {
   const paths = planExitPaths(root);
   try {
     mkdirSync(paths.dir, { recursive: true });

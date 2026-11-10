@@ -1,5 +1,5 @@
 /**
- * 飞书 IM 入站(step-013 二期收口,designs/08 §2.2):事件回调接收+会话归属规则。
+ * 飞书 IM 入站(二期, §2.2):事件回调接收+会话归属规则。
  * 形态=HTTP 事件回调(飞书官方通道;长连接 SDK 依赖重,登记为等价替代面)。
  * 红线:归属规则确定性(不靠模型);URL 校验 challenge 回显;加密事件 AES-256-CBC 解密;
  * verification token 不匹配=拒收。凭证全走 env(GENIE_FEISHU_*),不落配置文件。
@@ -86,7 +86,7 @@ export function parseFeishuCallback(raw: string, opts: FeishuInboundOptions): Fe
   };
 }
 
-/** 会话归属(designs/08 §2.2 表,确定性):
+/** 会话归属( §2.2 表,确定性):
  * 私聊→成员收件箱(任务归属该成员);群@→项目绑定(无绑定=unbound);
  * 群未@→默认不入,例外=「TODO:/跟进:」前缀。 */
 export type InboundRoute =

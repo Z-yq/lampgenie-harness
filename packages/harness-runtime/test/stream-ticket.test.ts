@@ -189,11 +189,9 @@ describe("consumeTicket", () => {
     const store = emptyStore();
     issueAt(store, NOW);
     expect(
-      consumeTicket(store, { ticketId: "t-1", binding: baseBinding(), now: NOW }).ticketId,
-    ).toBe("t-1");
+      consumeTicket(store, { ticketId: "t-1", binding: baseBinding(), now: NOW }).ticketId).toBe("t-1");
     expect(
-      consumeTicket(store, { ticketId: "unknown-id", binding: baseBinding(), now: NOW }).ticketId,
-    ).toBe("unknown-id");
+      consumeTicket(store, { ticketId: "unknown-id", binding: baseBinding(), now: NOW }).ticketId).toBe("unknown-id");
   });
 
   it("同一张票二次消费 → REPLAY", () => {

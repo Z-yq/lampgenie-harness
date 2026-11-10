@@ -6,7 +6,7 @@ import { hasBoardWriteEvidence, isCrosstalk, isProtocolLeak, relevanceTokens, Ll
 
 const ESIGN_TASK = "只读勘察,不要修改任何文件。目标:判断在一个新网页(电子签网页)应该放在工作区哪个位置、用什么技术栈。需要查清并逐条给出证据:仓库根目录结构、现有前端技术栈、路由注册方式。";
 
-describe("串台守卫(designs/25)", () => {
+describe("串台守卫", () => {
   it("异题结果(Excel 商品导入)判串台", () => {
     const foreign = '请确保您使用"strict"模式调用工具,请根据任务书及以下具体任务书,最后输出调查报告。\n\n探索仓库,定位 Excel 商品导入相关的代码,重点回答:\n1. 仓库根目录结构\n2. 是否已有 Excel 导入相关实现(排查 services/excel 目录)';
     expect(isCrosstalk(ESIGN_TASK, foreign)).toBe(true);
@@ -54,7 +54,7 @@ describe("hasBoardWriteEvidence(planner 串台误杀豁免)", () => {
   });
 });
 
-describe("isProtocolLeak(designs/25 协议泄漏检测)", () => {
+describe("isProtocolLeak(协议泄漏检测)", () => {
   it("DSML 工具标签泄漏 → 判泄漏", () => {
     expect(isProtocolLeak("调查仓库架构", '<｜DSML｜ parameter name="input" string="true">请调查本仓库')).toBe(true);
   });
@@ -75,7 +75,7 @@ describe("isProtocolLeak(designs/25 协议泄漏检测)", () => {
 });
 
 /**
- * P1-5 串台重派前置兜底(2026-10-29):判据不放宽,但重派前先看子 journal——
+ * P1-5 串台重派前置兜底:判据不放宽,但重派前先看子 journal——
  * 有 ≥200 字且非串台/非泄漏的 agent 文本就直接采用(省一轮重派);拿不到才走原整轮重派。
  */
 describe("串台重派前置兜底(P1-5)", () => {
@@ -118,7 +118,7 @@ describe("串台重派前置兜底(P1-5)", () => {
     });
     await waitFor(() => result, 15_000);
     expect(result?.note).toContain("[crosstalk-guard]");
-    // 文案在 2026-10-30 改为带「筛选保留 N 段/丢弃 M 段」的计数,断言按其不变部分匹配
+ // 文案在 改为带「筛选保留 N 段/丢弃 M 段」的计数,断言按其不变部分匹配
     expect(result?.finalText).toContain("[串台守卫] 首跑结果被判为可疑,但子 journal 内有可用产出");
     expect(result?.finalText).toContain("未重派");
     expect(result?.finalText).toContain("apps/web-sign");

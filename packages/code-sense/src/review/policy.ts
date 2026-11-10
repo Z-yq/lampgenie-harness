@@ -1,14 +1,12 @@
 /**
- * 深审策略闸(step-139 O1):确定性层(含反模式)跑完之后才决定要不要烧 LLM。
- * step-137 实测:深审跑满 8 分钟时间盒且零新增 findings(确定性层已 6→3 无 blocker)——
+ * 深审策略闸( O1):确定性层(含反模式)跑完之后才决定要不要烧 LLM。
+ * 经验证:深审跑满 8 分钟时间盒且零新增 findings(确定性层已 6→3 无 blocker)——
  * 「默认一定深审」在干净小变更上纯烧钱,故给出 auto 档并按证据自动跳过。
- *
  * 三档语义:
  *  - always:恒定深审(CLI `--deep` / 既有调用方未传 policy 的旧行为);
  *  - never :恒定不深审(fast 复跑,秒级零 LLM);
  *  - auto  :免费层无 blocker 且变更集小(totalLines ≤ AUTO_DEEP_MAX_LINES 且 files ≤ AUTO_DEEP_MAX_FILES)
  *            → 跳过并显式写进 summary;否则照常深审。
- *
  * 注意 findings severity 只有 blocker/warning/nit 三档(见 index.ts Finding)——
  * 任务口径里的「blocker/high」在本引擎等价于最高档 blocker。
  */

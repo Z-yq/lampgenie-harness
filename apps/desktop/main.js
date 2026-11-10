@@ -1,8 +1,7 @@
 /**
- * 桌面壳(step-136 产品化):Electron 窗口 + gateway 生命周期。
+ * 桌面壳(产品化):Electron 窗口 + gateway 生命周期。
  * 壳零业务:面板逻辑全在 gateway(panel.ts),壳只负责
  *  数据根解析 → 端口探测 → 资源自检 → 起 gateway → 探活 → loadURL → 回收/重启。
- *
  * 红线(沿用原壳):webPreferences contextIsolation+sandbox 全开、nodeIntegration 关;
  * 外链转系统浏览器;应用菜单置空。
  * 纯逻辑在 paths.js / logger.js / gateway-process.js(可脱离 electron 单测)。
@@ -151,7 +150,7 @@ ipcMain.handle("genie:window", (event, action) => {
   return null;
 });
 
-// 系统通知桥(2026-11-09):renderer 只传文案与任务标识,白名单字段、限长、去重、
+// 系统通知桥:renderer 只传文案与任务标识,白名单字段、限长、去重、
 // 窗口焦点抑制、click 恢复窗口都在主进程(notifications.js)完成。
 ipcMain.handle("genie:notify", (_event, payload) => {
   if (!notifyController) return false;
@@ -229,7 +228,7 @@ function createWindow() {
   const stateFile = join(app.getPath("userData"), "window-state.json");
   const restored = resolveWindowState(readWindowState(stateFile), screen.getPrimaryDisplay().workAreaSize);
   let zoomLevel = restored.zoomLevel;
-  // 截图标注(2026-10-26):面板「截图标注」依赖 getDisplayMedia;桌面壳无浏览器选择器,
+ // 截图标注:面板「截图标注」依赖 getDisplayMedia;桌面壳无浏览器选择器,
   // 授权处理器自动命中主屏(浏览器侧仍走 Chrome 自带选择器)。仅本会话生效,无全局权限变更。
   try {
     // Electron 33 契约:handler 第二参是 callback(streams)(opts.videoRequest 是 34+ API——
@@ -255,7 +254,7 @@ function createWindow() {
     minHeight: 640,
     title: WIN_TITLE,
     backgroundColor: "#f4f0e8",
-    // 2026-10-25 用户口径:去掉 Windows 原生标题栏,应用内容直接铺成画布卡片;
+ // 去掉 Windows 原生标题栏,应用内容直接铺成画布卡片;
     // 最小化/最大化/关闭由面板 #winControls(画布卡片)经 preload IPC 驱动。
     frame: false,
     show: false,
@@ -265,7 +264,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // 2026-11-08 新用户实测:窗口最小化/被遮挡时 Chromium 把面板定时器节流到分钟级,
+ // 新用户经验证:窗口最小化/被遮挡时 Chromium 把面板定时器节流到分钟级,
       // WS 心跳(30s)与任务进度刷新会停摆;桌面壳只有一个主窗口,保活它比省那点 CPU 更重要。
       // (浏览器内嵌的 webview guest 不在此列,仍按 Chromium 默认节流。)
       backgroundThrottling: false,
@@ -295,7 +294,7 @@ function createWindow() {
     windowState.persistNow();
   };
 
-  // role-based 应用菜单(2026-11-09 设计参考 ZCode 项目(致谢) 语义):
+ // role-based 应用菜单(设计参考 ZCode 项目(致谢) 语义):
   // 编辑/视图用标准 role(剪贴板/重载/DevTools);缩放项只展示键位、不注册 accelerator——
   // 键盘路径统一走 before-input-event + 持久化,避免同一次 Ctrl+= 被菜单和键盘各放大一级。
   const menuTemplate = buildApplicationMenuTemplate({
@@ -311,7 +310,7 @@ function createWindow() {
       else setZoom(0);
     },
     onHelp: (kind) => {
-      // 帮助→检查更新(2026-11-09):手动检查不受自动检查间隔限制;结果经状态推送→面板 toast/横幅。
+ // 帮助→检查更新:手动检查不受自动检查间隔限制;结果经状态推送→面板 toast/横幅。
       if (kind === "update") { manualUpdateCheck(); return; }
       const dir = kind === "logs" ? logsDir : dataRoot;
       if (dir) void shell.openPath(dir);
@@ -322,10 +321,10 @@ function createWindow() {
   menuInstalled = true;
   if (logs) logs.info("[menu] role-based menu installed (file/edit/view/window/help)");
 
-  // 系统通知(2026-11-09):焦点抑制/去重/对象持有/click 恢复窗口的语义见 notifications.js。
+ // 系统通知:焦点抑制/去重/对象持有/click 恢复窗口的语义见 notifications.js。
   notifyController = createNotificationController({
     Notification,
-    // 2026-11-09 实测:Windows 最小化后 BrowserWindow.isFocused() 仍可能为 true(前台身份未移交),
+ // 经验证:Windows 最小化后 BrowserWindow.isFocused 仍可能为 true(前台身份未移交),
     // 只看 isFocused 会把「最小化等任务」当成「用户正看着」而漏通知。可见且未最小化才算出在前台。
     isWindowFocused: () => !!(win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused()),
     focusWindow: showMainWindow,
@@ -337,7 +336,7 @@ function createWindow() {
 
   // 更新检查 IPC(白名单动作;checker 在 bootstrap 里创建,handler 先注册不阻塞面板)
   registerUpdateIpc();
-  // 托盘 + 关闭到托盘(2026-11-09,设计参考 ZCode 项目(致谢)):
+ // 托盘 + 关闭到托盘(设计参考 ZCode 项目(致谢)):
   // 最小化/关闭都收进托盘,gateway 与任务继续跑;托盘菜单「退出」才真正结束。
   // GENIE_TRAY=0 关闭(测试/排障时保留「关闭即退出」语义);macOS 不模拟菜单栏托盘。
   const trayAllowed = process.env.GENIE_TRAY !== "0" && process.platform !== "darwin";
@@ -381,7 +380,7 @@ function createWindow() {
     // 面板加载完成后补推一次更新状态(checkbox 可能已在面板起来前完成检查)
     if (updateChecker) sendUpdateState(updateChecker.getState());
   });
-  // 渲染进程崩溃(2026-11-08):「同 URL 保持页面」策略在 renderer 已死时必须失效,
+ // 渲染进程崩溃:「同 URL 保持页面」策略在 renderer 已死时必须失效,
   // 否则窗口停在白屏。有限次自动重载;连续崩溃说明不是偶发,转错误页让人可诊断。
   win.webContents.on("render-process-gone", (_event, details) => {
     if (logs) logs.error(`[renderer] 进程退出 reason=${details && details.reason} exitCode=${details && details.exitCode}`);
@@ -480,7 +479,7 @@ async function launchGateway() {
   }
 
   // 全量运行时(评分模型/Chromium/git+bash)只对打包态检查;dev 态没有 .stage 产物是正常现象。
-  // 2026-11-08 实测:360 安全卫士会持续隔离 onnxruntime.dll / chrome_elf.dll 等,
+ // 经验证:360 安全卫士会持续隔离 onnxruntime.dll / chrome_elf.dll 等,
   // 缺失是「功能降级」而非「安装坏了」——默认不阻断启动(标题提示降级);
   // 发布 QA 可设 GENIE_REQUIRE_FULL_RUNTIME=1 恢复严格阻断。
   if (app.isPackaged) {
@@ -548,7 +547,7 @@ function loadPanel(url) {
   if (!win) return;
   panelReady = false;
   win.setTitle(windowTitle());
-  // 2026-11-08 新用户实测:配好模型后壳为让 LLM 装配生效会重启 gateway,旧实现无条件 loadURL →
+ // 新用户经验证:配好模型后壳为让 LLM 装配生效会重启 gateway,旧实现无条件 loadURL →
   // 用户刚填完的「模型设置」界面被整页刷掉,回到默认画布。面板本身有 WS 自动重连(含半开检测),
   // 同 URL 重启时保留当前页面即可;端口漂移/错误页/白屏才需要真正导航。
   let current = "";
@@ -588,7 +587,6 @@ function scheduleRestart(reason) {
  * 首启(数据根还没有模型配置)时它以 llm=off + executor 直连起来,任务只会 echo 回显;
  * 用户在面板里配好模型后仅落盘不生效——这里检测到「配置已就绪但当前进程是 llm=off」就自动重启一次,
  * 让用户不必手动关掉再开。
- *
  * 只重启一次(条件从 not-ready → ready 的那次跃迁);重启后若仍 off,说明配置本身有问题,
  * 不再反复重启(交给面板/日志报错,避免死循环)。
  */
@@ -624,7 +622,7 @@ function watchLlmReadiness(wasReadyAtBoot) {
 }
 
 /**
- * 启动自愈快捷方式(2026-11-09):安装段在 UAC 提权内层实例执行,实测 NSIS CreateShortCut 总是失败、
+ * 启动自愈快捷方式:安装段在 UAC 提权内层实例执行,经验证 NSIS CreateShortCut 总是失败、
  * 子进程 PowerShell 也起不来(ps_exit=error),装完没有开始菜单/桌面入口且 AUMID 失去载体。
  * 应用以用户态运行时用 Electron 原生 shell.writeShortcutLink(COM + appUserModelId)补齐;
  * 桌面路径走 app.getPath("desktop"),尊重 360 等工具的桌面重定向。
@@ -656,7 +654,7 @@ function ensureShortcuts() {
 }
 
 /**
- * genie:// 协议注册(2026-11-09):打包态在用户态写 HKCU\Software\Classes\genie,
+ * genie:// 协议注册:打包态在用户态写 HKCU\Software\Classes\genie,
  * 指向当前 exe;安装器也会通过 electron-builder protocols 注册,这里做自愈兜底。
  */
 function ensureProtocolRegistration() {
@@ -743,7 +741,7 @@ function registerUpdateIpc() {
         if (!st.verified && logs) {
           logs.warn("[update] 更新包未提供 sha256(仅按大小校验),继续安装;建议发布方在清单补 sha256");
         }
-        // 安装前二次校验(2026-11-09):下载后文件可能被替换/损坏;再算一次 sha256。
+ // 安装前二次校验:下载后文件可能被替换/损坏;再算一次 sha256。
         try {
           const actual = await sha256FileAsync(spec.filePath);
           if (st.sha256 && actual !== st.sha256) {
@@ -780,9 +778,9 @@ function registerUpdateIpc() {
           logs.info(`[update] 安装器已启动 pid=${child.pid || "?"} args=${spec.args.join(" ")},观察 3s 是否早退`);
         }
         // 安装器启动后观察 3s 再退出应用:
-        // - spawn 失败 / 提前非 0 退出(实测旧 uninstall 注册项异常时 Setup 会 exit=2 直接退)→ 留在应用里报错;
+ // - spawn 失败 / 提前非 0 退出(经验证旧 uninstall 注册项异常时 Setup 会 exit=2 直接退)→ 留在应用里报错;
         // - 存活超过 3s 视为进入安装流程 → 退出壳,让安装器覆盖并重启。
-        // 旧实现 spawn 后立刻 quit,安装器早退时用户只看到应用消失、版本没变(2026-11-09 实测)。
+ // 旧实现 spawn 后立刻 quit,安装器早退时用户只看到应用消失、版本没变(经验证)。
         const MONITOR_MS = 3000;
         const launch = await new Promise((resolve) => {
           let settled = false;
@@ -812,7 +810,7 @@ function registerUpdateIpc() {
 }
 
 /**
- * 版本检查初始化(2026-11-09):未配置更新源时状态 disabled、不发任何请求。
+ * 版本检查初始化:未配置更新源时状态 disabled、不发任何请求。
  * 自动检查首查延迟 20s(不和启动抢带宽),之后按配置间隔轮询;手动检查不受限制。
  * 发现新版本时:状态推给面板(横幅/设置页),窗口不在前台才补系统通知(焦点抑制在 notify 层)。
  */

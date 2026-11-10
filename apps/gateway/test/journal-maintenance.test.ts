@@ -1,6 +1,5 @@
 /**
- * journal 存储维护协议(M123,2026-11-08)测试。
- *
+ * journal 存储维护协议测试。
  * 覆盖:snapshot/holders(判活+--force 放行)、plan(阈值/keepNewest/预算/maxFiles/大文件优先)、
  * apply(移动+manifest+cursor)、dryRun 零改动、snapshot-drift abort、verify/restore 双门、
  * FileJournal 归档冷读(boot 不扫 archive / readSession 兜底)、CLI 退出码。

@@ -1,10 +1,10 @@
-/** UI 实测:step-141 B/C #view-ide 视图骨架 + 入口接线(树/标签条/编辑区三栏 + 桶头 IDE 按钮)+ Monaco 编辑/保存流。
+/** UI 经验证: B/C #view-ide 视图骨架 + 入口接线(树/标签条/编辑区三栏 + 桶头 IDE 按钮)+ Monaco 编辑/保存流。
  *  覆盖:①桶头 IDE 按钮→#view-ide 激活且三栏可见 ②目录懒展开发 fs.list ③文件点击发
  *  file.read {full:true} 相对路径→标签打开 ④编辑→● 脏标记→脏标签关闭 confirm
  *  ⑤重复点击同文件复用标签 ⑥binary 文件只读提示不建编辑模型
  *  C:⑦.ts 文件 Monaco 挂载(.view-lines+行号列)⑧编辑→Ctrl+S→file.write→toast 已保存+● 消失
  *     ⑨file.write 沙箱拒绝(error 帧)→toast 报错且 ● 保留。
- *  跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/ide.spec.cjs(不碰产线 7700)。 */
+ * 跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/ide.spec.cjs(不碰生产环境 7700)。 */
 const { chromium } = require("playwright-core");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
@@ -23,7 +23,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   writeFileSync(join(projDir, "pixel.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64")); // 1x1 真 PNG
   writeFileSync(join(projDir, "big.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1200"><rect width="2000" height="1200" fill="#c98f45"/><circle cx="1000" cy="600" r="300" fill="#0d0a07"/></svg>', "utf-8"); // ⑥c 缩放/平移用大图
   writeFileSync(join(projDir, "mis.txt"), "mismatch root check\n", "utf-8"); // ⑩ 读写根错位回归用
-  // step-1024(板 5a7bb5d2)HTML 预览套件:页面 + 相对 style.css(标题变红)+ app.js
+ // (板 5a7bb5d2)HTML 预览套件:页面 + 相对 style.css(标题变红)+ app.js
   writeFileSync(join(projDir, "index.html"),
     '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head><body><h1 id="pv-title">PV-HELLO</h1><script src="app.js"></script></body></html>', "utf-8");
   writeFileSync(join(projDir, "style.css"), "#pv-title{color:rgb(255,0,0)}\n", "utf-8");
@@ -298,7 +298,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   });
   check("编辑区禁选中豁免(ip-strict 下可选中)", sel === "text/text" || sel === "no-strict", sel);
 
-  // ⑦ step-141 C:打开 .ts 文件 → Monaco 挂载(.view-lines 视口 + .line-numbers 行号列);worker 同源可达
+ // ⑦ C:打开 .ts 文件 → Monaco 挂载(.view-lines 视口 + .line-numbers 行号列);worker 同源可达
   await page.evaluate(() => { window.__ideMsgs = []; });
   await page.evaluate(() => { [...document.querySelectorAll("#ideTree .ft-row.file")].find((x) => x.textContent.includes("hello.ts")).click(); });
   await page.waitForFunction(() => {
@@ -377,8 +377,8 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("⑨ file.write 沙箱拒绝→toast 报错且 ● 保留", denied.toasts.some((t) => t.indexOf("保存失败") >= 0) && denied.dot.indexOf("●") >= 0,
     JSON.stringify({ toast: (denied.toasts.find((t) => t.indexOf("保存失败") >= 0) || "").slice(0, 52), dot: denied.dot }));
 
-  // ⑩ 读写根错位回归(2026-10-22 用户实报「点了文件一片空白」):IDE 树在项目 A,但活动项目被切到 B,
-  //    服务端若无条件按活动项目解析根 → 读 B 根下不存在的路径 → missing → 编辑区空白(实测复现)。
+ // ⑩ 读写根错位回归(用户用户反馈「点了文件一片空白」):IDE 树在项目 A,但活动项目被切到 B,
+ // 服务端若无条件按活动项目解析根 → 读 B 根下不存在的路径 → missing → 编辑区空白(经验证复现)。
   //    修复=file.read/file.write 帧带 projectId,server 优先用它。此处直接把 activeProjectId 改成别的项目再开文件。
   const mismatch = await page.evaluate(async () => {
     const keepActive = activeProjectId;
@@ -398,7 +398,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
     !!mismatch.mode && mismatch.mode === "edit" && mismatch.len > 0,
     JSON.stringify({ mode: mismatch.mode, len: mismatch.len, ro: mismatch.ro, diff: mismatch.treePid !== mismatch.otherPid }));
 
-  // ⑪ step-142 面包屑:激活标签路径分段渲染(项目名 / 目录… / 文件)+ 右侧语言与行列
+ // ⑪ 面包屑:激活标签路径分段渲染(项目名 / 目录… / 文件)+ 右侧语言与行列
   await page.evaluate(() => { [...document.querySelectorAll("#ideTree .ft-row.file")].find((x) => x.textContent.includes("hello.ts")).click(); });
   await page.waitForTimeout(900);
   const crumb = await page.evaluate(() => {
@@ -417,7 +417,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
     crumb.active.indexOf("hello.ts") >= 0 && /typescript/.test(crumb.right) && /Ln \d+, Col \d+/.test(crumb.right),
     JSON.stringify(crumb));
 
-  // ⑫ step-142 Ctrl+Shift+P(IDE 内)→ 命令面板打开且含「转到文件」与 IDE 命令;Esc 关闭
+ // ⑫ Ctrl+Shift+P(IDE 内)→ 命令面板打开且含「转到文件」与 IDE 命令;Esc 关闭
   await page.evaluate(() => {
     const tgt = document.querySelector("#ideBody .view-lines") || document.getElementById("ideEdit") || document.body;
     tgt.focus();
@@ -592,7 +592,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   });
   check("⑮ 终端输出含 echo 探针(term.session 真链路)", termOut.probe && termOut.reads > 0, JSON.stringify(termOut).slice(0, 260));
 
-  // ⑯ step-1024(板 5a7bb5d2)HTML 预览:双态切换 + 相对 css/js 生效 + 保存刷新 + 越界负面
+ // ⑯ (板 5a7bb5d2)HTML 预览:双态切换 + 相对 css/js 生效 + 保存刷新 + 越界负面
   await page.evaluate(() => { [...document.querySelectorAll("#ideTree .ft-row.file")].find((x) => x.textContent.includes("index.html")).click(); });
   await page.waitForFunction(() => {
     const tab = document.querySelector("#ideTabs .ide-tab.on") || {};
@@ -651,7 +651,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("⑯ 保存成功 toast→iframe 自动刷新出新内容(旧内容消失)",
     pv2.text === "PV-EDITED" && pv2.color === "rgb(255,0,0)", JSON.stringify(pv2));
 
-  // 越界负面:页面内 fetch /ide/preview(板节点 05 验收口径)→ 404 且不回 root: 行
+ // 越界负面:页面内 fetch /ide/preview(板节点 05 验径)→ 404 且不回 root: 行
   // (预期 404 会被浏览器记为 console error → 摘掉 listener 收集窗口,负面 fetch 完再挂回;其余错误保持严格)
   page.removeListener("console", onConsoleErr);
   const neg = await page.evaluate(async (p) => {

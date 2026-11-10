@@ -1,6 +1,6 @@
 /**
  * 远程项目(remote:ssh identity)单测:构造/解析/去重/注册表语义 + WS project.add 面板路径。
- * 2026-10-25(ZCode packages/shared/src/remote-workspace-identity.ts 对齐)。
+ * (ZCode packages/shared/src/remote-workspace-identity.ts 对齐)。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import WebSocket from "ws";

@@ -1,12 +1,10 @@
 /**
  * WS 发送字节账本(g3,2026-11)。
- *
  * 背景:网关五次 heap OOM,崩栈全部指向 JSON.stringify,但一直没有「谁在发大帧」的字节级证据
  * (只有帧数级指标与 bufferedAmount 瞬时值)。本模块给 safeSend 挂一个纯内存账本:
  *  - 每帧只记 type + Buffer.byteLength(UTF-8 实发字节),O(1)、无序列化、无分配风暴;
  *  - 30s 落一次账(journal custom 事件 + 一行 console),窗口内零帧不落(不发空账);
  *  - snapshot 按 bytes 降序给 top 帧型 + 单帧峰值 → 下次 OOM 前能指名道姓是哪个 type。
- *
  * 纯函数/纯内存:不 import 任何 I/O,时钟可注入,可单测(见 test/ws-byte-ledger.test.ts)。
  */
 import type { Journal } from "@lampgenie/core";

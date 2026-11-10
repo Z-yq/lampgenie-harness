@@ -1,7 +1,6 @@
 /**
- * presence 状态机(designs/04 §2):六态,判定规则确定性(只用心跳+事件计数,不用模型)。
+ * presence 状态机( §2):六态,判定规则确定性(只用心跳+事件计数,不用模型)。
  * 纯函数——状态推导在 relay 侧集中,客户端只上行事实。
- *
  * 规则(设计稿原文):
  * ①dnd 手动置位,优先于一切自动态;
  * ②coding 优先于 reviewing(人没在看审批,但 agent 在跑);
@@ -19,7 +18,7 @@ export function derivePresence(facts: PresenceFacts, now: number): PresenceState
   return "online";
 }
 
-/** 卡片「当前任务」语义(designs/04 §3):名下最近活跃的非终态任务;单成员只置顶一个。 */
+/** 卡片「当前任务」语义( §3):名下最近活跃的非终态任务;单成员只置顶一个。 */
 export interface MemberCardInput {
   username: string;
   facts: PresenceFacts;
@@ -29,8 +28,7 @@ export interface MemberCardInput {
 
 export function memberCard(
   input: MemberCardInput,
-  now: number,
-): { username: string; state: PresenceStateName; currentTask: string | null } {
+  now: number): { username: string; state: PresenceStateName; currentTask: string | null } {
   return {
     username: input.username,
     state: derivePresence(input.facts, now),

@@ -204,7 +204,7 @@ describe("deriveMessages 不消费 system.prompt(旁路记录,零上下文影响
   });
 
   it("⑦ negative 决策按 turn 冻结:长 turn 中途历史越门,node0 不得中途翻转、追加不得半路出现", async () => {
-    // 2026-10-28 code_review:门用「当前历史 tokens」判定,而历史随 step 增长。若每步重算,
+ // code_review:门用「当前历史 tokens」判定,而历史随 step 增长。若每步重算,
     // 首步不过门(退回旧行为,node0=当轮 system)、后面步骤越门后会突然把 node0 换成冻结快照
     // 并开始追加 —— 同一 turn 内 node0 身份翻转 = 又打碎一次前缀(正是本改动要消除的病)。
     // 这里刻意让首步**不过门**、第二步**越门**:断言整 turn node0 恒定且从无追加。
@@ -237,7 +237,7 @@ describe("deriveMessages 不消费 system.prompt(旁路记录,零上下文影响
 
 describe("system 提示节级增量注入(2026-10-29 token 轮 04)", () => {
   const SECTION_PREFIX = "[系统提示更新] 以下小节已变更,与此前冲突时以本条为准(未列出的小节保持原样):\n";
-  /** 节尺寸按**产线实测**构造(analysis/analyze7 实测:identity 2.4K / AGENTS.md 1.5K /
+ /** 节尺寸按**生产环境经验证**构造(analysis/analyze7 经验证:identity 2.4K / AGENTS.md 1.5K /
    *  skill-index 13.6K / user_memory 8.1K / date 22),总数≈26K——不是随手造的等分节。
    *  这样断言的「省多少」才对得上真实场景。 */
   const mkSections = (over: Record<string, string> = {}) => [
@@ -345,13 +345,12 @@ describe("system 提示节级增量注入(2026-10-29 token 轮 04)", () => {
   });
 
   it("节标题去重:内容自带 `## ` 标题的节不再加 `## name`(2026-10-30 修 f2)", async () => {
-    // 实测缺陷(本轮系统提示更新现场):dateBlock 内容本身就是 "\n\n## 当前日期\n2026-10-30(周五)",
+ // 经验证缺陷(本轮系统提示更新现场):dateBlock 内容本身就是 "\n\n## 当前日期\n2026-10-30(周五)",
     // 旧渲染固定拼 `## ${name}\n${content}` → 产出
     //   ## date
     //            ← 空行
     //   ## 当前日期
     // 既多花字符,也让模型看到两个标题、不确定哪个是节名。
-    //
     // 三 turn 是必须的(基线建立机制):turn1 node0==当轮 system → systemDecision=false,不落基线;
     // turn2 首次变更 → 落基线但**无从 diff**,付一次全文;turn3 起才真正走节 diff。
     const mk = (dateText: string) => [
@@ -430,7 +429,7 @@ describe("ephemeral 注入位置(2026-10-30 核查回滚)", () => {
       tools: [mkTool("noop", "r".repeat(50))],
       llm: capturingLlm(sink, () => {
         n++;
-        // 两步:第一步派工具(历史增长),第二步收口
+ // 两步:第一步派工具(历史增长),第二步
         return n === 1 ? { content: "", toolCalls: [{ id: "c1", name: "noop", arguments: "{}" }] } : { content: "done" };
       }),
     }).runTurn("go");
@@ -444,7 +443,7 @@ describe("ephemeral 注入位置(2026-10-30 核查回滚)", () => {
     expect(updates(second)).toHaveLength(1);
     expect(first[first.length - 1]!.content.startsWith("[系统提示更新]")).toBe(true);
     expect(second[second.length - 1]!.content.startsWith("[系统提示更新]")).toBe(true);
-    // negative:块不得出现在 system 之后(index 1)——那是已实测回滚的错误方向
+ // negative:块不得出现在 system 之后(index 1)——那是已经验证回滚的错误方向
     // (todoReminderSteps=3 探针:前置时 9 步里 5 步公共前缀塌到 1 条、覆盖率 2.4%)
     expect(first[1]!.content.startsWith("[系统提示更新]")).toBe(false);
     // 历史部分(除去末尾块)逐字节稳定:第二步以第一步的历史为前缀
@@ -475,7 +474,7 @@ describe("ephemeral 注入位置(2026-10-30 核查回滚)", () => {
     for (const req of collected) {
       const up = updates(req);
       expect(up).toHaveLength(1); // 每 turn 都重发(ephemeral 不落 journal)
-      // 位置=历史末尾(2026-10-30 核查回滚:前置到 index 1 会让块变动即令整条历史失效)
+ // 位置=历史末尾(核查回滚:前置到 index 1 会让块变动即令整条历史失效)
       expect(req[req.length - 1]).toBe(up[0]);
     }
     expect(collected[1]![1]!.content.startsWith("[系统提示更新]")).toBe(false); // 不得前置

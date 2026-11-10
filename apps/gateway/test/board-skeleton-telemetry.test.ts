@@ -1,10 +1,10 @@
 /**
- * board.skeleton 遥测事件(bq2,2026-11-05 板质量遥测闭环):
+ * board.skeleton 遥测事件(bq2, 板质量遥测闭环):
  * - normalize 被拒(单符号)不落事件;索引缺失早退不落事件;
  * - ok 路径:board.update 之后落 board.skeleton(status/landed/dropped 四桶/elidedRate/snapshot);
  * - rejected 路径(核验后 0 节点):落 status=rejected,landed 空、elidedRate=1。
  * stub 手段:saveIndex 把合成索引写进 tmp 根 .genie/sense-index/<sha>/index.json(loadIndex 原样读回);
- * ok 路径源文件在 tmp 根真实落盘。rejected 实测形态:幽灵文件使锚走 moved→复验失败进 movedUnresolved。
+ * ok 路径源文件在 tmp 根真实落盘。rejected 经验证形态:幽灵文件使锚走 moved→复验失败进 movedUnresolved。
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";

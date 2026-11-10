@@ -1,4 +1,4 @@
-// 最小 fake LSP server(step-114 单测夹具):Content-Length JSON-RPC。
+// 最小 fake LSP server(单测夹具):Content-Length JSON-RPC。
 // 行为:
 // - initialize → 声明全量同步 + formatting;
 // - didOpen/didChange → publishDiagnostics(含 "BAD" 的行报 FAKE001 error);

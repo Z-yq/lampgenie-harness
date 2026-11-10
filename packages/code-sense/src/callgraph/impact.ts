@@ -1,14 +1,12 @@
 /**
- * impact——改动影响面查询(step-066):一次查询=「改这个函数牵连什么」的完整清单。
- *
+ * impact——改动影响面查询:一次查询=「改这个函数牵连什么」的完整清单。
  * 四个通道,全部读静态索引(毫秒级,零 LLM):
- * ① 签名:C2fNode.sig(2026-10-15 起构建落盘;旧索引无=显式降级不假报);
- * ② 调用闭包:callers/callees 双向 BFS,逐跳 dN 标注;d1 完整不封顶(与 step-066 A4 修复同语义),
+ * ① 签名:C2fNode.sig(起构建落盘;旧索引无=显式降级不假报);
+ * ② 调用闭包:callers/callees 双向 BFS,逐跳 dN 标注;d1 完整不封顶(与 A4 修复同语义),
  *    d≥2 每层封顶防爆炸,截断如实标注;
  * ③ 受影响文件:闭包触达文件(调用通道)+ import 该定义所在文件的文件(import 通道,
  *    C2fIndex.importers,旧索引无=只出调用通道并注明);
  * ④ 关联测试:闭包中位于测试路径的调用方(直接 d1/间接 dN 分列)+ import 通道的测试文件。
- *
  * 向后兼容:旧 .genie/sense-index/ 不重建即可用——sig/importers 缺省,对应分节标注降级。
  */
 import type { C2fIndex, C2fNode } from "./c2f";
@@ -27,7 +25,7 @@ export interface ImpactRef {
 export interface ImpactTestRef extends ImpactRef {
   /** call=闭包里调用到它;import=import 通道(只到文件级,无行号语义→line=0)。 */
   via: "call" | "import";
-  /** step-099(RC-096-B3):跨深度定位——跳数 > 查询闭包深度,由测试通道专属延伸扫描发现
+ /** (RC-096-B3):跨深度定位——跳数 > 查询闭包深度,由测试通道专属延伸扫描发现
    * (ValidateFlagGroups 类形态:专属测试经 Execute→execute 3 跳触达,≤d2 闭包看不见)。 */
   beyondDepth?: boolean;
 }
@@ -48,15 +46,15 @@ export interface ImpactDefinition {
   signature?: string;
   callers: ImpactRef[];
   callees: ImpactRef[];
-  /** step-106:跨语言桥边命中(designs/27 §7 落地;索引无 bridge 段=undefined)。
+ /** 跨语言桥边命中( §7 落地;索引无 bridge 段=undefined)。
    * role=backend-handler:本定义是端点 handler(handler 名配对,裸名兼容方法形态——
-   * grafana HTTPServer.Logout↔handler=Logout 实锤),列出前端字面量调用点;
+ * grafana HTTPServer.Logout↔handler=Logout 注意),列出前端字面量调用点;
    * role=frontend-caller:本定义是前端符号,字面量按「同文件最近前驱节点」归属到它,
    * 列出触达的后端端点。 */
   bridges?: ImpactBridgeHit[];
 }
 
-/** step-106:单条桥边命中。 */
+/** 单条桥边命中。 */
 export interface ImpactBridgeHit {
   role: "backend-handler" | "frontend-caller";
   edge: BridgeEdge;
@@ -65,7 +63,7 @@ export interface ImpactBridgeHit {
   sameFile: boolean;
 }
 
-/** step-099(RC-096-B5):弃边与不可见面——「诚实弃边」的计量从构建期台账读出。 */
+/** (RC-096-B5):弃边与不可见面——「诚实弃边」的计量从构建期台账读出。 */
 export interface ImpactDroppedNote {
   /** 构建期弃边台账中匹配查询裸名的条目;null=该名无弃边记录(或旧索引无台账字段)。 */
   ledger: { count: number; reasons: Record<string, number>; samples: { file: string; line: number }[] } | null;
@@ -86,15 +84,15 @@ export interface ImpactResult {
   tests: ImpactTestRef[];
   /** import 通道是否可用(索引带 importers 字段)。false=旧索引,文件/测试清单只含调用通道。 */
   importChannel: boolean;
-  /** step-099:定义文件语言不在 import 解析面(py/java/c 族)时如实注记(importChannel 为真也可能空)。 */
+ /** 定义文件语言不在 import 解析面(py/java/c 族)时如实注记(importChannel 为真也可能空)。 */
   importCapable: boolean;
-  /** step-099(RC-096-B3):跨深度测试扫描是否触发封顶(节点/跳数),true=更深处可能还有测试。 */
+ /** (RC-096-B3):跨深度测试扫描是否触发封顶(节点/跳数),true=更深处可能还有测试。 */
   testScanCapped: boolean;
-  /** step-099(RC-096-B5):弃边与不可见计量面。 */
+ /** (RC-096-B5):弃边与不可见计量面。 */
   dropped: ImpactDroppedNote;
-  /** step-106:索引是否带桥边段(false=旧索引/通道关闭,桥边段整体缺席不报错)。 */
+ /** 索引是否带桥边段(false=旧索引/通道关闭,桥边段整体缺席不报错)。 */
   bridgeChannel: boolean;
-  /** 2026-10-22 P0:图置信度——解析含语法错误的文件面。known=false 表示旧索引未记录
+ /** P0:图置信度——解析含语法错误的文件面。known=false 表示旧索引未记录
    * (盲区未知,不得当作零盲区);related=本次查询触点里落在错误文件列表中的文件。
    * 有盲区时「0 调用方」不能作为可删除/可改签名的依据。 */
   graphHealth?: {
@@ -111,7 +109,7 @@ export interface ImpactResult {
     transitiveCallees: number;
     fileCount: number;
     testCount: number;
-    /** step-106:全部定义的桥边命中总数(仅 >0 时在渲染汇总行出现)。 */
+ /** 全部定义的桥边命中总数(仅 >0 时在渲染汇总行出现)。 */
     bridges?: number;
   };
 }
@@ -120,7 +118,7 @@ export interface ImpactResult {
 const DEEP_CAP_PER_LEVEL = 24;
 export const IMPACT_DEFAULT_DEPTH = 2;
 
-/** step-099(RC-096-B3):关联测试跨深度通道参数——闭包深度之外最多再走的跳数与全局访问封顶。
+/** (RC-096-B3):关联测试跨深度通道参数——闭包深度之外最多再走的跳数与全局访问封顶。
  * 语义:测试文件包含性匹配不受调用跳数限制(「3 跳外的专属测试」假阴性的根治),
  * 但必须有资源闸:热符号的全图调用方闭包可爆炸,只收集测试路径节点、封顶如实标注。 */
 const TEST_EXTRA_DEPTH = 6;
@@ -175,7 +173,7 @@ function bfs(
   return { refs, truncated };
 }
 
-/** step-099(RC-096-B3):跨深度测试调用方扫描——从定义符号沿 callers 方向 BFS 到
+/** (RC-096-B3):跨深度测试调用方扫描——从定义符号沿 callers 方向 BFS 到
  * depth+TEST_EXTRA_DEPTH,只收集「位于测试路径」的节点,跳数 > depth 的标 beyondDepth。
  * 与主闭包 BFS 独立(主闭包的语义=depth 内全类型节点,不动);防爆双闸:跳数+访问节点数。 */
 function bfsTestCallers(
@@ -316,7 +314,7 @@ export function queryImpact(index: C2fIndex, name: string, opts?: { depth?: numb
       tests.push({ ...r, via: "call" });
     }
   }
-  // step-099(RC-096-B3):跨深度测试扫描——测试文件包含性匹配不受调用跳数限制
+ // (RC-096-B3):跨深度测试扫描——测试文件包含性匹配不受调用跳数限制
   // (闭包 d 层封顶可能漏掉的 ≤depth 测试也由这里补齐;>depth 的标 beyondDepth)
   let testScanCapped = false;
   for (const h of hits) {
@@ -336,7 +334,7 @@ export function queryImpact(index: C2fIndex, name: string, opts?: { depth?: numb
     }
   }
 
-  // step-099(RC-096-B5):弃边与不可见计量(裸名与原名双查——台账键=调用点书写的被调名)
+ // (RC-096-B5):弃边与不可见计量(裸名与原名双查——台账键=调用点书写的被调名)
   const bare = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : name;
   const ledgerEntry = index.dropped
     ? (index.dropped[name] ?? index.dropped[bare] ?? null)
@@ -354,15 +352,15 @@ export function queryImpact(index: C2fIndex, name: string, opts?: { depth?: numb
       : false,
   };
 
-  // step-099(RC-096-B2):import 通道的语言能力面——TS/JS/Go 产 importers;
+ // (RC-096-B2):import 通道的语言能力面——TS/JS/Go 产 importers;
   // 定义文件语言不在面内时 import 通道对本符号恒空,如实注记(不算通道不可用)。
   const IMPORT_CAPABLE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go"]);
   const extOf = (f: string): string => f.slice(f.lastIndexOf("."));
   const importCapable = defFiles.length > 0 && defFiles.some((f) => IMPORT_CAPABLE_EXT.has(extOf(f)));
 
-  // step-106:跨语言桥边段——索引带 bridge 段时按定义配对(确定性,零 LLM):
+ // 跨语言桥边段——索引带 bridge 段时按定义配对(确定性,零 LLM):
   // ① backend-handler:edge.to.handler === 符号名/裸名(裸名兼容 Class.method 形态——
-  //    grafana HTTPServer.Logout↔handler=Logout 实锤),且定义文件与路由注册文件同语言族
+ // grafana HTTPServer.Logout↔handler=Logout 注意),且定义文件与路由注册文件同语言族
   //    (同扩展名或同属 JS 族)——跨语言同名不绑(前端 hello() 不得吸收后端 flask hello
   //    的桥边;名绑定是确定性层的全部证据,同族收窄是诚实边界);
   // ② frontend-caller:edge.from.file === 定义文件,归属=同文件最近前驱节点
@@ -439,7 +437,7 @@ export function queryImpact(index: C2fIndex, name: string, opts?: { depth?: numb
     return a.file.localeCompare(b.file);
   });
 
-  // 2026-10-22 P0:图置信度。索引字段缺席=旧索引(未知),不得把「没记录」读成「零盲区」;
+ // P0:图置信度。索引字段缺席=旧索引(未知),不得把「没记录」读成「零盲区」;
   // 字段在场且 >0 时,本次查询触达的解析错误文件单独列出(定义文件自身 + 受影响文件)。
   const errKnown = index.errorFiles !== undefined || index.errorFileCount !== undefined;
   const errSet = new Set(index.errorFiles ?? []);
@@ -481,7 +479,7 @@ const MAX_D1_LINES = 40; // d1 完整计数在 summary,展示行数仍要预算(
 const MAX_DEEP_LINES = 30;
 const MAX_FILE_LINES = 40;
 const MAX_TEST_LINES = 20;
-const MAX_BRIDGE_LINES = 20; // step-106:桥边段每方向展示帽(JSON 面完整,截断只在渲染层)
+const MAX_BRIDGE_LINES = 20; // 桥边段每方向展示帽(JSON 面完整,截断只在渲染层)
 
 function refLine(r: ImpactRef): string {
   const loc = r.line > 0 ? `:${r.line}` : "";
@@ -489,7 +487,7 @@ function refLine(r: ImpactRef): string {
 }
 
 /** 影响面文本(单仓;跨仓由调用方加 [repo] 头)。旧索引降级显式标注。
- * step-099:同名多定义头进 impact 面(此前只在 symbol 面,RC-096-B5);关联测试四组分列
+ * 同名多定义头进 impact 面(此前只在 symbol 面,RC-096-B5);关联测试四组分列
  * (直接/间接/跨深度/import);尾部「弃边与不可见」段恒在场。 */
 export function renderImpact(r: ImpactResult): string {
   const lines: string[] = [];
@@ -508,7 +506,7 @@ export function renderImpact(r: ImpactResult): string {
       lines.push("  签名: 未索引(旧格式索引——重建索引后可用: codesense index)");
     }
     if (d.callers.length === 0) {
-      // step-098(RC-096-B6):索引内无调用方≠无上游波及(弃边/动态调用可能未覆盖,见末节计量)
+ // (RC-096-B6):索引内无调用方≠无上游波及(弃边/动态调用可能未覆盖,见末节计量)
       lines.push("  上游调用方: 索引内无(入口形态——索引未覆盖的调用方仍可能受影响,弃边计量见末节)");
     } else {
       const d1 = d.callers.filter((x) => x.depth === 1);
@@ -527,7 +525,7 @@ export function renderImpact(r: ImpactResult): string {
       lines.push(...deep.slice(0, MAX_DEEP_LINES).map(refLine));
       if (d1.length + deep.length > MAX_D1_LINES + MAX_DEEP_LINES) lines.push(`    …下游还有 ${d.callees.length - MAX_D1_LINES - MAX_DEEP_LINES} 个(计数完整,展示截断)`);
     }
-    // step-106:跨语言桥边段(仅当本定义有命中时出段——零命中/旧索引零新行,输出面不回退)
+ // 跨语言桥边段(仅当本定义有命中时出段——零命中/旧索引零新行,输出面不回退)
     if (d.bridges && d.bridges.length > 0) {
       const asBackend = d.bridges.filter((h) => h.role === "backend-handler");
       const asFrontend = d.bridges.filter((h) => h.role === "frontend-caller");
@@ -562,9 +560,9 @@ export function renderImpact(r: ImpactResult): string {
     lines.push(...importOnly.slice(0, MAX_FILE_LINES).map((f) => `    ${f.file}(import 通道)`));
     if (importOnly.length > MAX_FILE_LINES) lines.push(`    …还有 ${importOnly.length - MAX_FILE_LINES} 个 import 方文件`);
   }
-  // 关联测试(step-099 RC-B3:四组分列——直接/间接/跨深度/import 通道)
+ // 关联测试( RC-B3:四组分列——直接/间接/跨深度/import 通道)
   if (r.tests.length === 0) {
-    // 措辞纪律(096 RC-B3 实锤):「建议补测试」不能再无条件出现——跨深度扫描与 import 通道
+ // 措辞纪律(096 RC-B3 注意):「建议补测试」不能再无条件出现——跨深度扫描与 import 通道
     // 都覆盖后才允许给建议,且必须带「深度外未穷尽」的诚实尾巴
     lines.push(`  关联测试: 未发现(调用闭包 ≤d${r.depth} + 跨深度延伸 ${TEST_EXTRA_DEPTH} 跳 + import 通道均无测试路径文件${r.testScanCapped ? ";跨深度扫描触发节点封顶,更深处未穷尽" : "——更深处未穷尽"};若确认无测试保护建议补测试)`);
   } else {
@@ -580,12 +578,12 @@ export function renderImpact(r: ImpactResult): string {
     if (r.tests.length > MAX_TEST_LINES) lines.push(`    …还有 ${r.tests.length - MAX_TEST_LINES} 个测试(计数完整,展示截断)`);
   }
   if (!r.importChannel) {
-    // step-099 RC-B2:此提示现在对 Go 也真实可兑现(重建后 importers 落盘)
+ // RC-B2:此提示现在对 Go 也真实可兑现(重建后 importers 落盘)
     lines.push("  (旧格式索引:import 通道不可用——文件/测试清单仅含调用通道;重建索引后补全: codesense index)");
   } else if (!r.importCapable && r.definitions.length > 0) {
     lines.push("  (import 通道注记: 定义文件语言暂不落 importers(python/java/c 族;TS/JS/Go 支持)——本符号的 import 通道为空属预期,调用通道不受影响)");
   }
-  // 2026-10-22 P0:图置信度必须显式——缺边不能被读成「没有调用方」。旧 JSON/手工构造
+ // P0:图置信度必须显式——缺边不能被读成「没有调用方」。旧 JSON/手工构造
   // 的 ImpactResult 可能没有该字段:按「未知」呈现,不得静默当作零盲区。
   const gh = r.graphHealth;
   if (!gh || !gh.known) {
@@ -600,7 +598,7 @@ export function renderImpact(r: ImpactResult): string {
       lines.push(`  图盲区: 全仓 ${gh.errorFileCount} 个文件解析含语法错误(本符号触点 0)——已找到的调用面可用,仍可能有遗漏`);
     }
   }
-  // 弃边与不可见(step-099 RC-B5,恒在场:「弃了边」对用户透明是 096 has_access 锚的实锤缺口)
+ // 弃边与不可见( RC-B5,恒在场:「弃了边」对用户透明是 096 has_access 锚的注意缺口)
   {
     const dp = r.dropped;
     const bits: string[] = [];

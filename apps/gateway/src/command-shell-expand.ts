@@ -1,15 +1,13 @@
 /**
  * 自定义命令 body 的 !`cmd` shell 片段展开(r4,ZCode custom-command-shell-expansion 语义)。
- *
  * 语义(ZCode apps/zcode-cli/packages/bootstrap/src/custom-command-shell-expansion.ts;
- * planner 实测该文件在 ref 树零命中,按已定稿语义实现):
+ * planner 经验证该文件在 ref 树零命中,按已定稿语义实现):
  * - 模板中 `` !`cmd` `` 片段 → 同步执行 `bash -c <cmd>`,以 stdout(去尾换行)替换该片段;
  * - 3s 超时(kill 后按失败处理);
  * - stdout 截 2000 字;
  * - 失败(非零退出/超时/无法 spawn)替换为 `(cmd 失败:<原因截 120 字>)`,不抛错;
  * - 每条 body 最多展开 3 处,超出部分保留原文(防一条模板拉起一串子进程);
  * - cwd=repoRoot(由调用方传入;缺省实现不在此模块猜测)。
- *
  * 纯函数形态:run 注入默认执行器(execFileSync bash),单测注桩不真 exec。
  * 接线:server.ts commands.list case 返回前对 custom 段 body 展开(见该处注释),
  * 协议不变,面板零改动。

@@ -1,5 +1,5 @@
 /**
- * Router 装配(step-0143 P1):面板 task.submit(server.ts)与飞书 im-inbound.ts(app.ts)两主径
+ * Router 装配( P1):面板 task.submit(server.ts)与飞书 im-inbound.ts(app.ts)两主径
  * 统一 Trigger 入 router;其余 tm.submit 直调点不收敛(等效 explicit,不破坏行为)。
  * P1 零 LLM:engine 不做任何模型调用(P2 才接 runCompanionTurn)。
  */
@@ -20,12 +20,12 @@ export interface RouterDeps {
   onTicketUpdated?: (payload: { ticketId: string; phase: string; taskId?: string; triggerId: string; threadKey: string }) => void;
   /** steer 注入钩子(app.ts 注入 journal 语义:对齐 agent-wiring steer_task)。 */
   steer?: (ticket: Ticket, trigger: Trigger) => void;
-  /** step-0144 P2 LLM 研判钩子:auto 模式 inferred 候选研判(runSuperAgentTurn 包装,可异步);
+ /** P2 LLM 研判钩子:auto 模式 inferred 候选研判(runSuperAgentTurn 包装,可异步);
    *  observe 模式恒不调用(dispatch 侧 auto 闸);返回 undefined=fail-soft 缺证据→ignore。 */
   assess?: (trigger: Trigger) => ({ decision: "accept" | "ignore"; intent_evidence?: string } | undefined) | Promise<{ decision: "accept" | "ignore"; intent_evidence?: string } | undefined>;
   now?: () => number;
   config?: PolicyConfig;
-  /** step-0145 P3 tickets.json 持久化/恢复 + audit 落盘共用的 io 注入(测试可 stub)。 */
+ /** P3 tickets.json 持久化/恢复 + audit 落盘共用的 io 注入(测试可 stub)。 */
   io?: {
     existsSync?: (p: string) => boolean;
     readFileSync?: (p: string, enc: string) => string;
@@ -95,7 +95,7 @@ export function createRouter(deps: RouterDeps): RouterApi {
     });
     ticketSink.touch();
   };
-  // ── step-0145 P3 重启恢复(DSH restore 等价):tickets.json 落盘 + 启动重放 phase=open Ticket ──
+ // ── P3 重启恢复(DSH restore 等价):tickets.json 落盘 + 启动重放 phase=open Ticket ──
   // 落盘文件:.genie/router/tickets.json(数组形式,全量覆写;Ticket 数小,无增量必要)。
   const routerDir = deps.root ? deps.root.replace(/\\/g, "/").replace(/\/$/, "") + "/.genie/router" : null;
   const ticketsPath = routerDir ? routerDir + "/tickets.json" : null;

@@ -1,5 +1,5 @@
 /**
- * 定时自动化(step-043,ZCode AutomationsSection/automationCron 移植):
+ * 定时自动化(ZCode AutomationsSection/automationCron 移植):
  * 保存的规则{name, instruction, everyMinutes, enabled}持久化 .genie/automations.json;
  * 调度判定=纯函数(check 注入 now),驱动侧 30s tick;到点经回调提交 system 任务。
  */
@@ -19,7 +19,7 @@ export interface Automation {
   nextRunAt: number;
   lastTaskSessionId: string | null;
   runCount: number;
-  /** 作用域(step-046,ZCode 自动化 全局/项目 tabs 对齐):"global"=缺省;否则=项目 id(任务按该项目 workdir 跑)。 */
+ /** 作用域(ZCode 自动化 全局/项目 tabs 对齐):"global"=缺省;否则=项目 id(任务按该项目 workdir 跑)。 */
   scope?: string;
 }
 
@@ -133,8 +133,7 @@ export class AutomationScheduler {
     private readonly store: AutomationStore,
     private readonly onSubmit: (a: Automation, trigger: "schedule" | "manual") => string,
     private readonly onEvent: (e: AutomationEvent) => void,
-    private readonly tickMs = 30_000,
-  ) {}
+    private readonly tickMs = 30_000) {}
 
   /** 定时驱动(unref 不阻退出)。 */
   start(): void {

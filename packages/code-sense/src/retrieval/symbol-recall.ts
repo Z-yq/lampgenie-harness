@@ -1,11 +1,9 @@
 /**
- * 符号优先召回(2026-10-21):自然语言问句 → 候选符号(读静态索引,毫秒级)。
- *
- * 背景(用户实报):`explore "子代理 spawn 权限审批怎么回到父会话"` 只回 grep 行,前列是
+ * 符号优先召回:自然语言问句 → 候选符号(读静态索引,毫秒级)。
+ * 背景(用户用户反馈):`explore "子代理 spawn 权限审批怎么回到父会话"` 只回 grep 行,前列是
  * plan.approve / AGENTS.md 噪声;真正答案 makeSubagentPermissionAsker(agent-wiring.ts:83)与
  * permission-broker.ts 完全进不了前列——而 `symbol makeSubagentPermissionAsker` 一次即中。
  * 瓶颈在**入口词**不在索引:中文问句没有 camelCase 字面量,grep 只能撞运气。
- *
  * 管线:
  *   ① queryTerms(中文分词+中英词典+驼峰切分) → 召回词表(cjk.ts 纯函数)
  *   ② 词表 × 索引符号名 token 打分(IDF 降权通用词 + 多词覆盖加分)
@@ -13,7 +11,6 @@
  *      (LlmLoopBackend.spawn 自身不含 subagent,但它调用 renderSubagentHeavyOpDiscipline)
  *   ④ 取 top-N 主候选 + top 候选的直接 callers/callees 各 1-2 个作「1 跳扩展」上下文
  *   ⑤ 输出携带「被谁调/调谁/命中原因」,消费面可直接渲染与给下一步命令
- *
  * 红线:索引缺失/损坏 → 返回空 symbols + degraded 说明(不编造符号);不在本函数内建索引。
  */
 import { statSync } from "node:fs";
@@ -32,7 +29,7 @@ export interface SymbolDoc {
   inCount: number;
   outCount: number;
   symKind?: string;
-  /** 2026-10-22:C/C++ 函数原型(与 C2fNode.proto 同源);同名定义在场时召回层折叠。 */
+ /** :C/C++ 函数原型(与 C2fNode.proto 同源);同名定义在场时召回层折叠。 */
   proto?: boolean;
 }
 
@@ -117,7 +114,7 @@ const byScore = (a: SymbolScore, b: SymbolScore): number =>
 export interface ScoreOptions {
   /** 测试文件降权(默认 true):测试符号同名多、命中多,抢生产符号的席位。 */
   demoteTests?: boolean;
-  /** 非产品路径(docs/tasks/ref/fixtures…)降权(默认 true)。 */
+ /** 非产品路径(docs/…)降权(默认 true)。 */
   demoteNonProduct?: boolean;
 }
 
@@ -302,8 +299,8 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
     return names;
   };
   const ranked = applyNeighborCoherence(firstPass, neighborNamesOf, terms.terms);
-  // 2026-10-22 P0:同名定义在场时折叠 .h 原型——否则 explore 同时给出定义与声明两条,
-  // 用户会误以为有两个实现(实锚 saadk_6920 SA_YOLOX_Init .c/.h 双条)。
+ // P0:同名定义在场时折叠 .h 原型——否则 explore 同时给出定义与声明两条,
+ // 用户会误以为有两个实现(依据 saadk_6920 SA_YOLOX_Init .c/.h 双条)。
   const defNames = new Set(ranked.filter((s) => !s.doc.proto).map((s) => s.doc.name));
   const rankedDedup = ranked.filter((s) => !(s.doc.proto && defNames.has(s.doc.name)));
   const primaries = diversePick(rankedDedup, Math.max(0, limit));
@@ -319,7 +316,7 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
       const name = n?.name ?? (id.split("#").pop() ?? "");
       if (!name) continue; // 模块级虚节点(`path#`)：无符号名,展示无意义
       // 索引内的 <module>/匿名容器 id 不在 nodes[]:行号回落**边上的调用行**(e.line),
-      // 不能填 0(实测会渲染成 `.execute@agent-wiring.ts:0` 这类假坐标)
+ // 不能填 0(经验证会渲染成 `.execute@agent-wiring.ts:0` 这类假坐标)
       out.push({ name, file: n?.file ?? (id.split("#")[0] ?? e.file), line: n?.line ?? e.line });
     }
     return out;
@@ -396,8 +393,8 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
   return { symbols: candidates, terms, indexSize: docs.length };
 }
 
-/** 结果多样性(2026-10-21):同一文件/同一容器最多 2 席——否则一个类的方法会占满 top-N
- * (「子代理 spawn 权限审批」实测 ParentAskBroker.* 连占 4 席,把 permission-broker.ts 挤掉)。
+/** 结果多样性:同一文件/同一容器最多 2 席——否则一个类的方法会占满 top-N
+ * (「子代理 spawn 权限审批」经验证 ParentAskBroker.* 连占 4 席,把 permission-broker.ts 挤掉)。
  * 多样性不足时才回填(不因去重让结果空转)。 */
 function diversePick(ranked: readonly SymbolScore[], limit: number): SymbolScore[] {
   const out: SymbolScore[] = [];

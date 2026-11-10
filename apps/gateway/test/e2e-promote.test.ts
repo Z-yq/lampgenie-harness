@@ -1,6 +1,5 @@
 /**
- * scripts/e2e-promote.mjs(机制 M6):E2E 晋升事务 + 覆盖率审计。
- *
+ * scripts/e2e-promote.mjs(机制):E2E 晋升事务 + 覆盖率审计。
  * 全部用例在临时目录里造 pending / 正式目录 / matrix,不碰仓库真实文件,不起网关、不 build。
  * 覆盖:dry-run 不写盘、apply 成功写三处、skip/only 拒绝、count 与真实 test() 数不一致拒绝、
  * 缺 fixture / 目标已存在无 force 拒绝、写盘失败整体回滚、matrix upsert 保留其它行、row.id 重复拒绝、CLI 退出码。

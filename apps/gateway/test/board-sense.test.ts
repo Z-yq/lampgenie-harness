@@ -1,5 +1,5 @@
 /**
- * board-sense 转换器(step-073 D1)单测:
+ * board-sense 转换器( D1)单测:
  * modulemap(跨模块真实调用聚合)/archmap(evidence 分级)/sequence(时序链)/pageflow(页面流)→ BoardDoc 形态;
  * 每条断言锚「边来自真实索引/推断如实标注/序与异步边界入标签」;产物过 BoardDocZ+边完整性(saveBoard 真存)。
  */
@@ -37,7 +37,7 @@ function fakeIndex(): C2fIndex {
   } as unknown as C2fIndex;
 }
 
-describe("board-sense 转换器(step-073)", () => {
+describe("board-sense 转换器", () => {
   it("modulemap:模块节点+跨模块真实调用聚合边(×N 计数与索引一致),模块内调用不出边", () => {
     const b = moduleMapBoard(fakeIndex());
     expect(b.nodes.length).toBe(3);
@@ -67,7 +67,7 @@ describe("board-sense 转换器(step-073)", () => {
     const b = archGraphBoard(g as never, "总体架构:网关进存储");
     expect(b.title).toContain("网关进存储");
     expect(b.nodes[0]!.fileRef).toBe("apps/gateway/src/server.ts");
-    expect(b.edges[0]!.kind).toBe("data"); // inferred 不冒充实证调用
+    expect(b.edges[0]!.kind).toBe("data"); // inferred 不冒充验证调用
     expect(b.edges[0]!.label).toContain("推断·");
     expect(b.edges[0]!.label).toContain("读写");
   });
@@ -116,7 +116,7 @@ describe("board-sense 转换器(step-073)", () => {
   });
 });
 
-describe("pageStructureBoard 页面结构板转换器(step-083)", () => {
+describe("pageStructureBoard 页面结构板转换器", () => {
   it("页面/区块/组件三类节点+contains 归属边+nav 导航边(trigger 入标签)", () => {
     const b = pageStructureBoard({
       pages: [

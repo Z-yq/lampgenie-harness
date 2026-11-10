@@ -1,13 +1,11 @@
 /**
  * 轨迹病理(Trajectory Pathology):把一段执行轨迹里的「病态形状」拆成六个可检测的原语,
  * 再用「原语签名 ⊆ 产物形态签名」的方式把轨迹归到已知病理形态,并给出干预载体路由。
- *
  * 为什么要原语 + 形态两层:
  * - 只按形态打标签,新增轨迹一旦不完全吻合就只能丢弃;先检测原语,未命中的新组合可以作为
  *   **候选形态**(NEW_CANDIDATE)回报,形态库才有生长路径,而不是靠人手改枚举。
  * - 形态只是名字,真正让人/agent 采取行动的是「干预载体」(tip / decision-gate / tool / ...)。
  *   同一形态在不同族里的首选载体不同,干预先后顺序也不同,所以路由必须由形态族决定。
- *
  * 六个原语(检测口径见 detectPrimitives):
  * - re-entry:windowMs 内重复同一 tool/file/args(转圈,同一个动作反复做)。
  * - reversal:同一文件的编辑回到此前出现过的状态(回环),或决策序列来回反复(≥2 次)。
@@ -15,7 +13,6 @@
  * - overlap :多个会话改动范围相交且时间重叠(并行冲突)。
  * - dangling:提问无人回答 / 失败后无成功修复(悬空)。
  * - decay   :读到的信息已过期,或同一 ref 反复读 ≥3 次(陈旧 / 缓存失效)。
- *
  * 红线:
  * - 纯逻辑:零 IO(不读文件 / 网络 / 环境 / 真实时钟),不引用 agent loop。
  *   时间一律为 epoch ms 数字,全部来自输入(at)或注入(opts);唯一允许的外部依赖是
@@ -341,8 +338,7 @@ interface NormalizedTrace {
 }
 
 function normalizeTrace(
-  trace: PathologyTrace | undefined | null,
-): NormalizedTrace {
+  trace: PathologyTrace | undefined | null): NormalizedTrace {
   const t = (trace && typeof trace === "object" ? trace : {}) as Record<
     string,
     unknown
@@ -390,8 +386,7 @@ function maxInWindow(times: number[], windowMs: number): number {
 function detectReEntry(
   steps: PathologyStep[],
   windowMs: number,
-  minRepeats: number,
-): PrimitiveHit {
+  minRepeats: number): PrimitiveHit {
   const hit = emptyHit();
   const groups = new Map<string, number[]>();
   for (const step of steps) {
@@ -410,8 +405,7 @@ function detectReEntry(
   for (const [key, times] of groups) {
     const max = maxInWindow(
       times.sort((a, b) => a - b),
-      windowMs,
-    );
+      windowMs);
     if (max < minRepeats) continue;
     hit.hit = true;
     hit.count += max - minRepeats + 1;
@@ -508,8 +502,7 @@ function detectFanout(
   steps: PathologyStep[],
   edits: PathologyEdit[],
   changeNodes: PathologyChangeNode[],
-  windowMs: number,
-): PrimitiveHit {
+  windowMs: number): PrimitiveHit {
   const hit = emptyHit();
   for (const node of changeNodes) {
     if (node.fanoutEdges < 2) continue;
@@ -524,8 +517,7 @@ function detectFanout(
         s.file === edit.file &&
         s.ok === false &&
         s.at >= edit.at &&
-        s.at - edit.at <= windowMs,
-    );
+        s.at - edit.at <= windowMs);
     if (fixes.length < 2) continue;
     hit.count += 1;
     hit.evidence.push(
@@ -543,8 +535,7 @@ function detectOverlap(
 ): PrimitiveHit {
   const hit = emptyHit();
   const intervalOf = (
-    session: PathologySession,
-  ): { min: number; max: number } | undefined => {
+    session: PathologySession): { min: number; max: number } | undefined => {
     const times = steps
       .filter((s) => s.file && session.files.includes(s.file))
       .map((s) => s.at);
@@ -626,8 +617,7 @@ function detectDecay(reads: PathologyRead[]): PrimitiveHit {
 /** 六原语一次算完:返回固定顺序的 Record,绝不抛。 */
 export function detectPrimitives(
   trace: PathologyTrace | undefined | null,
-  opts?: DetectOptions,
-): Record<PathologyPrimitive, PrimitiveHit> {
+  opts?: DetectOptions): Record<PathologyPrimitive, PrimitiveHit> {
   const result: Record<PathologyPrimitive, PrimitiveHit> = {
     "re-entry": emptyHit(),
     reversal: emptyHit(),
@@ -655,8 +645,7 @@ export function detectPrimitives(
 // ---------------------------------------------------------------- 形态目录
 
 function normalizeCatalog(
-  catalog: PathologyForm[] | undefined | null,
-): PathologyForm[] {
+  catalog: PathologyForm[] | undefined | null): PathologyForm[] {
   return Array.isArray(catalog)
     ? catalog.filter((f): f is PathologyForm => !!f && typeof f === "object")
     : DEFAULT_CATALOG;
@@ -889,8 +878,7 @@ export function matchForms(
           extraPrimitives: active.filter((p) => !signature.includes(p)),
         };
       }),
-    (row) => row.form.id,
-  );
+    (row) => row.form.id);
 
   if (matched.length > 0) {
     return { matched, candidates: [], codes: [PATHOLOGY_CODES.MATCHED] };
@@ -1058,8 +1046,7 @@ function priorityOf(
   family: PathologyFamily,
   carrier: InterventionCarrier,
   index: number,
-  unknownOffset: number,
-): number {
+  unknownOffset: number): number {
   if (family === "rework-chain") {
     if (carrier === "tip") return 1;
     if (carrier === "decision-gate") return 2;

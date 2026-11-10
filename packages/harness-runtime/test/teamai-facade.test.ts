@@ -1,5 +1,5 @@
 /**
- * teamai 门面五件套:digest 新字段(roles/counts)+ teamaiList / teamaiStatus / teamaiDoctor(designs/30 §2.6/§2.7)。
+ * teamai 门面五件套:digest 新字段(roles/counts)+ teamaiList / teamaiStatus / teamaiDoctor( §2.6/§2.7)。
  * 用临时目录造一个"团队仓"树,断言只增不改的向后兼容面。
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
@@ -56,7 +56,7 @@ describe("readTeamaiAssets 新字段(只增不改)", () => {
     expect(d.counts).toEqual({ members: 2, skills: 1, rules: 2, docs: 1, learnings: 1 });
     expect(d.pulledAt).toBe(1_700_000_000_000);
     expect(d.skills[0]).toMatchObject({ ns: "demo", name: "x" });
-    // 2026-11-05:rules 两层都收——命名空间 rules/demo/y.md(relay push kind=rule 落点)与扁平 rules/flat.md
+ // rules 两层都收——命名空间 rules/demo/y.md(relay push kind=rule 落点)与扁平 rules/flat.md
     expect(d.rules.map((r) => r.name)).toEqual(["demo/y", "flat"]);
   });
 

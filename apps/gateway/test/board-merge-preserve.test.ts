@@ -3,7 +3,6 @@
  * 缺陷背景:board_upsert 落整板时 nodes 全用 agent 入参,板上已有的人的痕迹
  * (node.comments / node.done / node.pos 拖拽位置 / 人新增节点)一次落板全丢。
  * 修法:合入 board-store.mergeBoardNodes——以 next 为主体与顺序,人的痕迹合回来。
- *
  * 用法样例:
  * ① agent upsert 后 node.comments/done/pos 保留,且 agent 改的 label 生效;
  * ② agent 未提交的人新增节点仍在板上,位置在尾部;
@@ -80,7 +79,7 @@ describe("① mergeBoardNodes 直接语义(纯函数)", () => {
 });
 
 describe("② agent upsert 后人的痕迹保留(工具面 board_upsert)", () => {
-  // 2026-10-24 f2 撞车门:同 id 必须同 label(同 id 改 label 判为跨写者争用同一 id,整板拒收),
+ // f2 撞车门:同 id 必须同 label(同 id 改 label 判为跨写者争用同一 id,整板拒收),
   // 所以本用例的 agent 改的是 summary(而非 label),验证点(人的痕迹保留)不变。
   it("node.comments/done/pos 保留 + agent 改的 summary 生效 + 回执报保留项", async () => {
     const r = tmp();

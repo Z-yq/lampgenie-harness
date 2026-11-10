@@ -3,11 +3,9 @@
  * 的「多根 + priority 每级 +10」语义,裁到本仓的两级形态):
  *   user    `<home>/.genie/experiences`        priority 10
  *   project `<projectRoot>/.genie/experiences` priority 20
- *
  * 为什么需要多根:此前单根固定在 `<repo>/.genie/experiences`,用户级手写技能没有落点
  * (要么塞进仓库、要么塞进内置常量)。多根后读路径看全部根(priority 高者赢),
  * 写路径落最高优先级根(project)——见 store.ts `ExperienceStore.fromRoots`。
- *
  * 纪律:home 为空 / 家目录或其技能目录不存在(容器、CI 无家目录)→ 跳过该根,
  * 不凭空造出用户根目录;project 根始终保留(它是写路径,store 构造时会 mkdir)。
  */

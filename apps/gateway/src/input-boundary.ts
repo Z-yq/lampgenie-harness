@@ -1,11 +1,10 @@
 /**
- * 输入边界防御(M136):
+ * 输入边界防御:
  * ①read guard 顺序——realpath 归一(防 symlink 绕过)→ device/proc → stat special →
  *   denylist → binary(调用方在整读前做 head 探测)→ read;
  * ②单行 2000 字符 clamp(标记「…(+N 字符已截断)」计入额度);
  * ③编辑比例守卫(edit-ratio-guard):new_string 为空或不足 old_string 一半、且删行 > 20 时拒绝,
  *   防「放宽匹配后静默删大段」。
- *
  * 阈值全部集中在本文件常量(便于单测与调参),工具实现只引用不重复写字面量。
  * 守卫**不受 permission mode 影响**:auto(完全访问)只放开路径围栏,不放开设备/管道/伪文件与
  * 「静默删大段」——这两类是进程级风险(读 /dev/zero 挂死、FIFO 永久阻塞、/proc/<pid>/environ 泄密)。

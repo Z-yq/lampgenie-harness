@@ -1,6 +1,6 @@
 /**
- * symbol 容错回退 CLI/MCP 面单测(2026-10-21 批次 B):
- * 实锤:symbol INIT_DETECTOR --root py-mmdetection 与 symbol initdetect 都直接
+ * symbol 容错回退 CLI/MCP 面单测(批次 B):
+ * 注意:symbol INIT_DETECTOR --root py-mmdetection 与 symbol initdetect 都直接
  * 「未找到符号」断链。修复面=①文本面「你是不是想找: …」②--json suggestions 字段;
  * dispatchTool(CLI 文本/MCP tools/call)与 runCli --json 两面同源。
  */
@@ -39,7 +39,7 @@ function capture(): { io: CliIo; out: () => string } {
 }
 
 describe("symbol 容错回退(文本面=dispatchTool;JSON 面=suggestions 字段)", () => {
-  it("实锤 1:INIT_DETECTOR → 文本面建议 init_detector;直接给出命中", async () => {
+  it("实测确认 1:INIT_DETECTOR → 文本面建议 init_detector;直接给出命中", async () => {
     await setup();
     const mcp = createCodeIndexMcp(ws, { autoBuild: false });
     const r = mcp.dispatchTool("code_index_symbol", { name: "INIT_DETECTOR" });
@@ -49,7 +49,7 @@ describe("symbol 容错回退(文本面=dispatchTool;JSON 面=suggestions 字段
     expect(r.content[0]!.text).toContain("init_detector");
   }, 60_000);
 
-  it("实锤 2:initdetect → 近似建议(编辑距离≤2 档)", async () => {
+  it("实测确认 2:initdetect → 近似建议(编辑距离≤2 档)", async () => {
     await setup();
     const mcp = createCodeIndexMcp(ws, { autoBuild: false });
     const r = mcp.dispatchTool("code_index_symbol", { name: "initdetect" });

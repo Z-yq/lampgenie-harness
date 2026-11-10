@@ -10,7 +10,7 @@ class AskChildBackend extends NdjsonChildBackend {
   }
 }
 
-describe("permission-ask 应答回流(step-033 F4)", () => {
+describe("permission-ask 应答回流( F4)", () => {
   it("全链:spawn→permission-ask→respondPermission(allow-once)→result ok;reject→result 失败", async () => {
     const backend = new AskChildBackend();
     const events: SubagentEvent[] = [];

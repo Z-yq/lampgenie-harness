@@ -1,11 +1,9 @@
 /**
- * 进程级崩溃保活(2026-10-28,web_search 打崩 session-worker 事故产物)。
- *
+ * 进程级崩溃保活(web_search 打崩 session-worker 事故产物)。
  * 背景:会话 worker 里一个第三方库/内置工具漏出的同步链路让一条 socket 的 'error'
  * 无人监听,Node 把它抬成 uncaughtException;worker 只挂了 unhandledRejection,
  * 于是整个 worker code=1 退出——同一 worker 下的主 agent 与所有在跑子代理一起被收尸
  * (用户视角=任务莫名失败)。gateway 主进程早就有这层保活(main.ts),worker 一直是缺口。
- *
  * 纪律:保活 ≠ 吞错。异常一律响亮打到 stderr(→日志文件),含 tag + 堆栈首段,
  * 业务错误仍在各自连接/工具返回里 fail-visible;进程不静默死,也不假装没事。
  */

@@ -1,5 +1,5 @@
 /**
- * step-132 LLM 调用轨迹(用户口径:glm-5.3-flash 会话「不知道在干什么」,每次调用的
+ * LLM 调用轨迹(glm-5.3-flash 会话「不知道在干什么」,每次调用的
  * message 和 output 都要记录方便 debug):
  * ①sink 单元:全量 messages+响应+model 落 <baseDir>/<sessionId>/call-NNNN-tXsY.json,
  *   序号递增,journal 挂 llm.trace 指针(file+turn/step+usage);写失败静默(坏 baseDir 不抛)。
@@ -18,7 +18,7 @@ import { MemoryJournal } from "@lampgenie/core";
 import type { Journal } from "@lampgenie/core";
 import type { LlmProvider, LlmResponse } from "@lampgenie/runtime/agent/loop";
 
-/** 等异步落盘完成(2026-10-30 冻结治理:写改 fs.promises fire-and-forget,测试轮询等文件)。 */
+/** 等异步落盘完成(冻结治理:写改 fs.promises fire-and-forget,测试轮询等文件)。 */
 const waitFiles = async (dir: string, n: number, ms = 3000): Promise<string[]> => {
   const t0 = Date.now();
   for (;;) {
@@ -31,7 +31,7 @@ const waitFiles = async (dir: string, n: number, ms = 3000): Promise<string[]> =
   }
 };
 
-describe("makeLlmTraceSink(step-132)", () => {
+describe("makeLlmTraceSink()", () => {
   it("① 全量落盘+序号递增+journal llm.trace 指针(meta 不带 payload)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "llm-trace-t1-"));
     const j = new MemoryJournal();
@@ -73,7 +73,7 @@ describe("makeLlmTraceSink(step-132)", () => {
     const b = JSON.parse(readFileSync(join(dir, "web-test", files[1]!), "utf-8"));
     expect(b.response.content).toBe("完成");
     expect(b.ttftMs).toBeUndefined();
-    // journal 指针:file+meta,不带 messages(全文在文件);构型摘要在场(2026-10-19 用户实报配套)
+ // journal 指针:file+meta,不带 messages(全文在文件);构型摘要在场(用户用户反馈配套)
     const ptrs = j.readAll().filter((e) => e.kind === "llm.trace");
     expect(ptrs).toHaveLength(2);
     const p0 = ptrs[0]!.payload as { file: string; turn: number; step: number; model?: string; usage?: unknown; messageRoles?: string[]; systemHead?: string; responseHead?: string; toolCalls?: string[] };
@@ -92,7 +92,7 @@ describe("makeLlmTraceSink(step-132)", () => {
   it("② 写失败静默(轨迹旁路不打断主链);sessionId 防御性清洗做目录名", async () => {
     const j = new MemoryJournal();
     // baseDir 指向一个普通文件 → mkdir ENOTDIR 快速失败(勿用 /proc:该路径在本 WSL 上
-    // sync mkdir 会真挂死,阻塞事件循环连测试超时器都失效——2026-10-19 实测踩坑)。
+ // sync mkdir 会真挂死,阻塞事件循环连测试超时器都失效—— 经验证注意)。
     const notDir = join(tmpdir(), "llm-trace-notdir-" + Date.now() + ".txt");
     writeFileSync(notDir, "x");
     const sink = makeLlmTraceSink(j, notDir);
@@ -102,7 +102,7 @@ describe("makeLlmTraceSink(step-132)", () => {
     })).not.toThrow();
     await new Promise((r) => setTimeout(r, 150)); // 异步失败落地
     expect(j.readAll().filter((e) => e.kind === "llm.trace")).toHaveLength(0); // 失败不落指针
-    // 清洗:非法目录字符 → _;合法分隔符(:)保留
+ // 清洗:非法目录字符 → _;合法分隔符保留
     const dir = mkdtempSync(join(tmpdir(), "llm-trace-t2-"));
     const sink2 = makeLlmTraceSink(new MemoryJournal(), dir);
     sink2({ sessionId: "companion:20261019/../evil", turn: 1, step: 0, durationMs: 1, messages: [], toolNames: [], response: { content: "" } });
@@ -114,7 +114,7 @@ describe("makeLlmTraceSink(step-132)", () => {
   });
 });
 
-describe("AgentLoop×llmTrace 集成(step-132)", () => {
+describe("AgentLoop×llmTrace 集成", () => {
   it("③ 两步 turn:每步一文件,system/user 原文+响应 toolCalls/终稿全量在场;model 尽力读 provider 字段", async () => {
     const dir = mkdtempSync(join(tmpdir(), "llm-trace-t3-"));
     const j = new MemoryJournal();
@@ -171,7 +171,7 @@ describe("AgentLoop×llmTrace 集成(step-132)", () => {
   }, 20_000);
 });
 
-describe("step-1027 本地估算 + 前缀缓存估算", () => {
+describe(" 本地估算 + 前缀缓存估算", () => {
   const ascii1000 = "a".repeat(1000);
   const han1000 = "汉".repeat(1000);
   const tool = (name: string, desc: string) => ({
@@ -298,7 +298,7 @@ describe("step-1027 本地估算 + 前缀缓存估算", () => {
   });
 });
 
-describe("step-1031 标定接线:usage 回写 ratio,第二轮起估计收敛", () => {
+describe(" 标定接线:usage 回写 ratio,第二轮起估计收敛", () => {
   it("⑨ 前三轮 ratio 未启用=raw;样本≥3 后 estRatio<1 且 estimatedInput 向上报值收敛", async () => {
     const dir = mkdtempSync(join(tmpdir(), "llm-trace-t9-"));
     const calFile = join(dir, "token-calibration.json");

@@ -1,7 +1,7 @@
 /**
- * 会话项目归属不可变(2026-10-22,对齐 ZCode session.project_id 语义):
+ * 会话项目归属不可变(对齐 ZCode session.project_id 语义):
  * ①会话 owner 优先于 explicit——面板每次提交都带 active 项目,不得改写已定归属
- *   (实锤 web-1792663585723:前两任务 pid=genie,重启后点「重发」变 __harness__);
+ * (注意 web-1792663585723:前两任务 pid=genie,重启后点「重发」变 __harness__);
  * ②owner 首次解析即持久绑定(session.project.bind,幂等),任务被删后归属不丢;
  * ③新会话(无 owner)才用 explicit/active;
  * ④分叉复制事件时绑定随行继承(server.ts session.fork 拷贝非排除 kind)。

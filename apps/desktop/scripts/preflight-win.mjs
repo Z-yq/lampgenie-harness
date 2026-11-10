@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * 打包环境预检(pkg-s1):wine/WoW64/WINEPREFIX/NSIS 可用性。
- * 口径(2026-10-25 Windows 实机构建收敛):electron-builder 自带 NSIS 与 wine 驱动即可构建;
+ * 打包环境预检:wine/WoW64/WINEPREFIX/NSIS 可用性。
+ * 口径( Windows 实机构建收敛):electron-builder 自带 NSIS 与 wine 驱动即可构建;
  * 系统 makensis/wine64 不是硬依赖。缺系统命令时按「bundled/等效可用」判定,并明确标注依据。
  */
 import { spawnSync } from "node:child_process";

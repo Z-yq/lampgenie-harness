@@ -1,17 +1,13 @@
 /**
  * AIMD 自适应限流器(`AimdRegulator`):一个 provider key 上的纯状态机。
- *
  * 纯包纪律：不读时钟、不做 I/O——`now`（ms since epoch）一律由调用方传入；本类只回答
  * 「cap 现在是多少、能不能准入、这次信号让 cap 变了没有」。谁喂信号、谁排队(进程级
  * 协调器)都在包外。
- *
  * 度量单位是**模型请求**（每一次尝试）：`inFlight` = 已准入、尚未 release 的请求数。
  * 没有 ask 级计数——一个子代理同时只有一个请求在飞，「≤ N 个请求」与「≤ N 个子代理在跑」等价。
- *
  * 批次阻尼靠 **epoch**：每次准入记下当时的 epoch，每次限流裁决 epoch += 1。一个 429 只在
  * 它的请求是在**当前** cap 下发出（epoch 相同）时才评价当前 cap；旧 epoch 的 429 评价的是一个已被
  * 砍掉的 cap，只清 streak、刷新 cooldown。成功同理：只有当前 epoch 的成功计入 streak。
- *
  * 信号方法都返回本次信号引起的 cap 变化列表（通常 0 或 1 条；空闲重置紧接着一次限流时会是 2 条），
  * 调用方原样扇出成 `concurrency-changed` 事件。
  */
@@ -77,8 +73,7 @@ export class AimdRegulator {
    */
   constructor(
     readonly key: string,
-    readonly ceiling: number,
-  ) {
+    readonly ceiling: number) {
     this.cap = ceiling;
   }
 
@@ -151,7 +146,6 @@ export class AimdRegulator {
   /**
    * 被限流/过载。一律 `inFlight--`、清 streak、带 Retry-After 则把 cooldown
    * 推到更晚者。
-   *
    * 只有 `epoch === 当前 epoch` 的 429 才动 cap：它是在当前 cap 下发出的请求，是对当前 cap 的评价；
    * 旧 epoch 的 429 忽略（不发事件）。当前 epoch 的分两档：在 `lastGood` **之上**探测被限流 → 退回
    * `lastGood`（记 `lastBad`，不按系数减）；否则（`lastGood` 缺席或 `cap ≤ lastGood`：墙下移了）→
@@ -163,8 +157,7 @@ export class AimdRegulator {
     now: number,
     epoch: number,
     reason: AimdThrottleCause,
-    retryAfterMs?: number,
-  ): ConcurrencyShift[] {
+    retryAfterMs?: number): ConcurrencyShift[] {
     const changes = this.relaxIfIdle(now);
     this.inFlight = Math.max(0, this.inFlight - 1);
     this.successStreak = 0;
@@ -251,8 +244,7 @@ export class AimdRegulator {
   private shiftFor(
     previous: number,
     reason: ConcurrencyShiftReason,
-    cooldownMs?: number,
-  ): ConcurrencyShift {
+    cooldownMs?: number): ConcurrencyShift {
     return {
       key: this.key,
       previous,

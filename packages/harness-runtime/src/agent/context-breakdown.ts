@@ -1,9 +1,7 @@
 /**
- * 上下文构成归因(M145)。
- *
+ * 上下文构成归因。
  * 回答「上下文快满时到底是谁占的」:按固定 8 类把**本次请求**的输入拆开记账
  * (system 提示 / 工具定义 / 规则 / 技能清单 / MCP / 子代理定义 / 记忆 / 对话历史)。
- *
  * 口径(硬约束):
  *  - chars = 文本/JSON 的**逐字长度**,不做推断(exact);tokens 一律 `rawTokens` 本地估算
  *    (source 恒为 "local_estimate",不乘 provider 标定系数、不读 provider usage)。

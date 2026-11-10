@@ -1,5 +1,5 @@
 /**
- * sensing/decision 单测(2026-10-21):分支/循环决策点感知。
+ * sensing/decision 单测:分支/循环决策点感知。
  * 覆盖:python(if/elif/else 独立 clause + while/for 迭代目标 + 三元)、js(else-if 链=
  * elif、for-of/in 区分、switch case/default、三元 ternary_expression)、typescript
  * (类型注解下零 ERROR)、c(do-while/for/switch case_statement/三元)、cpp(range-for)、

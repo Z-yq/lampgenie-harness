@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 /**
- * 远端代码认知运行时 staging(2026-10-27,ZCode Source Server 形态的 genie 切片):
+ * 远端代码认知运行时 staging(ZCode Source Server 形态的 genie 切片):
  * 把 code-sense CLI + 依赖闭包 + **自带的 Linux Node 20** 打成 `sense-remote.tar.gz`,
  * 连接 WSL/SSH 时上传到目标 `~/.genie/genie-sense`,之后 code_sense / code_review
  * 由工作区服务在远端直接执行(不再逐次 wsl.exe / ssh 拼命令)。
- *
  * 为什么自带 Node:code-sense 需要 node>=20(可选链/空值合并、Object.hasOwn、Array.at 等),
  * 而 WSL 常见 apt node 只有 12;远端没有可靠 node 时工具会整块不可用(ZCode 同样在
  * Source Server archive 内自带目标 Node)。
- *
  * 内容:
  *   node                        Node 20 linux-x64 官方二进制(下载缓存 .stage/downloads)
  *   app/cli.js                  packages/code-sense-cli/dist/cli.js(esbuild bundle,外部依赖 ts-morph/web-tree-sitter)
  *   app/package.json            {"type":"module"}(ESM 入口)
  *   app/node_modules/…          gateway staging 的依赖闭包去掉 playwright-core;
  *                               tree-sitter-wasms 剪到 code-sense 支持的 11 种语言
- *
  * 幂等:.stage/sense-remote 每次重建;tar 版本号=sha256 前 16 位,部署端据此跳过重复上传。
  * 纯 Node 内置实现 + tar 命令(WSL/Linux 均自带)。
  */

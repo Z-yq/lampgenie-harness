@@ -1,5 +1,5 @@
 /**
- * M144 指令文件链:用户级 ~/.genie/AGENTS.md → 仓根(AGENTS / .genie / .agents)→ 子目录。
+ * 指令文件链:用户级 ~/.genie/AGENTS.md → 仓根(AGENTS / .genie / .agents)→ 子目录。
  * 覆盖:链序、realpath 去重、内容 sha1 去重、预算(env 覆盖 + clamp)、注入拦截、mtime 缓存、不越界。
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

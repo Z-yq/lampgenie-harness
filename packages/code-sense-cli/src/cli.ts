@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
  * codesense——code-sense 静态调用索引的独立 CLI(零 lampgenie-harness 运行时依赖)。
- *
  * 指令集与 MCP 工具面(code_index_*)、lampgenie-harness gateway 内部工具三方同源:
  * 单一真相=packages/code-sense 核心库;本 CLI 与 src/mcp-core.ts 都是薄适配。
  * 详见 docs/codesense-cli.md(仓根)或本包 README。
@@ -85,7 +84,7 @@ export const HELP = `codesense v${VERSION} — 代码静态调用索引 CLI(code
                          --semantics  LLM 语义描述(批量 ≤12/请求,上限 40 端点;
                                       无凭证=显式 off 不报错;--write 落盘语义缓存
                                       .genie/sense-index/api-semantics.json,按 git sha+端点指纹)
-  bridge                 跨语言桥边(step-103/107):前端 fetch 字面量 ↔ 后端 route 的确定性配对,
+  bridge                 跨语言桥边(/107):前端 fetch 字面量 ↔ 后端 route 的确定性配对,
                          每条边带双端 file:line+confidence;纯行扫描,不触发索引构建
                          --forms http-api,ws,spec,ipc,capi,grpc  形态选择(缺省 http-api;all=全形态:
                          ws=WebSocket 通道/spec=OpenAPI 对账/ipc=Electron IPC/capi=Python C-API/grpc=gRPC)
@@ -117,13 +116,13 @@ export const HELP = `codesense v${VERSION} — 代码静态调用索引 CLI(code
   state                  状态机表面:transitions 表/switch 转移/状态模式类族/XState/Redux slice
                          (五形态确定性提取,触发点带 file:line;mermaid 可上白板)
   algo [file]            算法画像:模型定义/训练/推理/数据管线/CV-DSP 角色识别(信号带证据行)
-  vars <file>            文件变量类型清单(step-089):类型分组的变量/字段/枚举常量/typedef,
+  vars <file>            文件变量类型清单:类型分组的变量/字段/枚举常量/typedef,
                          每条带声明类型(C: int/char*/struct X/数组/函数指针;TS 泛型联合;
                          Py 注解;Go/Java 静态类型)——逐文件深提取,不触发索引构建
                          --locals 扩入函数内注解面(带注解 param/local;推断局部不入)
-  tokens <file>          semantic-token 流导出(step-089):span+kind+dataType 的 JSON
+  tokens <file>          semantic-token 流导出:span+kind+dataType 的 JSON
                          (--json 全量;文本面=摘要),供 UI 语义着色/外部编辑器集成
-  project [root]         项目底座认知(step-089):README 首段/包清单/框架指纹/入口/目录拓扑
+  project [root]         项目底座认知:README 首段/包清单/框架指纹/入口/目录拓扑
                          → 确定性骨架(全带证据行)+LLM purpose(凭证链自动生效,指纹缓存;
                          --no-llm 关)——「这个项目大概是干什么的」防开发偏离主线
                          --write  落盘 .genie/sense-index/profile.json(gateway 注入与
@@ -145,7 +144,7 @@ export const HELP = `codesense v${VERSION} — 代码静态调用索引 CLI(code
 服务
   serve [root]           MCP stdio 服务(codex/trae/dsh/zcode 等 MCP 客户端直接接入;
                          工具面十五件:code_index_symbol/file/entrypoints/modules/impact +
-                         api/state/algo(step-080)+ vars/project(step-089)+
+                         api/state/algo()+ vars/project()+
                          wire(2026-10-21,WS 协议三处对账)+ refs(字面量引用面)+
                          branches(2026-10-23,分支/循环骨架)+
                          surface(2026-11-06,概念足迹 ${SURFACE_CATEGORIES.length} 类表面)——
@@ -189,8 +188,8 @@ export function defaultIo(): CliIo {
   return { out: (s) => process.stdout.write(s + "\n"), err: (s) => process.stderr.write(s + "\n") };
 }
 
-/** 大仓索引自动抬堆(2026-11-08,7700 审计):1439 个源文件的 ts 仓在默认 2GB 堆上 ts-morph
- *  全量解析 OOM(实测峰值 RSS 2.6GB)。估算建议堆帽 > 当前堆上限时,用同级 node 带
+/** 大仓索引自动抬堆(7700 审计):1439 个源文件的 ts 仓在默认 2GB 堆上 ts-morph
+ * 全量解析 OOM(经验证峰值 RSS 2.6GB)。估算建议堆帽 > 当前堆上限时,用同级 node 带
  *  --max-old-space-size 重跑一次(index 命令);env 标记防递归,子进程输出直接透传。
  *  估算失败/已显式设堆=保持原行为。 */
 async function ensureIndexHeap(root: string, io: CliIo, quiet: boolean): Promise<void> {
@@ -230,7 +229,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
   };
 
   const rootArg = (): string | undefined => {
-    // step-092:波浪号自展(非 shell 调用形态 shell 不代展开)——--root 与位置参数两源统一。
+ // 波浪号自展(非 shell 调用形态 shell 不代展开)——--root 与位置参数两源统一。
     const r = flagStr(p, "root") ?? (cmd === "entrypoints" || cmd === "index" || cmd === "serve" || cmd === "doctor" || cmd === "project" ? p._[1] : undefined);
     return r !== undefined ? expandTilde(r) : undefined;
   };
@@ -290,7 +289,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
           io.out(`  索引: ${nodes} 节点 / ${edges} 边(构建 ${(out.buildMs / 1000).toFixed(1)}s${out.relinked ? `,relink ${out.relinked}` : ""})`);
           const covLine = formatCoverageLine(out.index.coverage);
           if (covLine) io.out(`  覆盖: ${covLine}`);
-          // fail-visible(step-067):零覆盖/低覆盖显式告警,不再 exit 0 无声跳过
+ // fail-visible:零覆盖/低覆盖显式告警,不再 exit 0 无声跳过
           for (const w of out.index.coverage ? coverageWarnings(out.index.coverage) : []) {
             io.err(c.yellow(`  [warn] 覆盖: ${w}`));
           }
@@ -316,7 +315,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         for (const e of reg.roots) {
           io.out(`  ${c.bold(e.name)}  ${e.root}`);
           io.out(`    ${e.stats.nodes} 节点 / ${e.stats.edges} 边 / ${e.stats.files} 文件 · 上次构建 ${e.lastBuild.mode}(复用 ${e.lastBuild.reused}/新扫 ${e.lastBuild.scanned})· ${new Date(e.lastIndexedAt).toLocaleString()}`);
-          // 覆盖行(step-067 status 面):manifest 有则显,旧索引显「无覆盖数据(建议重建)」
+ // 覆盖行( status 面):manifest 有则显,旧索引显「无覆盖数据(建议重建)」
           const idx = loadIndex(e.root);
           const covLine = formatCoverageLine(idx?.coverage);
           if (covLine) {
@@ -366,7 +365,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         const ctx = await resolveContext({ root: rootArg(), noBuild: flagBool(p, "no-build"), quiet });
         printNotes(io, c, ctx);
         const repo = flagStr(p, "repo");
-        // 2026-10-21 E②:symbol --graph = graph <符号名>(mermaid 邻域图;graph 子命令保留为别名)
+ // E②:symbol --graph = graph <符号名>(mermaid 邻域图;graph 子命令保留为别名)
         const r = cmd === "symbol" && flagBool(p, "graph")
           ? queryGraphCmd(ctx, name, repo, json, d)
           : cmd === "symbol"
@@ -376,8 +375,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "explore": {
-        // 2026-10-21 C/E:自然语言探索——「不认识这个仓,从哪看起」的第一入口。
-        // 2026-10-21 符号优先:查询先走 cjk 分词+中英词典 → 静态索引打分出候选符号(gateway
+ // C/E:自然语言探索——「不认识这个仓,从哪看起」的第一入口。
+ // 符号优先:查询先走 cjk 分词+中英词典 → 静态索引打分出候选符号(gateway
         // code_index mode=explore 同一管线),再叠加原有 grep 行命中(保留但在输出中降权排后)。
         const q = p._.slice(1).join(" ").trim();
         if (!q) {
@@ -466,7 +465,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "api": {
-        // step-077:HTTP 接口表面——确定性行扫描,索引非前置(--no-build 下也能出清单)
+ // HTTP 接口表面——确定性行扫描,索引非前置(--no-build 下也能出清单)
         // 收尾批 I:--semantics 走 api-semantics 模块(批量/上限/缓存/无凭证显式 off);
         // --write 显式开启语义缓存落盘(基线仓只读红线,默认不落盘)
         const ctx = await resolveContext({ root: rootArg(), noBuild: true, quiet });
@@ -480,10 +479,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "bridge": {
-        // step-103:跨语言桥边(HTTP api 桥原型)——前端 fetch 字面量 ↔ 后端 route 的确定性
+ // 跨语言桥边(HTTP api 桥原型)——前端 fetch 字面量 ↔ 后端 route 的确定性
         // 配对,每条边带双端 file:line 证据;纯行扫描链,索引非前置。
-        // step-107:--forms http-api,ws,spec,ipc,capi,grpc|all(缺省 http-api,行为恒等)。
-        // 2026-10-25:--candidates/--semantic 追加 LLM 消歧候选区(tier=semantic,与确定性边分离;
+ // --forms http-api,ws,spec,ipc,capi,grpc|all(缺省 http-api,行为恒等)。
+ // --candidates/--semantic 追加 LLM 消歧候选区(tier=semantic,与确定性边分离;
         // --candidates=all 追加 1 段前缀 low 档)。
         const ctx = await resolveContext({ root: rootArg(), noBuild: true, quiet });
         printNotes(io, c, ctx);
@@ -502,7 +501,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "wire": {
-        // 2026-10-21:WS 消息协议表面——本仓真正的接口是消息协议而非 HTTP。
+ // WS 消息协议表面——本仓真正的接口是消息协议而非 HTTP。
         // 纯行/结构扫描(协议 union ↔ server.ts case ↔ panel/assets 发送/接收),
         // 不触发索引构建;--changed 只看 git 工作区 diff/未跟踪文件。
         const root = rootArg() ?? resolveProjectRoot(process.cwd())?.root ?? process.cwd();
@@ -516,7 +515,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "refs": {
-        // 2026-10-21:字面量引用面——删除/修改一个字符串标识(如 action === "graph")时,
+ // 字面量引用面——删除/修改一个字符串标识(如 action === "graph")时,
         // symbol/impact 全空、review --scan 0 条、explore 不命中,只能 grep。本命令按语境
         // 列出全部引用点(产品源码+测试+文档/提示词文本),所属符号读现成索引(缺席留空)。
         // 纯行扫描,不触发索引构建;默认排除 node_modules/dist/.genie/vendor。
@@ -538,7 +537,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "surface": {
-        // 2026-11-06 全链路闭环变更:概念足迹面——替换/迁移/下线一个概念(消息名、journal kind、
+ // 全链路闭环变更:概念足迹面——替换/迁移/下线一个概念(消息名、journal kind、
         // 配置键、面板文案、资源名、测试断言、文档章节)时,把全部落点一次列全,替掉人肉多轮 grep。
         // 纯行扫描(复用 refs 遍历),不触发索引构建;默认排除 node_modules/dist/.genie/vendor/.git。
         const concepts = p._.slice(1).filter((x) => typeof x === "string" && x.trim().length > 0);
@@ -562,7 +561,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "config": {
-        // step-089 P2:LLM 凭证配置(文件权限 600,输出永远脱敏)
+ // P2:LLM 凭证配置(文件权限 600,输出永远脱敏)
         const sub = p._[1] ?? "list";
         const key = p._[2];
         const value = p._[3];
@@ -615,7 +614,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "state": {
-        // step-077 P2:状态机表面(五形态;不依赖索引构建)
+ // P2:状态机表面(五形态;不依赖索引构建)
         const ctx = await resolveContext({ root: rootArg(), noBuild: true, quiet });
         printNotes(io, c, ctx);
         const r = await queryStateCmd(ctx, json, { all: flagBool(p, "all") });
@@ -623,7 +622,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "algo": {
-        // step-077 P3:算法画像(框架 API 模式识别;不依赖索引构建)
+ // P3:算法画像(框架 API 模式识别;不依赖索引构建)
         const ctx = await resolveContext({ root: rootArg(), noBuild: true, quiet });
         printNotes(io, c, ctx);
         const r = await queryAlgoCmd(ctx, json, p._[1], { all: flagBool(p, "all") });
@@ -632,7 +631,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
 
       case "vars":
       case "tokens": {
-        // step-089 P1:变量类型清单 / semantic-token 导出(逐文件深提取,不依赖索引构建)
+ // P1:变量类型清单 / semantic-token 导出(逐文件深提取,不依赖索引构建)
         // 收尾批 F:vars --locals 扩入函数内注解面(param/parameter/local)
         const pathArg = p._[1];
         if (!pathArg) {
@@ -649,7 +648,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "project": {
-        // step-089 P3:项目底座认知(README/包清单/框架指纹/入口/拓扑 → 骨架;
+ // P3:项目底座认知(README/包清单/框架指纹/入口/拓扑 → 骨架;
         // LLM purpose 走凭证链+指纹缓存;--write 落盘供 gateway 注入/action=project 消费)
         const ctx = await resolveContext({ root: rootArg(), noBuild: true, quiet });
         printNotes(io, c, ctx);
@@ -658,7 +657,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "wiki": {
-        // step-118:持久 repo wiki(.genie/wiki/<repo>/;零 embedding;索引非前置)
+ // 持久 repo wiki(.genie/wiki/<repo>/;零 embedding;索引非前置)
         const r = await wikiCommand(p, json);
         return emit(io, { text: r.text, json: r.json, miss: r.miss ?? false }, json);
       }
@@ -672,7 +671,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "modules": {
-        // 2026-10-22 P1:模块视图(清单+交互矩阵+枢纽/测试面;--graph=mermaid)
+ // P1:模块视图(清单+交互矩阵+枢纽/测试面;--graph=mermaid)
         const ctx = await resolveContext({ root: rootArg(), noBuild: flagBool(p, "no-build"), quiet });
         printNotes(io, c, ctx);
         const r = queryModulesCmd(ctx, flagStr(p, "repo"), json, flagBool(p, "graph"));
@@ -680,7 +679,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       }
 
       case "flow": {
-        // 整仓代码流(2026-10-26):module/file/function 三层 + 入口/分层/裁剪;图给人看,JSON 给 agent。
+ // 整仓代码流:module/file/function 三层 + 入口/分层/裁剪;图给人看,JSON 给 agent。
         const ctx = await resolveContext({ root: rootArg(), noBuild: flagBool(p, "no-build"), quiet });
         printNotes(io, c, ctx);
         const level = flagStr(p, "level");
@@ -780,7 +779,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       case "serve": {
         serveMain(p._.slice(1), { root: flagStr(p, "root") });
         // 常驻:进程由 serve 的 stdin end/drain 逻辑退出;runCli 在此不返回——否则主守卫
-        // 立刻 process.exit 杀死尚未消费 stdin 的服务(实测一次性管道场景零响应实锤)
+ // 立刻 process.exit 杀死尚未消费 stdin 的服务(经验证一次性管道场景零响应注意)
         return new Promise<number>(() => {});
       }
 
@@ -819,7 +818,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       return 2;
     }
     if (e instanceof IndexBusyError) {
-      // step-086 单飞锁:同根已有索引在飞 → 礼貌拒绝(exit 3),不重复烧内存
+ // 单飞锁:同根已有索引在飞 → 礼貌拒绝(exit 3),不重复烧内存
       io.err(c.yellow(e.message));
       return 3;
     }
@@ -828,7 +827,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
       return 2;
     }
     if (e instanceof LlmConfigError) {
-      // step-089 P2:凭证/配置形态错=用法错误档(exit 2),与 review --deep 缺凭证同语义
+ // P2:凭证/配置形态错=用法错误档(exit 2),与 review --deep 缺凭证同语义
       io.err(c.red(e.message));
       return 2;
     }

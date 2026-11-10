@@ -1,5 +1,5 @@
 /**
- * 增量链桥边同步测试(step-106 / designs/27 §7):
+ * 增量链桥边同步测试( / §7):
  * ① 首建(express×ts 同族混语 fixture)→ index.bridge 在场(边带双端证据);
  * ② 零变更重建 → bridge 逐字节 carry(与 coverage carry 同口径,不重算);
  * ③ 前端文件新增 fetch 字面量 → 重建 → 桥边增量出现(重算通道);
@@ -50,7 +50,7 @@ afterAll(() => {
   rmSync(fakeHome, { recursive: true, force: true });
 }, 60_000);
 
-describe("step-106:增量链桥边同步", () => {
+describe("增量链桥边同步", () => {
   it("①首建:bridge 段在场,orders/hello 端点出边(同族仓自配对:server/app.ts 路由行字面量自命中,103 §3.4 登记形态)", { timeout: 120_000 }, async () => {
     const r = await buildIndexWithReuse(ws, { heapBudget: "off" });
     expect(r.mode).toBe("full");

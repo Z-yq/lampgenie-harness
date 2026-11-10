@@ -1,5 +1,5 @@
 /**
- * 服务端目录浏览(step-056,「选目录弹 Windows 对话框」根治):
+ * 服务端目录浏览(「选目录弹 Windows 对话框」根治):
  * 面板跑在浏览器/Electron,浏览器侧选目录只能拿到 Windows 侧相对路径(webkitdirectory);
  * gateway 本体跑在 WSL——目录浏览必须由服务端做,才能浏览到 /home/... 真实项目路径。
  * fs.list 故意不限定根:它就是「添加项目」的目录选择器;gateway 是本地工具,

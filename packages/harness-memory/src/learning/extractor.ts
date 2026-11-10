@@ -3,7 +3,6 @@
 // 正确性来自「写入保守 + 语音原生易纠正 + 审计留痕」,而不是问用户。
 // 同类「session-end 提取 + 双文档边界」的领域模型参考 qwen-audio-agent(Apache-2.0,致谢),
 // 本文件为独立实现;strict 类型化列入 backlog。
-//
 // 代码级安全不变量(不得弱化):
 // - 一切写入都走与 Realtime 记忆工具相同的 MemoryProvider 运行时;提取器不直接改文档。
 // - USER.md 只收显式交互指令;MEMORY.md 拒收指令形内容。
@@ -94,14 +93,11 @@ function clampPatch(value) {
 }
 
 // 摘掉落不了地的 edit。
-//
 // 模型很容易把【对话里的原话】当成 old_text,而 old_text 必须是【现有文档里】的
 // 原文;文档还是空模板时更是必错。这类 edit 在 prepareEdit 里会抛错,而 apply 是
 // 整批原子的 —— 一条坏 edit 会连带丢掉同批完全正确的 append。
-//
 // 这里按顺序在副本上模拟替换(edits 是顺序应用的,后一条可能依赖前一条的结果),
 // 找不到或出现多次的单独摘出去,保住其余部分。
-//
 // 已知限制:这里用 memoryService.list() 的内容,与喂给模型的是同一份,视角一致;
 // 但 prepareEdit 用未截断原文。文档超过注入预算时,被截断部分若含重复文本,
 // 仍可能在 prepareEdit 处判为 ambiguous 而整批失败。那种情况 read 侧本就有

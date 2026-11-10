@@ -1,7 +1,6 @@
 /**
- * M162 信封闸生产可达性(WS e2e):修复前 protocol TaskSubmit 无 source/envelope/deliveryKey 字段,
+ * 信封闸生产可达性(WS e2e):修复前 protocol TaskSubmit 无 source/envelope/deliveryKey 字段,
  * zod strip 后 server 的 externalSourceOf(rawSubmit) 永远拿不到 source —— 外部来源路径不可达。
- *
  * 断言面(真网关 createGatewayApp + WS,无 llm/executor=任务停在 running):
  * ① source=bot + deliveryKey → task.submitted 带 envelope + journal task.envelope.issued;
  * ② 同 deliveryKey 重投 → duplicate:true 且 taskId 相同;
@@ -64,7 +63,7 @@ function issuedEvents(sessionId: string): { type?: unknown; taskId?: unknown }[]
   return events.map((e) => e.payload ?? {}).filter((p) => p.type === "task.envelope.issued");
 }
 
-describe("M162 信封闸 WS 生产链路", () => {
+describe(" 信封闸 WS 生产链路", () => {
   it("外部来源签发/重投去重/篡改拒收/自声明拒收/内部零变化", { timeout: 30_000 }, async () => {
     const { ws, wait } = await boot();
 

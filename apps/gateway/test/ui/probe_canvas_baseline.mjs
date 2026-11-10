@@ -1,5 +1,5 @@
-/** 画布「改前基线」一次性取证探针(2026-11-05)。
- *  只读实测:不改 src。自起临时实例(默认 7791,不碰 7700),板副本落独立 SID。
+/** 画布「改前基线」一次性取证探针。
+ * 只读经验证:不改 src。自起临时实例(默认 7791,不碰 7700),板副本落独立 SID。
  *  量:viewBox 宽高比 / 节点与 text 数量 / 3 个节点文本(截断判据) / cvPan.k 与字号 /
  *      「全」「适」缩放与一屏完整可见节点数 / 添加模块全链路(含 WS frame 序列) / 真事件平移对照。
  *  跑法:cd apps/gateway && node --import tsx test/ui/probe_canvas_baseline.mjs
@@ -147,7 +147,7 @@ const snap = (page) => page.evaluate(() => {
       if (bb && gr.width > 2 && bb.width * (gr.width / (g.getBBox ? (g.getBBox().width || 1) : 1)) > gr.width + 4) overflowTexts++;
     }
   }
-  // 字号:.cv-foot(若有)/ svg text 计算值 + getBBox 实测高度 / HTML 侧 .cv-aitem 对照
+ // 字号:.cv-foot(若有)/ svg text 计算值 + getBBox 经验证高度 / HTML 侧 .cv-aitem 对照
   let font = null;
   const foot = document.querySelector(".cv-foot");
   const probeText = svg ? svg.querySelector("text") : null;
@@ -323,7 +323,7 @@ try {
   note("F.fit.fitLast", sFit.fitLast);
   await shot(page, "before-17nodes-fit.png");
 
-  // ---------- 3 添加模块实测(在「适」态) ----------
+ // ---------- 3 添加模块经验证(在「适」态) ----------
   const add = { steps: {} };
   add.nodesBefore = (await snap(page)).docNodes;
   const tAdd = await page.evaluate(() => Date.now());
@@ -379,7 +379,7 @@ try {
   out.add = add;
   console.log("[add] " + JSON.stringify(add.verdict));
 
-  // ---------- 4 平移实测(page.mouse 真事件) ----------
+ // ---------- 4 平移经验证(page.mouse 真事件) ----------
   await press(page, "cvZfit"); await page.waitForTimeout(700);
   const panBeforeNode = await page.evaluate(() => ({ ...cvPan }));
   const np = await nodePoint(page);

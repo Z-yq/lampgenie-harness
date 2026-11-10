@@ -1,11 +1,9 @@
 /**
  * 03 board_read 同参去重(token 成本优化第一轮)+ 未决 2B 的 rev 自增守护。
- *
- * 缺陷背景:实测 93 个 session 里同目标重读 1,437 轮、其中 1,418 次逐字节相同(最狠一块
+ * 缺陷背景:经验证 93 个 session 里同目标重读 1,437 轮、其中 1,418 次逐字节相同(最狠一块
  * 2,160 字符的板读 155 次),而 microcompact 的 NEVER_COMPACT_TOOLS 把 board_read 排除在
  * 裁剪外——重复读是纯 token 浪费。判据只用 BoardDoc.rev(三处写路径 upsert/evidence/prune
  * 均自增),同 key 同 rev 才回一行短提示。
- *
  * negative(cache key 不得只用 sessionId):不同 taskId / all 翻转都必须各返回全量。
  */
 import { describe, it, expect, afterEach } from "vitest";
@@ -72,7 +70,7 @@ describe("② 同参重读:短提示→带标记短提示→第 4 次=逃逸全�
     expect(third).toContain("[[activate-tool:board_upsert]]");
     expect(third).not.toContain("节点n1");
     // 逃逸(旧实现 stubStreak 在 execute 内重建,计数永远 1,此分支是死代码——
-    // 38 步 board_read 死循环实锤;修后计数挂实例作用域,n=3 触发)
+ // 38 步 board_read 死循环注意;修后计数挂实例作用域,n=3 触发)
     const fourth = String(await tool.execute({}));
     expect(fourth).toContain("已连续 3 次重读");
     expect(fourth).toContain("节点n1");

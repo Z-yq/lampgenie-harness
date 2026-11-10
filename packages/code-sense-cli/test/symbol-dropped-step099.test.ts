@@ -1,5 +1,5 @@
 /**
- * step-099(RC-096-B5)symbol 面弃边可见性:formatSymbolHit 在命中名有构建期弃边台账或
+ * (RC-096-B5)symbol 面弃边可见性:formatSymbolHit 在命中名有构建期弃边台账或
  * 索引内未解析边时追加「弃边与不可见」行;无则零行(默认输出逐字节不变)。
  * impact 面同源口径在 packages/code-sense/test/impact-step099.test.ts 锚定。
  */
@@ -33,7 +33,7 @@ function fakeHit(): SymbolQueryResult {
   };
 }
 
-describe("step-099 RC-B5:symbol 面弃边行", () => {
+describe(" RC-B5:symbol 面弃边行", () => {
   it("有台账:追加数量+原因行(与 impact 面同口径)", () => {
     const s = fakeRepo({
       dropped: { has_access: { count: 15, reasons: { "同名候选非唯一(收窄后仍有 3 处待选)": 15 }, samples: [{ file: "x.py", line: 1 }] } },

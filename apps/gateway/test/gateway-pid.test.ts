@@ -1,5 +1,5 @@
 /**
- * gateway.pid 生命周期(2026-10-25):网关自己写、只清自己的、退出日志带来源指纹。
+ * gateway.pid 生命周期:网关自己写、只清自己的、退出日志带来源指纹。
  */
 import { describe, it, expect } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

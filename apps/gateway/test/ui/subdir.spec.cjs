@@ -1,4 +1,4 @@
-/** UI 实测(step-060):子智能体目录(两区+条目下钻+运行角标)+ task_output 轮询聚合(刷屏治理)。
+/** UI 经验证:子智能体目录(两区+条目下钻+运行角标)+ task_output 轮询聚合(刷屏治理)。
  * 自启跑法:npx tsx test/ui/_ui_selfhost.cjs --opts test/ui/_subdir.opts.cjs test/ui/subdir.spec.cjs
  * 断言面:①目录开合/两区分区/条目下钻(任务书全文/模型行)/多 title 区分 ②同 agentId 多次
  * task_output 轮询只渲染一张聚合卡(终态翻绿+聚合说明) ③历史转录注入(journal 重放)同语义
@@ -28,7 +28,7 @@ const HIST = "spec-sess-subdir-hist";
     localStorage.setItem("zh:g-term", "off");
   });
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 30000 }); // 慢盘+共享负载下首屏 >5s 是常态,页面级加载显式放宽
-  // 2026-10-21 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
+ // 画布分流/分身独立看板:画布形态下白板 chip=定位白板卡、目录条目=定位消息分组、
   // 会话流不渲染子代理过程卡——本规格守经典契约(浮窗/工作区 tab/会话流过程卡),先切经典布局。
   await page.waitForTimeout(600);
   await page.evaluate(() => { try { if (document.body.classList.contains("cv-shell")) CanvasShell.setMode("classic"); } catch (e) {} });
@@ -80,7 +80,7 @@ const HIST = "spec-sess-subdir-hist";
   const labels = await page.locator("#subDirBody .sd-label").allTextContents();
   check("条目标题区分(两个不同 title)", labels.some((x) => x.indexOf("渲染链路勘察") >= 0) && labels.some((x) => x.indexOf("测试缺口清点") >= 0), labels.join("|"));
 
-  // 6. 下钻(step-062 收敛:条目主区域=一级入口开工作区 tab;下钻改挂「详情」钮轻展开)
+ // 6. 下钻(收敛:条目主区域=一级入口开工作区 tab;下钻改挂「详情」钮轻展开)
   const drillItem = page.locator("#subDirBody .sd-item", { hasText: "渲染链路勘察" });
   const moreBtnN = await drillItem.locator("[data-submore]").count();
   check("条目带「详情」轻展开钮(下钻新挂点)", moreBtnN === 1, "count=" + moreBtnN);
@@ -123,7 +123,7 @@ const HIST = "spec-sess-subdir-hist";
   check("角标归零隐藏", !badgeGone);
   await page.screenshot({ path: "/tmp/ui-subdir-live.png" });
 
-  // ── 9.5 目录深化(2026-10-16):元信息行/deadline 倒计时/心跳/终止按钮——G2 字段防御式渲染 + 终止通路 ──
+ // ── 9.5 目录深化:元信息行/deadline 倒计时/心跳/终止按钮——G2 字段防御式渲染 + 终止通路 ──
   // 同进程注入后台注册表(服务端 subagentList 透传 + subagent.cancel case 的真实通路):
   //  zz=字段齐全带 cancel 句柄;old=stale+过期 deadline;nn=零新字段(缺席不炸)且无 cancel 句柄。
   const regInjected = (() => {

@@ -1,5 +1,5 @@
 /**
- * 模型热切回归(2026-10-20 用户实报「最新的 session 用配置过的 GLM 模型一直不行」):
+ * 模型热切回归(用户用户反馈「最新的 session 用配置过的 GLM 模型一直不行」):
  * 根因=面板只发 model/旧路由,运行时拿旧端点+旧 key(智谱端点收到阿里云 Key → 401);
  * 且旧凭证回退让 env 的 GENIE_LLM_API_KEY 压过 Provider 专属密钥。
  * 这里锁死两组行为:选择即 Registry(路由由模型拥有者派生)+ 专属密钥优先。
@@ -150,7 +150,7 @@ describe("buildModelProviders 角色路由(registry 语义)", () => {
     expect(p.review?.describe()).toMatchObject({
       model: "deepseek-v4.1-flash-1017", baseUrl: "https://aliyun.example/compatible-mode", apiType: "chat",
     });
-    // 2026-10-20 用户口径:子代理未显式配置=回退主 provider(与主 agent 同模型同端点),不再恒建独立轨
+ // 子代理未显式配置=回退主 provider(与主 agent 同模型同端点),不再恒建独立轨
     expect(p.subagent).toBeUndefined();
   });
 

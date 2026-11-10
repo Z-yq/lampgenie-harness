@@ -1,5 +1,5 @@
 /**
- * 白板评论待办链路(2026-10-22):评论 → 登记 pending → agent loop tips 注入一次即消费。
+ * 白板评论待办链路:评论 → 登记 pending → agent loop tips 注入一次即消费。
  * 设计板 n5「评论唤醒」验收:不自动开轮,但下一轮一定看见。
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

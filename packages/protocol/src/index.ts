@@ -1,5 +1,5 @@
 /**
- * Gateway Client Protocol(designs/12 定稿)的 zod schema。
+ * Gateway Client Protocol(定稿)的 zod schema。
  * 模式参照 qwen-audio-agent shared/protocol(Apache-2.0,能力协商/信封纪律),
  * 内容自研——该仓协议以 voice 事件为主体,不适用 coding harness。
  */
@@ -16,12 +16,10 @@ const Envelope = z.object({ v: z.literal(PROTOCOL_VERSION) });
  * 口径对齐 ZCode/packages/shared/src/errors.ts:14-89(normalizeUnknownError:
  * 「结构化 code 优先、message 兜底」)——即 code 是可编程的稳定标识,人话文案由展示层
  * (面板 ERR_TEXT:apps/gateway/src/error-text.ts)按 code 本地化,服务端 message 只做兜底。
- *
  * Q1 过渡方案(本批已拍板):`as const` 对象 + 同名类型 = 收窄但不封闭。
  * error 帧 schema 用 `z.union([z.enum(ERROR_CODE_VALUES), z.string()])`:
  * 新站点写错 code 有 IDE/tsc 提示,历史字符串仍可通过校验(不炸旧调用点/旧客户端)。
  * 后续批次再把 union 收成 z.enum 完成封闭。
- *
  * 值约定:kebab-case(线上字符串与改造前逐字一致,前端判串/日志检索零漂移);
  * 例外 custom_command_reserved_name 沿用 commands-store 诊断口径(历史值不动)。
  */
@@ -47,12 +45,12 @@ export const ErrorCode = {
   QueueItemMissing: "queue-item-missing",
   // ---- 会议/团队/语音 ----
   MeetingImportFailed: "meeting-import-failed",
-  /** step-1033:super agent 指挥台链(新链只发这两个)。 */
+ /** super agent 指挥台链(新链只发这两个)。 */
   SuperFailed: "super-failed",
   SuperAnnounceFailed: "super-announce-failed",
-  /** @deprecated step-1033 legacy:companion 链旧错误码,保留值不删,新链不再发出。 */
+ /** @deprecated legacy:companion 链旧错误码,保留值不删,新链不再发出。 */
   CompanionFailed: "companion-failed",
-  /** @deprecated step-1033 legacy:见上。 */
+ /** @deprecated legacy:见上。 */
   CompanionAnnounceFailed: "companion-announce-failed",
   VoiceUnavailable: "voice-unavailable",
   VoiceFailed: "voice-failed",
@@ -142,9 +140,9 @@ export const TaskSubmit = Envelope.extend({
   credentialRef: z.string().optional(),
   /** 项目 id(缺省=激活项目;面板提交时带)。 */
   projectId: z.string().optional(),
-  /** 附件(step-048):已上传文件(.genie/uploads/<sid>/…);agent 侧注入任务书 + vision 通道。 */
+ /** 附件:已上传文件(.genie/uploads/<sid>/…);agent 侧注入任务书 + vision 通道。 */
   attachments: z.array(z.object({ name: z.string(), path: z.string(), mime: z.string().optional(), size: z.number().optional() })).optional(),
-  // ---- M162 外部来源提交面(全部 optional:面板不带=内部 user 路径逐字零变化)----
+ // ---- 外部来源提交面(全部 optional:面板不带=内部 user 路径逐字零变化)----
   // 只做透传,不在此做结构/权限校验:信封 digest/generation 与自声明拒收都在 gateway task-envelope。
   /** 来源描述符:字符串简写(bot/remote/group/schedule)或对象 {kind,id}(未知键 passthrough)。 */
   source: z
@@ -167,13 +165,13 @@ export const TaskCancel = Envelope.extend({
   type: z.literal("task.cancel"),
   taskId: z.string().min(1),
 });
-// 2026-11-05 interrupted 一键续跑:面板任务卡对 interrupted(及 legacy「重启中断」cancelled)任务发;
+// interrupted 一键续跑:面板任务卡对 interrupted(及 legacy「重启中断」cancelled)任务发;
 // 服务端 resumeInterrupted 幂等重提(idempotencyKey=resume:<原id>,双击/重连不双跑)。
 export const TaskResume = Envelope.extend({
   type: z.literal("task.resume"),
   taskId: z.string().min(1),
 });
-// 会议导入命令面(step-013 二期收口,designs/08 §3):纪要抽取→确认→批量任务。
+// 会议导入命令面(二期, §3):纪要抽取→确认→批量任务。
 export const MeetingImport = Envelope.extend({
   type: z.literal("meeting.import"),
   path: z.string().min(1),
@@ -183,17 +181,17 @@ export const MeetingSchedule = Envelope.extend({
   todos: z.array(z.object({ content: z.string().min(1), owner: z.string().optional(), deadline: z.string().optional() })).min(1),
   sessionId: z.string().optional(),
 });
-// 会话导出(step-004 二期收口):journal → dsh session-format v4 文件。
+// 会话导出(二期):journal → dsh session-format v4 文件。
 export const SessionExport = Envelope.extend({
   type: z.literal("session.export"),
   sessionId: z.string().min(1),
 });
-// 后台子代理进度/结果查询(step-054,ZCode TaskOutput 语义)
+// 后台子代理进度/结果查询(ZCode TaskOutput 语义)
 export const TaskOutputQuery = Envelope.extend({
   type: z.literal("task_output"),
   agentId: z.string().min(1),
 });
-// Plan 审批流(step-053,ZCode ExitPlanMode 审批语义):plan 模式任务终态→广播审批;
+// Plan 审批流(ZCode ExitPlanMode 审批语义):plan 模式任务终态→广播审批;
 // 批准=按计划派实施(ZCode「User has approved your plan」模型内容);反馈=steered 消息。
 export const PlanApprove = Envelope.extend({
   type: z.literal("plan.approve"),
@@ -202,7 +200,7 @@ export const PlanApprove = Envelope.extend({
   decision: z.enum(["approve", "feedback"]),
   feedback: z.string().optional(),
 });
-// ZCode 内置命令(step-052):/goal /compact。
+// ZCode 内置命令:/goal /compact。
 export const GoalSet = Envelope.extend({
   type: z.literal("goal.set"),
   sessionId: z.string().min(1),
@@ -230,7 +228,7 @@ export const TaskPin = Envelope.extend({
   pinned: z.boolean(),
 });
 export const TaskDelete = Envelope.extend({ type: z.literal("task.delete"), taskId: z.string().min(1) });
-/** 会话级批量删除(2026-10-19 用户实报「这些删不掉」):侧栏一行=一个会话(step-048 聚合),
+/** 会话级批量删除(用户用户反馈「这些删不掉」):侧栏一行=一个会话(聚合),
  *  删单条撑不住整行(该会话还有 N 条任务)→ 一次删该会话全部任务。 */
 export const TaskDeleteSession = Envelope.extend({ type: z.literal("task.deleteSession"), sessionId: z.string().min(1) });
 export const ArchiveClear = Envelope.extend({ type: z.literal("archive.clear") });
@@ -269,10 +267,10 @@ export const SenseQuery = Envelope.extend({
   query: z.string().min(1),
   mode: z.enum(["auto", "debug", "plan", "explore", "ui"]).optional(),
   depth: z.number().int().positive().max(5).optional(),
-  /** 项目级 code-sense(2026-10-12 用户口径:能力挂在项目级)——缺省回落 harness 根。 */
+ /** 项目级 code-sense(能力挂在项目级)——缺省回落 harness 根。 */
   projectId: z.string().min(1).optional(),
 });
-// repo wiki(step-118):持久 .genie/wiki/<repo>/ 页结构;projectId 缺省回退 harness 根。
+// repo wiki:持久 .genie/wiki/<repo>/ 页结构;projectId 缺省回退 harness 根。
 export const WikiList = Envelope.extend({
   type: z.literal("wiki.list"),
   projectId: z.string().min(1).optional(),
@@ -290,7 +288,7 @@ export const WikiRebuild = Envelope.extend({
   /** LLM 叙述页上限(成本护栏;缺省服务端 4)。 */
   maxLlmPages: z.number().int().min(0).max(20).optional(),
 });
-// 评审遗留(行级回写店消费,2026-10-13):sticky/resolved 跨轮视图。
+// 评审遗留(行级回写店消费:sticky/resolved 跨轮视图。
 export const StoredCommentZ = z.object({
   key: z.string(),
   path: z.string(),
@@ -313,7 +311,7 @@ export const ReviewStoreResult = Envelope.extend({
   open: z.array(StoredCommentZ),
   resolved: z.array(StoredCommentZ),
 });
-/** 评审评论一键回注聊天窗(step-074):单条/多条/整批评论编成修复指令,作为新任务注入目标会话。
+/** 评审评论一键回注聊天窗:单条/多条/整批评论编成修复指令,作为新任务注入目标会话。
  * 通道语义对齐 board.continue(tm.submit 新任务);items 由面板从 review.findings 卡或回写店组装。 */
 export const ReviewInjectItemZ = z.object({
   file: z.string().min(1).max(400),
@@ -335,30 +333,30 @@ export const ReviewInject = Envelope.extend({
   /** 来源面(chat-findings=会话内评论卡/review-store=回写店),journal 记账用。 */
   source: z.string().max(40).optional(),
 });
-/** 语音输入(2026-10-12 用户口径:qwen-audio-realtime 即语音模型,主 agent 语音通道)。
+/** 语音输入( qwen-audio-realtime 即语音模型,主 agent 语音通道)。
  * 浏览器采集 PCM16(base64)→服务端转 dashscope realtime→回复文本;凭证不出服务端。
- * @deprecated step-1033:voice.speak(音频直入大脑链路)已删除——server 不再受理,已从 ClientMessage
+ * @deprecated voice.speak(音频直入大脑链路)已删除——server 不再受理,已从 ClientMessage
  * 联合移除;保留 export 只为旧引用编译不破。语音入口改走 voice.transcribe(ASR→文本→super.turn)。 */
 export const VoiceSpeak = Envelope.extend({
   type: z.literal("voice.speak"),
   /** 16kHz PCM16 单声道,base64 编码。 */
   audioB64: z.string().min(1),
 });
-/** 语音输入(step-1033):浏览器 PCM16(base64)→服务端 ASR→文本;不产生人格设定与语音回播。 */
+/** 语音输入:浏览器 PCM16(base64)→服务端 ASR→文本;不产生人格设定与语音回播。 */
 export const VoiceTranscribe = Envelope.extend({
   type: z.literal("voice.transcribe"),
   audioB64: z.string().min(1),
   format: z.enum(["pcm16"]).optional(),
   sampleRate: z.number().int().positive().optional(),
 });
-// F3 自定义分组(step-037 收口):任务拖入用户自定义桶(本地偏好,不进状态机)。
+// F3 自定义分组:任务拖入用户自定义桶(本地偏好,不进状态机)。
 export const TaskGroup = Envelope.extend({ type: z.literal("task.group"), taskId: z.string().min(1), group: z.string().min(1).nullable() });
-// F5 一键沉淀(step-037 收口):当前会话轨迹→经验库(incidents/自动提炼)。
+// F5 一键沉淀:当前会话轨迹→经验库(incidents/自动提炼)。
 export const ExpDistill = Envelope.extend({ type: z.literal("exp.distill"), sessionId: z.string().min(1), projectId: z.string().optional() });
-// 多快照浏览(step-021/designs/21 收口):快照清单+任意恢复。
+// 多快照浏览(/):快照清单+任意恢复。
 export const CheckpointList = Envelope.extend({ type: z.literal("checkpoint.list") });
 export const CheckpointRestore = Envelope.extend({ type: z.literal("checkpoint.restore"), sha: z.string().min(7) });
-// 团队视图(step-032 收口):多 org 快照/邀请;审批中心挂起清单(step-010 收口)。
+// 团队视图:多 org 快照/邀请;审批中心挂起清单。
 export const TeamStatus = Envelope.extend({ type: z.literal("team.status") });
 export const TeamInvite = Envelope.extend({ type: z.literal("team.invite"), orgUrl: z.string().min(1), displayName: z.string().optional(), projects: z.array(z.string()).optional() });
 // fixD4(团队 issue 四件套):双通道 issue 面板消息 + P2P 通道面。
@@ -372,27 +370,27 @@ export const IssueConfirmDispatch = Envelope.extend({ type: z.literal("issue.con
 // team.p2p.*:状态全景 + 消息发送(P2P 优先/relay 兜底/离线队列)。
 export const TeamP2pStatus = Envelope.extend({ type: z.literal("team.p2p.status") });
 export const TeamP2pSend = Envelope.extend({ type: z.literal("team.p2p.send"), to: z.string().min(1), text: z.string().min(1) });
-// teamai 兼容面(designs/24):pull=手动触发团队仓重拉;push=经验/技能以 teamai skill 形态推团队仓。
+// teamai 兼容面:pull=手动触发团队仓重拉;push=经验/技能以 teamai skill 形态推团队仓。
 export const TeamaiPull = Envelope.extend({ type: z.literal("teamai.pull") });
-export const TeamaiPush = Envelope.extend({ type: z.literal("teamai.push"), orgUrl: z.string().optional(), ns: z.string().optional(), name: z.string().min(1), description: z.string().optional(), body: z.string().min(1), contributors: z.array(z.string()).optional(), /** 资源类(designs/30 §2.2);缺省=skill(旧客户端不带 kind 仍有效)。 */ kind: z.enum(["skill", "rule", "doc"]).optional() });
-// designs/30 门面三件套(panel 侧):inspect=资产清单+本地/团队仓 diff+团队仓体检;contribute=会话经验入 learnings;
+export const TeamaiPush = Envelope.extend({ type: z.literal("teamai.push"), orgUrl: z.string().optional(), ns: z.string().optional(), name: z.string().min(1), description: z.string().optional(), body: z.string().min(1), contributors: z.array(z.string()).optional(), /** 资源类( §2.2);缺省=skill(旧客户端不带 kind 仍有效)。 */ kind: z.enum(["skill", "rule", "doc"]).optional() });
+// 门面三件套(panel 侧):inspect=资产清单+本地/团队仓 diff+团队仓体检;contribute=会话经验入 learnings;
 // remove=删团队仓 main 上的一份资源。三者都只是转发/读面,权威数据仍在团队仓。
 export const TeamaiInspect = Envelope.extend({ type: z.literal("teamai.inspect") });
 export const TeamaiContribute = Envelope.extend({ type: z.literal("teamai.contribute"), orgUrl: z.string().optional(), title: z.string().min(1), body: z.string().min(1), tags: z.array(z.string()).optional(), project: z.string().optional() });
 export const TeamaiRemove = Envelope.extend({ type: z.literal("teamai.remove"), orgUrl: z.string().optional(), kind: z.enum(["skill", "rule", "doc"]), ns: z.string().optional(), name: z.string().min(1) });
 export const PermissionPending = Envelope.extend({ type: z.literal("permission.pending") });
-/** step-1042 关卡 Gate 历史面:拉最近决议(broker 内存 ring;重启即失,持久化登记后续)。 */
+/** 关卡 Gate 历史面:拉最近决议(broker 内存 ring;重启即失,持久化登记后续)。 */
 export const PermissionHistory = Envelope.extend({ type: z.literal("permission.history"), limit: z.number().int().positive().max(100).optional() });
-// TTS 播报(step-014 二期收口,designs/07):文本→服务端 qwen-tts→音频 base64 回放;
+// TTS 播报(二期:文本→服务端 qwen-tts→音频 base64 回放;
 // 凭证不出服务端;brief 级经播报改写器口语化限长。
 export const VoiceTts = Envelope.extend({
   type: z.literal("voice.tts"),
   text: z.string().min(1),
   level: z.enum(["full", "brief"]).default("full"),
-  /** 音色试听(2026-10-20):单次覆盖 config audio.tts.voice,不落配置;服务端回包 voice.tts.result.voice 回显。 */
+ /** 音色试听:单次覆盖 config audio.tts.voice,不落配置;服务端回包 voice.tts.result.voice 回显。 */
   voice: z.string().min(1).max(80).optional(),
 });
-/** 音色清单(2026-10-20):按当前 audio.tts.model 返回内置官方音色表;未知模型=空表(前端走自定义 voice id 兜底)。 */
+/** 音色清单:按当前 audio.tts.model 返回内置官方音色表;未知模型=空表(前端走自定义 voice id 兜底)。 */
 export const VoiceList = Envelope.extend({ type: z.literal("voice.list") });
 export const ExpList = Envelope.extend({ type: z.literal("exp.list") });
 export const ExpDisable = Envelope.extend({
@@ -407,7 +405,7 @@ export const ExpView = Envelope.extend({
   category: z.string().min(1),
   name: z.string().min(1),
 });
-/** 经验删除(2026-11-02 用户口径「经验库应当可以删除」):物理删技能目录,ledger 记 delete 可审计。 */
+/** 经验删除:物理删技能目录,ledger 记 delete 可审计。 */
 export const ExpRemove = Envelope.extend({
   type: z.literal("exp.remove"),
   category: z.string().min(1),
@@ -420,13 +418,13 @@ export const CfgSet = Envelope.extend({
   /** 点路径嵌套补丁,如 {llm:{model:"x"}}。 */
   patch: z.record(z.string(), z.unknown()),
 });
-/** step-125 预设一键接入:密钥名是否已存在(只查名字,不返回值)。 */
+/** 预设一键接入:密钥名是否已存在(只查名字,不返回值)。 */
 export const CfgSecretStatus = Envelope.extend({
   type: z.literal("cfg.secret.status"),
   rid: z.string().max(40).optional(),
   names: z.array(z.string().min(1)).max(20),
 });
-/** step-125 写入本机密钥文件(值只在 WS 帧内传输,服务端落 0600 文件)。 */
+/** 写入本机密钥文件(值只在 WS 帧内传输,服务端落 0600 文件)。 */
 export const CfgSecretSet = Envelope.extend({
   type: z.literal("cfg.secret.set"),
   rid: z.string().max(40).optional(),
@@ -437,7 +435,7 @@ export const ModelsList = Envelope.extend({
   type: z.literal("models.list"),
   /** 指定 providers[] 中的 id:按该 provider 的端点/凭证拉;缺省=主 llm。 */
   providerId: z.string().optional(),
-  /** step-128:只读探测——回包仅报连通与可见模型数,面板不合并目录(拉取合并走缺省形态)。 */
+ /** 只读探测——回包仅报连通与可见模型数,面板不合并目录(拉取合并走缺省形态)。 */
   probeOnly: z.boolean().optional(),
 });
 export const ProfileFile = Envelope.extend({
@@ -446,27 +444,27 @@ export const ProfileFile = Envelope.extend({
   /** 缺省=拉文件清单;给 file=拉该文件函数与调用边。 */
   file: z.string().optional(),
 });
-/** @deprecated step-1033 legacy:companion.turn 入站仍受理(老客户端),新前端只发 super.turn。 */
+/** @deprecated legacy:companion.turn 入站仍受理(老客户端),新前端只发 super.turn。 */
 export const CompanionTurn = Envelope.extend({
   type: z.literal("companion.turn"),
   text: z.string().min(1),
 });
-/** super agent 指挥台(step-1033):唯一新写入站(命令框/侧聊带入)。 */
+/** super agent 指挥台:唯一新写入站(命令框/侧聊带入)。 */
 export const SuperTurn = Envelope.extend({
   type: z.literal("super.turn"),
   text: z.string().min(1),
 });
-/** 指挥台历史浮层(step-1033):sinceSeq 增量拉取。 */
+/** 指挥台历史浮层:sinceSeq 增量拉取。 */
 export const SuperHistory = Envelope.extend({
   type: z.literal("super.history"),
   sinceSeq: z.number().int().nonnegative().optional(),
 });
-/** 指挥台待处理清单(step-1033):ask/permission/interrupted/blocked/failed 聚合。 */
+/** 指挥台待处理清单:ask/permission/interrupted/blocked/failed 聚合。 */
 export const SuperInbox = Envelope.extend({
   type: z.literal("super.inbox"),
   limit: z.number().int().positive().max(200).optional(),
 });
-/** @deprecated step-1033 legacy:companion.history 入站仍受理,回包统一 super.history.result。 */
+/** @deprecated legacy:companion.history 入站仍受理,回包统一 super.history.result。 */
 export const CompanionHistory = Envelope.extend({
   type: z.literal("companion.history"),
   sinceSeq: z.number().int().nonnegative().optional(),
@@ -498,7 +496,7 @@ export const TraceQuery = Envelope.extend({
 export const SessionStatus = Envelope.extend({
   type: z.literal("session.status"),
   sessionId: z.string().min(1),
-  /** step-1036 增量化:已收到的末条事件 seq(= 上次回包 status.seq)。缺省=全量投影(老客户端/首拉,
+ /** 增量化:已收到的末条事件 seq(= 上次回包 status.seq)。缺省=全量投影(老客户端/首拉,
    *  与改造前逐字一致);带值=服务端只归约 seq 更大的新事件并合并进累积态。
    *  注意服务端读事件时传 sinceSeq+1(journal.readSession 比较用 e.seq >= sinceSeq),否则水位那条重复归约。 */
   sinceSeq: z.number().int().nonnegative().optional(),
@@ -523,7 +521,7 @@ export const ApiRetryStatusZ = z.object({
 export type ApiRetryStatus = z.infer<typeof ApiRetryStatusZ>;
 export const Ping = Envelope.extend({ type: z.literal("ping") });
 
-// ---- 项目管理(step-035,ZCode workspace 项目移植) ----
+// ---- 项目管理(ZCode workspace 项目移植) ----
 export const ProjectAdd = Envelope.extend({
   type: z.literal("project.add"),
   /** 本地绝对路径(Web 面板无文件夹对话框,路径输入;校验在服务端)。 */
@@ -545,7 +543,7 @@ export const ProjectRename = Envelope.extend({
   label: z.string().min(1).max(80),
 });
 
-// ---- 服务端目录浏览(step-056,「选目录弹 Windows 对话框」根治 + 项目文件树) ----
+// ---- 服务端目录浏览(「选目录弹 Windows 对话框」根治 + 项目文件树) ----
 export const FsList = Envelope.extend({
   type: z.literal("fs.list"),
   /** 绝对路径;"" = 返回锚点(home/root/cwd)。 */
@@ -571,7 +569,7 @@ export const SshTest = Envelope.extend({
   /** 连接向导:连通后顺手安装工作区服务并 ping 验证(设置台「测试连接」不传,保持轻量)。 */
   ensureServer: z.boolean().optional(),
 });
-// WSL 连接向导(2026-10-27,与 SSH 同构:先连接→连接中装工作区服务→经服务浏览目录→选目录添加项目)
+// WSL 连接向导(与 SSH 同构:先连接→连接中装工作区服务→经服务浏览目录→选目录添加项目)
 export const WslList = Envelope.extend({
   type: z.literal("wsl.list"),
 });
@@ -619,7 +617,7 @@ export const FsOpen = Envelope.extend({
   reveal: z.boolean().optional(),
 });
 
-// ---- @ 文件提及(step-039,ZCode fileMentionProvider 移植) ----
+// ---- @ 文件提及(ZCode fileMentionProvider 移植) ----
 // ---- F6 workflow ask 面板应答 ----
 export const WorkflowAnswer = Envelope.extend({
   type: z.literal("workflow.answer"),
@@ -634,24 +632,24 @@ export const FileRead = Envelope.extend({
   path: z.string().min(1),
   /** 目标行(视图滚动定位);缺省=1。 */
   line: z.number().int().positive().optional(),
-  /** step-141 IDE:回全文(startLine=1+全文 content);缺省行为不变(±20 行窗口)。 */
+ /** IDE:回全文(startLine=1+全文 content);缺省行为不变(±20 行窗口)。 */
   full: z.literal(true).optional(),
-  /** 2026-10-22:解析根的项目 id——IDE 树按桶打开时必带(否则 server 回退 activeId,
-   *  活动项目≠树项目时读错根→missing→编辑区空白,实测复现)。缺省=旧语义(活动项目)。 */
+ /** :解析根的项目 id——IDE 树按桶打开时必带(否则 server 回退 activeId,
+ * 活动项目≠树项目时读错根→missing→编辑区空白,经验证复现)。缺省=旧语义(活动项目)。 */
   projectId: z.string().optional(),
 });
-// step-141 IDE 保存链:全文覆盖写(首版不带锁、不做多写者冲突检测;写权限=激活项目根内全可写)。
+// IDE 保存链:全文覆盖写(首版不带锁、不做多写者冲突检测;写权限=激活项目根内全可写)。
 export const FileWrite = Envelope.extend({
   type: z.literal("file.write"),
   /** 项目内相对路径;越界/.git/超限在 server 侧沙箱拒绝。 */
   path: z.string().min(1),
   /** UTF-8 全文覆盖内容(>512KB 拒;允许新建文件,父目录须已存在)。 */
   content: z.string(),
-  /** 2026-10-22:解析根的项目 id(IDE 树桶项目);缺省=旧语义(活动项目)。 */
+ /** :解析根的项目 id(IDE 树桶项目);缺省=旧语义(活动项目)。 */
   projectId: z.string().optional(),
 });
 /**
- * 2026-10-29 板「OOXML 文本回写」P2:Office 文档文本级编辑(服务端处理路径)。
+ * 板「OOXML 文本回写」P2:Office 文档文本级编辑(服务端处理路径)。
  * 为什么不让前端自己拼 zip:浏览器得先拿 10MB 原始字节(/ide/asset 走 Range 分块)、
  * 再在页面里引 zip + XML 重打包,内存与坑都翻倍。改由服务端读原文件 → rewriteOfficeText → 写回,
  * 前端只发「哪一段要换成什么文本」。沙箱同 /ide/office(ideOfficeResolve)。
@@ -675,7 +673,7 @@ export const IdeOfficeEdit = Envelope.extend({
   })).min(1).max(5000),
 });
 
-// ---- step-142 IDE 文件操作(P0 编辑体验):mkdir / remove / rename / grep ----
+// ---- IDE 文件操作(P0 编辑体验):mkdir / remove / rename / grep ----
 // 沙箱口径与 file.write 完全一致(realpath 前缀比对 + 拒 .git 段 + 拒绝对路径/越界);失败统一走
 // fs.*.result { ok:false, error }(二选一即可,此处选回包式:前端能按 op 精确定位失败的那一条)。
 export const FsMkdir = Envelope.extend({
@@ -771,34 +769,34 @@ export const FilesSearch = Envelope.extend({
   query: z.string().default(""),
 });
 
-/** 会话全文检索(step-115):面板命令中心 `#` 域;空 query=最近会话浏览。 */
+/** 会话全文检索:面板命令中心 `#` 域;空 query=最近会话浏览。 */
 export const SessionSearch = Envelope.extend({
   type: z.literal("session.search"),
   query: z.string().default(""),
   limit: z.number().int().positive().max(50).optional(),
 });
 
-// ---- Git 面板(step-037 批C,ZCode GitPane/GitActionMenu 移植) ----
+// ---- Git 面板(批C,ZCode GitPane/GitActionMenu 移植) ----
 export const GitStatus = Envelope.extend({ type: z.literal("git.status") });
 export const GitDiff = Envelope.extend({ type: z.literal("git.diff"), file: z.string().min(1) });
 export const GitBranches = Envelope.extend({ type: z.literal("git.branches") });
 export const GitLog = Envelope.extend({ type: z.literal("git.log"), limit: z.number().int().positive().max(200).optional() });
 
-// ---- 定时自动化(step-043,ZCode Automations 移植) ----
+// ---- 定时自动化(ZCode Automations 移植) ----
 export const GitCommitMsg = Envelope.extend({ type: z.literal("git.commitmsg") });
 
-// ---- checkpoint 回滚(step-044,designs/21) ----
+// ---- checkpoint 回滚 ----
 export const CheckpointPreview = Envelope.extend({ type: z.literal("checkpoint.preview"), taskId: z.string().min(1) });
 export const CheckpointRewind = Envelope.extend({ type: z.literal("checkpoint.rewind"), taskId: z.string().min(1) });
 
-// ---- 内联变更条/使用统计(step-046,ZCode 变更条+UsageStatistics 对齐) ----
+// ---- 内联变更条/使用统计(ZCode 变更条+UsageStatistics 对齐) ----
 export const TaskDiffstat = Envelope.extend({ type: z.literal("task.diffstat"), taskId: z.string().min(1) });
 export const StatsSummary = Envelope.extend({ type: z.literal("stats.summary") });
-// step-052:单文件补丁(变更条文件清单→右侧 diff 面板)与模型逐一探活(设置页模型列表)。
+// 单文件补丁(变更条文件清单→右侧 diff 面板)与模型逐一探活(设置页模型列表)。
 export const TaskFileDiff = Envelope.extend({ type: z.literal("task.filediff"), taskId: z.string().min(1), file: z.string().min(1) });
 export const ModelsProbe = Envelope.extend({ type: z.literal("models.probe"), model: z.string().min(1), providerId: z.string().optional() });
 
-// ---- step-047:管理面(子智能体/技能/命令/钩子/MCP/记忆)+ 终端 ----
+// ---- 管理面(子智能体/技能/命令/钩子/MCP/记忆)+ 终端 ----
 export const AgentsList = Envelope.extend({ type: z.literal("agents.list") });
 export const SkillsList = Envelope.extend({ type: z.literal("skills.list") });
 export const SkillsDisableBuiltin = Envelope.extend({ type: z.literal("skills.disableBuiltin"), name: z.string().min(1), disabled: z.boolean() });
@@ -820,19 +818,19 @@ export const MemoryView = Envelope.extend({ type: z.literal("memory.view") });
 export const TermExec = Envelope.extend({ type: z.literal("term.exec"), command: z.string().min(1) });
 export const TermCancel = Envelope.extend({ type: z.literal("term.cancel") });
 
-// ---- step-048:插件市场 / 节点 / 附件 ----
+// ---- 插件市场 / 节点 / 附件 ----
 export const PluginsList = Envelope.extend({ type: z.literal("plugins.list") });
 export const PluginsInstall = Envelope.extend({ type: z.literal("plugins.install"), id: z.string().min(1) });
 export const PluginsUninstall = Envelope.extend({ type: z.literal("plugins.uninstall"), id: z.string().min(1) });
 export const PluginsToggle = Envelope.extend({ type: z.literal("plugins.toggle"), id: z.string().min(1), enabled: z.boolean() });
 export const NodesList = Envelope.extend({ type: z.literal("nodes.list") });
-// ---- 看板三件套(2026-10-20:子代理目录/任务追踪/用量,各自独立看板) ----
+// ---- 看板三件套(子代理目录/任务追踪/用量,各自独立看板) ----
 export const SubagentsList = Envelope.extend({ type: z.literal("subagents.list"), sessionId: z.string().optional() });
 /** 会话 worker 清单(F5-3 可观测):活跃 worker 进程的 pid/会话/时刻。 */
 export const WorkersList = Envelope.extend({ type: z.literal("workers.list") });
 export const TrackView = Envelope.extend({ type: z.literal("track.view"), sessionId: z.string().optional() });
 export const UsageView = Envelope.extend({ type: z.literal("usage.view") });
-// ---- step-049:项目档案(架构图管线) ----
+// ---- 项目档案(架构图管线) ----
 export const ProfileGet = Envelope.extend({ type: z.literal("profile.get"), projectId: z.string().min(1) });
 export const ProfileRebuild = Envelope.extend({ type: z.literal("profile.rebuild"), projectId: z.string().min(1) });
 const PlanItemSchema = z.object({
@@ -848,7 +846,7 @@ const PlanItemSchema = z.object({
 export const ProfilePlanUpsert = Envelope.extend({ type: z.literal("profile.plan.upsert"), projectId: z.string().min(1), item: PlanItemSchema });
 export const ProfilePlanRemove = Envelope.extend({ type: z.literal("profile.plan.remove"), projectId: z.string().min(1), id: z.string().min(1) });
 export const ProfilePlanApply = Envelope.extend({ type: z.literal("profile.plan.apply"), projectId: z.string().min(1) });
-/** 「总路线」并入代码档案(step-131):读/生成项目宗旨画像(.genie/sense-index/profile.json)。
+/** 「总路线」并入代码档案:读/生成项目宗旨画像(.genie/sense-index/profile.json)。
  * generate=true 显式跑确定性骨架 + LLM purpose 层并落盘(LLM 缺席=仅骨架,llmState=off 如实标注)。
  * projectId 缺省=harness 根(与 sense.query/wiki.* 同语义)。 */
 export const ProfileSenseGet = Envelope.extend({
@@ -875,7 +873,7 @@ export const AutomationCreate = Envelope.extend({
   name: z.string().min(1),
   instruction: z.string().min(1),
   everyMinutes: z.number().int().min(1).max(525600),
-  /** 作用域(step-046):"global" 缺省;否则=项目 id。 */
+ /** 作用域:"global" 缺省;否则=项目 id。 */
   scope: z.string().optional(),
 });
 export const AutomationUpdate = Envelope.extend({
@@ -910,7 +908,7 @@ export const GitPull = Envelope.extend({
   branch: z.string().min(1).optional(),
 });
 
-// ---- 权限审批(step-037 B2,ZCode PermissionDialog 移植) ----
+// ---- 权限审批( B2,ZCode PermissionDialog 移植) ----
 export const PermissionRespond = Envelope.extend({
   type: z.literal("permission.respond"),
   requestId: z.string().min(1),
@@ -919,7 +917,7 @@ export const PermissionRespond = Envelope.extend({
   rule: z.object({ permission: z.string(), pattern: z.string() }).optional(),
 });
 
-/** node-agent 执行结果回流(step-033 tunnel 委派)。 */
+/** node-agent 执行结果回流( tunnel 委派)。 */
 export const NodeTaskResult = Envelope.extend({
   type: z.literal("node.task.result"),
   nodeId: z.string().min(1),
@@ -929,7 +927,7 @@ export const NodeTaskResult = Envelope.extend({
   error: z.string().optional(),
 });
 
-// ---- 语义流程白板(designs/22,step-057):agent 先画后改的设计白板;节点连接 code-index ----
+// ---- 语义流程白板:agent 先画后改的设计白板;节点连接 code-index ----
 /** 语义流程编码:函数框内的步骤(step 顺序/branch 分支/loop 循环),递归。 */
 export type BoardFlowStep = {
   type: "step" | "branch" | "loop";
@@ -959,7 +957,7 @@ export const BoardSymbolRefZ = z.object({
   line: z.number().int().positive().optional(),
   anchor: z.string().max(300).optional(),
 });
-/** step-121 工作流板节点参数(wf-* 节点的类型化配置;全可选=旧节点零破坏,编译期按 kind 校验必填):
+/** 工作流板节点参数(wf-* 节点的类型化配置;全可选=旧节点零破坏,编译期按 kind 校验必填):
  * wf-script/wf-test 用 command+timeoutMs;wf-agent 用 actor+instructions;
  * wf-condition 用 cond(JS 表达式,变量域 R["<nodeId>"]);wf-notify 用 message。 */
 export const BoardNodeWfZ = z.object({
@@ -970,23 +968,23 @@ export const BoardNodeWfZ = z.object({
   cond: z.string().max(500).optional(),
   message: z.string().max(1000).optional(),
 });
-/** step-137 代码级落目标:节点上的可执行验收契约(accept=怎么写才算过;evidence=跑过的证据)。
- * 背景实锤:桌面 exe 任务板上「首启引导」节点有 DoD 文案但既没实现也没人核对,交付 llm=off/echo 被吐槽
+/** 代码级落目标:节点上的可执行验收契约(accept=怎么写才算过;evidence=跑过的证据)。
+ * 背景注意:桌面 exe 任务板上「首启引导」节点有 DoD 文案但既没实现也没人核对,交付 llm=off/echo 被吐槽
  * 「根本不干活」——根因=节点无验收绑定、完工无证据门。
- * 全字段可选:旧板(step-057 起的所有板)无这些字段照常解析,旧客户端零影响。 */
+ * 全字段可选:旧板(起的所有板)无这些字段照常解析,旧客户端零影响。 */
 export const BoardAcceptZ = z.object({
   /** 可执行验收:命令或明确的验证动作(如 `pnpm vitest run test/x.test.ts`、`启动 exe 截图确认无 API Key 引导`)。 */
   cmd: z.string().min(1).max(500),
   /** 期望输出/行为片段(命不中=不通过)。 */
   expect: z.string().max(300).optional(),
-  /** 验收类型(2026-10-25 变更契约图四类):command=命令/browser=浏览器/manual=人工检查/negative=负面断言。
+ /** 验收类型(变更契约图四类):command=命令/browser=浏览器/manual=人工检查/negative=负面断言。
    * 可选以兼容旧板;agent 新落板时应显式标类型(板校验会软提示缺 type)。 */
   type: z.enum(["command", "browser", "manual", "negative"]).optional(),
   /** 为什么验收这一条(可选说明)。 */
   note: z.string().max(300).optional(),
 });
 export type BoardAccept = z.infer<typeof BoardAcceptZ>;
-/** 证据落账时捕获的目标文件指纹(M107,2026-11-06):文件在证据之后被改动/消失 → 该证据视为过期,
+/** 证据落账时捕获的目标文件指纹:文件在证据之后被改动/消失 → 该证据视为过期,
  * 不再算覆盖、节点不算 passed。旧 evidence 无 files 字段 = 不做任何 stale 判定(向后兼容,逐字不变)。 */
 export const BoardEvidenceFileZ = z.object({
   /** 捕获时解析出的绝对路径(读时直接 stat,不依赖调用方再传根)。 */
@@ -1004,7 +1002,7 @@ export const BoardEvidenceZ = z.object({
   ok: z.boolean(),
   at: z.number().default(0),
   note: z.string().max(300).optional(),
-  /** 实测输出摘录(截断,防巨型日志撑爆板)。 */
+ /** 经验证输出摘录(截断,防巨型日志撑爆板)。 */
   output: z.string().max(2000).optional(),
   /** 落账时目标文件指纹(≤12;由 board-store 写盘路径捕获,客户端传值不生效)。 */
   files: z.array(BoardEvidenceFileZ).max(12).optional(),
@@ -1017,8 +1015,8 @@ export const BoardNodeZ = z.object({
   /** 六期工作流语义:module/function=代码件;llm=模型调用;tool=工具/外部系统;io=输入/输出;decision=判断分支;note=备注。 */
   /** 七期工作流全类型集:io≈Start/Answer,decision≈IfElse,aggregate≈VariableAggregator,
    * retrieval≈KnowledgeRetrieval,classifier≈QuestionClassifier;module/function/note=代码世界原生件。 */
-  /** step-083 页面结构板族:page=页面(线框)/section=区块/component=组件/nav=导航条。 */
-  /** step-121 工作流板可执行节点族(docKind=workflow 专用,映射 harness-workflow 引擎能力):
+ /** 页面结构板族:page=页面(线框)/section=区块/component=组件/nav=导航条。 */
+ /** 工作流板可执行节点族(docKind=workflow 专用,映射 harness-workflow 引擎能力):
    * wf-script=world.run 白名单命令/wf-test=world.run+断言 report/wf-agent=agent().ask 子代理/
    * wf-condition=条件分支(出边 label 真/假)/wf-parallel=并发 fan-out(Promise.all)/
    * wf-notify=report 成果登记。参数配置走 wf 字段(见 BoardNodeWfZ)。 */
@@ -1038,18 +1036,18 @@ export const BoardNodeZ = z.object({
   before: z.string().max(500).optional(),
   /** 原来是什么→改成什么:add 新增/modify 修改/delete 删除/keep 仅涉及不改。 */
   change: z.enum(["add", "modify", "delete", "keep"]).default("modify"),
-  /** 模块完成标记(step-057 五期实时面板):agent 每落实一个模块即置 true,面板实时出进度。 */
+ /** 模块完成标记(五期实时面板):agent 每落实一个模块即置 true,面板实时出进度。 */
   done: z.boolean().default(false),
   /** 用户评论(查看态追加,服务端 board.comment 合并;「按板续作」会带进指令)。 */
   comments: z.array(z.string().max(500)).max(20).default([]),
   symbolRef: BoardSymbolRefZ.optional(),
-  /** step-073:纯文件链(模块/页面/架构节点的入口文件)——只驱动画布「文件链」与档案跳转,
+ /** 纯文件链(模块/页面/架构节点的入口文件)——只驱动画布「文件链」与档案跳转,
    * 不参与 symbolRef 三态判定(这些节点没有符号语义)。 */
   fileRef: z.string().max(400).optional(),
   flow: z.array(BoardFlowStepZ).max(40).default([]),
-  /** step-121:工作流板节点参数(wf-* 节点;design/page 板节点无此字段)。 */
+ /** 工作流板节点参数(wf-* 节点;design/page 板节点无此字段)。 */
   wf: BoardNodeWfZ.optional(),
-  /** step-137 代码级落目标:优先级档。P0=必做(必须带 accept 才允许落板;完工须有证据);
+ /** 代码级落目标:优先级档。P0=必做(必须带 accept 才允许落板;完工须有证据);
    * P1/P2=余力项(不强制 accept)。缺省=undefined(旧板/未标档节点,不参与 P0 校验与覆盖率)。 */
   phase: z.enum(["P0", "P1", "P2"]).optional(),
   /** 这个节点要改的文件/符号清单(验收目标面;evidence/覆盖率核对据此说「改到哪了」)。 */
@@ -1061,36 +1059,36 @@ export const BoardNodeZ = z.object({
   pos: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 export const BoardDocZ = z.object({
-  /** 板文档版本:1=旧板;2=2026-10-25 迁移脚本升级版(字段仍按可选读取,零新必填)。
+ /** 板文档版本:1=旧板;2= 迁移脚本升级版(字段仍按可选读取,零新必填)。
    * 用 union 而非硬切 2:滚动窗口内新旧网关都能读;写入方(upsert)仍写 1,迁移脚本显式写 2。 */
   version: z.union([z.literal(1), z.literal(2)]),
   taskId: z.string().min(1),
   sessionId: z.string().min(1),
   title: z.string().min(1).max(200),
   status: z.enum(["draft", "implementing", "done"]).default("draft"),
-  /** 板类型(step-083 页面结构板):design=模块/流程设计板(缺省,向后兼容旧板);
+ /** 板类型(页面结构板):design=模块/流程设计板(缺省,向后兼容旧板);
    * page=页面结构板——节点=页面/区块/组件(线框形态),边=导航/包含,规划类任务产物;
-   * workflow=工作流板(step-121)——节点=wf-* 可执行步骤(参数走 wf 字段),边=执行顺序/
+ * workflow=工作流板——节点=wf-* 可执行步骤(参数走 wf 字段),边=执行顺序/
    * 分支(label 真/假),「编译执行」把画布编译成 harness-workflow 脚本运行。 */
   docKind: z.enum(["design", "page", "workflow"]).optional(),
-  /** 任务板型(2026-10-25 变更契约图):板校验按板型切换规则——code/test/docs/ui/ui-func/
+ /** 任务板型(变更契约图):板校验按板型切换规则——code/test/docs/ui/ui-func/
    * fault(故障链,不要求代码变更 before)/refactor(要求现状/目标泳道)/perf/data/
    * contract/deploy/research/orchestration。缺省=undefined(旧板按通用 design 规则软校验)。
-   * composition(2026-10-29)=办公/产出类任务(写 PPT/汇报/文章/调研报告)的「作业思路板」:
+ * composition=办公/产出类任务(写 PPT/汇报/文章/调研报告)的「作业思路板」:
    * 章节节点复用 kind:"section",章间关系用 data 边(->>)的 label 关系词(承接/递进/并列/对照/因果)
    * 表达,不引入新的 edge kind。 */
   boardType: z.enum([
     "code", "test", "docs", "ui", "ui-func", "fault", "refactor", "perf",
     "data", "contract", "deploy", "research", "orchestration",
-    // 2026-10-25 更多板型:matrix=候选×维度决策矩阵(复用 research 矩阵规则与表格视图)。
+ // 更多板型:matrix=候选×维度决策矩阵(复用 research 矩阵规则与表格视图)。
     "matrix",
-    // 2026-10-29 composition=作业思路板(主题/受众/结构/章节/章间关系;不画执行步骤)。
+ // composition=作业思路板(主题/受众/结构/章节/章间关系;不画执行步骤)。
     "composition",
   ]).optional(),
-  /** 规模分级(2026-10-25):S=1~3 节点一次到位/M=骨架≤9/L=多模块/迁移两版+风险回滚。
+ /** 规模分级:S=1~3 节点一次到位/M=骨架≤9/L=多模块/迁移两版+风险回滚。
    * 可选以兼容旧板;planner 新落板应显式标注,板校验据此提示规模超标。 */
   scale: z.enum(["S", "M", "L"]).optional(),
-  /** 文档体裁(2026-10-27,docs 板):board-skills DOC_GENRES 的 key(review-solution/
+ /** 文档体裁(docs 板):board-skills DOC_GENRES 的 key(review-solution/
    * review-code/research/summary/guide/generic)。可选;类型门按体裁必答维度查覆盖。 */
   docGenre: z.string().min(2).max(40).optional(),
   /** 乐观锁:每次写入 +1,人/agent 并发改板防互相覆盖。 */
@@ -1100,11 +1098,11 @@ export const BoardDocZ = z.object({
   nodes: z.array(BoardNodeZ).min(1).max(60),
   edges: z.array(z.object({
     from: z.string(), to: z.string(),
-    /** step-083 页面结构板:nav=页面间导航(箭头+触发器标签)/contains=包含(区块属于页面,无线头)。 */
+ /** 页面结构板:nav=页面间导航(箭头+触发器标签)/contains=包含(区块属于页面,无线头)。 */
     kind: z.enum(["call", "data", "verify", "nav", "contains"]).default("call"),
     label: z.string().max(120).optional(),
-    /** step-073:用户虚拟边(画布拖拽/编辑态人工加的连线)——与 agent code_index 实证边显式区分,
-     * 虚线渲染+导出标注+续作指令注明「待核实」。缺省 false=实证边。 */
+ /** 用户虚拟边(画布拖拽/编辑态人工加的连线)——与 agent code_index 验证边显式区分,
+ * 虚线渲染+导出标注+续作指令注明「待核实」。缺省 false=验证边。 */
     virtual: z.boolean().optional(),
   })).max(120).default([]),
   planned_files: z.array(z.string().max(400)).max(60).default([]),
@@ -1174,7 +1172,7 @@ export const BoardDiagramResult = Envelope.extend({
   error: z.string().optional(),
 });
 export type BoardDiagramResult = z.infer<typeof BoardDiagramResult>;
-// P3 人参与编辑(step-057 二期):人改板=改设计不改码;rev 乐观锁,冲突回 board.conflict。
+// P3 人参与编辑(二期):人改板=改设计不改码;rev 乐观锁,冲突回 board.conflict。
 export const BoardSave = Envelope.extend({
   type: z.literal("board.save"),
   sessionId: z.string().min(1),
@@ -1199,7 +1197,7 @@ export const BoardOverlaySave = Envelope.extend({
   taskId: z.string().min(1),
   dataB64: z.string().max(5_600_000),
 });
-/** 手绘批注层拉取(2026-10-14 会话级落盘:无语义板时 taskId=__session__,笔迹跟会话走,换浏览器/刷新不丢)。 */
+/** 手绘批注层拉取(会话级落盘:无语义板时 taskId=__session__,笔迹跟会话走,换浏览器/刷新不丢)。 */
 export const BoardOverlayGet = Envelope.extend({
   type: z.literal("board.overlay.get"),
   sessionId: z.string().min(1),
@@ -1227,7 +1225,7 @@ export const BoardFromCode = Envelope.extend({
   file: z.string().min(1).max(400),
   projectId: z.string().min(1).optional(),
 });
-/** step-073:code-sense 分析产物直接生成可编辑语义板。
+/** code-sense 分析产物直接生成可编辑语义板。
  * source=modulemap(全仓模块依赖)/archmap(LLM 架构图,无 LLM 显式降级)/sequence(符号静态时序,需 query)/pageflow(页面流)。 */
 export const BoardFromSense = Envelope.extend({
   type: z.literal("board.fromsense"),
@@ -1242,19 +1240,19 @@ export const BoardFromSense = Envelope.extend({
   file: z.string().max(400).optional(),
   projectId: z.string().min(1).optional(),
 });
-/** 设计沉淀查询(step-058):任务收官的 done 板项目级索引;代码档案「设计沉淀」区数据源。
+/** 设计沉淀查询:任务收官的 done 板项目级索引;代码档案「设计沉淀」区数据源。
  * 板全文不走此消息——点击条目由面板复用 board.get(sessionId,taskId) 拿 doc+links。 */
 export const BoardArchiveList = Envelope.extend({
   type: z.literal("board.archive.list"),
   projectId: z.string().min(1).optional(),
 });
-/** step-121 工作流板编译(只编译不跑):画布 doc→harness-workflow 脚本;错误 fail-visible 列出。 */
+/** 工作流板编译(只编译不跑):画布 doc→harness-workflow 脚本;错误 fail-visible 列出。 */
 export const BoardWorkflowCompile = Envelope.extend({
   type: z.literal("board.workflow.compile"),
   sessionId: z.string().min(1),
   taskId: z.string().min(1),
 });
-/** step-121 工作流板编译执行:编译通过即异步运行(引擎真跑),进度走 board.workflow.progress 广播,
+/** 工作流板编译执行:编译通过即异步运行(引擎真跑),进度走 board.workflow.progress 广播,
  * 终态 board.workflow.result 广播;编译失败直接回 run.result(errors)。 */
 export const BoardWorkflowRun = Envelope.extend({
   type: z.literal("board.workflow.run"),
@@ -1282,7 +1280,7 @@ export const DashboardTrends = Envelope.extend({
   type: z.literal("dashboard.trends"),
   projectId: z.string().nullable().optional(),
 });
-/** 子代理终止(2026-10-16 子代理目录「终止」按钮;最小消息):服务端查后台注册表条目的
+/** 子代理终止(子代理目录「终止」按钮;最小消息):服务端查后台注册表条目的
  * cancel 句柄调用;句柄未挂(并行线字段未上线/已收尾)=ok:false + reason,面板 toast 如实提示。 */
 export const SubagentCancel = Envelope.extend({
   type: z.literal("subagent.cancel"),
@@ -1305,7 +1303,7 @@ export const QueueDispatchNow = Envelope.extend({
   sessionId: z.string().min(1),
   itemId: z.string().min(1),
 });
-// ask_user(2026-10-19 许愿式编程):主 agent 在需求有取舍时向用户发问,阻塞等待答复。
+// ask_user(许愿式编程):主 agent 在需求有取舍时向用户发问,阻塞等待答复。
 // Client 侧:面板回送用户选择/自由文本。
 export const AskUserAnswer = Envelope.extend({
   type: z.literal("ask.user.answer"),
@@ -1320,7 +1318,7 @@ export const QueueRemove = Envelope.extend({
 });
 // per-session 主模型覆盖(白板「per-session 主模型」):每个 session 独立主模型;
 // 未设置 session 沿用全局 coding.llm;运行中任务持启动时引用(不热切全局 provider)。
-// 2026-10-22:model 允许 null=清除覆盖(回到跟随全局);expectedRevision=可选 CAS(不符则拒绝且不落盘)。
+// model 允许 null=清除覆盖(回到跟随全局);expectedRevision=可选 CAS(不符则拒绝且不落盘)。
 export const SessionModelSet = Envelope.extend({
   type: z.literal("session.model.set"),
   sessionId: z.string().min(1),
@@ -1339,14 +1337,14 @@ export const SessionModelGet = Envelope.extend({
   type: z.literal("session.model.get"),
   sessionId: z.string().min(1),
 });
-// 会话→owner 项目桥(2026-10-22 归属漂移根治,前端半边已按此字面契约实现):
+// 会话→owner 项目桥(归属漂移根治,前端半边已按此字面契约实现):
 // 该会话**最早**一条带 projectId 的任务的 projectId=会话既有 owner;无任务/无归属=null。
 export const SessionOwnerGet = Envelope.extend({
   type: z.literal("session.owner.get"),
   sessionId: z.string().min(1),
 });
 
-// ---- 内置浏览器视图(2026-10-21 移植 ZCode browser-use:统一视图双态+截图流) ----
+// ---- 内置浏览器视图(移植 ZCode browser-use:统一视图双态+截图流) ----
 // 形态来源: ZCode/packages/shared/src/browser-use/commands.ts(命令面)+
 //   ZCode/packages/ui/src/browser-use/UnifiedBrowserView.tsx(视图态)。
 // 订阅制:面板打开 browser 视图发 view.open,服务端仅在订阅存续期间推 frame(≥800ms 节流、变更才推)。
@@ -1367,7 +1365,7 @@ export const BrowserViewCommand = Envelope.extend({
   args: z.record(z.unknown()).optional(),
 });
 
-// ---- 截图标注(2026-10-26,面板自有能力) ----
+// ---- 截图标注(面板自有能力) ----
 // 链路:composer 按钮→getDisplayMedia 取屏→画框裁剪→面板标注编辑器(框/点/全局
 // 三类编号批注)→ annotate.submit →服务端落盘 <项目>/.genie/feedback/ +构造
 // feedback-minimal-4 兼容 JSON +组装 instruction → task.submit(忙则入队)。
@@ -1398,7 +1396,7 @@ export const AnnotateSubmit = Envelope.extend({
   type: z.literal("annotate.submit"),
   /** 目标会话(反馈作为该会话的追问/新任务投递;项目归属复用 task.submit 决议)。 */
   sessionId: z.string().min(1),
-  /** 面板裁剪后的截图(image/png dataURL;尺寸/哈希由服务端从字节实测)。 */
+ /** 面板裁剪后的截图(image/png dataURL;尺寸/哈希由服务端从字节经验证)。 */
   dataUrl: z.string().min(1),
   notes: z.array(AnnotateNoteZ).min(1).max(1000),
   /** 带编号标记的预览图(image/jpeg dataURL;服务端校验尺寸与原图一致后随反馈落盘)。 */
@@ -1434,7 +1432,7 @@ export const AnnotateResult = Envelope.extend({
   message: z.string().optional(),
 });
 
-// ---- 聊天窗语音任务书(2026-11-08)----
+// ---- 聊天窗语音任务书----
 // 链路:composer 🎤 按钮→MediaRecorder 录音(dataURL)→ voice.draft →服务端用 coding.models.voice
 // 角色模型(qwen3.8-omni-flash 形态的 OpenAI 兼容端点)把口述整理成任务书 → voice.draft.result
 // →面板把任务书文本回填聊天输入区(用户确认后自己发送)。撰写期间按 sessionId 加输入锁:
@@ -1459,7 +1457,7 @@ export const VoiceDraftResult = Envelope.extend({
   message: z.string().optional(),
 });
 
-// ---- M167 表面/通道能力包(2026-11-08)----
+// ---- 表面/通道能力包----
 /** 客户端能力位(已解析形态;source=legacy 表示无声明、按旧面板行为)。 */
 export const SurfaceCapsZ = z.object({
   rendersMarkdown: z.boolean(),
@@ -1485,7 +1483,7 @@ export const ClientSurface = Envelope.extend({
   hasUI: z.unknown().optional(),
 });
 
-/** M72 能力暴露 allowlist:连接级 clientMode 声明(未声明=panel,legacy 消费者零变化)。
+/**  能力暴露 allowlist:连接级 clientMode 声明(未声明=panel,legacy 消费者零变化)。
  * mode 用 string 接收而非 z.enum:非法值由网关回 client.mode.result{ok:false} 并保持连接原 mode,
  * 客户端能拿到「你写的值不合法」的定向提示;走枚举只会落到 InvalidMessage 通用文案。 */
 export const ClientModeDeclare = Envelope.extend({
@@ -1503,7 +1501,7 @@ export type ClientMessage = z.infer<typeof ClientMessage>;
 
 // ---- 服务端 → 客户端 ----
 export const TaskState = z.enum(["queued", "running", "blocked", "interrupted", "done", "failed", "cancelled"]);
-/** 板质量遥测(2026-11-05 bq3):任务结算的规划质量结构化字段,与 audit 出口 planQualityOf 同源;
+/** 板质量遥测( bq3):任务结算的规划质量结构化字段,与 audit 出口 planQualityOf 同源;
  *  skeleton=骨架采纳维度(landed 并集 vs 终板 sk- 存活),无骨架任务缺省。 */
 export const PlanQualityZ = z.object({
   boardType: z.string().nullable(),
@@ -1523,14 +1521,14 @@ export const Task = z.object({
   credentialRef: z.string().optional(),
   projectId: z.string().optional(),
   title: z.string().optional(), pinned: z.boolean().optional(), archived: z.boolean().optional(),
-  /** step-165 gaps3.2:用户改名粘性标记(ref session-mgmt custom 粘性);rename 置位/清名复位,面板据此保用户标题。 */
+ /** 用户改名粘性标记(ref session-mgmt custom 粘性);rename 置位/清名复位,面板据此保用户标题。 */
   titleCustom: z.boolean().optional(),
   /** F3 自定义分组(用户桶;缺省无)。 */
   group: z.string().optional(),
-  /** 本次运行起点(step-046,「已工作」计时);未跑过=缺省。 */
+ /** 本次运行起点(「已工作」计时);未跑过=缺省。 */
   startedAt: z.number().optional(),
   attachments: z.array(z.object({ name: z.string(), path: z.string(), mime: z.string().optional(), size: z.number().optional() })).optional(),
-  /** 板质量遥测(2026-11-05 bq3):结算时挂上,随 done 带出(task.detail.get 全量返回);
+ /** 板质量遥测( bq3):结算时挂上,随 done 带出(task.detail.get 全量返回);
    *  task.list/task.changed 走 TaskIndex 投影不带本字段。skeleton 维度=骨架采纳率,无骨架任务缺省。 */
   planQuality: PlanQualityZ.optional(),
   /** 任务进展(touch 写入,面板防御式读取:全部字段可选,缺失即不显示)。
@@ -1542,15 +1540,15 @@ export const Task = z.object({
     at: z.number().optional(),
   }).optional(),
 });
-/** 与 zod 常量同名的类型导出(2026-11-05):Task 从 interface 转 zod 后,全仓 `import type { Task }` 的
+/** 与 zod 常量同名的类型导出:Task 从 interface 转 zod 后,全仓 `import type { Task }` 的
  * 调用方不断线——const(值)与 type(类型)同名合法,单点修复所有消费方。 */
 export type Task = z.infer<typeof Task>;
 
 
 /**
- * 任务索引(2026-10-29 协议索引化):hello / task.list / task.changed 只发索引,正文
+ * 任务索引(协议索引化):hello / task.list / task.changed 只发索引,正文
  * (instruction/result/error/attachments/resourceTags/idempotencyKey/credentialRef/targetNode)
- * 一律不进索引——面板按 id 发 task.detail.get 现取。历史:2026-11-04 网关 OOM 二连的根因是
+ * 一律不进索引——面板按 id 发 task.detail.get 现取。历史: 网关 OOM 二连的根因是
  * 列表帧带全文(hello 峰值 960KB),当时用「最近 N 条全文+其余截断」的魔法数补丁压着;索引化后
  * 帧长只随任务条数线性增长(每条约百字节),不再随正文长度爆炸,截断口径与阈值一并不存在。
  */
@@ -1622,7 +1620,7 @@ export const BrowserViewCommandResult = Envelope.extend({
   })).optional(),
 });
 
-// ── super agent 指挥台 inbox(step-1033,契约 §2)──
+// ── super agent 指挥台 inbox(契约 §2)──
 /** 待处理项(聚合 ask/permission/interrupted/blocked/failed)。宽松结构:只锁契约字段,
  * 其余 passthrough(避免新增字段动协议)。 */
 export const SuperInboxItemZ = z.object({
@@ -1644,7 +1642,7 @@ export const SuperInboxItemZ = z.object({
 }).passthrough();
 export type SuperInboxItem = z.infer<typeof SuperInboxItemZ>;
 
-/** M167 表面能力声明回执:ok=false 时带稳定 error(坏字段/缺 sessionId),且服务端未落账。 */
+/** 表面能力声明回执:ok=false 时带稳定 error(坏字段/缺 sessionId),且服务端未落账。 */
 export const SurfaceResult = Envelope.extend({
   type: z.literal("surface.result"),
   ok: z.boolean(),
@@ -1656,8 +1654,8 @@ export const ServerMessage = z.discriminatedUnion("type", [
   SurfaceResult,
   BrowserViewFrame, BrowserViewEvent, BrowserViewSubscribed, BrowserViewCommandResult,
   // fixI4: hello 附全量会话排队快照(页面刷新后队列恢复);queue.update=队列任何变更广播(入队/出队/删除/抢占)。
-  // 2026-10-22:build=面板产物戳——老窗口收到与自身 __PANEL_BUILD 不符时自愈重载(IDE 空白根治)。
-  // J4(2026-11-05):sessionActivity = sid → 最近活动时间(ms)首帧快照(侧栏排序用;独立字段,不污染 TaskIndex)。
+ // build=面板产物戳——老窗口收到与自身 __PANEL_BUILD 不符时自愈重载(IDE 空白根治)。
+ // sessionActivity = sid → 最近活动时间(ms)首帧快照(侧栏排序用;独立字段,不污染 TaskIndex)。
   Envelope.extend({ type: z.literal("hello"), build: z.string().optional(), tasks: z.array(TaskIndex), queue: z.array(QueueItem).optional(), sessionActivity: z.record(z.number()).optional() }),
   Envelope.extend({ type: z.literal("queue.update"), sessionId: z.string(), items: z.array(QueueItem) }),
   Envelope.extend({ type: z.literal("task.submitted"), task: Task }),
@@ -1665,7 +1663,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("task.list"), tasks: z.array(TaskIndex) }),
   /** 单任务详情回执(正文只在被点名时出现):task=null 表示 id 不存在/已删(面板须显示不可用,不得当正文渲染)。 */
   Envelope.extend({ type: z.literal("task.detail.result"), taskId: z.string(), task: Task.nullable() }),
-  // super-agent Router(step-0143 P1):Ticket 阶段变化广播(observed/open/closed;P3 面板 Ticket 阶段表消费)。
+ // super-agent Router( P1):Ticket 阶段变化广播(observed/open/closed;P3 面板 Ticket 阶段表消费)。
   // P1 保持 payload 字段稳定:ticketId/phase/taskId?/triggerId/threadKey。
   Envelope.extend({
     type: z.literal("ticket.updated"),
@@ -1680,17 +1678,17 @@ export const ServerMessage = z.discriminatedUnion("type", [
     sessionId: z.string().optional(),
     since: z.number().int().optional(),
     events: z.array(z.unknown()),
-    // 向后翻页(2026-10-22):旧字段一律保留(since/events/sessionId),以下两个只在 beforeSeq 路径给。
+ // 向后翻页:旧字段一律保留(since/events/sessionId),以下两个只在 beforeSeq 路径给。
     hasMore: z.boolean().optional(),
     /** 下一页游标(本页最小 seq);仅 hasMore=true 时给——游标必须严格推进,否则前端 loop 会死转。 */
     nextBeforeSeq: z.number().int().optional(),
   }),
-  // 会议导入(step-013 收口)/会话导出(step-004 收口)
+ // 会议导入/会话导出
   Envelope.extend({ type: z.literal("meeting.extraction"), extraction: z.record(z.unknown()), draftPath: z.string() }),
   Envelope.extend({ type: z.literal("meeting.scheduled"), tasks: z.array(z.object({ id: z.string(), content: z.string() })) }),
   Envelope.extend({ type: z.literal("session.export.result"), sessionId: z.string(), file: z.string(), events: z.number().int() }),
   Envelope.extend({ type: z.literal("voice.tts.result"), audioB64: z.string(), mime: z.string(), text: z.string(), voice: z.string().optional() }),
-  // 音色清单(2026-10-20):model=过滤依据回显;voices 空=无内置清单(自定义 id 兜底)。
+ // 音色清单:model=过滤依据回显;voices 空=无内置清单(自定义 id 兜底)。
   Envelope.extend({
     type: z.literal("voice.list.result"),
     model: z.string(),
@@ -1706,7 +1704,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   }),
   Envelope.extend({ type: z.literal("team.status.result"), orgs: z.array(z.record(z.unknown())), projectTeam: z.record(z.unknown()).nullable().optional(), projectTeams: z.array(z.record(z.unknown())).nullable().optional(), teamai: z.record(z.unknown()).nullable().optional() }),
   Envelope.extend({ type: z.literal("teamai.push.result"), ok: z.boolean(), branch: z.string().optional(), reason: z.string().optional() }),
-  // designs/30 门面回包:inspect(清单+diff+体检)/contribute(learnings 分支)/remove(main 上删除)。
+ // 门面回包:inspect(清单+diff+体检)/contribute(learnings 分支)/remove(main 上删除)。
   // status/doctor 缺省=不入包(拿不到团队仓时 list 仍回,原因进 reason)。
   Envelope.extend({
     type: z.literal("teamai.inspect.result"),
@@ -1737,16 +1735,16 @@ export const ServerMessage = z.discriminatedUnion("type", [
     }),
   }),
   Envelope.extend({ type: z.literal("permission.pending.result"), asks: z.array(z.object({ requestId: z.string(), sessionId: z.string(), tool: z.string(), summary: z.string(), risk: z.string(), since: z.number() })) }),
-  // step-1042 关卡 Gate:决议广播(broker onSettle→全端一致清理挂起行/modal;by=panel/timeout/offline/policy/…)。
+ // 关卡 Gate:决议广播(broker onSettle→全端一致清理挂起行/modal;by=panel/timeout/offline/policy/…)。
   Envelope.extend({ type: z.literal("permission.resolved"), requestId: z.string(), decision: z.enum(["allow-once", "reject"]), by: z.string() }),
-  // step-1042 关卡 Gate 历史面:broker 内存 ring 最近决议(旧在前;重启即失——持久化登记后续)。
+ // 关卡 Gate 历史面:broker 内存 ring 最近决议(旧在前;重启即失——持久化登记后续)。
   Envelope.extend({ type: z.literal("permission.history.result"), items: z.array(z.object({ requestId: z.string(), sessionId: z.string(), tool: z.string(), summary: z.string(), risk: z.string(), since: z.number(), settledAt: z.number(), decision: z.string(), by: z.string() })) }),
   Envelope.extend({ type: z.literal("checkpoint.list.result"), snapshots: z.array(z.object({ taskId: z.string(), sha: z.string().nullable(), sessionId: z.string(), at: z.number() })) }),
   Envelope.extend({ type: z.literal("checkpoint.restore.result"), ok: z.boolean(), sha: z.string().optional(), reason: z.string().optional() }),
   Envelope.extend({ type: z.literal("exp.distill.result"), ok: z.boolean(), detail: z.string().optional() }),
-  // ZCode 内置命令回包(step-052)
+ // ZCode 内置命令回包
   // sync=true=goal.get 轮询/查询回包(状态同步,前端静默刷新 chip);缺省=goal.set 动作确认(可 toast)。
-  // 「目标已清除」toast 刷屏根因(2026-10-13 视频):15s 轮询复用动作确认回包语义。
+ // 「目标已清除」toast 刷屏根因(视频):15s 轮询复用动作确认回包语义。
   Envelope.extend({ type: z.literal("goal.result"), goal: z.string().nullable(), state: z.enum(["active", "paused", "cleared", "complete", "budget_limited"]), sync: z.boolean().optional() }),
   Envelope.extend({ type: z.literal("session.compact.result"), compacted: z.boolean(), reason: z.string().optional(), summaryChars: z.number().int().optional(), tokensBefore: z.number().optional(), tokensAfter: z.number().optional(), trigger: z.enum(["manual", "auto"]).optional() }),
   // 压缩状态帧(2026-11 边界元数据):手动 /compact 与自动钩子共用的过程广播(started/completed/
@@ -1754,9 +1752,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("session.compact.status"), sessionId: z.string(), phase: z.enum(["started", "completed", "failed", "skipped"]), trigger: z.enum(["manual", "auto"]).optional(), reason: z.string().optional(), summaryChars: z.number().int().optional(), tokensBefore: z.number().optional(), tokensAfter: z.number().optional() }),
   Envelope.extend({ type: z.literal("plan.approval.request"), sessionId: z.string(), taskId: z.string(), planPath: z.string(), planExcerpt: z.string() }),
   Envelope.extend({ type: z.literal("task.output.result"), agentId: z.string(), status: z.string(), outputFile: z.string().optional(), output: z.string().optional() }),
-  // 子代理终止回包(2026-10-16 目录「终止」按钮;cancel 句柄缺席=ok:false+reason,面板如实提示)
+ // 子代理终止回包(目录「终止」按钮;cancel 句柄缺席=ok:false+reason,面板如实提示)
   Envelope.extend({ type: z.literal("subagent.cancel.result"), agentId: z.string(), ok: z.boolean(), reason: z.string().optional() }),
-  // 档案文件钻取(step-048 追记八:文件清单/函数+调用边)
+ // 档案文件钻取(文件清单/函数+调用边)
   Envelope.extend({
     type: z.literal("profile.file.result"),
     mode: z.enum(["files", "symbols"]),
@@ -1764,7 +1762,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     file: z.string().optional(),
     symbols: z.array(z.object({ name: z.string(), kind: z.string(), line: z.number(), container: z.string().nullable(), id: z.string() })).optional(),
     edges: z.array(z.object({ from: z.string(), fromName: z.string(), to: z.string(), toName: z.string(), line: z.number(), crossFile: z.boolean() })).optional(),
-    /** code2flow 分类(2026-10-12 三改):符号 id → trunk/leaf/regular + 出入度。 */
+ /** code2flow 分类(三改):符号 id → trunk/leaf/regular + 出入度。 */
     kinds: z.record(z.string(), z.object({ kind: z.string(), inCount: z.number(), outCount: z.number() })).optional(),
     /** 八期:代码档案工作流化组织——fileToModules 模块分类(16 类类型+真实调用边+跨文件目标)。 */
     modules: z.object({
@@ -1778,7 +1776,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
       crossFileTargets: z.array(z.object({ name: z.string(), file: z.string(), line: z.number() })).optional(),
     }).optional(),
   }),
-  // ── super agent 指挥台(step-1033,出站只发 super.*)──
+ // ── super agent 指挥台(出站只发 super.*)──
   Envelope.extend({ type: z.literal("super.turn.user"), text: z.string() }),
   Envelope.extend({ type: z.literal("super.turn.done"), text: z.string(), sessionId: z.string() }),
   Envelope.extend({ type: z.literal("super.history.result"), events: z.array(z.unknown()) }),
@@ -1817,9 +1815,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("super.inbox.changed") }),
   // 语音输入转写结果(voice.transcribe → 文本;不含人格设定与语音回播)。
   Envelope.extend({ type: z.literal("voice.transcribe.result"), text: z.string() }),
-  // ── legacy 只读(step-1033):以下 companion.* 服务端消息保留在联合里(旧回放/旧客户端解析不破),
+ // ── legacy 只读:以下 companion.* 服务端消息保留在联合里(旧回放/旧客户端解析不破),
   // 服务端不再发出(server 出站统一 super.*)。 ──
-  // 语音入口广播(2026-10-13:头像气泡语音→companion,转写文本先播给全部客户端,回复随后 turn.done)
+ // 语音入口广播(头像气泡语音→companion,转写文本先播给全部客户端,回复随后 turn.done)
   Envelope.extend({ type: z.literal("companion.turn.user"), text: z.string() }),
   Envelope.extend({ type: z.literal("companion.turn.done"), text: z.string(), sessionId: z.string() }),
   Envelope.extend({ type: z.literal("companion.history.result"), events: z.array(z.unknown()) }),
@@ -1841,7 +1839,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     taskId: z.string().optional(),
     state: z.string().optional(),
   }),
-  // 追踪统计投影(step-031:dsh session-stats 诚实子集;ttft/decodeTps=流式链路收口,缺 0)
+ // 追踪统计投影(dsh session-stats 诚实子集;ttft/decodeTps=流式链路,缺 0)
   Envelope.extend({
     type: z.literal("trace.stats.result"),
     stats: z.object({
@@ -1856,7 +1854,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
       contextWindow: z.number().int().nullable(),
       ttftMs: z.number().int().default(0), ttftMsMax: z.number().int().default(0),
       decodeTps: z.number().int().default(0),
-      // 子代理消耗(2026-10-22 用户口径:单独一窗;不并入 tokens)
+ // 子代理消耗(单独一窗;不并入 tokens)
       subagents: z.object({
         spawned: z.number().int(),
         agents: z.array(z.object({
@@ -1881,12 +1879,12 @@ export const ServerMessage = z.discriminatedUnion("type", [
       costModels: z.array(z.record(z.any())).optional(),
     }),
   }),
-  // 会话状态服务端推送(step-030 推送化收口):任务/待办/子代理状态变化时主动广播,
+ // 会话状态服务端推送(推送化):任务/待办/子代理状态变化时主动广播,
   // 面板收到即替代一次轮询(轮询保留作断线兜底)。
-  // J4(2026-11-05 侧栏按会话活动时间排序):lastActivityAt=该会话最近一次「用户可见动作」的 journal 时间(ms)。
+ // (侧栏按会话活动时间排序):lastActivityAt=该会话最近一次「用户可见动作」的 journal 时间(ms)。
   // 复用本帧的 200ms per-session 合并,不新增 message type(历史故障教训:独立高频帧会放大广播风暴)。
   Envelope.extend({ type: z.literal("session.status.changed"), sessionId: z.string(), lastActivityAt: z.number().optional() }),
-  // 语义流程白板(designs/22):board.get 回包/列表回包/agent 写板广播(面板在板视图时即刷新)
+ // 语义流程白板:board.get 回包/列表回包/agent 写板广播(面板在板视图时即刷新)
   Envelope.extend({ type: z.literal("board.doc"), sessionId: z.string(), taskId: z.string(), doc: BoardDocZ.nullable(), links: z.array(BoardLinkStateZ).default([]), overlayB64: z.string().optional(), crossFileTargets: z.array(z.object({ name: z.string(), file: z.string(), line: z.number().int() })).optional() }),
   /** 白板出图回包:svg 为 `<svg ...>` 全文,diagnostics 为 flowkit 编译/导出诊断。 */
   BoardDiagramResult,
@@ -1897,17 +1895,17 @@ export const ServerMessage = z.discriminatedUnion("type", [
     sessionId: z.string(),
     items: z.array(z.object({
       taskId: z.string(), title: z.string(), status: z.string(), updatedAt: z.number(), nodeCount: z.number().int(),
-      /** 2026-10-22:板类型,面板据此按类型过滤(旧服务端缺省=design)。 */
+ /** :板类型,面板据此按类型过滤(旧服务端缺省=design)。 */
       docKind: z.string().optional(),
-      /** 2026-10-22:该板未处理的用户评论条数(agent 尚未消费);0/缺省=无待读。 */
+ /** :该板未处理的用户评论条数(agent 尚未消费);0/缺省=无待读。 */
       pendingComments: z.number().int().optional(),
     })),
-    /** step-072:损坏/不可读板文件数(面板显式降级「板损坏」而非冒充「无板」;0 时服务端缺省不发)。 */
+ /** 损坏/不可读板文件数(面板显式降级「板损坏」而非冒充「无板」;0 时服务端缺省不发)。 */
     skipped: z.number().int().optional(),
   }),
   // board.changed 走 bus 广播通道(server.ts onBusEvent),线形={type, payload} 包装。
   Envelope.extend({ type: z.literal("board.changed"), payload: z.object({ sessionId: z.string(), taskId: z.string() }) }),
-  // 设计沉淀回包(step-058):done 板项目级索引条目(files=节点 symbolRef.file 去重,反查匹配键)
+ // 设计沉淀回包:done 板项目级索引条目(files=节点 symbolRef.file 去重,反查匹配键)
   Envelope.extend({
     type: z.literal("board.archive.result"),
     projectId: z.string().nullable(),
@@ -1918,7 +1916,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   }),
   // P3:保存冲突(rev 乐观锁)+批注层随 board.doc 下发(overlayB64)
   Envelope.extend({ type: z.literal("board.conflict"), sessionId: z.string(), taskId: z.string(), currentRev: z.number().int() }),
-  // ---- step-121 工作流板:编译回包 / 运行进度广播 / 运行终态广播 ----
+ // ---- 工作流板:编译回包 / 运行进度广播 / 运行终态广播 ----
   /** 编译回包(只编译不跑):ok=false 时 errors 列全部编译错误(fail-visible);ok=true 附脚本全文。 */
   Envelope.extend({
     type: z.literal("board.workflow.compile.result"),
@@ -1955,15 +1953,15 @@ export const ServerMessage = z.discriminatedUnion("type", [
       detail: z.string().optional(),
     })).optional(),
   }),
-  // 会话进度投影(step-030:ZCode ConversationStatusPanel 的拉模型版;轮询由面板发起)
+ // 会话进度投影(ZCode ConversationStatusPanel 的拉模型版;轮询由面板发起)
   Envelope.extend({
     type: z.literal("session.status.result"),
-    /** 回显请求的会话 id(step-1036):面板按它登记水位表(缺它则所有会话的水位都落到
-     *  undefined 键 → 后续请求永远发不出 sinceSeq,增量路径形同虚设 —— 浏览器实测抓到)。
+ /** 回显请求的会话 id:面板按它登记水位表(缺它则所有会话的水位都落到
+ * undefined 键 → 后续请求永远发不出 sinceSeq,增量路径形同虚设 —— 浏览器经验证抓到)。
      *  可选:旧网关不回显时面板退回「当前会话」口径(Tolerant Reader)。 */
     sessionId: z.string().min(1).optional(),
     status: z.object({
-      /** step-1036 增量化:水位=该会话当前最大 seq(空会话=0)。面板据此下次带 sinceSeq 走增量。
+ /** 增量化:水位=该会话当前最大 seq(空会话=0)。面板据此下次带 sinceSeq 走增量。
        *  与 status.task 索引化同批(2026-11 治网关 OOM):task 只带 TaskIndex,instruction/result
        *  全文一律不进状态帧(面板按 id 走 task.detail.get)。 */
       seq: z.number().int().nonnegative(),
@@ -1976,9 +1974,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
       subagents: z.object({ spawnCount: z.number().int(), resultCount: z.number().int(), running: z.number().int() }),
       workflows: z.array(z.object({ wfId: z.string(), asks: z.number().int(), done: z.boolean() })),
       compactions: z.array(z.object({ at: z.number(), tokens: z.number().optional(), summaryChars: z.number().optional() })).default([]),
-      // 子代理实时清单(B 2026-10-14 面板过程卡):后台注册表按会话过滤+output.txt tail;缺省=注册表缺席(降级)
-      // model(step-060 子代理目录):子代理实际模型名(注册表缺席/旧进程=缺省,目录回落「主模型」文案)
-      // deadline/heartbeatAt/stale/stopReason(2026-10-16 目录深化,并行线字段):有则透传无则缺省——面板防御式渲染。
+ // 子代理实时清单(B 面板过程卡):后台注册表按会话过滤+output.txt tail;缺省=注册表缺席(降级)
+ // model(子代理目录):子代理实际模型名(注册表缺席/旧进程=缺省,目录回落「主模型」文案)
+ // deadline/heartbeatAt/stale/stopReason(目录深化,并行线字段):有则透传无则缺省——面板防御式渲染。
       subagentList: z.array(z.object({
         agentId: z.string(), status: z.string(), outputFile: z.string(),
         tail: z.string().optional(), title: z.string().optional(), model: z.string().optional(),
@@ -2063,7 +2061,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("dashboard.changed") }),
   // 错误帧:code 走 ErrorCode 过渡 union(登记码收窄提示 + 历史字符串仍放行,Q1)。
   Envelope.extend({ type: z.literal("error"), code: ErrorCodeSchema, message: z.string() }),
-  // repo wiki(step-118):manifest 为结构化页面索引(panel 直接消费;z.record 保持协议松耦合)
+ // repo wiki:manifest 为结构化页面索引(panel 直接消费;z.record 保持协议松耦合)
   Envelope.extend({
     type: z.literal("wiki.list.result"),
     projectId: z.string().nullable(),
@@ -2098,7 +2096,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({
     type: z.literal("exp.list.result"),
     items: z.array(z.object({ category: z.string(), name: z.string(), description: z.string() })),
-    /** 已禁用条目(step-044 恢复入口数据源)。 */
+ /** 已禁用条目(恢复入口数据源)。 */
     disabled: z.array(z.object({ category: z.string(), name: z.string() })).default([]),
   }),
   Envelope.extend({
@@ -2120,7 +2118,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("cfg.set.result"),
     applied: z.array(z.string()),
     needsRestart: z.array(z.string()),
-    /** env 占用键(2026-10-19 模型切换失效根治配套):这些键被进程 env 层(GENIE_LLM_*)压住,
+ /** env 占用键(模型切换失效根治配套):这些键被进程 env 层(GENIE_LLM_*)压住,
      * 重启也不会生效——面板据此把「重启生效」徽标升格为「env 占用」警示。 */
     envOccupied: z.array(z.string()).optional(),
     /** 实际生效选择(2026-10-20 Provider Registry 语义):模型/端点/协议/凭证来源,绝不含密钥值。
@@ -2151,7 +2149,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     error: z.string().optional(),
   }),
   Envelope.extend({ type: z.literal("models.list.result"), ids: z.array(z.string()), providerId: z.string().optional(), probeOnly: z.boolean().optional() }),
-  // ---- tunnel 委派(step-033,designs/09 §4):任务书下发远端节点;凭证只带引用名,值由节点本地解析 ----
+ // ---- tunnel 委派(§4):任务书下发远端节点;凭证只带引用名,值由节点本地解析 ----
   Envelope.extend({
     type: z.literal("node.task.dispatch"),
     taskId: z.string().min(1),
@@ -2162,7 +2160,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     delegatedDepth: z.number().int().nonnegative().default(0),
   }),
   Envelope.extend({ type: z.literal("node.task.cancel"), taskId: z.string().min(1) }),
-  // 权限审批请求(step-037):广播给已连接客户端;超时无应答=自动拒绝(fail-closed)。
+ // 权限审批请求:广播给已连接客户端;超时无应答=自动拒绝(fail-closed)。
   Envelope.extend({
     type: z.literal("permission.ask"),
     requestId: z.string().min(1),
@@ -2174,9 +2172,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
     timeoutMs: z.number().int().positive(),
   }),
   Envelope.extend({ type: z.literal("files.result"), query: z.string(), files: z.array(z.string()) }),
-  // 会话全文检索回包(step-115):result=DiscoverResult(browse 时空 query 也走此型)。
+ // 会话全文检索回包:result=DiscoverResult(browse 时空 query 也走此型)。
   Envelope.extend({ type: z.literal("session.search.result"), query: z.string(), result: z.unknown() }),
-  // ask_user(2026-10-19 许愿式编程):主 agent 需求取舍发问,面板问答条答复(ask.user.answer)。
+ // ask_user(许愿式编程):主 agent 需求取舍发问,面板问答条答复(ask.user.answer)。
   Envelope.extend({
     type: z.literal("ask.user"),
     requestId: z.string(),
@@ -2201,21 +2199,21 @@ export const ServerMessage = z.discriminatedUnion("type", [
     totalLines: z.number().int(),
     content: z.string(),
     missing: z.boolean().optional(),
-    /** step-141 IDE(full=true):二进制文件(首 8KB 含 NUL)不回 content,只回标记。 */
+ /** IDE(full=true):二进制文件(首 8KB 含 NUL)不回 content,只回标记。 */
     binary: z.boolean().optional(),
-    /** step-141 IDE(full=true):>2MB 不回全文,只回标记(响应体防放大)。 */
+ /** IDE(full=true):>2MB 不回全文,只回标记(响应体防放大)。 */
     tooLarge: z.boolean().optional(),
-    /** 2026-10-26:显式 projectId 的项目目录不可用(只读保护;面板提示恢复目录而非「不存在」)。 */
+ /** :显式 projectId 的项目目录不可用(只读保护;面板提示恢复目录而非「不存在」)。 */
     unavailable: z.boolean().optional(),
   }),
-  // step-141 IDE 保存链:ok=落盘成功;失败回 error(code=file-write-denied,message 带 reason)。
+ // IDE 保存链:ok=落盘成功;失败回 error(code=file-write-denied,message 带 reason)。
   Envelope.extend({
     type: z.literal("file.write.result"),
     path: z.string(),
     ok: z.boolean(),
     bytes: z.number().int().optional(),
   }),
-  // 2026-10-29 板「OOXML 文本回写」P2:Office 文本级编辑回执(服务端读原文件→重写→落盘)。
+ // 板「OOXML 文本回写」P2:Office 文本级编辑回执(服务端读原文件→重写→落盘)。
   // ok=false 时 error 带人话原因(下标越界/找不到文本节点/沙箱拒绝/远程项目不支持)。
   Envelope.extend({
     type: z.literal("ide.office.edit.result"),
@@ -2239,7 +2237,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     sha: z.string().nullable(),
     files: z.array(z.string()),
   }),
-  // 内联变更条(step-046):无快照/无差异=空 files,面板隐藏条。
+ // 内联变更条:无快照/无差异=空 files,面板隐藏条。
   Envelope.extend({
     type: z.literal("task.diffstat.result"),
     taskId: z.string(),
@@ -2248,7 +2246,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     total: z.object({ files: z.number(), add: z.number(), del: z.number() }),
     error: z.string().optional(),
   }),
-  // 单文件补丁结果(step-052):变更条文件清单→右侧 diff 面板。
+ // 单文件补丁结果:变更条文件清单→右侧 diff 面板。
   Envelope.extend({
     type: z.literal("task.filediff.result"),
     taskId: z.string(),
@@ -2257,7 +2255,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     truncated: z.boolean().optional(),
     error: z.string().optional(),
   }),
-  // 模型探活结果(step-052):设置页模型列表逐项「测」→最小 chat 调用往返。
+ // 模型探活结果:设置页模型列表逐项「测」→最小 chat 调用往返。
   Envelope.extend({
     type: z.literal("models.probe.result"),
     model: z.string(),
@@ -2265,7 +2263,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     ms: z.number(),
     error: z.string().optional(),
   }),
-  // 使用统计(step-046):journal 离线归约(journal 全量事件+任务登记表)。
+ // 使用统计:journal 离线归约(journal 全量事件+任务登记表)。
   Envelope.extend({
     type: z.literal("stats.summary.result"),
     summary: z.object({
@@ -2289,7 +2287,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
       generatedAt: z.number(),
     }),
   }),
-  // 管理面结果(step-047)
+ // 管理面结果
   Envelope.extend({
     type: z.literal("agents.list.result"),
     agents: z.array(z.object({ name: z.string(), description: z.string(), systemPrompt: z.string().optional(), tools: z.array(z.string()).optional(), builtin: z.boolean() })),
@@ -2354,7 +2352,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     root: z.string(),
     usage: z.object({ user: z.object({ used: z.number(), limit: z.number() }), memory: z.object({ used: z.number(), limit: z.number() }) }),
   }),
-  // 插件市场(step-048)
+ // 插件市场
   Envelope.extend({
     type: z.literal("plugins.list.result"),
     catalog: z.array(z.object({
@@ -2369,7 +2367,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
       installed: z.boolean().optional(), enabled: z.boolean().optional(),
     })),
   }),
-  // 项目档案(step-049)
+ // 项目档案
   Envelope.extend({
     type: z.literal("profile.get.result"),
     profile: z.object({
@@ -2402,7 +2400,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     }),
   }),
   Envelope.extend({ type: z.literal("profile.progress"), projectId: z.string(), progress: z.number(), stage: z.string(), state: z.string() }),
-  // 总路线(step-131):项目开发宗旨/主线能力/偏离提示 + 确定性骨架事实;exists=false=manifest 缺席
+ // 总路线:项目开发宗旨/主线能力/偏离提示 + 确定性骨架事实;exists=false=manifest 缺席
   Envelope.extend({
     type: z.literal("profile.sense.result"),
     projectId: z.string().nullable().optional(),
@@ -2436,9 +2434,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
     })),
     identity: z.object({ fingerprint: z.string().optional(), mode: z.string() }).optional(),
   }),
-  // step-1042 节点 Fleet:注册/掉线/心跳在线态翻转的廉价广播(面板收即重拉 nodes.list;负载细节仍在回包)。
+ // 节点 Fleet:注册/掉线/心跳在线态翻转的廉价广播(面板收即重拉 nodes.list;负载细节仍在回包)。
   Envelope.extend({ type: z.literal("nodes.changed") }),
-  // step-1042 节点 Fleet「电脑控制」真路由回执:remote=NodeDispatch.delegate 结果;local 照旧走 task 链无此帧。
+ // 节点 Fleet「电脑控制」真路由回执:remote=NodeDispatch.delegate 结果;local 照旧走 task 链无此帧。
   Envelope.extend({ type: z.literal("node.exec.result"), nodeId: z.string(), ok: z.boolean(), output: z.string().optional(), error: z.string().optional(), durationMs: z.number().optional() }),
   Envelope.extend({
     type: z.literal("wizard.gen.result"),
@@ -2447,7 +2445,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     note: z.string(),
   }),
   Envelope.extend({ type: z.literal("term.output"), chunk: z.string(), err: z.boolean().optional() }),
-  // 流式消息(step-050,ZCode 流式消息展示):loop onStream 旁路广播;不落 journal,终态由 task.changed/session.history 承接。
+ // 流式消息(ZCode 流式消息展示):loop onStream 旁路广播;不落 journal,终态由 task.changed/session.history 承接。
   Envelope.extend({
     type: z.literal("stream"),
     sessionId: z.string(),
@@ -2475,7 +2473,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     type: z.literal("git.log.result"),
     commits: z.array(z.object({ hash: z.string(), subject: z.string(), author: z.string(), date: z.string() })),
   }),
-  // 评审遗留(行级回写店,2026-10-13):sticky 跨轮视图(open=未解决,resolved=已标记不再复现)。
+ // 评审遗留(行级回写店:sticky 跨轮视图(open=未解决,resolved=已标记不再复现)。
   Envelope.extend({
     type: z.literal("review.store.result"),
     projectId: z.string().nullable(),
@@ -2483,14 +2481,14 @@ export const ServerMessage = z.discriminatedUnion("type", [
     open: z.array(StoredCommentZ),
     resolved: z.array(StoredCommentZ),
   }),
-  // 评审评论回注回执(step-074):注入目标会话+新任务 id+条数,面板据此 toast/跳转。
+ // 评审评论回注回执:注入目标会话+新任务 id+条数,面板据此 toast/跳转。
   Envelope.extend({
     type: z.literal("review.inject.result"),
     sessionId: z.string(),
     taskId: z.string(),
     count: z.number().int(),
   }),
-  // 项目清单(step-035):连接即推+变更广播;availability=启动期一次性校验(ZCode 同语义)。
+ // 项目清单:连接即推+变更广播;availability=启动期一次性校验(ZCode 同语义)。
   Envelope.extend({
     type: z.literal("project.list.result"),
     projects: z.array(z.object({
@@ -2501,7 +2499,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     })),
     activeProjectId: z.string(),
   }),
-  // 服务端目录浏览(step-056):path="" 为锚点应答;error 时 entries 缺省。
+ // 服务端目录浏览:path="" 为锚点应答;error 时 entries 缺省。
   Envelope.extend({
     type: z.literal("fs.list.result"),
     path: z.string(),
@@ -2523,12 +2521,12 @@ export const ServerMessage = z.discriminatedUnion("type", [
     tool: z.string(),
     error: z.string().optional(),
   }),
-  // step-142 IDE 文件操作回包(mkdir/remove/rename 三通道同构):ok=false 时 error 带拒因
+ // IDE 文件操作回包(mkdir/remove/rename 三通道同构):ok=false 时 error 带拒因
   // (越界/.git/目标不存在/目录非空未传 recursive…),面板据此 toast 并不刷新树。
   Envelope.extend({ type: z.literal("fs.mkdir.result"), path: z.string(), ok: z.boolean(), error: z.string().optional() }),
   Envelope.extend({ type: z.literal("fs.remove.result"), path: z.string(), ok: z.boolean(), error: z.string().optional() }),
   Envelope.extend({ type: z.literal("fs.rename.result"), from: z.string(), to: z.string(), ok: z.boolean(), error: z.string().optional() }),
-  // step-142 全项目内容搜索:matches[{ path(项目内相对), line(1-based), text(整行,已截断 400 字符) }]。
+ // 全项目内容搜索:matches[{ path(项目内相对), line(1-based), text(整行,已截断 400 字符) }]。
   Envelope.extend({
     type: z.literal("fs.grep.result"),
     query: z.string(),
@@ -2564,7 +2562,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   Envelope.extend({ type: z.literal("term.session.close.result"), requestId: z.string() }),
   Envelope.extend({ type: z.literal("git.show.result"), requestId: z.string(), content: z.string() }),
   // 会话分叉回包(ZCode session-fork 语义移植,refs: ZCode):ok=false 时 reason 必带。
-  // modelOverride(2026-10-22):父会话若有 per-session 主模型覆盖,fork 后继承认该覆盖(同 zcode
+ // modelOverride:父会话若有 per-session 主模型覆盖,fork 后继承认该覆盖(同 zcode
   // session-fork 的 modelSelection 继承);无覆盖=缺省,新会话跟随全局 coding.llm。
   Envelope.extend({
     type: z.literal("session.fork.result"),
@@ -2575,7 +2573,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
     modelOverride: z.object({ model: z.string(), providerId: z.string().optional(), effort: z.string().optional() }).nullable().optional(),
   }),
   // per-session 主模型回包:「实际生效选择」语义与 cfg.set.result.effective 同构(不含密钥值)。
-  // 2026-10-22:改为**广播**(多标签/多客户端同步),payload 带 ok/effective/routeError/warning/revision;
+ // 改为**广播**(多标签/多客户端同步),payload 带 ok/effective/routeError/warning/revision;
   // ok=false 时 routeError(选择不可用,未落盘)或 code=revision-mismatch(CAS 冲突)。
   Envelope.extend({
     type: z.literal("session.model.result"),
@@ -2664,5 +2662,5 @@ export function explainClientMessageError(raw: string): string | null {
   return `非法消息(type=${typeLabel}):${parts.join("; ").slice(0, 200)}`;
 }
 
-// Team Relay 协议(designs/05 §8 子集):独立消息族,与 gateway 命令族互不掺入。
+// Team Relay 协议( §8 子集):独立消息族,与 gateway 命令族互不掺入。
 export * from "./relay.js";

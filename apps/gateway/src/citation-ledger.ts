@@ -1,6 +1,5 @@
 /**
- * M169 研究引用账本(cite_source + 收尾引用校验,2026-11-07)。
- *
+ * 研究引用账本(cite_source + 收尾引用校验。
  * 口径(机制 #169):研究稿里的 [n] 编号不许来自模型记忆——
  *  1) 编号只由 cite_source 工具给出:先在**本会话 journal** 里找到该 URL 的 web_fetch 调用与
  *     成功结果(非错误),否则拒绝登记(「先抓再引」);
@@ -9,7 +8,6 @@
  *  3) 同一 taskId 内按登记顺序连续编号(n 从 1 起);同 url+quote 重复登记幂等返回原 n;
  *  4) 交付前收尾审计:正文出现的 [n] 必须在账本里(missing=未登记/越界);已登记但正文没引用
  *     只算 info(unused,不报警)。模型知识标 [unverified],不占编号。
- *
  * 事件:`custom/citation.registered`(append-only,sourceToolCallId 指回抓取证据)与
  * `custom/citation.audit`(收尾结论,agent-wiring 落)。
  */
@@ -124,8 +122,7 @@ export function extractFetchedText(content: unknown): string {
 /** 本会话里该 URL 最近一次成功的 web_fetch(调用 id + 抓取正文);没有 → null。 */
 export function findFetchedText(
   events: readonly CitationJournalEvent[],
-  url: string,
-): { toolCallId: string; text: string; seq: number } | null {
+  url: string): { toolCallId: string; text: string; seq: number } | null {
   const target = normalizeUrl(url);
   if (!target) return null;
   const calls = new Set<string>();
@@ -194,7 +191,7 @@ export function auditCitations(finalText: string, registered: readonly CitationR
 }
 
 /**
- * 收尾审计作用域判据(2026-11-07 收窄):coding 终稿里的 `[1]` 常是数组/脚注/编号,
+ * 收尾审计作用域判据(收窄):coding 终稿里的 `[1]` 常是数组/脚注/编号,
  * 全类别审计会把它们当「未登记引用」误报。口径:agent 已明确用了账本(有登记)任何类别都审计;
  * office/qa 默认审计;指令命中研究/调研词也审计;其余(coding/普通任务)且无登记 → 不审计。
  */

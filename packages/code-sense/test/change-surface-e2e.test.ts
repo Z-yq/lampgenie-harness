@@ -1,8 +1,7 @@
 /**
- * 全链路闭环端到端夹具(2026-11-06):在临时目录造一个玩具概念 demoFlag,分布在
+ * 全链路闭环端到端夹具:在临时目录造一个玩具概念 demoFlag,分布在
  * protocol / journal / config / ui / assets / tests / docs 七类表面,然后走
  * 「scan → 只改 ui → audit failed(列出剩余)→ 改全 → audit passed」的完整闭环。
- *
  * 这条用例是「证明没有只改一半」的机制级验收:不是断言某个函数返回值,而是断言
  * 流程能真实拦住「只改 UI 就交差」。
  */

@@ -1,5 +1,5 @@
 /**
- * loop 接线(M150):tool.execute 前归一层。
+ * loop 接线:tool.execute 前归一层。
  * 契约:
  *  - 归一成功后工具收到归一参数并正常执行;
  *  - 校验失败 → 该工具结果是 [工具参数错误] 框,turn 不失败、loop 继续(下一步仍可调用);
@@ -77,7 +77,7 @@ describe("loop ↔ tool-args", () => {
     expect(results[0]).toContain("[工具参数错误] read_file");
     expect(results[0]).toContain("- path: 期望 required,收到 undefined");
     expect(results[1]).toBe("content-a");
-    // 错误框是工具结果而非 turn 失败:turn 正常收口
+ // 错误框是工具结果而非 turn 失败:turn 正常
     const ends = journal.readAll().filter((e) => e.kind === "turn.end");
     expect((ends.at(-1)!.payload as { reason: string }).reason).toBe("completed");
   });

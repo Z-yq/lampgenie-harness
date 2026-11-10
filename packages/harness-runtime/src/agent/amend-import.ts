@@ -1,6 +1,5 @@
 /**
  * 进程替换后的「导入前判断」纯逻辑(零 IO / 零 import,2026-11 #174)。
- *
  * 为什么需要它:主进程在处理一个提问(ask)的中途被打断(崩溃/替换/重启)后,
  * 新进程要靠盘上的 run 现场接着走。但「接着走」有两类完全不同的做法:
  * - 旧 ask 其实已经算完了(checkpoint 里有终态节点)→ 直接把它当作 imported 节点写进
@@ -9,7 +8,6 @@
  * 这两条路选错任何一条都会产生「同一提问两个答案」或「历史被写乱」的脏现场,
  * 所以把「能不能导、导哪条、门什么时候关」收进一个可逐条断言的判定模块,
  * 由调用方只读结论、按码分支,判断本身不做任何 IO 与模型调用。
- *
  * 关键不变量:
  * 1. 只导「最长全 completed 前缀」:某 actor 的第一个 running/failed 之后即便又有
  *    completed 也不收——那条 completed 的因果前提已经断了(前缀语义单调)。
@@ -21,7 +19,6 @@
  *    以 `${target.id}:` 开头;历史里出现外来 id = TARGET_DIRTY(不是重建现场,是拼接现场)。
  * 5. stopPredecessor 在 awaitSettlement!==true 时零副作用(既不读也不改),返回
  *    SKIP_SETTLEMENT,让调用方自己决定是否重试。
- *
  * 依赖纪律:零 import(不读文件/环境/网络/时间),所有导出函数不 throw;
  * 非法入参折叠成 AMEND_INVALID,状态不满足折叠成 RUN_MISSING / BOUNDARY_MISSING /
  * TARGET_DIRTY / MISS / HASH_DIVERGED / DOOR_CLOSED。码表顺序固定(便于自动化按码断言)。
@@ -307,10 +304,9 @@ export function matchImport(
   const bucket: unknown[] = Array.isArray(bucketRaw) ? bucketRaw : [];
   const entry = bucket.find(
     (candidate): candidate is AskRecord =>
-      isRecord(candidate) && (candidate as { id?: unknown }).id === opts.askId,
-  );
+      isRecord(candidate) && (candidate as { id?: unknown }).id === opts.askId);
 
-  // 门关判定需要条目自身的 toolCalls,所以条目缺失时先按 MISS 收口。
+ // 门关判定需要条目自身的 toolCalls,所以条目缺失时先按 MISS。
   if (entry === undefined) return { ok: false, codes: [AMEND_MISS], hit: false };
 
   const toolCalls =

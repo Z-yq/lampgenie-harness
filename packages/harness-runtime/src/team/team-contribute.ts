@@ -1,5 +1,5 @@
 /**
- * 会话经验贡献(designs/30 §2.4 / teamai-cli contribute):
+ * 会话经验贡献( §2.4 / teamai-cli contribute):
  * 纯函数层——learnings 文件名 slug 化 + 文档渲染。**无 IO**(relay 的 git 写入在 team-relay.ts),
  * 便于单测与读侧(teamai-bridge.parseLearningMeta)形态对齐。
  * 落点:团队仓 `teamai-learnings` 分支的 `learnings/<ts>-<slug>.md`。

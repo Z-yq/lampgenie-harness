@@ -1,7 +1,7 @@
 /**
- * typed/types(step-089 P1 / designs/26 §2.1):变量类型识别的数据契约。
+ * typed/types( P1 / §2.1):变量类型识别的数据契约。
  * 单一 kind 词表(对齐 LSP SemanticTokenTypes 的诚实子集)+ 声明时类型文本(dataType)。
- * tier×evidence 双诚实轴沿用 designs/16:structural/ast=语法级确证,lexical/grep=词法级。
+ * tier×evidence 双诚实轴沿用 :structural/ast=语法级确证,lexical/grep=词法级。
  */
 
 export type TypedLang = "c" | "cpp" | "python" | "typescript" | "go" | "java";
@@ -18,7 +18,7 @@ export type TypedKind =
   | "property"
   | "enumMember"
   | "type"
-  // F/G 批(2026-10-22):函数内 kind——默认 vars 面不入(VAR_KINDS 不含),--locals 扩入。
+ // F/G 批:函数内 kind——默认 vars 面不入(VAR_KINDS 不含),--locals 扩入。
   | "param" // Python def 形参(带注解)
   | "parameter" // TS/JS 形参(带类型注解)
   | "local"; // 函数体内注解局部变量(Python/TS 同名)
@@ -52,8 +52,8 @@ export interface TypedFileResult {
   degraded?: { reason: string };
 }
 
-/** 读取失败降级理由(step-101):fs 错误的完整路径不截断——旧 `slice(0,80)` 把 ENOENT 完整路径
- * 拦腰斩断(实测呈现「open '/home/…/bench)」半截路径,读起来像「参数被截断」误诊,step-092 踩坑③)。
+/** 读取失败降级理由:fs 错误的完整路径不截断——旧 `slice(0,80)` 把 ENOENT 完整路径
+ * 拦腰斩断(经验证呈现「open '/home/…/bench)」半截路径,读起来像「参数被截断」误诊, 注意③)。
  * ≤300 字符全量保留;超长中段截断但保尾部(fs 错误消息的路径恒在尾:`…, open '<path>'`)。 */
 export function readFailReason(err: unknown): string {
   const full = String(err);
@@ -61,7 +61,7 @@ export function readFailReason(err: unknown): string {
   return full.slice(0, 160) + " … " + full.slice(-130);
 }
 
-/** semantic-token 流导出格式(designs/26 §2.1 定稿;消费者=未来 UI 语义着色/外部编辑器集成)。 */
+/** semantic-token 流导出格式( §2.1 定稿;消费者=未来 UI 语义着色/外部编辑器集成)。 */
 export interface SemanticTokenFile {
   version: 1;
   file: string;

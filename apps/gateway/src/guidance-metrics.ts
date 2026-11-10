@@ -1,17 +1,14 @@
 /**
- * M23 指导可度量(2026-11-07),纯函数层。
- *
+ *  指导可度量,纯函数层。
  * 问题:机制/提示词改完只凭感觉说「变好了」,回答不了「哪条 tips 真的改变了行为、值不值这份 token」。
  * 口径:每条 tips 在注册表里带三件事——触发条件(trigger)、预期行为(expected)、度量指标(metric);
  * 任务收尾按本任务 journal 窗口算计数器与比率,供与历次会话汇总做前后对比。
- *
  * 数据源只有本任务事件(调用方用 `journal.readSession(sessionId, taskStartSeq)` 切片,不 readAll):
  *  step.start / step.end         → steps、并行步(step 区间内 tool.call ≥2)
  *  tool.call(name,arguments)     → toolCalls / read_file 路径 / board_upsert / terminal 验证命令
  *  tool.result(content)          → reworkCalls(错误/超时)
  *  tip.injected(payload.keys)    → 各 tip 注入次数
  *  llm.trace(payload.usage)      → tokens(totalTokens 求和;缺失忽略,不估算)
- *
  * 纪律:指标全部确定性(零 LLM、零启发式打分);没有真源就留 0,不写「看起来合理」的假数。
  */
 import { isVerificationCommand } from "./verification-ledger.js";

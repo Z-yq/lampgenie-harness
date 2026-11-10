@@ -1,6 +1,5 @@
 /**
- * result_read 取回旁路二次提炼(2026-11-08)。
- *
+ * result_read 取回旁路二次提炼。
  * 契约:result_read 是模型/用户**显式发起**的 dump 回读,其输出已被工具自身 maxChars/grep/limit 约束
  * (取回转义口必须原样)。故 loop 结果归一处对它跳过 big-intake(不产生 context.intake、不改写 content)
  * 与 spill(不落二次 dump、不加占位头);其它工具(对照组 terminal)同尺寸仍照旧进闸。

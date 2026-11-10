@@ -1,9 +1,8 @@
 /**
- * 双中心布局(2026-10-25:会话流+IDE 并列常驻)契约测试 —— PAGE 源码字符串断言。
+ * 双中心布局(会话流+IDE 并列常驻)契约测试 —— PAGE 源码字符串断言。
  * 覆盖:①双栏 CSS(body.dual-center/--dual-chatw/窄屏降级) ②路由分流(switchView("ide")→右栏开合
  * 不改 data-view) ③viewLive dual 分支(右栏 IDE 判活,防 WS 停更) ④拖拽条(夹紧+localStorage 持久化)
  * ⑤Monaco 重排兜底(ideLayoutKick+ResizeObserver) ⑥刷新还原(savedView=ide 不拽走身份) ⑦入口按钮。
- *
  * 风格照抄 panel-ide-deep.test.ts:servePanel 取真实面板 HTML,再做字符串/函数体断言(零构建链)。
  */
 import { describe, it, expect } from "vitest";
@@ -42,7 +41,7 @@ describe("双中心布局:会话流+IDE 并列常驻", () => {
       expect(html).toContain("body.dual-center #view-tasks.on");
       expect(html).toContain("var(--dual-chatw");
       expect(html).toContain("body.dual-center #view-ide.on");
-      // 指挥台让位(复用 board 先例)+ 页面右距释放(step-1033:数字人立绘已退役,改 #sc-root)
+ // 指挥台让位(复用 board 先例)+ 页面右距释放(数字人立绘已退役,改 #sc-root)
       expect(html).toContain("body.dual-center #sc-root");
       // 窄屏降级两档:≤1400 收窄;≤1150 禁双栏
       expect(html).toContain("@media (max-width:1400px)");

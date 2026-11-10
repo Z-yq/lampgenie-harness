@@ -1,6 +1,5 @@
 /**
  * 改派导入(amend-import)持久层:把 runtime 的纯裁决落到单一 JSON 账本。
- *
  * 数据面:`<root>/.genie/rsi/amend.json`
  *   {
  *     "v": 1,
@@ -12,19 +11,16 @@
  *     "lastAction"?: string,
  *     "updatedAt"?: number
  *   }
- *
  * 为什么是单文件整账本:改派导入的关键不变量是「跨进程单调」——第二个 CLI 进程
  * 不得把已经判为分叉(HASH_DIVERGED)的 ask 回落到 HIT,也不得在门关上(DOOR_CLOSED)
  * 之后重新开一条世界写。整账本 + 临时文件 rename 原子替换,让「读到的永远是某一完整代」
  * 成立:崩溃最多丢掉最后一次未 rename 的写。
- *
  * 失败口径:
  * - 参数错误(TypeError)是唯一 throw 的情形。
  * - 读失败(文件不存在 = 首次;JSON 坏 / 形状坏)→ 折叠成 AMEND_STORE_ERROR,**写操作拒写**
  *   (坏账本上先落库会掩盖原始损坏,宁可停下等人看)。
  * - 写后校验(读回 v 与 lastAction 一致)不过 → AMEND_STORE_WRITE_MISMATCH(不 throw)。
  * - 业务拒绝沿用 runtime 的 AMEND_* 稳定码,且拒收前不落盘(预检失败时**不调** stopPredecessor)。
- *
  * 依赖纪律:node:fs / node:path + runtime 纯逻辑(经 workspace 子路径导入)。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";

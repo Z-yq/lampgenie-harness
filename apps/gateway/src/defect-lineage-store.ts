@@ -1,20 +1,16 @@
 /**
  * 缺陷血缘持久层(生产侧,缺陷血缘 2026-11):把 defect-lineage 的纯逻辑落到 append-only jsonl。
- *
  * 为什么 append-only:「这条缺陷算在谁头上」是审计事实——登记、归属、人工澄清都是判断的历史,
  * 不能被后来的写入覆盖或抹掉(错的溯源比没有更贵,所以要能回看当初为什么这么判)。
  * 单行追加 + 写后重读行数校验让「写成功了吗」成为可复核断言,而不是信任 appendFileSync 没抛异常。
- *
  * 数据面:`<root>/.genie/rsi/defects.jsonl`,每行 `{v:1,type,at,defect,lineage?}`
  * - register   {defect}                     缺陷登记(fixTaskId / files / fixedAt 是归属与漏点推断的输入)
  * - attribute  {defect,lineage}             一次自动归属的结论(buildLineage 结果,含 votes/codes/chain)
  * - clarify    {defect,lineage,by,note,sourceTaskId,missedLink} 人工判定(置信沿用原值,codes 用 MEDIUM 表示人工入链)
- *
  * 投影语义(loadDefects):
  * - 按行序归并(latest wins on 同 id):register 建底,attribute 覆盖 lineage,clarify 把状态钉在 clarified。
  * - 每条状态优先级:最近一次 clarify > attribute(unattributed ? "unattributed" : "attributed") > register。
  * - 坏行(JSON 坏 / v 不是 1 / type 未知 / 缺 defect)只计入 parseErrors 并跳过:一行坏不整文件失效、不 throw。
- *
  * 依赖纪律:node:fs / node:path + 同目录 evidence-graph-store(投影写入)+ runtime 的纯逻辑模块;
  * 不引 agent loop、不引 gateway 业务模块。runtime 模块按 experiment-store 的既有套路惰性解析(两跳):
  * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;

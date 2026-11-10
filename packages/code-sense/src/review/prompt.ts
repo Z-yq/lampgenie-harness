@@ -55,7 +55,7 @@ export const REVIEW_PROMPT_BODY = `你是代码审查员。审查代码变更并
 export const REVIEW_PROMPT = REVIEW_PROMPT_BODY.replace("{{ANTIPATTERNS}}", ANTIPATTERN_DIMENSION);
 
 /**
- * 全文件扫描提示词(step-116):与 diff 审查的关键差异——审查对象是完整源文件,
+ * 全文件扫描提示词:与 diff 审查的关键差异——审查对象是完整源文件,
  * 「只审变更」纪律不适用;要求逐文件基于全局上下文判断,行号必须对应文件真实行。
  */
 export const SCAN_REVIEW_PROMPT_BODY = `你是代码审查员。对下面给出的完整源文件做静态审查(全文件扫描,没有 diff)。

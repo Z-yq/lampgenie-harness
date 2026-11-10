@@ -1,4 +1,4 @@
-/** step-083 UI 阶段:页面结构板线框渲染 + 用户拖拽/连线保存 + 多尺寸截图(真实 gateway 7803)。
+/** UI 阶段:页面结构板线框渲染 + 用户拖拽/连线保存 + 多尺寸截图(真实 gateway 7803)。
  * 跑法:node apps/gateway/test/ui/s083-ui.cjs  (单 chromium,跑完即退)
  */
 const { createRequire } = require("node:module");
@@ -9,7 +9,8 @@ const fs = require("node:fs");
 const BASE = "http://127.0.0.1:7803";
 const SID = "s083-e2e";
 const SHOTS = "/tmp/s083/shots";
-const BOARD_FILE = "/mnt/e/workship/genie/lampgenie-harness/.genie/boards/" + SID + "/efbeff6c-6cbb-4b5a-9920-7e6d51241fa7.json";
+const REPO_ROOT = require("node:path").resolve(__dirname, "../../..");
+const BOARD_FILE = REPO_ROOT + "/.genie/boards/" + SID + "/efbeff6c-6cbb-4b5a-9920-7e6d51241fa7.json";
 
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log((ok ? "PASS" : "FAIL") + " " + name + (detail ? " — " + detail : "")); };
@@ -75,7 +76,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
   console.log("[shot] board-page-1440x900.png");
 
   // 用户拖拽:页面节点位移→防抖落盘(board.save pos 持久化,rev 自增)
-  // (step-057 十期坑复防:getBoundingClientRect 不看 overflow 裁剪——先 elementFromPoint 预检,
+ // (十期坑复防:getBoundingClientRect 不看 overflow 裁剪——先 elementFromPoint 预检,
   //  选一个「中心点命中 cv-node 本体」的可见节点再拖;保持 1440 流程,act-board 显式切视图)
   await page.click("#act-board").catch(() => {});
   await page.waitForTimeout(1200);
@@ -176,7 +177,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check("1024 窄窗:无横向溢出", overflow <= 2, "overflow=" + overflow + "px");
 
-  // 会话恢复持久化:刷新后板仍在(step-072 会话级白板存盘直接受益)+拖拽结果仍在
+ // 会话恢复持久化:刷新后板仍在(会话级白板存盘直接受益)+拖拽结果仍在
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2500);
   await page.click("#act-board").catch(() => {});

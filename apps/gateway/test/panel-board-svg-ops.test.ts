@@ -1,5 +1,5 @@
 /**
- * 白板 flowkit 断裂修复(2026-11-05)契约测试 —— 锁住「svg 模式下按钮不再静默失效」的四条口径:
+ * 白板 flowkit 断裂修复契约测试 —— 锁住「svg 模式下按钮不再静默失效」的四条口径:
  *  ①整理按钮:svg 模式串含 disabled 且 title 说明布局由 flowkit/ELK 决定;cards 模式逐字保留旧串;
  *  ②导出 PNG:boardExportPng 先走 svg 直出(cvExportSvgPng),拿不到才回退旧卡片/简图路线;
  *  ③导出尺寸计划 cvSvgPngPlan:viewBox 优先,大板(>400 万像素)自动降 1x,无尺寸返回 null(不抛);
@@ -128,7 +128,7 @@ describe("白板 flowkit 断裂修复", () => {
       // 常规板:2x
       const small = plan('<svg viewBox="0 0 400 300"></svg>')!;
       expect(small).toEqual({ w: 400, h: 300, scale: 2, outW: 800, outH: 600 });
-      // 实测大板(step-1033:7261×2942):2x = 341MB RGBA → 必须降 1x,不许把浏览器打爆
+ // 经验证大板(7261×2942):2x = 341MB RGBA → 必须降 1x,不许把浏览器打爆
       const big = plan('<svg viewBox="0 0 7261 2942"></svg>')!;
       expect(big.scale).toBe(1);
       expect(big.outW).toBe(7261);
@@ -216,8 +216,7 @@ describe("画布四件事(添加闭环/平移/连线/边标签常显)", () => {
         (fn: () => void) => { timers.push(fn); return timers.length; },
         () => { /* clearTimeout */ },
         () => "sig",
-        JSON,
-      ) as {
+        JSON) as {
         save: () => boolean; flush: () => void;
         st: () => { inflight: boolean; queued: boolean; timer: boolean };
         ack: () => void;

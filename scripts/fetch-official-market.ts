@@ -40,7 +40,7 @@ const manifest = JSON.parse(readFileSync(join(OUT_DIR, "marketplace.json"), "utf
 const plugins = manifest.plugins.filter((p) => p?.name && p.source?.url?.endsWith(".zip"));
 console.log(`清单 ${manifest.plugins.length} 条,zip 源 ${plugins.length} 个`);
 
-// ── 图标拉取(2026-10-25:市场卡片 logo;CDN assets/<name>/icon.png,失败容错)──
+// ── 图标拉取(市场卡片 logo;CDN assets/<name>/icon.png,失败容错)──
 mkdirSync(join(OUT_DIR, "icons"), { recursive: true });
 let iconOk = 0;
 for (const p of manifest.plugins) {

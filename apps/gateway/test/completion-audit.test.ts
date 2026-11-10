@@ -1,6 +1,5 @@
 /**
- * M5 完成审计(2026-11):把各段收尾机制的事实聚合成一张可判定的记分卡。
- *
+ * 完成审计(2026-11):把各段收尾机制的事实聚合成一张可判定的记分卡。
  * A. 纯函数:buildCompletionAudit 六行判据 + 渲染噪音控制/长度上限;
  * B. 聚合接线(agent-wiring 实际终态):completion.audit 落一次 / off 不落 / hard 补跑后仍 fail → failed。
  */

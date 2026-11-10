@@ -1,7 +1,6 @@
 /**
- * 虚拟组织协作开发流 live 测试(tasks/step-1525-j3-team-collab):对仓内活组织
+ * 虚拟组织协作开发流 live 测试:对仓内活组织
  * `<repo>/.genie/team` 真跑一轮(live 模式复用同一组步骤)。
- *
  * 门控:`TEAM_COLLAB_LIVE=1` 才跑;默认整文件 skipped,不影响 e2e 全绿统计。
  * 硬纪律:绝不重启 7700/7870;不写 .genie 之外;报告落 `<repo>/.genie/team-collab/live-report.json`。
  */
@@ -30,6 +29,5 @@ describe.skipIf(!LIVE)("虚拟组织协作开发流(live 活组织)", () => {
       const weekly = report as CollabReport;
       expect(weekly.weekly?.total ?? -1).toBeGreaterThanOrEqual(0);
     },
-    600_000,
-  );
+    600_000);
 });
