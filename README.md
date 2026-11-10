@@ -1,27 +1,37 @@
-# LampGenie · 神灯
-
-> 本地优先的开源 AI Agent 运行时与工作台:把一句自然语言愿望,跑成「代码感知 → 白板规划 → 子代理执行 → 证据验收」的可观测、可回放、可审计的交付流水线。
->
-> **The genie in your lamp** — a local-first, open-source agent runtime that turns one wish into a shipped, verified task.
-
-<!-- TODO(开源前):补三张截图(面板任务流 / 白板画布 / 轨迹回看)放 docs/assets/,并替换下面的占位 -->
-<!-- ![面板](docs/assets/panel.png) ![白板](docs/assets/board.png) ![轨迹](docs/assets/trace.png) -->
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520-green)](./README.md#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
-[![pnpm workspace](https://img.shields.io/badge/pnpm-monorepo-orange)](./README.md#%E5%BC%80%E5%8F%91%E8%80%85%E6%8C%87%E5%8D%97)
+<div align="center">
+  <img src="assets/logo/logo-mark-only.svg" width="140" alt="LampGenie">
+  <h1>LampGenie</h1>
+  <p><b>神灯 · 本地优先的开源 AI Agent 运行时与工作台</b></p>
+  <p>把一句自然语言愿望,跑成「代码感知 → 白板规划 → 子代理执行 → 证据验收」的可观测、可回放、可审计的交付流水线。</p>
+  <p><i>The genie in your lamp — a local-first, open-source agent runtime that turns one wish into a shipped, verified task.</i></p>
+  <p>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+    <img src="https://img.shields.io/badge/node-%E2%89%A520-green" alt="node >= 20">
+    <img src="https://img.shields.io/badge/pnpm-monorepo-orange" alt="pnpm monorepo">
+    <img src="https://img.shields.io/badge/TypeScript-89.7%25-blue" alt="TypeScript">
+  </p>
+</div>
 
 ---
 
 ## 这是什么
 
-LampGenie(内部代号 lampgenie-harness)不是聊天壳,而是围绕**「任务」**组织的一等公民运行时。核心主张:
+LampGenie 不是聊天壳,而是围绕**「任务」**组织的一等公民运行时。核心主张:
 
 - **先感知再动手**:改代码前,`code-sense` 先给出静态调用图、改动影响面、分支决策点与项目画像——不做局部盲修;
 - **先规划再执行**:白板把任务画成「变更契约图」(现状层+变更层),节点带目标、验收条件与证据,P0 节点未验收不算完成;
 - **分派子代理**:主 agent 负责理解、拆解、调度与验收;worker / explore / planner / judge 等子代理在各自领地内执行,互不踩文件,重活可进独立 git worktree;
 - **证据收口**:测试、typecheck、代码评审、截图冒烟等证据回填白板,`done` 状态必须带证据;
 - **全过程可观测**:任务、工具调用、LLM 请求响应、子代理轨迹全部落 journal / llm-trace,面板里可回放、可导出、可复盘。
+
+## 一眼看懂
+
+| 聊天即任务 | 白板规划 | 子代理执行 |
+|---|---|---|
+| ![聊天即任务](docs/ui-shots/ui-all-chat.png) | ![白板规划](docs/ui-shots/03-sense-plan.png) | ![子代理执行](docs/ui-shots/ui-all-running.png) |
+| 提一句需求,`@文件` 引用上下文 | 代码感知打底,白板画出变更契约 | worker/explore 领地化执行,证据回填 |
+
+> 更多面板截图见 [`docs/ui-shots/`](./docs/ui-shots/)。
 
 ## 功能亮点
 
@@ -42,8 +52,8 @@ LampGenie(内部代号 lampgenie-harness)不是聊天壳,而是围绕**「任务
 要求:Node.js ≥ 20、pnpm。
 
 ```bash
-git clone https://github.com/<your-org>/lampgenie.git
-cd lampgenie
+git clone https://github.com/Z-yq/lampgenie-harness.git
+cd lampgenie-harness
 pnpm install
 pnpm -r build
 pnpm --filter @lampgenie/gateway start   # 打开 http://localhost:7700
@@ -51,7 +61,7 @@ pnpm --filter @lampgenie/gateway start   # 打开 http://localhost:7700
 
 首次打开面板 → 「设置」页接入模型:任一 OpenAI 兼容端点(填 BaseURL + API Key)。密钥只落本地 `.genie/secrets.json`,不入库、不回显。
 
-> **桌面版**:`apps/desktop` 为 Electron 壳(内置网关托管、无边框标题栏、系统托盘)。构建安装包见 `apps/desktop/README`。
+> **桌面版**:`apps/desktop` 为 Electron 壳(内置网关托管、无边框标题栏、系统托盘)。构建安装包见 `apps/desktop/README.md`。
 
 ### 日常入口
 
@@ -85,17 +95,19 @@ pnpm --filter @lampgenie/gateway start   # 打开 http://localhost:7700
 
 依赖链:`core → harness-runtime → protocol → 其余包 → gateway`。
 
+整仓代码流程图(由 `scripts/render-mermaid.mjs` 从 code-sense 生成)见 [`docs/code-flow/`](./docs/code-flow/)。
+
 ## 开发者指南
 
 ```bash
 pnpm -r build        # 按依赖链全量构建
 pnpm -r typecheck    # 全仓类型检查
 pnpm -r test         # 全仓测试(vitest)
+pnpm gate:creds      # 凭证红线扫描(提交前建议跑一次)
 ```
 
 - 测试约定:`packages/*/test` 与 `apps/*/test`;端到端用例不依赖真实模型(`packages/test-support` 提供 mock LLM);
-- 改动纪律与工程史见 `AGENTS.md` 与 `tasks/`(按 step 编号的开发历程,非产品入口);
-- 提交建议按主题分批,凭证/运行时产物不入库。
+- 提交建议按主题分批,凭证/运行时产物不入库;详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 安全与隐私
 
@@ -112,10 +124,8 @@ Windows(实机)与 Linux/WSL 上开发与实测;macOS 理论可运行但未验�
 
 本项目的设计在演进中参考过若干开源项目的思路(qwen-audio-agent、ZCode、deepseek-harness、opencode、teamai-cli、EditHere、open-code-review、gitdiagram、code2flow、deepwiki-open 等)——**均只作思路致谢,仓库不含任何第三方项目源码拷贝**,对应模块为本仓独立实现。完整致谢与随包第三方组件(Monaco Editor、mermaid,MIT)许可见 [NOTICE.md](./NOTICE.md)。
 
-> 名称说明:LampGenie(神灯里的灯神)与 Cisco pyATS「Genie harness」、Databricks「Genie」等均无关联;仓库内包名 `@lampgenie/*` 为内部代号,将随版本演进逐步对齐。
+> 名称说明:LampGenie(神灯里的灯神)与 Cisco pyATS「Genie harness」、Databricks「Genie」等均无关联。
 
 ## 许可证
 
 [MIT](./LICENSE) © 2026 LampGenie contributors
-
-<!-- TODO(开源前):补充 CONTRIBUTING.md、行为准则(CODE_OF_CONDUCT.md)、Issue/PR 模板 -->

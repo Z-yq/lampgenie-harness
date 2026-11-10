@@ -1,4 +1,4 @@
-# lampgenie-harness 全仓代码流(2026-10-26)
+# lamplampgenie-harness 全仓代码流(2026-10-26)
 
 code-sense 的整仓 flow 能力产物:三层聚合(module/file/function)+ code2flow 语义
 (每文件 `<module>` 组合根、trunk/leaf/regular 三色、File/Class 分组、默认裁零连接、
@@ -8,8 +8,8 @@ code-sense 的整仓 flow 能力产物:三层聚合(module/file/function)+ code2
 
 | 文件 | 内容 | 规模 |
 | --- | --- | --- |
-| `lampgenie-harness-module.png` / `.svg` / `.mmd` | **模块级全仓流**(主图) | 18 节点 / 18 边 · 入口 3 |
-| `lampgenie-harness-files.png` / `.mmd` | 文件级全量流(不设上限) | 见文件 |
+| `lamplampgenie-harness-module.png` / `.svg` / `.mmd` | **模块级全仓流**(主图) | 18 节点 / 18 边 · 入口 3 |
+| `lamplampgenie-harness-files.png` / `.mmd` | 文件级全量流(不设上限) | 见文件 |
 | `gateway-functions.png` / `.mmd` | `apps/gateway` 函数级流(Top 50 预算) | 47 节点 / 80 边 |
 
 主图读数:
@@ -22,30 +22,30 @@ code-sense 的整仓 flow 能力产物:三层聚合(module/file/function)+ code2
   (外部库/动态形态)只计入脚下,不画边;零连接节点默认裁掉。
 
 > 图给人看;结构化数据用 `codesense flow --json`。代码档案里的
-> `.genie/wiki/lampgenie-harness/flow.md`、`flow/*.md` 是同一份 flow 的持久页面,
+> `.genie/wiki/lamplampgenie-harness/flow.md`、`flow/*.md` 是同一份 flow 的持久页面,
 > 面板「代码档案 · Wiki 文档」tab 直接渲染 mermaid。
 >
 > 面板查看:代码档案 → Wiki 文档(分组「全仓流程 / 语义指南 / 功能拆解」)。注意 Wiki 按
-> **当前项目**取数——当前项目不是 lampgenie-harness 时,先在侧栏「+ 添加项目」加入
-> `/mnt/e/workship/genie/lampgenie-harness`,或直接用 CLI `codesense wiki get flow` /
+> **当前项目**取数——当前项目不是 lamplampgenie-harness 时,先在侧栏「+ 添加项目」加入
+> `/mnt/e/workship/genie/lamplampgenie-harness`,或直接用 CLI `codesense wiki get flow` /
 > `codesense wiki get features`。
 
 ## 重新生成
 
 ```bash
-# 1) 模块级(默认 auto;lampgenie-harness 模块数≥6 → module)
-node packages/code-sense-cli/dist/cli.js flow --root . --out docs/code-flow/lampgenie-harness-module.mmd
+# 1) 模块级(默认 auto;lamplampgenie-harness 模块数≥6 → module)
+node packages/code-sense-cli/dist/cli.js flow --root . --out docs/code-flow/lamplampgenie-harness-module.mmd
 
 # 2) 文件级 / 函数级(预算与 scope)
 node packages/code-sense-cli/dist/cli.js flow --root . --level file --max-nodes 50 \
-  --out docs/code-flow/lampgenie-harness-files.mmd
+  --out docs/code-flow/lamplampgenie-harness-files.mmd
 node packages/code-sense-cli/dist/cli.js flow --root . --level function --scope apps/gateway --max-nodes 50 \
   --out docs/code-flow/gateway-functions.mmd
 
 # 3) mermaid → SVG/PNG(零联网;用仓内 mermaid.min.js + playwright-core)
 CHROME_PATH=$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome | head -1) \
-  node scripts/render-mermaid.mjs docs/code-flow/lampgenie-harness-module.mmd \
-  docs/code-flow/lampgenie-harness-module.png --width 2200
+  node scripts/render-mermaid.mjs docs/code-flow/lamplampgenie-harness-module.mmd \
+  docs/code-flow/lamplampgenie-harness-module.png --width 2200
 
 # 4) 沉淀到代码档案(flow/模块 flow/语义指南/功能拆解;--no-flow 可关)
 node packages/code-sense-cli/dist/cli.js wiki rebuild --root . --no-llm
