@@ -555,7 +555,7 @@ flowchart TB
 | 工具面装配/冻结(tool-view 延迟加载) | agent-wiring.ts:4322;tool-view.ts |
 | 队列(忙碌入队 + FIFO 续发) | server.ts:935-938,431 |
 
-**增强(没有也能跑,提升质量/体验)**:白板规划契约(board-store.ts)、code-sense 感知与评审(sense-tool.ts / code-sense 包)、Web 面板与 IDE(panel.ts)、Super Agent 指挥台与语音输入(super-agent.ts、assets/super-console.js、voice.* server.ts:1900-1941;step-1033 起「数字人/立绘/口播」形态已退役,companion.* 仅只读兼容)、IM 入站与会议导入(im-inbound.ts:30、meeting-tools.ts)、workflow/自动化编排(board-workflow.ts:129-252、automations.ts)、经验沉淀(.genie/experiences,executor-wiring.ts:105)、团队/P2P(team-embedded.ts、team-p2p.ts:289)、远程项目 SSH/WSL(ssh-ops.ts)、记忆/浏览器/插件/MCP(memoryTool agent-wiring.ts:478、browser-tool.ts:1276、plugins.ts:396、mcp.ts:54)、LSP/终端面板(harness-lsp、harness-terminal)。
+**增强(没有也能跑,提升质量/体验)**:白板规划契约(board-store.ts)、code-sense 感知与评审(sense-tool.ts / code-sense 包)、Web 面板与 IDE(panel.ts)、Super Agent 指挥台与语音输入(super-agent.ts、assets/super-console.js、voice.* server.ts:1900-1941(数字人/立绘/口播形态已退役,companion.* 仅只读兼容))、IM 入站与会议导入(im-inbound.ts:30、meeting-tools.ts)、workflow/自动化编排(board-workflow.ts:129-252、automations.ts)、经验沉淀(.genie/experiences,executor-wiring.ts:105)、团队/P2P(team-embedded.ts、team-p2p.ts:289)、远程项目 SSH/WSL(ssh-ops.ts)、记忆/浏览器/插件/MCP(memoryTool agent-wiring.ts:478、browser-tool.ts:1276、plugins.ts:396、mcp.ts:54)、LSP/终端面板(harness-lsp、harness-terminal)。
 
 **图 6|任务状态机**——必需能力「任务管理器」的状态迁移,按 `packages/core/src/task/task.ts:6-24` 真实代码画(终态集合 TERMINAL_STATES :15;cancelled 同为终态)。大白话:一张工单的一生只有这几条路——排队→开干→(可能卡住)→干完/干砸/被取消,完。
 
