@@ -1,0 +1,116 @@
+{
+ "at": "2026-11-05T13:20:44.393Z",
+ "A": {
+  "label": "A-非编辑态-节点",
+  "at": {
+   "x": 530,
+   "y": 387
+  },
+  "dx": 120,
+  "dy": 0,
+  "panBefore": {
+   "x": 30,
+   "y": 20,
+   "k": 1
+  },
+  "panAfter": {
+   "x": 150,
+   "y": 20,
+   "k": 1
+  },
+  "boardEditOnBefore": false,
+  "boardEditOnAfter": false,
+  "docNodesBefore": 17,
+  "docNodesAfter": 17,
+  "selAfter": null,
+  "verdict": "PASS"
+ },
+ "B": {
+  "editViaButton": true,
+  "boardEditOn": true,
+  "docNodesBefore": 17,
+  "docEdgesBefore": 16,
+  "panBeforeShot": {
+   "x": 150,
+   "y": 20,
+   "k": 1
+  },
+  "drag": {
+   "label": "B-编辑态-节点",
+   "at": {
+    "x": 632,
+    "y": 427
+   },
+   "dx": 120,
+   "dy": 0,
+   "panBefore": {
+    "x": 150,
+    "y": 20,
+    "k": 1
+   },
+   "panAfter": {
+    "x": 270,
+    "y": 20,
+    "k": 1
+   },
+   "boardEditOnBefore": true,
+   "boardEditOnAfter": true,
+   "docNodesBefore": 17,
+   "docNodesAfter": 17,
+   "selAfter": null
+  },
+  "dx": 120,
+  "dxRange": {
+   "min": 100,
+   "max": 140
+  },
+  "docNodesAfterDrag": 17,
+  "structureUnchanged": true,
+  "verdict": "PASS"
+ },
+ "C": {
+  "drag": {
+   "label": "C-编辑态-空白",
+   "at": {
+    "x": 399,
+    "y": 370
+   },
+   "dx": 120,
+   "dy": 0,
+   "panBefore": {
+    "x": 270,
+    "y": 20,
+    "k": 1
+   },
+   "panAfter": {
+    "x": 390,
+    "y": 20,
+    "k": 1
+   },
+   "boardEditOnBefore": true,
+   "boardEditOnAfter": true,
+   "docNodesBefore": 17,
+   "docNodesAfter": 17,
+   "selAfter": null
+  },
+  "dx": 120,
+  "boardEditOn": true,
+  "verdict": "PASS"
+ },
+ "shots": [
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-A-nonedit.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-before.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-after.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/pan-editmode-C-blank.png"
+ ],
+ "errors": [],
+ "port": 7794,
+ "summary": {
+  "A.dx": 120,
+  "B.dx": 120,
+  "C.dx": 120,
+  "boardEditOnDuringB": true,
+  "nodesBeforeB": 17,
+  "structureUnchanged": true
+ }
+}

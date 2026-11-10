@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>LampGenie Logo 预览</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: 'Segoe UI','PingFang SC',system-ui,sans-serif; background: #080D18; color: #E7EDF6; }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 22px; } h2 { font-size: 15px; color: #8FA3C4; font-weight: 600; margin: 36px 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  figure { margin: 0; background: #0C1424; border: 1px solid #1D2F49; border-radius: 16px; padding: 12px; text-align: center; }
+  figcaption { font-size: 12px; color: #8FA3C4; margin-top: 8px; }
+  img { display: block; }
+  .s64 { width: 64px; } .s32 { width: 32px; } .s16 { width: 16px; }
+  .strip { background: repeating-linear-gradient(45deg,#0C1424 0 12px,#101B30 12px 24px); border:1px solid #1D2F49; border-radius:16px; padding:12px; display:flex; gap:16px; align-items:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>LampGenie · Logo 预览</h1>
+  <h2>主标(暗色)</h2>
+  <div class="row">
+    <figure><img src="logo.svg" width="240" alt="主标"><figcaption>logo.svg 512</figcaption></figure>
+    <figure><img src="logo-wordmark.svg" width="520" alt="组合"><figcaption>logo-wordmark.svg 1180×320</figcaption></figure>
+  </div>
+  <h2>变体</h2>
+  <div class="row">
+    <figure><img src="logo-light.svg" width="180" alt="亮色"><figcaption>logo-light.svg(浅底)</figcaption></figure>
+    <figure><img src="logo-mono.svg" width="180" alt="单色"><figcaption>logo-mono.svg(单色/占位)</figcaption></figure>
+  </div>
+  <h2>小尺寸表现</h2>
+  <div class="strip">
+    <img class="s64" src="logo.svg" alt="64"><img class="s32" src="logo.svg" alt="32"><img class="s16" src="logo.svg" alt="16">
+    <img class="s32" src="logo-mono.svg" alt="mono32">
+    <span style="color:#8FA3C4;font-size:12px">64 / 32 / 16:轨道与灯体轮廓保持可辨;节点字在小尺寸冗余,favicon 建议用 logo-mark-only</span>
+  </div>
+</main>
+</body>
+</html>

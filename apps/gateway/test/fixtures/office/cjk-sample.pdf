@@ -1,0 +1,152 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F0 10 0 R /F1 20 0 R /F2 30 0 R /F3 40 0 R /F8 50 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 503 >>
+stream
+BT /F8 9 Tf 60 778 Td (F0 STSong-Light predefined CMap) Tj ET
+BT /F0 21 Tf 60 750 Td <5B8B4F53FF1A6A2A63927B804F5368375F20> Tj ET
+BT /F8 9 Tf 60 706 Td (F1 GBK-named font, serif flag) Tj ET
+BT /F1 21 Tf 60 678 Td <00D200D300D400D500D600D700D800D900DA> Tj ET
+BT /F8 9 Tf 60 634 Td (F2 SimSun radicals via ToUnicode) Tj ET
+BT /F2 21 Tf 60 606 Td <00D200D300D400D500D600D700D800D900DA00DB00DC> Tj ET
+BT /F8 9 Tf 60 562 Td (F3 KaiTi_GB2312) Tj ET
+BT /F3 21 Tf 60 534 Td <00D200D300D400D500D600D700D8> Tj ET
+
+endstream
+endobj
+10 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [11 0 R] >>
+endobj
+11 0 obj
+<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor 12 0 R /DW 1000 >>
+endobj
+12 0 obj
+<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [-120 -140 1000 860] /ItalicAngle 0 /Ascent 860 /Descent -140 /CapHeight 680 /StemV 76 >>
+endobj
+20 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /#BA#DA#CC#E5 /Encoding /Identity-H /DescendantFonts [21 0 R] /ToUnicode 23 0 R >>
+endobj
+21 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /#BA#DA#CC#E5 /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 22 0 R /DW 960 >>
+endobj
+22 0 obj
+<< /Type /FontDescriptor /FontName /#BA#DA#CC#E5 /Flags 4 /FontBBox [-120 -140 1000 860] /ItalicAngle 0 /Ascent 860 /Descent -140 /CapHeight 680 /StemV 76 >>
+endobj
+23 0 obj
+<< /Length 377 >>
+stream
+/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+/CMapName /Custom-Identity-UCS def /CMapType 2 def
+1 begincodespacerange <0000> <FFFF> endcodespacerange
+9 beginbfchar
+<00D2> <9ED1>
+<00D3> <4F53>
+<00D4> <540D>
+<00D5> <79F0>
+<00D6> <FF1A>
+<00D7> <7C97>
+<00D8> <9ED1>
+<00D9> <6837>
+<00DA> <5F20>
+endbfchar
+endcmap CMapName currentdict /CMap defineresource pop end end
+endstream
+endobj
+30 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /SimSun /Encoding /Identity-H /DescendantFonts [31 0 R] /ToUnicode 33 0 R >>
+endobj
+31 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /SimSun /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 32 0 R /DW 960 >>
+endobj
+32 0 obj
+<< /Type /FontDescriptor /FontName /SimSun /Flags 4 /FontBBox [-120 -140 1000 860] /ItalicAngle 0 /Ascent 860 /Descent -140 /CapHeight 680 /StemV 76 >>
+endobj
+33 0 obj
+<< /Length 406 >>
+stream
+/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+/CMapName /Custom-Identity-UCS def /CMapType 2 def
+1 begincodespacerange <0000> <FFFF> endcodespacerange
+11 beginbfchar
+<00D2> <5929>
+<00D3> <5730>
+<00D4> <2F5E>
+<00D5> <2EE9>
+<00D6> <FF0C>
+<00D7> <90E8>
+<00D8> <9996>
+<00D9> <6620>
+<00DA> <5B57>
+<00DB> <6837>
+<00DC> <5F20>
+endbfchar
+endcmap CMapName currentdict /CMap defineresource pop end end
+endstream
+endobj
+40 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /KaiTi_GB2312 /Encoding /Identity-H /DescendantFonts [41 0 R] /ToUnicode 43 0 R >>
+endobj
+41 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /KaiTi_GB2312 /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 42 0 R /DW 960 >>
+endobj
+42 0 obj
+<< /Type /FontDescriptor /FontName /KaiTi_GB2312 /Flags 4 /FontBBox [-120 -140 1000 860] /ItalicAngle 0 /Ascent 860 /Descent -140 /CapHeight 680 /StemV 76 >>
+endobj
+43 0 obj
+<< /Length 349 >>
+stream
+/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+/CMapName /Custom-Identity-UCS def /CMapType 2 def
+1 begincodespacerange <0000> <FFFF> endcodespacerange
+7 beginbfchar
+<00D2> <6977>
+<00D3> <4F53>
+<00D4> <FF1A>
+<00D5> <6977>
+<00D6> <4E66>
+<00D7> <6837>
+<00D8> <5F20>
+endbfchar
+endcmap CMapName currentdict /CMap defineresource pop end end
+endstream
+endobj
+50 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 51
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000292 00000 n 
+0000000846 00000 n 
+0000000970 00000 n 
+0000001152 00000 n 
+0000001326 00000 n 
+0000001466 00000 n 
+0000001652 00000 n 
+0000001826 00000 n 
+0000002255 00000 n 
+0000002389 00000 n 
+0000002569 00000 n 
+0000002737 00000 n 
+0000003195 00000 n 
+0000003335 00000 n 
+0000003521 00000 n 
+0000003695 00000 n 
+0000004096 00000 n 
+trailer
+<< /Size 51 /Root 1 0 R >>
+startxref
+4167
+%%EOF

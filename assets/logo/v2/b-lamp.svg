@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LampGenie candidate B: a solid genie lamp with a cyan spark at its spout">
+  <title>LampGenie · B 灯</title>
+  <rect width="512" height="512" rx="112" fill="#0B1220"/>
+  <g transform="translate(-11 10)">
+    <ellipse cx="186" cy="258" rx="98" ry="92" fill="#F0B429"/>
+    <path d="M244 236 L 386 184 L 402 230 L 260 292 Z" fill="#F0B429"/>
+    <rect x="72" y="330" width="228" height="46" rx="23" fill="#C98A1C"/>
+    <circle cx="428" cy="150" r="34" fill="#2AC5E0"/>
+  </g>
+</svg>

@@ -1,0 +1,32 @@
+# 门禁 CI(step-015 D3 收口):凭证红线→审计对账→构建→测试→类型检查。
+# 本地等价跑法:pnpm gate(build 含在 test/typecheck 前,见 steps)。
+name: ci
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 凭证红线(cred-gate)
+        run: pnpm gate:creds
+      - name: 审计对账(audit-reconcile)
+        run: pnpm gate:audit
+      - name: 构建(依赖包先行:core/protocol → 全仓)
+        run: pnpm -r run build
+      - name: 测试
+        run: pnpm -r run test
+      - name: 类型检查
+        run: pnpm -r run typecheck

@@ -1,0 +1,11 @@
+import { Tiktoken } from 'js-tiktoken/lite';
+import { readFileSync } from 'node:fs';
+const t0=Date.now();
+const ranks=JSON.parse(readFileSync('/mnt/e/workship/genie/lampgenie-harness/packages/harness-runtime/assets/tokenizer/cl100k_base.json','utf8'));
+const enc=new Tiktoken(ranks);
+console.log('init ms',Date.now()-t0);
+const s=('中文测试 hello world 一二三四五六七八九十 '.repeat(4000));
+let t=Date.now();console.log('chars',s.length,'tokens',enc.encode(s,[],[]).length,'ms',Date.now()-t);
+for (const x of ['hello world','中文测试','hello, 世界!','const a = 1;','function foo(){return 42}']) console.log(JSON.stringify(x), enc.encode(x,[],[]).length);
+const big='x'.repeat(300000); t=Date.now(); console.log('300k ascii',enc.encode(big,[],[]).length,'ms',Date.now()-t);
+const big2=('中文测试 hello world 一段代码 ').repeat(15000); t=Date.now(); console.log('mixed',big2.length,'tokens',enc.encode(big2,[],[]).length,'ms',Date.now()-t);

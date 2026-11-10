@@ -1,0 +1,37 @@
+{
+  "name": "lampgenie-harness",
+  "description": "个人 AI 数字人管家与 vibe coding agent 运行时：代码感知 → 白板规划 → 子代理执行 → 证据验收",
+  "private": true,
+  "version": "0.0.8",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint .",
+    "arch:check": "tsx scripts/arch-policy.mts --changed",
+    "gate:creds": "tsx scripts/cred-gate.ts",
+    "gate:audit": "tsx scripts/audit-reconcile.ts",
+    "gate": "pnpm gate:creds && pnpm gate:audit && pnpm -r run test && pnpm -r run typecheck",
+    "e2e:promote": "node scripts/e2e-promote.mjs"
+  },
+  "devDependencies": {
+    "@lampgenie/code-sense-cli": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "@types/minimatch": "^6.0.0",
+    "glob": "^13.0.6",
+    "minimatch": "^10.2.6",
+    "pptxgenjs": "^4.0.1",
+    "zod": "^3.23.0"
+  }
+}

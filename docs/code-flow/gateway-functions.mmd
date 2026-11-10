@@ -1,0 +1,198 @@
+flowchart LR
+  subgraph g0["File: apps/gateway/src/assets/canvas-shell.js"]
+    n0["▶ ◆ <module><br/>canvas-shell.js"]
+    n1["○ enterCanvas<br/>canvas-shell.js:1601"]
+    n2["○ focus<br/>canvas-shell.js:778"]
+    n3["○ trayApply<br/>canvas-shell.js:1519"]
+    n4["○ scheduleDraw<br/>canvas-shell.js:1354"]
+    n5["○ hostRect<br/>canvas-shell.js:218"]
+    n6["● saveSoon<br/>canvas-shell.js:1454"]
+    n7["● applyCard<br/>canvas-shell.js:568"]
+    n8["○ notifyResize<br/>canvas-shell.js:1500"]
+    n9["○ fitAll<br/>canvas-shell.js:770"]
+    n10["○ setView<br/>canvas-shell.js:644"]
+    n11["○ bindHudEvents<br/>canvas-shell.js:1194"]
+    n12["○ bindCardEvents<br/>canvas-shell.js:1242"]
+    n13["○ bindHostEvents<br/>canvas-shell.js:844"]
+    n14["○ bindCanvasKeys<br/>canvas-shell.js:1030"]
+    n15["● zOf<br/>canvas-shell.js:214"]
+    n16["○ ctxItemsFor<br/>canvas-shell.js:1115"]
+    n17["○ hideCard<br/>canvas-shell.js:822"]
+    n18["○ resetLayout<br/>canvas-shell.js:1480"]
+    n19["○ alignSelection<br/>canvas-shell.js:1154"]
+  end
+  subgraph g1["File: apps/gateway/src/commands-store.ts"]
+    n20["▶ ◆ <module><br/>commands-store.ts"]
+  end
+  subgraph g2["File: apps/gateway/src/issue-service.ts"]
+    n21["▶ ◆ <module><br/>issue-service.ts"]
+  end
+  subgraph g3["File: apps/gateway/src/main.ts"]
+    n22["▶ ◆ <module><br/>main.ts"]
+  end
+  subgraph g4["File: apps/gateway/src/panel.ts"]
+    n23["▶ ◆ <module><br/>panel.ts"]
+    subgraph g18["Class: PAGE·script-2"]
+      n24["● clamp<br/>panel.ts:24623"]
+      n25["○ annRenderAll<br/>panel.ts:24832"]
+    end
+    subgraph g20["Class: PROFILE_PAGE·script-3"]
+      n26["○ bindGraph<br/>panel.ts:25286"]
+    end
+  end
+  subgraph g5["File: apps/gateway/src/provider-presets.ts"]
+    n27["▶ ◆ <module><br/>provider-presets.ts"]
+    n28["● m<br/>provider-presets.ts:46"]
+  end
+  subgraph g6["File: apps/gateway/src/sense-index-worker.ts"]
+    n29["▶ ◆ <module><br/>sense-index-worker.ts"]
+  end
+  subgraph g7["File: apps/gateway/src/session-worker.ts"]
+    n30["▶ ◆ <module><br/>session-worker.ts"]
+  end
+  subgraph g8["File: apps/gateway/src/app.ts"]
+    n31["○ createGatewayApp<br/>app.ts:146"]
+    n32["○ createGatewayApp.ensureServer<br/>app.ts:769"]
+    n33["● createGatewayApp.broadcastRaw<br/>app.ts:464"]
+  end
+  subgraph g9["File: apps/gateway/src/factory.ts"]
+    n34["○ buildModelProviders<br/>factory.ts:229"]
+  end
+  subgraph g10["File: apps/gateway/src/repo-root.ts"]
+    n35["● repoRoot<br/>repo-root.ts:6"]
+  end
+  subgraph g11["File: apps/gateway/src/session-worker-lib.ts"]
+    n36["● notify<br/>session-worker-lib.ts:34"]
+  end
+  subgraph g12["File: apps/gateway/src/plugins.ts"]
+    subgraph g19["Class: PluginSystem"]
+      n37["○ toggle<br/>plugins.ts:522"]
+    end
+  end
+  subgraph g13["File: apps/gateway/src/remote-project.ts"]
+    n38["○ parseRemoteSshProject<br/>remote-project.ts:41"]
+  end
+  subgraph g14["File: apps/gateway/src/agent-wiring.ts"]
+    n39["○ runWithAgent<br/>agent-wiring.ts:2579"]
+    n40["○ buildAttachmentInjection<br/>agent-wiring.ts:2332"]
+  end
+  subgraph g15["File: apps/gateway/src/server.ts"]
+    n41["○ startGatewayServer<br/>server.ts:325"]
+    n42["○ safeSend<br/>server.ts:4077"]
+  end
+  subgraph g16["File: apps/gateway/src/ssh-ops.ts"]
+    n43["● shQuote<br/>ssh-ops.ts:217"]
+  end
+  subgraph g17["File: apps/gateway/src/browser-tool.ts"]
+    n44["○ runBrowserActionCore<br/>browser-tool.ts:822"]
+    n45["● callLoc<br/>browser-tool.ts:440"]
+    n46["○ targetSelector<br/>browser-tool.ts:699"]
+  end
+  n27 -->|×132| n28
+  n23 -->|×9| n25
+  n23 -->|×6| n24
+  n0 -->|×3| n2
+  n0 -->|×2| n1
+  n30 -->|×2| n36
+  n0 --> n3
+  n22 --> n35
+  n22 --> n34
+  n22 --> n31
+  n31 -->|×19| n35
+  n31 -->|×10| n33
+  n31 -->|×2| n38
+  n31 --> n34
+  n31 --> n32
+  n1 --> n3
+  n1 --> n9
+  n1 --> n2
+  n1 --> n8
+  n2 --> n7
+  n2 --> n5
+  n2 --> n10
+  n2 --> n8
+  n2 --> n6
+  n2 --> n4
+  n3 --> n5
+  n32 -->|×4| n35
+  n26 -->|×2| n37
+  n32 --> n41
+  n9 --> n5
+  n9 --> n10
+  n5 --> n15
+  n8 --> n4
+  n39 -->|×9| n35
+  n41 -->|×7| n42
+  n39 -->|×2| n38
+  n39 --> n43
+  n39 --> n40
+  n14 --> n17
+  n14 --> n7
+  n14 --> n4
+  n14 --> n6
+  n12 --> n2
+  n12 --> n7
+  n12 --> n8
+  n12 --> n6
+  n12 --> n4
+  n12 --> n17
+  n13 --> n10
+  n13 --> n6
+  n13 --> n15
+  n13 --> n2
+  n13 --> n4
+  n11 --> n9
+  n11 --> n18
+  n11 --> n15
+  n11 --> n5
+  n11 --> n10
+  n11 --> n6
+  n11 --> n4
+  n41 --> n35
+  n16 -->|×4| n19
+  n16 -->|×3| n8
+  n16 -->|×3| n4
+  n16 -->|×2| n17
+  n16 -->|×2| n7
+  n16 -->|×2| n6
+  n16 --> n2
+  n16 --> n3
+  n17 --> n7
+  n17 --> n6
+  n17 --> n4
+  n18 --> n2
+  n18 --> n9
+  n18 --> n6
+  n19 --> n7
+  n19 --> n6
+  n19 --> n4
+  n44 -->|×38| n45
+  n44 -->|×8| n46
+  classDef fTrunk fill:#8a5a2a,stroke:#c98f45,color:#fff;
+  classDef fLeaf fill:#5aa06a,stroke:#7ec98f,color:#08240f;
+  classDef fRegular fill:#4a4440,stroke:#8a7a5a,color:#ece1d1;
+  classDef fIsolated fill:#2a2420,stroke:#6b5c4a,color:#a89480,stroke-dasharray:4 3;
+  classDef fRoot fill:#6a4a8a,stroke:#b08ad0,color:#fff;
+  class n6,n7,n15,n28,n33,n35,n36,n43,n45,n24 fLeaf;
+  class n1,n2,n3,n4,n5,n8,n9,n10,n11,n12,n13,n14,n16,n17,n18,n19,n31,n32,n34,n38,n39,n40,n41,n42,n44,n46,n25,n37,n26 fRegular;
+  class n0,n20,n21,n22,n23,n27,n29,n30 fRoot;
+  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79 stroke:#5b8ec9,stroke-width:2px;
+  linkStyle 27 stroke:#5aa06a,stroke-width:2px;
+  style n0 stroke:#ffd27f,stroke-width:3px
+  style n20 stroke:#ffd27f,stroke-width:3px
+  style n21 stroke:#ffd27f,stroke-width:3px
+  style n22 stroke:#ffd27f,stroke-width:3px
+  style n23 stroke:#ffd27f,stroke-width:3px
+  style n27 stroke:#ffd27f,stroke-width:3px
+  style n29 stroke:#ffd27f,stroke-width:3px
+  style n30 stroke:#ffd27f,stroke-width:3px
+  subgraph lg["图例"]
+    lg0["▼ 入口/trunk(无人调用)"]
+    lg1["● leaf(不调他人)"]
+    lg2["○ regular"]
+    lg3["⇢ 跨语言 HTTP 桥"]
+  end
+  class lg0 fTrunk;
+  class lg1 fLeaf;
+  class lg2 fRegular;
+  class lg3 fIsolated;

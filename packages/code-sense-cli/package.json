@@ -1,0 +1,52 @@
+{
+  "name": "@lampgenie/code-sense-cli",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "codesense CLI——把 code-sense 静态调用索引包装成独立命令行/MCP 服务(零 lampgenie-harness 运行时依赖)",
+  "bin": {
+    "codesense": "./dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "http://localhost:4873/",
+    "access": "restricted"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --external:ts-morph --external:web-tree-sitter --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" && chmod +x dist/cli.js || true",
+    "pack:tarball": "npm pack",
+    "prepack": "node -e \"const{existsSync}=require('node:fs');if(!existsSync('dist/cli.js')){console.error('[prepack] dist/cli.js 缺失——先 pnpm build 产出 bundle 再打包');process.exit(1)}\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "tree-sitter-wasms": "0.1.13",
+    "ts-morph": "^24.0.0",
+    "web-tree-sitter": "0.25.10"
+  },
+  "devDependencies": {
+    "@lampgenie/code-sense": "workspace:^",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,471 @@
+// ───────────────────────── PDF(最小抽取:`(...)` 与 `<...>` 双语法 + ToUnicode) ─────────────────────────
+/**
+ * 口径与上限:
+ *  - 单 CMap ≤ 8192 条映射、总 CMap ≤ 32 个,超限截断(防恶意超大 CMap 撑爆内存);
+ *  - 可见字符 < 8 一律判 ok:false(「正文过少」):3 个字符不算抽取成功;
+ *  - 不引外部依赖:Flate 走 node:zlib,ASCII85 自研,CMap 手工解析。
+ *
+ * 注意(不要「优化」掉):`/F9 9 Tf … (F0 STSong-Light UniGB-UCS2-H) Tj` 这类**字体标注行是页面
+ * 上真实印出来的字**,是正文的一部分,必须照抽。别为了「看起来更像正文」把它过滤掉。
+ */
+const PDF_CMAP_MAX_MAPPINGS = 8192;
+const PDF_CMAP_MAX_FONTS = 32;
+/** 正文可见字符下限(见上方口径)。 */
+const PDF_MIN_VISIBLE_CHARS = 8;
+
+/** 一份 ToUnicode CMap:code(按 codeLen 字节大端)→ Unicode 串。 */
+type PdfCmap = { map: Map<number, string>; codeLen: number };
+
+/** 扫所有 stream…endstream:解压 → 抽 Tj/TJ(字面量与十六进制串都抽)。 */
+function flattenPdf(buf: Buffer): { text: string; note?: string } {
+  const src = buf.toString("latin1"); // latin1 与字节 1:1,便于按字节偏移切 stream
+  const objs = pdfObjectIndex(src);
+  const cmaps = pdfFontCMaps(objs);
+  const chunks: string[] = [];
+  let idx = 0;
+  for (;;) {
+    const s = src.indexOf("stream", idx);
+    if (s < 0) break;
+    if (s >= 3 && src.slice(s - 3, s) === "end") { idx = s + 6; continue; }
+    let start = s + 6;
+    if (src[start] === "\r") start++;
+    if (src[start] === "\n") start++;
+    const e = src.indexOf("endstream", start);
+    if (e < 0) break;
+    let end = e;
+    if (src[end - 1] === "\n") end--;
+    if (src[end - 1] === "\r") end--;
+    idx = e + 9;
+    if (end <= start) continue;
+    const dict = pdfStreamDict(src, s);
+    // 图片/嵌入字库/元数据流不是正文,跳过(否则二进制会被当文本抽出来)
+    if (/\/Subtype\s*\/(?:Image|Type1C|CIDFontType0C|OpenType|XML)\b/.test(dict)) continue;
+    if (/\/FontFile[23]?\b/.test(dict)) continue;
+    const content = decodePdfStream(buf.subarray(start, end), dict);
+    if (!content) continue;
+    // 只认真正绘制文字的流:CMap 里的 <0000> <FFFF> 会被误当正文串
+    if (!/BT|Tj|TJ/.test(content) || /begincmap|beginbfchar|beginbfrange/.test(content)) continue;
+    const t = pdfContentText(content, cmaps);
+    if (t.trim()) chunks.push(t);
+  }
+  const text = chunks.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const notes: string[] = [];
+  if (text && hasCjk(text)) {
+    notes.push(cmaps.size > 0 ? "已按 ToUnicode 解码" : "PDF 无 ToUnicode,中文可能乱码或缺失");
+  }
+  return { text, ...(notes.length ? { note: notes.join(";") } : {}) };
+}
+
+/** 内容流 → 文本:Tj/TJ 取串(字面量 + 十六进制),Td/TD/T*/Tm/ET/BT 视为换行;Tf 切当前字体。 */
+function pdfContentText(src: string, cmaps: Map<string, PdfCmap>): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  let arr: string[] | null = null;
+  let last = "";
+  let lastName = "";
+  let curCmap: PdfCmap | null = null;
+  const brk = (): void => { if (out && !out.endsWith("\n")) out += "\n"; };
+  const push = (v: string): void => {
+    if (!v) return;
+    last = v;
+    if (arr) arr.push(v);
+  };
+  while (i < n) {
+    const ch = src[i];
+    if (ch === "/") { // 资源名:/F0
+      let j = i + 1;
+      while (j < n && !/[\s/\[\]<>(){}%]/.test(src[j] as string)) j++;
+      lastName = src.slice(i + 1, j);
+      i = j;
+      continue;
+    }
+    if (ch === "(") {
+      const r = readPdfLiteral(src, i);
+      push(decodePdfBytes(Buffer.from(r.value, "latin1"), curCmap));
+      i = r.end;
+      continue;
+    }
+    if (ch === "<") {
+      if (src[i + 1] === "<") { i += 2; continue; } // 内联字典 << >>,不是字符串
+      const r = readPdfHex(src, i);
+      push(decodePdfBytes(r.bytes, curCmap));
+      i = r.end;
+      continue;
+    }
+    if (ch === "[") { arr = []; i++; continue; }
+    if (ch === "]") { if (arr) { last = arr.join(""); arr = null; } i++; continue; }
+    if (ch !== undefined && /[A-Za-z'"*]/.test(ch)) {
+      let j = i + 1;
+      while (j < n && /[A-Za-z*'"]/.test(src[j] as string)) j++;
+      const op = src.slice(i, j);
+      if (op === "Tf") {
+        curCmap = (lastName && cmaps.get(lastName)) || null;
+      } else if (op === "Tj" || op === "TJ" || op === "'" || op === "\"") {
+        if (last) out += last;
+        last = "";
+        if (op === "'" || op === "\"") brk();
+      } else if (op === "Td" || op === "TD" || op === "T*" || op === "Tm" || op === "ET" || op === "BT") {
+        brk();
+      }
+      i = j;
+      continue;
+    }
+    i++;
+  }
+  return out;
+}
+
+/**
+ * 一个 PDF 串(字节)→ 文本。顺序:CMap(该字体有 ToUnicode 时)→ 纯 ASCII 原样 →
+ * UTF-16BE(偶数长且每个码元都是可打印/常见 CJK)→ latin1(控制字转空格)。
+ * 解出来全是控制字符/空白 → 返回空串(该串判为不可读,跳过)。
+ */
+function decodePdfBytes(bytes: Buffer, cmap: PdfCmap | null): string {
+  if (!bytes.length) return "";
+  if (cmap) {
+    let s = "";
+    const len = Math.max(1, Math.min(4, cmap.codeLen || 2));
+    for (let i = 0; i + len <= bytes.length; i += len) {
+      let code = 0;
+      for (let k = 0; k < len; k++) code = (code << 8) | (bytes[i + k] as number);
+      const v = cmap.map.get(code);
+      if (v !== undefined) s += v;
+    }
+    if (s && !isUnreadable(s)) return s; // CMap 覆盖不到任何码位时才回落启发式
+  }
+  let s: string;
+  if (isPlainAscii(bytes)) s = bytes.toString("latin1");
+  else if (isUtf16BeText(bytes)) s = utf16BeToStr(bytes.toString("hex"));
+  else s = latin1Clean(bytes);
+  return isUnreadable(s) ? "" : s;
+}
+
+/** 全是 ASCII 可打印(含常见空白)→ 直接 latin1,避免偶数长 ASCII 被误判成 UTF-16BE。 */
+function isPlainAscii(bytes: Buffer): boolean {
+  for (const b of bytes) {
+    if (b === 0x09 || b === 0x0a || b === 0x0d) continue;
+    if (b < 0x20 || b > 0x7e) return false;
+  }
+  return true;
+}
+
+/** UTF-16BE 可信度判定:偶数长度,且每个 16-bit 码元都可打印或是常见 CJK 区段。 */
+function isUtf16BeText(bytes: Buffer): boolean {
+  if (bytes.length < 2 || bytes.length % 2 !== 0) return false;
+  for (let i = 0; i + 1 < bytes.length; i += 2) {
+    if (!isCommonCjkUnit(((bytes[i] as number) << 8) | (bytes[i + 1] as number))) return false;
+  }
+  return true;
+}
+
+function isCommonCjkUnit(u: number): boolean {
+  return (u >= 0x20 && u <= 0x7e)
+    || (u >= 0x4e00 && u <= 0x9fff)
+    || (u >= 0x3000 && u <= 0x303f)
+    || (u >= 0xff00 && u <= 0xffef)
+    || (u >= 0x2000 && u <= 0x206f)
+    || u === 0x09 || u === 0x0a || u === 0x0d;
+}
+
+/** 十六进制串(4 位/码元)→ 字符串。 */
+function utf16BeToStr(hex: string): string {
+  let out = "";
+  for (let i = 0; i + 4 <= hex.length; i += 4) out += String.fromCharCode(parseInt(hex.slice(i, i + 4), 16));
+  return out;
+}
+
+/** 逐字节 latin1:可打印保留,控制字转空格。 */
+function latin1Clean(bytes: Buffer): string {
+  let out = "";
+  for (const b of bytes) {
+    if (b === 0x09 || b === 0x0a || b === 0x0d) { out += " "; continue; }
+    out += (b < 0x20 || (b >= 0x7f && b <= 0x9f)) ? " " : String.fromCharCode(b);
+  }
+  return out;
+}
+
+/** 全是控制字符/空白 → 不可读。 */
+function isUnreadable(s: string): boolean {
+  if (!s) return true;
+  for (const ch of s) {
+    const c = ch.codePointAt(0) as number;
+    if (c > 0x1f && c !== 0x7f && !(c >= 0x80 && c <= 0x9f) && !/\s/.test(ch)) return false;
+  }
+  return true;
+}
+
+/** 可见字符数(非控制、非空白)。用于「正文过少」闸门。 */
+function countVisibleChars(s: string): number {
+  let n = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0) as number;
+    if (c > 0x1f && c !== 0x7f && !(c >= 0x80 && c <= 0x9f) && !/\s/.test(ch)) n++;
+  }
+  return n;
+}
+
+function hasCjk(s: string): boolean {
+  return /[\u2E80-\u9FFF\uF900-\uFAFF\uFF01-\uFF60]/.test(s);
+}
+
+// ── PDF 对象索引 / 字体 → CMap(不引外部依赖,按 obj 文本粗解析) ──
+
+/** `N 0 obj … endobj` → N → 对象体(重复定义时后者覆盖,兼容增量更新)。 */
+function pdfObjectIndex(src: string): Map<number, string> {
+  const out = new Map<number, string>();
+  const re = /(\d+)\s+0\s+obj\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const start = m.index + m[0].length;
+    const e = src.indexOf("endobj", start);
+    out.set(Number(m[1]), src.slice(start, e < 0 ? src.length : e));
+  }
+  return out;
+}
+
+/** 字体资源名(/F0 …)→ ToUnicode CMap。没有 /ToUnicode 的字体不进 map(回落启发式)。 */
+function pdfFontCMaps(objs: Map<number, string>): Map<string, PdfCmap> {
+  const out = new Map<string, PdfCmap>();
+  const dicts: string[] = [];
+  const bodies = Array.from(objs.values());
+  for (let k = 0; k < bodies.length; k++) {
+    const body = bodies[k] as string;
+    if (body.indexOf("/Font") < 0) continue;
+    const inline = /\/Font\s*<<([\s\S]{0,4000}?)>>/g;
+    let m: RegExpExecArray | null;
+    while ((m = inline.exec(body))) if (m[1]) dicts.push(m[1]);
+    // `/Font 1 0 R`(间接引用一份字体名 → 对象的字典)
+    const indirect = /\/Font\s+(\d+)\s+0\s+R/g;
+    while ((m = indirect.exec(body))) {
+      const sub = objs.get(Number(m[1]));
+      if (sub) dicts.push(sub);
+    }
+  }
+  for (let d = 0; d < dicts.length; d++) {
+    const pairs = /\/([A-Za-z0-9_.+-]+)\s+(\d+)\s+0\s+R/g;
+    let p: RegExpExecArray | null;
+    while ((p = pairs.exec(dicts[d] as string))) {
+      const name = p[1] as string;
+      if (out.has(name)) continue;
+      if (out.size >= PDF_CMAP_MAX_FONTS) return out;
+      const font = objs.get(Number(p[2]));
+      if (!font) continue;
+      const tu = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(font);
+      if (!tu) continue;
+      const cmapObj = objs.get(Number(tu[1]));
+      if (!cmapObj) continue;
+      const text = pdfObjStreamText(cmapObj);
+      if (!text) continue;
+      const cmap = parseCmap(text);
+      if (cmap.map.size) out.set(name, cmap);
+    }
+  }
+  return out;
+}
+
+/** 对象体里的 stream → 解压后文本(CMap 流本身也可能 FlateDecode)。 */
+function pdfObjStreamText(body: string): string | null {
+  const s = body.indexOf("stream");
+  if (s < 0) return null;
+  let start = s + 6;
+  if (body[start] === "\r") start++;
+  if (body[start] === "\n") start++;
+  const e = body.indexOf("endstream", start);
+  if (e < 0) return null;
+  let end = e;
+  if (body[end - 1] === "\n") end--;
+  if (body[end - 1] === "\r") end--;
+  if (end <= start) return null;
+  return decodePdfStream(Buffer.from(body.slice(start, end), "latin1"), pdfStreamDict(body, s));
+}
+
+/**
+ * ToUnicode CMap → map。只认 beginbfchar(`<src> <dst>`)与 beginbfrange
+ * (`<lo> <hi> <dst>` / `<lo> <hi> [<d1> <d2> …]`),条数超过上限即截断。
+ */
+function parseCmap(text: string): PdfCmap {
+  const map = new Map<number, string>();
+  let codeLen = 2;
+  const csr = /begincodespacerange([\s\S]*?)endcodespacerange/.exec(text);
+  if (csr && csr[1]) {
+    const lo = /<([0-9A-Fa-f]+)>/.exec(csr[1]);
+    if (lo && lo[1]) codeLen = Math.max(1, Math.min(4, Math.ceil(lo[1].length / 2)));
+  }
+  const bc = /beginbfchar([\s\S]*?)endbfchar/g;
+  let g: RegExpExecArray | null;
+  while ((g = bc.exec(text))) {
+    const body = g[1] ?? "";
+    const pair = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g;
+    let p: RegExpExecArray | null;
+    while ((p = pair.exec(body))) {
+      if (map.size >= PDF_CMAP_MAX_MAPPINGS) return { map, codeLen };
+      map.set(parseInt(p[1] as string, 16), utf16BeToStr(p[2] ?? ""));
+    }
+  }
+  const br = /beginbfrange([\s\S]*?)endbfrange/g;
+  while ((g = br.exec(text))) {
+    const body = g[1] ?? "";
+    // 数组形式:<lo> <hi> [<d1> <d2> …]
+    const arrRe = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g;
+    let a: RegExpExecArray | null;
+    while ((a = arrRe.exec(body))) {
+      const lo = parseInt(a[1] as string, 16);
+      const hi = parseInt(a[2] as string, 16);
+      const items = (a[3] ?? "").match(/<([0-9A-Fa-f]*)>/g) || [];
+      for (let k = 0; k < items.length; k++) {
+        if (map.size >= PDF_CMAP_MAX_MAPPINGS) return { map, codeLen };
+        const code = lo + k;
+        if (code > hi) break;
+        map.set(code, utf16BeToStr(String(items[k]).replace(/[<>\s]/g, "")));
+      }
+    }
+    // 单目标形式:<lo> <hi> <dst>(dst 是首字符 Unicode,逐个 +1)
+    const oneRe = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+    let o: RegExpExecArray | null;
+    while ((o = oneRe.exec(body))) {
+      const lo = parseInt(o[1] as string, 16);
+      const hi = parseInt(o[2] as string, 16);
+      const dstHex = o[3] as string;
+      if (dstHex.length <= 4) {
+        const base = parseInt(dstHex, 16);
+        for (let code = lo; code <= hi; code++) {
+          if (map.size >= PDF_CMAP_MAX_MAPPINGS) return { map, codeLen };
+          map.set(code, String.fromCharCode(base + (code - lo)));
+        }
+      } else if (!map.has(lo)) {
+        map.set(lo, utf16BeToStr(dstHex)); // 多码元目标:只能整串给 lo
+      }
+    }
+  }
+  return { map, codeLen };
+}
+
+// ── 流解压(Flate / ASCII85) ──
+
+/** stream 之前的字典原文(取最近的 `<<`)。 */
+function pdfStreamDict(src: string, streamAt: number): string {
+  const at = src.lastIndexOf("<<", streamAt);
+  if (at < 0 || streamAt - at > 4000) return "";
+  return src.slice(at, streamAt);
+}
+
+/** 字典里的 /Filter → 过滤器名列表(按应用顺序)。 */
+function pdfFilters(dict: string): string[] {
+  const m = /\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9]+)/.exec(dict);
+  if (!m || !m[1]) return [];
+  const out: string[] = [];
+  const re = /\/([A-Za-z0-9]+)/g;
+  let g: RegExpExecArray | null;
+  while ((g = re.exec(m[1]))) if (g[1]) out.push(g[1]);
+  return out;
+}
+
+/** 按 /Filter 链解压;不支持的过滤器返回 null(宁可少抽,不要抽垃圾)。 */
+function decodePdfStream(raw: Buffer, dict: string): string | null {
+  const filters = pdfFilters(dict);
+  if (!filters.length) {
+    if (/\/Filter/.test(dict)) return null; // 有 /Filter 但解不出名字 → 保守跳过
+    return raw.toString("latin1"); // 未压缩内容流(最小 PDF 常见)
+  }
+  let cur: Buffer | null = raw;
+  for (const f of filters) {
+    if (!cur) return null;
+    if (f === "FlateDecode" || f === "Fl") {
+      let plain: Buffer | null = null;
+      try { plain = inflateSync(cur); } catch { try { plain = inflateRawSync(cur); } catch { plain = null; } }
+      cur = plain;
+    } else if (f === "ASCII85Decode" || f === "A85") {
+      cur = ascii85Decode(cur);
+    } else {
+      return null; // DCT/JPX/LZW/RunLength 等:不是文本
+    }
+  }
+  return cur ? cur.toString("latin1") : null;
+}
+
+/** 最小 ASCII85 解码(PDF 里不带 `<~` 前缀,以 `~>` 结束)。 */
+function ascii85Decode(raw: Buffer): Buffer | null {
+  const out: number[] = [];
+  let i = 0;
+  if (raw[0] === 0x3c && raw[1] === 0x7e) i = 2;
+  let group: number[] = [];
+  for (; i < raw.length; i++) {
+    const b = raw[i] as number;
+    if (b === 0x7e) break; // ~> 结束
+    if (b === 0x20 || b === 0x0a || b === 0x0d || b === 0x09 || b === 0x0c || b === 0x00) continue;
+    if (b === 0x7a) { // 'z' → 四个 0
+      if (group.length) return null;
+      out.push(0, 0, 0, 0);
+      continue;
+    }
+    if (b < 0x21 || b > 0x75) return null;
+    group.push(b - 0x21);
+    if (group.length === 5) {
+      let v = 0;
+      for (let k = 0; k < 5; k++) v = v * 85 + (group[k] as number);
+      out.push(Math.floor(v / 16777216) % 256, Math.floor(v / 65536) % 256, Math.floor(v / 256) % 256, v % 256);
+      group = [];
+    }
+  }
+  if (group.length === 1) return null;
+  if (group.length > 1) {
+    const n = group.length;
+    let v = 0;
+    for (let k = 0; k < 5; k++) v = v * 85 + (k < n ? (group[k] as number) : 84);
+    for (let k = 0; k < n - 1; k++) out.push(Math.floor(v / Math.pow(256, 3 - k)) % 256);
+  }
+  return Buffer.from(out);
+}
+
+/** PDF 字面量串(PDFDocEncoding/转义):\( \) \\ \n \t \r \b \f \ddd,行尾续行。 */
+function readPdfLiteral(src: string, at: number): { value: string; end: number } {
+  let out = "";
+  let i = at + 1;
+  const n = src.length;
+  let depth = 1;
+  while (i < n) {
+    const ch = src[i] as string;
+    if (ch === "\\") {
+      const nx = src[i + 1] ?? "";
+      if (nx === "n") { out += "\n"; i += 2; continue; }
+      if (nx === "r") { out += "\r"; i += 2; continue; }
+      if (nx === "t") { out += "\t"; i += 2; continue; }
+      if (nx === "b") { out += "\b"; i += 2; continue; }
+      if (nx === "f") { out += "\f"; i += 2; continue; }
+      if (nx === "\n") { i += 2; continue; }
+      if (nx === "\r") { i += src[i + 2] === "\n" ? 3 : 2; continue; }
+      if (nx >= "0" && nx <= "7") {
+        let oct = "";
+        let j = i + 1;
+        while (j < n && oct.length < 3 && (src[j] as string) >= "0" && (src[j] as string) <= "7") { oct += src[j]; j++; }
+        out += String.fromCharCode(parseInt(oct, 8) & 0xff);
+        i = j;
+        continue;
+      }
+      out += nx;
+      i += 2;
+      continue;
+    }
+    if (ch === "(") { depth++; out += ch; i++; continue; }
+    if (ch === ")") { depth--; if (depth === 0) { i++; break; } out += ch; i++; continue; }
+    out += ch;
+    i++;
+  }
+  return { value: out, end: i };
+}
+
+/** PDF 十六进制串 `<5B8B4F53…>` → 字节(忽略空白,奇数尾位补 0)。 */
+function readPdfHex(src: string, at: number): { bytes: Buffer; end: number } {
+  let hex = "";
+  let i = at + 1;
+  const n = src.length;
+  while (i < n) {
+    const ch = src[i] as string;
+    if (ch === ">") { i++; break; }
+    if (/[0-9A-Fa-f]/.test(ch)) hex += ch;
+    i++;
+  }
+  if (hex.length % 2) hex += "0"; // PDF 规定奇数位尾补 0
+  return { bytes: Buffer.from(hex, "hex"), end: i };
+}

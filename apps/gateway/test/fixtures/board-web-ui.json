@@ -1,0 +1,526 @@
+{
+  "version": 1,
+  "taskId": "web-ui-fixture",
+  "sessionId": "web-ui-fixture",
+  "title": "Web 控制台 · 用户管理流程",
+  "status": "draft",
+  "docKind": "page",
+  "rev": 1,
+  "nodes": [
+    {
+      "id": "nav",
+      "kind": "nav",
+      "label": "顶部导航",
+      "summary": "用户 / 角色 / 设置",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p_list",
+      "kind": "page",
+      "label": "用户管理",
+      "summary": "用户列表、筛选与批量操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_header",
+      "kind": "section",
+      "label": "顶部导航",
+      "summary": "品牌 / 用户 / 角色 / 设置 + 新建",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_logo",
+      "kind": "component",
+      "label": "品牌标识",
+      "summary": "Web 控制台",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_tab_users",
+      "kind": "component",
+      "label": "用户页签",
+      "summary": "当前选中",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_tab_roles",
+      "kind": "component",
+      "label": "角色页签",
+      "summary": "角色与权限",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_tab_settings",
+      "kind": "component",
+      "label": "设置页签",
+      "summary": "工作区设置",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_new",
+      "kind": "component",
+      "label": "新建用户",
+      "summary": "点击打开新建用户页",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_side",
+      "kind": "section",
+      "label": "筛选",
+      "summary": "全部 / 启用 / 禁用",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "f_all",
+      "kind": "component",
+      "label": "全部页签",
+      "summary": "当前选中",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "f_active",
+      "kind": "component",
+      "label": "启用页签",
+      "summary": "已启用用户",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "f_disabled",
+      "kind": "component",
+      "label": "禁用页签",
+      "summary": "已禁用用户",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_search",
+      "kind": "section",
+      "label": "查找用户",
+      "summary": "按姓名/邮箱查找用户",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_search",
+      "kind": "component",
+      "label": "搜索用户",
+      "summary": "输入姓名或邮箱",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_table",
+      "kind": "section",
+      "label": "用户列表",
+      "summary": "表格行与行内操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_row",
+      "kind": "component",
+      "label": "用户行卡片",
+      "summary": "头像/姓名/邮箱/角色/状态",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_footer",
+      "kind": "section",
+      "label": "底部操作与分页",
+      "summary": "导出 / 批量删除 / 分页",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_export",
+      "kind": "component",
+      "label": "导出 CSV",
+      "summary": "次要操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "w_bulkdel",
+      "kind": "component",
+      "label": "批量删除",
+      "summary": "危险操作:二次确认",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "pg_prev",
+      "kind": "component",
+      "label": "上一页",
+      "summary": "翻页",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "pg_next",
+      "kind": "component",
+      "label": "下一页",
+      "summary": "翻页",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p_edit",
+      "kind": "page",
+      "label": "编辑用户",
+      "summary": "编辑用户资料与角色",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_form",
+      "kind": "section",
+      "label": "用户资料",
+      "summary": "姓名 / 邮箱 / 角色",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_name",
+      "kind": "component",
+      "label": "用户名输入",
+      "summary": "必填",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_email",
+      "kind": "component",
+      "label": "邮箱输入",
+      "summary": "必填且校验格式",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_role",
+      "kind": "component",
+      "label": "角色选择器",
+      "summary": "管理员/编辑/只读",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_actions",
+      "kind": "section",
+      "label": "底部操作",
+      "summary": "取消 / 保存",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_cancel",
+      "kind": "component",
+      "label": "取消",
+      "summary": "返回列表",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "e_save",
+      "kind": "component",
+      "label": "保存用户",
+      "summary": "主操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p_detail",
+      "kind": "page",
+      "label": "用户详情",
+      "summary": "用户资料与角色详情",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "d_card",
+      "kind": "section",
+      "label": "用户资料卡",
+      "summary": "头像/姓名/邮箱/角色",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "d_edit",
+      "kind": "component",
+      "label": "编辑用户",
+      "summary": "主操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "d_back",
+      "kind": "component",
+      "label": "返回列表",
+      "summary": "次要操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "p_list",
+      "to": "s_header",
+      "kind": "contains"
+    },
+    {
+      "from": "s_header",
+      "to": "w_logo",
+      "kind": "contains"
+    },
+    {
+      "from": "s_header",
+      "to": "w_tab_users",
+      "kind": "contains"
+    },
+    {
+      "from": "s_header",
+      "to": "w_tab_roles",
+      "kind": "contains"
+    },
+    {
+      "from": "s_header",
+      "to": "w_tab_settings",
+      "kind": "contains"
+    },
+    {
+      "from": "s_header",
+      "to": "w_new",
+      "kind": "contains"
+    },
+    {
+      "from": "p_list",
+      "to": "s_side",
+      "kind": "contains"
+    },
+    {
+      "from": "s_side",
+      "to": "f_all",
+      "kind": "contains"
+    },
+    {
+      "from": "s_side",
+      "to": "f_active",
+      "kind": "contains"
+    },
+    {
+      "from": "s_side",
+      "to": "f_disabled",
+      "kind": "contains"
+    },
+    {
+      "from": "p_list",
+      "to": "s_search",
+      "kind": "contains"
+    },
+    {
+      "from": "s_search",
+      "to": "w_search",
+      "kind": "contains"
+    },
+    {
+      "from": "p_list",
+      "to": "s_table",
+      "kind": "contains"
+    },
+    {
+      "from": "s_table",
+      "to": "w_row",
+      "kind": "contains"
+    },
+    {
+      "from": "p_list",
+      "to": "s_footer",
+      "kind": "contains"
+    },
+    {
+      "from": "s_footer",
+      "to": "w_export",
+      "kind": "contains"
+    },
+    {
+      "from": "s_footer",
+      "to": "w_bulkdel",
+      "kind": "contains"
+    },
+    {
+      "from": "s_footer",
+      "to": "pg_prev",
+      "kind": "contains"
+    },
+    {
+      "from": "s_footer",
+      "to": "pg_next",
+      "kind": "contains"
+    },
+    {
+      "from": "p_edit",
+      "to": "e_form",
+      "kind": "contains"
+    },
+    {
+      "from": "e_form",
+      "to": "e_name",
+      "kind": "contains"
+    },
+    {
+      "from": "e_form",
+      "to": "e_email",
+      "kind": "contains"
+    },
+    {
+      "from": "e_form",
+      "to": "e_role",
+      "kind": "contains"
+    },
+    {
+      "from": "p_edit",
+      "to": "e_actions",
+      "kind": "contains"
+    },
+    {
+      "from": "e_actions",
+      "to": "e_cancel",
+      "kind": "contains"
+    },
+    {
+      "from": "e_actions",
+      "to": "e_save",
+      "kind": "contains"
+    },
+    {
+      "from": "p_detail",
+      "to": "d_card",
+      "kind": "contains"
+    },
+    {
+      "from": "p_detail",
+      "to": "d_edit",
+      "kind": "contains"
+    },
+    {
+      "from": "p_detail",
+      "to": "d_back",
+      "kind": "contains"
+    },
+    {
+      "from": "w_new",
+      "to": "p_edit",
+      "kind": "nav",
+      "label": "跳转：编辑用户"
+    },
+    {
+      "from": "e_save",
+      "to": "p_detail",
+      "kind": "nav",
+      "label": "跳转：用户详情"
+    },
+    {
+      "from": "d_back",
+      "to": "p_list",
+      "kind": "nav",
+      "label": "返回：用户列表"
+    },
+    {
+      "from": "nav",
+      "to": "p_list",
+      "kind": "nav",
+      "label": "点击「用户」"
+    },
+    {
+      "from": "nav",
+      "to": "p_edit",
+      "kind": "nav",
+      "label": "点击「角色」"
+    },
+    {
+      "from": "nav",
+      "to": "p_detail",
+      "kind": "nav",
+      "label": "点击「设置」"
+    }
+  ],
+  "planned_files": [],
+  "updatedAt": 0
+}

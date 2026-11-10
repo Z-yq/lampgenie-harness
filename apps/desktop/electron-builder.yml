@@ -1,0 +1,100 @@
+# Genie Harness 桌面打包(step-136)
+# 用法:pnpm --filter @lampgenie/desktop dist:dir / dist:win
+# 注意:打包前必须先 build gateway(package.json 的 dist:* 脚本已串行),否则 extraResources 为空壳。
+appId: com.genie.harness
+productName: LampGenie
+asar: true
+
+# genie:// 深链(2026-11-09):安装器在 HKCU\Software\Classes\genie 注册协议;
+# 应用启动时还会 setAsDefaultProtocolClient 自愈(见 main.js ensureProtocolRegistration)。
+protocols:
+  - name: Genie Harness Protocol
+    schemes:
+      - genie
+
+directories:
+  output: dist
+
+# Electron 发行包用本地解包副本(scripts/stage-electron-dist.mjs 生成):
+# @electron/get 在本机网络下偶发 ECONNRESET,缓存命中不稳定;electronDist 直接指目录可完全离线。
+electronDist: .stage/electron-dist
+
+# 壳本体共 10 个 js + package.json(面板/业务全部在 extraResources 的 gateway 里)。
+# 注:本包当前无 assets/ 目录,故 files 不含 assets/**;后续加图标/静态图时补 `- assets/**`。
+files:
+  - main.js
+  - paths.js
+  - logger.js
+  - gateway-process.js
+  - titlebar-preload.js
+  - window-state.js
+  - app-menu.js
+  - notifications.js
+  - tray.js
+  - deep-link.js
+  - update-check.js
+  - package.json
+
+# gateway 产物整目录 → resources/gateway(gateway.mjs + assets + wasm + echo-child + sense-index-worker ...)
+# 另带运行时需真实 node_modules 的外部依赖(K5):esbuild --external 的 ts-morph / playwright-core,
+# 以及 code-sense 走 require.resolve 的 tree-sitter-wasms / web-tree-sitter。
+#
+# ⚠️ 不能用静态清单逐包列:实测 ts-morph 有传递依赖(@ts-morph/common → minimatch/path-browserify/
+#    tinyglobby → picomatch/fdir/brace-expansion/balanced-match),只拷 4 个根包时打包产物的
+#    `require('ts-morph')` 直接 MODULE_NOT_FOUND,code_review 整块失效(2026-10-19 实测复现)。
+#    故改由 scripts/stage-gateway-deps.mjs 递归求依赖闭包,按 Node 嵌套解析语义布点(同名多版本
+#    顶层共用 + 冲突版本巢套在引用方 node_modules 下,pnpm 软链经 realpath 消解为实体目录),
+#    产物在 .stage/node_modules;此处只搬 stage 结果,脚本前置执行并自检 ts-morph 可加载,
+#    闭包不完整则拒绝产出残包。
+extraResources:
+  - from: ../gateway/dist
+    to: gateway
+  - from: .stage/node_modules
+    to: gateway/node_modules
+  # ── 全量运行时(scripts/stage-full-runtime.mjs 产出,dist:full 前置)──
+  # runtime/model-150m   ONNX 服务(server.mjs + lib + model.onnx/.data + onnxruntime)
+  # browsers             Chrome for Testing(浏览器工具,不依赖本机 Chrome)
+  # git                  PortableGit(bash + git,Windows 无 bash 的兜底)
+  - from: .stage/runtime
+    to: runtime
+  - from: .stage/browsers
+    to: browsers
+  - from: .stage/git
+    to: git
+  # 远端代码认知/评审运行时(自带 Node 20 + code-sense CLI + 依赖闭包):连接 WSL/SSH 时
+  # 上传到目标 ~/.genie/genie-sense,code_sense/code_review 在远端执行(scripts/stage-sense-remote.mjs)
+  - from: .stage/sense-remote.tar.gz
+    to: sense-remote.tar.gz
+  # gateway 目录缺 package.json 时,其中的 .js(tsc 产物,ESM)会被 Node 当 CJS 加载
+  # (实测:外部脚本 import agent-wiring.js 直接 SyntaxError;gateway.mjs 自身是 bundle 不受影响)
+  - from: ../gateway/package.json
+    to: gateway/package.json
+
+win:
+  # 无代码签名证书:禁用签名与 exe 资源重写(否则 electron-builder 会下载 winCodeSign,
+  # 网络不稳时整个打包失败;版本信息由 asar 内 package.json 提供,app.getVersion 不受影响)。
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # 2026-11-09 实测:360 会把「无效快捷方式」清理掉;electron-builder 默认在升级时沿用旧快捷方式
+  # (keepShortcuts 语义),被删后不会补建 → 开始菜单/桌面没有入口,Windows toast 的 AUMID 也失去载体。
+  # 桌面快捷方式用 "always" 让每次安装都重建;开始菜单由 build/installer.nsh 的 customInstall 自愈。
+  createDesktopShortcut: always
+  deleteAppDataOnUninstall: false
+  shortcutName: Genie Harness
+  # 覆盖升级前置:安装前结束 LampGenie 进程树(build/installer.nsh 的 customInit),
+  # 防旧进程锁 exe/dll 导致文件跳过与旧运行时残留。
+  include: build/installer.nsh
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

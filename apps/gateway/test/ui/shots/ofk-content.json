@@ -1,0 +1,154 @@
+{
+ "at": "2026-11-05T10:49:14.506Z",
+ "board": "c78b0e83-2956-4245-b080-1048c53b6a47.json",
+ "src": "17 节点真板",
+ "metrics": {
+  "before.svgWH": {
+   "w": 4349,
+   "h": 798
+  },
+  "before.nodes": 18,
+  "before.nodeTextOverflow": 7,
+  "before.descTexts": 15,
+  "before.descWithEllipsis": 0,
+  "before.edgeLabelTexts": 16,
+  "before.edgeLabelSamples": [
+   "task.submit",
+   "入队后",
+   "逐候选查上限",
+   "位够→running",
+   "超上限留队",
+   "终态释放再drain",
+   "启动装载",
+   "tasks() 最后态"
+  ],
+  "before.maxTextW": 935,
+  "before.overflowSamples": [
+   {
+    "id": "s4",
+    "cardW": 340,
+    "textW": 820,
+    "over": 480,
+    "text": "三重上限 maxConcurrent=4/system=2/perOwner=2 ｜ 分支； 全局<4 且 system"
+   },
+   {
+    "id": "s5",
+    "cardW": 320,
+    "textW": 600,
+    "over": 280,
+    "text": "超上限留 queued;list() 不过滤 queued,task-index 白名单投影含 state——盲区待审计"
+   },
+   {
+    "id": "s6",
+    "cardW": 320,
+    "textW": 717,
+    "over": 397,
+    "text": "setState 走 transition() 校验;running 交 app.ts onChange→session"
+   },
+   {
+    "id": "s11",
+    "cardW": 340,
+    "textW": 935,
+    "over": 595,
+    "text": "env GENIE_AUTORESUME_MINUTES 缺省=关;开启时启动清算后 N 分钟内对 interrupte"
+   },
+   {
+    "id": "s15",
+    "cardW": 180,
+    "textW": 825,
+    "over": 645,
+    "text": "core/task.ts；6 TS type+TERMINAL_STATES;protocol/index.ts；136"
+   },
+   {
+    "id": "s16",
+    "cardW": 180,
+    "textW": 472,
+    "over": 292,
+    "text": "panel.ts/assets 正被并行任务 E1 修改;s13 动手前 git status 对齐 E1,冲突以 E1"
+   }
+  ],
+  "after.svgWH": {
+   "w": 4349,
+   "h": 798
+  },
+  "after.nodes": 18,
+  "after.nodeTextOverflow": 5,
+  "after.descTexts": 11,
+  "after.descWithEllipsis": 3,
+  "after.edgeLabelTexts": 16,
+  "after.edgeLabelSamples": [
+   "task.submit",
+   "入队后",
+   "逐候选查上限",
+   "位够→running",
+   "超上限留队",
+   "终态释放再drain",
+   "启动装载",
+   "tasks() 最后态"
+  ],
+  "after.maxTextW": 898,
+  "after.overflowSamples": [
+   {
+    "id": "s4",
+    "cardW": 340,
+    "textW": 827,
+    "over": 487,
+    "text": "三重上限 maxConcurrent=4/system=2/perOwner=2 ｜ 分支； 全局<4 且 system"
+   },
+   {
+    "id": "s6",
+    "cardW": 320,
+    "textW": 422,
+    "over": 102,
+    "text": "setState 走 transition() 校验 · ⟨TaskManager.setState @ task-ma"
+   },
+   {
+    "id": "s11",
+    "cardW": 340,
+    "textW": 898,
+    "over": 558,
+    "text": "env GENIE_AUTORESUME_MINUTES 缺省=关 ｜ 分支； GENIE_AUTORESUME_MIN"
+   },
+   {
+    "id": "s15",
+    "cardW": 180,
+    "textW": 260,
+    "over": 80,
+    "text": "core/task.ts；6 TS type+TERMINAL_STATES"
+   },
+   {
+    "id": "s16",
+    "cardW": 180,
+    "textW": 213,
+    "over": 33,
+    "text": "panel.ts/assets 正被并行任务 E1 修改"
+   }
+  ]
+ },
+ "notes": [
+  "before: flowkit diags=[] errorish=0",
+  "after: flowkit diags=[] errorish=0"
+ ],
+ "dsl": {
+  "before": {
+   "desc": 17,
+   "edgeWithLabel": 16,
+   "warnings": 22
+  },
+  "after": {
+   "desc": 17,
+   "edgeWithLabel": 16,
+   "warnings": 16
+  }
+ },
+ "shots": [
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/ofk-before.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/ofk-after.png"
+ ],
+ "delta": {
+  "nodeTextOverflow": "7 → 5",
+  "descWithEllipsis": "0 → 3",
+  "edgeLabelTexts": "16 → 16",
+  "maxTextW": "935 → 898"
+ }
+}

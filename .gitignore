@@ -1,0 +1,49 @@
+node_modules/
+dist/
+# 桌面打包的依赖 staging 产物(scripts/stage-gateway-deps.mjs 生成)
+.stage/
+*.local
+.env
+
+# 参考项目(只读,不入库)
+ref/
+
+# 经验库运行时数据
+.genie/
+genie.config.json
+
+# 运行时产物(devlog 与 .genie 同级,不入库)
+devlog/
+
+# ---- 入库红线(2026-10-27 推送前盘点) ----
+# 本地模型运行时(权重+venv,2.6G;打包脚本现场拉取,不进库)
+services/
+# 参考项目克隆只留本地(ref/;不进库,开源仓不含第三方源码拷贝)
+ref/
+# 密钥备份(含真实 KEY)
+.env.bak-*
+# Windows 路径产物与 scratch
+E:
+nul
+out/
+eval-scratch/
+zz-wslcheck.txt
+delegate-proof.md
+remote-delegate-proof.md
+UNFINISHED-*.md
+# electron 构建产物与一次性探针/备份
+apps/desktop/build/
+apps/gateway/audit-probe1.mjs
+apps/gateway/idle-probe.mjs
+apps/gateway/probe-*.mjs
+apps/gateway/tip-probe.mjs
+apps/gateway/tip-loss-probe.mjs
+apps/gateway/tasks_placeholder
+*.bak
+*.bak-*
+
+# Office/Word 打开文档时生成的锁文件(~$xxx.pptx):不该入库
+~$*
+
+# 桌面壳新用户烟测临时物(数据根/截图/探针脚本,本地复现用,不入库)
+apps/desktop/.smoke/

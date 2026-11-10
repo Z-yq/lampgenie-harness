@@ -1,0 +1,59 @@
+{
+  "name": "@lampgenie/code-sense",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    },
+    "./review": {
+      "types": "./src/review/index.ts",
+      "development": "./src/review/index.ts",
+      "default": "./dist/review/index.js"
+    },
+    "./wiki": {
+      "types": "./src/wiki/index.ts",
+      "development": "./src/wiki/index.ts",
+      "default": "./dist/wiki/index.js"
+    },
+    "./wire": {
+      "types": "./src/wire/index.ts",
+      "development": "./src/wire/index.ts",
+      "default": "./dist/wire/index.js"
+    },
+    "./surface": {
+      "types": "./src/surface/index.ts",
+      "development": "./src/surface/index.ts",
+      "default": "./dist/surface/index.js"
+    },
+    "./review/*": {
+      "development": "./src/review/*.ts",
+      "default": "./dist/review/*.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "NODE_OPTIONS=--conditions=development vitest run",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lampgenie/core": "workspace:^",
+    "ts-morph": "^24.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tree-sitter-wasms": "0.1.13",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "web-tree-sitter": "0.25.10"
+  }
+}

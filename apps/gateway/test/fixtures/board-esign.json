@@ -1,0 +1,569 @@
+{
+ "docKind": "page",
+ "nodes": [
+  {
+   "id": "pg6",
+   "kind": "page",
+   "label": "记录看板(首屏)",
+   "summary": "应用入口与工作台:列出本机全部签署记录,按状态分组,提供新建/继续/导入/校验入口"
+  },
+  {
+   "id": "p6s1",
+   "kind": "section",
+   "label": "状态分组与筛选",
+   "summary": "草稿/待我签/等待他人/部分完成/已完成/已退回/已过期 七态筛选,默认展示待办优先"
+  },
+  {
+   "id": "p6s2",
+   "kind": "section",
+   "label": "搜索栏",
+   "summary": "按标题/文档编号/签署人姓名即时过滤(本地索引,无网络)"
+  },
+  {
+   "id": "p6s3",
+   "kind": "section",
+   "label": "记录卡片列表",
+   "summary": "每张卡:文档缩略图+状态徽标+签署进度(n/m)+最近动作时间+主操作按钮(继续/查看凭证/催办)"
+  },
+  {
+   "id": "p6s4",
+   "kind": "section",
+   "label": "待办与到期提醒",
+   "summary": "顶部横幅聚合:今日到期、待我签、被退回需要处理的条目"
+  },
+  {
+   "id": "p6s5",
+   "kind": "section",
+   "label": "导入已签包",
+   "summary": "拖入他人回传的包,自动合并进记录并推进状态机"
+  },
+  {
+   "id": "p6s6",
+   "kind": "section",
+   "label": "存储用量与清理",
+   "summary": "IndexedDB 占用估算、导出备份、删除已归档记录(删除三次确认)"
+  },
+  {
+   "id": "pg1",
+   "kind": "page",
+   "label": "文档准备",
+   "summary": "新建签署流程第一步:载入待签文档并填写元信息与签署人名单"
+  },
+  {
+   "id": "p1s1",
+   "kind": "section",
+   "label": "文件投放区",
+   "summary": "拖拽或点击选择文档;仅接受本地文件,不上传任何服务器"
+  },
+  {
+   "id": "p1s2",
+   "kind": "section",
+   "label": "文档预览与页导航",
+   "summary": "多页渲染(逐页缩略+主视图翻页),用于确认文档与后续放置坐标的基准"
+  },
+  {
+   "id": "p1s3",
+   "kind": "section",
+   "label": "元信息表单",
+   "summary": "文档标题/编号/用途说明/签署截止时间/是否需全部签完才生效"
+  },
+  {
+   "id": "p1s4",
+   "kind": "section",
+   "label": "签署人名单",
+   "summary": "姓名+联系方式(仅用于包内说明与提醒文案,不做身份认证)+角色(签署人/见证人/抄送)"
+  },
+  {
+   "id": "p1s5",
+   "kind": "section",
+   "label": "流程模板",
+   "summary": "可选:将「签署人顺序+字段布局」存为模板供下次复用(存 IndexedDB)"
+  },
+  {
+   "id": "pg2",
+   "kind": "page",
+   "label": "签署位放置",
+   "summary": "在文档页面上拖放各类型签署字段并指派归属签署人,是坐标与字段语义的唯一来源"
+  },
+  {
+   "id": "p2s1",
+   "kind": "section",
+   "label": "页面画布与缩放",
+   "summary": "以实际渲染尺寸承载字段层;缩放/滚动只影响显示,不影响存储坐标"
+  },
+  {
+   "id": "p2s2",
+   "kind": "section",
+   "label": "字段类型面板",
+   "summary": "签名(手写/图章)/姓名/日期/正文文本/勾选框/公章图 六类字段,拖入即创建"
+  },
+  {
+   "id": "p2s3",
+   "kind": "section",
+   "label": "放置与坐标归一化",
+   "summary": "字段位置以「页码+归一化 0..1 矩形」存储,与 DPI/缩放/窗口尺寸解耦"
+  },
+  {
+   "id": "p2s4",
+   "kind": "section",
+   "label": "字段属性面板",
+   "summary": "归属签署人(配色区分)/必填开关/尺寸微调/删除;重复字段可批量复制到每页"
+  },
+  {
+   "id": "p2s5",
+   "kind": "section",
+   "label": "发送前校验",
+   "summary": "每位签署人至少一个签名字段、必填字段无重叠、全部字段有归属,否则阻断下一步并高亮问题字段"
+  },
+  {
+   "id": "p2s6",
+   "kind": "section",
+   "label": "键盘与对齐辅助",
+   "summary": "方向键像素级微调、吸附对齐线、字段列表与画布双向定位(无障碍可用)"
+  },
+  {
+   "id": "pg3",
+   "kind": "page",
+   "label": "发送",
+   "summary": "编排签署顺序并导出「待签包」交给对方(离线场景的传输就发生在这一步)"
+  },
+  {
+   "id": "p3s1",
+   "kind": "section",
+   "label": "签署顺序编排",
+   "summary": "串行(按序逐个签)或并行(各自独立签)两种模式,拖拽排序,可设每人截止时间"
+  },
+  {
+   "id": "p3s2",
+   "kind": "section",
+   "label": "分发方式",
+   "summary": "复制说明文案/下载待签包/mailto 预填邮件正文;不依赖任何在线服务"
+  },
+  {
+   "id": "p3s3",
+   "kind": "section",
+   "label": "待签包导出",
+   "summary": "单文件 HTML(内嵌文档、字段、元信息、留痕链),双击即可签署,不含他人签名内容"
+  },
+  {
+   "id": "p3s4",
+   "kind": "section",
+   "label": "发送留痕",
+   "summary": "写入「已发出/发给谁/何时/包哈希」到本机留痕链,作为凭证时间线首个锚点"
+  },
+  {
+   "id": "pg4",
+   "kind": "page",
+   "label": "签署",
+   "summary": "签署人打开待签包后的界面:只读浏览+按引导填写并提交签章"
+  },
+  {
+   "id": "p4s1",
+   "kind": "section",
+   "label": "待签包打开与只读浏览",
+   "summary": "顶部显示「谁被请求签/截止时间/说明」,文档区只读防篡改,底部固化当前包哈希"
+  },
+  {
+   "id": "p4s2",
+   "kind": "section",
+   "label": "字段引导",
+   "summary": "滚动定位到第一个未填字段并高亮脉冲;进度条显示「还剩 n 处待填」"
+  },
+  {
+   "id": "p4s3",
+   "kind": "section",
+   "label": "签名采集",
+   "summary": "手写(指针事件含笔压/撤销/清空)/输入姓名生成手写体/上传签名图片 三选一"
+  },
+  {
+   "id": "p4s4",
+   "kind": "section",
+   "label": "意愿确认",
+   "summary": "勾选「我已阅读并同意以上内容」+自填姓名与联系方式;可选邮箱一次性验证码(需在线,默认关闭)"
+  },
+  {
+   "id": "p4s5",
+   "kind": "section",
+   "label": "提交签章",
+   "summary": "把签名图+填写值+时间戳+设备信息写入留痕链,生成回传包(哈希链上追加一环)"
+  },
+  {
+   "id": "p4s6",
+   "kind": "section",
+   "label": "拒签/退回",
+   "summary": "填写退回理由后生成退回包,状态回到发起人待处理"
+  },
+  {
+   "id": "pg5",
+   "kind": "page",
+   "label": "完成凭证",
+   "summary": "把一次签署的全部证据性信息渲染成一页可打印可归档的凭证"
+  },
+  {
+   "id": "p5s1",
+   "kind": "section",
+   "label": "凭证头",
+   "summary": "文档标题/编号/最终指纹(整包 SHA-256)/生成时间"
+  },
+  {
+   "id": "p5s2",
+   "kind": "section",
+   "label": "签署人时间线",
+   "summary": "逐人:姓名/动作(签署或退回)/时间/设备与浏览器标识/签名图缩略"
+  },
+  {
+   "id": "p5s3",
+   "kind": "section",
+   "label": "签章与字段快照",
+   "summary": "各字段最终填写值与其在文档中的位置页码,供人工核对"
+  },
+  {
+   "id": "p5s4",
+   "kind": "section",
+   "label": "哈希链明细",
+   "summary": "每阶段一条(准备/发出/每次签署)prevHash→hash,任一步被改动链条即断"
+  },
+  {
+   "id": "p5s5",
+   "kind": "section",
+   "label": "导出与打印",
+   "summary": "打印样式直接输出 PDF;导出归档包(含凭证页+文档+链)用于长期保存"
+  },
+  {
+   "id": "p5s6",
+   "kind": "section",
+   "label": "能力边界声明",
+   "summary": "如实标注:本凭证为意愿确认级自证,未接入 CA/实名认证,不构成法律意义上的可靠电子签名"
+  },
+  {
+   "id": "pg7",
+   "kind": "page",
+   "label": "校验",
+   "summary": "对任意已签包/凭证做独立完整性核验——给别人验,也给自己验"
+  },
+  {
+   "id": "p7s1",
+   "kind": "section",
+   "label": "待验包投放",
+   "summary": "拖入 .esig 包或凭证 HTML;仅本地计算,不联网"
+  },
+  {
+   "id": "p7s2",
+   "kind": "section",
+   "label": "哈希重算比对",
+   "summary": "用 WebCrypto 重算各阶段摘要,与包内记录逐条比对"
+  },
+  {
+   "id": "p7s3",
+   "kind": "section",
+   "label": "链完整性检查",
+   "summary": "逐环验证 prevHash 指向与前序内容摘要一致,定位断链发生的那一步"
+  },
+  {
+   "id": "p7s4",
+   "kind": "section",
+   "label": "结论卡",
+   "summary": "三态结论:通过/不一致(指出哪一步哪一字段)/无法判定(缺链或格式不符),禁含糊措辞"
+  },
+  {
+   "id": "p7s5",
+   "kind": "section",
+   "label": "明细展开",
+   "summary": "每阶段展示期望哈希与实际哈希对照,可复制用于人工传播核对"
+  }
+ ],
+ "edges": [
+  {
+   "from": "pg6",
+   "to": "pg1",
+   "kind": "nav",
+   "label": "点击「新建签署」"
+  },
+  {
+   "from": "pg6",
+   "to": "pg4",
+   "kind": "nav",
+   "label": "点击卡片「继续签署」(待我签)"
+  },
+  {
+   "from": "pg6",
+   "to": "pg5",
+   "kind": "nav",
+   "label": "点击卡片「查看凭证」"
+  },
+  {
+   "from": "pg6",
+   "to": "pg7",
+   "kind": "nav",
+   "label": "点击顶部「校验」"
+  },
+  {
+   "from": "pg6",
+   "to": "pg6",
+   "kind": "nav",
+   "label": "拖入他人回传包自动导入"
+  },
+  {
+   "from": "pg1",
+   "to": "pg2",
+   "kind": "nav",
+   "label": "点击「下一步:放置签署位」(元信息与名单齐备后放行)"
+  },
+  {
+   "from": "pg1",
+   "to": "pg6",
+   "kind": "nav",
+   "label": "点击「取消」放弃草稿"
+  },
+  {
+   "from": "pg2",
+   "to": "pg3",
+   "kind": "nav",
+   "label": "点击「下一步:发送」(校验通过才放行)"
+  },
+  {
+   "from": "pg2",
+   "to": "pg1",
+   "kind": "nav",
+   "label": "点击「上一步」返回改文档或名单"
+  },
+  {
+   "from": "pg3",
+   "to": "pg4",
+   "kind": "nav",
+   "label": "对方双击打开导出的待签包(独立文件,非跳转)"
+  },
+  {
+   "from": "pg3",
+   "to": "pg6",
+   "kind": "nav",
+   "label": "点击「完成分发,返回工作台」"
+  },
+  {
+   "from": "pg4",
+   "to": "pg5",
+   "kind": "nav",
+   "label": "点击「提交签章」(写链成功后自动进入)"
+  },
+  {
+   "from": "pg4",
+   "to": "pg3",
+   "kind": "nav",
+   "label": "点击「拒签并退回」生成退回包"
+  },
+  {
+   "from": "pg5",
+   "to": "pg6",
+   "kind": "nav",
+   "label": "点击「返回工作台」"
+  },
+  {
+   "from": "pg5",
+   "to": "pg7",
+   "kind": "nav",
+   "label": "点击「立即校验本件」"
+  },
+  {
+   "from": "pg7",
+   "to": "pg6",
+   "kind": "nav",
+   "label": "点击「返回工作台」"
+  },
+  {
+   "from": "pg7",
+   "to": "pg5",
+   "kind": "nav",
+   "label": "结论卡内点击「查看凭证原件」"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s5",
+   "kind": "contains"
+  },
+  {
+   "from": "pg6",
+   "to": "p6s6",
+   "kind": "contains"
+  },
+  {
+   "from": "pg1",
+   "to": "p1s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg1",
+   "to": "p1s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg1",
+   "to": "p1s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg1",
+   "to": "p1s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg1",
+   "to": "p1s5",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s5",
+   "kind": "contains"
+  },
+  {
+   "from": "pg2",
+   "to": "p2s6",
+   "kind": "contains"
+  },
+  {
+   "from": "pg3",
+   "to": "p3s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg3",
+   "to": "p3s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg3",
+   "to": "p3s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg3",
+   "to": "p3s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s5",
+   "kind": "contains"
+  },
+  {
+   "from": "pg4",
+   "to": "p4s6",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s5",
+   "kind": "contains"
+  },
+  {
+   "from": "pg5",
+   "to": "p5s6",
+   "kind": "contains"
+  },
+  {
+   "from": "pg7",
+   "to": "p7s1",
+   "kind": "contains"
+  },
+  {
+   "from": "pg7",
+   "to": "p7s2",
+   "kind": "contains"
+  },
+  {
+   "from": "pg7",
+   "to": "p7s3",
+   "kind": "contains"
+  },
+  {
+   "from": "pg7",
+   "to": "p7s4",
+   "kind": "contains"
+  },
+  {
+   "from": "pg7",
+   "to": "p7s5",
+   "kind": "contains"
+  }
+ ]
+}

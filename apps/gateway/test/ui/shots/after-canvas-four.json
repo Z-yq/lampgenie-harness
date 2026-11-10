@@ -1,0 +1,781 @@
+{
+ "at": "2026-11-05T10:58:45.140Z",
+ "before": {},
+ "add": {
+  "before": {
+   "docNodes": 17,
+   "svgRealNodes": 17,
+   "k": 1,
+   "stale": null
+  },
+  "beforeBaseline": {
+   "at300ms": {
+    "docNodes": 18,
+    "svgNodeEls": 18,
+    "svgRealNodes": 17
+   },
+   "saveFrames": [
+    {
+     "dt": 1518,
+     "nodes": 18
+    }
+   ],
+   "diagramResult": [
+    {
+     "dt": 3047,
+     "ok": true,
+     "svgLen": 24192
+    }
+   ]
+  },
+  "panel": {
+   "display": "block",
+   "items": 26
+  },
+  "firstItem": "function/函函数推荐",
+  "series": [
+   {
+    "at": 7,
+    "svgNodeEls": 18,
+    "svgRealNodes": 17,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 1613,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3236,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3300,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3363,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3428,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3495,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 3561,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   },
+   {
+    "at": 4771,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "docNodes": 18,
+    "stale": null,
+    "hostHasSvg": true
+   }
+  ],
+  "samples": {
+   "at300": {
+    "docNodes": 18,
+    "docEdges": 16,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "k": 0.9,
+    "pan": {
+     "x": -132,
+     "y": 40
+    },
+    "zLow": false,
+    "stale": null,
+    "hostHasSvg": true,
+    "selNode": "n18",
+    "edgeLabelsTotal": 16,
+    "edgeLabelsVisible": 16,
+    "edgeLabelSamples": [
+     "位够→running",
+     "窗外→等一键",
+     "续跑→submit",
+     "task.submit"
+    ],
+    "edgeLabelMarkup": [
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     }
+    ],
+    "linkFrom": null,
+    "boardEditOn": false,
+    "toasts": [
+     "已添加 函数「函数 8」· 正在出图…"
+    ]
+   },
+   "at1200": {
+    "docNodes": 18,
+    "docEdges": 16,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "k": 0.9,
+    "pan": {
+     "x": -132,
+     "y": 40
+    },
+    "zLow": false,
+    "stale": null,
+    "hostHasSvg": true,
+    "selNode": "n18",
+    "edgeLabelsTotal": 16,
+    "edgeLabelsVisible": 16,
+    "edgeLabelSamples": [
+     "位够→running",
+     "窗外→等一键",
+     "续跑→submit",
+     "task.submit"
+    ],
+    "edgeLabelMarkup": [
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     }
+    ],
+    "linkFrom": null,
+    "boardEditOn": false,
+    "toasts": [
+     "已添加 函数「函数 8」· 正在出图…"
+    ]
+   },
+   "at3500": {
+    "docNodes": 18,
+    "docEdges": 16,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "k": 0.9,
+    "pan": {
+     "x": -132,
+     "y": 40
+    },
+    "zLow": false,
+    "stale": null,
+    "hostHasSvg": true,
+    "selNode": "n18",
+    "edgeLabelsTotal": 16,
+    "edgeLabelsVisible": 16,
+    "edgeLabelSamples": [
+     "位够→running",
+     "窗外→等一键",
+     "续跑→submit",
+     "task.submit"
+    ],
+    "edgeLabelMarkup": [
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     }
+    ],
+    "linkFrom": null,
+    "boardEditOn": false,
+    "toasts": [
+     "已添加 函数「函数 8」· 正在出图…"
+    ]
+   },
+   "done": {
+    "docNodes": 18,
+    "docEdges": 16,
+    "svgNodeEls": 19,
+    "svgRealNodes": 18,
+    "k": 0.9,
+    "pan": {
+     "x": -132,
+     "y": 40
+    },
+    "zLow": false,
+    "stale": null,
+    "hostHasSvg": true,
+    "selNode": "n18",
+    "edgeLabelsTotal": 16,
+    "edgeLabelsVisible": 16,
+    "edgeLabelSamples": [
+     "位够→running",
+     "窗外→等一键",
+     "续跑→submit",
+     "task.submit"
+    ],
+    "edgeLabelMarkup": [
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     },
+     {
+      "cls": "",
+      "parentCls": "g",
+      "tag": "text",
+      "display": "block"
+     }
+    ],
+    "linkFrom": null,
+    "boardEditOn": false,
+    "toasts": []
+   }
+  },
+  "minSvgNodesAnyTime": 18,
+  "minRealNodesAnyTime": 17,
+  "sawStale": false,
+  "staleSamples": 0,
+  "hostHasSvgThroughout": true,
+  "toastSeen": [
+   "已添加 函数「函数 8」· 正在出图…"
+  ],
+  "frames": {
+   "sent": [
+    {
+     "dt": 89,
+     "type": "task.list"
+    },
+    {
+     "dt": 506,
+     "type": "board.save",
+     "nodes": 18,
+     "edges": 16
+    },
+    {
+     "dt": 565,
+     "type": "board.get"
+    },
+    {
+     "dt": 567,
+     "type": "board.diagram"
+    },
+    {
+     "dt": 715,
+     "type": "session.status"
+    },
+    {
+     "dt": 1983,
+     "type": "task.list"
+    },
+    {
+     "dt": 1984,
+     "type": "session.status"
+    },
+    {
+     "dt": 1984,
+     "type": "trace.stats"
+    },
+    {
+     "dt": 2129,
+     "type": "session.status"
+    },
+    {
+     "dt": 2157,
+     "type": "board.get"
+    },
+    {
+     "dt": 3983,
+     "type": "task.list"
+    },
+    {
+     "dt": 3984,
+     "type": "session.status"
+    },
+    {
+     "dt": 3984,
+     "type": "trace.stats"
+    },
+    {
+     "dt": 4089,
+     "type": "task.list"
+    },
+    {
+     "dt": 5129,
+     "type": "session.status"
+    },
+    {
+     "dt": 5132,
+     "type": "git.status"
+    },
+    {
+     "dt": 5132,
+     "type": "git.branches"
+    }
+   ],
+   "recv": [
+    {
+     "dt": 10,
+     "type": "session.status.result"
+    },
+    {
+     "dt": 49,
+     "type": "trace.stats.result"
+    },
+    {
+     "dt": 91,
+     "type": "task.list"
+    },
+    {
+     "dt": 454,
+     "type": "git.status.result"
+    },
+    {
+     "dt": 465,
+     "type": "git.status.result"
+    },
+    {
+     "dt": 476,
+     "type": "git.status.result"
+    },
+    {
+     "dt": 564,
+     "type": "session.status.changed"
+    },
+    {
+     "dt": 565,
+     "type": "session.status.changed"
+    },
+    {
+     "dt": 565,
+     "type": "session.status.changed"
+    },
+    {
+     "dt": 565,
+     "type": "board.changed"
+    },
+    {
+     "dt": 565,
+     "type": "board.changed"
+    },
+    {
+     "dt": 565,
+     "type": "board.changed"
+    },
+    {
+     "dt": 566,
+     "type": "board.doc",
+     "nodes": 18
+    },
+    {
+     "dt": 636,
+     "type": "board.diagram.result",
+     "ok": true,
+     "svgLen": 23321
+    },
+    {
+     "dt": 2157,
+     "type": "dashboard.changed"
+    },
+    {
+     "dt": 2157,
+     "type": "dashboard.changed"
+    },
+    {
+     "dt": 2157,
+     "type": "dashboard.changed"
+    },
+    {
+     "dt": 2161,
+     "type": "task.list"
+    },
+    {
+     "dt": 2192,
+     "type": "session.status.result"
+    },
+    {
+     "dt": 2199,
+     "type": "session.status.result"
+    },
+    {
+     "dt": 2223,
+     "type": "session.status.result"
+    },
+    {
+     "dt": 2262,
+     "type": "board.doc",
+     "nodes": 18
+    },
+    {
+     "dt": 2282,
+     "type": "trace.stats.result"
+    },
+    {
+     "dt": 3737,
+     "type": "board.doc",
+     "nodes": 18
+    },
+    {
+     "dt": 3985,
+     "type": "task.list"
+    },
+    {
+     "dt": 3998,
+     "type": "session.status.result"
+    },
+    {
+     "dt": 4028,
+     "type": "trace.stats.result"
+    },
+    {
+     "dt": 4090,
+     "type": "task.list"
+    },
+    {
+     "dt": 5164,
+     "type": "session.status.result"
+    }
+   ]
+  },
+  "saveFrame": {
+   "dt": 506,
+   "type": "board.save",
+   "nodes": 18,
+   "edges": 16
+  },
+  "diagramResult": {
+   "dt": 636,
+   "type": "board.diagram.result",
+   "ok": true,
+   "svgLen": 23321
+  },
+  "verdict": {
+   "nodesNeverZero": true,
+   "sawStale": false,
+   "docGrewByOne": true,
+   "toastMatches": true,
+   "saveDt": 506,
+   "diagramDt": 636
+  }
+ },
+ "pan": {
+  "nodeStart": {
+   "id": "s1",
+   "x": 380,
+   "y": 396
+  },
+  "dragNode": {
+   "before": {
+    "x": -132,
+    "y": 40
+   },
+   "after": {
+    "x": -12,
+    "y": 40
+   },
+   "dx": 120,
+   "dk": null,
+   "selAfterDrag": "n18"
+  },
+  "blankStart": {
+   "x": 399,
+   "y": 329
+  },
+  "dragBlank": {
+   "before": {
+    "x": -12,
+    "y": 40
+   },
+   "after": {
+    "x": 108,
+    "y": 40
+   },
+   "dx": 120
+  },
+  "clickSelect": {
+   "clicked": "s1",
+   "selNode": "s1",
+   "ok": true
+  },
+  "beforeBaseline": {
+   "nodeDx": 0,
+   "blankDx": 120
+  },
+  "verdict": {
+   "nodePanOk": true,
+   "blankPanOk": true,
+   "clickSelectOk": true
+  }
+ },
+ "labels": {
+  "fit": {
+   "k": 0.9,
+   "zLow": false,
+   "edgeLabelsTotal": 16,
+   "edgeLabelsVisible": 16,
+   "toasts": [],
+   "edgeLabelMarkup": [
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "block"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "block"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "block"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "block"
+    }
+   ]
+  },
+  "zoomOut": {
+   "k": 0.3,
+   "zLow": true,
+   "edgeLabelsTotal": 16,
+   "edgeLabelsVisible": 0,
+   "edgeLabelMarkup": [
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "none"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "none"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "none"
+    },
+    {
+     "cls": "",
+     "parentCls": "g",
+     "tag": "text",
+     "display": "none"
+    }
+   ]
+  },
+  "beforeBaseline": {
+   "fitK": 0.9,
+   "edgeLabels": 3
+  },
+  "verdict": {
+   "labelsVisibleAtFit": true,
+   "hiddenAtLow": true,
+   "zLowAtLow": true
+  }
+ },
+ "link": {
+  "from": "s1",
+  "selAfterClick": "s1",
+  "stateAfterL": "s1",
+  "hintVisible": true,
+  "to": "s7",
+  "wordBoxVisible": true,
+  "docEdgesBefore": 16,
+  "docEdgesAfter": 17,
+  "lastEdge": {
+   "from": "s1",
+   "to": "s7",
+   "label": "验证"
+  },
+  "frames": [
+   {
+    "dt": 99,
+    "type": "board.list"
+   },
+   {
+    "dt": 122,
+    "type": "board.save",
+    "nodes": 18,
+    "edges": 17
+   },
+   {
+    "dt": 259,
+    "type": "task.list"
+   },
+   {
+    "dt": 260,
+    "type": "session.status"
+   },
+   {
+    "dt": 260,
+    "type": "trace.stats"
+   },
+   {
+    "dt": 397,
+    "type": "session.status"
+   },
+   {
+    "dt": 953,
+    "type": "board.get"
+   },
+   {
+    "dt": 956,
+    "type": "board.diagram"
+   },
+   {
+    "dt": 1124,
+    "type": "session.status"
+   },
+   {
+    "dt": 2251,
+    "type": "task.list"
+   },
+   {
+    "dt": 2252,
+    "type": "session.status"
+   },
+   {
+    "dt": 2252,
+    "type": "trace.stats"
+   },
+   {
+    "dt": 2357,
+    "type": "task.list"
+   },
+   {
+    "dt": 2853,
+    "type": "board.get"
+   }
+  ],
+  "sentBoardSave": true,
+  "esc": {
+   "inLink": "s1",
+   "afterEsc": null,
+   "ok": true
+  },
+  "beforeBaseline": {
+   "note": "改前 svg 视图无连线入口(.cv-port 只在卡片渲染里),cvLinkFrom/cvLinkAskWord 未定义"
+  },
+  "verdict": {
+   "edgeAdded": true,
+   "labelOk": true,
+   "fromToOk": true,
+   "saveSent": true,
+   "escOk": true
+  }
+ },
+ "shots": [
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-add-300ms.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-add-done.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-pan-node.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-edge-labels.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/after-link-menu.png"
+ ],
+ "errors": [],
+ "port": 7796,
+ "editDrag": {
+  "note": "svg 视图节点拖拽未实现(布局由 flowkit/ELK 决定);编辑态下节点按下也不起平移(boardEditOn 早退)",
+  "boardEditOn": false
+ }
+}

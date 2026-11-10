@@ -1,0 +1,62 @@
+[
+ {
+  "ctrl": "前置:flowkit svg 出图",
+  "verdict": "可用",
+  "ev": "#cvSvgHost [data-node-id]=15 卡片DOM=0"
+ },
+ {
+  "ctrl": "#cvArrangeBtn(整理)",
+  "verdict": "不可用(明确置灰+说明)",
+  "ev": "disabled=true title='当前为 flowkit 布局:重排由服务端 ELK 自动完成,画布坐标不参与出图…' 点击 toast=[]"
+ },
+ {
+  "ctrl": "#cvAddBtn(添加模块)",
+  "verdict": "可用",
+  "ev": "cvAddPanel display=block"
+ },
+ {
+  "ctrl": "双击空白(在落点添加模块)",
+  "verdict": "可用",
+  "ev": "落点(389,480) display=block"
+ },
+ {
+  "ctrl": "右键节点(菜单)",
+  "verdict": "可用",
+  "ev": "节点 f1 菜单项=[\"编辑明细\",\"复制\",\"创建副本\",\"删除\"]"
+ },
+ {
+  "ctrl": "右键菜单「删除」",
+  "verdict": "可用",
+  "ev": "节点 8→7"
+ },
+ {
+  "ctrl": "Ctrl+Z(撤销删除)",
+  "verdict": "可用",
+  "ev": "节点 7→8"
+ },
+ {
+  "ctrl": "右键空白(菜单)",
+  "verdict": "可用",
+  "ev": "菜单项=[\"粘贴(灰)\",\"添加模块\",\"适配全部\",\"整理布局(SVG 视图不适用)(灰)\"]"
+ },
+ {
+  "ctrl": "Ctrl+A(全选)",
+  "verdict": "不可用(有明确提示)",
+  "ev": "toast=[\"SVG 视图暂不支持全选/框选:框选与多选请切回卡片渲染(localStorage.cvRender=cards)\"]"
+ },
+ {
+  "ctrl": "点选 + Delete 键",
+  "verdict": "可用",
+  "ev": "选中=f2 节点 8→7 toast=[]"
+ },
+ {
+  "ctrl": "#boardExpPng(导出 PNG)",
+  "verdict": "可用",
+  "ev": "下载次数=1 长度=375078 toast=[\"PNG 已导出:flowkit SVG 2469×394(2x)\"] 卡片DOM=0"
+ },
+ {
+  "ctrl": "cards 回滚对照",
+  "verdict": "可用",
+  "ev": "可见卡=8 整理钮 disabled=false"
+ }
+]

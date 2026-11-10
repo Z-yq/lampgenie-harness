@@ -1,0 +1,77 @@
+{
+  "note": "白板 SVG 出图宽高比:改造前(单列长链) vs 改造后(自实现 wrapping layered 布局,aspectRatio=1.6)。数值为本轮实测 viewBox。",
+  "before": [
+    {
+      "case": "17 节点 + 3 groups",
+      "viewBox": "136 56 4349 798",
+      "w": 4349,
+      "h": 798,
+      "ratio": 5.45,
+      "command": "node -e 'import(\"@openflowkit/openflowkit-mcp/dist/generated/openflowkit-agent.js\").then(m=>...)' / apps/gateway/test/ui/probe_canvas_baseline.mjs",
+      "output": "test/ui/shots/before-baseline.json → \"A.viewBoxWH\": {\"w\":4349,\"h\":798,\"ratio\":5.4499}"
+    },
+    {
+      "case": "17 节点 fit 可见卡片",
+      "visibleCards": 1,
+      "output": "test/ui/shots/before-17nodes-fit.png(缩放后只有 1 张卡可见)"
+    },
+    {
+      "case": "60 节点 + 6 groups",
+      "w": 7460,
+      "h": 3024,
+      "ratio": 2.47,
+      "command": "apps/gateway 内 npx vitest 基线脚本(60 节点链式板出图后解析 viewBox)",
+      "output": "w=7460 h=3024 ratio=2.47"
+    },
+    {
+      "case": "同类 17 节点板(headlessElkLayout 直连,本轮复测)",
+      "viewBox": "4373 x 264",
+      "ratio": 16.56,
+      "command": "renderBoardSvg(doc, { layout: ofkMod.headlessElkLayout })",
+      "output": "baseElk={\"w\":4373,\"h\":264} ratio=16.56(无分组场景退化为单行长条)"
+    }
+  ],
+  "after": [
+    {
+      "case": "17 节点 + 3 groups",
+      "viewBox": "1693 x 862",
+      "ratio": 1.96,
+      "ok": true,
+      "command": "cd apps/gateway && npx vitest run test/board-layout-elk.test.ts",
+      "output": "MEASURE 17nodes-3groups ok=true {\"w\":1693,\"h\":862,\"ratio\":1.964} 350ms"
+    },
+    {
+      "case": "60 节点 + 6 groups",
+      "viewBox": "3337 x 2204",
+      "ratio": 1.51,
+      "ok": true,
+      "command": "cd apps/gateway && npx vitest run test/board-layout-elk.test.ts",
+      "output": "MEASURE 60nodes-6groups ok=true {\"w\":3337,\"h\":2204,\"ratio\":1.514} 205ms"
+    },
+    {
+      "case": "17 节点 + 3 groups + 边 label",
+      "viewBox": "1721 x 1110",
+      "ratio": 1.55,
+      "ok": true,
+      "command": "cd apps/gateway && npx vitest run test/board-layout-elk.test.ts",
+      "output": "MEASURE 17nodes-3groups-labels ok=true {\"w\":1721,\"h\":1110,\"ratio\":1.55} 48ms diags=none"
+    },
+    {
+      "case": "带环图 A→B→C→A",
+      "viewBox": "495 x 354",
+      "ratio": 1.40,
+      "ok": true,
+      "command": "cd apps/gateway && npx vitest run test/board-layout-elk.test.ts",
+      "output": "MEASURE cycle-abc ok=true {\"w\":495,\"h\":354,\"ratio\":1.398} 15ms"
+    }
+  ],
+  "targets": {
+    "17nodes": "1.2 ~ 2.4",
+    "60nodes": "<= 2.6 且不劣于 2.47",
+    "pass": true
+  },
+  "testRun": {
+    "command": "cd apps/gateway && npx vitest run test/board-layout-elk.test.ts test/board-diagram.test.ts test/board-diagram-rpc.test.ts test/board-ofk.test.ts",
+    "result": "Test Files 4 passed (4) / Tests 58 passed (58)"
+  }
+}

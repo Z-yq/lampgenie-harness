@@ -1,0 +1,292 @@
+{
+  "version": 1,
+  "taskId": "popup-ui-fixture",
+  "sessionId": "popup-ui-fixture",
+  "title": "移动端 · 用户删除与筛选弹层流程",
+  "status": "draft",
+  "docKind": "page",
+  "rev": 1,
+  "nodes": [
+    {
+      "id": "p1",
+      "kind": "page",
+      "label": "用户列表",
+      "summary": "列表、详情入口与删除操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s1",
+      "kind": "section",
+      "label": "用户列表",
+      "summary": "列表区与行操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "card",
+      "kind": "component",
+      "label": "用户行卡片",
+      "summary": "点击进入用户详情",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "row1",
+      "kind": "component",
+      "label": "用户行一",
+      "summary": "头像/姓名/状态",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "row2",
+      "kind": "component",
+      "label": "用户行二",
+      "summary": "头像/姓名/状态",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "row3",
+      "kind": "component",
+      "label": "用户行三",
+      "summary": "头像/姓名/状态",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "trigger",
+      "kind": "component",
+      "label": "删除用户按钮",
+      "summary": "点击弹出确认弹窗",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "dlg",
+      "kind": "section",
+      "label": "确认删除弹窗",
+      "summary": "弹窗:确认后删除,取消关闭",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "txt",
+      "kind": "component",
+      "label": "影响说明",
+      "summary": "删除后无法撤销",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "confirm",
+      "kind": "component",
+      "label": "确认删除",
+      "summary": "危险操作,执行删除",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "cancel",
+      "kind": "component",
+      "label": "取消",
+      "summary": "关闭弹窗",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p2",
+      "kind": "page",
+      "label": "用户详情",
+      "summary": "资料与筛选入口",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s2",
+      "kind": "section",
+      "label": "用户资料",
+      "summary": "头像/姓名/邮箱",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "avatar",
+      "kind": "component",
+      "label": "用户头像图标",
+      "summary": "展示头像",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "name",
+      "kind": "component",
+      "label": "姓名输入",
+      "summary": "展示并可编辑",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "email",
+      "kind": "component",
+      "label": "邮箱输入",
+      "summary": "展示并可编辑",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "rolebadge",
+      "kind": "component",
+      "label": "角色选择器",
+      "summary": "管理员 / 编辑 / 只读",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "acctstatus",
+      "kind": "component",
+      "label": "账号状态开关",
+      "summary": "启用 / 停用",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "filter",
+      "kind": "component",
+      "label": "筛选按钮",
+      "summary": "点击弹出筛选下拉菜单",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "dd",
+      "kind": "section",
+      "label": "筛选下拉菜单",
+      "summary": "下拉菜单:状态与时间范围",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "status",
+      "kind": "component",
+      "label": "状态选择器",
+      "summary": "全部 / 启用 / 禁用",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "range",
+      "kind": "component",
+      "label": "最近7天页签",
+      "summary": "当前选中",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p3",
+      "kind": "page",
+      "label": "删除结果",
+      "summary": "结果回执与返回入口",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s3",
+      "kind": "section",
+      "label": "结果区",
+      "summary": "结果说明与返回",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "done",
+      "kind": "component",
+      "label": "完成按钮",
+      "summary": "返回用户列表",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    }
+  ],
+  "edges": [
+    { "from": "p1", "to": "s1", "kind": "contains" },
+    { "from": "s1", "to": "card", "kind": "contains" },
+    { "from": "s1", "to": "row1", "kind": "contains" },
+    { "from": "s1", "to": "row2", "kind": "contains" },
+    { "from": "s1", "to": "row3", "kind": "contains" },
+    { "from": "s1", "to": "trigger", "kind": "contains" },
+    { "from": "p1", "to": "dlg", "kind": "contains" },
+    { "from": "dlg", "to": "txt", "kind": "contains" },
+    { "from": "dlg", "to": "confirm", "kind": "contains" },
+    { "from": "dlg", "to": "cancel", "kind": "contains" },
+    { "from": "p2", "to": "s2", "kind": "contains" },
+    { "from": "s2", "to": "avatar", "kind": "contains" },
+    { "from": "s2", "to": "name", "kind": "contains" },
+    { "from": "s2", "to": "email", "kind": "contains" },
+    { "from": "s2", "to": "rolebadge", "kind": "contains" },
+    { "from": "s2", "to": "acctstatus", "kind": "contains" },
+    { "from": "s2", "to": "filter", "kind": "contains" },
+    { "from": "p2", "to": "dd", "kind": "contains" },
+    { "from": "dd", "to": "status", "kind": "contains" },
+    { "from": "dd", "to": "range", "kind": "contains" },
+    { "from": "p3", "to": "s3", "kind": "contains" },
+    { "from": "s3", "to": "done", "kind": "contains" },
+    { "from": "card", "to": "p2", "kind": "nav", "label": "跳转：用户详情" },
+    { "from": "trigger", "to": "dlg", "kind": "nav", "label": "弹出：确认删除弹窗" },
+    { "from": "confirm", "to": "p3", "kind": "nav", "label": "跳转：删除结果" },
+    { "from": "filter", "to": "dd", "kind": "nav", "label": "弹出：筛选下拉菜单" },
+    { "from": "done", "to": "p1", "kind": "nav", "label": "返回：用户列表" }
+  ],
+  "planned_files": [],
+  "updatedAt": 0
+}

@@ -1,0 +1,38 @@
+/** Coding 模型设置结果态验收(ZCode 配置面板范式):默认只呈现 Provider/模型结果;
+ * 添加过程(预设/手动/自定义模型)只在「+ 添加 Provider」弹窗内出现。 */
+const { chromium } = require("playwright-core");
+const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
+(async () => {
+  const b = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-proxy-server"] });
+  const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+  const errs = [];
+  p.on("pageerror", (e) => errs.push(String(e).slice(0, 180)));
+  const results = [];
+  const check = (n, ok, d = "") => { results.push({ n, ok }); console.log((ok ? "PASS" : "FAIL") + " " + n + (d ? " — " + d : "")); };
+  await p.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(2500);
+  await p.evaluate(() => { switchView("sys"); setSection("model"); });
+  await p.waitForSelector("#prov-list .prov-card", { timeout: 12000 }).catch(() => {});
+  await p.waitForFunction(() => (document.querySelector("#model-dir-count")?.textContent || "").trim() !== "", { timeout: 12000 }).catch(() => {});
+  await p.waitForTimeout(400);
+  check("Provider 结果卡可见", (await p.locator("#prov-list .prov-card").count()) >= 1, "n=" + (await p.locator("#prov-list .prov-card").count()));
+  check("添加 Provider 入口可见", await p.locator("#prov-add-open").isVisible());
+  check("默认无添加弹窗/常驻表单", await p.locator("#prov-modal-mask").isHidden() && !(await p.locator("#prov-manual-sec").isVisible()));
+  check("模型目录默认折叠", (await p.locator("#model-dir").getAttribute("open")) === null);
+  check("模型目录计数在场", /个模型|\(空\)/.test((await p.locator("#model-dir-count").textContent()) || ""));
+  await p.click("#prov-add-open");
+  await p.waitForTimeout(300);
+  check("点添加才出现过程弹窗", await p.locator("#prov-modal-mask").isVisible());
+  check("弹窗内 16 张预设卡", (await p.locator("#provPresets .preset-card").count()) === 16 && await p.locator("#provPresets .preset-card").first().isVisible());
+  check("弹窗内手动自定义可展开", await p.locator("#prov-manual-toggle").isVisible());
+  await p.click("#prov-modal-close");
+  await p.waitForTimeout(200);
+  check("关闭回结果态", await p.locator("#prov-modal-mask").isHidden());
+  const defaultText = ((await p.locator("#sec-model").textContent()) || "").toLowerCase();
+  check("默认无占位/echo 文案", !/echo 回显|placeholder|llm=off/.test(defaultText));
+  check("零 pageerror", errs.length === 0, errs.join(" | "));
+  await b.close();
+  const failed = results.filter((r) => !r.ok);
+  console.log(failed.length === 0 ? "ALL PASS " + results.length : "FAILED " + failed.length + "/" + results.length);
+  process.exit(failed.length === 0 ? 0 : 1);
+})();

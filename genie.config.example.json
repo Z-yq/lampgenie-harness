@@ -1,0 +1,10 @@
+{
+  "$comment": "示例配置。实际文件 genie.config.json 由设置页 cfg.set 自动生成(不入库)。优先级: default < ~/.lampgenie-harness/config.json < 本文件 < env GENIE_*。凭证只存 env 名(apiKeyEnv),明文在 env 或 .genie/secrets.json(0600)。",
+  "gateway": { "port": 7700, "panel": true },
+  "executor": { "kind": "echo" },
+  "llm": { "baseUrl": "https://your-openai-compat-endpoint", "model": "your-model", "apiKeyEnv": "GENIE_LLM_API_KEY", "timeoutMs": 60000 },
+  "journal": { "dir": ".genie/journals" },
+  "experience": { "root": ".genie/experiences" },
+  "concurrency": { "maxConcurrent": 4, "maxConcurrentPerOwner": 2, "maxConcurrentSystem": 2 },
+  "agent": { "maxSteps": 8, "$comment_agent": "subagentDeadlineMin=子代理缺省时间盒(分钟,spawn 未显式传 deadlineMin 时生效;到点强制收割部分结果;缺省不限时);subagentStaleWarnMin=无产出预警阈值(分钟,超时无新工具调用→[warn]+task_output stale 标记;缺省 20)" }
+}

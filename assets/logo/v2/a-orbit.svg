@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LampGenie candidate A: a gold orbit ring with a separate cyan node riding its gap">
+  <title>LampGenie · A 轨道</title>
+  <rect width="512" height="512" rx="112" fill="#0B1220"/>
+  <path d="M356 122 A 152 152 0 1 0 356 390" fill="none" stroke="#F0B429" stroke-width="54" stroke-linecap="round"/>
+  <circle cx="356" cy="122" r="42" fill="#2AC5E0"/>
+</svg>

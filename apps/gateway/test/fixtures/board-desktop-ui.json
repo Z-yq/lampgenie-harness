@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "taskId": "desktop-ui-fixture",
+  "sessionId": "desktop-ui-fixture",
+  "title": "Genie Desktop 设置中心 · 桌面交互流程",
+  "status": "draft",
+  "docKind": "page",
+  "rev": 1,
+  "nodes": [
+    {
+      "id": "nav",
+      "kind": "nav",
+      "label": "顶部导航",
+      "summary": "通用 / 模型 / 快捷键 / 关于",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p1",
+      "kind": "page",
+      "label": "通用设置",
+      "summary": "桌面窗口通用偏好:主题、启动项、语言",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_menu",
+      "kind": "section",
+      "label": "菜单栏",
+      "summary": "文件 / 编辑 / 视图 + 保存",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "m_file",
+      "kind": "component",
+      "label": "文件菜单项",
+      "summary": "点击展开文件菜单",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "m_edit",
+      "kind": "component",
+      "label": "编辑菜单项",
+      "summary": "点击展开编辑菜单",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "m_view",
+      "kind": "component",
+      "label": "视图菜单项",
+      "summary": "点击展开视图菜单",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "m_save",
+      "kind": "component",
+      "label": "保存设置",
+      "summary": "主操作:保存当前设置",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "m_more",
+      "kind": "component",
+      "label": "更多图标",
+      "summary": "更多操作",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_nav",
+      "kind": "section",
+      "label": "设置导航",
+      "summary": "通用 / 模型 / 快捷键 / 关于",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "n_general",
+      "kind": "component",
+      "label": "通用页签",
+      "summary": "当前选中;基础偏好",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "n_model",
+      "kind": "component",
+      "label": "模型页签",
+      "summary": "模型与 Provider",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "n_short",
+      "kind": "component",
+      "label": "快捷键页签",
+      "summary": "快捷键映射",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "n_about",
+      "kind": "component",
+      "label": "关于页签",
+      "summary": "版本与更新",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s_status",
+      "kind": "section",
+      "label": "状态栏",
+      "summary": "自动保存已开启 · 已同步",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s1",
+      "kind": "section",
+      "label": "启动与外观",
+      "summary": "主题切换与开机启动",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "gotoModel",
+      "kind": "component",
+      "label": "打开模型设置",
+      "summary": "点击进入模型与 Provider 页面",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "theme",
+      "kind": "component",
+      "label": "主题切换",
+      "summary": "点击切换深色/浅色并即时预览",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "startup",
+      "kind": "component",
+      "label": "开机启动",
+      "summary": "开关:登录系统后自动启动 Genie",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p2",
+      "kind": "page",
+      "label": "模型与 Provider",
+      "summary": "桌面端模型配置:Provider 目录、默认模型、连接测试",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s2",
+      "kind": "section",
+      "label": "模型目录",
+      "summary": "Provider 列表与模型下拉",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "addprov",
+      "kind": "component",
+      "label": "添加 Provider",
+      "summary": "点击打开配置弹窗",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "testconn",
+      "kind": "component",
+      "label": "连接测试",
+      "summary": "点击测试 baseUrl 与密钥连通性",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p3",
+      "kind": "page",
+      "label": "快捷键",
+      "summary": "桌面端全局与编辑器快捷键映射",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s3",
+      "kind": "section",
+      "label": "快捷键列表",
+      "summary": "当前绑定与冲突提示",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "edit",
+      "kind": "component",
+      "label": "编辑快捷键主按钮",
+      "summary": "主操作:点击录制新组合键",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "reset",
+      "kind": "component",
+      "label": "恢复默认",
+      "summary": "点击恢复全部默认快捷键",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "p4",
+      "kind": "page",
+      "label": "关于",
+      "summary": "版本、更新通道与诊断信息",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "s4",
+      "kind": "section",
+      "label": "版本信息",
+      "summary": "当前版本与检查更新",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    },
+    {
+      "id": "check",
+      "kind": "component",
+      "label": "检查更新",
+      "summary": "点击检查新版本并显示下载进度",
+      "change": "keep",
+      "done": false,
+      "comments": [],
+      "flow": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "p1",
+      "to": "s1",
+      "kind": "contains"
+    },
+    {
+      "from": "p1",
+      "to": "s_menu",
+      "kind": "contains"
+    },
+    {
+      "from": "s_menu",
+      "to": "m_file",
+      "kind": "contains"
+    },
+    {
+      "from": "s_menu",
+      "to": "m_edit",
+      "kind": "contains"
+    },
+    {
+      "from": "s_menu",
+      "to": "m_view",
+      "kind": "contains"
+    },
+    {
+      "from": "s_menu",
+      "to": "m_save",
+      "kind": "contains"
+    },
+    {
+      "from": "s_menu",
+      "to": "m_more",
+      "kind": "contains"
+    },
+    {
+      "from": "p1",
+      "to": "s_nav",
+      "kind": "contains"
+    },
+    {
+      "from": "s_nav",
+      "to": "n_general",
+      "kind": "contains"
+    },
+    {
+      "from": "s_nav",
+      "to": "n_model",
+      "kind": "contains"
+    },
+    {
+      "from": "s_nav",
+      "to": "n_short",
+      "kind": "contains"
+    },
+    {
+      "from": "s_nav",
+      "to": "n_about",
+      "kind": "contains"
+    },
+    {
+      "from": "p1",
+      "to": "s_status",
+      "kind": "contains"
+    },
+    {
+      "from": "s1",
+      "to": "gotoModel",
+      "kind": "contains"
+    },
+    {
+      "from": "s1",
+      "to": "theme",
+      "kind": "contains"
+    },
+    {
+      "from": "s1",
+      "to": "startup",
+      "kind": "contains"
+    },
+    {
+      "from": "p2",
+      "to": "s2",
+      "kind": "contains"
+    },
+    {
+      "from": "s2",
+      "to": "addprov",
+      "kind": "contains"
+    },
+    {
+      "from": "s2",
+      "to": "testconn",
+      "kind": "contains"
+    },
+    {
+      "from": "p3",
+      "to": "s3",
+      "kind": "contains"
+    },
+    {
+      "from": "s3",
+      "to": "edit",
+      "kind": "contains"
+    },
+    {
+      "from": "s3",
+      "to": "reset",
+      "kind": "contains"
+    },
+    {
+      "from": "p4",
+      "to": "s4",
+      "kind": "contains"
+    },
+    {
+      "from": "s4",
+      "to": "check",
+      "kind": "contains"
+    },
+    {
+      "from": "gotoModel",
+      "to": "p2",
+      "kind": "nav",
+      "label": "跳转：模型与 Provider"
+    },
+    {
+      "from": "addprov",
+      "to": "p3",
+      "kind": "nav",
+      "label": "跳转：快捷键"
+    },
+    {
+      "from": "edit",
+      "to": "p4",
+      "kind": "nav",
+      "label": "跳转：关于"
+    },
+    {
+      "from": "check",
+      "to": "p1",
+      "kind": "nav",
+      "label": "返回：通用设置"
+    },
+    {
+      "from": "nav",
+      "to": "p1",
+      "kind": "nav",
+      "label": "点击「通用」"
+    },
+    {
+      "from": "nav",
+      "to": "p2",
+      "kind": "nav",
+      "label": "点击「模型」"
+    },
+    {
+      "from": "nav",
+      "to": "p3",
+      "kind": "nav",
+      "label": "点击「快捷键」"
+    },
+    {
+      "from": "nav",
+      "to": "p4",
+      "kind": "nav",
+      "label": "点击「关于」"
+    }
+  ],
+  "planned_files": [],
+  "updatedAt": 0
+}

@@ -1,0 +1,1002 @@
+{
+ "at": "2026-11-05T10:36:59.391Z",
+ "metrics": {
+  "hook.wsFramesAtOpen": {
+   "sent": 47,
+   "recv": 51,
+   "types": [
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "task.list",
+    "git.status",
+    "git.branches"
+   ]
+  },
+  "A.viewBox": "136 56 4349 798",
+  "A.viewBoxWH": {
+   "w": 4349,
+   "h": 798,
+   "ratio": 5.4499
+  },
+  "B.docNodes": 17,
+  "B.svgDataNodeIds": 18,
+  "B.svgRealNodes": 17,
+  "B.texts": 51,
+  "B.textsWithArrowOrBar": 13,
+  "B.edgeLabels": 3,
+  "B.edgeLabelSamples": [
+   "位够→running",
+   "窗外→等一键",
+   "续跑→submit"
+  ],
+  "B.nodeTextsTruncated": 0,
+  "B.nodeTextsOverflow": 0,
+  "B.arrowSamples": [
+   "位够→running",
+   "窗外→等一键",
+   "续跑→submit",
+   "同 idempotencyKey 返回已有任务;否则 sta",
+   "queued 按 createdAt 升序推进;触发点仅su"
+  ],
+  "C.sample": {
+   "total": 17,
+   "picked": [
+    {
+     "id": "s11",
+     "label": "自动恢复窗?",
+     "summary": "env GENIE_AUTORESUME_MINUTES 缺省=关;开启时启动清",
+     "nodeRect": {
+      "w": 790,
+      "h": 81
+     },
+     "textOverflowPx": 0,
+     "texts": [
+      {
+       "s": "自动恢复窗?",
+       "len": 6,
+       "truncated": false,
+       "w": 66,
+       "h": 14,
+       "bboxW": 78
+      },
+      {
+       "s": "env GENIE_AUTORESUME_MINUTES 缺省=关;开启时启动清算后 N 分钟内对 interrupted 自动重提(11-04 人工续跑口径产品化);窗外只留一键 ｜ 分支； GENIE_AUTORESUM · ⟨app.ts⟩",
+       "len": 123,
+       "truncated": false,
+       "w": 790,
+       "h": 11,
+       "bboxW": 933
+      }
+     ]
+    },
+    {
+     "id": "s1",
+     "label": "用户提交任务",
+     "summary": "面板 composer 发 task.submit(WS);忙则入队",
+     "nodeRect": {
+      "w": 225,
+      "h": 71
+     },
+     "textOverflowPx": -25,
+     "texts": [
+      {
+       "s": "用户提交任务",
+       "len": 6,
+       "truncated": false,
+       "w": 71,
+       "h": 14,
+       "bboxW": 84
+      },
+      {
+       "s": "面板 composer 发 task.submit(WS);忙则入队",
+       "len": 34,
+       "truncated": false,
+       "w": 200,
+       "h": 11,
+       "bboxW": 237
+      }
+     ]
+    },
+    {
+     "id": "s8",
+     "label": "journal 回放装载",
+     "summary": "app.ts:188-216 单遍回放 task.* 取最后态→restore(",
+     "nodeRect": {
+      "w": 271,
+      "h": 90
+     },
+     "textOverflowPx": -30,
+     "texts": [
+      {
+       "s": "journal 回放装载",
+       "len": 12,
+       "truncated": false,
+       "w": 100,
+       "h": 14,
+       "bboxW": 118
+      },
+      {
+       "s": "app.ts；188-216 单遍回放 task.*取最后态→restore();collected 回写 task.progress防重复收编;onChange kind 三元链里 int · ⟨buildApp @app.ts:188⟩",
+       "len": 120,
+       "truncated": false,
+       "w": 241,
+       "h": 45,
+       "bboxW": 284
+      }
+     ]
+    }
+   ]
+  },
+  "D.k_initial": 1,
+  "D.pan_initial": {
+   "x": 30,
+   "y": 20
+  },
+  "D.host": {
+   "w": 934,
+   "h": 336,
+   "rect": {
+    "left": 369,
+    "top": 289,
+    "w": 793,
+    "h": 286
+   }
+  },
+  "D.zoomBounds": {
+   "min": 0.25,
+   "max": 2
+  },
+  "D.font": {
+   "selector": "svg text(无 .cv-foot)",
+   "fontSize": "14px",
+   "lineHeight": "normal",
+   "rectH": 0,
+   "rectW": 0,
+   "bboxH": 0,
+   "hasCvFoot": false
+  },
+  "D.htmlFont": null,
+  "D.zpct": "100%",
+  "E.all.k": 0.1734,
+  "E.all.fullyVisible": 13,
+  "E.all.partialVisible": 4,
+  "E.all.zpct": "17%",
+  "E.all.fitLast": {
+   "basis": "tight",
+   "minX": 160,
+   "minY": 80,
+   "w": 4531,
+   "h": 810,
+   "k": 0.1734,
+   "view": {
+    "w": 793,
+    "h": 286
+   }
+  },
+  "F.fit.k": 0.9,
+  "F.fit.fullyVisible": 1,
+  "F.fit.partialVisible": 2,
+  "F.fit.worldTransform": "translate(-132px, 40px) scale(0.9)",
+  "F.fit.zpct": "90%",
+  "F.fit.fitLast": {
+   "basis": "tight",
+   "minX": 160,
+   "minY": 80,
+   "w": 4533,
+   "h": 810,
+   "k": 0.9,
+   "view": {
+    "w": 793,
+    "h": 286
+   }
+  },
+  "3a.addPanel": {
+   "display": "block",
+   "items": 26,
+   "inlineDisplay": "block"
+  },
+  "60.docNodes": 60,
+  "60.fit.k": 0.7,
+  "60.fit.fullyVisible": 5,
+  "60.viewBox": "136 56 7460 3024",
+  "60.texts": 257,
+  "60.fit.fitLast": {
+   "basis": "tight",
+   "minX": 52,
+   "minY": 80,
+   "w": 7580,
+   "h": 3036,
+   "k": 0.7,
+   "view": {
+    "w": 793,
+    "h": 287
+   }
+  },
+  "60.all.k": 0.0907,
+  "60.all.fullyVisible": 60,
+  "60.all.fitLast": {
+   "basis": "tight",
+   "minX": 52,
+   "minY": 80,
+   "w": 7580,
+   "h": 3036,
+   "k": 0.0907,
+   "view": {
+    "w": 793,
+    "h": 287
+   }
+  }
+ },
+ "add": {
+  "steps": {
+   "panel": {
+    "display": "block",
+    "items": 26,
+    "inlineDisplay": "block"
+   }
+  },
+  "nodesBefore": 17,
+  "firstItemKind": "decision/判判断分支",
+  "clicked": "dispatch:decision",
+  "after300": {
+   "viewBox": "136 56 4349 798",
+   "vbWH": {
+    "w": 4349,
+    "h": 798,
+    "ratio": 5.4499
+   },
+   "docNodes": 18,
+   "svgDataNodeIds": 18,
+   "svgRealNodes": 17,
+   "texts": 51,
+   "textsArrowish": 13,
+   "arrowSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit",
+    "同 idempotencyKey 返回已有任务;否则 sta",
+    "queued 按 createdAt 升序推进;触发点仅su"
+   ],
+   "edgeLabels": 3,
+   "edgeLabelSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit"
+   ],
+   "nodeTextsTruncated": 0,
+   "nodeTextsOverflow": 0,
+   "fullyVisible": 0,
+   "partialVisible": 2,
+   "hostRect": {
+    "left": 369,
+    "top": 289,
+    "w": 513,
+    "h": 272
+   },
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "fitLast": {
+    "basis": "tight",
+    "minX": 160,
+    "minY": 80,
+    "w": 4533,
+    "h": 810,
+    "k": 0.9,
+    "view": {
+     "w": 793,
+     "h": 286
+    }
+   },
+   "k": 0.9,
+   "pan": {
+    "x": -132,
+    "y": 40
+   },
+   "hostW": 604,
+   "hostH": 319,
+   "zpct": "90%",
+   "worldTransform": "translate(-132px, 40px) scale(0.9)",
+   "font": {
+    "selector": "svg text(无 .cv-foot)",
+    "fontSize": "14px",
+    "lineHeight": "normal",
+    "rectH": 0,
+    "rectW": 0,
+    "bboxH": 0,
+    "hasCvFoot": false
+   },
+   "htmlFont": "11px",
+   "toasts": [
+    "操作失败:该能力在当前网关未启用 — 会话模型覆盖未启用(生产入口 main.ts 才有)复制诊断",
+    "操作失败:该能力在当前网关未启用 — 配置通道未启用(生产入口 main.ts 才有)复制诊断",
+    "全览 17%:标签暂隐,可点 + 放大;导出 PNG 可看 100% 全图"
+   ]
+  },
+  "after2500": {
+   "viewBox": "136 56 4349 942",
+   "vbWH": {
+    "w": 4349,
+    "h": 942,
+    "ratio": 4.6168
+   },
+   "docNodes": 18,
+   "svgDataNodeIds": 19,
+   "svgRealNodes": 18,
+   "texts": 53,
+   "textsArrowish": 13,
+   "arrowSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit",
+    "同 idempotencyKey 返回已有任务;否则 sta",
+    "queued 按 createdAt 升序推进;触发点仅su"
+   ],
+   "edgeLabels": 3,
+   "edgeLabelSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit"
+   ],
+   "nodeTextsTruncated": 0,
+   "nodeTextsOverflow": 0,
+   "fullyVisible": 0,
+   "partialVisible": 2,
+   "hostRect": {
+    "left": 369,
+    "top": 289,
+    "w": 513,
+    "h": 272
+   },
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "fitLast": {
+    "basis": "tight",
+    "minX": 160,
+    "minY": 80,
+    "w": 4533,
+    "h": 810,
+    "k": 0.9,
+    "view": {
+     "w": 793,
+     "h": 286
+    }
+   },
+   "k": 0.9,
+   "pan": {
+    "x": -132,
+    "y": 40
+   },
+   "hostW": 604,
+   "hostH": 319,
+   "zpct": "90%",
+   "worldTransform": "translate(-132px, 40px) scale(0.9)",
+   "font": {
+    "selector": "svg text(无 .cv-foot)",
+    "fontSize": "14px",
+    "lineHeight": "normal",
+    "rectH": 0,
+    "rectW": 0,
+    "bboxH": 0,
+    "hasCvFoot": false
+   },
+   "htmlFont": null,
+   "toasts": []
+  },
+  "after5500": {
+   "viewBox": "136 56 4349 942",
+   "vbWH": {
+    "w": 4349,
+    "h": 942,
+    "ratio": 4.6168
+   },
+   "docNodes": 18,
+   "svgDataNodeIds": 19,
+   "svgRealNodes": 18,
+   "texts": 53,
+   "textsArrowish": 13,
+   "arrowSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit",
+    "同 idempotencyKey 返回已有任务;否则 sta",
+    "queued 按 createdAt 升序推进;触发点仅su"
+   ],
+   "edgeLabels": 3,
+   "edgeLabelSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit"
+   ],
+   "nodeTextsTruncated": 0,
+   "nodeTextsOverflow": 0,
+   "fullyVisible": 0,
+   "partialVisible": 2,
+   "hostRect": {
+    "left": 369,
+    "top": 289,
+    "w": 513,
+    "h": 272
+   },
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "fitLast": {
+    "basis": "tight",
+    "minX": 160,
+    "minY": 80,
+    "w": 4533,
+    "h": 810,
+    "k": 0.9,
+    "view": {
+     "w": 793,
+     "h": 286
+    }
+   },
+   "k": 0.9,
+   "pan": {
+    "x": -132,
+    "y": 40
+   },
+   "hostW": 604,
+   "hostH": 319,
+   "zpct": "90%",
+   "worldTransform": "translate(-132px, 40px) scale(0.9)",
+   "font": {
+    "selector": "svg text(无 .cv-foot)",
+    "fontSize": "14px",
+    "lineHeight": "normal",
+    "rectH": 0,
+    "rectW": 0,
+    "bboxH": 0,
+    "hasCvFoot": false
+   },
+   "htmlFont": null,
+   "toasts": []
+  },
+  "after9000": {
+   "viewBox": "136 56 4349 942",
+   "vbWH": {
+    "w": 4349,
+    "h": 942,
+    "ratio": 4.6168
+   },
+   "docNodes": 18,
+   "svgDataNodeIds": 19,
+   "svgRealNodes": 18,
+   "texts": 53,
+   "textsArrowish": 13,
+   "arrowSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit",
+    "同 idempotencyKey 返回已有任务;否则 sta",
+    "queued 按 createdAt 升序推进;触发点仅su"
+   ],
+   "edgeLabels": 3,
+   "edgeLabelSamples": [
+    "位够→running",
+    "窗外→等一键",
+    "续跑→submit"
+   ],
+   "nodeTextsTruncated": 0,
+   "nodeTextsOverflow": 0,
+   "fullyVisible": 0,
+   "partialVisible": 2,
+   "hostRect": {
+    "left": 369,
+    "top": 289,
+    "w": 513,
+    "h": 272
+   },
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "fitLast": {
+    "basis": "tight",
+    "minX": 160,
+    "minY": 80,
+    "w": 4533,
+    "h": 810,
+    "k": 0.9,
+    "view": {
+     "w": 793,
+     "h": 286
+    }
+   },
+   "k": 0.9,
+   "pan": {
+    "x": -132,
+    "y": 40
+   },
+   "hostW": 604,
+   "hostH": 319,
+   "zpct": "90%",
+   "worldTransform": "translate(-132px, 40px) scale(0.9)",
+   "font": {
+    "selector": "svg text(无 .cv-foot)",
+    "fontSize": "14px",
+    "lineHeight": "normal",
+    "rectH": 0,
+    "rectW": 0,
+    "bboxH": 0,
+    "hasCvFoot": false
+   },
+   "htmlFont": null,
+   "toasts": []
+  },
+  "frames": {
+   "at300": {
+    "sent": [],
+    "recv": []
+   },
+   "at2500": {
+    "sent": [
+     {
+      "t": 1793875055611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875055611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875055612,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875055702,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875055990,
+      "type": "board.save",
+      "nodes": 18
+     },
+     {
+      "t": 1793875056133,
+      "type": "board.get"
+     },
+     {
+      "t": 1793875056136,
+      "type": "board.diagram",
+      "svgQ": 1
+     },
+     {
+      "t": 1793875056283,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875057010,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875057432,
+      "type": "board.get"
+     },
+     {
+      "t": 1793875057611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875057611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875057611,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875059611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875059611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875059611,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875059702,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875060010,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875060013,
+      "type": "git.status"
+     },
+     {
+      "t": 1793875060013,
+      "type": "git.branches"
+     },
+     {
+      "t": 1793875061611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875061611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875061611,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875063010,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875063611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875063611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875063611,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875063702,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875065477,
+      "type": "board.get"
+     },
+     {
+      "t": 1793875065611,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875065611,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875065611,
+      "type": "trace.stats"
+     },
+     {
+      "t": 1793875066010,
+      "type": "session.status"
+     },
+     {
+      "t": 1793875066016,
+      "type": "ping"
+     },
+     {
+      "t": 1793875066016,
+      "type": "goal.get"
+     }
+    ],
+    "recv": [
+     {
+      "t": 1793875055613,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875055613,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875055613,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875055703,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875056133,
+      "type": "session.status.changed"
+     },
+     {
+      "t": 1793875056133,
+      "type": "session.status.changed"
+     },
+     {
+      "t": 1793875056133,
+      "type": "session.status.changed"
+     },
+     {
+      "t": 1793875056133,
+      "type": "board.changed"
+     },
+     {
+      "t": 1793875056134,
+      "type": "board.changed"
+     },
+     {
+      "t": 1793875056134,
+      "type": "board.changed"
+     },
+     {
+      "t": 1793875056134,
+      "type": "board.doc",
+      "nodes": 18
+     },
+     {
+      "t": 1793875057432,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875057432,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875057432,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875057433,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875057434,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875057519,
+      "type": "board.diagram.result",
+      "ok": true,
+      "svgLen": 24192
+     },
+     {
+      "t": 1793875058738,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875058739,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875058739,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875058846,
+      "type": "board.doc",
+      "nodes": 18
+     },
+     {
+      "t": 1793875058865,
+      "type": "board.doc",
+      "nodes": 18
+     },
+     {
+      "t": 1793875059613,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875059613,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875059614,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875059703,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875060012,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875060458,
+      "type": "git.branches.result"
+     },
+     {
+      "t": 1793875061613,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875061613,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875061613,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875063011,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875063613,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875063613,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875063614,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875063703,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875065477,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875065477,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875065477,
+      "type": "dashboard.changed"
+     },
+     {
+      "t": 1793875066476,
+      "type": "task.list"
+     },
+     {
+      "t": 1793875066476,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875066476,
+      "type": "trace.stats.result"
+     },
+     {
+      "t": 1793875066477,
+      "type": "pong"
+     },
+     {
+      "t": 1793875066477,
+      "type": "session.status.result"
+     },
+     {
+      "t": 1793875066478,
+      "type": "goal.result"
+     }
+    ]
+   }
+  },
+  "verdict": {
+   "inBoardDoc": true,
+   "docNodes": "17→300ms:18→2500ms:18",
+   "sentBoardSave": true,
+   "saveFrames": [
+    {
+     "dt": 1518,
+     "nodes": 18
+    }
+   ],
+   "gotBoardDocBack": true,
+   "reSentBoardDiagram": [
+    {
+     "dt": 1664
+    }
+   ],
+   "gotDiagramResult": [
+    {
+     "dt": 3047,
+     "ok": true,
+     "svgLen": 24192
+    }
+   ],
+   "svgRealNodes": "17→18→5.5s:18→9s:18(before 17)",
+   "appearedOnCanvas": true,
+   "appearedLate": true,
+   "docNodesLate": "18→5.5s:18→9s:18",
+   "textsLate": "53→5.5s:53→9s:53",
+   "kLate": "0.9→5.5s:0.9→9s:0.9",
+   "toastsLate": {
+    "at5500": [],
+    "at9000": []
+   },
+   "diagramsAfter": 1,
+   "textsBeforeAfter": "51→53",
+   "toasts": [],
+   "frameSeq": [
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "task.list",
+    "board.save",
+    "board.get",
+    "board.diagram",
+    "session.status",
+    "session.status",
+    "board.get",
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "task.list",
+    "session.status",
+    "git.status",
+    "git.branches",
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "session.status",
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "task.list",
+    "board.get",
+    "task.list",
+    "session.status",
+    "trace.stats",
+    "session.status",
+    "ping",
+    "goal.get"
+   ]
+  }
+ },
+ "pan": {
+  "nodeStart": {
+   "id": "s7",
+   "x": 419,
+   "y": 522
+  },
+  "nodeMovedTo": {
+   "x": 297,
+   "y": 490
+  },
+  "beforeNode": {
+   "x": -132,
+   "y": 40,
+   "k": 0.9
+  },
+  "afterNode": {
+   "x": -132,
+   "y": 40,
+   "k": 0.9
+  },
+  "dNode": {
+   "dx": 0,
+   "dy": 0,
+   "dk": 0
+  },
+  "blankStart": {
+   "x": 389,
+   "y": 319
+  },
+  "beforeBlank": {
+   "x": -132,
+   "y": 40,
+   "k": 0.9
+  },
+  "afterBlank": {
+   "x": -12,
+   "y": 40,
+   "k": 0.9
+  },
+  "dBlank": {
+   "dx": 120,
+   "dy": 0,
+   "dk": 0
+  }
+ },
+ "shots": [
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-17nodes-all.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-17nodes-fit.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-add-panel.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-after-add.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-after-add-late.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/before-60nodes.png"
+ ],
+ "errors": []
+}

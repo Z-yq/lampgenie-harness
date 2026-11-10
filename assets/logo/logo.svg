@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LampGenie logo: a genie lamp orbited by a four-node pipeline">
+  <title>LampGenie</title>
+  <defs>
+    <radialGradient id="lampBody" cx="0.38" cy="0.32" r="0.9">
+      <stop offset="0%" stop-color="#FFE9A8"/>
+      <stop offset="45%" stop-color="#F5B942"/>
+      <stop offset="100%" stop-color="#C77F1E"/>
+    </radialGradient>
+    <linearGradient id="spout" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F5B942"/>
+      <stop offset="100%" stop-color="#D0901F"/>
+    </linearGradient>
+    <radialGradient id="sparkGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#7EE8FA" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#36C2F6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#36C2F6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0C1424"/>
+  <g fill="none">
+    <circle cx="256" cy="268" r="176" stroke="#2E4A6B" stroke-width="20" stroke-dasharray="4 26" stroke-linecap="round" opacity="0.85"/>
+    <circle cx="256" cy="268" r="220" stroke="#1D2F49" stroke-width="14" stroke-dasharray="4 32" stroke-linecap="round" opacity="0.65"/>
+  </g>
+  <g>
+    <circle cx="256" cy="92" r="30" fill="#36C2F6"/>
+    <circle cx="256" cy="92" r="18" fill="#0C1424"/>
+    <text x="256" y="99" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="22" font-weight="700" fill="#BFEFFF">感</text>
+    <circle cx="398" cy="194" r="30" fill="#9B6DF3"/>
+    <circle cx="398" cy="194" r="18" fill="#0C1424"/>
+    <text x="398" y="201" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="22" font-weight="700" fill="#E7DBFF">规</text>
+    <circle cx="346" cy="356" r="30" fill="#F5B942"/>
+    <circle cx="346" cy="356" r="18" fill="#0C1424"/>
+    <text x="346" y="363" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="22" font-weight="700" fill="#FFEBB8">执</text>
+    <circle cx="166" cy="356" r="30" fill="#3ECF8E"/>
+    <circle cx="166" cy="356" r="18" fill="#0C1424"/>
+    <text x="166" y="363" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="22" font-weight="700" fill="#C9F7E2">验</text>
+  </g>
+  <g>
+    <circle cx="268" cy="232" r="14" fill="url(#sparkGlow)"/>
+    <path d="M272 228 C 268 218, 258 216, 252 210 C 250 207, 252 203, 256 203 C 254 196, 262 194, 268 198 C 272 201, 274 206, 272 210 C 278 214, 279 222, 272 228 Z" fill="#7EE8FA" opacity="0.95"/>
+  </g>
+  <g>
+    <path d="M136 302 C 196 322, 316 322, 376 302 C 356 352, 156 352, 136 302 Z" fill="url(#lampBody)"/>
+    <path d="M376 302 L 434 268 C 442 264, 448 268, 446 276 C 440 296, 418 308, 396 312 Z" fill="url(#spout)"/>
+    <ellipse cx="256" cy="302" rx="120" ry="18" fill="#FFE9A8"/>
+    <ellipse cx="256" cy="302" rx="104" ry="13" fill="#F9CE6E"/>
+    <path d="M206 296 C 206 292, 306 292, 306 296 C 306 300, 206 300, 206 296 Z" fill="#8A5A12" opacity="0.35"/>
+    <path d="M196 322 C 216 336, 296 336, 316 322 C 310 332, 286 340, 256 340 C 226 340, 202 332, 196 322 Z" fill="#8A5A12" opacity="0.25"/>
+    <circle cx="214" cy="306" r="4" fill="#FFF3C9" opacity="0.9"/>
+    <circle cx="292" cy="310" r="3" fill="#FFF3C9" opacity="0.7"/>
+    <path d="M256 288 C 252 284, 252 276, 256 270 C 260 276, 260 284, 256 288 Z" fill="#FFF3C9" opacity="0.8"/>
+  </g>
+</svg>

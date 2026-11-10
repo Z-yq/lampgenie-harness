@@ -1,0 +1,546 @@
+{
+ "at": "2026-11-05T11:05:06.974Z",
+ "port": 7798,
+ "beforeSource": "apps/gateway/test/ui/shots/before-baseline.json",
+ "errors": [],
+ "shots": [
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-17-all.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-17-fit.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-60-all.png",
+  "/mnt/e/workship/genie/lampgenie-harness/apps/gateway/test/ui/shots/layout-after-60-fit.png"
+ ],
+ "17nodes": {
+  "board": "17nodes",
+  "viewBox": {
+   "w": 1733,
+   "h": 951,
+   "ratio": 1.8223
+  },
+  "docNodes": 17,
+  "svgRealNodes": 17,
+  "before": {
+   "viewBox": "136 56 4349 798",
+   "ratio": 5.4499,
+   "fitK": 0.9,
+   "fitVisible": "1/17",
+   "allK": 0.1734,
+   "allVisible": "13/17",
+   "edgeLabels": 3
+  },
+  "after": {
+   "ratio": 1.8223,
+   "fitK": 0.9,
+   "fitVisible": "3/17",
+   "fitPartial": 3,
+   "fitZpct": "90%",
+   "fitEdgeLabelsVisible": 16,
+   "allK": 0.1737,
+   "allVisible": "17/17",
+   "allPartial": 0,
+   "allZpct": "17%",
+   "edgeLabelsVisible": 16,
+   "edgeLabelsTotal": 16,
+   "textOverflowSampled3": "0/3",
+   "textOverflowAllNodes": "0/17",
+   "hostClient": "934x336"
+  },
+  "diagnosis": {
+   "k": 0.9,
+   "readableMin": 0.7,
+   "naturalK": 0.9,
+   "clampedByReadableMin": false,
+   "contentW": 1769,
+   "viewW": 793,
+   "overflowPx": 888,
+   "hostClientW": 934,
+   "hostClientH": 336,
+   "note": "「适」k 被 CV_FIT_READABLE_MIN 钳住时,内容宽 k*contentW 会大于视口宽 → 一屏只能看见左边一小块"
+  },
+  "detail": {
+   "tag": "17nodes",
+   "fixture": {
+    "sid": "ui-probe-layout17-7798",
+    "task": "c78b0e83-2956-4245-b080-1048c53b6a47",
+    "nodes": 17,
+    "edges": 16
+   },
+   "svgKids": 35,
+   "viewBox": {
+    "raw": "136 56 1733 951",
+    "w": 1733,
+    "h": 951,
+    "ratio": 1.8223
+   },
+   "docNodes": 17,
+   "docEdges": 16,
+   "svgRealNodes": 17,
+   "cvFitReadableMin": 0.7,
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "host": {
+    "clientW": 934,
+    "clientH": 336,
+    "rect": {
+     "left": 369,
+     "top": 289,
+     "w": 793,
+     "h": 286
+    }
+   },
+   "kInitial": 1,
+   "edgeLabels": {
+    "groups": 16,
+    "total": 16,
+    "visible": 16,
+    "samples": [
+     "task.submit",
+     "入队后",
+     "逐候选查上限",
+     "位够→running",
+     "超上限留队"
+    ]
+   },
+   "textSample": {
+    "total": 17,
+    "picked": [
+     {
+      "id": "s11",
+      "nodeW": 759,
+      "nodeH": 81,
+      "maxTextW": 759,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "自动恢复窗?",
+        "len": 6,
+        "truncated": false,
+        "wPx": 66
+       },
+       {
+        "s": "env GENIE_AUTORESUME_MINUTES 缺省=关 ｜ 分支； GENIE_AUTORESUME_MIN",
+        "len": 123,
+        "truncated": false,
+        "wPx": 759
+       }
+      ]
+     },
+     {
+      "id": "s1",
+      "nodeW": 183,
+      "nodeH": 71,
+      "maxTextW": 159,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "用户提交任务",
+        "len": 6,
+        "truncated": false,
+        "wPx": 71
+       },
+       {
+        "s": "面板 composer 发 task.submit(WS)",
+        "len": 29,
+        "truncated": false,
+        "wPx": 159
+       }
+      ]
+     },
+     {
+      "id": "s8",
+      "nodeW": 271,
+      "nodeH": 68,
+      "maxTextW": 241,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "journal 回放装载",
+        "len": 12,
+        "truncated": false,
+        "wPx": 100
+       },
+       {
+        "s": "app.ts；188-216 单遍回放 task.* 取最后态→restore() ·⟨buildApp @ app.t",
+        "len": 66,
+        "truncated": false,
+        "wPx": 241
+       }
+      ]
+     }
+    ],
+    "allOverflowNodes": 0,
+    "allOverflowSamples": []
+   },
+   "all": {
+    "k": 0.1737,
+    "fullyVisible": 17,
+    "partialVisible": 0,
+    "visibleOf": "17/17",
+    "zpct": "17%",
+    "fitLast": {
+     "basis": "tight",
+     "minX": 160,
+     "minY": 80,
+     "w": 1767,
+     "h": 963,
+     "k": 0.1737,
+     "view": {
+      "w": 793,
+      "h": 286
+     }
+    },
+    "edgeLabelsVisible": 0,
+    "zLow": true,
+    "hostW": 934,
+    "hostH": 336
+   },
+   "fit": {
+    "k": 0.9,
+    "fullyVisible": 3,
+    "partialVisible": 3,
+    "visibleOf": "3/17",
+    "zpct": "90%",
+    "worldTransform": "translate(-132px, 40px) scale(0.9)",
+    "fitLast": {
+     "basis": "tight",
+     "minX": 160,
+     "minY": 80,
+     "w": 1769,
+     "h": 963,
+     "k": 0.9,
+     "view": {
+      "w": 793,
+      "h": 286
+     }
+    },
+    "edgeLabelsVisible": 16,
+    "edgeLabelSamples": [
+     "task.submit",
+     "入队后",
+     "逐候选查上限",
+     "位够→running",
+     "超上限留队"
+    ],
+    "hostClientW": 934,
+    "hostClientH": 336,
+    "zLow": false,
+    "visibleNodeIds": [
+     "s7",
+     "s8",
+     "s15"
+    ]
+   },
+   "viewBoxAfterFit": "136 56 1733 951",
+   "fitDiagnosis": {
+    "k": 0.9,
+    "readableMin": 0.7,
+    "naturalK": 0.9,
+    "clampedByReadableMin": false,
+    "contentW": 1769,
+    "viewW": 793,
+    "overflowPx": 888,
+    "hostClientW": 934,
+    "hostClientH": 336,
+    "note": "「适」k 被 CV_FIT_READABLE_MIN 钳住时,内容宽 k*contentW 会大于视口宽 → 一屏只能看见左边一小块"
+   }
+  }
+ },
+ "60nodes": {
+  "board": "60nodes",
+  "viewBox": {
+   "w": 3800,
+   "h": 2325,
+   "ratio": 1.6344
+  },
+  "docNodes": 60,
+  "svgRealNodes": 60,
+  "before": {
+   "viewBox": "136 56 7460 3024",
+   "ratio": null,
+   "fitK": 0.7,
+   "fitVisible": "5/60",
+   "allK": 0.0907,
+   "allVisible": "60/60",
+   "edgeLabels": null
+  },
+  "after": {
+   "ratio": 1.6344,
+   "fitK": 0.7,
+   "fitVisible": "7/60",
+   "fitPartial": 4,
+   "fitZpct": "70%",
+   "fitEdgeLabelsVisible": 97,
+   "allK": 0.1174,
+   "allVisible": "60/60",
+   "allPartial": 0,
+   "allZpct": "12%",
+   "edgeLabelsVisible": 97,
+   "edgeLabelsTotal": 97,
+   "textOverflowSampled3": "0/3",
+   "textOverflowAllNodes": "0/60",
+   "hostClient": "934x337"
+  },
+  "diagnosis": {
+   "k": 0.7,
+   "readableMin": 0.7,
+   "naturalK": 0.7,
+   "clampedByReadableMin": true,
+   "contentW": 3920,
+   "viewW": 793,
+   "overflowPx": 2787,
+   "hostClientW": 934,
+   "hostClientH": 337,
+   "note": "「适」k 被 CV_FIT_READABLE_MIN 钳住时,内容宽 k*contentW 会大于视口宽 → 一屏只能看见左边一小块"
+  },
+  "detail": {
+   "tag": "60nodes",
+   "fixture": {
+    "sid": "ui-probe-layout60-7798",
+    "task": "dec3a2d2-b812-4fe1-899b-c2a91365ea26",
+    "nodes": 60,
+    "edges": 58
+   },
+   "svgKids": 161,
+   "viewBox": {
+    "raw": "136 56 3800 2325",
+    "w": 3800,
+    "h": 2325,
+    "ratio": 1.6344
+   },
+   "docNodes": 60,
+   "docEdges": 58,
+   "svgRealNodes": 60,
+   "cvFitReadableMin": 0.7,
+   "zoomBounds": {
+    "min": 0.25,
+    "max": 2
+   },
+   "host": {
+    "clientW": 934,
+    "clientH": 337,
+    "rect": {
+     "left": 369,
+     "top": 289,
+     "w": 793,
+     "h": 287
+    }
+   },
+   "kInitial": 1,
+   "edgeLabels": {
+    "groups": 60,
+    "total": 97,
+    "visible": 97,
+    "samples": [
+     "暴露面 = 计划开放",
+     "的资产 →",
+     "逐条指定认证方式与账号来源",
+     "已认证主体(租户ID+角色+到期日)",
+     "→ 授权决策输入"
+    ]
+   },
+   "textSample": {
+    "total": 60,
+    "picked": [
+     {
+      "id": "t9-budget",
+      "nodeW": 271,
+      "nodeH": 68,
+      "maxTextW": 206,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "提问预算与短超时",
+        "len": 8,
+        "truncated": false,
+        "wPx": 95
+       },
+       {
+        "s": "每任务 2 问 + 改动前 90s 超时 + bypass 标记 ·⟨ask-user-router.ts, app.t",
+        "len": 62,
+        "truncated": false,
+        "wPx": 206
+       }
+      ]
+     },
+     {
+      "id": "t6-p3",
+      "nodeW": 271,
+      "nodeH": 79,
+      "maxTextW": 211,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "形状归一化纯函数",
+        "len": 8,
+        "truncated": false,
+        "wPx": 95
+       },
+       {
+        "s": "⟨normalizeHumanEdits @ board-store.ts⟩ ·⟨board-store.ts:norm",
+        "len": 118,
+        "truncated": true,
+        "wPx": 211
+       }
+      ]
+     },
+     {
+      "id": "ta-blast",
+      "nodeW": 271,
+      "nodeH": 68,
+      "maxTextW": 212,
+      "overflowCount": 0,
+      "overflowTexts": [],
+      "texts": [
+       {
+        "s": "影响面量化",
+        "len": 5,
+        "truncated": false,
+        "wPx": 59
+       },
+       {
+        "s": "受影响租户数、重复邮件量、SLA 违约与补偿口径 ·⟨发信记录, SLA 条款 +1⟩",
+        "len": 43,
+        "truncated": false,
+        "wPx": 212
+       }
+      ]
+     }
+    ],
+    "allOverflowNodes": 0,
+    "allOverflowSamples": []
+   },
+   "all": {
+    "k": 0.1174,
+    "fullyVisible": 60,
+    "partialVisible": 0,
+    "visibleOf": "60/60",
+    "zpct": "12%",
+    "fitLast": {
+     "basis": "tight",
+     "minX": 52,
+     "minY": 80,
+     "w": 3980,
+     "h": 2337,
+     "k": 0.1174,
+     "view": {
+      "w": 793,
+      "h": 287
+     }
+    },
+    "edgeLabelsVisible": 0,
+    "zLow": true,
+    "hostW": 934,
+    "hostH": 337
+   },
+   "fit": {
+    "k": 0.7,
+    "fullyVisible": 7,
+    "partialVisible": 4,
+    "visibleOf": "7/60",
+    "zpct": "70%",
+    "worldTransform": "translate(-24.4px, -48px) scale(0.7)",
+    "fitLast": {
+     "basis": "tight",
+     "minX": 52,
+     "minY": 80,
+     "w": 3920,
+     "h": 2337,
+     "k": 0.7,
+     "view": {
+      "w": 793,
+      "h": 287
+     }
+    },
+    "edgeLabelsVisible": 97,
+    "edgeLabelSamples": [
+     "暴露面 = 计划开放",
+     "的资产 →",
+     "逐条指定认证方式与账号来源",
+     "已认证主体(租户ID+角色+到期日)",
+     "→ 授权决策输入"
+    ],
+    "hostClientW": 934,
+    "hostClientH": 337,
+    "zLow": false,
+    "visibleNodeIds": [
+     "h-h1",
+     "h-h2",
+     "h-h3",
+     "h-h4",
+     "h-h5",
+     "ta-t1",
+     "ta-t2"
+    ]
+   },
+   "viewBoxAfterFit": "136 56 3800 2325",
+   "fitDiagnosis": {
+    "k": 0.7,
+    "readableMin": 0.7,
+    "naturalK": 0.7,
+    "clampedByReadableMin": true,
+    "contentW": 3920,
+    "viewW": 793,
+    "overflowPx": 2787,
+    "hostClientW": 934,
+    "hostClientH": 337,
+    "note": "「适」k 被 CV_FIT_READABLE_MIN 钳住时,内容宽 k*contentW 会大于视口宽 → 一屏只能看见左边一小块"
+   }
+  }
+ },
+ "before17Detail": {
+  "viewBox": "136 56 4349 798",
+  "viewBoxWH": {
+   "w": 4349,
+   "h": 798,
+   "ratio": 5.4499
+  },
+  "fitK": 0.9,
+  "fitVisible": "1/17",
+  "fitPartial": 2,
+  "allK": 0.1734,
+  "allVisible": "13/17",
+  "edgeLabels": 3,
+  "nodeTextsOverflow": 0,
+  "s11": {
+   "id": "s11",
+   "label": "自动恢复窗?",
+   "summary": "env GENIE_AUTORESUME_MINUTES 缺省=关;开启时启动清",
+   "nodeRect": {
+    "w": 790,
+    "h": 81
+   },
+   "textOverflowPx": 0,
+   "texts": [
+    {
+     "s": "自动恢复窗?",
+     "len": 6,
+     "truncated": false,
+     "w": 66,
+     "h": 14,
+     "bboxW": 78
+    },
+    {
+     "s": "env GENIE_AUTORESUME_MINUTES 缺省=关;开启时启动清算后 N 分钟内对 interrupted 自动重提(11-04 人工续跑口径产品化);窗外只留一键 ｜ 分支； GENIE_AUTORESUM · ⟨app.ts⟩",
+     "len": 123,
+     "truncated": false,
+     "w": 790,
+     "h": 11,
+     "bboxW": 933
+    }
+   ]
+  }
+ },
+ "before60Detail": {
+  "viewBox": "136 56 7460 3024",
+  "fitK": 0.7,
+  "fitVisible": "5/60",
+  "allK": 0.0907,
+  "allVisible": "60/60"
+ }
+}

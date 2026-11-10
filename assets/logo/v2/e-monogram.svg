@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LampGenie candidate E: a gold disc with a negative-space G, and a cyan node at its terminal">
+  <title>LampGenie · E 负形 G</title>
+  <rect width="512" height="512" rx="112" fill="#0B1220"/>
+  <circle cx="256" cy="256" r="176" fill="#F0B429"/>
+  <path d="M256 256 h 96 a 96 96 0 1 1 -96 -96 a 96 96 0 0 1 82 48"
+        fill="none" stroke="#0B1220" stroke-width="52" stroke-linecap="round"/>
+  <circle cx="352" cy="256" r="34" fill="#2AC5E0"/>
+</svg>

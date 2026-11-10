@@ -1,0 +1,37 @@
+{
+  "name": "@lampgenie/executors",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./dsh-sdk-backend": {
+      "types": "./src/dsh-sdk-backend.ts",
+      "development": "./src/dsh-sdk-backend.ts",
+      "default": "./dist/dsh-sdk-backend.js"
+    },
+    "./acp-backend": {
+      "types": "./src/acp-backend.ts",
+      "development": "./src/acp-backend.ts",
+      "default": "./dist/acp-backend.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "NODE_OPTIONS=--conditions=development vitest run",
+    "build": "tsc -p tsconfig.json && cp src/echo-child.mjs dist/echo-child.mjs"
+  },
+  "dependencies": {
+    "@lampgenie/core": "workspace:*",
+    "@lampgenie/runtime": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

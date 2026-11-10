@@ -1,0 +1,26 @@
+{
+  "name": "@lampgenie/desktop",
+  "version": "0.0.14",
+  "private": true,
+  "type": "commonjs",
+  "description": "Genie Harness 桌面壳(Electron + 内置 gateway 进程托管)",
+  "author": "Genie Harness",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "node -e \"process.exit(0)\"",
+    "stage:deps": "node scripts/stage-gateway-deps.mjs",
+    "stage:full": "node scripts/stage-full-runtime.mjs",
+    "stage:electron": "node scripts/stage-electron-dist.mjs",
+    "dist:dir": "pnpm -w --filter @lampgenie/gateway build && node scripts/stage-gateway-deps.mjs && node scripts/stage-sense-remote.mjs && node scripts/stage-electron-dist.mjs && electron-builder --win --dir && node scripts/verify-artifact.mjs",
+    "dist:win": "pnpm -w --filter @lampgenie/gateway build && node scripts/stage-gateway-deps.mjs && node scripts/stage-sense-remote.mjs && node scripts/stage-electron-dist.mjs && electron-builder --win && node scripts/verify-installer.mjs",
+    "dist:full": "pnpm -w --filter @lampgenie/gateway build && node scripts/stage-gateway-deps.mjs && node scripts/stage-sense-remote.mjs && node scripts/stage-full-runtime.mjs && node scripts/stage-electron-dist.mjs && electron-builder --win && node scripts/verify-installer.mjs",
+    "test": "node --test test/",
+    "verify:installer": "node scripts/verify-installer.mjs",
+    "stage:sense": "node scripts/stage-sense-remote.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  }
+}

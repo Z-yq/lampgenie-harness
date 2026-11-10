@@ -1,0 +1,49 @@
+{
+  "name": "@lampgenie/gateway",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "genie-gateway": "./src/main.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/gateway.mjs --external:ts-morph --external:playwright-core --banner:js=\"import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);\" && esbuild ../../apps/node-agent/src/cli.ts --bundle --platform=node --format=esm --outfile=dist/downloads/node-agent.mjs && esbuild ../../apps/node-agent/src/agent-stdio.ts --bundle --platform=node --format=esm --outfile=dist/downloads/agent-stdio.mjs && esbuild ../../apps/node-agent/src/agent-stdio.ts --bundle --platform=node --format=cjs --target=node8 --outfile=dist/downloads/agent-stdio.cjs && rm -rf dist/assets && cp -r src/assets dist/assets && cp ../../packages/harness-executors/src/echo-child.mjs dist/echo-child.mjs && cp src/board-pptx.mjs dist/board-pptx.mjs && cp -L ../../packages/code-sense/node_modules/web-tree-sitter/tree-sitter.wasm dist/tree-sitter.wasm 2>/dev/null || true && esbuild src/sense-index-worker.ts --bundle --platform=node --format=esm --outfile=dist/sense-index-worker.mjs --external:ts-morph && esbuild src/session-worker.ts --bundle --platform=node --format=esm --outfile=dist/session-worker.mjs --external:ts-morph --external:playwright-core --banner:js=\"import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);\" && esbuild src/code-index-mcp.mjs --bundle --platform=node --format=esm --outfile=dist/code-index-mcp.mjs --external:ts-morph && esbuild src/remote-sense-probe.ts --bundle --platform=node --format=esm --outfile=dist/remote-sense-probe.mjs --external:playwright-core --external:chromium-bidi --external:ts-morph --banner:js=\"import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);\" && ( mkdir -p dist/assets/tokenizer && cp ../../packages/harness-runtime/assets/tokenizer/cl100k_base.json dist/assets/tokenizer/ && cp ../../packages/harness-runtime/assets/tokenizer/LICENSE-gpt-tokenizer.txt dist/assets/tokenizer/ ) || echo '[build] 警告: tokenizer 词表缺失,运行时将回退 CJK 字符估算(token-estimate.ts 的 fail-soft 路径)'",
+    "test": "NODE_OPTIONS=--conditions=development vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@lampgenie/code-sense": "workspace:^",
+    "@lampgenie/code-sense-cli": "workspace:^",
+    "@lampgenie/core": "workspace:*",
+    "@lampgenie/executors": "workspace:^",
+    "@lampgenie/experience": "workspace:^",
+    "@lampgenie/lsp": "workspace:*",
+    "@lampgenie/memory": "workspace:*",
+    "@lampgenie/node-agent": "workspace:^",
+    "@lampgenie/protocol": "workspace:^",
+    "@lampgenie/runtime": "workspace:^",
+    "@lampgenie/terminal": "workspace:*",
+    "@lampgenie/workflow": "workspace:^",
+    "@openflowkit/openflowkit-mcp": "0.2.4",
+    "esbuild": "^0.24.0",
+    "jszip": "^3.10.2",
+    "playwright-core": "^1.64.0",
+    "tree-sitter-wasms": "0.1.13",
+    "ts-morph": "^24.0.0",
+    "web-tree-sitter": "0.25.10",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
