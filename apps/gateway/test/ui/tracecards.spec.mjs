@@ -85,7 +85,11 @@ function pickRealTraceFiles() {
     const errs = [];
     page.on("pageerror", (e) => errs.push(String(e).slice(0, 200)));
     const traceReqs = [];
-    page.on("request", (r) => { if (r.url().includes("/api/llm-trace")) traceReqs.push(r.url()); });
+ // 只统计「拉全文」请求(/api/llm-trace?path=…);/api/llm-trace/list 是丢事件自愈的轻量清单,不算展示详情
+    page.on("request", (r) => {
+      const u = r.url();
+      if (u.includes("/api/llm-trace?") || u.includes("/api/llm-trace&")) traceReqs.push(u);
+    });
     await page.addInitScript((sid) => { localStorage.setItem("zh:sid", sid); }, SID);
     await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
@@ -106,8 +110,27 @@ function pickRealTraceFiles() {
     }));
     check("卡片数=trace 数", st1.cards === 3, "cards=" + st1.cards + " heads=" + st1.heads);
     check("默认视图=逐次决策", String(st1.paneOn).includes("on"), "chip class=" + st1.paneOn);
-    check("最新卡默认展开", st1.lastOpen === true, "openBodies=" + st1.openBodies);
-    check("首屏只拉最新卡(+上一条),不批量拉", traceReqs.length <= 3, "trace 请求数=" + traceReqs.length);
+ // 所有内容默认折叠,不主动展示详情(自动展开会拉 2MB 级全文,面板卡死)
+    check("默认全部折叠(无卡体)", st1.openBodies === 0, "openBodies=" + st1.openBodies + " lastOpen=" + st1.lastOpen);
+    check("首屏零 trace 请求", traceReqs.length === 0, "trace 请求数=" + traceReqs.length);
+
+ // 用户主动点最新卡头:此时才按需拉取并展开(≤2 个文件:本卡 + 上一条)
+    await page.evaluate(() => {
+      const cards = document.querySelectorAll("#trajCardsHost .tb-card");
+      const last = cards[cards.length - 1];
+      if (last) last.querySelector(".tb-c-head").click();
+    });
+    await page.waitForTimeout(2000);
+    const st2 = await page.evaluate(() => {
+      const cards = document.querySelectorAll("#trajCardsHost .tb-card");
+      const last = cards[cards.length - 1];
+      return {
+        lastOpen: last ? !!last.querySelector(".tb-c-body") : false,
+        openBodies: document.querySelectorAll("#trajCardsHost .tb-card .tb-c-body").length,
+      };
+    });
+    check("点卡头后才展开并拉取全文", st2.lastOpen === true && traceReqs.length > 0,
+      "openBodies=" + st2.openBodies + " trace 请求数=" + traceReqs.length);
 
     // 长 tool 结果:在展开的最新卡里找最长 pre,首尾都在
     const longTxt = await page.evaluate(() => {

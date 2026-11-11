@@ -339,7 +339,7 @@
       "body.cv-shell header{display:none!important}",
       /* ② 视图已在卡片内,不需要给固定侧栏让位 */
       "body.cv-shell .page{padding-left:0!important}",
-      "body.cv-shell .middle{height:100vh}",
+      "body.cv-shell .middle{height:calc(100vh - var(--bnav-h,44px))}",
       /* ③ 侧栏 → 浮动导航托盘:位置/宽度走 CSS 变量(拖拽改变量,持久化到 zh:cv-tray) */
       "body.cv-shell #sidebar{position:fixed;left:var(--cv-tray-x,56px);top:var(--cv-tray-y,12px);bottom:auto;",
       "  right:auto;width:var(--cv-tray-w,264px);height:auto;max-height:calc(100vh - 24px);",
@@ -395,7 +395,7 @@
        * (面板监听 cv-cards 事件);卡片状态点/连接点迁托盘(面板侧 cvCardStatus/cvConn);
        * 托盘收起=托盘自带最小化钮 + 既有 #sbRail 细轨承接唤回。样式/构建/事件全部移除,左缘留白归还画布。 */
       /* 缩放 HUD */
-      "#cvHud{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:2px;",
+      "#cvHud{position:absolute;left:50%;bottom:calc(10px + var(--bnav-h,44px));transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:2px;",
       "  padding:3px 6px;border:1px solid var(--border);border-radius:10px;background:var(--glass2);backdrop-filter:blur(8px)}",
       "#cvHud button{min-width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--muted);",
       "  font-size:11px;cursor:pointer;padding:0 6px}",

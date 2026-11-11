@@ -6,7 +6,7 @@
  * 真压缩发生→同步触发经验沉淀(exp=harness-experience distillFromTask,fold-in 进经验库,
  * 被压缩的头部内容不丢知识;异步不阻塞主链路,失败静默)。
  */
-import { autoCompact } from "@lampgenie/runtime/agent/auto-compact";
+import { autoCompact, type CompactOptions } from "@lampgenie/runtime/agent/auto-compact";
 import { clearReadFiles, readFilesOf } from "@lampgenie/runtime/agent/read-file-state";
 import type { MicrocompactConfig } from "@lampgenie/runtime/agent/microcompact";
 import { distillFromTask, type ExperienceStore } from "@lampgenie/experience";
@@ -47,6 +47,10 @@ export interface CompactHookOptions {
   /** 压缩完成回调(2026-11 看板刷新桥):手动/自动路径之外,自动压缩成功也要能主动推一帧
    *  trace.stats(否则看板上容量%要等 2s 轮询)。未注入=零行为差异。 */
   onCompacted?: (r: { sessionId: string; compacted: boolean; summary?: string }) => void;
+ /** 摘要前缀复用:主 loop 的 system 文本与 wire 广告工具定义(缓存命中;见 auto-compact
+ * 的 CompactOptions.prefix)。getter 形态让装配期尚未定义的 system/tools 在压缩执行时才取值;
+ * 抛错/返回空=退回旧实现,不阻塞压缩。 */
+  prefix?: CompactOptions["prefix"];
 }
 
 /** 看板刷新桥的进程级注册表(2026-11):server.ts 启动时把 broadcastTraceStats 注册进来,
@@ -63,9 +67,11 @@ export function broadcastTraceStatsOf(): ((sessionId: string) => Promise<void>) 
   return traceStatsBroadcaster ?? undefined;
 }
 
-/** 产出一个可挂 AgentLoop.compactHook 的闭包。 */
-export function makeCompactHook(o: CompactHookOptions): (j: Journal, sid: string) => Promise<void> {
-  return async (j, sid) => {
+/** 产出一个可挂 AgentLoop.compactHook 的闭包。第三参(可选:{reason:"overflow"}
+ * = provider 报 context_exceeded 的强制压缩一次(force=true,且不受阈值 gate.fire 限制);
+ * 不传 = 旧行为逐字不变。 */
+export function makeCompactHook(o: CompactHookOptions): (j: Journal, sid: string, opts?: { reason?: "overflow" }) => Promise<void> {
+  return async (j, sid, hookOpts) => {
     const gate = autoCompactGate(j.readAll(), sid, o.contextWindow, o.explicitThreshold ?? 0, o.maxOutputTokens, o.reasoningEffort);
     const threshold = gate.threshold;
     if (gate.baseline) {
@@ -87,7 +93,7 @@ export function makeCompactHook(o: CompactHookOptions): (j: Journal, sid: string
       }
       return;
     }
-    if (!gate.fire) return;
+    if (!gate.fire && hookOpts?.reason !== "overflow") return;
  // (配合 n1「head 为空=诚实返回,不再假压缩」):保留条数按实际消息数收敛——
     // 固定 keepRecent=10 时,「消息少但单条巨大」的会话(3 条 tool 结果撑爆窗口)head 恒为空,
     // autoCompact 会诚实拒绝 → 压缩永远跑不动。收敛口径=最多保留 10 条,但至少留 1 条进 head。
@@ -99,9 +105,11 @@ export function makeCompactHook(o: CompactHookOptions): (j: Journal, sid: string
       keepRecentMessages,
       compactLlm: o.compactLlm,
       devlogDir: o.devlogDir,
-      force: gate.force,
+      force: gate.force || hookOpts?.reason === "overflow",
       trigger: "auto",
       ...(o.microcompact ? { microcompact: o.microcompact } : {}),
+ // 前缀透传(不传=旧实现,请求逐字不变)。
+      ...(o.prefix ? { prefix: o.prefix } : {}),
     });
     // 看板刷新桥(2026-11):自动压缩成功也要推一帧 trace.stats。onCompacted 未注入时
     // 退回进程级注册表(server.ts 启动注册),两者皆无=零行为差异。

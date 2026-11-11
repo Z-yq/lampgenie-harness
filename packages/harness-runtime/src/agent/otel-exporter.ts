@@ -5,6 +5,13 @@
  * 协议:OTLP v1 traces JSON(PUT/POST application/json),span 形状取规范子集。
  */
 import type { Journal, JournalEvent } from "@lampgenie/core";
+import {
+  ExportLedger,
+  copyForExport,
+  dedupeKeyOf,
+  redactForExport,
+  type ExportRedactor,
+} from "./export-ledger";
 
 export interface OtelExporterOptions {
   /** OTLP/HTTP 端点(如 http://localhost:4318/v1/traces)。 */
@@ -21,6 +28,12 @@ export interface OtelExporterOptions {
   fetchImpl?: typeof fetch;
   /** 时钟注入(测试用)。 */
   now?: () => number;
+ /** 导出账本注入(测试/复用;缺省按 maxRecordBytes 新建)。 */
+  ledger?: ExportLedger;
+ /** 单条 span 导出字节上限(缺省 256 KiB;超限拒绝而非截断)。 */
+  maxRecordBytes?: number;
+ /** 脱敏器注入(测试用;缺省递归 redactText)。 */
+  redactor?: ExportRedactor;
 }
 
 interface Span {
@@ -69,8 +82,18 @@ export interface OtelExporter {
   attach(journal: Journal): () => void;
   /** 手动冲刷(测试/停机用)。 */
   flush(): Promise<void>;
-  /** 已导出 span 数/失败次数(观测)。 */
-  stats(): { spans: number; failures: number; pending: number };
+ /**
+ * 已导出 span 数/失败次数(观测)。
+ * dropped* 为导出闸门丢弃计数(不截断、不降级):重复 / 超限 / 脱敏失败(含不可拷贝)。
+ */
+  stats(): {
+    spans: number;
+    failures: number;
+    pending: number;
+    droppedRedaction: number;
+    droppedTooLarge: number;
+    droppedDuplicate: number;
+  };
   stop(): void;
 }
 
@@ -85,6 +108,50 @@ export function createOtelExporter(opts: OtelExporterOptions): OtelExporter {
   const open = new Map<string, { span: Span; t0: number }>();
   const turnTrace = new Map<string, string>(); // `${sessionId}:${turn}` → traceId
   let timer: ReturnType<typeof setInterval> | undefined;
+
+ // ── 导出闸门(flush 前逐条过闸;span 本体永不被改写,只处理导出副本)──
+  const ledger = opts.ledger ?? new ExportLedger({ maxRecordBytes: opts.maxRecordBytes ?? 262_144 });
+ /** 已过闸、待外送的导出副本:发送失败时保留,重试不再重复入账(否则下轮会被误判 DUPLICATE)。 */
+  let outbox: Span[] = [];
+  let droppedRedaction = 0;
+  let droppedTooLarge = 0;
+  let droppedDuplicate = 0;
+
+ /** span 所属 session:优先 genie.session 属性(turn span 带);其余 span 无 session 字段,
+ * traceId 是哈希、不含 sid,故回退 "unknown"(spanId 本身已唯一,去重键仍稳定)。 */
+  const sessionOf = (s: Span): string => {
+    for (const a of s.attributes) {
+      const v = a.value as { stringValue?: unknown };
+      if (a.key === "genie.session" && typeof v.stringValue === "string") return v.stringValue;
+    }
+    return "unknown";
+  };
+
+ /**
+ * 单条 span 过闸:深拷贝 → 脱敏(只作用于副本)→ 入账。
+ * 失败分支一律丢弃(不截断、不回退原记录):这是「宁可少一条遥测,不可漏一次凭证」的边界。
+ */
+  const gate = (s: Span): Span | undefined => {
+    const copy = copyForExport(s);
+    if (!copy.ok) {
+ // 不可序列化与脱敏失败同属 fail-closed 丢弃桶(都无法证明出站内容安全)。
+      droppedRedaction += 1;
+      ledger.markRedactionFailed();
+      return undefined;
+    }
+    const redacted = redactForExport(copy.record, opts.redactor);
+    if (!redacted.ok) {
+      droppedRedaction += 1;
+      ledger.markRedactionFailed();
+      return undefined;
+    }
+    const res = ledger.admit(dedupeKeyOf(sessionOf(s), "otel", s.spanId), redacted.record);
+    if (res.ok) return redacted.record as Span;
+    if (res.code === "TOO_LARGE") droppedTooLarge += 1;
+    else if (res.code === "DUPLICATE") droppedDuplicate += 1;
+    else droppedRedaction += 1; // INVALID(空 key 等)归入同一 fail-closed 桶
+    return undefined;
+  };
 
   const start = (key: string, span: Span, t0: number) => { open.set(key, { span, t0 }); spans.push(span); };
   const end = (key: string, tEnd: number, status?: Span["status"]) => {
@@ -178,9 +245,16 @@ export function createOtelExporter(opts: OtelExporterOptions): OtelExporter {
   };
 
   const flush = async (): Promise<void> => {
-    while (spans.length > 0) {
-      // 先窥视后出队:外送失败批次留在队列(fail-soft 不丢数据),成功才 splice。
-      const batch = spans.slice(0, maxBatch);
+    for (;;) {
+ // 先补齐 outbox:队首逐条过闸(过闸即出队,失败直接丢弃计数,不会被重复判定)。
+      while (outbox.length < maxBatch && spans.length > 0) {
+        const s = spans.shift()!;
+        const prepared = gate(s);
+        if (prepared) outbox.push(prepared);
+      }
+      if (outbox.length === 0) break;
+ // 先窥视后出队:外送失败批次留在 outbox(fail-soft 不丢数据),成功才切掉。
+      const batch = outbox.slice(0, maxBatch);
       const payload = {
         resourceSpans: [{
           resource: { attributes: [attr("service.name", opts.serviceName ?? "lampgenie-harness")] },
@@ -204,7 +278,7 @@ export function createOtelExporter(opts: OtelExporterOptions): OtelExporter {
           body: JSON.stringify(payload),
         });
         if (!res.ok) { failures += 1; break; }
-        spans.splice(0, batch.length);
+        outbox = outbox.slice(batch.length);
         exported += batch.length;
       } catch {
         failures += 1;
@@ -220,7 +294,14 @@ export function createOtelExporter(opts: OtelExporterOptions): OtelExporter {
       return journal.subscribe(handle);
     },
     flush,
-    stats: () => ({ spans: exported, failures, pending: spans.length }),
+    stats: () => ({
+      spans: exported,
+      failures,
+      pending: spans.length + outbox.length,
+      droppedRedaction,
+      droppedTooLarge,
+      droppedDuplicate,
+    }),
     stop: () => { if (timer) clearInterval(timer); },
   };
 }

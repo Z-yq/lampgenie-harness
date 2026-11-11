@@ -1,5 +1,5 @@
 /**
- * 轮末变更账本(turn-change-ledger。
+ *  轮末变更账本(turn-change-ledger。
  * A. 纯函数/采集:临时 git 仓(改 tracked / 新建 untracked / .gitignore 忽略 / 超大 / 非 git / 上限截断);
  * B. 接线(agent-wiring):done 与 failed 两路都落 journal custom `turn.change-ledger`,
  *    且账本内容绝不进 finalOut/模型上下文。

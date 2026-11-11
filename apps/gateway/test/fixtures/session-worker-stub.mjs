@@ -52,7 +52,7 @@ if (mode === "happy") {
     setTimeout(() => { send({ t: "task.state", taskId: spec.task.id, state: "done", result: "board 桩完成" }); setTimeout(() => process.exit(0), 50); }, Number(process.env.STUB_HOLD_MS ?? 150));
   }, 80);
 } else if (mode === "journalsync") {
- // 写前屏障桩:按序发 appendSync(带一条事件)与 flushStrict,把两次 ack 回写 journal,
+ //  写前屏障桩:按序发 appendSync(带一条事件)与 flushStrict,把两次 ack 回写 journal,
   // 供 host 侧断言「落账 + flush 都成功才 ok」与失败分支。
   const listeners = {};
   process.on("message", (m) => { if (m.t === "res" && listeners[m.id]) { listeners[m.id](m); delete listeners[m.id]; } });

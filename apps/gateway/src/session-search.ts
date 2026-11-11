@@ -4,10 +4,13 @@
  * 单例按 Journal 对象隔离(WeakMap):同一 gateway 的 agent 工具与面板 WS 共用一份索引;
  * 测试临时 journal 不会串到生产实例。configure 只登记缓存路径,首次查询才构建。
  */
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { Journal } from "@lampgenie/core";
 import type { Tool } from "@lampgenie/runtime/agent/loop";
 import { SessionSearchIndex } from "@lampgenie/runtime/session/search";
+import { buildContextCapsule, budgetCapsule, renderCapsule } from "@lampgenie/runtime/session/context-capsule";
 import { request, ProxyJournal } from "./session-worker-lib.js";
 
 interface Entry {
@@ -49,7 +52,7 @@ export function defaultSessionSearchCacheFile(journalDir: string | undefined): s
 }
 
 interface SessionSearchArgs {
-  action?: "discover" | "scroll" | "read";
+  action?: "discover" | "scroll" | "read" | "capsule";
   query?: string;
   sessionId?: string;
   cursor?: string | number;
@@ -62,6 +65,8 @@ interface SessionSearchArgs {
   source?: string;
   excludeSessionIds?: string[];
   includeCurrent?: boolean;
+ /** capsule:优先保留与这些词相关的决策/文件/阻塞(可选)。 */
+  focus?: string;
 }
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
@@ -77,7 +82,55 @@ function asInt(value: unknown): number | undefined {
 }
 
 /**
- * `session_search` 工具(只读):discover / scroll / read。
+ * capsule 全文落盘目录:随 journalDir(缓存文件的父目录)隔离;无缓存文件时落系统 tmp。
+ * 为什么落盘:摘要只有预算内的骨架,模型真要引用原文时凭 spill 指针回读,不必二次检索。
+ */
+function capsuleSpillDir(journal: Journal): string {
+  const entry = registry.get(journal);
+  const base = entry?.cacheFile ? dirname(entry.cacheFile) : tmpdir();
+  return join(base, "capsules");
+}
+
+/** 写全文;失败返回 null(只丢指针,摘要照给)。 */
+function writeCapsuleSpill(journal: Journal, sessionId: string, text: string): string | null {
+  try {
+    const dir = capsuleSpillDir(journal);
+ // sessionId 可能来自模型/远端:文件名只留安全字符,绝不直接拼路径。
+    const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "session";
+    const file = join(dir, `${safe}-${Date.now()}.txt`);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(file, text, { encoding: "utf8", mode: 0o600 });
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ *  action=capsule:取该会话事件 → 构建胶囊 → 预算裁剪 → 全文写 spill → 返回 JSON。
+ * gateway 工具路径与 session-worker-host 的 RPC 透传共用这一份实现,不复制两套逻辑。
+ * 整段 fail-soft:任何异常都收敛成错误文本,不打断 agent loop。
+ */
+export function runSessionSearchCapsule(journal: Journal, args: { sessionId?: unknown; focus?: unknown }): string {
+  const sessionId = String(args?.sessionId ?? "").trim();
+  if (!sessionId) return "session_search 错误:capsule 需要 sessionId(可先用 action=discover 找)";
+  try {
+    const events = getSessionSearchIndex(journal).sessionEvents(sessionId, { limit: 5000 });
+    const capsule = buildContextCapsule({
+      sessionId,
+      events,
+      focus: typeof args?.focus === "string" ? args.focus : "",
+    });
+    const budgeted = budgetCapsule(capsule);
+    const spill = writeCapsuleSpill(journal, sessionId, renderCapsule(capsule));
+    return JSON.stringify({ sessionId, capsule: budgeted.text, omitted: budgeted.omitted, spill });
+  } catch (err) {
+    return `session_search 错误: ${String(err).slice(0, 200)}`;
+  }
+}
+
+/**
+ * `session_search` 工具(只读):discover / scroll / read / capsule。
  * 返回 JSON 文本;错误以「session_search 错误: …」文本返回(fail-soft,不打断 loop)。
  */
 export function sessionSearchTool(journal: Journal, currentSessionId?: string): Tool {
@@ -89,14 +142,15 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
       "action=discover: empty query = list of recent sessions; otherwise returns related sessions (sessionId/title/time/hit snippets/hit count); automated sessions are down-weighted, never hidden. " +
       "action=scroll: takes sessionId, plus query to page through hits inside that session (cursor = next page), or seq to see the window around one event. " +
       "action=read: takes sessionId + fromSeq (default from the start) + limit to page through raw session text. " +
+      "action=capsule: takes sessionId and returns a budgeted summary (objective/decisions/files/blockers/nextStep) with per-source budget, two-stage trimming and an omitted count; the full untrimmed text is written to a spill file whose path is returned as `spill` (null if the write failed). " +
       "Typical flow: discover → best.seq → scroll(sessionId, seq) for context → read for more raw text. " +
       "sessionId values from the result can be reused in later tool calls or shown to the user.",
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["discover", "scroll", "read"], description: "Default: discover" },
+        action: { type: "string", enum: ["discover", "scroll", "read", "capsule"], description: "Default: discover" },
         query: { type: "string", description: "Keywords (any language or digits; space separates several keyword groups). With scroll = search inside the session; empty = browse recent sessions" },
-        sessionId: { type: "string", description: "Session id (required for scroll/read; found in discover results)" },
+        sessionId: { type: "string", description: "Session id (required for scroll/read/capsule; found in discover results)" },
         cursor: { type: "string", description: "Paging cursor for scroll (nextCursor from the previous page)" },
         seq: { type: "number", description: "scroll = event anchor (best.seq from discover); read = start fromSeq" },
         fromSeq: { type: "number", description: "read: starting seq (default 0 = from the beginning)" },
@@ -107,6 +161,7 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
         source: { type: "string", description: "discover: filter by origin — user/automation/subagent/companion/system (comma separated)" },
         excludeSessionIds: { type: "array", items: { type: "string" }, description: "Session ids to exclude as already seen (max 50)" },
         includeCurrent: { type: "boolean", description: "discover: include the current session (default false — history recall looks at past sessions only)" },
+        focus: { type: "string", description: "capsule: optional keywords; matching decisions/files/blockers are kept first" },
       },
       required: [],
     },
@@ -114,7 +169,8 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
     isConcurrencySafe: () => true,
     async execute(args: unknown): Promise<string> {
       const a = (args ?? {}) as SessionSearchArgs;
-      const action = a.action === "scroll" || a.action === "read" ? a.action : "discover";
+      const action =
+        a.action === "scroll" || a.action === "read" || a.action === "capsule" ? a.action : "discover";
  // session-worker 进程:ProxyJournal 只含本会话副本,历史会话全部不可见
  // (注意 stats docs=2/lastSeq=414263)。经既有 IPC RPC 代理到 gateway 真 journal 只读执行,
       // 零写冲突;host 缺席(单跑 worker 调试)=fail-soft 错误文本。
@@ -125,6 +181,7 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
           return `session_search 错误: ${String(err).slice(0, 200)}`;
         }
       }
+      if (action === "capsule") return runSessionSearchCapsule(journal, a);
       try {
         const index = getSessionSearchIndex(journal);
         if (action === "scroll") {

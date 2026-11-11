@@ -30,6 +30,12 @@ import { setPermissionMode } from "./permission-mode.js";
 process.env.GENIE_SESSION_WORKER_CHILD = "1";
 const STARTED_AT = Date.now();
 
+/** 启动阶段上报:阶段完成后 notify startup.progress —— host 侧阶段租约据此判卡点。
+ * 纯观测,不改任务主流程;IPC 断(host 已死)时吞掉,由 disconnect 自退兜底。 */
+function reportStartupStage(stage: "config" | "executor" | "providers" | "loop-ready"): void {
+  try { notify({ t: "startup.progress", stage, at: Date.now() }); } catch { /* IPC 断=disconnect 兜底 */ }
+}
+
 // ---- 生命周期:父进程绑定(抄 sense-index-worker)----
 function parentAlive(): boolean {
   try { process.kill(process.ppid ?? 0, 0); return true; } catch { return false; }
@@ -108,9 +114,13 @@ async function main(): Promise<void> {
  // 权限模式装载(复审 P1:main.ts 同款——缺这行 worker 恒 ask,
   // 配置 auto/readonly/plan 的用户在 worker 任务上语义漂移)
   setPermissionMode(config.permissions?.mode);
+ // 阶段进度上报(只看不拦)——host 侧租约据此判「卡在哪一段」。
+  reportStartupStage("config");
   const executor = buildExecutorFromConfig(config);
+  reportStartupStage("executor");
   const modelProviders = buildModelProviders(config, root, loaded.sources);
   const audioChat = buildAudioChatFromConfig(config, root, loaded.sources);
+  reportStartupStage("providers");
   let llm = modelProviders.main ?? audioChat;
  // per-session 主模型覆盖(用户用户反馈「会话内模型切换没生效」根因修复:进程内模式 runWithAgent
   // 已接 sessionModels,本 worker 子进程只读全局配置、不读 session-models.json——会话覆盖在 fork
@@ -250,6 +260,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  reportStartupStage("loop-ready");
   notify({ t: "ready", pid: process.pid });
   // pid 登记(F5-3:sense-index 同款——gateway 崩溃后的孤儿判定/清扫描可对账;退出即清)
   try {

@@ -1,5 +1,5 @@
 /**
- * 图片 offload 在 gateway 的**生产装配**接通回归(2026-11 验收)。
+ *  图片 offload 在 gateway 的**生产装配**接通回归(2026-11 验收)。
  * 背景:runtime 侧 loop 已实现 `imageOffload` 分支(首调报图片预算/尺寸错误 → data URL 落盘
  * `<root>/.genie/image-offload/<sessionId>/` + 占位行 → 立即重试一次),但 gateway 构造 AgentLoop
  * 时没传 = 生产行为等于改前。本文件锁三件事:

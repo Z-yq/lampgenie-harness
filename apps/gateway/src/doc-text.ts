@@ -14,10 +14,11 @@
 import { readFile } from "node:fs/promises";
 import { inflateRawSync, inflateSync } from "node:zlib";
 import JSZip from "jszip";
-import { parseOffice, parseXmlTree, type OfficeBlock, type OfficeShape } from "./office-ooxml.js";
+import { parseOffice, parseXmlTree, getExternalLinkStats, type OfficeBlock, type OfficeShape } from "./office-ooxml.js";
+import { probeDocument, probeVerdictToErrorCode, isPathWithinRoot, type DocProbeResult } from "./doc-probe.js";
 
 export type DocParseResult =
-  | { ok: true; text: string; kind: "docx" | "pptx" | "xlsx" | "pdf" | "zip" | "text"; note?: string }
+  | { ok: true; text: string; kind: "docx" | "pptx" | "xlsx" | "pdf" | "zip" | "text"; note?: string; scanSuspected?: boolean }
   | { ok: false; reason: string; kind?: string };
 
 /** 可解析扩展名(小写、不带点)。 */
@@ -111,10 +112,16 @@ function textOfNode(n: XmlNode | undefined): string {
 /** 解析一个附件文件为纯文本。**永不抛错**:失败一律 { ok:false, reason }。 */
 export async function parseDocFile(
   path: string,
-  opts?: { name?: string; mime?: string; maxChars?: number },
+  opts?: { name?: string; mime?: string; maxChars?: number; roots?: string[] },
 ): Promise<DocParseResult> {
   const nameHint = String(opts?.name || path || "");
   const ext = extOfName(nameHint) || extOfName(String(path || ""));
+ // 路径围栏(:传了 roots 时附件路径必须落在任一允许根内,全不命中直接拒(不读文件);
+ // 不传 / 传空数组 = 旧行为逐字不变。
+  if (opts?.roots && opts.roots.length > 0) {
+    const withinRoot = opts.roots.some((root) => isPathWithinRoot(path, root));
+    if (!withinRoot) return { ok: false, reason: "DOC_PATH_OUT_OF_ROOT: 附件路径不在允许根内", kind: ext };
+  }
   try {
     let buf: Buffer;
     try {
@@ -123,17 +130,26 @@ export async function parseDocFile(
     } catch (e) {
       return { ok: false, reason: `读取失败:${errMsg(e)}`, kind: ext || undefined };
     }
-    if (buf.length > DOC_MAX_BYTES) return { ok: false, reason: "文件过大(>64MB)", kind: ext || undefined };
+    if (buf.length > DOC_MAX_BYTES) return { ok: false, reason: `DOC_TOO_LARGE: 文件过大(>${Math.round(DOC_MAX_BYTES / 1024 / 1024)}MB)`, kind: ext || undefined };
     if (!ext || !DOC_PARSE_EXT.has(ext)) {
       return { ok: false, reason: `不支持解析的类型:${ext || "(无扩展名)"}`, kind: ext };
     }
+ // 解析前先探测:加密/损坏/炸弹/超大在解压前就拦下。
+ // 为什么必须先探:等解析器崩了才发现损坏/炸弹,进程可能已经吃满内存;
+ // 而 0 字符提取如果直接返回 ok:true,上层会把「扫描件没抽到字」当成「文件为空」——这不是成功。
+    const probe: DocProbeResult | undefined = PROBED_EXT.has(ext)
+      ? probeDocument(buf, ext, { maxBytes: DOC_MAX_BYTES })
+      : undefined;
+    if (probe && probe.code !== "OK") {
+      return { ok: false, reason: probeErrorReason(probe, ext), kind: ext };
+    }
     if (ext === "docx" || ext === "pptx") {
       const r = await flattenOffice(buf, ext);
-      return { ok: true, text: r.text, kind: ext, ...(r.note ? { note: r.note } : {}) };
+      return finalizeOk(r.text, ext, probe, r.note);
     }
     if (ext === "xlsx") {
       const r = await flattenXlsx(buf);
-      return { ok: true, text: r.text, kind: "xlsx", ...(r.note ? { note: r.note } : {}) };
+      return finalizeOk(r.text, "xlsx", probe, r.note);
     }
     if (ext === "pdf") {
       const r = flattenPdf(buf);
@@ -142,7 +158,7 @@ export async function parseDocFile(
       if (countVisibleChars(r.text) < PDF_MIN_VISIBLE_CHARS) {
         return { ok: false, reason: "PDF 正文过少(<8 可见字符),疑似扫描件或无文本层", kind: "pdf" };
       }
-      return { ok: true, text: r.text, kind: "pdf", ...(r.note ? { note: r.note } : {}) };
+      return finalizeOk(r.text, "pdf", probe, r.note);
     }
     if (ext === "zip") {
       const r = await listZip(buf);
@@ -153,6 +169,65 @@ export async function parseDocFile(
   } catch (e) {
     return { ok: false, reason: `解析失败:${errMsg(e).slice(0, 120)}`, kind: ext || undefined };
   }
+}
+
+// ───────────────────────── 探测接线 ─────────────────────────
+/** 走 probeDocument 的扩展名(文本类由 plainText 处理,不探测)。 */
+const PROBED_EXT = new Set(["docx", "pptx", "xlsx", "pdf"]);
+
+/** 探测结论 → 带专门错误码前缀的中文原因(上层据此分支/提示)。 */
+function probeErrorReason(probe: DocProbeResult, ext: string): string {
+  const code = probeVerdictToErrorCode(probe.code) || "DOC_PROBE_FAILED";
+  switch (probe.code) {
+    case "ENCRYPTED":
+      return `${code}: 文件已加密,请先去除密码后再上传`;
+    case "CORRUPT":
+      return `${code}: 文件结构损坏或不是有效的 ${ext.toUpperCase()} 文件`;
+    case "ZIP_BOMB":
+      return `${code}: 压缩包解压后体积超过上限(疑似 zip 炸弹)`;
+    case "TOO_LARGE":
+      return `${code}: 文件过大(>${Math.round(DOC_MAX_BYTES / 1024 / 1024)}MB)`;
+    case "UNSUPPORTED":
+      return `${code}: 不支持解析的类型`;
+    default:
+      return `${code}: 探测未通过`;
+  }
+}
+
+const SCAN_SUSPECTED_NOTE = "疑似扫描件/无文本层,请转图片后用 view_image";
+
+/**
+ * ok 分支统一:在既有 note 上追加页数/字符密度、不安全外链丢弃数、扫描件警告。
+ * 为什么 <8 可见字符要显式标 scanSuspected:0 字符不是「空文件」,是「没解析出文本层」,
+ * 上层应该走 OCR/看图路径,而不是把空字符串当正文喂给模型。
+ */
+function finalizeOk(
+  text: string,
+  kind: "docx" | "pptx" | "xlsx" | "pdf",
+  probe: DocProbeResult | undefined,
+  baseNote?: string): DocParseResult {
+  const notes: string[] = [];
+  if (baseNote) notes.push(...baseNote.split(";").filter(Boolean));
+  if (probe?.pages && probe.pages > 0) {
+    const perPage = Math.round(countVisibleChars(text) / probe.pages);
+    notes.push(`共 ${probe.pages} 页,约 ${perPage} 字/页`);
+  }
+  const probeDenied = probe ? probe.externalLinks.filter((l) => !l.allowed).length : 0;
+  const officeDenied = kind === "docx" || kind === "pptx" ? getExternalLinkStats().denied : 0;
+  const dropped = Math.max(probeDenied, officeDenied);
+  if (dropped > 0) notes.push(`已丢弃 ${dropped} 个不安全外链`);
+  let scanSuspected = false;
+  if (countVisibleChars(text) < PDF_MIN_VISIBLE_CHARS) {
+    notes.push(SCAN_SUSPECTED_NOTE);
+    scanSuspected = true;
+  }
+  return {
+    ok: true,
+    text,
+    kind,
+    ...(notes.length ? { note: notes.join(";") } : {}),
+    ...(scanSuspected ? { scanSuspected: true } : {}),
+  };
 }
 
 // ───────────────────────── 文本类 ─────────────────────────

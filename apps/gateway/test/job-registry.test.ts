@@ -1,5 +1,5 @@
 /**
- * 网关层:job registry 单例 + 结算通知去重 + 任务终态回收。
+ *  网关层:job registry 单例 + 结算通知去重 + 任务终态回收。
  * 真跑 sh 命令;journal 用 MemoryJournal 观测 custom job.done / message.system 的投递次数。
  */
 import { afterAll, describe, expect, it } from "vitest";

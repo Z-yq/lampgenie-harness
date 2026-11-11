@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // SOP 行为度量脚本( tips SOP 化升级,任务书第③件「行为验证口径」的载体)。
 // 口径:只读 .genie/journals/sessions/*.jsonl(旁路留痕,不改任何状态),三个指标:
-// 影响面先行率 = 会话内首个 edit_file/write_file 之前出现过 code_sense(任一 action)
+//  影响面先行率 = 会话内首个 edit_file/write_file 之前出现过 code_sense(任一 action)
 // 的会话占「有文件写入动作的会话」比例 —— 度量 plan 卡「影响面先行」。
-// 排障盲试度 = tool.result 带 error 之后、下一次任何探测类调用(code_sense/grep/glob/
+//  排障盲试度 = tool.result 带 error 之后、下一次任何探测类调用(code_sense/grep/glob/
 // read_file/session_search)之前,连续 edit_file/write_file 的「盲改步数」
 // 分布(p50/p90/最大值) —— 度量 debug 卡「假设驱动排障」。
-// 失败即停 = 同一文件「edit→测试→fail」循环 >2 轮的会话数(fail=error 或内容含
+//  失败即停 = 同一文件「edit→测试→fail」循环 >2 轮的会话数(fail=error 或内容含
 // FAIL/✗/failing) —— 度量 debug 卡「同一逻辑最多 2 轮」。
 // 复测方法:SOP 卡上线前后各跑一次 node scripts/measure-sop-behavior.mjs --since 7d,
 // 报表对比(同口径可复算)。事件口径:tool.call{payload.name,arguments},tool.result
@@ -19,10 +19,10 @@ const args = process.argv.slice(2);
 const sinceIdx = args.indexOf("--since");
 const SINCE_MS = 7 * 86400e3;
 const sinceMs = sinceIdx >= 0 && args[sinceIdx + 1]
-  ? (String(args[sinceIdx + 1]).endsWith("d") ? Date.now - parseInt(args[sinceIdx + 1], 10) * 86400e3 : Date.now - parseInt(args[sinceIdx + 1], 10) * 1000)
-  : Date.now - SINCE_MS;
+  ? (String(args[sinceIdx + 1]).endsWith("d") ? Date.now() - parseInt(args[sinceIdx + 1], 10) * 86400e3 : Date.now() - parseInt(args[sinceIdx + 1], 10) * 1000)
+  : Date.now() - SINCE_MS;
 
-const dir = join(process.cwd, ".genie", "journals", "sessions");
+const dir = join(process.cwd(), ".genie", "journals", "sessions");
 let files = [];
 try {
   files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"))
@@ -50,19 +50,19 @@ function loadSession(p) {
 const sessions = [];
 let tipCount = { dispatch: 0, parallel: 0, boardComments: 0, sop: 0, dyn: 0, trajectoryBackfill: 0, trajCards: 0 };// :动态卡/轨迹回看/trajectory 卡
 /** J1 注入间隔审计:同 key 两次注入的 tokensSpent 水位差(J1 起 tip.injected 才带该字段) */
-const lastWater = new Map;
+const lastWater = new Map();
 let gateSamples = 0, gateViolations = 0;
 for (const { p } of files) {
   let evs; try { evs = loadSession(p); } catch { continue; }
   if (!evs.length) continue;
 
- // —— 影响面先行:首个写调用前是否有 code_sense ——
+ // ——  影响面先行:首个写调用前是否有 code_sense ——
   const firstWriteIdx = evs.findIndex((e) => e.kind === "tool.call" && WRITE_TOOLS.has(e.payload?.name ?? ""));
   let impactFirst = null;
   if (firstWriteIdx >= 0) {
     impactFirst = evs.slice(0, firstWriteIdx).some((e) => e.kind === "tool.call" && e.payload?.name === "code_sense");
   }
- // —— 盲试:error 后到下一次探测之间的连续盲改步 ——
+ // ——  盲试:error 后到下一次探测之间的连续盲改步 ——
   let blind = null;
   const blindRuns = [];
   let inErrorWindow = false;
@@ -79,7 +79,7 @@ for (const { p } of files) {
   }
   if (blindCount > 0) blindRuns.push(blindCount);
   blind = blindRuns;
- // —— 失败即停:同文件连续写未通过(失败结果清零,只有连续写才累计,>2 轮违规) ——
+ // ——  失败即停:同文件连续写未通过(失败结果清零,只有连续写才累计,>2 轮违规) ——
   let lastFile = null; let rounds = 0; let stopViolations = 0;
   for (const e of evs) {
     if (e.kind === "tool.call" && WRITE_TOOLS.has(e.payload?.name ?? "")) {
@@ -110,7 +110,7 @@ for (const { p } of files) {
       }
     }
   }
-  sessions.push({ file: p.split("/").pop, hasWrite: firstWriteIdx >= 0, impactFirst, blindRuns, stopViolations });
+  sessions.push({ file: p.split("/").pop(), hasWrite: firstWriteIdx >= 0, impactFirst, blindRuns, stopViolations });
 }
 
 // —— 汇总 ——

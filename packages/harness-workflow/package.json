@@ -10,6 +10,7 @@
       "default": "./dist/index.js"
     },
     "./*": {
+      "types": "./src/*.ts",
       "development": "./src/*.ts",
       "default": "./dist/*.js"
     }
@@ -22,6 +23,7 @@
   "dependencies": {
     "@lampgenie/core": "workspace:*",
     "@lampgenie/executors": "workspace:*",
+    "@lampgenie/runtime": "workspace:*",
     "esbuild": "^0.24.0",
     "zod": "^3.23.0"
   },

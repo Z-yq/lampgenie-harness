@@ -217,8 +217,16 @@ function locateHit(source: string, site: HoleSite, siteId: string): RawHit | und
   const hits = findHoleCalls(source).filter((h) => h.name === site.name && h.line === site.line);
   if (hits.length === 0) return undefined;
   const k = occurrenceOf(siteId);
-  if (k !== undefined) return hits[k];
+  if (k !== undefined) {
+ // 同身份靠前的出现被填掉后,剩余 hit 的序号会前移:k 越界但只剩一个时它必然就是该 site。
+    return k < hits.length ? hits[k] : hits.length === 1 ? hits[0] : undefined;
+  }
   return hits.length === 1 ? hits[0] : undefined;
+}
+
+/** 源里这个稳定身份 (name,line) 是否仍有 hole 调用(拼接后「没被误删」的存在性复核)。 */
+function hasHoleAt(source: string, name: string, line: number): boolean {
+  return findHoleCalls(source).some((h) => h.name === name && h.line === line);
 }
 
 /** 把扫描结果整理成 sites 表(已 filled 的旧 site 由调用方另行保留)。 */
@@ -413,7 +421,7 @@ export function fillHole(
   // ⑤ 拼接后复核:其余 waiting site 仍能在新源里定位(这次 splice 没把它们连带删掉)。
   for (const other of Object.values(state.sites)) {
     if (other.siteId === siteId || other.status !== "waiting") continue;
-    if (locateHit(spliced, other, other.siteId) === undefined) {
+    if (!hasHoleAt(spliced, other.name, other.line)) {
       return { ok: false, codes: ["HOLE_SITE_DRIFT"], state, reason: `拼接会删除其他留白 ${other.siteId}` };
     }
   }

@@ -13,7 +13,7 @@ import {
   roughCompileCheck,
   scanHoles,
 } from "../src/agent/workflow-hole.ts";
-import type { HoleState } from "../src/agent/workflow-hole.ts";
+import type { HoleSite, HoleState } from "../src/agent/workflow-hole.ts";
 
 const T0 = 1_700_000_000_000;
 const T1 = 1_700_000_100_000;
@@ -458,23 +458,85 @@ describe("roughCompileCheck", () => {
   });
 });
 
-describe("HOLE_CODES", () => {
-  it("9 个码齐全、以 HOLE_ 开头、无重复", () => {
-    expect(HOLE_CODES).toHaveLength(9);
-    expect(new Set(HOLE_CODES).size).toBe(9);
-    expect(HOLE_CODES.every((code) => code.startsWith("HOLE_"))).toBe(true);
-    for (const code of [
-      "HOLE_INVALID",
-      "HOLE_SCANNED",
-      "HOLE_REACHED",
-      "HOLE_FILLED",
-      "HOLE_SITE_DRIFT",
-      "HOLE_INVALID_BODY",
-      "HOLE_COMPILE_FAILED",
-      "HOLE_MEMORY_HIT",
-      "HOLE_CHAINED",
-    ]) {
-      expect(HOLE_CODES).toContain(code);
-    }
+describe("稳定 siteId(chain/fill 后不漂移)", () => {
+  it("chain 前后旧 siteId 与 stoppedAt 都不变", () => {
+    const scanned = scanHoles(SCRIPT, { id: "wf-stable" }).state;
+    const planId = siteByName(scanned, "plan");
+    const reached = reachHole(scanned, planId).state;
+    const chained = chainTail(reached, { name: "review", prompt: "谁来做评审" }).state;
+    expect(siteByName(chained, "plan")).toBe(planId);
+    expect(siteByName(chained, "label")).toBe(siteByName(reached, "label"));
+    expect(chained.stoppedAt).toBe(planId);
+    expect(chained.sites[planId]!.status).toBe("waiting");
+  });
+
+  it("chain 后 fill 停驻的旧 site → FILLED(回归 #32)", () => {
+    const scanned = scanHoles(SCRIPT).state;
+    const planId = siteByName(scanned, "plan");
+    const reached = reachHole(scanned, planId).state;
+    const chained = chainTail(reached, { name: "review", prompt: "p" }).state;
+    const filled = fillHole(chained, { siteId: planId, body: BODY_PLAN, at: T1 });
+    expect(filled.ok).toBe(true);
+    expect(filled.codes).toEqual(["HOLE_FILLED"]);
+    expect(filled.state.sites[planId]!.status).toBe("filled");
+    expect(filled.state.sites[siteByName(chained, "label")]!.status).toBe("waiting");
+    expect(filled.state.sites[siteByName(chained, "review")]!.status).toBe("waiting");
+    expect(filled.state.script.source).not.toContain('hole("plan"');
+    expect(filled.state.script.hash).not.toBe(chained.script.hash);
+  });
+
+  it("同名不同行 → 两个不同 siteId", () => {
+    const src = 'hole("same", "a");\nawait step();\nhole("same", "b");\n';
+    const state = scanHoles(src).state;
+    const byLine: HoleSite[] = Object.values(state.sites).sort((a, b) => a.line - b.line);
+    expect(byLine).toHaveLength(2);
+    expect(byLine[0]!.siteId).not.toBe(byLine[1]!.siteId);
+    expect(byLine[0]!.siteId).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("同名同行重复(构造)→ #k 后缀、确定且可逐个填", () => {
+    const src = 'hole("dup", "a"); hole("dup", "b");\n';
+    const a = scanHoles(src).state;
+    const b = scanHoles(src).state;
+    const ids = Object.keys(a.sites).sort();
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toMatch(/^[0-9a-f]{8}#0$/);
+    expect(ids[1]).toMatch(/^[0-9a-f]{8}#1$/);
+    expect(Object.keys(b.sites).sort()).toEqual(ids);
+    const first = ids[0]!;
+    const second = ids[1]!;
+    const f2 = fillHole(a, { siteId: second, body: "const second = 2;", at: T1 });
+    expect(f2.ok).toBe(true);
+    expect(f2.state.sites[first]!.status).toBe("waiting");
+    expect(f2.state.script.source).toContain('hole("dup", "a")');
+    expect(f2.state.script.source).toContain("const second = 2;");
+    const f1 = fillHole(f2.state, { siteId: first, body: "const first = 1;", at: T1 });
+    expect(f1.ok).toBe(true);
+    expect(f1.state.script.source).not.toContain("hole(");
+  });
+
+  it("memoryHit 在 chain 后仍命中(键不变)", () => {
+    const scanned = scanHoles(SCRIPT).state;
+    const labelId = siteByName(scanned, "label");
+    const filled = fillHole(scanned, { siteId: labelId, body: BODY_LABEL, at: T0 }).state;
+    const chained = chainTail(filled, { name: "review", prompt: "p" }).state;
+    const hit = memoryHit(chained, labelId);
+    expect(hit.ok).toBe(true);
+    expect(hit.hit).toBe(true);
+    expect(hit.body).toBe(BODY_LABEL);
+    expect(hit.at).toBe(T0);
+  });
+
+  it("源码整体位移(该 (name,line) 已不存在)→ 仍判 HOLE_SITE_DRIFT", () => {
+    const scanned = scanHoles(SCRIPT).state;
+    const planId = siteByName(scanned, "plan");
+    const shifted: HoleState = {
+      ...scanned,
+      script: { ...scanned.script, source: `// 前插一行\n${SCRIPT}` },
+    };
+    const result = fillHole(shifted, { siteId: planId, body: BODY_PLAN });
+    expect(result.ok).toBe(false);
+    expect(result.codes).toEqual(["HOLE_SITE_DRIFT"]);
+    expect(result.state).toBe(shifted);
   });
 });

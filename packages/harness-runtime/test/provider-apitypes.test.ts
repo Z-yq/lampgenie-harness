@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createOpenAiCompatProvider } from "../src/agent/openai-provider";
+import { ANTHROPIC_CACHE_BREAKPOINT_LIMIT, markCacheBreakpoint, planCacheBreakpoints } from "../src/agent/provider-apitypes";
 
 /**
  * apiType 协议适配层端到端:node:http 真 mock server(127.0.0.1 随机端口)
@@ -72,6 +73,17 @@ afterEach(() => {
   for (const k of ["GENIE_LLM_DUMP_DIR"]) delete process.env[k];
 });
 
+/** 请求体里的断点位置(按计划优先级序:tools → system → 消息块),用于断言总数与位置稳定性。 */
+function breakpointsOf(body: Record<string, unknown>): string[] {
+  const found: string[] = [];
+  (body.tools as Record<string, unknown>[] | undefined)?.forEach((t, i) => { if (t.cache_control) found.push(`tools#${i}`); });
+  (body.system as Record<string, unknown>[] | undefined)?.forEach((b, i) => { if (b.cache_control) found.push(`system#${i}`); });
+  ((body.messages ?? []) as { content: Record<string, unknown>[] }[]).forEach((msg, i) => {
+    msg.content.forEach((b, j) => { if (b.cache_control) found.push(`msg${i}#${j}`); });
+  });
+  return found;
+}
+
 // =============================================================================
 // Anthropic Messages(/v1/messages)
 // =============================================================================
@@ -111,9 +123,11 @@ describe("apiType=anthropic 端到端(mock server)", () => {
     expect(msgs[0]!.role).toBe("user");
     expect(msgs[0]!.content[0]).toEqual({ type: "text", text: "看图" });
     expect(msgs[0]!.content[1]).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" }, cache_control: { type: "ephemeral" } });
-    // 缓存断点:② 对话历史前缀末尾(image 块,非首个 text 块);断点总数 2 < 官方上限 4
+ // 缓存断点:对话历史前缀末尾(image 块,非首个 text 块);本请求断点 = system 末块 + tools 末条
+ // + 末条消息末块 = 3(预算 4 内:消息只有 1 条,倒数第二条位置不存在)
     expect(msgs[0]!.content[1]!.cache_control).toEqual({ type: "ephemeral" });
     expect(msgs[0]!.content[0]!.cache_control).toBeUndefined();
+    expect(breakpointsOf(req.body)).toEqual(["tools#0", "system#0", "msg0#1"]);
     const tools = req.body.tools as { name: string; input_schema: Record<string, unknown> }[];
     expect(tools![0]!.name).toBe("getTime");
     expect(tools![0]!.input_schema).toEqual(TOOLS[0].parameters);
@@ -173,11 +187,16 @@ describe("apiType=anthropic 端到端(mock server)", () => {
     const msgs = m.requests[0]!.body.messages as { role: string; content: { type: string; id?: string; name?: string; input?: unknown; tool_use_id?: string; content?: string; cache_control?: unknown }[] }[];
     expect(m.requests[0]!.body.max_tokens).toBe(2048);
     expect(msgs[1]!.role).toBe("assistant");
-    expect(msgs[1]!.content[0]).toEqual({ type: "tool_use", id: "toolu_9", name: "getTime", input: { tz: "utc" } });
+    expect(msgs[1]!.content[0]).toEqual({ type: "tool_use", id: "toolu_9", name: "getTime", input: { tz: "utc" }, cache_control: { type: "ephemeral" } });
     expect(msgs[2]!.role).toBe("user");
     expect(msgs[2]!.content[0]).toEqual({ type: "tool_result", tool_use_id: "toolu_9", content: "12:00", cache_control: { type: "ephemeral" } });
-    // 断点只落在末条消息的末块(前缀末尾):assistant tool_use 块不带
-    expect(msgs[1]!.content[0]!.cache_control).toBeUndefined();
+ // 断点:3 条消息 + tools 的请求里,tail-2 落在 assistant tool_use 末块(上一轮的增量末尾,下一轮
+ // 请求里仍逐字节存在、断点立刻复用),tail-1 落在末条 tool_result 块——两处都要显式带标记(契约)
+    expect(msgs[1]!.content[0]!.cache_control).toEqual({ type: "ephemeral" });
+    expect(msgs[2]!.content[0]!.cache_control).toEqual({ type: "ephemeral" });
+ // 总数 = tools 末条 + tail-2 + tail-1 = 3(≤ 官方上限 4)
+    expect(breakpointsOf(m.requests[0]!.body)).toEqual(["tools#0", "msg1#0", "msg2#0"]);
+    expect(breakpointsOf(m.requests[0]!.body).length).toBeLessThanOrEqual(ANTHROPIC_CACHE_BREAKPOINT_LIMIT);
   });
 
   it("缓存断点:system 转 blocks 末块打标 + 无 system 时不发 system 键;请求内断点总数 ≤ 官方上限 4", async () => {
@@ -200,11 +219,62 @@ describe("apiType=anthropic 端到端(mock server)", () => {
       ...body.messages.flatMap((msg) => msg.content.map((b) => b.cache_control)),
       ...body.tools.map((t) => t.cache_control),
     ].filter((c) => c !== undefined).length;
-    expect(count).toBe(2); // system 末块 + 末条消息末块
-    expect(count).toBeLessThanOrEqual(4);
+    expect(count).toBe(3); // system 末块 + tools 末条 + 末条消息末块(消息仅 1 条,倒数第二条位置不存在)
+    expect(count).toBeLessThanOrEqual(ANTHROPIC_CACHE_BREAKPOINT_LIMIT);
+ // 位置明细:静态前缀两处 + 消息末块
+    expect(breakpointsOf(m.requests[0]!.body)).toEqual(["tools#0", "system#0", "msg0#0"]);
     // 无 system 消息时不发 system 键(旧行为保持)
     await p.chat([{ role: "user", content: "x" }], []);
     expect(m.requests[1]!.body.system).toBeUndefined();
+  });
+
+  it("缓存断点预算截断:消息很多 + tools + system 时总数恰好 4(不是 5+),静态前缀断点两次请求位置不变", async () => {
+    const m = await startMock((_req, res) => {
+      json(res, 200, { content: [{ type: "text", text: "ok" }], usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    servers.push(m.server);
+    const p = createOpenAiCompatProvider({ baseUrl: m.base, apiKey: "k", model: "m", apiType: "anthropic" });
+ // 候选 > 预算:system + tools + 两条消息断点 = 4 个候选全用满,再多也只能是 4
+    const head = [
+      { role: "system" as const, content: "S" },
+      { role: "user" as const, content: "q1" },
+      { role: "assistant" as const, content: "a1" },
+      { role: "user" as const, content: "q2" },
+      { role: "assistant" as const, content: "a2" },
+      { role: "user" as const, content: "q3" },
+      { role: "assistant" as const, content: "a3" },
+      { role: "user" as const, content: "q4" },
+    ];
+    await p.chat(head, TOOLS);
+ // 第二次请求只追加尾部两条(前缀逐字节不变):静态前缀上的断点必须原地不动,否则缓存永不命中
+    await p.chat([...head, { role: "assistant" as const, content: "a4" }, { role: "user" as const, content: "q5" }], TOOLS);
+    const first = breakpointsOf(m.requests[0]!.body);
+    const second = breakpointsOf(m.requests[1]!.body);
+    expect(ANTHROPIC_CACHE_BREAKPOINT_LIMIT).toBe(4);
+    expect(first).toHaveLength(4); // 恰好等于预算,不是 5
+    expect(second).toHaveLength(4);
+ // 静态前缀位置稳定(两次逐字相同)
+    expect(first.filter((x) => x.startsWith("tools#"))).toEqual(["tools#0"]);
+    expect(second.filter((x) => x.startsWith("tools#"))).toEqual(["tools#0"]);
+    expect(first.filter((x) => x.startsWith("system#"))).toEqual(["system#0"]);
+    expect(second.filter((x) => x.startsWith("system#"))).toEqual(["system#0"]);
+ // 消息侧断点跟随尾部(相对固定历史定位):7 条消息 → tail-2=msg5 / tail-1=msg6;追加两条后 → msg7 / msg8
+    expect(first.filter((x) => x.startsWith("msg"))).toEqual(["msg5#0", "msg6#0"]);
+    expect(second.filter((x) => x.startsWith("msg"))).toEqual(["msg7#0", "msg8#0"]);
+  });
+
+  it("缓存断点:块自带 cache_control 时原样保留(含 ttl)、不覆盖、不重复计数", () => {
+ // 适配器自身不预置标记(Message.content 是字符串、wire 块由适配器生成),preMarked 只可能来自
+ // 将来上游块透传——这里钉打标原语的「已有标记不覆盖」与计划层的「已有标记占配额不新增」。
+    const own: Record<string, unknown> = { type: "text", text: "p", cache_control: { type: "ephemeral", ttl: "1h" } };
+    expect(markCacheBreakpoint(own)).toBe(false); // 不新增打标
+    expect(own.cache_control).toEqual({ type: "ephemeral", ttl: "1h" }); // 原样保留(含 ttl 扩展字段)
+    expect(markCacheBreakpoint(undefined)).toBe(false); // 空块空态
+    const plan = planCacheBreakpoints({ hasTools: true, hasSystem: true, messageCount: 10, preMarked: ["system"] });
+    expect(plan.slots.map((s) => s.kind)).toEqual(["tools", "message", "message"]); // system 让出槽位
+    expect(plan.used).toBe(4); // 3 处新打标 + 1 处已有标记 = 4,没有重复计同一处
+    expect(plan.used).toBeLessThanOrEqual(ANTHROPIC_CACHE_BREAKPOINT_LIMIT);
+    expect(plan.skipped.some((s) => s.kind === "system" && s.reason === "pre-marked")).toBe(true);
   });
 
   it("usage 兼容形态:OpenAI 形态 prompt_tokens_details.cached_tokens(适配器不重复计缓存)+ 无缓存时不下发缓存字段", async () => {

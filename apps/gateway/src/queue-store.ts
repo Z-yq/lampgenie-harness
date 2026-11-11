@@ -12,6 +12,25 @@
 import type { Journal, JournalEvent } from "@lampgenie/core";
 import type { QueueItem } from "@lampgenie/protocol";
 
+/**
+ * 队列项的可选 inbox 元数据(扩展而非改 protocol——QueueItem 本体零改动)。
+ * 旧 journal 没有这些字段时按「pending + 旧行为」逐字恢复,天然向后兼容。
+ */
+export interface QueueItemInboxFields {
+ /** 归属(归属决议见 runtime/session/durable-inbox 的 resolveOwner;缺省 "unowned")。 */
+  ownerId?: string;
+ /** 调用方幂等键(admit 用;不进任务 idempotencyKey,后者仍是 queue.<sid>.<id>)。 */
+  idempotencyKey?: string;
+ /** 载荷指纹(同 key 异指纹=冲突)。 */
+  fingerprint?: string;
+  admittedSeq?: number;
+  promotedSeq?: number;
+  delivery?: "pending" | "delivered";
+}
+
+/** 带 inbox 元数据的队列项(gateway 内部类型;广播帧仍是超级集,zod 读端按未知字段丢弃)。 */
+export type QueueItemWithInbox = QueueItem & QueueItemInboxFields;
+
 /** 队列项的幂等键前缀:出队提交时写到任务的 idempotencyKey 上,回放据此识别「已发送」。 */
 export const QUEUE_IDEM_PREFIX = "queue.";
 
@@ -22,7 +41,7 @@ export function queueItemKey(sessionId: string, itemId: string): string {
 }
 
 /** 队列变更落账:写当期全量快照(items 已按队列顺序排列,首项=队头)。 */
-export function writeQueueSync(journal: Journal, sessionId: string, items: readonly QueueItem[]): void {
+export function writeQueueSync(journal: Journal, sessionId: string, items: readonly QueueItemWithInbox[]): void {
   journal.append({
     kind: "queue.sync",
     sessionId,
@@ -30,14 +49,18 @@ export function writeQueueSync(journal: Journal, sessionId: string, items: reado
   });
 }
 
-/** 形状校验:回放只信结构完整的项(手改/跨版本残留的坏数据静默丢弃,不猜)。 */
-function asQueueItem(value: unknown): QueueItem | null {
+/** 形状校验:回放只信结构完整的项(手改/跨版本残留的坏数据静默丢弃,不猜)。
+ * inbox 可选元数据必须显式透传——本函数是白名单式重建,漏一个字段等于
+ * 「写进去了但回放读不到」,重启后 owner/水位全部归零(接线测试假绿的经典坑)。 */
+function asQueueItem(value: unknown): QueueItemWithInbox | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
   const id = typeof v.id === "string" ? v.id : "";
   const sessionId = typeof v.sessionId === "string" ? v.sessionId : "";
   const instruction = typeof v.instruction === "string" ? v.instruction : "";
   if (!id || !sessionId || !instruction) return null;
+  const num = (x: unknown): number | undefined =>
+    typeof x === "number" && Number.isFinite(x) ? x : undefined;
   return {
     id,
     sessionId,
@@ -45,6 +68,12 @@ function asQueueItem(value: unknown): QueueItem | null {
     createdAt: typeof v.createdAt === "number" ? v.createdAt : Date.now(),
     ...(typeof v.projectId === "string" ? { projectId: v.projectId } : {}),
     ...(Array.isArray(v.attachments) ? { attachments: v.attachments as QueueItem["attachments"] } : {}),
+    ...(typeof v.ownerId === "string" && v.ownerId ? { ownerId: v.ownerId } : {}),
+    ...(typeof v.idempotencyKey === "string" && v.idempotencyKey ? { idempotencyKey: v.idempotencyKey } : {}),
+    ...(typeof v.fingerprint === "string" && v.fingerprint ? { fingerprint: v.fingerprint } : {}),
+    ...(num(v.admittedSeq) !== undefined ? { admittedSeq: num(v.admittedSeq) } : {}),
+    ...(num(v.promotedSeq) !== undefined ? { promotedSeq: num(v.promotedSeq) } : {}),
+    ...(v.delivery === "pending" || v.delivery === "delivered" ? { delivery: v.delivery } : {}),
   };
 }
 
@@ -64,17 +93,19 @@ function collectSubmittedKeys(events: JournalEvent[]): Set<string> {
  * 启动回放:重建 per-session 队列。
  * - 快照语义:同会话后写的 queue.sync 覆盖先写的(只保留最后一条)。
  * - 已提交项(任务已存在)与形状非法的项丢弃。
+ * - :delivery==="delivered" 的项不恢复(已放行=已交给执行器,重启再排会二次执行);
+ * 旧 journal 无该字段则视为 pending,逐字沿用旧行为。
  * - 空队列的会话不收(与运行期 map.delete 语义一致)。
  */
-export function restoreQueues(journal: Journal): Map<string, QueueItem[]> {
+export function restoreQueues(journal: Journal): Map<string, QueueItemWithInbox[]> {
   const events = journal.readAll();
-  const snapshots = new Map<string, QueueItem[]>();
+  const snapshots = new Map<string, QueueItemWithInbox[]>();
   for (const ev of events) {
     if (ev.kind !== "queue.sync") continue;
     const p = (ev.payload ?? {}) as Record<string, unknown>;
     const sessionId = typeof p.sessionId === "string" && p.sessionId ? p.sessionId : ev.sessionId;
     const raw = Array.isArray(p.items) ? p.items : [];
-    const items: QueueItem[] = [];
+    const items: QueueItemWithInbox[] = [];
     for (const entry of raw) {
       const item = asQueueItem(entry);
       if (item) items.push(item);
@@ -82,9 +113,11 @@ export function restoreQueues(journal: Journal): Map<string, QueueItem[]> {
     snapshots.set(sessionId, items); // 后写覆盖:最后一条快照为准
   }
   const submitted = collectSubmittedKeys(events);
-  const out = new Map<string, QueueItem[]>();
+  const out = new Map<string, QueueItemWithInbox[]>();
   for (const [sessionId, items] of snapshots) {
-    const kept = items.filter((it) => !submitted.has(queueItemKey(it.sessionId, it.id)));
+    const kept = items.filter(
+      (it) => it.delivery !== "delivered" && !submitted.has(queueItemKey(it.sessionId, it.id)),
+    );
     if (kept.length > 0) out.set(sessionId, kept);
   }
   return out;

@@ -46,10 +46,16 @@ import {
   type CompletionAudit,
   type CompletionFacts,
 } from "./completion-audit.js";
+import {
+  residualFindings,
+  residualVerdict,
+  type ResidualCode,
+  type ResidualFact,
+} from "./closeout-residual.js";
 
 export type CloseoutMode = "main" | "subagent" | "super";
 export type CloseoutState = "done" | "failed" | "cancelled";
-export type CloseoutStep = "m16" | "m23" | "m107" | "m169" | "m170" | "m5";
+export type CloseoutStep = "m16" | "m23" | "m107" | "m169" | "m170" | "m5" | "residual";
 
 /** 收尾事件聚合所需的最小 journal 面(测试可直接喂假 journal)。 */
 export interface CloseoutEvent {
@@ -78,10 +84,12 @@ export interface CloseoutReport {
   citations?: CloseoutCitationsFact;
   deliverables?: { declared: DeliverableRecord[]; checked: VerifiedDeliverable[] };
   completion?: CompletionAudit;
+ /**  残留重扫结论(无 changeFacts.residual 时为缺席)。 */
+  residual?: { code: ResidualCode; hits: number; unresolved: number; warn: boolean; hardFail: boolean };
 }
 
 export interface CloseoutHardFail {
-  kind: "verify" | "citation" | "completion";
+  kind: "verify" | "citation" | "completion" | "residual";
   reason: string;
 }
 
@@ -101,15 +109,18 @@ export interface TaskCloseoutInput {
   baseline?: ChangeBaseline | null;
  /** 主 agent 已采集的白板事实( board 行)。 */
   boardFacts?: CompletionFacts["board"];
- /** 主 agent 已采集的全链路审计事实( change 行)。 */
-  changeFacts?: CompletionFacts["change"];
+ /**
+ * 主 agent 已采集的全链路审计事实( change 行)。
+ * :可选带 `residual`(收尾前重扫事实),缺席=旧任务零变化。
+ */
+  changeFacts?: NonNullable<CompletionFacts["change"]> & { residual?: ResidualFact };
  /** 主 agent 已采集的变更账本事实( change-ledger 行;sub/super 由  段自算)。 */
   ledgerFacts?: CompletionFacts["ledger"];
   mode: CloseoutMode;
   /** 仅 main 生效:hard 机制开关(modes 优先于 hardFlags)。 */
   hardFlags?: { changeAudit?: boolean; verifyOnStop?: boolean; completionAudit?: boolean; citationAudit?: boolean };
   /** 已解析的机制策略(off/warn/hard),缺省按 hardFlags 推导为 warn。 */
-  modes?: { verify?: string; citation?: string; completion?: string };
+  modes?: { verify?: string; citation?: string; completion?: string; change?: string };
   /** main hard 补跑:把提示喂回 loop.runTurn;缺省=不补跑,按现状判定。 */
   retryTurn?: (prompt: string) => Promise<string | null | undefined>;
   /** 限定本次执行的机制段(缺省:main=m107/m169/m170/m5;sub/super=全部六项)。 */
@@ -181,7 +192,13 @@ const DEFAULT_STEPS: Record<CloseoutMode, readonly CloseoutStep[]> = {
 /** 跑一次任务收尾聚合。不抛错(各段内部吞异常,收尾路径不被打断)。 */
 export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskCloseoutResult> {
   const { journal, sessionId, taskId, root, taskStartSeq, state, mode } = input;
-  const steps = input.steps ?? DEFAULT_STEPS[mode];
+ // :changeAudit 开启(modes.change 非 off;旧调用方按 hardFlags 推导)时,main 步骤含 residual。
+  const changeAuditMode = input.modes?.change ?? (input.hardFlags?.changeAudit ? "hard" : undefined);
+  const baseSteps = input.steps ?? DEFAULT_STEPS[mode];
+  const steps = mode === "main" && changeAuditMode !== undefined && changeAuditMode !== "off"
+    && !baseSteps.includes("residual")
+    ? [...baseSteps, "residual"]
+    : baseSteps;
   const has = (s: CloseoutStep) => steps.includes(s);
   const verifyMode = input.modes?.verify ?? (input.hardFlags?.verifyOnStop ? "hard" : "warn");
   const citationMode = input.modes?.citation ?? (input.hardFlags?.citationAudit ? "hard" : "warn");
@@ -349,6 +366,50 @@ export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskClo
       }
     } catch {
       /* 引用账本失败不影响收尾 */
+    }
+  }
+
+ // ── 残留重扫(────────────────────────────────────────
+ // 只有输入带 changeFacts.residual(surface 任务且收尾前重扫过)才跑;旧任务零变化。
+  if (has("residual") && input.changeFacts?.residual) {
+    try {
+      const rf = input.changeFacts.residual;
+      const residualMode = changeAuditMode === "hard" ? "hard" : "warn";
+      if (rf.code === "SCAN_UNAVAILABLE") {
+ // 重扫不可用:留痕但不判定、不阻塞(扫描失败不是任务的错)。
+        report.residual = { code: "SCAN_UNAVAILABLE", hits: 0, unresolved: 0, warn: false, hardFail: false };
+        push(appendOnce(journal, sessionId, taskId, "residual.audit", {
+          code: "SCAN_UNAVAILABLE",
+          rescanAt: rf.rescanAt ?? null,
+        }));
+        addText("## 残留审计\n- 重扫不可用(scan 失败):不判定、不阻塞收尾");
+      } else {
+        const r = residualFindings({ concept: rf.concept, manifest: rf.manifest, hits: rf.hits });
+        const v = residualVerdict({ findings: r.findings, mode: residualMode });
+        report.residual = {
+          code: r.code,
+          hits: r.counts.hits,
+          unresolved: r.counts.unresolved,
+          warn: v.warn,
+          hardFail: v.hardFail,
+        };
+        push(appendOnce(journal, sessionId, taskId, "residual.audit", {
+          code: r.code,
+          hits: r.counts.hits,
+          unresolved: r.counts.unresolved,
+          mode: residualMode,
+          rescanAt: rf.rescanAt ?? null,
+        }));
+        if (v.text) addText(v.warn || v.hardFail ? `${v.text}\n[验收摘要标记] ${v.mark}` : v.text);
+        if (v.hardFail) {
+ // 与 changeAudit/citation/completion 的 hard 同型:残留未解释不放行 done。
+          const reason = `未通过残留审计(命中未解释 ${r.counts.hits} 条 / 清单未收口 ${r.counts.unresolved} 条)`;
+          push(appendOnce(journal, sessionId, taskId, "residual.audit.hard-fail", { reason, code: r.code }));
+          return { finalText, report, appendedEvents, hardFail: { kind: "residual", reason } };
+        }
+      }
+    } catch {
+ /* 残留段失败不影响收尾 */
     }
   }
 

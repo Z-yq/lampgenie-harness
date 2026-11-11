@@ -1,6 +1,7 @@
 /**
  * Phase 1/2 上下文模型评分。
- * 默认走本地 150M 的 Jev 形状:POST {providerUrl}/decide
+ * 模式缺省 off(不加载模型、不记录、不剪枝),shadow/active 须显式开启;启用后缺省走本地
+ * 150M 的 Jev 形状:POST {providerUrl}/decide
  *   { state: {goal, candidates:[{id,tool,where,chars,preview}]},
  *     questions: { call_<id>: noul, result_<id>: noul } }
  * → { call_<id>: {label,confidence,probabilities:{true,false}}, ... }
@@ -30,7 +31,8 @@ export const SCORING_CACHE_TTL_MS = 60_000;
 export const SCORING_CACHE_CAPACITY = 32;
 
 export const DEFAULT_MODEL_SCORING = {
-  mode: "shadow" as ModelScoringMode,
+ /** :缺省关——不加载模型、不记录、不剪枝;shadow/active 须显式开启。 */
+  mode: "off" as ModelScoringMode,
   /** 本地 150M 监听地址(05_serve.py --serve --port 8105;8000/8102/8103 已被本机服务占用)。 */
   providerUrl: "http://127.0.0.1:8105",
   model: "jev-150m",
@@ -111,12 +113,46 @@ export interface ModelDecisionSets {
   drop: Set<string>;
 }
 
-export function resolveModelScoringConfig(config?: ModelScoringConfig): Required<Omit<ModelScoringConfig, "fetchImpl" | "apiKeyEnv">> & Pick<ModelScoringConfig, "apiKeyEnv" | "fetchImpl"> {
+/** 解析后的评分配置:mode 三档 + 布尔投影(enabled/shadow/prune);其余字段与 ModelScoringConfig 同源。 */
+export interface ResolvedModelScoringConfig {
+  mode: ModelScoringMode;
+ /** mode !== "off":三档开关的布尔投影(off 时调用方不得构造 client、不得发请求)。 */
+  enabled: boolean;
+ /** shadow:只记录不剪(决策集不进入 microcompact)。 */
+  shadow: boolean;
+ /** active:高置信 keep/drop 参与 microcompact。 */
+  prune: boolean;
+ /** off 的来源:default-off=缺省或非法值;explicit-off=显式配置关闭。 */
+  reason?: "default-off" | "explicit-off";
+  providerUrl: string;
+  model: string;
+  apiType: ModelScoringApiType;
+ /** 凭证 env 名;本地 150M 无需。 */
+  apiKeyEnv?: string;
+  minConfidence: number;
+  maxCandidates: number;
+  minCandidates: number;
+  minTotalChars: number;
+  scoreEverySteps: number;
+  timeoutMs: number;
+ /** 测试注入;生产不传。 */
+  fetchImpl?: typeof fetch;
+}
+
+export function resolveModelScoringConfig(config?: ModelScoringConfig): ResolvedModelScoringConfig {
   const d = DEFAULT_MODEL_SCORING;
-  const mode = config?.mode === "off" || config?.mode === "active" || config?.mode === "shadow" ? config.mode : d.mode;
+  const rawMode = config?.mode;
+ // :缺省/非法值一律 off——不构造 client、不发请求、不落账;shadow/active 仅显式配置时启用。
+  const mode: ModelScoringMode = rawMode === "off" || rawMode === "shadow" || rawMode === "active" ? rawMode : "off";
+  const reason: ResolvedModelScoringConfig["reason"] =
+    rawMode === undefined || mode !== rawMode ? "default-off" : mode === "off" ? "explicit-off" : undefined;
   const apiType = config?.apiType === "openai" ? "openai" : "jev";
   return {
     mode,
+    enabled: mode !== "off",
+    shadow: mode === "shadow",
+    prune: mode === "active",
+    ...(reason ? { reason } : {}),
     providerUrl: String(config?.providerUrl ?? d.providerUrl).trim(),
     model: String(config?.model ?? d.model).trim() || d.model,
     apiType,

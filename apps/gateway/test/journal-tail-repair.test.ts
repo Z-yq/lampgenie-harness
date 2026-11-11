@@ -1,5 +1,5 @@
 /**
- * 崩溃尾部修复(机制 #25)单测:
+ *  崩溃尾部修复(机制 #25)单测:
  * journal 尾部「有 tool.call 无 tool.result / 有 step.start 无 step.end」时,resume 前补合成终态。
  * 覆盖:计划形状与顺序 / time 复用会话末事件 / seq 连续 / 幂等 / 已闭合不动 /
  *       未开始执行不伪造工具结果 / 续跑文案注入 / 跨 session 不混入。

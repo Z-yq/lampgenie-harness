@@ -1,5 +1,5 @@
 /**
- * 团队任务 DAG 单测(journal 折叠 + CAS + 依赖 + 租约 + 熔断 + 写域警告)。
+ *  团队任务 DAG 单测(journal 折叠 + CAS + 依赖 + 租约 + 熔断 + 写域警告)。
  * journal 用 MemoryJournal(与生产环境同一实现类,append/readAll/seq 语义一致)。
  */
 import { describe, it, expect } from "vitest";

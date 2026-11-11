@@ -238,3 +238,105 @@ export function projectSession(
   if (factsOut) factsOut.compactStart = compactStart;
   return proj;
 }
+
+/* --------------------------------------------------------------------------------------------
+ * (2026-11):投影缓存版本键与恢复 floor——session.status 的 memo 是跨请求累积态,
+ * 三个新事实决定它还能不能用:①归约口径变了(版本键);②恢复边界移动(floor);
+ * ③日志被收缩/restore 回退(事件数或最大 seq 变小)。判定与 floor 提取保持纯函数,
+ * 服务端只做接线(见 apps/gateway/src/server.ts 的 sessionStatusMemo)。
+ * 现有 projectSession/mergeProjection 语义一字不动;floor 过滤由调用方在喂入前做。
+ * ------------------------------------------------------------------------------------------ */
+
+/** 投影状态版本键:归约口径/字段语义变化时 +1,服务端一律丢弃旧 memo(避免升级后拿旧投影硬拼)。 */
+export const PROJECTION_STATE_VERSION = 2;
+
+/** 恢复 floor 事件的 payload.what 判别符(journal 落 `custom{what,floorSeq}`)。 */
+export const PROJECTION_FLOOR_WHAT = "session.restoreFloor";
+
+/** floor 提取只关心 kind/payload/seq(其余字段透明)。 */
+export interface ProjectionFloorEventLike {
+  kind: string;
+  payload?: unknown;
+ /** 全局递增 seq;缺失/非法按 0 处理(session-journal 每条事件都有,测试夹具可省)。 */
+  seq?: number;
+}
+
+/**
+ * 计算投影恢复 floor:取**最后一条** `custom{what:"session.restoreFloor"}` 的 floorSeq
+ * (无=0;非法/非正/非有限=0),再 clamp 到该批事件的最大 seq(floor 不可能越过日志前沿)。
+ * 纯函数,不读时钟不触 IO。
+ */
+export function projectionFloorOf(events: readonly ProjectionFloorEventLike[]): number {
+  let maxSeq = 0;
+  for (const e of events) {
+    if (typeof e.seq === "number" && Number.isFinite(e.seq) && e.seq > maxSeq) maxSeq = e.seq;
+  }
+  let floor = 0;
+  for (const e of events) {
+    if (e.kind !== "custom") continue;
+    const p = (e.payload ?? {}) as { what?: unknown; floorSeq?: unknown };
+    if (p.what !== PROJECTION_FLOOR_WHAT) continue;
+ // 最后一条说了算:合法正整数取整,非法/负数/非有限一律归 0(不信任坏数据)。
+    floor = typeof p.floorSeq === "number" && Number.isFinite(p.floorSeq) && p.floorSeq > 0 ? Math.floor(p.floorSeq) : 0;
+  }
+  return Math.min(floor, maxSeq);
+}
+
+/**
+ * 按恢复 floor 裁剪事件:返回 seq >= floor 的**新数组**;floor <= 0(含非法)原样返回
+ * **同一引用**(稳态零分配)。纯,不改入参。
+ */
+export function filterFromFloor<T extends { seq?: number }>(events: T[], floor: number): T[] {
+  if (!Number.isFinite(floor) || floor <= 0) return events;
+  return events.filter((e) => (typeof e.seq === "number" ? e.seq : 0) >= floor);
+}
+
+/** 缓存可信度判定的输入(全部取自 memo 与本次读到的日志事实)。 */
+export interface ProjectionCacheVerdictInput {
+ /** memo 里记录的版本键。 */
+  version?: number;
+ /** 期望版本(缺省 PROJECTION_STATE_VERSION;测试可注入)。 */
+  expectedVersion?: number;
+ /** 本次日志的 floor(全量=现场计算;增量=批内新 restoreFloor 事件或沿用 memo)。 */
+  floor?: number;
+ /** memo 里记录的 floor。 */
+  prevFloor?: number;
+ /** 本次投影源事件数(全量=floor 过滤后条数;增量=memo 计数+新事件数)。 */
+  nextCount?: number;
+ /** memo 记录的投影源事件数。 */
+  prevCount?: number;
+ /** 本次日志的最大 seq。 */
+  nextWatermark?: number;
+ /** memo 记录的水位(上一批最大 seq)。 */
+  prevWatermark?: number;
+}
+
+/** 判定原因(rebuild=为什么必须重建;ok=可复用/可增量)。 */
+export type ProjectionCacheReason = "version" | "floor-changed" | "log-shrink" | "restore-floor" | "ok";
+
+export interface ProjectionCacheVerdict {
+  rebuild: boolean;
+  reason: ProjectionCacheReason;
+}
+
+/**
+ * 判定 session.status 的投影 memo 能否复用。顺序即优先级:
+ * ① version 不符 → version;② floor 变化 → floor-changed;③ 事件数变小(日志收缩)→ log-shrink;
+ * ④ 最大 seq 变小(restore 回退)→ restore-floor;其余 ok(可复用/可增量)。
+ * 字段缺失/非法一律按「不可信」保守 rebuild(不 throw):坏数据只影响缓存命中,不影响投影正确性。
+ */
+export function projectionCacheVerdict(input: ProjectionCacheVerdictInput = {}): ProjectionCacheVerdict {
+  const expected = Number.isInteger(input.expectedVersion) ? input.expectedVersion! : PROJECTION_STATE_VERSION;
+ // ① 版本键:缺失/非整数/不符 → 整份丢弃(升级前的旧缓存口径不可信)。
+  if (!Number.isInteger(input.version) || input.version !== expected) return { rebuild: true, reason: "version" };
+ // ② 恢复边界移动:旧投影可能含着 floor 之前的历史,必须重建。
+  if (!Number.isInteger(input.floor) || !Number.isInteger(input.prevFloor)) return { rebuild: true, reason: "floor-changed" };
+  if (input.floor !== input.prevFloor) return { rebuild: true, reason: "floor-changed" };
+ // ③ 日志收缩:事件数变小(截断/清理/换日志)→ 增量拼接会漏事件。
+  if (!Number.isInteger(input.nextCount) || !Number.isInteger(input.prevCount)) return { rebuild: true, reason: "log-shrink" };
+  if (input.nextCount! < input.prevCount!) return { rebuild: true, reason: "log-shrink" };
+ // ④ 水位回退:最大 seq 变小 = restore 回退,旧累积态对应的事件已不存在,不能硬拼。
+  if (!Number.isInteger(input.nextWatermark) || !Number.isInteger(input.prevWatermark)) return { rebuild: true, reason: "restore-floor" };
+  if (input.nextWatermark! < input.prevWatermark!) return { rebuild: true, reason: "restore-floor" };
+  return { rebuild: false, reason: "ok" };
+}

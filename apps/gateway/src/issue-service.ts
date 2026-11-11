@@ -10,6 +10,14 @@ import { join } from "node:path";
 import { bus } from "@lampgenie/core";
 import { detectGitHost, type GitHostInfo } from "./git-host.js";
 import { gitRemoteUrl } from "./git-service.js";
+import {
+  buildWriteBackEvent,
+  hasWriteBack,
+  terminalWriteBackPlan,
+  writeBackKey,
+  type JournalLike,
+  type TerminalTaskState,
+} from "./issue-task-link.js";
 
 export type IssueStatus = "todo" | "doing" | "done";
 
@@ -46,12 +54,32 @@ export interface IssuePatch {
   taskId?: string;
 }
 
+/**  终态回写结果(OK=已写;DUPLICATE=幂等命中;NOT_FOUND/INVALID=未写且可重试)。 */
+export interface IssueWriteBackResult {
+  ok: boolean;
+  code: "OK" | "DUPLICATE" | "NOT_FOUND" | "INVALID";
+  written?: boolean;
+  error?: string;
+}
+
+export interface IssueWriteBackInput {
+  projectId: string;
+  number: number;
+  taskId: string;
+  state: TerminalTaskState | string;
+  journal: JournalLike;
+  sessionId: string;
+}
+
 export interface IssueChannel {
   readonly kind: "github" | "gitlab" | "repo";
   list(projectId: string): Promise<IssueRecord[]>;
   create(input: IssueCreateInput): Promise<IssueRecord>;
   update(projectId: string, number: number, patch: IssuePatch): Promise<IssueRecord | null>;
   comment(projectId: string, number: number, author: string, body: string): Promise<boolean>;
+ /**  终态回写钩子(可选):通道可自定义幂等/失败语义;
+ * 缺省(RepoIssues/GitHub/GitLab 均未实现)= writeBackIssueTask 走既有 update/comment,零新增网络语义。 */
+  writeBack?(input: IssueWriteBackInput): Promise<IssueWriteBackResult>;
 }
 
 /** fetch 注入面(单测/自签 https 场景替换;缺省 globalThis.fetch)。 */
@@ -547,5 +575,65 @@ export class IssueService {
     await this.comment(link.projectId, link.number, this.opts.username ?? "genie", mark + summary);
     if (t.state === "done") await this.update(link.projectId, link.number, { status: "done" });
     return true;
+  }
+}
+
+/**
+ * :任务终态 → issue 回写(只写一次;失败可重试)。
+ * 幂等双保险:①journal 里已有同 key 的 custom{type:"issue.task.writeback"} → DUPLICATE;
+ * ②plan 判定已经 done / 已有同文评论 → DUPLICATE。
+ * 失败(update/comment 抛错或返回空)返回 INVALID/NOT_FOUND 且**不落幂等事件**(下次可重试)。
+ * 不新增网络语义:统一走通道既有 update/comment。
+ */
+export async function writeBackIssueTask(
+  channel: IssueChannel,
+  input: IssueWriteBackInput): Promise<IssueWriteBackResult> {
+  if (channel.writeBack) return channel.writeBack(input);
+  const key = writeBackKey(input.taskId, input.number);
+  try {
+    if (hasWriteBack(input.journal.readAll(), key)) return { ok: true, code: "DUPLICATE", written: false };
+  } catch (err) {
+    return { ok: false, code: "INVALID", error: String(err).slice(0, 300) };
+  }
+  let issue: IssueRecord | null;
+  try {
+    issue = (await channel.list(input.projectId)).find((i) => i.number === input.number) ?? null;
+  } catch (err) {
+    return { ok: false, code: "INVALID", error: String(err).slice(0, 300) };
+  }
+  if (!issue) return { ok: false, code: "NOT_FOUND", error: "issue not found" };
+  const plan = terminalWriteBackPlan({
+    taskId: input.taskId,
+    taskState: input.state,
+    issue,
+    at: Date.now(),
+  });
+  if (plan.code === "DUPLICATE") return { ok: true, code: "DUPLICATE", written: false };
+  if (!plan.ok) return { ok: false, code: plan.code };
+  try {
+    if (plan.patch) {
+      const rec = await channel.update(input.projectId, input.number, plan.patch);
+      if (!rec) return { ok: false, code: "NOT_FOUND", error: "issue vanished during update" };
+    }
+    if (plan.comment) {
+      const done = await channel.comment(input.projectId, input.number, "genie", plan.comment);
+      if (!done) return { ok: false, code: "NOT_FOUND", error: "issue vanished during comment" };
+    }
+    input.journal.append({
+      kind: "custom",
+      sessionId: input.sessionId,
+      payload: buildWriteBackEvent({
+        key,
+        taskId: input.taskId,
+        issueNumber: input.number,
+        projectId: input.projectId,
+        state: input.state,
+        at: Date.now(),
+      }),
+    });
+    return { ok: true, code: "OK", written: true };
+  } catch (err) {
+ // 失败不落幂等事件:下一次终态重放/重试还能再写一次。
+    return { ok: false, code: "INVALID", error: String(err).slice(0, 300) };
   }
 }

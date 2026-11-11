@@ -9,6 +9,7 @@ import { remoteLs, remoteReadWindow, remoteWrite, remoteEdit, remoteGlob, remote
 import { tryChannelJson } from "./remote-channel.js";
 import { parseRemoteProject, type RemoteProject } from "./remote-project.js";
 import { snapshotApprovalObject, verifyApprovalObject } from "./approval-object.js";
+import { TimeTravelStore } from "./time-travel-store.js";
 import { makeLlmTraceSink } from "./llm-trace.js";
 import { mkdirSync as _mdSync } from "node:fs";
 import { execFileSync as _execFileSync } from "node:child_process";
@@ -34,13 +35,22 @@ import { isContentNode } from "./board-content-predicate.js";
 import { makeCalleesResolver } from "./board-derive-resolver.js";
 import { composeSystemPrompt, discoverAgentsMd, renderSubagentDispatchSection, renderSkillIndex, SKILL_INDEX_MAX_CHARS, type SkillIndexEntry, type ToolHint } from "@lampgenie/runtime/agent/system-composer";
 import { ParentAskBroker, driveParentDecision, renderPendingQuestionsBlock, buildSubagentAnswerTool } from "@lampgenie/runtime/agent/parent-ask-broker";
+import { SubagentRegistry } from "@lampgenie/runtime/agent/subagent-registry";
+// / 子代理控制面纯逻辑:steer 越权裁决 / 冷启动续跑计划 / fork 摘要 / 隔离与回收契约。
+import { MAX_SUBAGENT_DEPTH, depthOf, forkContextBlock, isolationVerdict, resumePlan, scratchContract, steerVerdict } from "@lampgenie/runtime/agent/subagent-control";
+// 深度从 registry 父子链推导(不信参数)+ 子代理 deny 并集收敛 + 续跑会话键(纯逻辑模块)。
+import { PRIMARY_ONLY_TOOLS, convergeDeny, resumeSessionKey, spawnDepthVerdict } from "@lampgenie/runtime/agent/subagent-depth";
 // 注意力预算:外发消息(提问/路由 note/终端交付)的用途/长度/结构化/去重门。
 import { guardAskUserPayload, guardRouteNote, guardTerminalNotice } from "@lampgenie/runtime/agent/attention-budget";
+//  后台子代理 idle wake:父会话空闲时把终态通知合并成一次 model-only turn(判定纯逻辑在 runtime)。
+import { generationOfEvent, wakeVerdict, type PendingNotification, type WakeCode } from "@lampgenie/runtime/task/idle-wake";
 import { loadSoul, DEFAULT_SOUL_MD, MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { loadAgentProfiles, formatAgentProfiles, composeSubagentInstructions, expandToolTokens, resolveProfileTools, toolGrantMatched } from "@lampgenie/runtime/agent/agent-profiles";
 import { sessionSearchTool } from "./session-search.js";
 import { SUBAGENT_READ_TOOLS, SUBAGENT_WRITE_TOOLS } from "./llm-loop-backend.js";
 import type { SessionModelFace } from "./session-model.js";
+// 任务档案:类型面走 runtime src(types 条件);值面由 task-profile-store 惰性加载(不在启动期 TLA)。
+import type { TaskProfile } from "@lampgenie/runtime/agent/task-profile";
 import { makeCompactHook } from "./compact-hook.js";
 import { autoCompactGate } from "./compact-gate.js";
 import { attachToolView } from "./tool-view.js";
@@ -49,20 +59,29 @@ import { attachToolView } from "./tool-view.js";
 import { deliverFinalNotice, extractDeliverableText } from "./subagent-result-digest.js";
 import { takePendingComments, renderPendingCommentsBlock } from "./board-comments.js";
 import { planTaskSurface, degradeFinalFor, GUI_ONLY_TOOLS } from "./surface-capabilities.js"; // 表面/通道能力包
-import { SOP_TIPS, sopTipText } from "./agent-wiring-sop-tips.js";
+import { SOP_TIPS, sopTipText, renderStartProfileTip } from "./agent-wiring-sop-tips.js";
+import { probeWorkStart, renderWorkStartBrief, verifyCommandsFor } from "./work-start-profile.js";
 // 开工前置门(:基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
 import { readBaselineStatus, planFreshnessSkip, planFreshnessAction, renderFreshnessLine, loadWordingTable, scanRuleWording, renderWordingLines } from "./startup-freshness.js";
 import type { FreshnessConfig } from "./startup-freshness.js";
 import { buildDefaultMicrocompactThreshold, DEFAULT_GROWTH_SPURT_TOKENS } from "@lampgenie/runtime/agent/microcompact";
 import { bigResultEnabledFromEnv } from "@lampgenie/runtime/agent/big-intake";
 import { readFilesOf, renderParentReadBlock } from "@lampgenie/runtime/agent/read-file-state";
+import { renderSystemReminder } from "@lampgenie/runtime/agent/reminder-source";
 import type { InjectGate } from "@lampgenie/runtime/agent/inject-gate";
+import { shouldRecallMemory } from "@lampgenie/memory";
 import { dynTipKeys, dynTipText, type DynSignals } from "./agent-wiring-dynamic-tips.js";
 import { broadcastTraceStatsOf } from "./compact-hook.js";
 import type { NodeRegistry, NodeDispatch } from "./nodes.js";
 import { dispatchGuard } from "./nodes.js";
 import { permissionRulesFromConfig, deriveChildRules, matchPermissionRule, evaluatePermission, type PermissionRule } from "@lampgenie/core";
 import { loadRulesHot } from "./permission-store.js";
+import {
+  SessionAlwaysStore,
+  evaluatePermission as evaluatePermissionGuard,
+  type Guard,
+  type PermissionEvaluation,
+} from "@lampgenie/runtime/agent/permission-guard";
 import { permissionMode } from "./permission-mode.js";
 import { BUILTIN_COMMANDS } from "./command-catalog.js";
 import {
@@ -97,6 +116,7 @@ import { createAcpBackend, type SubagentBackend } from "@lampgenie/executors";
 import type { TaskSupervisor } from "./task-manager.js";
 import { appendUserStoppedMarker } from "./user-stop-marker.js";
 import type { Task } from "@lampgenie/core";
+import { normalizeTaskKind, taskKindCapabilities, filterToolNamesByKindCapabilities, type TaskKindCapabilities } from "@lampgenie/runtime/task/task-kind";
 import { setPlanDeps } from "@lampgenie/code-sense";
 // 合并:代码认知唯一入口 code_sense(action 结构面 + mode 语义面)承载于 sense-tool.ts;
 // 本文件只做装配与提示词接线(旧 code_index 已删除)。
@@ -112,6 +132,11 @@ import {
   surfaceGateVerdict,
   type ChangeSurfaceJournal,
 } from "./change-surface-tool.js";
+// :分类可更正——gate 判据前读本会话最近一条更正(按水位缓存,不每步全扫)。
+import { readChangeScopeCorrection, type ChangeScopeCorrection } from "./change-scope-correction.js";
+// :收尾残留重扫——surface 任务在收尾前重扫概念词,残留事实进 changeFacts.residual。
+import { scanSurface } from "@lampgenie/code-sense/surface";
+import type { ResidualFact } from "./closeout-residual.js";
 // 任务级验证账本 / 交付物声明账本:纯函数与工具各一模块,收尾钩子在本文件。
 import { computeVerifyLedger, renderVerifyLedgerWarning, renderVerifyRetryPrompt } from "./verification-ledger.js";
 //  轮末变更账本:纯函数采集在独立模块,终态出口(finally)在这里接线。
@@ -143,9 +168,12 @@ import { projectMainlineBlock } from "@lampgenie/code-sense/project-profile";
 import { codeReview } from "@lampgenie/code-sense/review";
 import { ExperienceStore, distillFromTask, mergeSkillIndex, mergeSkillIndexWith, builtinSkillBody } from "@lampgenie/experience";
 import { disabledBuiltins } from "./skills-admin.js";
-import { WorkflowEngine } from "@lampgenie/workflow";
+import { WorkflowEngine, type WorkflowCaps, type CapsPatch } from "@lampgenie/workflow";
+import { OwnerRegistry, type OwnerUnit } from "@lampgenie/runtime/task/ownership";
+import { WorkflowAssetStore, type WorkflowAsset, type WorkflowAssetScope } from "@lampgenie/workflow/asset-store";
 import { renderTemplate } from "@lampgenie/workflow/templates";
 import { join } from "node:path";
+import { homedir } from "node:os";
 
 /**
  * 权限规则装载:env GENIE_PERMISSION_RULES(JSON 数组,fromConfig 形态对象亦可)
@@ -179,6 +207,97 @@ function journalGate(journal: Journal, sessionId: string, tool: string, effect: 
   });
 }
 
+/* ── 权限策略链(单调收窄)+ session-always 内存作用域 ──────────────────────────
+ * guard 只能 deny/abstain(见 runtime/agent/permission-guard.ts 头注:允许 allow 等于
+ * 给插件式策略发无约束放行票)。这里只做接线:缺省空链 + 空存储 = 与旧行为逐字一致,
+ * 接入后最多把「将放行」变成「已拒绝」。
+ */
+
+/** 进程级 session-always 存储:内存作用域,TTL + 单会话上限 + 会话隔离,重启即失效
+ * (会话级授权不是策略,刻意不落盘)。 */
+const sessionAlwaysStore = new SessionAlwaysStore();
+
+/** 装配口(缺省空链)。预留 API:生产装配方在角色/策略层注入 guard 时调用。 */
+let permissionGuards: Guard[] = [];
+export function setPermissionGuards(guards: Guard[] | undefined): void {
+  permissionGuards = Array.isArray(guards) ? [...guards] : [];
+}
+/** 测试可观口:读进程级 store(断言 TTL/上限/隔离/不写不命中)。 */
+export function sessionAlwaysStoreForTests(): SessionAlwaysStore { return sessionAlwaysStore; }
+
+/** 「本会话总是允许」的键:工具 + 摘要——一次放行只对同一调用形态生效,不扩散到同工具全部调用。 */
+export function permissionAlwaysKey(tool: string, summary: string): string {
+  return tool + "|" + summary;
+}
+
+/** 会话内 always 的授予/撤销口(面板「总是允许(本会话)」等入口共用)。
+ * no-always-allow 在场时 remember 直接拒写,命中侧由 evaluatePermission 短路。 */
+export function rememberSessionAlways(sessionId: string, tool: string, summary: string, revision?: string): boolean {
+  if (noAlwaysAllowEnabled()) return false;
+  return sessionAlwaysStore.remember(sessionId, permissionAlwaysKey(tool, summary), {
+    at: Date.now(),
+    ...(revision ? { revision } : {}),
+  });
+}
+/** 会话结束/取消的清场口;会话关闭点在 server 侧(本任务不改越界文件),此处只备接入。 */
+export function clearSessionAlways(sessionId?: string): void {
+  sessionAlwaysStore.clear(sessionId);
+}
+
+/** no-always-allow:env GENIE_NO_ALWAYS_ALLOW=1 > 项目 genie.config.json 的 permission.noAlwaysAllow。
+ * 直读项目文件(不走 loadConfig 全量合并):语义=「项目级设置页写的值」。 */
+export function noAlwaysAllowEnabled(root: string = repoRoot()): boolean {
+  if (process.env.GENIE_NO_ALWAYS_ALLOW === "1") return true;
+  try {
+    const j = JSON.parse(readFileSync(join(root, "genie.config.json"), "utf8")) as { permission?: { noAlwaysAllow?: unknown } };
+    return j?.permission?.noAlwaysAllow === true;
+  } catch {
+    return false;
+  }
+}
+
+/** 两处 ask 决策前的统一判定:guard deny(最高优先)> session-always 命中 > 交回既有路径。
+ * deny/allow 都就地落 permission.guard 审计;ask 原样返回,调用方继续走规则/面板。
+ * 事件用 kind=custom + payload.type(EventKind 是 core 的封闭联合,本任务不越界改它)。 */
+export function decidePermission(args: {
+  tool: string;
+  summary: string;
+  sessionId: string;
+  journal: Journal;
+  now?: number;
+}): PermissionEvaluation {
+  const ev = evaluatePermissionGuard({
+    mode: permissionMode(),
+    tool: args.tool,
+    sessionId: args.sessionId,
+    guardCtx: { tool: args.tool, summary: args.summary, sessionId: args.sessionId },
+    guards: permissionGuards,
+    alwaysStore: sessionAlwaysStore,
+    alwaysKey: permissionAlwaysKey(args.tool, args.summary),
+    noAlwaysAllow: noAlwaysAllowEnabled(),
+    now: args.now ?? Date.now(),
+  });
+  if (ev.effect !== "ask") {
+    const guardIds = (ev.guardHits ?? []).filter((h) => h.verdict === "deny").map((h) => h.guardId);
+    try {
+      args.journal.append({
+        kind: "custom",
+        sessionId: args.sessionId,
+        payload: {
+          type: "permission.guard",
+          tool: args.tool,
+          effect: ev.effect,
+          source: ev.source,
+          guardId: guardIds.join(","),
+          reasons: ev.denyReasons ?? [],
+          ...(ev.reason ? { reason: ev.reason.slice(0, 200) } : {}),
+        },
+      });
+    } catch { /* 审计失败不改变决策 */ }
+  }
+  return ev;
+}
+
 /** 关卡 Gate 风险启发式(旧主链路两处硬编码 "medium" 无信号):
  * 写/执行族=high,只读族=low,其余=medium。只影响展示与播报排序,**不改审批行为**。 */
 export function riskOfTool(tool: string): "low" | "medium" | "high" {
@@ -200,6 +319,17 @@ export function makeSubagentPermissionAsker(deps: {
   rulesRoot?: string;
 }): (tool: string, summary: string) => Promise<boolean> {
   return async (tool: string, summary: string) => {
+ // 单调收窄:后台子代理 ask 与前台同一判定(空链 = 行为不变);deny 不放行、
+ // always 命中直接放行,abstain 继续走下面的 env/mode/规则/面板链。
+    const guardEv = decidePermission({ tool: "subagent", summary, sessionId: deps.sessionId, journal: deps.journal });
+    if (guardEv.effect === "deny") {
+      journalGate(deps.journal, deps.sessionId, "subagent", "denied", "guard-denied");
+      return false;
+    }
+    if (guardEv.effect === "allow") {
+      journalGate(deps.journal, deps.sessionId, "subagent", "allowed", "session-always");
+      return true;
+    }
     if (process.env.GENIE_SUBAGENT_ASK === "allow-once") {
       journalGate(deps.journal, deps.sessionId, "subagent", "allowed", "env-allow-once");
       return true;
@@ -380,7 +510,7 @@ export function buildSubagentExtraTools(
   }
   const exec: Tool[] = [
     // workspace=工作区内档:命令围栏(与 file-tools.fencePath 同口径,围栏根=taskRoot);其余档不注入=零回归
-    createTerminalTool({
+    ownTerminalUnits(createTerminalTool({
       service: getTerminalService(execCtx.journal),
       owner: execCtx.owner,
       root: taskRoot,
@@ -391,7 +521,7 @@ export function buildSubagentExtraTools(
         if (gv && (gv.destructive || gv.write)) return subagentGitBlockReason(gv);
         return permissionMode() === "workspace" ? fenceCommand(c, taskRoot) : null;
       },
-    }),
+    }), { journal: execCtx.journal, owner: execCtx.owner, sessionId: execCtx.sessionId, service: getTerminalService(execCtx.journal) }),
  // :后台命令 job(与 terminal 同 owner;通知路由回父会话)。
     createJobTool({
       registry: getJobRegistry(execCtx.journal),
@@ -534,6 +664,17 @@ export function buildMainLoopPermission(
   const panelAsk = (permissionMode() === "ask" || permissionMode() === "workspace") && process.env.GENIE_PERM_ASK_MODE !== "allow" && brokerRef
     ? async (call: { name: string; arguments: string }) => {
         const preview = String(call.arguments ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+ // 单调收窄:guard 链 deny → 直拒(不咨询规则/面板);session-always 命中 → 直放;
+ // abstain 继续走下面的面板审批(空链 + 空存储时与旧行为逐字一致)。
+        const guardEv = decidePermission({ tool: call.name, summary: preview, sessionId: ctx.sessionId, journal: ctx.journal });
+        if (guardEv.effect === "deny") {
+          journalGate(ctx.journal, ctx.sessionId, call.name, "denied", "guard-denied");
+          return false;
+        }
+        if (guardEv.effect === "allow") {
+          journalGate(ctx.journal, ctx.sessionId, call.name, "allowed", "session-always");
+          return true;
+        }
  // 审批对象=执行对象:冻结真正要执行的调用(name+arguments);面板放行后复核,变了按拒绝。
         const approvalObject = () => ({ name: call.name, arguments: call.arguments });
         const snap = snapshotApprovalObject(approvalObject());
@@ -588,6 +729,128 @@ function getTerminalService(journal: Journal): TerminalSessionService {
     terminalServices.set(key, service);
   }
   return service;
+}
+
+/* ===== 会话工作所有权(owner/generation)接线 =====
+ * 注册表由装配方(app.ts)注入,按 journal 实例缓存——与 terminalServices/jobRegistries 同纪律
+ * (同进程多 app(测试)互不串会话)。未注入=整套逻辑 no-op,旧行为逐字不变。
+ * 关闸/级联顺序/代际判定全部由 OwnerRegistry 负责,这里只做「登记 + 终态 settle + 取消」三件事。 */
+const ownerRegistries = new WeakMap<object, OwnerRegistry>();
+
+/** 取本 journal 对应的注册表;未注入=undefined(调用方据此跳过失落)。 */
+function ownerRegistryOf(journal: Journal): OwnerRegistry | undefined {
+  try {
+    return ownerRegistries.get(journal as unknown as object);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 装配期绑定(journal → registry);重复装配覆盖为最新一份(测试内多 app 各自一份)。 */
+export function bindOwnerRegistry(journal: Journal, registry: OwnerRegistry | undefined): void {
+  if (!registry) return;
+  try {
+    ownerRegistries.set(journal as unknown as object, registry);
+  } catch { /* 绑定失败=降级 no-op */ }
+}
+
+/** 代际来源说明:这些登记点(parentId/工具工厂层)拿不到 loop 的 turn 序号或任务 generation,
+ * 故用**进程内单调递增计数器**作代际——每次登记取一个新代际,迟到回调凭旧代际被 settle 拒收
+ * (STALE_GENERATION),与 OwnerRegistry 的「换代递减」语义一致。 */
+let ownerGenerationSeq = 0;
+function nextOwnerGeneration(): number {
+  ownerGenerationSeq += 1;
+  return ownerGenerationSeq;
+}
+
+/** terminal 单元索引(unitId=终端会话 id → 所属服务与 tool 侧 owner):取消时据此调 service.close。 */
+const terminalUnitOwners = new Map<string, { owner: string; service: TerminalSessionService; generation: number }>();
+
+/** 登记一个工作单元;返回本次代际(未注入注册表/登记被拒=undefined,调用方按 no-op 处理)。 */
+function registerOwnedUnit(journal: Journal, input: { unitId: string; kind: OwnerUnit["kind"]; ownerSessionId: string }): number | undefined {
+  const registry = ownerRegistryOf(journal);
+  if (!registry) return undefined;
+  const generation = nextOwnerGeneration();
+  const r = registry.register({ unitId: input.unitId, kind: input.kind, ownerSessionId: input.ownerSessionId, generation });
+  if (r.code !== "OK") {
+ // CLOSING=owner 已关闸(会话正在关门),新单元不该再冒出来;只告警,不改变既有执行路径。
+    console.warn(`[ownership] 单元登记被拒(${input.kind}:${input.unitId}):${r.code}`);
+    return undefined;
+  }
+  return generation;
+}
+
+/** 终态 settle:旧代际迟到(会话关闸/重开换代后旧实例才回来)→ 丢弃,不更新状态,只告警。 */
+function settleOwnedUnit(journal: Journal, unitId: string, generation: number | undefined): void {
+  if (generation === undefined) return;
+  const registry = ownerRegistryOf(journal);
+  if (!registry) return;
+  const r = registry.settle(unitId, { generation });
+  if (r.code === "STALE_GENERATION") {
+    console.warn(`[ownership] 丢弃旧代际终态:${unitId}@${generation}(代际已换代,结果不写回新实例)`);
+    return;
+  }
+  if (r.code !== "OK") console.warn(`[ownership] settle 失败:${unitId}(${r.code})`);
+}
+
+/** 关会话时的取消 hook(由 app.ts 注入 server)。
+ * kind=terminal → 对应 terminal 服务的 close(owner-close);kind=subagent → 既有 cancel 句柄;
+ * kind=workflow → 引擎 run 内部 AbortController(WorkflowEngine 未暴露公开 abort 方法,运行时可达;缺失则只 warn)。
+ * 本函数可抛错:调用方(server)负责兜底 settle;单元状态不记 error,只 console.warn。 */
+export async function cancelOwnedUnit(unit: OwnerUnit): Promise<void> {
+  try {
+    if (unit.kind === "terminal") {
+      const entry = terminalUnitOwners.get(unit.unitId);
+      if (!entry) { console.warn(`[ownership] 终端单元无服务索引,跳过:${unit.unitId}`); return; }
+      await entry.service.close(entry.owner, unit.unitId, "owner-close");
+      terminalUnitOwners.delete(unit.unitId);
+      return;
+    }
+    if (unit.kind === "subagent") {
+      const cancel = bgAgents.get(unit.unitId)?.cancel;
+      if (!cancel) { console.warn(`[ownership] 子代理无 cancel 句柄(可能已收尾):${unit.unitId}`); return; }
+      await cancel();
+      return;
+    }
+    const engine = runningWorkflows.get(unit.unitId) as unknown as { abort?: { abort?: (reason?: string) => void } } | undefined;
+    const controller = engine?.abort;
+    if (typeof controller?.abort === "function") { controller.abort("owner-close"); return; }
+    console.warn(`[ownership] workflow 引擎未暴露 abort,靠 run 时间盒自然收敛:${unit.unitId}`);
+  } catch (err) {
+    console.warn(`[ownership] 取消失败(${unit.kind}:${unit.unitId}):`, err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** terminal open 成功后登记 ownership(unitId=终端会话 id)。未注入注册表=原样返回,零行为变化。 */
+function ownTerminalUnits(tool: Tool, deps: { journal: Journal; owner: string; sessionId: string; service: TerminalSessionService }): Tool {
+  const orig = tool.execute.bind(tool) as (a: unknown, s?: AbortSignal, c?: { callId: string }) => Promise<string>;
+  return {
+    ...tool,
+    async execute(args: unknown, signal?: AbortSignal, ctx?: { callId: string }): Promise<string> {
+      const result = await orig(args, signal, ctx);
+      try {
+        const action = String((args as { action?: unknown } | null)?.action ?? "");
+ // 会话工作所有权:显式 close = 该终端单元终态 → settle。
+ // 不 settle 的话单元永远停在 running,会话关闸时 pending 恒非空且会对已死会话再发一次 cancel。
+        if (action === "close") {
+          const closingId = String((args as { sessionId?: unknown } | null)?.sessionId ?? "");
+          const entry = closingId ? terminalUnitOwners.get(closingId) : undefined;
+          if (entry) {
+            settleOwnedUnit(deps.journal, closingId, entry.generation);
+            terminalUnitOwners.delete(closingId);
+          }
+          return result;
+        }
+        if (action !== "open") return result;
+        const parsed = JSON.parse(String(result)) as { sessionId?: unknown; id?: unknown } | null;
+        const sessionId = typeof parsed?.sessionId === "string" ? parsed.sessionId : typeof parsed?.id === "string" ? parsed.id : "";
+        if (!sessionId) return result;
+        const generation = registerOwnedUnit(deps.journal, { unitId: sessionId, kind: "terminal", ownerSessionId: deps.sessionId });
+        if (generation !== undefined) terminalUnitOwners.set(sessionId, { owner: deps.owner, service: deps.service, generation });
+      } catch { /* 登记失败不影响终端工具结果 */ }
+      return result;
+    },
+  };
 }
 
 /** 父代答/路由 note 门:answer_subagent 的 reason 按 route-note(30 词)截断。
@@ -727,6 +990,10 @@ function visionBridgeFor(config: { coding?: { llm?: { vision?: boolean }; vlm?: 
 export const TOOL_HINTS: ToolHint[] = [
   { name: "spawn_subagent", hint: "把子任务派给子 agent 执行,返回最终文本;任务书涉及 build 等重操作时写明预期命令(重操作需父代理审批)" },
   { name: "answer_subagent", hint: "应答子代理的重操作执行申请(批准/拒绝+一句理由;不应答=超时自动拒绝)" },
+  { name: "list_agents", hint: "列出本任务的子代理(含全部后代):agentId/状态/模型/耗时/截止/标题/结果摘要;includeDone=false 只看运行中" },
+  { name: "stop_agent", hint: "中断指定子代理:只能停自己的子代理,只影响该 agentId(兄弟/父任务不动);跨任务/不存在拒绝" },
+  { name: "steer_agent", hint: "向运行中的子代理追加指令(hint/directive,下个 step 生效):只能操作自己的后代;非运行态拒绝(已终态改用 resume_agent)" },
+  { name: "resume_agent", hint: "冷启动续跑已终态子代理:原任务书+上次结果摘要+本次指令,派新 agentId(原记录不动);只能续跑自己的后代" },
   { name: "ask_user", hint: "向用户发问并等待答复(许愿式编程:需求有取舍/范围可能膨胀时先问再动;给 2~4 个选项+你的推断依据;问题会同时进 Super Agent 指挥台「待处理」,先答先用;离线/超时返回未答复,按最合理推断继续)" },
   { name: "read_file", hint: "读项目内文本文件(带行号,支持 offset/limit 分窗)" },
  // 远程项目任务的 read_file/write_file/edit_file/glob/grep/list_dir/run_cmd 即远端同名七件
@@ -822,9 +1089,135 @@ export function memoryTool(store: MemoryStore): Tool {
 // 仅运行中条目持有(终态即摘除=「已收尾」时 server 诚实回 ok:false),各路径闭包读各自的 handle 变量。
 // spawnedAt/deadlineAt/staleWarnMs/staleNotified(防死机制):watchdog 巡检输入——
 // spawnedAt=派发时刻;deadlineAt=时间盒到点时刻(应收割却仍 running=后端内部收割失灵);staleNotified=预警只发一次。
-const bgAgents = new Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; staleWarnMs?: number; staleNotified?: boolean }>();
+const bgAgents = new Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; steer?: (text: string, mode: "hint" | "directive") => Promise<boolean>; spawnedAt?: number; deadlineAt?: number; staleWarnMs?: number; staleNotified?: boolean }>();
 // 供 server task_output 读取(注册表本体归 agent-wiring 所有)
 (globalThis as { __bgAgents?: typeof bgAgents }).__bgAgents = bgAgents;
+
+//  后台子代理 idle wake:后台单元完成后,若父会话已空闲(同 session 无 running/queued 任务、
+// 上一 turn 已结束且过了保护窗),起一次 model-only system 任务消费通知;父会话仍在跑/刚收尾
+// 一律不打扰——它下一 turn 自己会看到通知,硬插 turn 会让同一 session 两个模型 turn 并发。
+// 判定与 prompt 拼装在 runtime/task/idle-wake(纯逻辑);这里只做数据装配与提交。
+const idleWakeNotified = new Set<string>();
+const IDLE_WAKE_NOTIFIED_MAX = 500;
+
+export function maybeWakeIdleSession(
+  journal: Journal,
+  sessionId: string,
+  tm: Pick<import("./task-manager.js").TaskSupervisor, "list" | "submit">,
+  opts: { now?: number; minIdleMs?: number; maxBatch?: number } = {},
+): { code: WakeCode; submitted: boolean; ids: string[] } {
+  const now = opts.now ?? Date.now();
+  try {
+ // 父会话在跑的任务数(running/queued 都算忙:排队中的用户任务随时会起 turn)。
+    let activeTaskCount = 0;
+    try {
+      activeTaskCount = tm
+        .list({ sessionId })
+        .filter((task) => task.state === "running" || task.state === "queued").length;
+    } catch { /* 任务列表不可用按 0 处理:后面还有「turn 已结束」与 generation 两道门 */ }
+
+ // 上一 turn 结束时刻 + 当前代次:journal 最近一条 turn.end;generation 缺省用 turn 号,再缺省 0。
+    let lastTurnEndAt: number | undefined;
+    let currentGeneration = 0;
+    try {
+      for (const ev of journal.readSession(sessionId)) {
+        if (ev.kind !== "turn.end") continue;
+        if (typeof ev.time === "number") lastTurnEndAt = ev.time;
+        const turn = (ev.payload as { turn?: unknown } | undefined)?.turn;
+        currentGeneration =
+          generationOfEvent(ev as unknown as { payload?: { generation?: unknown } }) ||
+          (typeof turn === "number" ? turn : 0);
+      }
+    } catch { /* 读 journal 失败 = 结束时刻未知:走保守口径(不唤醒),不猜 */ }
+
+ // 待投递 = registry 里本会话终态且尚未被唤醒消费过的条目(ack 标记在 idleWakeNotified)。
+    const pending: PendingNotification[] = [];
+    for (const [agentId, entry] of bgAgents) {
+      if (entry.sessionId !== sessionId) continue;
+      if (entry.status !== "completed" && entry.status !== "failed") continue;
+      if (idleWakeNotified.has(agentId)) continue;
+      const explicitGeneration = (entry as { generation?: unknown }).generation;
+      pending.push({
+        id: agentId,
+        at: entry.lastEventAt ?? entry.spawnedAt ?? 0,
+ // 未显式带 generation 的条目视为当前代:生产上 registry 不记代次,若按 0 比对会恒判 stale
+ // (当前代通常是非 0 的 turn 号),唤醒永不触发。显式带代次时才做旧代过滤。
+        generation: typeof explicitGeneration === "number" ? explicitGeneration : currentGeneration,
+        kind: entry.status === "completed" ? "子代理完成" : "子代理失败",
+        summary: entry.title ?? agentId,
+      });
+    }
+
+    const verdict = wakeVerdict({
+      sessionId,
+      now,
+      ...(lastTurnEndAt !== undefined ? { lastTurnEndAt } : {}),
+      activeTaskCount,
+      pendingNotifications: pending,
+      currentGeneration,
+      ...(opts.minIdleMs !== undefined ? { minIdleMs: opts.minIdleMs } : {}),
+      ...(opts.maxBatch !== undefined ? { maxBatch: opts.maxBatch } : {}),
+    });
+    if (!verdict.wake || !verdict.prompt) {
+      return { code: verdict.code, submitted: false, ids: verdict.ids };
+    }
+
+ // 同一批 ids 的幂等键:重复回调(deadline 收割后又来迟到 result 等)不会起第二个唤醒 turn。
+    const idempotencyKey = `idle-wake:${sessionId}:${verdict.ids.join(",")}`;
+    tm.submit("system", sessionId, verdict.prompt, { title: "[唤醒] 后台单元完成", idempotencyKey });
+    for (const id of verdict.ids) {
+      idleWakeNotified.add(id);
+      if (idleWakeNotified.size > IDLE_WAKE_NOTIFIED_MAX) {
+        const oldest = idleWakeNotified.values().next().value;
+        if (typeof oldest === "string") idleWakeNotified.delete(oldest);
+      }
+    }
+    try {
+      journal.append({ kind: "custom", sessionId, payload: { type: "idle.wake", ids: verdict.ids, code: verdict.code } });
+    } catch { /* 留痕失败不影响「唤醒已提交」的事实 */ }
+    return { code: "WAKE", submitted: true, ids: verdict.ids };
+  } catch (err) {
+ // 通知链的失败不许影响子代理收尾:只告警。
+    console.warn("[gateway] idle wake 失败(不影响子代理收尾):", err instanceof Error ? err.message : String(err));
+    return { code: "INVALID", submitted: false, ids: [] };
+  }
+}
+
+// :子代理生命周期注册表(进程级单例;不取代 __bgAgents 镜像,只在其上补「状态机 + 后代关系」)。
+// 同一 gateway 进程内每个 task 都会 wire 一次,这里用 globalThis 复用同一实例;首次创建时从
+// __bgAgents 镜像 restore(终态保留、已存在记录不覆盖)。registry 是纯逻辑零 IO 模块,可被单测直驱。
+const subagentRegistry: SubagentRegistry = (() => {
+  const g = globalThis as { __subagentRegistry?: SubagentRegistry };
+  if (g.__subagentRegistry) return g.__subagentRegistry;
+  const reg = new SubagentRegistry();
+  const mirror = (globalThis as {
+    __bgAgents?: Map<string, { status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; spawnedAt?: number; deadlineAt?: number }>;
+  }).__bgAgents;
+  if (mirror && mirror.size > 0) {
+    try {
+      const restoreState = (status: string): "running" | "done" | "failed" | "cancelled" | "interrupted" =>
+        status === "completed" ? "done" : status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "running";
+      reg.restore([...mirror.entries()].map(([agentId, en]) => ({
+        agentId,
+        taskId: "",
+        sessionId: en.sessionId,
+        ...(en.title ? { title: en.title } : {}),
+        ...(en.model ? { model: en.model } : {}),
+        state: restoreState(en.status),
+        spawnedAt: en.spawnedAt ?? Date.now(),
+        ...(en.lastEventAt !== undefined ? { lastEventAt: en.lastEventAt } : {}),
+        ...(en.deadlineAt !== undefined ? { deadlineAt: en.deadlineAt } : {}),
+      })));
+    } catch { /* 镜像恢复失败不影响后续新注册 */ }
+  }
+  g.__subagentRegistry = reg;
+  return reg;
+})();
+
+// 冷启动续跑需要原任务书与角色(registry 只存状态/摘要,不存任务书正文;改 registry 形状超出本任务文件边界)。
+// 进程内映射;进程重启后缺席 → resume_agent 如实 NOT_FOUND/INVALID,不编造「原任务」。
+const SUBAGENT_BRIEF_CAP = 200;
+const subagentBriefs = new Map<string, { instructions: string; agentType?: string; title?: string }>();
 
 /** watchdog 硬收割缓冲:deadline 到点后给后端内部收割路径(deadline 定时器/backend 自身)留的宽限,
  * 超过它仍 running 才认定「收割失灵=子代理已死」(进程内 loop 崩溃/外部后端进程僵死均属此类)。 */
@@ -882,6 +1275,8 @@ export function runSubagentWatchdog(journal: Journal): void {
     en.status = "failed";
     en.lastEventAt = Date.now();
     delete en.cancel;
+ // :watchdog 收割也是终态来源之一——registry 同步落 failed,否则 list_agents 永远显示 running。
+    subagentRegistry.update(act.agentId, { state: "failed", resultSummary: "[watchdog 收割] 超过时间盒+宽限仍无终态,已判死并强制收尾" });
     let trail = "";
     try {
       trail = readFileSync(en.outputFile, "utf-8").split("\n").filter((l) => l.startsWith("[progress]") || l.startsWith("[心跳]")).slice(-12).join("\n").trim();
@@ -1170,8 +1565,13 @@ export function buildLoopTips(deps: {
     // 节奏交给 gate 的 ≥10k token 间隔。同一行内容不重复注(lastTrajBackfillKey)。
     const trajLine = String(ctx.trajectory ?? "").trim();
     if (trajLine && trajLine !== lastTrajBackfillKey && (!gate || gate.check("task:trajectory", tokensSpent))) {
-      parts.push("<system-reminder>任务内轨迹(回看自己走到哪)\n" + trajLine
-        + "\n需要更完整轨迹就 board_read/看面板轨迹条;方向偏了就回阶段锚。</system-reminder>");
+ // 改走提醒来源登记表渲染(trajectory 源),不再就地拼 <system-reminder>。
+ // inline 形态与旧拼接逐字节一致(轨迹块本身无嵌套标签);渲染失败(理论不可达)回退旧拼接,
+ // 提醒层故障不得打断主链。
+      const trajBody = "任务内轨迹(回看自己走到哪)\n" + trajLine
+        + "\n需要更完整轨迹就 board_read/看面板轨迹条;方向偏了就回阶段锚。";
+      const trajRendered = renderSystemReminder("trajectory", trajBody, { inline: true });
+      parts.push(trajRendered.ok ? trajRendered.text : "<system-reminder>" + trajBody + "</system-reminder>");
       pushKey("task:trajectory");
       lastTrajBackfillKey = trajLine;
     }
@@ -3036,40 +3436,242 @@ export function experienceFoldTool(store: ExperienceStore): Tool {
   };
 }
 
-/** run_workflow 工具:标准化任务的确定性编排(skill 不稳的替代)。 */
-function runWorkflowTool(journal: import("@lampgenie/core").Journal, executor: import("@lampgenie/executors").SubagentBackend, journalSessionId: string, workflowAskRouter?: import("./workflow-ask-router.js").WorkflowAskRouter): Tool {
+/* ------------------------------------------------------------------------------------------------
+ * workflow 资产 / 运行期 caps / 运行中 amend(工具面)。
+ * - 资产目录:project=<repoRoot>/.genie/workflows,global=~/.genie/workflows;asset 先查 project 再查 global。
+ * - caps 只影响「之后新开的派发」,amend 因此不重启当前 run(语义见 harness-workflow/engine.ts)。
+ * - 新增参数全部可选:旧调用(只给 template/args/script)渲染与返回字段逐字不变。
+ * ---------------------------------------------------------------------------------------------- */
+/** 运行中的 workflow(run 前 set,finally delete):amend 只能命中本进程内仍在跑的引擎。 */
+const runningWorkflows = new Map<string, WorkflowEngine>();
+/** action 白名单(未给=run)。 */
+const WORKFLOW_ACTIONS = ["run", "list", "save", "amend"] as const;
+type WorkflowAction = (typeof WORKFLOW_ACTIONS)[number];
+/** list 输出上限:资产清单是给人看的,超出部分不挤爆工具返回。 */
+const WORKFLOW_ASSET_LIST_MAX = 50;
+
+/** 资产目录(纯路径,可单测):project 随项目走,global 个人级。 */
+export function workflowAssetDirs(root: string = repoRoot(), home: string = homedir()): { project: string; global: string } {
+  return { project: join(root, ".genie", "workflows"), global: join(home, ".genie", "workflows") };
+}
+
+/** 按名查资产:project 优先、global 兜底(纯函数,便于单测)。 */
+export function findWorkflowAsset(
+  projectAssets: readonly WorkflowAsset[],
+  globalAssets: readonly WorkflowAsset[],
+  name: string): WorkflowAsset | undefined {
+  const n = name.trim();
+  return projectAssets.find((a) => a.name === n) ?? globalAssets.find((a) => a.name === n);
+}
+
+/** run 的 caps 提取:非法值显式报错(不静默丢弃,否则「配置看起来生效」但完全没生效)。 */
+export function workflowCapsFromArgs(args: { maxConcurrency?: unknown; subagentModel?: unknown }): { caps: CapsPatch; error?: string } {
+  const caps: CapsPatch = {};
+  if (args.maxConcurrency !== undefined) {
+    const v = args.maxConcurrency;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 32) {
+      return { caps: {}, error: `maxConcurrency 需为 1..32 的整数,实际: ${String(v)}` };
+    }
+    caps.maxConcurrency = v;
+  }
+  if (args.subagentModel !== undefined) {
+    const v = args.subagentModel;
+    if (typeof v !== "string" || v.trim().length === 0 || v.length > 128) {
+      return { caps: {}, error: "subagentModel 需为非空字符串(≤128 字)" };
+    }
+    caps.subagentModel = v.trim();
+  }
+  return { caps };
+}
+
+/** amend 的 patch:除 action/wfId 外原样透传(白名单/越界由 engine.amend 判定,
+ * 工具不重复一套规则——未知字段必须能被 engine 点名,不能在这里被静默过滤成空 patch)。 */
+export function workflowAmendPatch(args: Record<string, unknown>): Partial<WorkflowCaps> {
+  const { action: _action, wfId: _wfId, ...rest } = args;
+  return rest as Partial<WorkflowCaps>;
+}
+
+/** run_workflow 工具:标准化任务的确定性编排(skill 不稳的替代)。
+ * 同时是 workflow 资产的入口:action=save/list/amend + asset 按名加载 + caps 热调整。 */
+export function runWorkflowTool(
+  journal: import("@lampgenie/core").Journal,
+  executor: import("@lampgenie/executors").SubagentBackend,
+  journalSessionId: string,
+  workflowAskRouter?: import("./workflow-ask-router.js").WorkflowAskRouter,
+ /** 测试注入用:资产目录(缺省=workflowAssetDirs)。 */
+  dirsOverride?: { project?: string; global?: string },
+): Tool {
+  const dirs = workflowAssetDirs();
+  const projectStore = new WorkflowAssetStore({ dir: dirsOverride?.project ?? dirs.project });
+  const globalStore = new WorkflowAssetStore({ dir: dirsOverride?.global ?? dirs.global });
   return {
     name: "run_workflow",
-    description: "运行标准化 workflow(测试/评审/评测等):传 template=unit-tests|functional-test|algo-eval 加 args,或直接传 script 源码(TS,facade:agent/world/report/log;world.run 白名单)",
+    description: "运行标准化 workflow(测试/评审/评测等):传 template=unit-tests|functional-test|algo-eval 加 args,或直接传 script 源码(TS,facade:agent/world/report/log;world.run 白名单)。:action=save/list/amend 管理可复用资产(script+paramsSchema),asset=按名加载;maxConcurrency/subagentModel 作为运行期 caps,amend 可热调整运行中的 run(需给 wfId)",
     parameters: {
       type: "object",
       properties: {
         template: { type: "string", description: "模板名(与 script 二选一)" },
         args: { type: "string", description: "模板参数 JSON" },
         script: { type: "string", description: "workflow 脚本源码(TS)" },
+        action: { type: "string", enum: ["run", "list", "save", "amend"], description: "缺省 run:run=执行;list=列资产;save=保存当前 script 为资产(saveAs+scope);amend=热调整运行中 run 的 caps(wfId)" },
+        asset: { type: "string", description: "资产名:按名加载 script/paramsSchema 后运行(project 优先、global 兜底)" },
+        saveAs: { type: "string", description: "action=save 的资产名(文件名白名单 ^[A-Za-z0-9._-]{1,64}$)" },
+        scope: { type: "string", enum: ["project", "global"], description: "action=save 的作用域:project=<repoRoot>/.genie/workflows(缺省),global=~/.genie/workflows" },
+        paramsSchema: { type: "string", description: "action=save 的参数 JSON Schema(JSON 文本;缺省 {})" },
+        description: { type: "string", description: "action=save 的一句话用途" },
+        maxConcurrency: { type: "number", minimum: 1, maximum: 32, description: "运行期 caps:并发上限(1..32),作 WorkflowEngine 构造参数或 amend 目标" },
+        subagentModel: { type: "string", description: "运行期 caps:子代理模型名(非空 ≤128),同上" },
+        wfId: { type: "string", description: "workflow id:amend/list 用;run 时给则用它作为本次 id(便于运行中 amend)" },
       },
     },
     isConcurrencySafe: () => false,
     async execute(args: unknown) {
-      const a = args as { template?: string; args?: string; script?: string };
+      const a = (args ?? {}) as {
+        template?: string;
+        args?: string;
+        script?: string;
+        action?: WorkflowAction;
+        asset?: string;
+        saveAs?: string;
+        scope?: WorkflowAssetScope;
+        paramsSchema?: string;
+        description?: string;
+        maxConcurrency?: number;
+        subagentModel?: string;
+        wfId?: string;
+      };
+      const action = (a.action ?? "run") as WorkflowAction;
       try {
-        const source = a.script ?? renderTemplate(a.template!, a.args ? JSON.parse(a.args) : {});
-        const wfId = `wf-${Date.now()}`;
-        journal.append({ kind: "workflow.run.start", sessionId: journalSessionId, payload: { wfId, template: a.template ?? null } });
-        const engine = new WorkflowEngine({ root: repoRoot(), journal, workflowId: wfId, executor: { ...executor, spawn: executor.spawn.bind(executor) } as never, dispatch: async (instr) => {
-          // F6:面板在线先问面板(直答);超时/离线回退 executor dispatch。
-          const hash = (await import("node:crypto")).createHash("sha256").update(instr).digest("hex").slice(0, 12);
-          const direct = workflowAskRouter ? await workflowAskRouter.ask(wfId, "panel:" + hash, instr) : null;
-          if (direct !== null) return direct;
-          return new Promise<string>((resolve, reject) => {
-            void executor.spawn({ taskId: wfId, instructions: instr, workdir: repoRoot(), permissions: "sandbox" }, (e) => {
-              if (e.type === "result") e.result.ok ? resolve(e.result.finalText ?? "") : reject(new Error(e.result.error?.detail ?? "agent 失败"));
-            }).catch(reject);
+        if (!WORKFLOW_ACTIONS.includes(action)) {
+          return `run_workflow 错误: 未知 action "${String(action)}"(可用: ${WORKFLOW_ACTIONS.join("/")})`;
+        }
+
+ // ---- save:把当前 script 落成可复用资产(script 非空;saveAs/schema 非法=INVALID)----
+        if (action === "save") {
+          if (typeof a.script !== "string" || a.script.trim().length === 0) {
+            return "save 错误: INVALID — script 不得为空(action=save 保存的是当前 workflow 脚本)";
+          }
+          const name = typeof a.saveAs === "string" ? a.saveAs.trim() : "";
+          if (!name) return "save 错误: INVALID — saveAs 必填(资产名)";
+          const scope = a.scope ?? "project";
+          if (scope !== "project" && scope !== "global") return `save 错误: INVALID — scope 只能是 project|global,实际: ${String(scope)}`;
+          const paramsSchema = a.paramsSchema ?? "{}";
+          let schemaObj: unknown;
+          try {
+            schemaObj = JSON.parse(paramsSchema);
+          } catch {
+            return "save 错误: INVALID — paramsSchema 不是合法 JSON";
+          }
+          if (!schemaObj || typeof schemaObj !== "object" || Array.isArray(schemaObj)) {
+            return "save 错误: INVALID — paramsSchema 必须是 JSON 对象(schema)";
+          }
+          if (a.description !== undefined && typeof a.description !== "string") {
+            return "save 错误: INVALID — description 必须是字符串";
+          }
+          const store = scope === "global" ? globalStore : projectStore;
+          const saved = await store.save({
+            name,
+            script: a.script,
+            paramsSchema,
+            scope,
+            createdAt: 0, // save 内部按「已有则沿用,否则 now」重建,这里只占位
+            updatedAt: 0,
+            ...(a.description !== undefined ? { description: a.description } : {}),
           });
-        } });
-        const r = await engine.run(source, 600_000);
-        journal.append({ kind: "workflow.run.done", sessionId: journalSessionId, payload: { wfId, ok: r.ok } });
-        return JSON.stringify({ ok: r.ok, partial: r.partial, items: r.items.slice(0, 20), logs: r.logs.slice(-10), error: r.error }).slice(0, 12_000);
+          if (!saved.ok || !saved.asset) return `save 错误: ${saved.code} — ${saved.error ?? "未知错误"}`;
+          return JSON.stringify({ ok: true, name: saved.asset.name, scope: saved.asset.scope, path: join(store.dir, `${saved.asset.name}.json`) });
+        }
+
+ // ---- list:两目录合并(project 在前),按 updatedAt 倒序,≤50 ----
+        if (action === "list") {
+          const [p, g] = await Promise.all([projectStore.list(), globalStore.list()]);
+          if (!p.ok && !g.ok) return `list 错误: ${p.error ?? g.error ?? "读取资产目录失败"}`;
+          const assets = [...p.assets, ...g.assets]
+            .sort((x, y) => y.updatedAt - x.updatedAt)
+            .slice(0, WORKFLOW_ASSET_LIST_MAX)
+            .map((x) => ({
+              name: x.name,
+              scope: x.scope,
+              updatedAt: x.updatedAt,
+              ...(x.description !== undefined ? { description: x.description } : {}),
+            }));
+          return JSON.stringify({ ok: true, count: assets.length, assets, warnings: [...p.warnings, ...g.warnings].slice(0, 10) });
+        }
+
+ // ---- amend:只命中本进程内仍在跑的 run;白名单/越界由 engine 判定 ----
+        if (action === "amend") {
+          const wfId = typeof a.wfId === "string" ? a.wfId.trim() : "";
+          if (!wfId) return "amend 错误: wfId 必填(要 amend 的运行中 workflow id;run 时可用 wfId 指定)";
+          const engine = runningWorkflows.get(wfId);
+          if (!engine) return `无运行中的 workflow: ${wfId}(amend 只对 action=run 且尚未结束的运行生效)`;
+          const r = engine.amend(workflowAmendPatch(a as unknown as Record<string, unknown>));
+          return JSON.stringify({ ok: r.ok, code: r.code, applied: r.applied, rejectedKeys: r.rejectedKeys, caps: r.caps });
+        }
+
+ // ---- run:资产/脚本/模板 → engine(caps 构造参数)→ runningWorkflows 注册 ----
+        const capsParsed = workflowCapsFromArgs(a);
+        if (capsParsed.error) return `run_workflow 错误: ${capsParsed.error}`;
+        const caps = capsParsed.caps;
+        let loadedAsset: WorkflowAsset | undefined;
+        let source: string;
+        if (typeof a.asset === "string" && a.asset.trim().length > 0) {
+          const assetName = a.asset.trim();
+          const [p, g] = await Promise.all([projectStore.list(), globalStore.list()]);
+          loadedAsset = findWorkflowAsset(p.assets, g.assets, assetName);
+          if (!loadedAsset) {
+            return `run_workflow 错误: workflow 资产不存在: ${assetName}(先 action=save 保存,或 action=list 查看已有资产)`;
+          }
+          source = loadedAsset.script;
+        } else if (typeof a.script === "string") {
+          source = a.script;
+        } else if (typeof a.template === "string" && a.template.length > 0) {
+          source = renderTemplate(a.template, a.args ? JSON.parse(a.args) : {});
+        } else {
+          return "run_workflow 错误: 需要 template、script 或 asset 之一";
+        }
+        const wfId = typeof a.wfId === "string" && a.wfId.trim().length > 0 ? a.wfId.trim() : `wf-${Date.now()}`;
+        journal.append({
+          kind: "workflow.run.start",
+          sessionId: journalSessionId,
+          payload: { wfId, template: a.template ?? null, ...(loadedAsset ? { asset: loadedAsset.name } : {}) },
+        });
+        const engine = new WorkflowEngine({
+          root: repoRoot(),
+          journal,
+          workflowId: wfId,
+          executor: { ...executor, spawn: executor.spawn.bind(executor) } as never,
+          ...(Object.keys(caps).length > 0 ? { caps } : {}),
+          dispatch: async (instr) => {
+ // F6:面板在线先问面板(直答);超时/离线回退 executor dispatch。
+            const hash = (await import("node:crypto")).createHash("sha256").update(instr).digest("hex").slice(0, 12);
+            const direct = workflowAskRouter ? await workflowAskRouter.ask(wfId, "panel:" + hash, instr) : null;
+            if (direct !== null) return direct;
+            return new Promise<string>((resolve, reject) => {
+              void executor.spawn({ taskId: wfId, instructions: instr, workdir: repoRoot(), permissions: "sandbox" }, (e) => {
+                if (e.type === "result") e.result.ok ? resolve(e.result.finalText ?? "") : reject(new Error(e.result.error?.detail ?? "agent 失败"));
+              }).catch(reject);
+            });
+          },
+        });
+        runningWorkflows.set(wfId, engine); // amend 目标:run 期间可被外部热调整
+ // 会话工作所有权:workflow 单元(owner=发起会话)。登记点在上面三处错误 return 之后,
+ // 拒启路径不留条目(否则关会话时会去 abort 一个从未开始的 run)。
+        const wfOwnership = registerOwnedUnit(journal, { unitId: wfId, kind: "workflow", ownerSessionId: journalSessionId });
+        try {
+          const r = await engine.run(source, 600_000);
+          journal.append({
+            kind: "workflow.run.done",
+            sessionId: journalSessionId,
+            payload: { wfId, ok: r.ok, ...(loadedAsset ? { asset: loadedAsset.name } : {}) },
+          });
+ // 旧字段原样保留;caps 只在非空时追加(构造时给或运行中 amend 给都算)
+          const capsNow = engine.currentCaps();
+          const capsField = Object.keys(capsNow).length > 0 ? { caps: capsNow } : {};
+          return JSON.stringify({ ok: r.ok, partial: r.partial, items: r.items.slice(0, 20), logs: r.logs.slice(-10), error: r.error, ...capsField }).slice(0, 12_000);
+        } finally {
+          runningWorkflows.delete(wfId);
+          settleOwnedUnit(journal, wfId, wfOwnership); // 终态 settle(旧代际迟到=丢弃,见 settleOwnedUnit)
+        }
       } catch (err) {
         return `run_workflow 错误: ${String(err).slice(0, 200)}`;
       }
@@ -3090,7 +3692,7 @@ export type ReviewLlmPolicy = "auto" | "always" | "never";
 export function codeReviewTool(root: string, reviewLlm: LlmProvider | undefined, journal: import("@lampgenie/core").Journal, sessionId: string, progress?: (note: string) => void, baseSha?: string | null, remote?: RemoteProject): Tool {
   return {
     name: "code_review",
-    description: "审查代码变更(默认=本任务变更集:以任务开工 checkpoint 为基线,只含本任务开工后的改动+新文件,不含共享工作区里其它任务的在途改动;无 checkpoint 回退全仓未提交并标注。可传 commit hash/分支名显式改口径)。返回 findings(severity/file:line/scenario)。同源 CLI 形态:codesense review [target] [--deep](packages/code-sense-cli,人读 markdown/--json;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑)——当用户想在 harness 之外审查(本地终端/CI/其它 agent 平台)时,推荐该 CLI",
+    description: "审查代码变更(默认=本任务变更集:以任务开工 checkpoint 为基线,只含本任务开工后的改动+新文件,不含共享工作区里其它任务的在途改动;无 checkpoint 回退全仓未提交并标注。可传 commit hash/分支名显式改口径)。返回 findings(severity/file:line/scenario)。同源 CLI 形态:codesense review [target] [--deep](packages/code-sense-cli,人读 markdown/--json;适合人在终端、CI 门禁(exit 1=有 blocker)、外部 agent 直接跑;触发路径全景见 docs/code-review-trigger-matrix.md)——当用户想在 harness 之外审查(本地终端/CI/其它 agent 平台)时,推荐该 CLI",
     parameters: {
       type: "object",
       properties: {
@@ -3755,7 +4357,7 @@ export function wireAgentLoop(
  /** 流式出口(ZCode 流式消息展示):loop onStream 旁路→relay→WS stream 广播;不落 journal。 */
   streamSink?: (sessionId: string, ev: AgentStreamEvent) => void,
  /** 记忆接线:系统提示注入记忆上下文块+会话终态学习。 */
-  memory?: { contextBlock(ownerId: string): string; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
+  memory?: { contextBlock(ownerId: string): string; contextBlockFrozen?(ownerId: string): { block: string; hash: string; reused: boolean; revision?: string }; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
  /** 辅助链专用轨( F2):archLlm 架构导读/压缩等辅助调用不走 realtime 主轨(会话贵且易卡),
    * 缺省回退主轨(行为与旧版一致)。 */
   auxLlm?: LlmProvider,
@@ -3770,7 +4372,11 @@ export function wireAgentLoop(
   /** per-session 主模型覆盖面(缺省=无覆盖,共享 llm 现状零变化)。 */
   sessionModels?: SessionModelFace,
  /** 执行信封:装配方注入当前能力目录/策略(缺省=本任务实际工具面名+内置命令名 / permissionMode+agent.maxSteps)。 */
-  envelopeDeps?: EnvelopeDeps): void {
+  envelopeDeps?: EnvelopeDeps,
+ /** 会话工作所有权注册表(装配方注入;缺省=整套 ownership 逻辑降级 no-op)。 */
+  ownerRegistry?: OwnerRegistry): void {
+ // 注册表按 journal 缓存(同进程多 app 互不串会话);未传=不绑定=所有登记点 no-op。
+  bindOwnerRegistry(journal, ownerRegistry);
  // archLlm 生产注入( F1):plan 剖面在生产环境出真架构图(此前零注入恒静态降级)。
  // 装配期一次,全进程生效; 起优先走 aux 轨(每任务两次 LLM 调用,realtime 轨下纯属占会话)。
   setPlanDeps({ archLlm: archLlmFromProvider(auxLlm ?? llm) });
@@ -4028,6 +4634,28 @@ export async function maybeContinueGoal(
   }
 }
 
+/** 时间旅行:从本步工具调用里提取「将要触碰」的文件路径(只认文件类工具的 path 参数族),去重保序。 */
+const SNAPSHOT_PATH_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file", "apply_patch"]);
+
+export function collectSnapshotPaths(calls: { name?: string; arguments?: string }[] | undefined): string[] {
+  const out: string[] = [];
+  for (const c of calls ?? []) {
+    if (!c || !SNAPSHOT_PATH_TOOLS.has(String(c.name ?? ""))) continue;
+    let args: Record<string, unknown>;
+    try { args = JSON.parse(String(c.arguments ?? "{}")) as Record<string, unknown>; } catch { continue; }
+    for (const key of ["path", "file_path", "target_path"] as const) {
+      const v = args[key];
+      if (typeof v !== "string") continue;
+      const p = v.trim();
+      if (p && !out.includes(p)) out.push(p);
+    }
+  }
+  return out;
+}
+
+/** : task.kind.tools 留痕一次/任务(同任务重进 runWithAgent 不重复写同一条账)。 */
+const taskKindToolsLogged = new Set<string>();
+
 async function runWithAgent(
   tm: TaskSupervisor,
   journal: Journal,
@@ -4047,7 +4675,7 @@ async function runWithAgent(
  /** 取消信号注册表:wireAgentLoop 持有;runWithAgent 登记/注销本任务的 loop。 */
   activeLoops?: Map<string, AgentLoop>,
  /** 记忆接线。 */
-  memory?: { contextBlock(ownerId: string): string; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
+  memory?: { contextBlock(ownerId: string): string; contextBlockFrozen?(ownerId: string): { block: string; hash: string; reused: boolean; revision?: string }; onSessionClose(input: { ownerId: string; sessionId: string; transcript: { role: "user" | "assistant"; content: string }[] }): Promise<void> },
  /** 辅助链专用轨( F2;压缩/导读不占 realtime 会话)。 */
   auxLlm?: LlmProvider,
  /** 任务配置对象(agent.maxSteps 热读;agent.compactThresholdTokens=无窗口时的显式压缩阈值,;
@@ -4089,6 +4717,12 @@ async function runWithAgent(
       console.warn(`[session-model] 会话 ${task.sessionId} 覆盖派生异常(回退共享 llm):`, String(err).slice(0, 160));
     }
   }
+ // 任务 kind 能力位。task 由旧构造点传入(核心 Task 无 kind 字段),故做防御式取用;
+ // 未知/缺失 kind → 归一回落 user(全能力,normalized=false 可审计),默认路径逐字不变。
+  const taskKindCarrier = task as unknown as { kind?: string; kindCapabilities?: TaskKindCapabilities };
+  const taskKindInfo = normalizeTaskKind(taskKindCarrier.kind ?? "user");
+  const taskKindCaps: TaskKindCapabilities = taskKindCarrier.kindCapabilities
+    ?? taskKindCapabilities(taskKindInfo.kind).capabilities;
  // checkpoint 快照:执行前留工作区快照;GENIE_CHECKPOINT=off 跳过(测试提速)。
   // fixG1:sha 提升到本函数作用域——codeReviewTool 以它为 diff 基线(review 只审本任务变更集);
   // null(纯规划/干净树 stash-create 返回空/失败)→review 回退全仓未提交并在 summary 标注。
@@ -4469,6 +5103,11 @@ async function runWithAgent(
     store: getExperienceStore(),
     // 看板刷新桥(2026-11):自动压缩成功→推一帧 trace.stats(主 loop 与 spawn 子 loop 共用本实例)。
     onCompacted: (r) => { void broadcastTraceStatsOf()?.(r.sessionId); },
+ // 摘要前缀复用:摘要请求复用主会话的 system 与 wire 广告工具面,命中 provider prompt cache。
+ // systemWithMemory/surfacePlan 在本函数后半段才定义(loop 装配顺序所迫),故用 getter 在压缩
+ // 执行时读——压缩只可能发生在 loop 启动之后,那时两者已初始化(TDZ 不会触发);装配期异常
+ // 也只会让 getter 抛错 → autoCompact 退回旧路径,压缩不失败。
+    prefix: () => ({ system: systemWithMemory, tools: surfacePlan.tools }),
   });
 
  // 父子 ask-answer:任务级 broker——子代理重操作(build/install/全量测试/递归批处理)申请
@@ -4512,6 +5151,126 @@ async function runWithAgent(
   try {
     journal.append({ kind: "custom", sessionId: task.sessionId, payload: { type: "task.class", taskId: task.id, taskClass: taskClassState.value, source: "heuristic" } });
   } catch { /* 留痕失败不影响执行 */ }
+ // ── 任务档案(profile):按类别解析装配策略 ───────────────────────────────
+ // 显式档案来自任务 idempotencyKey 前缀 `profile:<id>:`(有则优先;否则按 taskClass 解析,再退 "*")。
+ // 档案文件缺失/坏 JSON/无匹配 = 零行为变化;显式 id 不存在/档案非法 = fail-closed 回退默认(不挂任务)。
+ // 消费面:工具 allow/deny(装配后过滤)、effectiveMaxSteps(loop 与执行信封同源)、skills allow(技能索引过滤)、
+ // model(复用会话模型派生面;派生失败 warn 回退共享 llm)、presetRevision(只记录)。
+  const explicitProfileId = (() => {
+    const key = task.idempotencyKey;
+    const m = typeof key === "string" ? /^profile:([a-z0-9][a-z0-9._-]{0,63}):/.exec(key) : null;
+    return m?.[1];
+  })();
+  let taskProfile: TaskProfile | undefined;
+  const baseMaxSteps = agentConfig?.agent?.maxSteps ?? 3000; // 设置页热读口径不变(档案覆盖才改)
+  let effectiveMaxSteps = baseMaxSteps;
+  try {
+    const profileStore = await import("./task-profile-store.js");
+    const loaded = await profileStore.loadTaskProfiles(repoRoot());
+    if (!loaded.ok) {
+ // 坏 JSON/IO:整份档案面不可用 → 回退默认,只留痕(不阻断任务)。
+      try {
+        journal.append({ kind: "custom", sessionId: task.sessionId, payload: { what: "task.profile", type: "task.profile", taskId: task.id, ok: false, code: loaded.code, profileId: explicitProfileId ?? null, taskClass: taskClassState.value, note: loaded.error ?? "档案文件不可用,回退默认" } });
+      } catch { /* 留痕失败不影响执行 */ }
+    } else if (loaded.profiles.length > 0 || explicitProfileId) {
+      const resolved = await profileStore.resolveTaskProfileAt(repoRoot(), {
+        taskClass: taskClassState.value,
+        ...(explicitProfileId ? { profileId: explicitProfileId } : {}),
+      });
+ // journal 形状按任务书口径(what/applied):null=档案未设该项,[]=未声明,不臆造生效。
+      const applied: Record<string, unknown> = resolved.profile
+        ? {
+            maxSteps: typeof resolved.profile.maxSteps === "number" ? resolved.profile.maxSteps : null,
+            toolsAllow: resolved.profile.tools?.allow ?? [],
+            toolsDeny: resolved.profile.tools?.deny ?? [],
+            skillsAllow: resolved.profile.skills?.allow ?? [],
+            model: resolved.profile.model ?? null,
+            presetRevision: resolved.profile.presetRevision ?? null,
+          }
+        : {};
+      if (resolved.ok && resolved.profile) {
+        const profile = resolved.profile;
+        taskProfile = profile;
+        if (typeof profile.maxSteps === "number") effectiveMaxSteps = profile.maxSteps;
+ // 模型面:profile.model 存在 → 合成 SessionModelOverride 走会话模型派生面(档案优先于会话覆盖)。
+        let modelApplied = false;
+        if (profile.model) {
+          if (sessionModels) {
+            try {
+              const override = {
+                model: profile.model.model,
+                ...(profile.model.providerId !== undefined ? { providerId: profile.model.providerId } : {}),
+                ...(profile.model.effort !== undefined ? { effort: profile.model.effort } : {}),
+              };
+              const derived = sessionModels.derive(task.sessionId, override);
+              if (derived) {
+                llm = derived;
+                modelApplied = true;
+              } else {
+                console.warn(`[task-profile] 档案 ${profile.id} 模型 ${profile.model.model} 派生失败,回退共享 llm`);
+              }
+              const roleModels = sessionModels.deriveRoleModels(task.sessionId, override);
+              if (roleModels) {
+                models = {
+                  ...models,
+                  ...(roleModels.compact ? { compact: roleModels.compact } : {}),
+                  ...(roleModels.review ? { review: roleModels.review } : {}),
+                  ...(roleModels.subagent ? { subagent: roleModels.subagent } : {}),
+                  ...(roleModels.digest ? { digest: roleModels.digest } : {}),
+                };
+              }
+              const ovWindow = sessionModels.contextWindowFor(override);
+              if (ovWindow !== undefined) contextWindow = ovWindow;
+            } catch (err) {
+              console.warn(`[task-profile] 档案 ${profile.id} 模型派生异常(回退共享 llm):`, String(err).slice(0, 160));
+            }
+          }
+        }
+        try {
+          journal.append({
+            kind: "custom",
+            sessionId: task.sessionId,
+            payload: {
+              what: "task.profile",
+              type: "task.profile",
+              taskId: task.id,
+              ok: true,
+              code: resolved.code,
+              profileId: profile.id,
+              taskClass: taskClassState.value,
+              ...(resolved.reason ? { reason: resolved.reason } : {}),
+              applied,
+              modelApplied,
+              effectiveMaxSteps,
+            },
+          });
+        } catch { /* 留痕失败不影响执行 */ }
+      } else {
+ // NOT_FOUND / NO_MATCH / INVALID:fail-closed 回退默认,留痕供审计。
+        try {
+          journal.append({
+            kind: "custom",
+            sessionId: task.sessionId,
+            payload: {
+              what: "task.profile",
+              type: "task.profile",
+              taskId: task.id,
+              ok: false,
+              code: resolved.code,
+              profileId: explicitProfileId ?? resolved.profile?.id ?? null,
+              taskClass: taskClassState.value,
+              ...(resolved.reason ? { reason: resolved.reason } : {}),
+              ...(resolved.issues ? { issues: resolved.issues.slice(0, 8) } : {}),
+              applied: {},
+            },
+          });
+        } catch { /* 留痕失败不影响执行 */ }
+      }
+    }
+  } catch (err) {
+ // 档案装配自身异常(模块解析/IO):warn 后回退默认,不挂任务。
+    console.warn(`[task-profile] 档案装配失败(回退默认):`, String(err).slice(0, 160));
+  }
  // 板根对齐(修正):此前注释说「board_upsert 写盘用 taskRoot」与代码不符——board_upsert
   // 实际写盘根 = storeRoot ?? repoRoot()(mainTools 只传 4 参 → storeRoot=undefined → repoRoot()),
   // 面板 board.load 也是 repoRoot()。故 repoRoot() 才是唯一板存储根;按 taskRoot 读板在
@@ -4528,9 +5287,23 @@ async function runWithAgent(
  // 全链路变更门的独立计数:与「无板」同档逃生阀,但独立计数——两类拒绝同因不同,
   // 混计会让「缺盘点」把「缺板」的额度吃掉,症状变成闸门突然静默放行。
   let surfaceGateDenies = 0;
+ // :本会话最新一条分类更正(`change.surface action=classify` 落 journal)。
+ // 按 journal 水位缓存:水位没变就不重读会话事件(避免每次写操作前全扫);读到结构坏的事件由
+ // readChangeScopeCorrection 自己跳过 → null,gate 回落到旧启发式(未更正=旧行为逐字不变)。
+  let scopeCorrectionCache: { watermark: number; value: ChangeScopeCorrection | null } | null = null;
+  const currentScopeCorrection = (): ChangeScopeCorrection | null => {
+    const watermark = journal.length;
+    if (scopeCorrectionCache && scopeCorrectionCache.watermark === watermark) return scopeCorrectionCache.value;
+    let value: ChangeScopeCorrection | null = null;
+    try {
+      value = readChangeScopeCorrection(journal.readSession(task.sessionId), task.sessionId);
+    } catch { value = null; }
+    scopeCorrectionCache = { watermark, value };
+    return value;
+  };
   /** 本任务的全链路变更判据(阶段回执/收尾摘要共用;hasManifest/exempt/hasChain 恒真=只取 scope,不产生拒绝)。 */
   const surfaceScopeThisTask = () =>
-    surfaceGateVerdict({ taskClass: taskClassState.value, instruction: String(task.instruction ?? ""), hasManifest: true, exempt: true, hasChain: true });
+    surfaceGateVerdict({ taskClass: taskClassState.value, instruction: String(task.instruction ?? ""), hasManifest: true, exempt: true, hasChain: true, correction: currentScopeCorrection() ?? undefined });
  // 规划委托判据:
   // 本任务是否派过 planner(含被权限拦下的尝试——尝试过即允许降级内联,以免 planner 不可用时死锁)。
   // 旧实现只靠提示词,flash 档主 agent 会把 6 节点设计板内联画成流程图并直接实施;这里把
@@ -4561,6 +5334,8 @@ async function runWithAgent(
       hasChain: surfaceManifest ? surfaceManifest.chain !== undefined : undefined,
       exempt: boardExemptThisTask || readChangeExempt(journal, task.sessionId, task.id) !== null,
       directRoute: taskRouteState.direct,
+ // :显式更正优先于启发式(合法才覆盖;null=旧行为逐字不变)。
+      correction: currentScopeCorrection() ?? undefined,
     });
     if (surfaceVerdict.deny) {
       surfaceGateDenies += 1;
@@ -4815,6 +5590,7 @@ async function runWithAgent(
         adapterEnv: { type: "object", description: "Env vars explicitly forwarded to the ACP adapter (opt-in; child env strips parent credentials by default)" },
         worktree: { type: "boolean", description: "true = run in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>). Parallel subagents do not collide and the main workspace is untouched; worktree and branch are kept for manual merge. Non-git repo = explicit rejection, no silent fallback." },
         isolation: { type: "string", enum: ["none", "worktree"], description: "Isolation alias: worktree equals worktree:true; none = default" },
+        context: { type: "string", enum: ["fresh", "fork"], description: "Context seed: fresh (default) = only the brief; fork = prepend a bounded summary of recent parent-session user/assistant text ([父会话上下文摘要(不可信背景)]). fork costs tokens; use it when the subtask needs the conversation's background." },
       },
       required: ["instructions"],
     },
@@ -4825,7 +5601,11 @@ async function runWithAgent(
       const rawArgs = args as {
         instructions: string; title?: string; agentType?: string; run_in_background?: boolean; deadlineMin?: number;
         backend?: string; adapter?: string; adapterArgs?: string[]; adapterEnv?: Record<string, string>;
-        worktree?: boolean; isolation?: string; wait?: boolean;
+        worktree?: boolean; isolation?: string; context?: string; wait?: boolean;
+ /** resume_agent 内部参数:`child:<原 taskId>` 会话键(同一 child 会话续跑,不新开会话)。 */
+        resumeSessionKey?: string;
+ /** 调用方自报深度:只进日志/错误文本做对照,不参与判定(判定只用 registry 链)。 */
+        depth?: number;
       };
  // ACP 后端:显式 backend 只认 "acp"(其它值 fail-visible,不静默当默认后端)。
       const backendArg = rawArgs.backend ? String(rawArgs.backend).toLowerCase() : undefined;
@@ -4839,6 +5619,33 @@ async function runWithAgent(
         return JSON.stringify({ status: "rejected", reason: `未知 isolation "${String(rawArgs.isolation)}":可选 none/worktree(或直接用 worktree:true)` });
       }
       const worktreeRequested = rawArgs.worktree === true || isolationArg === "worktree";
+ // 上下文种子:缺省 fresh=旧行为(instructions 逐字不变);未知值 fail-visible。
+      const contextArg = rawArgs.context === undefined ? "fresh" : String(rawArgs.context).toLowerCase();
+      if (contextArg !== "fresh" && contextArg !== "fork") {
+        return JSON.stringify({ status: "rejected", code: "INVALID", reason: `未知 context "${String(rawArgs.context)}":可选 fresh/fork` });
+      }
+ // 深度校验(partial → implemented):只认  registry 已落盘的父子链(本次 spawn 的新记录
+ // 还未登记),调用方自报深度不采信;CYCLE/INVALID 同样拒派(失败方向必须是「不派发」)。
+      {
+        const depthVerdict = spawnDepthVerdict({
+          records: subagentRegistry.list({ includeDone: true, limit: 200 }),
+          parentId: task.id,
+          ...(typeof rawArgs.depth === "number" ? { requestedDepth: rawArgs.depth } : {}),
+        });
+        if (!depthVerdict.ok) {
+          journal.append({
+            kind: "custom",
+            sessionId: task.sessionId,
+            payload: { type: "subagent.depth.reject", parentId: task.id, code: depthVerdict.code, depth: depthVerdict.depth, reason: depthVerdict.reason },
+          });
+          return JSON.stringify({ status: "rejected", code: depthVerdict.code, reason: depthVerdict.reason });
+        }
+      }
+ // 嵌套深度:父链 + 本次 > MAX_SUBAGENT_DEPTH 拒绝(外部/续跑路径兜底;子代理工具池不给 spawn)。
+      const parentDepth = depthOf(subagentRegistry, task.id);
+      if ((parentDepth.ok ? parentDepth.depth : 0) + 1 > MAX_SUBAGENT_DEPTH) {
+        return JSON.stringify({ status: "rejected", code: "DEPTH_EXCEEDED", reason: `子代理嵌套深度超上限 ${MAX_SUBAGENT_DEPTH}(当前父深度 ${parentDepth.depth})` });
+      }
  // plan-gate 写角色前置闸:worker/general 等写角色派发需规划板在场(worktree
       // 创建之前拦——拒绝不产生孤儿工作树)。planner/explore/judge/test-analyst 不受限。
  // ppt-master 同样是写角色(产 deck.md / 调导出工具),纳入同一道闸。
@@ -4860,7 +5667,7 @@ async function runWithAgent(
       const subAbort = new AbortController();
       const forwardAbort = () => subAbort.abort();
       signal?.addEventListener("abort", forwardAbort, { once: true });
-      const instructions = composeSubagentInstructions(agentProfiles, rawArgs.agentType, String(rawArgs.instructions))
+      const baseInstructions = composeSubagentInstructions(agentProfiles, rawArgs.agentType, String(rawArgs.instructions))
  // planner 历史复用(新规划基于已有历史规划):任务书尾部自动带历史档案
         //(本会话优先+近期,≤8 条)——延续已验证的结构,别推翻已交付的成果;确需重构时在板里注明理由。
         + (String(rawArgs.agentType ?? "").toLowerCase() === "planner"
@@ -4875,10 +5682,27 @@ async function runWithAgent(
           const block = renderParentReadBlock(readFilesOf(task.sessionId));
           return block ? "\n\n" + block : "";
         })();
+ // context=fresh(缺省)时 instructions 逐字等于 baseInstructions(旧行为不变);
+ // fork 时把父会话最近 user/assistant 文本摘要前插(带「不可信背景」header,预算 4000 字)。
+      const forkBlock = contextArg === "fork" ? forkContextBlock(deriveMessages(journal, task.sessionId)) : "";
+      const instructions = forkBlock ? forkBlock + "\n\n" + baseInstructions : baseInstructions;
       const events: string[] = [];
       // 终态守卫(机制1 竞态面):deadline 收割与后端迟到 result 只落一次注册表/journal 终态。
       let settled = false;
       let deadlineFired = false;
+ // 会话工作所有权:后台子代理登记为 owner=task.sessionId 的 subagent 单元。
+ // 归属只认注册时写入的 ownerSessionId;subagent.event 里的 parentTaskId 仅作追溯,**不当归属依据**。
+      let ownedGeneration: number | undefined;
+      const registerOwnedSubagent = (): void => {
+        if (ownedGeneration !== undefined) return;
+        ownedGeneration = registerOwnedUnit(journal, { unitId: bgAgentId, kind: "subagent", ownerSessionId: task.sessionId });
+      };
+      const settleOwnedSubagent = (): void => {
+        if (ownedGeneration === undefined) return;
+        const generation = ownedGeneration;
+        ownedGeneration = undefined;
+        settleOwnedUnit(journal, bgAgentId, generation);
+      };
       // 同步落结果的 backend(ACP 的 spawn-failed 在 spawn 返回前就发 result)在注册表登记前已终态——
       // 用最近一次 result.ok 校正登记状态,避免「failed 却显示 running」。
       let lastResultOk: boolean | undefined;
@@ -4889,7 +5713,14 @@ async function runWithAgent(
       // (后台共用 `${task.id}-bg`)→ 子 loop sessionId、轨迹目录 `subagent-<taskId>-sub`、
  // subagent.event.taskId 三者全撞在一起(经验证两个并行 explore 的 159 次调用混在同一目录,
       // 无法按子代理排障)。前缀保留父任务 id 便于追溯;agentId 仍是全局唯一键。
-      const subTaskId = task.id.slice(0, 8) + "-" + bgAgentId.slice(6, 14);
+ // resume_agent:显式带 resumeSessionKey 时沿用 `child:<原 taskId>`(同一 child 会话续跑),
+ // 否则维持每次派发唯一 id(并行/重派不撞轨迹目录;agentId 仍是全局唯一键)。
+      const resumeSessionKeyArg = typeof rawArgs.resumeSessionKey === "string" && rawArgs.resumeSessionKey.trim()
+        ? rawArgs.resumeSessionKey.trim()
+        : undefined;
+      const subTaskId = resumeSessionKeyArg ?? (task.id.slice(0, 8) + "-" + bgAgentId.slice(6, 14));
+ // TaskSpec.taskId 与 subTaskId 同源:续跑时逐字等于 child:<原 taskId>(不另开会话 id),否则维持旧后缀。
+      const taskSpecId = (suffix: "-sub" | "-bg"): string => resumeSessionKeyArg ?? subTaskId + suffix;
  // worktree 隔离:在构造后端前创建,使 roots/workdir/子进程 cwd 全部指向派生工作树。
       // 后台名额预检前置:避免「worktree 已建、却因后台上限被拒」的孤儿工作树(正式检查在下方后台分支)。
       if (worktreeRequested && rawArgs.run_in_background === true) {
@@ -4917,7 +5748,8 @@ async function runWithAgent(
             payload: { type: "worktree.create", ok: false, agentId: bgAgentId, error: { code, message } },
           });
           // 明确拒绝,不静默回退主工作区(回退需调用方显式去掉 worktree 参数重派)。
-          return JSON.stringify({ status: "rejected", reason: `worktree 隔离不可用(${code}):${message}`, worktree: { requested: true, ok: false, code } });
+          const iso = isolationVerdict({ requested: true, worktreeAvailable: false });
+          return JSON.stringify({ status: "rejected", code: iso.code, reason: `worktree 隔离不可用(${code}):${message}`, worktree: { requested: true, ok: false, code } });
         }
       }
  // 子代理工作根:worktree 模式下所有子代理面(工具围栏/命令 cwd/code_sense 根)
@@ -4935,10 +5767,59 @@ async function runWithAgent(
       const worktreeLine = worktree
         ? `[worktree] path=${worktree.path} branch=${worktree.branch} base=${worktree.baseCommit}\n`
         : "";
+ // 回收契约:worktree 模式下走既有 worktree-service.collect 取改动文件(git status,只读),
+ // 交付文本固定 `worktree:<path> 改动文件:<...>`;none 模式为空(scratchContract 不伪造路径)。
+      const scratchOf = async (): Promise<{ ok: boolean; text: string; paths: readonly string[]; diffHint: string }> => {
+        if (!worktree) {
+          const sc = scratchContract({ mode: "none" });
+          return { ok: sc.ok, text: "", paths: sc.paths, diffHint: sc.diffHint };
+        }
+        let changedFiles: string[] = [];
+        try {
+          const c = await defaultWorktreeService().collect({ path: worktree.path });
+          if (c.ok) changedFiles = c.changedFiles;
+        } catch { /* 回收失败不阻塞交付 */ }
+        const sc = scratchContract({ mode: "worktree", workdir: worktree.path, changedFiles });
+        const text = `worktree:${worktree.path} 改动文件:${changedFiles.length ? changedFiles.slice(0, 20).join(",") : "(无)"}`;
+        return { ok: sc.ok, text, paths: sc.paths, diffHint: sc.diffHint };
+      };
  // 子代理实际模型名(目录:
       // models.subagent 显式配置才存在(factory 未配=undefined),回退主 llm=同实例同模型同 effort,
       // 主模型热切换后新 spawn 天然用新模型(与 effectiveBackend 同判定源)。
       const subModelName = subagentModelNameOf(models?.subagent ?? llm);
+ // :子代理生命周期注册(进程级 registry;bgAgents 镜像继续承担输出文件/cancel 句柄)。
+ // parentId=派发它的主 task id → list_agents/stop_agent 按后代递归天然隔离其它任务。
+      const registerSubagentRecord = (): void => {
+        subagentRegistry.register({
+          agentId: bgAgentId,
+          taskId: subTaskId,
+          parentId: task.id,
+          sessionId: task.sessionId,
+          ...(subTitle ? { title: subTitle } : {}),
+          model: subModelName,
+          state: "running",
+          spawnedAt: spawnStartAt,
+          ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}),
+        });
+ // 原任务书/角色留进程内(resume_agent 冷启动续跑的依据;registry 不存任务书正文)。
+        subagentBriefs.set(bgAgentId, {
+          instructions,
+          ...(rawArgs.agentType ? { agentType: String(rawArgs.agentType) } : {}),
+          ...(subTitle ? { title: subTitle } : {}),
+        });
+        if (subagentBriefs.size > SUBAGENT_BRIEF_CAP) {
+          for (const k of subagentBriefs.keys()) {
+            if (subagentBriefs.size <= SUBAGENT_BRIEF_CAP) break;
+            subagentBriefs.delete(k);
+          }
+        }
+      };
+ // 父任务取消 → 子代理随之 abort;registry 如实落 cancelled。后台 detach 路径会摘掉本监听
+ // (子代理转后台后独立存活,不再受父取消影响——与既有 detachParent 语义一致)。
+      const markSubagentCancelled = () => {
+        subagentRegistry.update(bgAgentId, { state: "cancelled", resultSummary: "父任务取消,子代理随之中断" });
+      };
+      signal?.addEventListener("abort", markSubagentCancelled, { once: true });
       // review 抓:sessionId 来自客户端,入路径段前消毒(与 board-store seg 同纪律)
       const bgOutputDir = join(repoRoot(), ".genie", "agent-outputs", String(task.sessionId).replace(/[\\/:*?"<>|]/g, "_").replace(/\.\./g, "_"), bgAgentId);
  // echo 占位后端 → 进程内 LLM 子代理(ZCode Agent 工具的本质=独立上下文
@@ -4988,9 +5869,33 @@ async function runWithAgent(
               }
             : undefined)
         : undefined;
+ // 工具面收敛(只收紧):父 deny ∪ profile deny(本仓 AgentProfile 无 deny 字段=空) ∪
+ // 系统默认 deny(todowrite/task 主 agent 独占) ∪ primary-only 工具;命中的工具从子代理注入面摘掉,
+ // 并在 journal 留痕(哪个工具因谁被收走可事后对账)。白名单本身不放宽。
+      const parentDenyNames = (permRules ?? [])
+        .filter((r) => r.action === "deny")
+        .map((r) => String(r.permission ?? "").trim())
+        .filter(Boolean);
+      const convergedDeny = convergeDeny({
+        parentDeny: parentDenyNames,
+        childDeny: [],
+        primaryOnly: PRIMARY_ONLY_TOOLS,
+        kind: "subagent",
+      }).deny;
+      const allowedExtraTools = capExtraTools ? capExtraTools.filter((t) => !convergedDeny.includes(t.name)) : undefined;
+      journal.append({
+        kind: "custom",
+        sessionId: task.sessionId,
+        payload: {
+          type: "subagent.tool.deny",
+          agentId: bgAgentId,
+          deny: convergedDeny,
+          removed: capExtraTools ? capExtraTools.length - (allowedExtraTools?.length ?? 0) : 0,
+        },
+      });
  // 子代理工具池名字集(池外观测用):内置读/写+注入面(code_sense 系/skill_view/MCP)。
-      const subPoolNames: string[] = capExtraTools
-        ? [...SUBAGENT_READ_TOOLS, ...SUBAGENT_WRITE_TOOLS, ...capExtraTools.map((t) => t.name)]
+      const subPoolNames: string[] = allowedExtraTools
+        ? [...SUBAGENT_READ_TOOLS, ...SUBAGENT_WRITE_TOOLS, ...allowedExtraTools.map((t) => t.name)]
         : [];
       const capSkillIndex = cap.toolWhitelist
         && expandToolTokens(cap.toolWhitelist).includes("skill_view")
@@ -5039,7 +5944,7 @@ async function runWithAgent(
             ...(deadlineMs > 0 ? { deadlineMs } : {}),
             staleWarnMs,
  // 能力白名单:profile.tools 声明→真实工具面;缺席=角色二分兜底(行为同旧版)。
-            ...(cap.toolWhitelist ? { toolWhitelist: cap.toolWhitelist, extraTools: capExtraTools } : {}),
+            ...(cap.toolWhitelist ? { toolWhitelist: cap.toolWhitelist, extraTools: allowedExtraTools } : {}),
  // 写盘围栏:profile.writeGlobs→后端 write_file/edit_file 路径白名单(planner 只写规划稿)。
             ...(cap.writeGlobs ? { writeGlobs: cap.writeGlobs } : {}),
             ...(capSkillIndex ? { skillIndexText: capSkillIndex } : {}),
@@ -5152,6 +6057,7 @@ async function runWithAgent(
           if (settled || deadlineFired) return;
           deadlineFired = true;
           settled = true;
+          settleOwnedSubagent(); // 终态 settle(timebox 收割=终态)
           void (async () => { try { await bgHandleRef?.cancel("graceful"); } catch { /* 已退出 */ } })();
           let trail = "";
           try {
@@ -5162,6 +6068,8 @@ async function runWithAgent(
           try { ap(outputFile, `[result ok=true] ${partial}\n`, "utf-8"); } catch { /* 输出文件写失败不阻塞收割 */ }
           const en = bgAgents.get(bgAgentId);
           if (en) { en.status = "completed"; en.lastEventAt = Date.now(); delete en.cancel; }
+ // :deadline 收割=终态(部分交付),registry 落 done+摘要,避免 list_agents 显示 running。
+          subagentRegistry.update(bgAgentId, { state: "done", resultSummary: partial.slice(0, 200) });
           try {
             journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, event: { type: "result", ok: true, finalText: partial.slice(0, 300) }, reap: { reason: "deadline" } } });
           } catch { /* 终态事件失败不影响收割 */ }
@@ -5175,6 +6083,8 @@ async function runWithAgent(
               pointerOnly: true,
             });
           } catch { /* 通知失败不影响收割 */ }
+ // :后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
+          maybeWakeIdleSession(journal, task.sessionId, tm);
           finalText = partial;
           events.push("result"); // 前台竞态路径(若仍在等)立即收割
         };
@@ -5184,7 +6094,7 @@ async function runWithAgent(
         }
         const bgHandle = await effectiveBackend.spawn(
           {
-            taskId: `${subTaskId}-bg`,
+            taskId: taskSpecId("-bg"),
             instructions: instructions + symbolCtx,
             workdir: subRoot,
             permissions: "sandbox",
@@ -5200,9 +6110,19 @@ async function runWithAgent(
                 // 终态守卫(机制1 竞态面):deadline 已收割时,后端迟到的 result 只落文件,不再翻注册表/journal/通知。
                 if (!settled) {
                   settled = true;
+                  settleOwnedSubagent(); // 终态 settle(后端 result 到达)
                   const entryBg = bgAgents.get(bgAgentId);
                   // 终态摘除 cancel 句柄:此后「终止」按钮经 server 诚实回 ok:false(已收尾)。
                   if (entryBg) { entryBg.status = e.result.ok ? "completed" : "failed"; delete entryBg.cancel; }
+ // :后台终态同步落 registry(list_agents 的状态源;后台路径在此返回,不走末尾统一更新)。
+                  subagentRegistry.update(bgAgentId, { state: e.result.ok ? "done" : "failed", resultSummary: String(e.result.finalText ?? e.result.error?.detail ?? "").slice(0, 200) });
+ // worktree 交付回收(路径+改动文件)——异步补齐,不阻塞终态事件与通知。
+                  if (worktree) void scratchOf().then((s) => {
+                    if (!s.text) return;
+                    try { ap(outputFile, `[scratch] ${s.text}\n`, "utf-8"); } catch { /* 输出失败不影响交付 */ }
+                    const cur = subagentRegistry.get(bgAgentId);
+                    subagentRegistry.update(bgAgentId, { resultSummary: `${s.text} | ${String(cur?.resultSummary ?? "")}`.slice(0, 200) });
+                  });
  // B:后台子代理也落 subagent.result 终态事件——此前只有 message.system,
                   // 投影 running 计数只增不减、面板历史卡重启后无终态可查。纯事件补齐,不改权限语义。
                   try {
@@ -5223,6 +6143,8 @@ async function runWithAgent(
                       outputText: noticeOutput,
                     });
                   } catch { /* 通知失败不影响子代理收尾 */ }
+ // :后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
+                  maybeWakeIdleSession(journal, task.sessionId, tm);
                 }
               }
               if (e.type === "permission-ask") {
@@ -5244,7 +6166,11 @@ async function runWithAgent(
         }
         // subagent.cancel 句柄(G3 通路收尾):后台路径闭包读 bgHandleRef(spawn 未决时按下终止=诚实等待句柄就位后再取消);
         // 已收尾(settled)不挂——server 侧按「句柄缺席」回 ok:false。
-        bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => bgHandleRef?.cancel("graceful") }), ...(subTitle ? { title: subTitle } : {}) });
+        bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return bgHandleRef?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => bgHandle.steer(t, m) }), ...(subTitle ? { title: subTitle } : {}) });
+ // :登记 registry(后台路径),并摘掉父取消监听——后台已 detach,父取消不再作用于它。
+        registerSubagentRecord();
+        registerOwnedSubagent(); // 所有权登记(cancel 句柄已就位,关会话时可真取消)
+        signal?.removeEventListener("abort", markSubagentCancelled);
         ensureSubagentWatchdog(journal);
         // 终态注册表防无界增长(review 抓):>200 条时清最老的终态项(running 永不清)
         if (bgAgents.size > 200) {
@@ -5279,6 +6205,7 @@ async function runWithAgent(
         if (settled || deadlineFired) return;
         deadlineFired = true;
         settled = true;
+        settleOwnedSubagent(); // 终态 settle(timebox 收割=终态,前台路径)
         void (async () => { try { await subHandle?.cancel("graceful"); } catch { /* 已退出 */ } })();
         let trail = "";
         try {
@@ -5289,6 +6216,8 @@ async function runWithAgent(
         try { ap(outputFile, `[result ok=true] ${partial}\n`, "utf-8"); } catch { /* 输出文件写失败不阻塞收割 */ }
         const en = bgAgents.get(bgAgentId);
         if (en) { en.status = "completed"; en.lastEventAt = Date.now(); delete en.cancel; }
+ // :前台路径的 deadline 收割同落 registry(部分结果交付,非失败)。
+        subagentRegistry.update(bgAgentId, { state: "done", resultSummary: partial.slice(0, 200) });
         try {
           journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: task.id, agentId: bgAgentId, event: { type: "result", ok: true, finalText: partial.slice(0, 300) }, reap: { reason: "deadline" } } });
         } catch { /* 终态事件失败不影响收割 */ }
@@ -5301,7 +6230,7 @@ async function runWithAgent(
       }
       subHandle = await effectiveBackend.spawn(
         {
-          taskId: `${subTaskId}-sub`,
+          taskId: taskSpecId("-sub"),
           instructions: instructions + symbolCtx,
  // workdir 按项目解析;worktree 模式=派生工作树。
           workdir: subRoot,
@@ -5323,6 +6252,15 @@ async function runWithAgent(
                 const entryBg = bgAgents.get(bgAgentId);
                 // 终态摘除 cancel 句柄:此后「终止」按钮经 server 诚实回 ok:false(已收尾)。
                 if (entryBg) { entryBg.status = e.result.ok ? "completed" : "failed"; delete entryBg.cancel; }
+ // :前台终态同步落 registry(与 bgAgents 镜像同一判定源)。
+                subagentRegistry.update(bgAgentId, { state: e.result.ok ? "done" : "failed", resultSummary: String(e.result.finalText ?? e.result.error?.detail ?? "").slice(0, 200) });
+ // worktree 交付回收(路径+改动文件)——异步补齐,不阻塞终态事件。
+                if (worktree) void scratchOf().then((s) => {
+                  if (!s.text) return;
+                  try { ap(outputFile, `[scratch] ${s.text}\n`, "utf-8"); } catch { /* 输出失败不影响交付 */ }
+                  const cur = subagentRegistry.get(bgAgentId);
+                  subagentRegistry.update(bgAgentId, { resultSummary: `${s.text} | ${String(cur?.resultSummary ?? "")}`.slice(0, 200) });
+                });
               }
             }
           } catch { /* 输出文件写失败不影响子代理 */ }
@@ -5334,6 +6272,11 @@ async function runWithAgent(
               if (subHandle) void subHandle.respondPermission(e.requestId, decision).catch(() => {});
               else pendingAsks.push({ requestId: e.requestId, decision });
             };
+ // 单调收窄:决策前先跑 guard 链与 session-always(空链 + 空存储 = 行为不变)。
+ // deny 直接拒(不咨询规则/面板),always 命中直接放行;abstain 落下面既有三级决策。
+            const guardEv = decidePermission({ tool: "subagent", summary: e.summary, sessionId: task.sessionId, journal });
+            if (guardEv.effect === "deny") { applyDecision("reject", "guard-denied"); return; }
+            if (guardEv.effect === "allow") { applyDecision("allow-once", "session-always"); return; }
             if (process.env.GENIE_SUBAGENT_ASK === "allow-once") applyDecision("allow-once", "env-allow-once");
             else if (permissionMode() === "auto") applyDecision("allow-once", "mode-auto(完全访问)");
             else if (permissionMode() === "readonly") applyDecision("reject", "mode-readonly");
@@ -5367,7 +6310,10 @@ async function runWithAgent(
       // 此前仅 auto-bg 后才入表,前台运行期(最长 180s)面板无从知道「有没有在工作」;
       // result 分支既有代码本就尝试更新该条目,此处补齐登记即可闭环。终态由 result 分支改写。
       // subagent.cancel 句柄(G3 通路收尾):前台路径闭包读 subHandle;已收尾不挂。
-      bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => subHandle?.cancel("graceful") }), ...(subTitle ? { title: subTitle } : {}) });
+      bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return subHandle?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => subHandle?.steer(t, m) ?? Promise.resolve(false) }), ...(subTitle ? { title: subTitle } : {}) });
+ // :前台路径同样登记 registry(运行期即可被 list_agents 看到)。
+      registerSubagentRecord();
+      registerOwnedSubagent(); // 所有权登记(前台转后台/前台终态同一单元)
       ensureSubagentWatchdog(journal);
  // ZCode 赛跑语义:结果 vs 自动转后台计时器——超时→父拿 agentId 立即返回,子代理 detach 继续。
  // wait:true:
@@ -5396,7 +6342,9 @@ async function runWithAgent(
       if (outcome === "auto-bg") {
         signal?.removeEventListener("abort", forwardAbort); // detach:父取消不再杀后台子代理
         // re-set 会整个替换条目对象:cancel 句柄随条目重挂(auto-bg 到达时必未收尾,防御式带 settled 守卫)。
-        bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => subHandle?.cancel("graceful") }), ...(subTitle ? { title: subTitle } : {}) });
+        bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return subHandle?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => subHandle?.steer(t, m) ?? Promise.resolve(false) }), ...(subTitle ? { title: subTitle } : {}) });
+ // :detach 后父取消不再作用,摘监听;registry 记录保持 running(转后台仍在跑)。
+        signal?.removeEventListener("abort", markSubagentCancelled);
       ensureSubagentWatchdog(journal);
         journal.append({ kind: "subagent.backgrounded", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, outputFile } });
         return JSON.stringify({
@@ -5412,11 +6360,20 @@ async function runWithAgent(
         });
       }
       signal?.removeEventListener("abort", forwardAbort);
+      signal?.removeEventListener("abort", markSubagentCancelled);
       // 机制1 竞态面:deadline 收割(外部后端)已落过终态事件,不重复写。
       if (!deadlineFired) {
         journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, event: { type: "result", finalText: finalText.slice(0, 300) }, ...(worktree ? { worktree } : {}) } });
       }
-      return (finalText || "(子 agent 未返回结果)") + worktreeNote;
+ // :前台终态兜底落 registry(已 cancelled/interrupted 的不回退;仅 running 才改)。
+      settleOwnedSubagent(); // 终态 settle(前台路径走到终态返回:同单元只结算一次)
+      const finalScratch = await scratchOf();
+      if (subagentRegistry.get(bgAgentId)?.state === "running") {
+        const summary = finalScratch.text ? `${finalScratch.text} | ${finalText || ""}` : (finalText || "");
+        subagentRegistry.update(bgAgentId, { state: lastResultOk === false ? "failed" : "done", resultSummary: summary.slice(0, 200) });
+      }
+      const scratchNote = finalScratch.text ? `\n\n[scratch] ${finalScratch.text}(diff:${finalScratch.diffHint || "n/a"})` : "";
+      return (finalText || "(子 agent 未返回结果)") + worktreeNote + scratchNote;
     },
   };
 
@@ -5521,14 +6478,88 @@ async function runWithAgent(
   const liteMode = process.env.GENIE_SYSTEM_LITE === "off" ? false
     : process.env.GENIE_SYSTEM_LITE === "on" ? true
     : instrChars < 1450;
+ // 开工画像(2026-11):coding 任务开工时探测 branch/脏文件/近期提交/worktree/包清单,
+ // 把可执行 verify 命令与停止规则写进 system 稳定前缀。
+ // 为什么 verify 命令要进稳定前缀:它是本仓真值(现读 manifests/锁文件),模型不必自猜命令
+ // (猜错=白烧一轮验证);system 每步重发但逐字不变 → prompt cache 命中,增量成本≈0。
+ // 为什么探测失败不能阻塞开工:开工信息是增益不是前置条件——探测逐项 fail-soft,
+ // 整体异常只落 errors 审计(task 照常开工);非 coding 类完全不探测(零行为变化)。
+  let workStartBrief = "";
+  {
+    const alreadyProfiled = journal.readAll().some((e) =>
+      e.kind === "custom" && e.sessionId === task.sessionId
+      && (e.payload as { type?: string } | undefined)?.type === "work.start.profile");
+    if (taskClassState.value === "coding" && !alreadyProfiled) {
+      try {
+        const profile = await probeWorkStart({
+          root: taskRoot,
+          exec: (cmd, args, o) => {
+            try {
+              const out = _execFileSync(cmd, args, {
+                cwd: o?.cwd ?? taskRoot,
+                encoding: "utf8",
+                timeout: o?.timeoutMs ?? 3000,
+                stdio: ["ignore", "pipe", "ignore"],
+              });
+              return { ok: true, stdout: String(out), stderr: "" };
+            } catch (err) {
+              const e = err as { stdout?: unknown; stderr?: unknown; message?: unknown };
+              return { ok: false, stdout: String(e?.stdout ?? ""), stderr: String(e?.stderr ?? e?.message ?? err) };
+            }
+          },
+        });
+ // 稳定前缀:同输入同文本(渲染纯函数,无时间戳/随机数),同会话只注入一次。
+        workStartBrief = renderStartProfileTip(renderWorkStartBrief(profile, { modelFamily: subagentModelNameOf(llm) }));
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: {
+            type: "work.start.profile",
+            taskId: task.id,
+            root: taskRoot,
+            branch: profile.branch,
+            dirty: profile.dirtyFiles,
+            commits: profile.commits,
+            worktrees: profile.worktrees,
+            manifests: profile.manifests,
+            packageManager: profile.packageManager,
+            verifyCommands: verifyCommandsFor(profile),
+            errors: profile.errors,
+          },
+        });
+      } catch (err) {
+ // 整段异常:跳过注入,只落 errors 审计(fail-soft,不阻塞开工)。
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: {
+            type: "work.start.profile",
+            taskId: task.id,
+            skipped: true,
+            errors: [{ probe: "work-start", error: err instanceof Error ? err.message : String(err) }],
+          },
+        });
+      }
+    }
+  }
   const composed = composeSystemPrompt({
-    base: systemForTaskClass(taskClassState.value, { lite: liteMode }) + "\n\n## 行为纪律(soul 继承,身份以上文为准)\n" + soulDisciplinesFor(soulText) + "\n\n" + formatAgentProfiles(agentProfiles) + projectMainline,
+    base: systemForTaskClass(taskClassState.value, { lite: liteMode }) + "\n\n## 行为纪律(soul 继承,身份以上文为准)\n" + soulDisciplinesFor(soulText) + "\n\n" + formatAgentProfiles(agentProfiles) + projectMainline
+ // 开工画像块进稳定前缀(coding 类且本会话未注入过才有内容;空串=零变化)。
+      + workStartBrief,
     agentsMd: discoverAgentsMd(taskRoot),
  // 父子 ask-answer:「子代理资源调度」节(spawn 告知义务+审批决策指引)。
     subagentDispatch: renderSubagentDispatchSection({ answerToolMounted: true }),
     // n6 技能索引(主 agent 也注入,ZCode context/sections/skills.ts):与子代理同源同格式,
     // 预算 20000 字符,超预算降级为 name+file 一行。空索引=不渲染该节(renderSkillIndex 返回 "")。
-    skillIndex: renderSkillIndex(collectSkillIndexEntries(store), SKILL_INDEX_MAX_CHARS),
+ // 档案 skills.allow:只过滤「可安全过滤」的索引行(name 或 category/name 命中),空=不过滤。
+    skillIndex: renderSkillIndex(
+      (() => {
+        const all = collectSkillIndexEntries(store);
+        const allow = taskProfile?.skills?.allow;
+        if (!allow || allow.length === 0) return all;
+        return all.filter((e) => allow.includes(e.name) || allow.includes(`${e.category}/${e.name}`));
+      })(),
+      SKILL_INDEX_MAX_CHARS),
   });
  // 保留节边界( token 轮 04):旧写法 `const { text: system } = ...` 把 sections 丢掉,
  // 导致 loop 只能整篇 26~28K 字符重发 system 变更(经验证 855 次调用 / 8.3M uncached / 占未命中 39.5%)。
@@ -5559,7 +6590,12 @@ async function runWithAgent(
           }
           if (kind === "doc") {
  // 附件链路:文档类走解析器(doc-text.ts,永不抛错),返回解析后的纯文本。
-            const r = await parseDocFile(p, { name: att.name, mime: att.mime });
+            const r = await parseDocFile(p, {
+              name: att.name,
+              mime: att.mime,
+ // 路径围栏:附件路径必须落在 repoRoot/taskRoot 之内,越界解析器直接拒。
+              roots: [...new Set([repoRoot(), taskRoot].filter((x): x is string => !!x))],
+            });
             if (!r.ok) return "[文档附件解析失败] " + att.name + ":" + r.reason + "\n路径:" + p;
             const head = "[文档附件] " + att.name + "(已解析为纯文本)" + (r.note ? "(注:" + r.note + ")" : "");
             const body = r.text.length > 100 * 1024 ? r.text.slice(0, 100 * 1024) + "\n…(超 100KB 截断)" : r.text;
@@ -5584,8 +6620,29 @@ async function runWithAgent(
       }
     : null;
  // 权限闸门:规则在场才设;ask 处置 env 可调(缺省 fail-closed)。
- // 记忆上下文注入:USER.md/MEMORY.md 渲染块进系统提示(空=不加节)。
-  const memBlock = memory?.contextBlock("local") ?? "";
+ // 记忆上下文注入(冻结 + 召回门):USER.md/MEMORY.md 渲染块进系统提示(空=不加节)。
+ // 召回门:「你好」「谢谢」「好的」「/compact」这类 trivial 输入不携带任务信息,记忆块对回答零增益——
+ // 整块跳过注入,这一次调用直接省下数千 token;跳过判定与原因落 journal(memory.recall)可审计。
+ // 冻结视图:同 owner 内容/revision 未变时复用同一份快照,中途写盘不再让整节系统提示前缀失效。
+  const recallDecision = shouldRecallMemory(task.instruction);
+  let memBlock = "";
+ // memoryScope="none" 的 kind 不注入记忆块(召回门判定也一并省下)。
+ // memoryScope="session":本仓 MemoryStore 只有 MEMORY.md/USER.md 双库、无 project/session 域过滤,
+ // 故保持既有注入(等价于「无域过滤时只跳过 project 域」的现状),不做块内伪拆分。
+  if (memory && taskKindCaps.memoryScope !== "none" && recallDecision.recall) {
+    const frozen = memory.contextBlockFrozen?.("local");
+    memBlock = frozen ? frozen.block : memory.contextBlock("local");
+ // 无 memory 或空库不落 snapshot 事件(hash 只对真实注入块有意义)。
+    if (frozen && memBlock) {
+      try {
+        journal.append({ kind: "custom", sessionId: task.sessionId, payload: { what: "memory.snapshot", hash: frozen.hash, reused: frozen.reused } });
+      } catch { /* 留痕失败不影响注入 */ }
+    }
+  } else if (!recallDecision.recall) {
+    try {
+      journal.append({ kind: "custom", sessionId: task.sessionId, payload: { what: "memory.recall", recalled: false, reason: recallDecision.reason } });
+    } catch { /* 留痕失败不影响主流程 */ }
+  }
  // 会话目标注入( /goal):journal 最近一条 active goal → 系统提示(目标驱动跨轮任务)。
   const goalEv = [...journal.readAll()].reverse().find((e) => e.sessionId === task.sessionId && e.kind === "goal.set");
   const goalPayload = (goalEv?.payload ?? {}) as { goal?: string | null; state?: string };
@@ -5841,7 +6898,187 @@ async function runWithAgent(
   // 工具清单同步入 journal(task.progress.tools):此后任何「工具是否下发」质疑可直接以 journal 为证。
  // tool_view 按需注入(像 MCP 一样用时再看):长描述工具摘要为首句+指路,
   // 完整说明经 tool_view(name) 查看;tools 参数从 39k chars 级降到 schema+短描述。
-  const changeSurfaceTool = makeChangeSurfaceTool({ journal: journal as unknown as ChangeSurfaceJournal, sessionId: task.sessionId, taskId: task.id, root: taskRoot });
+  const changeSurfaceTool = makeChangeSurfaceTool({ journal: journal as unknown as ChangeSurfaceJournal, sessionId: task.sessionId, taskId: task.id, root: taskRoot, instruction: String(task.instruction ?? "") });
+ //  子代理控制面(仅主工具面;子代理工具池由 buildSubagentExtraTools/SUBAGENT_*_TOOLS 决定,
+ // 结构性不含这两个名字——越权不是靠提示词约束,而是工具面缺失)。
+  const listAgentsTool: Tool = {
+    name: "list_agents",
+    description: "列出本任务的子代理(含全部后代,递归):agentId/状态/模型/耗时/截止/标题/结果摘要。includeDone=false 只看运行中;limit 缺省 50。只能看自己的子代理。",
+    parameters: {
+      type: "object",
+      properties: {
+        includeDone: { type: "boolean", description: "false = 只列运行中(缺省 true=含终态)" },
+        limit: { type: "number", description: "最多返回条数(缺省 50)" },
+      },
+    },
+ // 只读注册表快照,无副作用:可与其它工具在同一步并行执行。
+    isConcurrencySafe: () => true,
+    async execute(args: unknown) {
+      const a = (args ?? {}) as { includeDone?: boolean; limit?: number };
+      const now = Date.now();
+      const rows = subagentRegistry.list({
+        parentId: task.id,
+        includeDone: a.includeDone !== false,
+        ...(typeof a.limit === "number" ? { limit: a.limit } : {}),
+      }).map((r) => ({
+        agentId: r.agentId,
+        state: r.state,
+        model: r.model,
+        title: r.title,
+        elapsedSec: Math.max(0, Math.round(((r.lastEventAt ?? now) - r.spawnedAt) / 1000)),
+        ...(r.deadlineAt !== undefined
+          ? { deadlineAt: new Date(r.deadlineAt).toISOString(), deadlineInSec: Math.round((r.deadlineAt - now) / 1000) }
+          : {}),
+        ...(r.resultSummary ? { resultSummary: r.resultSummary.slice(0, 200) } : {}),
+      }));
+      return JSON.stringify({ count: rows.length, agents: rows });
+    },
+  };
+  const stopAgentTool: Tool = {
+    name: "stop_agent",
+    description: "中断指定子代理(**只能停自己的子代理**):只作用于该 agentId 一条记录,兄弟子代理与父任务不受影响。跨任务/非后代/不存在一律拒绝(fail-closed);已终态返回 ALREADY_TERMINAL。",
+    parameters: {
+      type: "object",
+      properties: { agentId: { type: "string", description: "要中断的子代理 id(spawn_subagent 返回的 agentId)" } },
+      required: ["agentId"],
+    },
+    async execute(args: unknown) {
+      const a = (args ?? {}) as { agentId?: string };
+      const id = String(a.agentId ?? "");
+      if (!id) return JSON.stringify({ ok: false, code: "INVALID", reason: "agentId 必填" });
+      const rec = subagentRegistry.get(id);
+ // fail-closed:只允许当前 task 的后代(registry 递归后代集);跨任务/不存在一律拒绝,
+ // 且拒绝分支不触碰任何 cancel 句柄(避免误停别人的子代理)。
+      const allowed = new Set(subagentRegistry.descendants(task.id));
+      if (!rec || !allowed.has(id)) {
+        return JSON.stringify({ ok: false, code: "FORBIDDEN", reason: `只能停止本任务的子代理(${id} 不属于当前任务)` });
+      }
+      if (rec.state !== "running") {
+        return JSON.stringify({ ok: false, code: "ALREADY_TERMINAL", agentId: id, state: rec.state });
+      }
+      const cancel = bgAgents.get(id)?.cancel;
+      if (!cancel) {
+        return JSON.stringify({ ok: false, code: "NO_HANDLE", agentId: id, reason: "无取消句柄(前台派发可能尚未转后台,或已收尾)" });
+      }
+      try {
+ // 既有 cancel 句柄(与面板「终止」按钮同一条通路);句柄内部已先落 registry.interrupt。
+        cancel();
+      } catch (err) {
+        return JSON.stringify({ ok: false, code: "CANCEL_FAILED", agentId: id, reason: String((err as Error)?.message ?? err) });
+      }
+ // 兜底:句柄缺席 interrupt 的旧条目在此补落;终态返回 ALREADY_TERMINAL 也算成功。
+      const r = subagentRegistry.interrupt(id);
+      const finalRec = r.record ?? subagentRegistry.get(id);
+      return JSON.stringify({ ok: finalRec?.state === "interrupted", agentId: id, state: finalRec?.state ?? rec.state });
+    },
+  };
+ // steer:运行中注入指令(复用 registry 越权裁决 + 后端 handle.steer);子代理工具池结构性不给。
+  const steerAgentTool: Tool = {
+    name: "steer_agent",
+    description: "向**运行中**的子代理中途追加指令(hint=提示/directive=强制),后端在下一个 step 生效。权限边界:只能操作自己的后代(跨任务/不存在→FORBIDDEN/NOT_FOUND),非运行态→NOT_RUNNING;ACP 后端单回合无运行中干预(如实 INVALID)。",
+    parameters: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "目标子代理 id(spawn_subagent 返回的 agentId)" },
+        text: { type: "string", description: "追加指令正文(≤2000 字)" },
+        mode: { type: "string", enum: ["hint", "directive"], description: "hint=建议(directive=必须执行);缺省 hint" },
+      },
+      required: ["agentId", "text"],
+    },
+    async execute(args: unknown) {
+      const a = (args ?? {}) as { agentId?: string; text?: string; mode?: string };
+      const id = String(a.agentId ?? "");
+      if (!id) return JSON.stringify({ ok: false, code: "INVALID", reason: "agentId 必填" });
+      const rec = subagentRegistry.get(id);
+      const verdict = steerVerdict(rec ? { ...rec } : undefined, { byAgentId: task.id, registry: subagentRegistry, mode: a.mode });
+      if (!verdict.ok) {
+        const reason = verdict.code === "NOT_FOUND" ? `子代理不存在(${id})`
+          : verdict.code === "NOT_RUNNING" ? `子代理非运行态(${rec?.state ?? "unknown"}),无法 steer——已终态请用 resume_agent`
+            : `无权 steer ${id}(只能操作自己的后代)`;
+        return JSON.stringify({ ok: false, code: verdict.code, agentId: id, ...(rec ? { state: rec.state } : {}), reason });
+      }
+      const text = String(a.text ?? "").trim();
+      if (!text) return JSON.stringify({ ok: false, code: "INVALID", agentId: id, reason: "text 必填" });
+      const steer = bgAgents.get(id)?.steer;
+      if (!steer) {
+        return JSON.stringify({ ok: false, code: "NOT_RUNNING", agentId: id, reason: "无运行中 steer 句柄(可能刚收尾,或该后端不暴露中途转向)" });
+      }
+      let delivered = false;
+      try {
+        delivered = await steer(text.slice(0, 2000), verdict.mode);
+      } catch (err) {
+        return JSON.stringify({ ok: false, code: "INVALID", agentId: id, reason: String((err as Error)?.message ?? err).slice(0, 300) });
+      }
+      try {
+        journal.append({ kind: "custom", sessionId: task.sessionId, payload: { type: "subagent.steer", agentId: id, mode: verdict.mode, ok: delivered, chars: text.length } });
+      } catch { /* 留痕失败不影响 steer */ }
+      return delivered
+        ? JSON.stringify({ ok: true, code: "OK", agentId: id, mode: verdict.mode, note: "已注入,子代理下一个 step 生效" })
+        : JSON.stringify({ ok: false, code: "INVALID", agentId: id, reason: "后端不支持运行中 steer(ACP 单回合)" });
+    },
+  };
+ // cold resume:终态子代理带「原任务书 + 上次结果摘要 + 本次指令」续跑(新 agentId,原记录不动)。
+ // 子代理工具池结构性不给(否则子代理可无限续跑绕过派发纪律)。
+  const resumeAgentTool: Tool = {
+    name: "resume_agent",
+    description: "冷启动续跑:对**已终态**子代理派新子代理,instructions=原任务书(截1500)+上次结果摘要(截800)+本次指令;新 agentId 挂在当前任务下,原记录不改。权限边界:只能续跑自己的后代(跨任务 FORBIDDEN);原任务书只在父进程内保留(进程重启后如实 INVALID)。context=fork 时前插父会话最近文本摘要。",
+    parameters: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "已终态的子代理 id" },
+        instruction: { type: "string", description: "本次续跑指令(必填;会在原任务与上次结果之后追加)" },
+        context: { type: "string", enum: ["fresh", "fork"], description: "fresh=只带原任务/结果/指令(缺省);fork=再加父会话上下文摘要" },
+      },
+      required: ["agentId", "instruction"],
+    },
+    async execute(args: unknown) {
+      const a = (args ?? {}) as { agentId?: string; instruction?: string; context?: string };
+      const id = String(a.agentId ?? "");
+      if (!id) return JSON.stringify({ ok: false, code: "INVALID", reason: "agentId 必填" });
+      const rec = subagentRegistry.get(id);
+ // fail-closed:先判后代(跨任务的 id 连「存在性/状态」都不该透露)。
+      if (rec) {
+        const allowed = new Set(subagentRegistry.descendants(task.id));
+        if (!allowed.has(id)) return JSON.stringify({ ok: false, code: "FORBIDDEN", agentId: id, reason: `只能续跑本任务的子代理(${id} 不属于当前任务)` });
+      }
+      const brief = subagentBriefs.get(id);
+      const plan = resumePlan(rec ? { ...rec, ...(brief ? { instructions: brief.instructions } : {}) } : undefined, { instruction: a.instruction, context: a.context });
+      if (!plan.ok) {
+        const reason = plan.code === "NOT_FOUND" ? `子代理不存在(${id})`
+          : plan.code === "NOT_RUNNING" ? `子代理仍在运行(${rec?.state}),同目标续跑会双跑——先等终态或用 steer_agent`
+            : plan.code === "INVALID" ? (String(a.instruction ?? "").trim() ? "原任务书不可得(进程重启后不留存),请直接 spawn_subagent" : "instruction 必填")
+              : "续跑被拒";
+        return JSON.stringify({ ok: false, code: plan.code, agentId: id, ...(rec ? { state: rec.state } : {}), reason });
+      }
+      let instructions = plan.instructions;
+      if (plan.needsParentContext) {
+        const block = forkContextBlock(deriveMessages(journal, task.sessionId));
+ // 占位前缀由真实摘要替换;摘要为空时保留占位行(调用方可见「无上下文」的事实)。
+        instructions = block ? block + "\n" + instructions.replace(/^\[父会话上下文摘要\]\n?/, "") : instructions;
+      }
+      const title = `[续跑] ${brief?.title ?? rec?.title ?? id}`.slice(0, 30);
+ // 同一 child 会话续跑——task_id 固定为 `child:<原 taskId>`(已有 child: 前缀先剥掉,多次续跑不叠前缀),
+ // 由 spawn 侧写进 registry.taskId 与 TaskSpec.taskId;不新建会话 id。
+      const sessionKey = resumeSessionKey(String(rec?.taskId || id).replace(/^child:/, ""));
+      const raw = await spawnTool.execute({
+        instructions,
+        title,
+        ...(brief?.agentType ? { agentType: brief.agentType } : {}),
+        run_in_background: true,
+        resumeSessionKey: sessionKey,
+      });
+      let parsed: { agentId?: string; status?: string; reason?: string } | undefined;
+      try { parsed = JSON.parse(raw) as { agentId?: string; status?: string; reason?: string }; } catch { parsed = undefined; }
+      if (!parsed?.agentId) {
+        return JSON.stringify({ ok: false, code: "INVALID", originalAgentId: id, reason: String(parsed?.reason ?? raw).slice(0, 400) });
+      }
+      return JSON.stringify({
+        ok: true, code: "OK", originalAgentId: id, agentId: parsed.agentId, state: parsed.status,
+        needsParentContext: plan.needsParentContext,
+        note: "已按原任务书冷启动续跑(新 agentId,原记录不改);结果经系统消息/task_output 返回",
+      });
+    },
+  };
   const mainTools: Tool[] = attachToolView([spawnTool, withAnswerAttentionGuard(buildSubagentAnswerTool(parentAskBroker)), codeSenseTool(taskRoot, taskRemoteProject ?? undefined), changeSurfaceTool, sessionSearchTool(journal, task.sessionId), codeReviewTool(taskRoot, models?.review, journal, task.sessionId, streamSink ? (note) => streamSink(task.sessionId, { type: "tool-progress", callId: "code_review", name: "code_review", note }) : undefined, checkpointSha, taskRemoteProject ?? undefined), runWorkflowTool(journal, executor, task.sessionId, workflowAskRouter), skillViewTool(store, () => disabledBuiltins(repoRoot())), experienceFoldTool(store), todoTool(journal, task.sessionId, { allowParallelInProgress: agentConfig?.agent?.todoAllowParallelInProgress === true }), ...(askUser ? [askUserTool(task.sessionId, askUser)] : []), teamTaskTool(journal, task.sessionId), boardUpsertTool(journal, task.sessionId, task.id, taskRoot, undefined, undefined, { onExempt: () => { boardExemptThisTask = true; }, taskClass: () => taskClassState.value }), boardExportPptxTool(task.sessionId, task.id, taskRoot), taskPhaseTool, boardReadTool(journal, task.sessionId, undefined, { boardId: task.id, fallbackToSessionBoard: true }), meetingImportTool(llm), steerTool, taskOutputTool, (() => {
  // 主 agent 终端(卫生提醒 + 绕写检测):命令含写文件形态且
         // 规划未落地时拦截——堵「文件工具被 plan-gate 拦、改用 echo > 绕行」的流程造假口子。
@@ -5907,7 +7144,19 @@ async function runWithAgent(
     ...(browserTool ? [browserTool] : []), ...webTools,
  // 引用账本排在 web 工具之后(先抓再引),收尾按登记表校验正文 [n]。
     makeCiteSourceTool({ journal: journal as unknown as CitationJournal, sessionId: task.sessionId, taskId: task.id }),
-    ...(readAttachmentTool ? [readAttachmentTool] : [])]);
+    ...(readAttachmentTool ? [readAttachmentTool] : []),
+    listAgentsTool, stopAgentTool, steerAgentTool, resumeAgentTool],
+ // 工具契约按执行上下文投影:装配期把真实上下文交给 attachToolView——plan/readonly 下写类工具
+ // 描述带只读前缀,qa/office 带类别提示,委派类只列本次真实可用的 agent 名。投影只作用于 wire 描述,
+ // 注册表本体(Tool 对象)与 tool_view 全文说明都不变(见 tool-contract.ts 的「先快照再重写」注释)。
+    {
+      contract: {
+        agentType: "main",
+        permissionMode: permissionMode(),
+        taskClass: taskClassState.value,
+        availableTools: agentProfiles.map((p) => p.name),
+      },
+    });
  // 工具面即 SDK(PTC/代码模式):coding 任务追加 run_code——沙箱内一次调用跑多步工具链,
   // 只回最终返回值+子调用账本,省掉每步一次推理轮。追加在 attachToolView **之后**:run_code 的
   // 描述/参数里带完整签名清单(>240 字符),走摘要化会把 SDK 清单截掉(eager 暴露是机制前提)。
@@ -5945,6 +7194,51 @@ async function runWithAgent(
  // 工具注册身份治理:装配后统一登记身份,冲突/保留名命中从工具面剔除并留 journal 证据。
   const governedTools = governToolIdentity(mainTools, journal, task.sessionId);
   if (governedTools.length !== mainTools.length) mainTools.splice(0, mainTools.length, ...governedTools);
+ // 档案工具面(与 runtime applyProfile 同口径):deny 优先,allow 非空即白名单;不新增工具。
+ // 过滤后为空 → 下方既有「工具面非空门禁」fail-visible(装配 bug 不静默降级)。
+  if (taskProfile?.tools) {
+    const allow = taskProfile.tools.allow ?? [];
+    const deny = new Set(taskProfile.tools.deny ?? []);
+    const allowSet = allow.length > 0 ? new Set(allow) : undefined;
+    const beforeNames = mainTools.map((t) => t.name);
+    const kept = mainTools.filter((t) => !deny.has(t.name) && (!allowSet || allowSet.has(t.name)));
+    if (kept.length !== mainTools.length) {
+      mainTools.splice(0, mainTools.length, ...kept);
+      try {
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: {
+            what: "task.profile.tools",
+            type: "task.profile.tools",
+            taskId: task.id,
+            profileId: taskProfile.id,
+            before: beforeNames.length,
+            after: kept.length,
+            removed: beforeNames.filter((n) => !kept.some((t) => t.name === n)),
+          },
+        });
+      } catch { /* 留痕失败不影响执行 */ }
+    }
+  }
+ // 按 kind 能力位收敛主工具面(reminder/scheduled_task=只读+minimal;meeting=只读;
+ // subagent/workflow=能力全开但记忆域=session)。默认 kind=user 全能力 → removed 为空,
+ // 工具面逐字不变(兼容既有全部调用点)。
+  const kindFilter = filterToolNamesByKindCapabilities(mainTools.map((t) => t.name), taskKindCaps);
+  if (kindFilter.removed.length > 0) {
+    const keep = new Set(kindFilter.kept);
+    mainTools.splice(0, mainTools.length, ...mainTools.filter((t) => keep.has(t.name)));
+    if (!taskKindToolsLogged.has(task.id)) {
+      taskKindToolsLogged.add(task.id);
+      try {
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: { what: "task.kind.tools", type: "task.kind.tools", taskId: task.id, kind: taskKindInfo.kind, removed: kindFilter.removed },
+        });
+      } catch { /* 留痕失败不影响执行 */ }
+    }
+  }
   if (mainTools.length === 0) {
     recordUser();
     const curGate = tm.get(task.id);
@@ -5957,7 +7251,6 @@ async function runWithAgent(
   journal.append({ kind: "task.progress", sessionId: task.sessionId, payload: { taskId: task.id, tools: surfacePlan.tools.map((t) => t.name), toolCount: surfacePlan.tools.length } });
   // 写前持久化屏障装配(config.agent.writeBarrier 透传;缺席/非法=undefined,loop 内部缺省 hard)。
   const writeBarrier = writeBarrierOf(agentConfig);
-  console.error("[T] AgentLoop ctor at", Date.now());
   const loop = new AgentLoop({
     journal,
     sessionId: task.sessionId,
@@ -5974,7 +7267,8 @@ async function runWithAgent(
     ...(streamSink ? { onStream: (ev: AgentStreamEvent) => streamSink(task.sessionId, ev) } : {}),
  // 权限传递:ask 处置收进 buildMainLoopPermission(mode=ask+面板在场→审批卡,不再静默 deny)。
     ...(permRules ? { permission: buildMainLoopPermission(permRules, permissionBroker, { sessionId: task.sessionId, journal }) } : {}),
-    maxSteps: agentConfig?.agent?.maxSteps ?? 3000, // 设置页可配+热读(上限 3000)
+ // 档案 maxSteps 覆盖在此生效(loop 与下方执行信封共用同一个 effectiveMaxSteps);无档案=逐字不变。
+    maxSteps: effectiveMaxSteps, // 设置页可配+热读(上限 3000)
     // 写前持久化屏障(config.agent.writeBarrier):只显式传"off"|"hard";undefined 不写键(留给 loop 缺省 hard)。
     ...(writeBarrier ? { writeBarrier } : {}),
  //  图片 offload:装配方必须传,否则 loop 层整条分支不生效(生产默认关闭=改前行为)。
@@ -5993,6 +7287,19 @@ async function runWithAgent(
     // 把 phase/step/note touch 进 TaskSupervisor,面板进度条与 task 卡据此更新。旁路:applyTrajectoryProgress
     // 内部吞异常且 tm 缺失即跳过——进度写失败绝不影响 turn 主链;不碰状态迁移(setState 调用点不改)。
     onTrajectory: (ev) => applyTrajectoryProgress(tm, task.id, ev),
+ // 时间旅行:每步工具执行前拍「本步将要触碰的文件」快照(tNsM 对齐 stepId,回滚按它取)。
+ // loop 已 await 本回调,读盘完成才放行工具;这里失败只 warn(时间旅行是旁路,不挂任务)。
+    onStepToolPlan: async (p) => {
+      try {
+        const paths = collectSnapshotPaths(p.calls);
+        if (paths.length === 0) return;
+        const tt = new TimeTravelStore({ root: repoRoot() });
+        const r = await tt.capture(task.sessionId, `t${p.turn}s${p.step}`, taskRoot, paths);
+        if (!r.ok) console.warn("[time-travel] 快照采集失败:", r.code ?? "unknown");
+      } catch (err) {
+        console.warn("[time-travel] 快照旁路异常:", String(err).slice(0, 160));
+      }
+    },
  // 待决审批 ephemeral 注入( token 治理):见 parentAskBroker.onPending 注释——
     // 旧口径 message.user 永久落 journal,已了结的审批块滞留历史每次请求重放(2.7M token/日)。
     // 现改为每步现算:待决期间可见,应答/超时后 pending 清空 → 注入自然消失,历史零滞留。
@@ -6123,7 +7430,7 @@ async function runWithAgent(
       };
       const policyCurrent: EnvelopePolicy = envelopeDeps?.policy?.() ?? {
         approval: permissionMode(),
-        maxIterations: agentConfig?.agent?.maxSteps ?? 3000,
+        maxIterations: effectiveMaxSteps,
       };
       const envelopeGate = verifyTaskEnvelopeAtStart({
         journal: journal as unknown as EnvelopeStartJournal,
@@ -6438,6 +7745,46 @@ async function runWithAgent(
       const ledgerFacts = ledgerBefore
         ? { changed: ledgerBefore.changed.length, unknown: ledgerBefore.unknown.length, oversized: ledgerBefore.oversized.length }
         : undefined;
+ // :surface 任务收尾前对变更概念重扫一次,残留事实进 changeFacts.residual。
+ // 非 surface / 无清单 = 零额外 IO;扫描失败显式标记 SCAN_UNAVAILABLE,不阻塞收尾。
+      const residualFact = await (async (): Promise<ResidualFact | undefined> => {
+        try {
+          if (changeAuditMode === "off") return undefined;
+          if (surfaceScopeThisTask().scope !== "surface") return undefined;
+          const m = readChangeSurfaceManifest(journal, task.sessionId, task.id);
+          const concepts = (m?.concepts ?? []).filter((c) => typeof c === "string" && c.trim() !== "");
+          if (!m || !concepts.length) return undefined;
+ // 清单条目(change.surface 事件自带 manifest/entries 时才有;旧事件没有=只查命中)。
+          let manifest: unknown[] = [];
+          try {
+            const evs = journal.readAll().filter(
+              (e) => e.kind === "custom" && e.sessionId === task.sessionId
+                && (e.payload as { type?: string } | undefined)?.type === "change.surface",
+            );
+            const p = evs.length
+              ? (evs[evs.length - 1]!.payload as { taskId?: string; manifest?: unknown; entries?: unknown } | undefined)
+              : undefined;
+            if (p && p.taskId === task.id) {
+              manifest = Array.isArray(p.manifest) ? p.manifest : Array.isArray(p.entries) ? p.entries : [];
+            }
+          } catch {
+ /* 无条目=只查命中 */
+          }
+          try {
+            const report = await scanSurface(taskRoot, concepts);
+            return {
+              concept: concepts.join(", "),
+              manifest: manifest as ResidualFact["manifest"],
+              hits: report.hits.map((h) => ({ file: h.file, line: h.line, text: h.text })),
+              rescanAt: Date.now(),
+            };
+          } catch {
+            return { code: "SCAN_UNAVAILABLE", concept: concepts.join(", "), manifest: [], hits: [], rescanAt: Date.now() };
+          }
+        } catch {
+          return undefined;
+        }
+      })();
       const closeout = await runTaskCloseout({
         journal,
         sessionId: task.sessionId,
@@ -6449,10 +7796,10 @@ async function runWithAgent(
         taskClass: taskClassState.value,
         instruction: String(task.instruction ?? ""),
         ...(boardFacts ? { boardFacts } : {}),
-        ...(changeFacts ? { changeFacts } : {}),
+        ...(changeFacts ? { changeFacts: { ...changeFacts, ...(residualFact ? { residual: residualFact } : {}) } } : {}),
         ...(ledgerFacts ? { ledgerFacts } : {}),
         mode: "main",
-        modes: { verify: verifyMode, citation: citationMode, completion: completionMode },
+        modes: { verify: verifyMode, citation: citationMode, completion: completionMode, change: changeAuditMode },
         retryTurn: (prompt: string) => loop.runTurn(prompt),
       });
       finalOut = closeout.finalText;

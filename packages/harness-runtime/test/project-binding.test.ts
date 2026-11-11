@@ -52,7 +52,7 @@ describe("InviteRecord.projects(邀请绑定项目)", () => {
     const file = join(dir, "invites.jsonl");
     try {
       const store = new InviteStore(file);
-      store.issue("code-1", "zhongyuqi", Date.now() + 60_000, ["lampgenie-harness"]);
+      store.issue("code-1", "deployer", Date.now() + 60_000, ["lampgenie-harness"]);
       expect(store.get("code-1")?.projects).toEqual(["lampgenie-harness"]);
       // 模拟旧记录(无 projects 字段)落盘后重载
       appendFileSync(file, JSON.stringify({ code: "legacy-1", createdAt: Date.now(), expiresAt: Date.now() + 60_000, createdBy: "x", redeemedBy: null, redeemedAt: null, branch: null }) + "\n");

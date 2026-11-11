@@ -13,14 +13,16 @@
  * 旁路纪律:写失败静默(轨迹绝不打断主链);messages 里无凭证(请求体同 dumpRequestBody 口径,
  * apiKey 只在 headers 永不落盘)。
  */
-import { promises as fsp } from "node:fs";
+import { constants as fsConstants, promises as fsp } from "node:fs";
 import { dirname, join } from "node:path";
 import { redactText, type Journal } from "@lampgenie/core";
 import type { LlmCallTrace } from "@lampgenie/runtime/agent/loop";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio;本文件不再自带字符系数)。
 import { rawTokens, calibrate, calibrationOf } from "@lampgenie/runtime/agent/token-estimate";
 import { repoRoot } from "./repo-root.js";
-import { pruneLlmTrace } from "./llm-trace-retention.js";
+import { TRACE_FILE_RE, pruneLlmTrace } from "./llm-trace-retention.js";
+import { miningWindowStart, migratePathFor, retentionVerdict } from "./trace-retention-policy.js";
+import { loadEvidenceGraph } from "./evidence-graph-store.js";
 // 前缀算法复用 panel-traj-model(已实现 msgKeyOf/commonPrefixLen),不重写。
 import { commonPrefixLen } from "./panel-traj-model.js";
 
@@ -56,6 +58,124 @@ const PRUNE_MIN_INTERVAL_MS = 10 * 60 * 1000;
 let writesSincePrune = 0;
 let lastPruneAt = 0;
 
+/** 挖掘窗口天数(env 缺省 7;配坏 → 回落缺省,不让笔误把窗口保护整块关掉)。 */
+function miningWindowDays(): number | undefined {
+  const raw = process.env?.GENIE_LLM_TRACE_MINING_WINDOW_DAYS;
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * 证据图谱里出现过的 sessionId(去重)——这些会话的轨迹是审计回溯的原始现场,必须钉扎。
+ * 读不到证据图(fail-soft):返回空集 + 一行 warning;本轮窗口保护照常生效,只是识别不出
+ * 「被谁引用」,不静默、也不因此放弃清理(证据图缺失≠全部钉扎,那会让清理永久停摆)。
+ */
+export function collectEvidenceSessions(root: string = repoRoot()): Set<string> {
+  const out = new Set<string>();
+  try {
+    const { graph } = loadEvidenceGraph(root);
+    const nodes: Record<string, { source?: { sessionId?: string } }> =
+      (graph as unknown as { nodes?: Record<string, { source?: { sessionId?: string } }> } | undefined)?.nodes ?? {};
+    for (const node of Object.values(nodes)) {
+      const sid = node?.source?.sessionId;
+      if (typeof sid === "string" && sid.trim() !== "") out.add(sid);
+    }
+  } catch (e) {
+    console.warn(`[llm-trace] 证据图谱不可读,本轮仅按挖掘窗口钉扎:${String((e as Error)?.message ?? e).slice(0, 200)}`);
+  }
+  return out;
+}
+
+/** 迁移单文件上限:证据区不是备份盘,超大轨迹搬过去只会把磁盘问题复制一份。 */
+const MIGRATE_MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+/**
+ * 把「被证据引用的轨迹」复制一份到证据区 `<root>/.genie/evidence/traces/<session>/<file>`。
+ * 纪律:
+ * - 只复制,不动原文件:原处仍被 pin(删不删由人决定),迁移只是让证据区自带现场;
+ * - 已存在跳过(COPYFILE_EXCL,幂等)+ 单文件 >50MB 跳过;
+ * - 单文件失败只计数不抛:迁移失败仍 pin,文件留在原处——绝不因为搬不动就删。
+ */
+export async function migrateEvidenceTraces(opts: {
+  traceRoot: string;
+  evidenceRoot: string;
+  sessions: ReadonlySet<string>;
+  maxBytes?: number;
+}): Promise<{ migrated: number; skipped: number; failed: number }> {
+  const { traceRoot, evidenceRoot, sessions } = opts;
+  const maxBytes = Number.isFinite(opts.maxBytes) ? Number(opts.maxBytes) : MIGRATE_MAX_FILE_BYTES;
+  let migrated = 0;
+  let skipped = 0;
+  let failed = 0;
+  if (!sessions || sessions.size === 0) return { migrated, skipped, failed };
+  let dirs: string[] = [];
+  try {
+    dirs = await fsp.readdir(traceRoot);
+  } catch {
+    return { migrated, skipped, failed }; // 轨迹目录不可读:迁移是旁路,静默
+  }
+  for (const sessionId of dirs) {
+    if (!sessions.has(sessionId)) continue;
+    const sessionDir = join(traceRoot, sessionId);
+    let files: string[] = [];
+    try {
+      files = await fsp.readdir(sessionDir);
+    } catch {
+      continue;
+    }
+    for (const name of files) {
+      if (!TRACE_FILE_RE.test(name)) continue;
+      const src = join(sessionDir, name);
+      const dst = migratePathFor(evidenceRoot, sessionId, name);
+      try {
+        const st = await fsp.stat(src);
+        if (!st.isFile()) continue;
+        if (st.size > maxBytes) {
+          skipped++;
+          continue;
+        }
+        await fsp.mkdir(dirname(dst), { recursive: true });
+        await fsp.copyFile(src, dst, fsConstants.COPYFILE_EXCL);
+        migrated++;
+      } catch (e) {
+        if ((e as { code?: string })?.code === "EEXIST") {
+          skipped++; // 已迁移过:幂等
+          continue;
+        }
+        failed++; // 单文件失败不阻塞整轮
+      }
+    }
+  }
+  return { migrated, skipped, failed };
+}
+
+/** 一轮完整清理:证据图 → 窗口 → 迁移 → prune(全在旁路异步链里,异常由调用方 catch)。 */
+async function runPrune(root: string, protectPath: string): Promise<void> {
+  const now = Date.now();
+  const windowStart = miningWindowStart({ now, days: miningWindowDays() });
+  const evidenceRoot = repoRoot();
+  const evidenceSessions = collectEvidenceSessions(evidenceRoot);
+ // 迁移先于 prune:被引用的现场要先在证据区有副本,否则删/留都只有原处一份。
+  const mig = await migrateEvidenceTraces({ traceRoot: root, evidenceRoot, sessions: evidenceSessions });
+  if (mig.failed > 0) {
+    console.warn(`[llm-trace] 证据区迁移失败 ${mig.failed} 份(文件仍被钉扎,留在原处)`);
+  }
+  await pruneLlmTrace(root, {
+    protectPath,
+ // pin 闭包:证据引用优先于挖掘窗口(窗口外的被引用轨迹同样不删)。
+    shouldPin: (f) => {
+      const v = retentionVerdict({ sessionId: f.sessionId, epoch: f.epoch, now, windowStart, evidenceSessions });
+      return { pin: v.pin, reason: v.reason };
+    },
+    onPinStats: (s) => {
+      if (s.pinnedOverBudget) {
+        console.warn(`[llm-trace] 钉扎 ${s.pinned} 份轨迹自身已超总量上限,按证据/窗口纪律保留未删`);
+      }
+    },
+  });
+}
+
 /**
  * 触发一次旁路 prune(不 await、不抛)。返回是否真的发起了。
  * - `GENIE_LLM_TRACE_KEEP_PER_SESSION=0` = 关闭清理(直接 return,连目录都不扫)。
@@ -73,8 +193,8 @@ function maybePrune(root: string, protectPath: string): void {
   lastPruneAt = now;
   // 绝不 await:prune 可能扫上万文件,await 会把清理成本挂到 LLM 调用尾上。
   // catch 静默:清理是旁路优化——目录不存在/权限/占用都不该让主链(更不该让用户)看见;
-  // 不记日志是为了避免「每次调用都在 journal 里刷一条清理失败」的噪声。
-  void pruneLlmTrace(root, { protectPath }).catch(() => { /* 旁路优化:清理失败无害,静默 */ });
+ // 证据图/迁移失败已在 runPrune 内各自 warn 一次,这里只挡意外异常。
+  void runPrune(root, protectPath).catch(() => { /* 旁路优化:清理失败无害,静默 */ });
 }
 
 // ===================== 本地估算 + 前缀缓存估算 + 用量异常标记 =====================
@@ -274,6 +394,16 @@ function appendTraceEvent(
   }
 }
 
+/**
+ * (2026-11 usage-envelope):取 loop 回调带过来的请求信封指纹(16 hex sha256 前缀)。
+ * runtime 的 LlmCallTrace 类型尚未声明该字段(loop 以 `...envKey` spread 传入),这里按运行期值
+ * 取用;非 string / 非 16 hex 一律视为缺失——旧 journal 的 payload 形状逐字不变。
+ */
+function envelopeOf(info: LlmCallTrace): string | undefined {
+  const v = (info as LlmCallTrace & { envelope?: unknown }).envelope;
+  return typeof v === "string" && /^[0-9a-f]{16}$/.test(v) ? v : undefined;
+}
+
 /** 构造轨迹 sink。
  *  @param dropLogPath 指针事件彻底丢失时的 drop 日志路径;缺省先读 env `GENIE_LLM_TRACE_DROP_LOG`
  *    (测试注入 tmpdir 用),再缺省 `<.genie>/logs/llm-trace-drop.log`。 */
@@ -338,7 +468,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
         const c = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
         if (!c.includes("<system-reminder>")) continue;
  // (2026-11 token 轮):任务内轨迹回看块(loop 的 task.trajectory 旁路产物经 tips 注入)。
-        // 必须先于 tips 分类判定:tips 块是本条的包封壳,先命中 >tips( 会把轨迹块一并吞成 tips,
+ // 必须先于 tips 分类判定:tips 块是本条的包封壳,先命中 >tips(会把轨迹块一并吞成 tips,
         // 审计时就分不出「注了纪律」还是「注了轨迹回看」。
         if (c.includes("任务内轨迹")) reminders.push("trajectory");
         else if (c.includes(">tips(")) {
@@ -368,6 +498,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
         response: redactDeep(info.response),
         ...(reminders.length ? { reminders } : {}),
       };
+      const env = envelopeOf(info); // 信封指纹(同步段取值)
       const bodyStr = JSON.stringify(body, null, 1);
       void (async () => {
         try {
@@ -390,6 +521,10 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
                 step: info.step,
                 model: info.model,
                 durationMs: info.durationMs,
+ // (2026-11 usage-envelope):信封指纹透传(白名单补一项)。此前 payload 是显式
+ // 白名单,loop 侧算出的 envelope 到此被丢弃,trace-stats 的 usageEnvelope /
+ // tokensDeduped 在真实 journal 上恒不出现。缺失/非法值不写该键(旧行为不变)。
+                ...(env ? { envelope: env } : {}),
                 ...(info.response.usage ? { usage: info.response.usage } : {}),
  // 构型摘要(用户用户反馈「journal 里看不到 system/构型」):journal 侧可见的
                 // 有界速览——角色链/system 头部/输出头部/工具调用名;全文仍在 file(指针哲学不变)。

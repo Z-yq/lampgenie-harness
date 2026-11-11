@@ -79,12 +79,15 @@ describe(" 输出截断续写", () => {
     const { llm, calls } = scripted([
       { content: "我先查", toolCalls: [{ id: "c1", name: "getTime", arguments: "{}" }], finishReason: "length" },
     ]);
-    const loop = new AgentLoop({ journal, sessionId: "s1", system: "", llm, tools: [getTime], maxSteps: 1 });
+ // maxSteps 由 1 提到 2——末步(step=1)的 toolCalls 会被预算收束拦下不执行,
+ // 本用例要验的是「有 toolCalls 的 length 不续写、工具照常执行」,必须让 step0 不是末步。
+    const loop = new AgentLoop({ journal, sessionId: "s1", system: "", llm, tools: [getTime], maxSteps: 2 });
     await loop.runTurn("现在几点?");
 
-    expect(calls).toHaveLength(1);
+ // 3 次调用 = step0 主请求 + step1 主请求(末步)+ step1 的预算收尾;全程无截断续写请求
+    expect(calls).toHaveLength(3);
     expect(calls[0]!.some((m) => m.content.includes(PROMPT_HEAD))).toBe(false);
-    const toolResults = journal.readAll().filter((e) => e.kind === "tool.result");
+    const toolResults = journal.readAll().filter((e) => e.kind === "tool.result" && String((e.payload as { content: string }).content).includes("2026-11-07"));
     expect(toolResults).toHaveLength(1);
     expect(String((toolResults[0]!.payload as { content: string }).content)).toContain("2026-11-07");
   });

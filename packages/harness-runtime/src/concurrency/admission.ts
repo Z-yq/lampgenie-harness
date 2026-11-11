@@ -64,6 +64,15 @@ export interface ModelRetryEvent extends ModelLifecycleBase {
 export interface ModelStreamStalledEvent extends ModelLifecycleBase {
   type: "model_stream_stalled";
 }
+/** :可修复请求错误已被一次性改写(invalid_request → strip/clamp/drop 后重发一次)。
+ * 生产端在 openai-provider(postWithRetry);governor 的 switch 走 default,不消费本条。 */
+export interface ModelRepairEvent extends ModelLifecycleBase {
+  type: "model_repair";
+ /** 触发的错误分类(当前仅 invalid_request)。 */
+  code: string;
+ /** 实际执行的改写动作(applyRepair 的 applied)。 */
+  actions: string[];
+}
 
 export type ModelLifecycleEvent =
   | ModelQueuedEvent
@@ -72,4 +81,5 @@ export type ModelLifecycleEvent =
   | ModelCompletedEvent
   | ModelFailedEvent
   | ModelRetryEvent
-  | ModelStreamStalledEvent;
+  | ModelStreamStalledEvent
+  | ModelRepairEvent;

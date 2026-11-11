@@ -1,5 +1,5 @@
 /**
- * 开工前置门:基线新鲜度 + 规则旧措辞(2026-11)。
+ *  开工前置门:基线新鲜度 + 规则旧措辞(2026-11)。
  * 契约:
  * a.readBaselineStatus 绝不抛错:真 git 仓覆盖 fresh/behind/ahead-warn/diverged,无 upstream 与
  *   非 git 目录一律 unknown(前者 reason=no-upstream)——「量不到」不等于「新鲜」,不能静默放行成 fresh;

@@ -133,7 +133,8 @@ describe("///// 收尾段与事件(主链)", () => {
 
 describe(" goal 护栏 /  用户停止 /  尾部修复入口", () => {
   it(" 任务终态后走 maybeContinueGoal(主链与 gateway onTaskDone 各一处)", () => {
-    expect(WIRING).toContain("maybeContinueGoal(tm, journal, llm, task.sessionId, taskStartGoalRevision");
+ // 允许调用方在 sessionId 之后追加可选参数(如 expectedRevision):断言前缀而不是整行字面。
+    expect(WIRING).toContain("maybeContinueGoal(tm, journal, llm, task.sessionId");
     expect(APP).toContain("maybeContinueGoal(taskManager, journal");
   });
 

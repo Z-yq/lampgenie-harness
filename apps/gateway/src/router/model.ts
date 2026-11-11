@@ -6,6 +6,7 @@
 
 /** 入口来源。 */
 import type { Mandate } from "./policy.js";
+import type { RouteIdentity, RouteIdentityCode } from "@lampgenie/runtime/router/route-identity";
 
 export type TriggerSource = "panel" | "im";
 
@@ -41,6 +42,11 @@ export interface Ticket {
   taskId?: string;
  /** P3 Mandate 授权凭证(explicit/auto-accept 派发时产出;重启恢复后按当前 policy revalidate)。 */
   mandate?: Mandate;
+ /**
+ * 入站时冻结的路由身份快照(只读)。Ticket 存在期间后续判定复用它,不从 trigger 重新派生;
+ * 重启恢复后随 tickets.json 一并回读(只校验不重算)。
+ */
+  routeIdentity?: RouteIdentity;
   /** 创建时刻(epoch ms)。 */
   createdAt: number;
   updatedAt: number;
@@ -63,5 +69,9 @@ export interface Disposition {
   intent_evidence?: string;
  /** P3 派发随行的 Mandate 摘要(无凭证字段,assertNoCredential 守门)。 */
   mandate?: Mandate;
+ /** :本次判定所用的冻结路由身份快照(可审计复算;不含凭证字段)。 */
+  routeIdentity?: RouteIdentity;
+ /** :身份码(OK / 派生失败码);不写=旧口径行。 */
+  routeIdentityCode?: RouteIdentityCode;
   at: number;
 }

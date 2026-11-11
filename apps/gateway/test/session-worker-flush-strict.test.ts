@@ -1,5 +1,5 @@
 /**
- * 生产态写前屏障:worker ProxyJournal.flushStrict 走 RPC ack。
+ *  生产态写前屏障:worker ProxyJournal.flushStrict 走 RPC ack。
  * 断言语义:
  * ①host RPC journal.appendSync:落账成功 + flushStrict 成功 → ok:true,且 flush 在 append 之后;
  *   flushStrict 抛错 → ok:false + error(带原因);appendMany 抛错 → ok:false 且不调 flush;

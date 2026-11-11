@@ -29,12 +29,17 @@ const jevAnswer = (truth: number) => ({
 });
 
 describe("model-scoring:默认本地 150M / 其它 provider", () => {
-  it("默认值指向本地 150M Jev(/decide)", () => {
+  it("缺省关闭:mode=off,端点仍指向本地 150M Jev(/decide)", () => {
     const c = resolveModelScoringConfig(undefined);
-    expect(c.mode).toBe("shadow");
+    expect(c.mode).toBe("off");
+    expect(c.enabled).toBe(false);
+    expect(c.shadow).toBe(false);
+    expect(c.prune).toBe(false);
+    expect(c.reason).toBe("default-off");
     expect(c.providerUrl).toBe("http://127.0.0.1:8105");
     expect(c.model).toBe("jev-150m");
     expect(c.apiType).toBe("jev");
+    expect(DEFAULT_MODEL_SCORING.mode).toBe("off");
     expect(DEFAULT_MODEL_SCORING.maxCandidates).toBe(12);
   });
 
@@ -95,7 +100,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
       return new Response(JSON.stringify({ call_c1: jevAnswer(0.2), result_c1: jevAnswer(0.9) }), { status: 200 });
     }) as typeof fetch;
     const r = await scoreContextCandidates(
-      { providerUrl: "http://127.0.0.1:8105", apiType: "jev", fetchImpl },
+      { mode: "shadow", providerUrl: "http://127.0.0.1:8105", apiType: "jev", fetchImpl },
       [{ id: "c1", tool: "read_file", where: "src/a.ts", chars: 100, preview: "x" }],
       "goal",
     );
@@ -123,7 +128,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
       id: `c${i}`, tool: "read_file", where: `src/${i}.ts`, chars: 100, preview: "x",
     }));
     const r = await scoreContextCandidates(
-      { providerUrl: "http://127.0.0.1:8105", apiType: "jev", maxCandidates: 12, fetchImpl },
+      { mode: "shadow", providerUrl: "http://127.0.0.1:8105", apiType: "jev", maxCandidates: 12, fetchImpl },
       many,
       "goal",
     );
@@ -147,7 +152,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
       }), { status: 200 });
     }) as typeof fetch;
     const r = await scoreContextCandidates(
-      { providerUrl: "http://127.0.0.1:9000", apiType: "openai", model: "refiner", fetchImpl },
+      { mode: "shadow", providerUrl: "http://127.0.0.1:9000", apiType: "openai", model: "refiner", fetchImpl },
       [{ id: "c1", tool: "read_file", where: "src/a.ts", chars: 100, preview: "x" }],
       "goal",
     );
@@ -157,7 +162,7 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
 
   it("provider 失败 fail-soft:返回 error 不抛", async () => {
     const r = await scoreContextCandidates(
-      { providerUrl: "http://127.0.0.1:1", fetchImpl: (async () => { throw new Error("ECONNREFUSED"); }) as typeof fetch },
+      { mode: "shadow", providerUrl: "http://127.0.0.1:1", fetchImpl: (async () => { throw new Error("ECONNREFUSED"); }) as typeof fetch },
       [{ id: "c1", tool: "read_file", where: "src/a.ts", chars: 100, preview: "x" }],
       "goal",
     );
@@ -285,12 +290,12 @@ describe("model-scoring:默认本地 150M / 其它 provider", () => {
 
   it("scoreEverySteps=50:第 5 步不再评分,50 步才评一次(止损口径)", async () => {
     // 口径表:scoreEverySteps 从 5 → 50 的直接效果(第 0 步的 0%N==0 是既有语义,保留)
-    expect(shouldScoreStep(0, { scoreEverySteps: 50 })).toBe(true);
-    expect(shouldScoreStep(5, { scoreEverySteps: 50 })).toBe(false);
-    expect(shouldScoreStep(49, { scoreEverySteps: 50 })).toBe(false);
-    expect(shouldScoreStep(50, { scoreEverySteps: 50 })).toBe(true);
+    expect(shouldScoreStep(0, { mode: "shadow", scoreEverySteps: 50 })).toBe(true);
+    expect(shouldScoreStep(5, { mode: "shadow", scoreEverySteps: 50 })).toBe(false);
+    expect(shouldScoreStep(49, { mode: "shadow", scoreEverySteps: 50 })).toBe(false);
+    expect(shouldScoreStep(50, { mode: "shadow", scoreEverySteps: 50 })).toBe(true);
     // 对照旧值:5 步一次
-    expect(shouldScoreStep(5, { scoreEverySteps: 5 })).toBe(true);
+    expect(shouldScoreStep(5, { mode: "shadow", scoreEverySteps: 5 })).toBe(true);
     // 端到端:同一 turn 内 50 步口径下最多 1 次请求(第 0 步),不再每 5 步打一次
     const calls: number[] = [];
     const fetchImpl = (async () => {
@@ -381,7 +386,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
     resetModelScoringCache();
     const calls = { n: 0 };
     const r = await scoreContextCandidates(
-      { providerUrl: "http://t", apiType: "jev", fetchImpl: jevFetchOf(calls) },
+      { mode: "shadow", providerUrl: "http://t", apiType: "jev", fetchImpl: jevFetchOf(calls) },
       [scoringCand("a", 1_000), scoringCand("b", 1_000)],
       "goal",
       { skipTooSmall: true, cache: true, sessionId: "s-skip-unit" },
@@ -421,7 +426,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
     resetModelScoringCache();
     const calls = { n: 0 };
     const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
-    const cfg = { providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
+    const cfg = { mode: "shadow", providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
     const opts = { skipTooSmall: true, cache: true, sessionId: "s-cache" };
     const r1 = await scoreContextCandidates(cfg, cands, "goal", opts);
     const r2 = await scoreContextCandidates(cfg, cands, "goal", opts);
@@ -439,7 +444,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
     resetModelScoringCache();
     const calls = { n: 0 };
     const base = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
-    const cfg = { providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
+    const cfg = { mode: "shadow", providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
     const opts = { skipTooSmall: true, cache: true, sessionId: "s-miss" };
     await scoreContextCandidates(cfg, base, "goal", opts);
     await scoreContextCandidates(cfg, base, "goal-2", opts); // goal 变
@@ -459,7 +464,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
     const calls = { n: 0 };
     let now = 1_000_000;
     const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
-    const cfg = { providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
+    const cfg = { mode: "shadow", providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
     const opts = { skipTooSmall: true, cache: true, sessionId: "s-ttl", now: () => now };
     await scoreContextCandidates(cfg, cands, "goal", opts);
     now += SCORING_CACHE_TTL_MS - 1;
@@ -481,7 +486,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof fetch;
     const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
-    const cfg = { providerUrl: "http://t", apiType: "jev" as const, fetchImpl };
+    const cfg = { mode: "shadow", providerUrl: "http://t", apiType: "jev" as const, fetchImpl };
     const opts = { skipTooSmall: true, cache: true, sessionId: "s-error" };
     const r1 = await scoreContextCandidates(cfg, cands, "goal", opts);
     expect(r1.error).toContain("ECONNREFUSED");
@@ -502,7 +507,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
       })) as unknown as typeof fetch;
     const r = await scoreContextCandidates(
-      { providerUrl: "http://t", apiType: "jev", timeoutMs: 500, fetchImpl },
+      { mode: "shadow", providerUrl: "http://t", apiType: "jev", timeoutMs: 500, fetchImpl },
       [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)],
       "goal",
       { skipTooSmall: true, cache: true, sessionId: "s-timeout" },
@@ -516,7 +521,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
     resetModelScoringCache();
     const calls = { n: 0 };
     const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
-    const cfg = { providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
+    const cfg = { mode: "shadow", providerUrl: "http://t", apiType: "jev" as const, fetchImpl: jevFetchOf(calls) };
     const opts = { skipTooSmall: true, cache: true, sessionId: "s-reset" };
     await scoreContextCandidates(cfg, cands, "goal", opts);
     expect((await scoreContextCandidates(cfg, cands, "goal", opts)).cacheHit).toBe(true);
@@ -551,5 +556,104 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
       .filter((e) => e.kind === "context.model.score")
       .map((e) => (e.payload as { step: number }).step);
     expect(steps).toEqual([0, 0]);
+  });
+});
+
+// :缺省 off 的三档显式开关、off 零网络零开销、确定性与不可变。
+describe("model-scoring:缺省 off / 显式三档", () => {
+  const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
+
+  it("shadow 显式开启:enabled=true、shadow=true、prune=false", () => {
+    const c = resolveModelScoringConfig({ mode: "shadow" });
+    expect(c).toMatchObject({ mode: "shadow", enabled: true, shadow: true, prune: false });
+    expect(c.reason).toBeUndefined();
+    expect(c.providerUrl).toBe(DEFAULT_MODEL_SCORING.providerUrl);
+  });
+
+  it("active 显式开启:enabled=true、prune=true、shadow=false", () => {
+    const c = resolveModelScoringConfig({ mode: "active" });
+    expect(c).toMatchObject({ mode: "active", enabled: true, shadow: false, prune: true });
+    expect(c.reason).toBeUndefined();
+  });
+
+  it("非法 mode 退化为 off(不 throw);显式 off 记 explicit-off", () => {
+    const bad = resolveModelScoringConfig({ mode: "bogus" as never });
+    expect(bad).toMatchObject({ mode: "off", enabled: false, shadow: false, prune: false, reason: "default-off" });
+    const off = resolveModelScoringConfig({ mode: "off" });
+    expect(off).toMatchObject({ mode: "off", enabled: false, reason: "explicit-off" });
+  });
+
+  it("显式配置字段原样保留(providerUrl/model/apiType/阈值)", () => {
+    const c = resolveModelScoringConfig({
+      mode: "active",
+      providerUrl: "http://127.0.0.1:9000/",
+      model: "refiner",
+      apiType: "openai",
+      minConfidence: 0.75,
+      maxCandidates: 7,
+      timeoutMs: 3_000,
+    });
+    expect(c).toMatchObject({
+      providerUrl: "http://127.0.0.1:9000/", // 原样保留(尾斜杠由 endpointOf 在发请求时处理)
+      model: "refiner",
+      apiType: "openai",
+      minConfidence: 0.75,
+      maxCandidates: 7,
+      timeoutMs: 3_000,
+    });
+  });
+
+  it("确定性/不可变:两次解析深等且非同一对象,改返回值不回写 DEFAULT", () => {
+    const snapshot = { ...DEFAULT_MODEL_SCORING };
+    const a = resolveModelScoringConfig(undefined);
+    const b = resolveModelScoringConfig(undefined);
+    expect(a).toEqual(b);
+    expect(a).not.toBe(b);
+    a.mode = "active";
+    expect(DEFAULT_MODEL_SCORING).toEqual(snapshot);
+    expect(resolveModelScoringConfig(undefined).mode).toBe("off");
+  });
+
+  it("off 时 scoreContextCandidates 零 fetch(缺省/非法 mode 都不发)", async () => {
+    resetModelScoringCache();
+    let calls = 0;
+    const fetchImpl = (async () => { calls += 1; return new Response("{}", { status: 200 }); }) as typeof fetch;
+    const r1 = await scoreContextCandidates(
+      { providerUrl: "http://t", fetchImpl },
+      cands, "goal",
+      { skipTooSmall: true, cache: true, sessionId: "s-off" },
+    );
+    expect(calls).toBe(0);
+    expect(r1.decisions).toEqual([]);
+    expect(r1.skipped).toBeUndefined();
+    const r2 = await scoreContextCandidates(
+      { mode: "bogus" as never, providerUrl: "http://t", fetchImpl },
+      cands, "goal",
+    );
+    expect(calls).toBe(0);
+    expect(r2.decisions).toEqual([]);
+    expect(modelScoringCacheSize()).toBe(0);
+  });
+
+  it("off 主链路:不评分、不发 fetch、不落 context.model.score", async () => {
+    resetModelScoringCache();
+    let calls = 0;
+    const fetchImpl = (async () => { calls += 1; return new Response("{}", { status: 200 }); }) as typeof fetch;
+    const journal = scoringJournal("s-off-loop", [10_000, 10_000, 10_000]);
+    const llm: LlmProvider = { async chat() { return { content: "done" }; } };
+    const loop = new AgentLoop({
+      journal, sessionId: "s-off-loop", system: "sys", llm,
+      modelScoring: { providerUrl: "http://test", scoreEverySteps: 1, fetchImpl },
+    });
+    await loop.runTurn("go");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls).toBe(0);
+    expect(journal.readAll().some((e) => e.kind === "context.model.score")).toBe(false);
+  });
+
+  it("shouldScoreStep:缺省 off 永不评分,显式 shadow 才按节拍", () => {
+    expect(shouldScoreStep(0, { scoreEverySteps: 1 })).toBe(false);
+    expect(shouldScoreStep(5, { scoreEverySteps: 5 })).toBe(false);
+    expect(shouldScoreStep(5, { mode: "shadow", scoreEverySteps: 5 })).toBe(true);
   });
 });

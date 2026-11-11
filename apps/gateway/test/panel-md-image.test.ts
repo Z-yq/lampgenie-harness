@@ -25,7 +25,7 @@ function extractFn(html: string, name: string): string {
   return html.slice(i, j);
 }
 
-const MD = "README.md";
+const MD = "docs/code-flow/README.md";
 /** 要在测试里求值的 PAGE 函数(esc 用于还原 mdInline 的入口转义;ideMdIo 是真 io)。 */
 const NEEDED = ["esc", "mdImgSrc", "mdImgHtml", "ideMdAssetUrl", "ideMdRelPath", "ideMdIo", "mdInlineScan"];
 

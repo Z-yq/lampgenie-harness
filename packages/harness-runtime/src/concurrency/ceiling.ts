@@ -38,3 +38,32 @@ export function clampRunConcurrency(requested: number | undefined, ceiling: numb
   if (requested === undefined || !Number.isFinite(requested)) return ceiling;
   return Math.max(1, Math.min(ceiling, Math.floor(requested)));
 }
+
+/** 双界的三个输入:provider 界(governor 桶上限)、run 界(单 run maxConcurrency)、CPU 天花板。 */
+export interface DoubleBoundInput {
+ /** provider 界:某 provider 桶当前允许的并发(AIMD/ceiling 的结果);缺省/非有限=无界。 */
+  providerCap?: number;
+ /** run 界:这条 run 自己请求的并发上界;缺省/非有限=无界。 */
+  runCap?: number;
+ /** CPU 推导的硬天花板(deriveWorkflowConcurrencyCeiling 的产物);缺省/非有限=不参与,全无界时为 1。 */
+  ceiling?: number;
+}
+
+/**
+ * 双界取 min 是**唯一**口径:实际生效并发 = min(provider 界, run 界, 天花板)。
+ * 为什么必须收敛成一个函数:两道界一处写 min、一处写 clamp,迟早出现「provider 说 4、
+ * run 说 32、实际跑 8」这类三方不一致;所有消费方(engine 构造 RunGuard、面板展示、
+ * resume 重建)必须调用同一个实现。
+ * 归一化规则(确定性):
+ * - undefined / NaN / ±Infinity 一律读作「这一界不限制」,不参与取 min;
+ * - 非整数向下取整(要「3.7 个在飞」没有意义,向上取整会偷偷越过用户说的数);
+ * - 结果至少为 1(一张座位都不给等于 run 必然卡死);
+ * - 三界全无界 → ceiling(ceiling 也无界 → 1)。
+ */
+export function doubleBoundConcurrency(bounds: DoubleBoundInput): number {
+  const finite = [bounds.providerCap, bounds.runCap, bounds.ceiling].filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v),
+  );
+  if (finite.length === 0) return 1;
+  return Math.max(1, Math.floor(Math.min(...finite)));
+}

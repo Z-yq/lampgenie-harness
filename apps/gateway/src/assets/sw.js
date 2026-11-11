@@ -1,4 +1,4 @@
-/* 面板壳缓存 service worker( 视频 T1):网关重启窗口内刷新/打开页面→缓存壳+「服务重启中」横幅,
+/* 面板壳缓存 service worker:网关重启窗口内刷新/打开页面→缓存壳+「服务重启中」横幅,
  * 不再裸 ERR_CONNECTION_REFUSED。network-first:在线时永远拿最新面板与资产(缓存只作离线/停机回退,不引陈旧)。
  * 排除:非 GET、跨源、已下线的旧重资产;WS 不经 fetch 不受影响。 */
 const CACHE = "gh-shell-v1";

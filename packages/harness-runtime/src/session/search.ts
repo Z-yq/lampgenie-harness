@@ -8,15 +8,27 @@
  *  - 排序 = 词频 + kind 权重 + 时间衰减 + 来源权重;自动化(auto-*)只降权不排除。
  * 设计稿与验收记录:。
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
 import type { Journal, JournalEvent } from "@lampgenie/core";
+import {
+  readShadowPair,
+  scanJournalFallback,
+  shadowEventText,
+  writeBreadcrumbFile,
+  writeShadowPair,
+  type JournalScanHit,
+  type SearchCacheSource,
+} from "./search-shadow.js";
 
 export type SessionSource = "user" | "automation" | "subagent" | "companion" | "system";
 
 export interface SessionSearchOptions {
   /** 可选磁盘缓存(建议随 journalDir 隔离,如 .genie/journals/session-search-index.json)。 */
   cacheFile?: string;
+ /** 影子缓存(主缓存损坏时的第二份副本;缺省 `${cacheFile}.shadow`)。 */
+  shadowFile?: string;
+ /** 降级溯源面包屑(缺省 `${cacheFile}.breadcrumb.json`)。 */
+  breadcrumbFile?: string;
   /** 时钟注入(测试用)。 */
   now?: () => number;
   /** 单事件入索引文本上限(默认 4000 字)。 */
@@ -33,7 +45,18 @@ export interface SessionSearchStats {
   sessions: number;
   tokens: number;
   lastSeq: number;
-  cache: { file: string | null; loaded: boolean; hit: boolean };
+  cache: {
+    file: string | null;
+    loaded: boolean;
+    hit: boolean;
+ /** 本次索引来源:主缓存/影子/重建/线性扫描兜底。 */
+    source: SearchCacheSource | null;
+ /** 磁盘上的 breadcrumb 原文(没有则 null);解析留给调用方,避免 stats 抛错。 */
+    breadcrumb: string | null;
+  };
+ /** 索引是否已降级(构建/读盘异常 → 三形态走 journal 线性扫描)。 */
+  degraded: boolean;
+  fallbackReason?: string | null;
 }
 
 interface IndexedDoc {
@@ -491,6 +514,63 @@ function compareSeq(a: { seq: number }, b: { seq: number }): number {
   return a.seq - b.seq;
 }
 
+function flattenText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** 降级路径的 role 推导(索引不可用时没有 role 字段,只能由 kind 反推)。 */
+function roleOfKind(kind: string): string {
+  if (kind === "message.user") return "user";
+  if (kind === "message.system") return "system";
+  if (kind === "message.agent") return "assistant";
+  if (kind.startsWith("tool.")) return "tool";
+  if (kind.startsWith("task.") || kind === "todo.updated") return "task";
+  if (kind === "plan.saved") return "plan";
+  if (kind === "board.update") return "board";
+  if (kind.startsWith("review.")) return "review";
+  if (kind.startsWith("subagent.")) return "subagent";
+  return "assistant";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** 降级提示统一文案:让调用方一眼看出「结果是线性扫描来的」,而不是以为索引坏了就没数据。 */
+function degradedMessage(reason: string | null): string {
+  return `索引降级:使用 journal 线性扫描 (${reason ?? "unknown"})`;
+}
+
+/** 降级路径的会话摘要(由事件线性推导,字段与正常索引的 SessionSummary 对齐)。 */
+function fallbackSummary(sessionId: string, events: readonly JournalEvent[]): SessionSummary | null {
+  const last = events[events.length - 1];
+  if (!last) return null;
+  return {
+    sessionId,
+    title: clip(flattenText(shadowEventText(last)), 60) || sessionId,
+    when: new Date(last.time).toISOString(),
+    lastAt: last.time,
+    source: "user",
+    demoted: false,
+    events: events.length,
+    messages: events.length,
+    indexed: events.length,
+  };
+}
+
+/** 降级路径的 ScrollEvent:snippet 非空即命中(anchor=true)。 */
+function fallbackScrollEvent(event: JournalEvent, snippet: string | null): ScrollEvent {
+  const kind = String(event.kind ?? "");
+  return {
+    seq: event.seq,
+    kind,
+    role: roleOfKind(kind),
+    time: event.time,
+    text: snippet ?? clip(flattenText(shadowEventText(event)), 1500),
+    ...(snippet ? { anchor: true } : {}),
+  };
+}
+
 export interface DiscoverOptions {
   limit?: number;
   after?: string | number;
@@ -519,6 +599,8 @@ export interface ReadOptions {
 export class SessionSearchIndex {
   private readonly journal: Journal;
   private readonly cacheFile: string | null;
+  private readonly shadowFile: string | null;
+  private readonly breadcrumbFile: string | null;
   private readonly now: () => number;
   private readonly maxTextPerEvent: number;
   private readonly cacheDebounceMs: number;
@@ -532,6 +614,13 @@ export class SessionSearchIndex {
   private builtAt = 0;
   private cacheLoaded = false;
   private cacheHit = false;
+ /** 索引来源(降级可观测性):主缓存/影子/重建/线性扫描兜底。 */
+  private cacheSource: SearchCacheSource | null = null;
+ /** 磁盘 breadcrumb 原文(便于 stats 直接回显,不做二次解析)。 */
+  private breadcrumbText: string | null = null;
+ /** 构建期是否已降级(降级后三形态改走 journal 线性扫描,绝不抛)。 */
+  private degraded = false;
+  private fallbackReason: string | null = null;
   private unsubscribe: (() => void) | null = null;
   private cacheTimer: ReturnType<typeof setTimeout> | null = null;
   private lastCacheWrite = 0;
@@ -540,6 +629,8 @@ export class SessionSearchIndex {
   constructor(journal: Journal, options: SessionSearchOptions = {}) {
     this.journal = journal;
     this.cacheFile = options.cacheFile ?? null;
+    this.shadowFile = options.shadowFile ?? (this.cacheFile ? `${this.cacheFile}.shadow` : null);
+    this.breadcrumbFile = options.breadcrumbFile ?? (this.cacheFile ? `${this.cacheFile}.breadcrumb.json` : null);
     this.now = options.now ?? (() => Date.now());
     this.maxTextPerEvent = options.maxTextPerEvent ?? 4000;
     this.cacheDebounceMs = options.cacheDebounceMs ?? 8000;
@@ -549,31 +640,191 @@ export class SessionSearchIndex {
   ensureBuilt(): void {
     if (this.built) return;
     const started = this.now();
+    try {
+      this.buildIndex();
+    } catch (error) {
+ // fail-open:缓存/索引是派生数据,journal 才是唯一事实源 —— 构建期异常不许把检索整体打死。
+ // 只标记降级,三形态改走 journal 线性扫描;不 reset(避免留下半截脏索引被误当作有效)。
+      this.degraded = true;
+      this.cacheSource = "fallback";
+      this.fallbackReason = error instanceof Error ? error.message : String(error);
+      this.unsubscribe = null;
+      this.writeBreadcrumb({ source: "fallback", reason: this.fallbackReason });
+    }
+    this.buildMs = Math.max(0, this.now() - started);
+    this.builtAt = this.now();
+    this.built = true;
+  }
+
+ /**
+ * :按 sessionId 取该会话的**原始事件**(供 capsule 摘要使用),只读,不影响倒排索引。
+ * 上限 5000 条:超长会话保留「头 1000 + 尾 4000」——头段给 objective(首条 user 文本),
+ * 尾段给 nextStep(最后一条 agent 文本),中间中段被丢弃不影响五段语义。
+ * 读 journal 失败一律返回空数组(胶囊空态可渲染,不 throw)。
+ */
+  sessionEvents(sessionId: string, options: { limit?: number } = {}): JournalEvent[] {
+    const sid = String(sessionId ?? "").trim();
+    if (!sid) return [];
+    const limit = Math.max(1, Math.min(5000, Math.trunc(options.limit ?? 5000)));
+    try {
+      const events = this.journal.readSession(sid, 0);
+      if (!Array.isArray(events) || events.length === 0) return [];
+      if (events.length <= limit) return events;
+      const head = Math.min(1000, limit);
+      const tail = limit - head;
+      return [...events.slice(0, head), ...events.slice(events.length - tail)];
+    } catch {
+      return [];
+    }
+  }
+
+ /** 构建主体:双读主/影缓存 → 增量补齐 → 订阅;失败由 ensureBuilt 兜住。 */
+  private buildIndex(): void {
     const events = this.journal.readAll();
     this.reset();
-    let loaded = false;
-    if (this.cacheFile && events.length > 0) loaded = this.loadCache(events);
-    if (loaded) {
+    let source: "primary" | "shadow" | null = null;
+    let reasons: string[] = [];
+    if (this.cacheFile && this.shadowFile && events.length > 0) {
+      const read = readShadowPair<CachePayload>(this.cacheFile, this.shadowFile, (payload) =>
+        this.validatePayload(payload, events),
+      );
+      reasons = read.reasons;
+      if (read.payload !== undefined && read.source) {
+        try {
+          this.applyPayload(read.payload);
+          source = read.source;
+        } catch {
+ // 校验过了但填充仍炸(毒行/字段类型诡异):当缓存不可用,走全量重建。
+          this.reset();
+          source = null;
+        }
+      }
+    }
+    if (source) {
       this.cacheLoaded = true;
       this.cacheHit = true;
+      this.cacheSource = source;
+      if (source === "shadow") {
+ // 主缓存已坏:用影子顶上,并留痕「是谁救的场」。
+        this.writeBreadcrumb({ source: "shadow", reason: reasons.join(","), lastSeq: this.lastSeq });
+      }
+ // 缓存落后:只补 lastSeq 之后的事件(增量,不重建)。
+      if (this.lastSeq < this.journal.length - 1) {
+        for (const event of this.journal.readAll(this.lastSeq + 1)) this.indexEvent(event);
+        if (this.cacheFile) this.dirty = true;
+      }
     } else {
       for (const event of events) this.indexEvent(event);
-      if (this.cacheFile) this.dirty = true; // 首次构建/缓存失效:flush 应能落盘
-    }
-    // 缓存落后:只补 lastSeq 之后的事件(增量,不重建)。
-    if (loaded && this.lastSeq < this.journal.length - 1) {
-      for (const event of this.journal.readAll(this.lastSeq + 1)) this.indexEvent(event);
-      if (this.cacheFile) this.dirty = true;
+      this.cacheSource = "rebuild";
+      if (this.cacheFile) {
+        this.dirty = true; // 首次构建/缓存失效:flush 应能落盘
+        if (events.length > 0) this.writeBreadcrumb({ source: "rebuild", reason: reasons.join(","), lastSeq: this.lastSeq });
+      }
     }
     // 空 journal 也要把 lastSeq 归位(否则首条 append 的 seq=0 会被跳过)。
     if (events.length === 0) this.lastSeq = -1;
+    this.readBreadcrumb();
     this.unsubscribe = this.journal.subscribe((event) => {
       this.indexEvent(event);
       this.markDirty();
     });
-    this.buildMs = Math.max(0, this.now() - started);
-    this.builtAt = this.now();
-    this.built = true;
+  }
+
+ /** 缓存校验(只管形状/新鲜度;JSON 解析失败由 readShadowPair 判为 json)。 */
+  private validatePayload(payload: CachePayload, events: JournalEvent[]): true | { ok: false; reason: "shape" | "stale" } {
+    if (!payload || payload.v !== CACHE_VERSION) return { ok: false, reason: "shape" };
+    if (!Array.isArray(payload.docs) || !Array.isArray(payload.postings) || !Array.isArray(payload.sessions)) {
+      return { ok: false, reason: "shape" };
+    }
+    if (typeof payload.lastSeq !== "number" || !Number.isFinite(payload.lastSeq)) return { ok: false, reason: "shape" };
+    const first = events[0];
+    const last = events[events.length - 1];
+    if (!first || !last) return { ok: false, reason: "stale" };
+    if (payload.lastSeq > last.seq || payload.lastSeq < -1) return { ok: false, reason: "stale" };
+    if (payload.firstTime !== first.time) return { ok: false, reason: "stale" };
+    const lastAtCacheSeq = events[payload.lastSeq];
+    if (!lastAtCacheSeq || lastAtCacheSeq.time !== payload.lastTime) return { ok: false, reason: "stale" };
+    return true;
+  }
+
+ /** 把校验通过的 payload 填进内存态(与 loadCache 的填充部分逐字段等价)。 */
+  private applyPayload(payload: CachePayload): void {
+    this.reset();
+    this.docs = payload.docs.map((row, index) => ({
+      id: index,
+      sessionId: String(row[0] ?? ""),
+      seq: Number(row[1] ?? 0),
+      kind: String(row[2] ?? ""),
+      role: String(row[3] ?? ""),
+      ts: Number(row[4] ?? 0),
+      text: String(row[5] ?? ""),
+      tool: row[6] === null ? null : String(row[6] ?? ""),
+      weight: Number(row[7] ?? 0),
+      subagent: Boolean(row[8]),
+    }));
+    this.sessions = new Map(
+      payload.sessions.map((row) => [
+        String(row[0] ?? ""),
+        {
+          sessionId: String(row[0] ?? ""),
+          title: String(row[1] ?? ""),
+          startedAt: Number(row[2] ?? 0),
+          lastAt: Number(row[3] ?? 0),
+          events: Number(row[4] ?? 0),
+          messages: Number(row[5] ?? 0),
+          userMessages: Number(row[6] ?? 0),
+          subagentDocs: Number(row[7] ?? 0),
+          automationSeen: Boolean(row[8]),
+          companionSeen: Boolean(row[9]),
+          lastText: String(row[10] ?? ""),
+        } satisfies SessionMeta,
+      ]),
+    );
+    this.postings = new Map(
+      payload.postings.map(([token, entries]) => [
+        String(token),
+        new Map((entries ?? []).map(([docId, tf]) => [Number(docId), Number(tf)] as const)),
+      ]),
+    );
+    this.sessionDocs = new Map();
+    for (const doc of this.docs) {
+      const list = this.sessionDocs.get(doc.sessionId);
+      if (list) list.push(doc.id);
+      else this.sessionDocs.set(doc.sessionId, [doc.id]);
+    }
+    this.lastSeq = payload.lastSeq;
+  }
+
+ /** 写 breadcrumb(best-effort:观测数据写不出来不影响检索)。 */
+  private writeBreadcrumb(meta: { source: SearchCacheSource; reason?: string; lastSeq?: number }): void {
+    if (!this.breadcrumbFile) return;
+    try {
+      const ok = writeBreadcrumbFile(this.breadcrumbFile, {
+        v: 1,
+        at: this.now(),
+        source: meta.source,
+        ...(meta.reason ? { reason: meta.reason } : {}),
+        docs: this.docs.length,
+        sessions: this.sessions.size,
+        lastSeq: meta.lastSeq ?? this.lastSeq,
+      });
+      if (ok) this.readBreadcrumb();
+    } catch {
+ /* breadcrumb 是派生观测数据:写失败不外抛 */
+    }
+  }
+
+  private readBreadcrumb(): string | null {
+    if (!this.breadcrumbFile) {
+      this.breadcrumbText = null;
+      return null;
+    }
+    try {
+      this.breadcrumbText = readFileSync(this.breadcrumbFile, "utf-8");
+    } catch {
+      this.breadcrumbText = null;
+    }
+    return this.breadcrumbText;
   }
 
   private reset(): void {
@@ -672,12 +923,21 @@ export class SessionSearchIndex {
       sessions: this.sessions.size,
       tokens: this.postings.size,
       lastSeq: this.lastSeq,
-      cache: { file: this.cacheFile, loaded: this.cacheLoaded, hit: this.cacheHit },
+      cache: {
+        file: this.cacheFile,
+        loaded: this.cacheLoaded,
+        hit: this.cacheHit,
+        source: this.cacheSource,
+        breadcrumb: this.breadcrumbText,
+      },
+      degraded: this.degraded,
+      fallbackReason: this.fallbackReason,
     };
   }
 
   discover(query: string, options: DiscoverOptions = {}): DiscoverResult {
     this.ensureBuilt();
+    if (this.degraded) return this.degradedDiscover(query, options);
     const started = this.now();
     const limit = Math.max(1, Math.min(50, Math.trunc(options.limit ?? 5)));
     const text = String(query ?? "").trim();
@@ -840,6 +1100,7 @@ export class SessionSearchIndex {
 
   scroll(sessionId: string, options: ScrollOptions = {}): ScrollResult {
     this.ensureBuilt();
+    if (this.degraded) return this.degradedScroll(sessionId, options);
     const sid = String(sessionId ?? "").trim();
     const meta = this.sessions.get(sid);
     if (!meta) {
@@ -921,6 +1182,7 @@ export class SessionSearchIndex {
 
   read(sessionId: string, options: ReadOptions = {}): ReadResult {
     this.ensureBuilt();
+    if (this.degraded) return this.degradedRead(sessionId, options);
     const sid = String(sessionId ?? "").trim();
     const meta = this.sessions.get(sid);
     if (!meta) {
@@ -958,12 +1220,34 @@ export class SessionSearchIndex {
     };
   }
 
-  /** 立即写缓存(可选)。返回是否实际写盘。 */
+ /** 立即写缓存(可选)。返回是否实际写盘(至少一份副本成功)。 */
   flush(): boolean {
     if (!this.cacheFile || !this.built || !this.dirty) return false;
     this.clearCacheTimer();
+    try {
+      const payload = this.buildPayload();
+      const shadowPath = this.shadowFile ?? `${this.cacheFile}.shadow`;
+      const result = writeShadowPair(this.cacheFile, shadowPath, this.breadcrumbFile, payload, {
+        source: this.cacheSource ?? "rebuild",
+        docs: this.docs.length,
+        sessions: this.sessions.size,
+        lastSeq: this.lastSeq,
+        now: this.now,
+      });
+      if (result.written.length === 0) return false; // 两份都失败:保持 dirty,下轮再试
+      this.dirty = false;
+      this.lastCacheWrite = this.now();
+      this.readBreadcrumb();
+      return true;
+    } catch {
+ // fail-open:缓存写不出去只是「下次重建更慢」,绝不影响检索本身。
+      return false;
+    }
+  }
+
+  private buildPayload(): CachePayload {
     const journalEvents = this.journal.readAll();
-    const payload: CachePayload = {
+    return {
       v: CACHE_VERSION,
       lastSeq: this.lastSeq,
       firstTime: journalEvents[0]?.time ?? 0,
@@ -994,26 +1278,6 @@ export class SessionSearchIndex {
       ]),
       postings: [...this.postings.entries()].map(([token, posting]) => [token, [...posting.entries()]]),
     };
-    try {
-      mkdirSync(dirname(this.cacheFile), { recursive: true });
-      const tmp = `${this.cacheFile}.${process.pid}.tmp`;
-      writeFileSync(tmp, JSON.stringify(payload), "utf-8");
-      try {
-        renameSync(tmp, this.cacheFile);
-      } catch {
-        try {
-          unlinkSync(tmp);
-        } catch {
-          /* tmp 清理失败不致命 */
-        }
-        writeFileSync(this.cacheFile, JSON.stringify(payload), "utf-8");
-      }
-      this.dirty = false;
-      this.lastCacheWrite = this.now();
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /** 停止订阅/定时器;尽力 flush 缓存。 */
@@ -1024,70 +1288,159 @@ export class SessionSearchIndex {
     this.flush();
   }
 
-  private loadCache(events: JournalEvent[]): boolean {
-    if (!this.cacheFile || !existsSync(this.cacheFile)) return false;
-    let payload: CachePayload;
+ /* ── 降级路径(fail-open):索引不可用时用 journal 线性扫描兜底,三形态对外绝不抛 ── */
+
+  private degradedDiscover(query: string, options: DiscoverOptions): DiscoverResult {
+    this.cacheSource = "fallback";
+    const started = this.now();
+    const text = String(query ?? "").trim();
+    const limit = Math.max(1, Math.min(50, Math.trunc(options.limit ?? 5)));
     try {
-      payload = JSON.parse(readFileSync(this.cacheFile, "utf-8")) as CachePayload;
-    } catch {
-      return false;
-    }
-    if (!payload || payload.v !== CACHE_VERSION || !Array.isArray(payload.docs) || !Array.isArray(payload.postings)) return false;
-    const first = events[0];
-    const last = events[events.length - 1];
-    if (!first || !last) return false;
-    if (payload.lastSeq > last.seq || payload.lastSeq < -1) return false;
-    if (payload.firstTime !== first.time) return false;
-    const lastAtCacheSeq = events[payload.lastSeq];
-    if (!lastAtCacheSeq || lastAtCacheSeq.time !== payload.lastTime) return false;
-    try {
-      this.docs = payload.docs.map((row, index) => ({
-        id: index,
-        sessionId: String(row[0] ?? ""),
-        seq: Number(row[1] ?? 0),
-        kind: String(row[2] ?? ""),
-        role: String(row[3] ?? ""),
-        ts: Number(row[4] ?? 0),
-        text: String(row[5] ?? ""),
-        tool: row[6] === null ? null : String(row[6] ?? ""),
-        weight: Number(row[7] ?? 0),
-        subagent: Boolean(row[8]),
-      }));
-      this.sessions = new Map(
-        payload.sessions.map((row) => [
-          String(row[0] ?? ""),
-          {
-            sessionId: String(row[0] ?? ""),
-            title: String(row[1] ?? ""),
-            startedAt: Number(row[2] ?? 0),
-            lastAt: Number(row[3] ?? 0),
-            events: Number(row[4] ?? 0),
-            messages: Number(row[5] ?? 0),
-            userMessages: Number(row[6] ?? 0),
-            subagentDocs: Number(row[7] ?? 0),
-            automationSeen: Boolean(row[8]),
-            companionSeen: Boolean(row[9]),
-            lastText: String(row[10] ?? ""),
-          } satisfies SessionMeta,
-        ]),
-      );
-      this.postings = new Map(
-        payload.postings.map(([token, entries]) => [
-          String(token),
-          new Map((entries ?? []).map(([docId, tf]) => [Number(docId), Number(tf)] as const)),
-        ]),
-      );
-      this.sessionDocs = new Map();
-      for (const doc of this.docs) {
-        const list = this.sessionDocs.get(doc.sessionId);
-        if (list) list.push(doc.id);
-        else this.sessionDocs.set(doc.sessionId, [doc.id]);
+      const events = this.journal.readAll();
+      const scan = scanJournalFallback(events, text, { now: this.now });
+      const timeBySeq = new Map<number, number>(events.map((event) => [event.seq, event.time] as const));
+      const grouped = new Map<string, JournalScanHit[]>();
+      for (const hit of scan.hits) {
+        const bucket = grouped.get(hit.sessionId);
+        if (bucket) bucket.push(hit);
+        else grouped.set(hit.sessionId, [hit]);
       }
-      this.lastSeq = payload.lastSeq;
-      return true;
-    } catch {
-      this.reset();
-      return false;
+      const results: DiscoverHit[] = [...grouped.entries()]
+        .map(([sessionId, hits]) => {
+          const firstHit = hits[0]!;
+          const lastAt = Math.max(...hits.map((hit) => timeBySeq.get(hit.seq) ?? 0));
+          return {
+            sessionId,
+            title: clip(flattenText(firstHit.text), 60) || sessionId,
+            when: new Date(lastAt).toISOString(),
+            lastAt,
+            source: "user" as const,
+            demoted: false,
+            events: hits.length,
+            messages: hits.length,
+            indexed: hits.length,
+            score: hits.length,
+            hits: hits.length,
+            best: {
+              seq: firstHit.seq,
+              kind: firstHit.kind,
+              role: roleOfKind(firstHit.kind),
+              snippet: firstHit.snippet,
+              ts: timeBySeq.get(firstHit.seq) ?? lastAt,
+            },
+          } satisfies DiscoverHit;
+        })
+        .sort((a, b) => b.score - a.score || b.lastAt - a.lastAt)
+        .slice(0, limit);
+      return {
+        mode: "discover",
+        query: text,
+        count: results.length,
+        tookMs: Math.max(0, this.now() - started),
+        stats: this.stats(),
+        results,
+        message: degradedMessage(this.fallbackReason),
+      };
+    } catch (error) {
+      return {
+        mode: "discover",
+        query: text,
+        count: 0,
+        tookMs: Math.max(0, this.now() - started),
+        stats: this.stats(),
+        results: [],
+        message: degradedMessage(errorMessage(error)),
+      };
+    }
+  }
+
+  private degradedScroll(sessionId: string, options: ScrollOptions): ScrollResult {
+    this.cacheSource = "fallback";
+    const sid = String(sessionId ?? "").trim();
+    const limit = Math.max(1, Math.min(20, Math.trunc(options.limit ?? 5)));
+    const query = String(options.query ?? "").trim();
+    try {
+      const events = this.journal.readAll().filter((event) => String(event.sessionId ?? "") === sid);
+      if (events.length === 0) {
+        return { mode: "scroll", sessionId: sid, session: null, events: [], message: `会话不存在或没有可检索内容: ${sid}` };
+      }
+      const summary = fallbackSummary(sid, events);
+      if (!query) {
+ // 无 query:线性扫描退化为「该会话前 limit 条」,与正常 scroll 的翻页起点语义一致。
+        return {
+          mode: "scroll",
+          sessionId: sid,
+          session: summary,
+          events: events.slice(0, limit).map((event) => fallbackScrollEvent(event, null)),
+          message: degradedMessage(this.fallbackReason),
+        };
+      }
+      const scan = scanJournalFallback(events, query, { now: this.now });
+      const snippetBySeq = new Map<number, string>(scan.hits.map((hit) => [hit.seq, hit.snippet] as const));
+      return {
+        mode: "scroll",
+        sessionId: sid,
+        session: summary,
+        query,
+        totalMatches: scan.hits.length,
+        events: events
+          .filter((event) => snippetBySeq.has(event.seq))
+          .slice(0, limit)
+          .map((event) => fallbackScrollEvent(event, snippetBySeq.get(event.seq) ?? null)),
+        message: scan.hits.length ? degradedMessage(this.fallbackReason) : `会话内没有匹配「${query}」的内容`,
+      };
+    } catch (error) {
+      return { mode: "scroll", sessionId: sid, session: null, events: [], message: degradedMessage(errorMessage(error)) };
+    }
+  }
+
+  private degradedRead(sessionId: string, options: ReadOptions): ReadResult {
+    this.cacheSource = "fallback";
+    const sid = String(sessionId ?? "").trim();
+    const fromSeq = Math.max(0, Math.trunc(options.fromSeq ?? 0));
+    const limit = Math.max(1, Math.min(50, Math.trunc(options.limit ?? 20)));
+    try {
+      const events = this.journal.readAll().filter((event) => String(event.sessionId ?? "") === sid);
+      if (events.length === 0) {
+        return {
+          mode: "read",
+          sessionId: sid,
+          session: null,
+          events: [],
+          fromSeq,
+          nextSeq: null,
+          done: true,
+          total: 0,
+          message: `会话不存在或没有可检索内容: ${sid}`,
+        };
+      }
+      let position = events.findIndex((event) => event.seq >= fromSeq);
+      if (position < 0) position = events.length;
+      const slice = events.slice(position, position + limit);
+      const nextSeq = position + slice.length < events.length ? events[position + slice.length]!.seq : null;
+      return {
+        mode: "read",
+        sessionId: sid,
+        session: fallbackSummary(sid, events),
+        events: slice.map((event) => fallbackScrollEvent(event, null)),
+        fromSeq,
+        nextSeq,
+        done: nextSeq === null,
+        total: events.length,
+        message: degradedMessage(this.fallbackReason),
+      };
+    } catch (error) {
+      return {
+        mode: "read",
+        sessionId: sid,
+        session: null,
+        events: [],
+        fromSeq,
+        nextSeq: null,
+        done: true,
+        total: 0,
+        message: degradedMessage(errorMessage(error)),
+      };
     }
   }
 

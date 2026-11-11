@@ -300,7 +300,8 @@ export function rebuildDashboardSessions(
           f.status = "stopped";
           f.stoppedAt = ev.time;
         } else {
-          // completed / max-steps:LLM 说完,等用户接话(ref waiting_for_input)。
+ // completed / max-steps / budget-exhausted:LLM 说完(或预算耗尽后已做无工具收尾),
+ // 等用户接话(ref waiting_for_input)。budget-exhausted 属同档:不是错误态,别落红。
           f.status = "waiting_for_input";
           lastTurnEnd.set(ev.sessionId, ev.time);
         }

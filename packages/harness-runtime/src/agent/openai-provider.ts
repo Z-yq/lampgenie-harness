@@ -31,10 +31,19 @@ export function dumpRequestBody(model: string, body: Record<string, unknown>): v
   }
 }
 import { classifyModelError, ModelRequestError, UnknownErrorBudget, type ModelErrorDecision } from "./model-error-policy";
+import {
+  applyRepair,
+  detectFake200,
+  repairPlan,
+  shouldTreatAsError,
+  DROP_UNSUPPORTED_KEYS,
+  type RepairMessage,
+} from "./error-repair";
 import type { LlmChatOptions, LlmProvider, LlmResponse, Message, ToolSpec } from "../agent/loop";
 import type { RequestAdmission, AdmissionTicket, ModelLifecycleEvent } from "../concurrency/admission";
 import { anthropicChat, responsesChat } from "./provider-apitypes";
 import { pcm16B64ToWavDataUrl } from "./audio-wav";
+import { modelFamilyOf, normalizeToolsForProvider } from "./provider-schema";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -47,6 +56,9 @@ export interface OpenAiCompatOptions {
    * /v1/messages(x-api-key 头+系统分离+内容块流式);responses=OpenAI Responses
    * POST /v1/responses(input 数组+function_call 形态)。协议适配在 provider-apitypes.ts。 */
   apiType?: "chat" | "responses" | "anthropic";
+ /** 模型族路由标识(api.id,如 openai-gpt):构造期固定,update 不改。
+ * 只用于请求体层的族判定(工具名/schema 归一/风格提示),不上 wire。缺省=按 model 判族。 */
+  apiId?: string;
   /** 请求超时。 */
   timeoutMs?: number;
   /** 请求级 max_tokens;缺省=端点默认。 */
@@ -94,7 +106,11 @@ export function sanitizeLoneSurrogates(s: string): string {
   return out + s.slice(seg);
 }
 
-function toOpenAi(messages: Message[], tools: ToolSpec[]) {
+function toOpenAi(messages: Message[], tools: ToolSpec[], ctx: { apiId?: string; model?: string } = {}) {
+ // 模型族适配:改的只是请求体这一层的 tools 副本(注册表本体不动,见 provider-schema.ts 头注)。
+ // 未知族(generic:apiId 与 model 都判不出)时零变化 —— 猜错归一语义的代价高于原样透传。
+  const family = modelFamilyOf(ctx.apiId ?? ctx.model);
+  const providerTools = family === "generic" ? [...tools] : normalizeToolsForProvider(tools, ctx);
   return {
     model: undefined as unknown as string, // 由调用处填
     max_tokens: undefined as unknown as number, // 请求级上限,由调用处填(缺省=端点默认)
@@ -137,9 +153,9 @@ function toOpenAi(messages: Message[], tools: ToolSpec[]) {
       }
       return { role: m.role, content: sanitizeLoneSurrogates(m.content) };
     }),
-    ...(tools.length > 0
+    ...(providerTools.length > 0
       ? {
-          tools: tools.map((t) => ({
+          tools: providerTools.map((t) => ({
             type: "function",
             function: { name: t.name, description: t.description, parameters: t.parameters },
           })),
@@ -225,6 +241,19 @@ export interface PostRetryOptions {
   budget?: UnknownErrorBudget;
   /** 预算键(provider/model)。 */
   budgetKey?: string;
+ /** :可修复请求错误(invalid_request)的改写入口,由调用方注入。
+ * 返回非空动作数组=已改写并应重发一次(不占既有 retry 预算);null=不修。 */
+  repair?: (input: { decision: ModelErrorDecision; status?: number; attempt: number }) => string[] | null;
+}
+
+/** :请求修复生命周期事件({type:"model_repair", code, actions})。
+ * 已登记进 admission.ts 的 ModelLifecycleEvent 联合(ModelRepairEvent),观测者按 event.type 消费。 */
+function emitModelRepair(emit: StatusEmit, code: string, actions: readonly string[]): void {
+  try {
+    emit({ type: "model_repair", code, actions: [...actions], at: Date.now() });
+  } catch {
+ /* 观察者异常不影响主链 */
+  }
 }
 
 /** 非 ok 响应体预览:clone 后读文本(不消费原响应体,调用方仍可 errorText/res.text())。 */
@@ -282,6 +311,16 @@ export async function postWithRetry(
     const rec = budget.record(budgetKey, decision.kind);
     // 永久错误 / 未知预算耗尽:立即抛,不再按 RETRYABLE_STATUSES 盲重试。
     if (decision.stop || rec.stop) {
+ // invalid_request(400/422)先做一次性请求改写并立即重发;不占既有 retry 预算。
+ // 同一 reason 是否已修过由调用方的 attemptedRepairs(每次请求局部 Set)判定。
+      if (decision.kind === "invalid_request" && opts.repair) {
+        const actions = opts.repair({ decision, status: res.status, attempt });
+        if (actions && actions.length > 0) {
+          emitModelRepair(opts.emit, decision.kind, actions);
+          attempt--; // 抵掉 for 的 ++:改写后的这次重发不消耗既有重试预算
+          continue;
+        }
+      }
       const stopDecision: ModelErrorDecision = decision.stop ? decision : { ...decision, stop: true, retryable: false, action: `${decision.action}(连续 ${rec.count} 次)` };
       opts.emit({
         type: "model_request_failed",
@@ -362,14 +401,27 @@ export function chatCompletionsUrl(baseUrl: string): string {
  * 注意:服务端推理引擎瞬时 abort,HTTP 层是 200(postWithRetry 重试不到),
  * 旧实现直接 throw → 整个任务 task.fail。这类错误与 5xx 同类(服务端过载/抖动),应当重试。 */
 class StreamMidFlightError extends Error {}
+/** 流式重试上下文:重试/预算之外, 追加同源修复入口(与非流式 postWithRetry 同一套机制)。
+ * body 用 getter:修复改写会重建请求体,重发必须取最新体(不能是调用时的快照)。 */
+interface StreamRetryCtx {
+  retry: number;
+  emit: StatusEmit;
+  budget?: UnknownErrorBudget;
+  budgetKey?: string;
+ /** :invalid_request 的一次性改写入口(absent=不修复,如 anthropic/responses 适配器)。 */
+  repair?: PostRetryOptions["repair"];
+ /** :本次请求是否已执行过改写(第二次失败时据此注明「修复后仍失败」)。 */
+  repairAttempted?: () => boolean;
+}
+
 /** 流中断重试(区分于 HTTP 状态码重试):mid-flight SSE 错误/断流最多 N 次,指数退避。
  * onDelta 已发过增量的场合,重试会重复发增量(面板打字机可能有轻微回跳,终稿以聚合结果为准)。 */
 async function chatStreamedWithRetry(
   cur: { baseUrl: string; apiKey: string; timeoutMs?: number },
-  body: Record<string, unknown>,
+  body: () => Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: { text?: string; reasoning?: string }) => void,
-  retryCtx: { retry: number; emit: StatusEmit; budget?: UnknownErrorBudget; budgetKey?: string },
+  retryCtx: StreamRetryCtx,
   ctrl: { abort: (reason?: unknown) => void },
   opts: LlmChatOptions = {},
 ): Promise<LlmResponse> {
@@ -392,7 +444,24 @@ async function chatStreamedWithRetry(
     } catch (err) {
       lastErr = err;
       // HTTP 层已分类并抛出的错误(含永久错误/预算耗尽):原样上抛,不再重试。
-      if (err instanceof ModelRequestError) throw err;
+      if (err instanceof ModelRequestError) {
+ // 流式 invalid_request 已做过一次性请求改写还失败=改写面救不了,上抛并注明(不盲修)。
+        if (err.kind === "invalid_request" && retryCtx.repairAttempted?.()) {
+          const repaired: ModelErrorDecision = {
+            kind: err.kind,
+            retryable: false,
+            stop: true,
+            action: `${err.action}(修复后仍失败)`,
+            detail: err.detail,
+          };
+          throw new ModelRequestError(repaired, {
+            message: `${err.message} | 修复后仍失败(已做一次性请求改写)`,
+            detail: err.detail,
+            cause: err,
+          });
+        }
+        throw err;
+      }
       const midFlight = err instanceof StreamMidFlightError;
       const decision = classifyModelError({
         err,
@@ -441,10 +510,10 @@ async function chatStreamedWithRetry(
 /** 流式 chat(SSE)聚合:content/reasoning/tool_calls/usage 与非流式同构;增量经 onDelta 透出。 */
 async function chatStreamed(
   cur: { baseUrl: string; apiKey: string; timeoutMs?: number },
-  body: Record<string, unknown>,
+  body: () => Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: { text?: string; reasoning?: string }) => void,
-  retryCtx: { retry: number; emit: StatusEmit; budget?: UnknownErrorBudget; budgetKey?: string },
+  retryCtx: StreamRetryCtx,
   ctrl: { abort: (reason?: unknown) => void },
   progress: { chars: number },
 ): Promise<LlmResponse> {
@@ -460,20 +529,34 @@ async function chatStreamed(
     emit: retryCtx.emit,
     ...(retryCtx.budget ? { budget: retryCtx.budget } : {}),
     ...(retryCtx.budgetKey ? { budgetKey: retryCtx.budgetKey } : {}),
+ // 流式 fetch 的 400/422 invalid_request 走与非流式同一套一次性修复(postWithRetry 内改写后重发)。
+    ...(retryCtx.repair ? { repair: retryCtx.repair } : {}),
   };
   let res: Response;
   try {
-    res = await postWithRetry(() => post({ ...body, stream: true, stream_options: { include_usage: true } }), retryOpts);
+ // body 每次重发前现取:修复改写重建 body 后,postWithRetry 的这次重发必须用新体。
+    res = await postWithRetry(() => post({ ...body(), stream: true, stream_options: { include_usage: true } }), retryOpts);
   } catch (err) {
     // 端点兼容:stream_options 不被支持(400 且报文点名)→ 去掉该参数重试一次。
     if (err instanceof ModelRequestError && err.kind === "invalid_request" && /stream_options/i.test(err.detail)) {
-      res = await postWithRetry(() => post({ ...body, stream: true }), retryOpts);
+      res = await postWithRetry(() => post({ ...body(), stream: true }), retryOpts);
     } else throw err;
   }
   // 非 SSE 响应(个别网关忽略 stream 标志):按整包 JSON 解析,增量无从谈起,聚合结果照常返回。
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("event-stream")) {
-    const data = (await res.json()) as ChatJson;
+ // 非 SSE 的整包 JSON 同样先识别伪 200(HTTP 200 但 body 是错误),按错误处理。
+    const rawText = await res.text();
+    const fake200 = detectFake200(res.status, rawText);
+    if (shouldTreatAsError(fake200)) {
+      const decision = classifyModelError({ status: res.status, body: rawText });
+      retryCtx.emit({ type: "model_request_failed", code: fake200.code ?? decision.kind, reason: "fake-200", retryable: false, at: Date.now() });
+      throw new ModelRequestError(
+        { ...decision, stop: true, retryable: false, action: `${decision.action}(伪 200:响应体为错误)` },
+        { status: res.status, detail: decision.detail },
+      );
+    }
+    const data = JSON.parse(rawText) as ChatJson;
     const msg = data.choices[0]?.message ?? {};
     const rs = msg.reasoning_content ?? msg.reasoning ?? undefined;
     const finish = mapOpenAiFinishReason(data.choices[0]?.finish_reason);
@@ -566,6 +649,7 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
     describe() {
       return {
         baseUrl: cur.baseUrl, apiType: cur.apiType ?? "chat", model: cur.model,
+        apiId: cur.apiId,
         maxTokens: cur.maxTokens, reasoningEffort: cur.reasoningEffort, timeoutMs: cur.timeoutMs, retry: cur.retry,
       };
     },
@@ -607,16 +691,69 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
           if (cur.apiType === "responses") {
             return await responsesChat(cur, messages, tools, controller.signal, onDelta, rctx);
           }
-          const body = toOpenAi(messages, tools);
-          body.model = cur.model;
-          if (cur.maxTokens !== undefined && cur.maxTokens > 0) body.max_tokens = cur.maxTokens;
+ // 每次请求一套修复尝试集(局部),messages/tools/extra 用本次请求副本。
+          const attemptedRepairs = new Set<string>();
+          let reqMessages = messages as unknown as RepairMessage[];
+          let reqTools = tools as unknown as readonly unknown[];
+          const reqExtra: Record<string, unknown> = {};
+          if (cur.reasoningEffort) reqExtra.reasoningEffort = cur.reasoningEffort;
+          if (cur.maxTokens !== undefined && cur.maxTokens > 0) reqExtra.maxTokens = cur.maxTokens;
+ // body 由 reqMessages/reqExtra 派生:repair 改写后重建即可(不触碰调用方入参)。
+          const buildBody = (): Record<string, unknown> => {
+            const b = toOpenAi(reqMessages as unknown as Message[], reqTools as unknown as ToolSpec[], { apiId: cur.apiId, model: cur.model }) as unknown as Record<string, unknown>;
+            b.model = cur.model;
+            const maxTokens = typeof reqExtra.maxTokens === "number" ? reqExtra.maxTokens : undefined;
+            if (maxTokens !== undefined && maxTokens > 0) b.max_tokens = maxTokens;
  // 思考力度:OpenAI o 系/GLM reasoning_effort;空串=显式关(不发)。
-          if (cur.reasoningEffort) (body as Record<string, unknown>).reasoning_effort = cur.reasoningEffort;
+            if (typeof reqExtra.reasoningEffort === "string" && reqExtra.reasoningEffort) b.reasoning_effort = reqExtra.reasoningEffort;
+ // 白名单参数(repair 的 drop-unsupported-params 目标):只回填请求里真实存在的键。
+            for (const key of DROP_UNSUPPORTED_KEYS) if (key in reqExtra) b[key] = reqExtra[key];
+            return b;
+          };
+          let body = buildBody();
  // 请求体诊断 dump(GENIE_LLM_DUMP_DIR 门控,缺省零开销)。
-          dumpRequestBody(cur.model, body as Record<string, unknown>);
+          dumpRequestBody(cur.model, body);
+ // invalid_request 的一次性请求改写(同 reason 每请求只修一次;第二次失败即终态)。
+          const repairBody = (decision: ModelErrorDecision): string[] | null => {
+            if (attemptedRepairs.has(decision.kind)) return null;
+            const plan = repairPlan({
+              code: decision.kind,
+              attempt: 0,
+              requestFacts: {
+                hasReasoning: reqMessages.some((m) => m.role === "assistant" && typeof m.reasoning === "string" && m.reasoning.length > 0),
+                ...(typeof reqExtra.maxTokens === "number" ? { maxTokens: reqExtra.maxTokens } : {}),
+                paramKeys: DROP_UNSUPPORTED_KEYS.filter((k) => k in reqExtra),
+              },
+            });
+            if (!plan.ok) return null;
+            const repaired = applyRepair({ messages: reqMessages, tools: reqTools, extra: reqExtra }, plan.actions);
+            if (repaired.applied.length === 0) return null;
+            attemptedRepairs.add(decision.kind);
+            reqMessages = repaired.request.messages;
+            reqTools = repaired.request.tools;
+            for (const key of Object.keys(reqExtra)) delete reqExtra[key];
+            Object.assign(reqExtra, repaired.request.extra);
+            body = buildBody();
+            return repaired.applied;
+          };
  // 流式分支(ZCode 流式消息展示):onDelta 在场才启用——压缩/评审/导读等
           // 内部调用保持非流式旧路径零风险;流式下增量经 onDelta 透出,聚合结果与非流式同构。
-          if (onDelta) return await chatStreamedWithRetry(cur, body, controller.signal, onDelta, rctx, controller, opts);
+ // 流式路径接同一套一次性修复(与非流式共享本次请求的 attemptedRepairs;
+ // body 以 getter 传入,修复重建后的新体才是重发体)。
+          if (onDelta) {
+            return await chatStreamedWithRetry(
+              cur,
+              () => body,
+              controller.signal,
+              onDelta,
+              {
+                ...rctx,
+                repair: ({ decision }: { decision: ModelErrorDecision }) => repairBody(decision),
+                repairAttempted: () => attemptedRepairs.size > 0,
+              },
+              controller,
+              opts);
+          }
           const res = await postWithRetry(() => fetch(chatCompletionsUrl(cur.baseUrl), {
             method: "POST",
             headers: {
@@ -625,12 +762,31 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
             },
             body: JSON.stringify(body),
             signal: controller.signal,
-          }), { retry: rctx.retry, signal: controller.signal, emit, budget: unknownBudget, budgetKey: rctx.budgetKey });
+          }), {
+            retry: rctx.retry,
+            signal: controller.signal,
+            emit,
+            budget: unknownBudget,
+            budgetKey: rctx.budgetKey,
+ // 仅 chat/completions 路径注入改写入口(anthropic/responses 适配器语义不动)。
+            repair: ({ decision }: { decision: ModelErrorDecision }) => repairBody(decision),
+          });
           if (!res.ok) {
             const text = await res.text();
             throw new Error(`LLM ${res.status}: ${text.slice(0, 200)}`);
           }
-        const data = (await res.json()) as {
+ // 解析前识别伪 200(HTTP 200 但 body 是错误信封/无 choices),按错误处理而非空成功。
+          const rawText = await res.text();
+          const fake200 = detectFake200(res.status, rawText);
+          if (shouldTreatAsError(fake200)) {
+            const decision = classifyModelError({ status: res.status, body: rawText });
+            emit({ type: "model_request_failed", code: fake200.code ?? decision.kind, reason: "fake-200", retryable: false, at: Date.now() });
+            throw new ModelRequestError(
+              { ...decision, stop: true, retryable: false, action: `${decision.action}(伪 200:响应体为错误)` },
+              { status: res.status, detail: decision.detail },
+            );
+          }
+        const data = JSON.parse(rawText) as {
           choices: { finish_reason?: string | null; message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[];
  /** OpenAI 兼容 usage(追踪:此前被丢弃);字段缺失按 0 并保留 total 原值。 */
           usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };

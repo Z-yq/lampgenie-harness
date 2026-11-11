@@ -91,7 +91,10 @@ describe("AgentLoop", () => {
     };
     const loop = new AgentLoop({ journal, sessionId: "s1", system: "", llm, tools: [getTime], maxSteps: 3 });
     await loop.runTurn("hi");
-    expect(journal.readAll().filter((e) => e.kind === "tool.call").length).toBe(3);
+ // 末步(step=2)的工具调用被预算收束拦下(**不执行**,只落合成 tool.result),
+ // 所以真实执行数 = maxSteps-1,循环仍然被 maxSteps 硬性收住(防死循环意图不变)。
+    expect(journal.readAll().filter((e) => e.kind === "tool.call").length).toBe(2);
+    expect((journal.readAll().filter((e) => e.kind === "turn.end").at(-1)!.payload as { reason: string }).reason).toBe("budget-exhausted");
   });
 });
 

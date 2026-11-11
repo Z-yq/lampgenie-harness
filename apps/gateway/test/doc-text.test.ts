@@ -362,3 +362,49 @@ describe("doc-text: 边界", () => {
     expect(DOC_PARSE_EXT.has("zip")).toBe(true);
   });
 });
+
+// ───────────────────────── 路径围栏 ─────────────────────────
+describe("parseDocFile 路径围栏 roots", () => {
+  it("根内文件 + roots=[根] → 正常解析", async () => {
+    const p = writeSample("fence-inside.md", Buffer.from("围栏内正文", "utf8"));
+    const r = await parseDocFile(p, { roots: [TMP] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.kind).toBe("text");
+    expect(r.text).toContain("围栏内正文");
+  });
+
+  it("越界路径 + roots=[根] → DOC_PATH_OUT_OF_ROOT 且不读文件", async () => {
+    const outside = join(tmpdir(), "genie-doc-text-outside-fence.md");
+    const r = await parseDocFile(outside, { roots: [TMP] });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toContain("DOC_PATH_OUT_OF_ROOT");
+    expect(r.kind).toBe("md");
+ // 围栏在读文件之前:即便文件不存在也不能落到「读取失败」
+    expect(r.reason).not.toContain("读取失败");
+  });
+
+  it("不传 roots → 旧行为(越界路径也照旧解析)", async () => {
+    const p = writeSample("fence-legacy.md", Buffer.from("旧行为正文", "utf8"));
+    const r = await parseDocFile(p);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.text).toContain("旧行为正文");
+  });
+
+  it("roots 为空数组 → 旧行为", async () => {
+    const p = writeSample("fence-empty-roots.md", Buffer.from("空根正文", "utf8"));
+    const r = await parseDocFile(p, { roots: [] });
+    expect(r.ok).toBe(true);
+  });
+
+  it("双根命中任一 → 放行", async () => {
+    const p = writeSample("fence-two-roots.md", Buffer.from("双根正文", "utf8"));
+    const otherRoot = join(tmpdir(), "genie-doc-text-other-root");
+    const r = await parseDocFile(p, { roots: [otherRoot, TMP] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.text).toContain("双根正文");
+  });
+});

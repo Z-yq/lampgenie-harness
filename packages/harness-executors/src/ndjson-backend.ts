@@ -5,6 +5,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
+import {
+  confineSpec,
+  type ConfinementCapabilities,
+  type ConfinementFacts,
+  type ConfinementPolicy,
+  type ConfinementRunner,
+} from "./sandbox-confinement";
 
 export interface TaskSpec {
   taskId: string;
@@ -54,6 +61,21 @@ export interface SubagentBackend {
 type ChildState = "spawning" | "ready" | "running" | "done" | "failed" | "cancelled";
 
 /**
+ * 被沙箱门拒绝时的空句柄:没有子进程,所有控制动作都是安全 no-op。
+ * 返回句柄而不是 throw——调用方已从 result 事件拿到失败原因,throw 只会被当成宿主崩溃。
+ */
+function deniedHandle(taskId: string): SubagentHandle {
+  return {
+    taskId,
+    async cancel() {},
+    async steer() {
+      return false;
+    },
+    async respondPermission() {},
+  };
+}
+
+/**
  * NDJSON-RPC over stdio 子进程基类:
  * 一行一个 JSON;spawn→ready(超时判失败)→progress→result;cancel 三板斧。
  */
@@ -63,8 +85,51 @@ export abstract class NdjsonChildBackend implements SubagentBackend {
   abstract command(spec: TaskSpec): { cmd: string; args: string[]; env?: Record<string, string> };
   /** ready 等待超时。 */
   readyTimeoutMs = 5000;
+ /** 最近一次派发的沙箱事实(测试/观测用;被拒绝时也写入)。 */
+  lastConfinement?: ConfinementFacts;
+ /** 最近一次实际下发给子进程的 spawn 载荷(新增 confinement 字段的取证点)。 */
+  lastSpawnMessage?: Record<string, unknown>;
+
+ /** runner 归因:基类登记为 ndjson;echo 等子类覆写。 */
+  protected confinementKind(): ConfinementRunner {
+    return "ndjson";
+  }
+
+ /** 该 runner 的隔离能力快照。基类按四项全能力登记;echo 覆写为全 false。 */
+  protected confinementCapabilities(): ConfinementCapabilities {
+    return { fsIsolation: true, networkIsolation: true, processIsolation: true, envScrub: true };
+  }
+
+ /** 派发策略缺省全拒(需要放行时由子类/调用方显式给 policy)。 */
+  protected confinementPolicy(): ConfinementPolicy {
+    return {};
+  }
 
   async spawn(spec: TaskSpec, onEvent: (e: SubagentEvent) => void): Promise<SubagentHandle> {
+ // 沙箱门在 spawn 之前:声明不等于事实,违规的 spec 连子进程都不给起。
+    const verdict = confineSpec(
+      {
+        permissions: spec.permissions,
+        workdir: spec.workdir,
+        instructions: spec.instructions,
+ // 只往下传 spec 显式携带的 env 覆盖量;不把 process.env 塞进来(否则凭据面永远命中)
+        env: spec.env,
+      },
+      this.confinementPolicy(),
+      { backendKind: this.confinementKind(), capabilities: this.confinementCapabilities() },
+    );
+    this.lastConfinement = verdict.facts;
+    if (!verdict.ok) {
+      onEvent({
+        type: "result",
+        result: {
+          ok: false,
+          error: { kind: "spawn-failed", detail: `sandbox-confinement-denied: ${verdict.violations.join("; ")}`.slice(0, 300) },
+        },
+      });
+      return deniedHandle(spec.taskId);
+    }
+
     const { cmd, args, env } = this.command(spec);
     const child = spawn(cmd, args, {
       cwd: spec.workdir,
@@ -150,8 +215,18 @@ export abstract class NdjsonChildBackend implements SubagentBackend {
       onEvent = (e) => { onReady(e); origOnEvent(e); };
     });
 
-    // 发送 spawn 指令
-    await send({ type: "spawn", taskId: spec.taskId, instructions: spec.instructions, permissions: spec.permissions, budget: spec.budget, ...(spec.permissionRules ? { permissionRules: spec.permissionRules } : {}) });
+ // 发送 spawn 指令:confinement 是新增可选字段,老 child 忽略它照常工作。
+    const spawnMessage: Record<string, unknown> = {
+      type: "spawn",
+      taskId: spec.taskId,
+      instructions: spec.instructions,
+      permissions: spec.permissions,
+      budget: spec.budget,
+      ...(spec.permissionRules ? { permissionRules: spec.permissionRules } : {}),
+      confinement: verdict.facts,
+    };
+    this.lastSpawnMessage = spawnMessage;
+    await send(spawnMessage);
     await readyGate;
 
     const self = this;

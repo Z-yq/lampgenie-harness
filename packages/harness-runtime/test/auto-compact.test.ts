@@ -135,11 +135,11 @@ describe("auto-compact 诚实性(n1/n2:空摘要假压缩 + tail 丢失)", () =>
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("tool 配对:tail 首条是 tool 结果时 deriveMessages 不出现孤立 tool 消息(repairToolPairing 兜住)", async () => {
+  it("tool 配对:组对齐后 tail 不再从 tool 起切,deriveMessages 不出现孤立 tool 消息", async () => {
     const j = new MemoryJournal();
     j.append({ kind: "message.user", sessionId: "s", payload: { text: "跑工具" } });
     for (let i = 0; i < 5; i++) j.append({ kind: "message.agent", sessionId: "s", payload: { text: `步${i}` } });
-    // 被压进 head 的 assistant(toolCalls) + 它的结果:结果落在 tail 里而调用在 head 里
+ // assistant(toolCalls) + 它的结果:旧实现按任意下标切会把二者分居 head/tail(要修的就是这个)
     j.append({ kind: "message.agent", sessionId: "s", payload: { text: "", toolCalls: [{ id: "c-old", name: "read_file", arguments: "{}" }] } });
     j.append({ kind: "tool.result", sessionId: "s", payload: { toolCallId: "c-old", content: "结果" } });
     j.append({ kind: "message.agent", sessionId: "s", payload: { text: "收尾" } });
@@ -148,10 +148,12 @@ describe("auto-compact 诚实性(n1/n2:空摘要假压缩 + tail 丢失)", () =>
     expect(r.compacted).toBe(true);
     const done = j.readAll().find((e) => e.kind === "compact.done")!;
     const tail = (done.payload as { tail: { role: string }[] }).tail;
-    expect(tail[0]!.role).toBe("tool"); // 前提成立:tail 首条就是那个 tool 结果
+ // :tail 以 assistant 为组边界整组保留——首条是 assistant(tool_use),其 tool 回执随组一起进 tail
+    expect(tail[0]!.role).toBe("assistant");
+    expect(tail.some((m) => m.role === "tool")).toBe(true);
     const out = deriveMessages(j, "s");
-    // 孤立 tool 结果被 repairToolPairing 丢弃(其 assistant 调用已在 head 里被清掉)
-    expect(out.some((m) => m.role === "tool")).toBe(false);
+ // 组不再被切分 → tail 里没有无来源的 tool 消息(旧实现这里要靠 repairToolPairing 丢弃)
+    expect(out.some((m) => m.role === "tool")).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
 

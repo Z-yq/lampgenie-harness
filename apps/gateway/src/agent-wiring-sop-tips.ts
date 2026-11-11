@@ -88,3 +88,27 @@ export function sopTipText(phase: string, surface = false): string {
   const lines = (surface ? SOP_SURFACE_TIPS[phase] : undefined) ?? SOP_TIPS[phase] ?? [];
   return lines.join("\n");
 }
+
+/**
+ * 开工 brief 的三条停止规则(固定中文行,渲染侧永不裁剪)。
+ * 出处:本仓已验证的三类高耗循环——
+ * ①同一文件连改 3 次仍失败 = 假设错了(收尾纪律「同一逻辑最多 2 轮」的硬止损);
+ * ②patch 失败凭记忆重试 → 必然再失败(apply_patch 的上下文已漂移,必须重读);
+ * ③一步一个独立查询 → 每往返重发整段上下文(并行工具纪律)。
+ * 只放这三条:停止规则是刹车,不是清单;再多会被模型当背景噪声跳过。
+ */
+export const START_BRIEF_STOP_RULES: readonly string[] = [
+  "同一文件连续改 3 次仍失败:停手先问用户,别再换写法硬撞",
+  "patch/apply_patch 失败:先重读文件再改,不凭记忆重试",
+  "互不依赖的查询合批一次发,别一步一个往返",
+];
+
+/**
+ * 把 renderWorkStartBrief 的正文包成可直插稳定前缀(system / kickoff 块)的段落。
+ * 空正文=空串(调用方按空=不注入);正文本身已确定性,包装不再引入时间戳/随机数。
+ */
+export function renderStartProfileTip(brief: string): string {
+  const body = String(brief ?? "").trim();
+  if (!body) return "";
+  return "\n\n## 开工画像(稳定前缀:同输入同文本,勿重复探测)\n" + body;
+}

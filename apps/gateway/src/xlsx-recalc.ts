@@ -127,7 +127,7 @@ export function formulaCellsOf(xml: string): { ref: string; formula: string }[] 
 export function formulaTemplate(formula: string): string {
   return String(formula ?? "")
     .replace(/\s+/g, "")
-    // 引用形态:$A$1 / A1 / $A1 / A$1;排除 LOG10( 这类「函数名+数字」与小数。
+ // 引用形态:$A$1 / A1 / $A1 / A$1;排除 LOG10(这类「函数名+数字」与小数。
     .replace(/(?<![A-Za-z_0-9])(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})(?![\d.(])/g, "$1$2$3{r}");
 }
 

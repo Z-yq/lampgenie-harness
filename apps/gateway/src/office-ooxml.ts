@@ -12,6 +12,7 @@
  *  - 文件超 128MB 直接拒(防内存炸弹:整包要读进内存才能解)。
  */
 import JSZip from "jszip";
+import { sanitizeExternalTarget } from "./doc-probe.js";
 
 export interface OfficeRun { text: string; bold?: boolean; italic?: boolean; underline?: boolean; sizePt?: number; color?: string; revised?: "ins" | "del" }
 /** 渐变色标:pos 0..1(对应 a:gs@pos/100000),color "#RRGGBB"。 */
@@ -63,6 +64,29 @@ export type OfficeAst =
 export const OFFICE_MAX_BYTES = 128 * 1024 * 1024;
 /** 可预览扩展名(小写带点)。 */
 export const OFFICE_DOC_EXT = new Set([".pptx", ".docx"]);
+
+/** 外链协议统计(供 doc-text 写 note;不改 OfficeAst 必需字段)。 */
+export interface ExternalLinkStats {
+  allowed: number;
+  denied: number;
+  deniedTargets: string[];
+}
+
+let externalLinkStats: ExternalLinkStats = { allowed: 0, denied: 0, deniedTargets: [] };
+
+/** 清空外链统计(parseOffice 入口调用:统计只反映本次解析)。 */
+export function resetExternalLinkStats(): void {
+  externalLinkStats = { allowed: 0, denied: 0, deniedTargets: [] };
+}
+
+/** 读取外链统计副本:http/https 计入 allowed,危险协议计入 denied。 */
+export function getExternalLinkStats(): ExternalLinkStats {
+  return {
+    allowed: externalLinkStats.allowed,
+    denied: externalLinkStats.denied,
+    deniedTargets: [...externalLinkStats.deniedTargets],
+  };
+}
 /** /ide/office/media 的 part 白名单前缀(防路径穿越:只允许这两棵树下的媒体文件)。 */
 const OFFICE_MEDIA_PART_RE = /^(?:ppt|word)\/media\/[A-Za-z0-9._-]+$/;
 
@@ -75,6 +99,7 @@ export async function parseOffice(
   opts?: { docPath?: string; pid?: string },
 ): Promise<OfficeAst> {
   const e = String(ext || "").toLowerCase();
+  resetExternalLinkStats();
   if (!OFFICE_DOC_EXT.has(e)) throw new Error("不支持的文档类型:仅 .pptx/.docx 可预览");
   if (!buf || buf.length === 0) throw new Error("不是有效的 OOXML 文件");
   if (buf.length > OFFICE_MAX_BYTES) throw new Error("文件过大(>128MB),不支持预览");
@@ -524,7 +549,18 @@ function pptxRelMap(xml: string | undefined): Record<string, string> {
     const target = attrOf(rel, "Target");
     const mode = attrOf(rel, "TargetMode");
     if (!id || !target) continue;
-    if (mode && mode.toLowerCase() === "external") continue; // 外链不同步(不产出 src)
+    if (mode && mode.toLowerCase() === "external") {
+ // 外链不同步(不产出 src,既有可见内容不变),但必须按协议白名单分类:
+ // 只认 http/https;javascript:/data:/file: 等危险协议丢弃并计数,供上层写 note/审计。
+      const verdict = sanitizeExternalTarget(target);
+      if (verdict.allowed) {
+        externalLinkStats.allowed++;
+      } else {
+        externalLinkStats.denied++;
+        if (externalLinkStats.deniedTargets.length < 20) externalLinkStats.deniedTargets.push(target);
+      }
+      continue;
+    }
     out[id] = target;
   }
   return out;

@@ -5,11 +5,14 @@
 import type { Journal } from "@lampgenie/core";
 //  流中断安全锚点恢复:锚点计算 / 可重试判据 / 作废落账 / 冷恢复过滤(纯函数,见 stream-anchor.ts)。
 import { classifyStreamRetry, filterDiscarded, findSafeAnchor, markDiscard, STREAM_REOPEN_MAX, type SafeAnchor } from "./stream-anchor";
+// 时间旅行「只删对话」:区间口径与消息类 kind 集合由纯逻辑层统一(两端共用同一份定义,防漂移)。
+import { TRUNCATABLE_MESSAGE_KINDS } from "./time-travel";
 import {
   microcompactMessages, shouldAggressivePrune, ASCII_TOKENS_PER_CHAR,
   GROWTH_BUDGET_RATIO, GROWTH_BUDGET_MIN_TOKENS,
   type MicrocompactConfig, type MicrocompactPolicyState,
 } from "./microcompact";
+import { AGE_CODES, ageMicrocompact } from "./microcompact-age";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio)。
 import { estimateMessagesTokens as estimateMessagesTokensUnified } from "./token-estimate";
 // 上下文构成归因(只观测,不参与闸门/压缩决策)。
@@ -26,10 +29,14 @@ import {
   type ModelScoringMode,
 } from "./model-scoring";
 import { buildReadFilesReminder } from "./read-file-state";
+import { renderSystemReminder } from "./reminder-source";
 import { createInjectGate, type InjectGate } from "./inject-gate";
 import { spillToolResult } from "./tool-result-spill";
 import { intakeToolResult, shouldIntake, type BigIntakeConfig, type IntakeMeta } from "./big-intake";
 import { normalizeToolArgs, renderToolArgError } from "./tool-args";
+import { envelopeFingerprint } from "./usage-envelope";
+// 双投影:展示载荷归一化(纯逻辑);loop 只做透传,模型可见路径(content/modelContent)逐字不变。
+import { normalizeToolDisplay, type ToolDisplayPayload } from "./tool-display";
 // 工具注册身份治理:未知工具按「前缀 + 编辑距离」给可达候选(纯函数,零依赖模块)。
 import { describeUnknownTool } from "./tool-identity";
 import {
@@ -38,12 +45,21 @@ import {
   resultHashOf,
   type GuardKind,
 } from "./tool-loop-guard";
+// 工具批次并发调度(纯逻辑):安全调用之间再做路径重叠检测,同路径调用拆串行屏障。
+import { mergeBatchResults, planToolBatch } from "./tool-batch";
 import {
   isImageBudgetError,
   offloadImages,
   offloadProjectionPreserved,
   type OffloadedImage,
 } from "./image-offload";
+// 请求级媒体预算(纯逻辑):图片字节总量超限时确定性省略旧图,受保护媒体优先保留。
+import {
+  applyMediaBudget,
+  mediaBudgetNote,
+  MEDIA_BUDGET_CODES,
+  type MediaBudgetAccounting,
+} from "./media-budget";
 // 系统上下文代:三态 reconcile / 单块合成 / 代重开。指纹实现随之迁到该模块,此处 re-export
 // 保持既有导入面不变。
 import {
@@ -55,6 +71,10 @@ import {
 } from "./system-context-generation";
 //  阶段遥测(纯逻辑,无 IO):turn 内 llm/tools 阶段 span + 单条 telemetry.phase 汇总。
 import { PhaseRecorder, buildTurnTelemetry, createTelemetryClock, type PhaseToken } from "./phase-telemetry";
+// 原生元数据降级 + overflow 单次守卫(纯逻辑,零 IO;见 native-metadata.ts)。
+import { OverflowOnceGuard, shouldReplayNativeMetadata } from "./native-metadata";
+import { ModelRequestError } from "./model-error-policy";
+import { markAnnounced, shouldAnnounce, stableHash } from "./announce-once";
 
 export { sectionSha };
 /** 消息(对齐 dsh llm 词汇表的最小子集)。 */
@@ -119,6 +139,8 @@ export interface ToolExecOutcome {
   error?: ToolExecError;
  /** 循环护栏:只改「模型可见文本」(结果去重 stub),journal tool.result 仍存 content 原文。 */
   modelContent?: string;
+ /** 展示投影:只给面板/回放(deriveMessages 不读),绝不进模型上下文。 */
+  display?: ToolDisplayPayload;
 }
 
 /** 工具取消文案(executeTracked 的取消分支以字符串而非抛错返回,execOne 归一时复用同一定义)。 */
@@ -368,13 +390,28 @@ export interface AgentLoopOptions {
   toolTimeoutMs?: number;
  /** 压缩钩子( §4.2/ 修复):每 step 前调用,超阈值由实现方触发 autoCompact。
    * 走注入而非直接 import,避免 loop↔auto-compact 循环依赖(auto-compact 引 deriveMessages)。 */
-  compactHook?: (journal: Journal, sessionId: string) => Promise<void>;
+ /** 第三参(可选:{reason:"overflow"} = provider 报 context_exceeded 的强制压缩一次;
+ * 不传 = 旧行为逐字不变。 */
+  compactHook?: (journal: Journal, sessionId: string, opts?: { reason?: "overflow" }) => Promise<void>;
  /** microcompact 配置(对齐 ZCode 阈值触发):thresholdTokens > 0 时启用组清理
    * (保留最近 keepRecent 组,其余清为可重读占位;minSavings 不足回滚);未传=只走超大结果
    * 占位(旧行为,零变化)。阈值由装配方用 autoCompact 阈值推导(buildDefaultMicrocompactThreshold)。
  * cache-aware 批量/滞后策略默认开启(loop 每步传 policyState);
    * `cacheAware:false` = 恢复旧的每步增量清(仅用于对照实验)。 */
   microcompact?: MicrocompactConfig;
+ /** 按龄零模型微压缩:每次 provider 请求前,若会话「闲置」够久(now - 会话最后事件时间
+ * ≥ idleMs),丢最老的完整对话组(user+assistant+tool 链不拆),保留最近 keepRecentGroups 组与
+ * 全部 system;估算收益 < minSavingsTokens(缺省 256)整体回滚。**ephemeral**:结果只替换本次
+ * 请求(reqMessages 局部),不改历史/journal/derive → 前缀断点不被无记录改写。
+ * 不配置=行为逐字不变(旧构造点/测试零影响);`enabled:false` = 显式关。 */
+  ageMicrocompact?: {
+    enabled?: boolean;
+    idleMs?: number;
+    maxAgeMs?: number;
+    keepRecentGroups?: number;
+    minSavingsTokens?: number;
+    now?: () => number;
+  };
   /** 写时定形 spill(2026-11 token 优化轮 02,对齐 dsh spill-policy):配置后,工具结果**进历史
    * 之前**超阈即落盘并换成「头+标记+尾+落盘路径+回读指引」,之后永不改写——取代读时改写
  * (microcompact 每步重写历史中段 → 提示前缀逐字变化 → prompt cache 全量失效,经验证 uncached
@@ -396,6 +433,11 @@ export interface AgentLoopOptions {
       skipped: { messageIndex: number; imageIndex: number; reason: string }[];
     }>;
   };
+ /** 请求级媒体预算:请求内图片字节总量超限时按确定性顺序省略旧图(保护最后一条含图消息
+ * 与最近 protectRecent 张)。缺省 maxBytes=40MiB / protectRecent=4;不配置=默认预算生效,
+ * 未超预算时请求字节逐字不变。省略账目落 journal(custom{what:"media.budget"}),提示为
+ * ephemeral(不进历史);受保护媒体自身超预算 → 本步显式报错,不发必然被拒的请求。 */
+  mediaBudget?: { maxBytes?: number; protectRecent?: number };
  /** 大结果「智能入上下文」闸门:工具结果进 journal 之前,超过**本步剩余预算**
    * 且 ≥ 绝对下限(4k tok)时,chunk 切分 + 本地 8105 选块(±小模型四段摘要),全文落盘
    * `.genie/tool-dumps/<callId>.txt`,上下文里只放「选块/摘要 + 全文已落盘指针」。
@@ -481,6 +523,10 @@ export interface AgentLoopOptions {
     taskId?: string; step: number; turn: number; phase?: string; subgoal: string;
     tokensSpent: number; errors: number; steps: number; tools: Record<string, number>;
   }) => void;
+ /** 时间旅行:每步在「模型已返回 toolCalls、工具尚未执行」时回调一次(本步工具将触碰的文件
+ * 由装配方从 calls 里提取)。**必须 await**:快照读盘要赶在工具改动文件之前完成;回调异常在
+ * loop 侧吞掉(时间旅行是旁路,绝不打断工具执行)。缺省不配置=零行为变化。 */
+  onStepToolPlan?: (p: { turn: number; step: number; calls: ToolCall[] }) => void | Promise<void>;
  /** 流式回调:LLM 增量与工具起止的旁路通知;不落 journal(持久层语义不变)。 */
   onStream?: (e: AgentStreamEvent) => void;
  /** LLM 调用轨迹回调:每 step chat 完成后上报 LlmCallTrace(全量 messages+响应);
@@ -755,11 +801,47 @@ export function buildTodoReminder(journal: Journal, sessionId: string): string |
   const open = items.filter((i) => i.status !== "completed");
   if (open.length === 0) return null;
   const lines = open.slice(0, 8).map((i) => `- [${i.status === "in_progress" ? "进行中" : "待办"}] ${i.content}`);
-  return ["<system-reminder>", "当前工作计划还有未完成项:", ...lines, "进度有变化时用 todo_write 更新状态;全部完成前不要提前收尾。", "</system-reminder>"].join("\n");
+ // 提醒来源登记:文本形态由登记表统一渲染,逐字节与旧拼接一致。
+  const body = ["当前工作计划还有未完成项:", ...lines, "进度有变化时用 todo_write 更新状态;全部完成前不要提前收尾。"].join("\n");
+  const rendered = renderSystemReminder("todo", body);
+  return rendered.ok ? rendered.text : null;
+}
+
+/** 一条「只删对话」区间:(boundary, until) 开区间内的消息类事件不进上下文。 */
+interface TruncateRange {
+  boundary: number;
+  until: number;
+}
+
+/**
+ * 扫出本会话全部 session.truncate 区间(custom 事件 payload.type==="session.truncate")。
+ * 口径:
+ * - 只认 boundarySeq 为**有限正整数**的截断事件(脏数据静默忽略,不改变旧行为);
+ * - until = 该 custom 事件自身 seq(落盘序即右端点,后追加的消息天然落在区间外);
+ * - ID 幂等:同幂等键重复 append 在 journal 层就被吞掉,这里无所谓重复区间(重复也幂等)。
+ * 读流异常 → 空数组(derive 绝不能因旁路能力抛错)。
+ */
+function sessionTruncateRanges(journal: Journal, sessionId: string): TruncateRange[] {
+  const ranges: TruncateRange[] = [];
+  try {
+    for (const e of journal.readAll()) {
+      if (e.sessionId !== sessionId || e.kind !== "custom") continue;
+      const p = (e.payload ?? {}) as { type?: unknown; boundarySeq?: unknown };
+      if (p.type !== "session.truncate") continue;
+      const b = Number(p.boundarySeq);
+      if (!Number.isFinite(b) || b <= 0 || !Number.isInteger(b)) continue;
+      const seq = Number(e.seq);
+      if (!Number.isFinite(seq)) continue;
+      ranges.push({ boundary: b, until: seq });
+    }
+  } catch {
+    return [];
+  }
+  return ranges;
 }
 
 /** 从 journal 重建消息列表(deriveMessages)。 */
-export function deriveMessages(journal: Journal, sessionId: string): Message[] {
+export function deriveMessages(journal: Journal, sessionId: string, opts?: { currentModel?: string }): Message[] {
   const out: Message[] = [];
  // 音频回放收敛:journal 全量落音频,但 derive 只保留**最新一条**带音频的 user 消息——
   // 历史轮的音频降级为其文本占位(语音轮的占位即「(语音输入)」),防多轮后全量回放请求被 b64 撑爆。
@@ -778,10 +860,19 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
    *  currentTurn 恒 0 会让「turn >= lastTurn」恒真 → 一张图都不回收(静默退化成永不裁剪,
    *  迟早把请求顶到端点上限),见下方回收分支的旧口径兜底。 */
   let sawTurnBoundary = false;
+ // 时间旅行「只删对话」:先扫出本会话全部 session.truncate 区间 (boundary, T),T=该 custom 事件自身 seq。
+ // 先扫再用是为了「区间与迭代顺序无关」:区间来自**全量**事件流(含迭代中会读到的截断事件本身),
+ // 多条 truncate 各自成区间、同时生效(不是只看最后一条)。无 truncate 事件 → 空数组 → 旧行为逐字节不变。
+  const truncateRanges = sessionTruncateRanges(journal, sessionId);
  //  冷恢复过滤:被 stream.attempt.discarded 作废的 attemptId 的 message.agent 不进上下文;
   // 已提交的 tool.result 原样保留;无作废标记时 filterDiscarded 原样返回(未作废会话逐字节不变)。
   for (const e of filterDiscarded(journal.readAll())) {
     if (e.sessionId !== sessionId) continue;
+ // truncate 只作用于消息类事件:观测/审计事件(turn.start/step.start/custom…)照常进流,
+ // 否则 currentTurn/currentStep 的推演会断裂,vision/压缩口径跟着变。
+    if (truncateRanges.length > 0
+      && TRUNCATABLE_MESSAGE_KINDS.has(e.kind)
+      && truncateRanges.some((r) => r.boundary < e.seq && e.seq < r.until)) continue;
     const p = e.payload as Record<string, unknown>;
     switch (e.kind) {
       case "turn.start":
@@ -808,15 +899,28 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
         if (audio && typeof audio.data === "string" && audio.data) audioIdx.push(out.length - 1);
         break;
       }
-      case "message.agent":
+      case "message.agent": {
+ // 只有「同模型 + 无失败标记」的消息才回放 provider 原生元数据(reasoning 等);
+ // 否则降级为纯文本——模型切换后硬回放旧模型的原生字段会被端点拒/被错误词表解释。
+ // opts.currentModel 未传 = 旧行为逐字不变(reasoning 照带)。
+        const messageModel = typeof p.model === "string" && p.model ? p.model : undefined;
+        const messageHadError = p.error !== undefined || p.failed === true || p.incomplete === true;
+        const replay = opts?.currentModel === undefined
+          ? true
+          : shouldReplayNativeMetadata({
+              ...(messageModel ? { messageModel } : {}),
+              currentModel: opts.currentModel,
+              messageHadError,
+            }).replay;
         out.push({
           role: "assistant",
           content: String(p.text ?? ""),
           toolCalls: p.toolCalls as ToolCall[] | undefined,
           // thinking 模式历史必须回传 reasoning_content(2026-11):旧 journal 无该字段=不带。
-          ...(typeof p.reasoning === "string" && p.reasoning ? { reasoning: p.reasoning } : {}),
+          ...(replay && typeof p.reasoning === "string" && p.reasoning ? { reasoning: p.reasoning } : {}),
         });
         break;
+      }
       case "tool.result": {
  // 循环护栏:模型可见文本优先取 payload.modelContent(结果去重 stub);journal 原文仍在 content。
         out.push({ role: "tool", toolCallId: String(p.toolCallId), content: String(p.modelContent ?? p.content ?? "") });
@@ -935,6 +1039,29 @@ export function deriveMessages(journal: Journal, sessionId: string): Message[] {
     m.content = "[视觉注入] (历史图片已从上下文移除;需要再看用 view_image)";
   }
   return repairToolPairing(out);
+}
+
+/**
+ * 本 turn 已落账的 durable 工具输出 token 粗估( overflow 守卫用;只判 0/非0)。
+ * 从会话事件尾部反向扫,到本 turn 的 turn.start 停;tool.result 是按模型可见文本计。
+ */
+function durableToolOutputTokens(journal: Journal, sessionId: string, turn: number): number {
+  let tokens = 0;
+  const evs = journal.readSession(sessionId);
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const e = evs[i]!;
+    if (e.kind === "turn.start") {
+      const t = (e.payload as { turn?: unknown }).turn;
+ // 本 turn 已扫完(含更早 turn 的 turn.start)即停。
+      if (typeof t === "number" && t === turn) break;
+      if (typeof t === "number" && t !== turn) break;
+    }
+    if (e.kind !== "tool.result") continue;
+    const p = e.payload as { content?: unknown; modelContent?: unknown };
+    const text = typeof p.modelContent === "string" ? p.modelContent : typeof p.content === "string" ? p.content : "";
+    tokens += Math.ceil(text.length * ASCII_TOKENS_PER_CHAR);
+  }
+  return tokens;
 }
 
 /**
@@ -1144,6 +1271,8 @@ export class AgentLoop {
   private totalErrors = 0;
   /** 注入闸(J1):ephemeral 提醒的 ≥10k token 间隔控制,跨 step 共享一份水位表。 */
   private gate: InjectGate = createInjectGate();
+ /** :overflow 单次守卫(跨 turn 复用:同一 turn 只压一次,surface 真缩小才允许下一 turn 再压)。 */
+  private readonly overflowGuard = new OverflowOnceGuard();
   /** 轨迹统计(J1;每 turn 起点清零):工具类别计数 / 调用总数 / 并行步数 / 已统计步数 /
    *  重试次数(emptyTurnRetried) / 上次落卡 step / 上次落卡的 phase / 本轮已落条数 / 摘要行。 */
   private trajToolCounts = new Map<string, number>();
@@ -1395,6 +1524,33 @@ export class AgentLoop {
       sources.push({ key, codec: TEXT_CODEC, load: async () => ({ status: "absent" as const }) });
     }
     const { block } = await reconcileSystemContext(state, sources);
+    if (block.length === 0) return block; // 无节变化:零追加(与公告已发出同路径,均返回空串)
+ //  announce-once:同一版本(内容指纹相同)在**最后一次真压缩边界之后**已公告过就不再重复;
+ // 压缩重建 canonical history 后允许再公告一次;公告本身落 journal(可审计),不靠易失内存。
+ // 指纹用 delta 文本的 sha256,key 由 announceKeyOf 再派生(见 announce-once.ts)。
+    const decision = shouldAnnounce({
+      events: journal.readSession(sessionId),
+      sessionId,
+      kind: "system-section-update",
+      payloadHash: stableHash(block),
+    });
+    if (!decision.ok || !decision.announce) return "";
+    try {
+ // 追加公告事件(与节增量同一步只落一次;markAnnounced 对边界后已有同 key 公告返回空)。
+      for (const ev of markAnnounced(journal.readSession(sessionId), sessionId, {
+        kind: "system-section-update",
+        key: decision.key,
+        at: Date.now(),
+        summary: block.slice(0, 120),
+      })) {
+        journal.append({
+          kind: "custom",
+          sessionId,
+          payload: ev.payload,
+          idempotencyKey: `runtime.announce.${sessionId}.${decision.key}.${ev.seq}`,
+        });
+      }
+    } catch { /* 落账失败:放行本次注入,下轮按「未见公告」重试 */ }
     return block;
   }
 
@@ -1592,6 +1748,9 @@ export class AgentLoop {
     }
  // turn 边界(dsh turn/start 对应物;reason 落 turn.end)
     const turn = ++AgentLoop.turnCounter;
+ // 每 turn 边界重置 overflow 守卫(上一 turn 压缩后 surface 未缩的停滞标记不跨 turn 判死新 turn;
+ // 新 turn 仍只允许压缩一次 + 重放,同 turn 二次 overflow 依旧终态)。
+    this.overflowGuard.resetForTurn();
  //  阶段遥测(turn 级,只观测零决策变更):clock/recorder/turnT0 + 汇总累加槽。
     // 每 turn 至多一条 telemetry.phase,任何异常静默(旁路不得打断主链)。
     const phaseClock = createTelemetryClock();
@@ -1616,7 +1775,9 @@ export class AgentLoop {
 
     const maxSteps = this.opts.maxSteps ?? 10;
     let finalText = "";
-    let turnReason: "completed" | "max-steps" | "aborted" | "cancelled" | "stopped" = "completed";
+ // 末步耗尽不再是「直接截停」,新终态 budget-exhausted(已做一次无工具收尾请求);
+ // max-steps 保留在联合里只为兼容旧 journal/旧消费方按 reason 字符串读历史。
+    let turnReason: "completed" | "max-steps" | "budget-exhausted" | "aborted" | "cancelled" | "stopped" = "completed";
  // 空响应防抖( MB 会话注意):上游可 200-正常返回「零内容+零工具」(经验证 603s 挂流
     // 0 output token 后 resolve)——空终态几乎总是传输/上游抖动而非模型决策,重试一次再接受。
     let emptyTurnRetried = false;
@@ -1632,7 +1793,14 @@ export class AgentLoop {
         // 经 microcompactMessages 读取侧生效;此前每条工具结果写一对无摘要 compact.* 事件,
         // 被 deriveMessages 当真压缩边界硬截断(模型失忆)+面板渲染「上下文已压缩」+闸门清零。
         if (this.opts.compactHook) await this.opts.compactHook(journal, sessionId);
-        const derived = deriveMessages(journal, sessionId);
+ // 每步按 t0 快照解析「本次请求实际要用的模型」(与下方 llmVendor.modelName ?? model 同口径);
+ // 模型切换后旧模型的原生元数据(reasoning/thinking)不能回放给新模型,正常请求也要按当前模型降级。
+        const llmModelVendor = this.opts.llm as { model?: string; modelName?: string };
+        const modelForDerive = llmModelVendor.modelName ?? llmModelVendor.model;
+ // provider 无模型名(=undefined)时不传:deriveMessages 走旧行为,逐字不变。
+        const derived = modelForDerive !== undefined
+          ? deriveMessages(journal, sessionId, { currentModel: modelForDerive })
+          : deriveMessages(journal, sessionId);
  // 大结果闸门:chunk 相关性判断需要一个「当前任务目标」,与 model-scoring 同口径
         // (去掉纪律卡、跳过 [系统提醒]);每步刷新,execOne 里直接用。
         this.stepGoal = goalFromMessages(derived);
@@ -1973,12 +2141,12 @@ export class AgentLoop {
           if (remainMs <= (this.opts.deadlineWarnMs ?? 120_000)) {
             this.budgetWarned = true;
             const remainMin = Math.max(1, Math.round(remainMs / 60_000));
-            messages.push({
-              role: "user",
-              content: "<system-reminder>时间盒仅剩约 " + remainMin + " 分钟:立即停止继续检索/探路,"
-                + "基于已获得的信息输出任务书要求的最终结论(事实清单/文件:行号/结论与依据)。"
-                + "不要再发起新的搜索;未覆盖到的部分如实标注「未完成」。</system-reminder>",
-            });
+ // 提醒来源登记:inline 形态沿用旧单行排版(逐字节等价),body 已自清洗故不重复转义。
+            const timeboxBody = "时间盒仅剩约 " + remainMin + " 分钟:立即停止继续检索/探路,"
+              + "基于已获得的信息输出任务书要求的最终结论(事实清单/文件:行号/结论与依据)。"
+              + "不要再发起新的搜索;未覆盖到的部分如实标注「未完成」。";
+            const timeboxReminder = renderSystemReminder("timebox", timeboxBody, { escapeNested: false, inline: true });
+            if (timeboxReminder.ok) messages.push({ role: "user", content: timeboxReminder.text });
           }
         }
         const llmT0 = Date.now();
@@ -2019,6 +2187,77 @@ export class AgentLoop {
         let imageOffloadRetried = false;
         /** 是否真的做过 offload 并换过请求(只有它为真,第二次失败才附「图片已 offload」。) */
         let imageOffloadApplied = false;
+ // 按龄零模型微压缩(ephemeral):每次 provider 请求前判断会话是否「闲置」够久。
+ // 闲置够久时丢最老的完整对话组(不拆 user+assistant+tool 链),收益 < 256 token 整体回滚。
+ // 只替换本次请求的 reqMessages:历史/journal/derive 逐字不变(压缩不写盘、不改前缀断点);
+ // 未配置/未触发/回滚 = 请求逐字不变(零行为变化)。时间取**会话最后一条事件**的 time
+ // (不猜、不读墙钟之外的东西);连续运行的 turn 里它≈now → SKIPPED_NOT_IDLE,正好零变化。
+        {
+          const ageCfg = this.opts.ageMicrocompact;
+          if (ageCfg && ageCfg.enabled !== false) {
+            let lastEventAt: number | undefined;
+            try {
+              const evs = journal.readSession(sessionId);
+              lastEventAt = evs.length > 0 ? evs[evs.length - 1]!.time : undefined;
+            } catch { lastEventAt = undefined; }
+            const aged = ageMicrocompact(reqMessages, {
+              now: (ageCfg.now ?? Date.now)(),
+              ...(lastEventAt !== undefined ? { lastEventAt } : {}),
+              ...(ageCfg.idleMs !== undefined ? { idleMs: ageCfg.idleMs } : {}),
+              ...(ageCfg.maxAgeMs !== undefined ? { maxAgeMs: ageCfg.maxAgeMs } : {}),
+              ...(ageCfg.keepRecentGroups !== undefined ? { keepRecentGroups: ageCfg.keepRecentGroups } : {}),
+              ...(ageCfg.minSavingsTokens !== undefined ? { minSavingsTokens: ageCfg.minSavingsTokens } : {}),
+            });
+            if (aged.code === AGE_CODES.OK) reqMessages = aged.messages;
+ // 只在「真的做过裁剪判定」时留痕(OK/ROLLED_BACK):每步都记 NOT_IDLE 会把 journal 灌噪声。
+            if (aged.code === AGE_CODES.OK || aged.code === AGE_CODES.ROLLED_BACK) {
+              try {
+                journal.append({
+                  kind: "custom",
+                  sessionId,
+                  payload: {
+                    what: "microcompact.age",
+                    turn,
+                    step,
+                    code: aged.code,
+                    prunedGroups: aged.prunedGroups,
+                    savingsTokens: aged.savingsTokens,
+                  },
+                });
+              } catch { /* 留痕失败不阻塞本步 */ }
+            }
+          }
+        }
+ // 请求级媒体预算:每次发往 provider 的请求都先过一道预算——
+ // 请求内图片字节总量超限时按确定性顺序省略旧图(保护最后一条含图消息 + 最近 N 张)。
+ // 省略账目落 journal(custom,deriveMessages 不读 → 零上下文影响);提示作为 ephemeral
+ // user 消息只进本步请求,不进历史。未超预算=reqMessages 逐字不变(零行为变化)。
+        {
+          const budgeted = applyMediaBudget(reqMessages, this.opts.mediaBudget ?? {});
+          const recordMediaBudget = (accounting: MediaBudgetAccounting, code: string) => {
+            try {
+              journal.append({
+                kind: "custom",
+                sessionId,
+                payload: { what: "media.budget", turn, step, code, ...accounting },
+              });
+            } catch { /* 留痕失败不阻塞本步 */ }
+          };
+          if (budgeted.code === MEDIA_BUDGET_CODES.OMITTED) {
+            reqMessages = budgeted.messages;
+            recordMediaBudget(budgeted.accounting, budgeted.code);
+            const note = mediaBudgetNote(budgeted.accounting);
+            if (note) reqMessages = [...reqMessages, { role: "user", content: note }];
+          } else if (budgeted.code === MEDIA_BUDGET_CODES.PROTECTED_OVER_BUDGET) {
+ // 受保护媒体自身超预算:显式失败,绝不静默发一个必然被 provider 拒的请求。
+            recordMediaBudget(budgeted.accounting, budgeted.code);
+            const mib = (n: number) => (n / (1024 * 1024)).toFixed(1);
+            throw new Error(
+              `[媒体预算] 受保护图片超预算:请求图片共 ${mib(budgeted.accounting.totalBytes)} MB,`
+              + `预算 ${mib(this.opts.mediaBudget?.maxBytes ?? 40 * 1024 * 1024)} MB;本步不发超限请求`,
+            );
+          }
+        }
  // :本 step 的 llm 阶段(provider 重试/视觉自愈/锚点重开都算同一段,不拆 span)。
         const phaseLlmToken: PhaseToken = phaseRecorder.begin("llm");
         for (;;) {
@@ -2139,11 +2378,51 @@ export class AgentLoop {
               });
             } catch { /* 持久化失败只告警 */ }
           }
+ // provider 报 context_exceeded → 本 turn 只允许「强制压缩一次 + 原地重放同一请求」。
+ // 第二次 overflow / 本 turn 已有 durable 工具输出 → 终态失败,不死循环压缩:
+ // 压缩会丢原始消息,反复压只会摘要套摘要,把真实事实全抹掉。
+          if (err instanceof ModelRequestError && err.kind === "context_exceeded") {
+            const durableOutputTokens = durableToolOutputTokens(journal, sessionId, turn);
+            const guard = this.overflowGuard.next({ turn, durableOutputTokens, overflow: true });
+            if (guard.action === "compact-and-replay") {
+              try {
+                journal.append({
+ // EventKind 已登记本 kind;deriveMessages 走 kind 白名单,不读本事件 → 零上下文影响。
+                  kind: "compact.overflow",
+                  sessionId,
+                  payload: { action: guard.action, code: guard.code, turn, step },
+                });
+              } catch { /* 留痕失败不阻塞重放 */ }
+              if (this.opts.compactHook) {
+                try {
+                  await this.opts.compactHook(journal, sessionId, { reason: "overflow" });
+                } catch { /* 压缩失败:照旧重放一次;仍超限则下一次 overflow 即终态 */ }
+              }
+ // 重取 deriveMessages(压缩可能已写 compact.done 边界)并用同一 step 重放一次;
+ // system 头沿用本步已定案的 node0(重放请求必须与压缩前同一 request,不能丢系统提示)。
+              const replayDerived = deriveMessages(journal, sessionId, { currentModel: modelAtStart });
+              const replaySystem = messages[0]?.role === "system"
+                ? messages[0]
+                : { role: "system" as const, content: this.opts.system };
+              reqMessages = [replaySystem, ...replayDerived];
+              this.overflowGuard.noteSurfaceTokens(estimateMessagesTokensUnified(reqMessages));
+              attemptId = `${sessionId}:${turn}:${step}:${++this.attemptSeq}`;
+              continue;
+            }
+ // terminal:落到下方轨迹留痕并抛原错误。
+          }
  // 失败调用也落轨迹——旧实现只在成功后上报,子代理 8 路 fetch failed
           // 在轨迹里完全不可见,只剩一句无 cause 的 finalText。
+ // 信封指纹(2026-11 usage-envelope):给本次请求算一个确定性 key,统计侧据此判断
+ // 「这条请求是不是刚发过」。try/catch 包裹——指纹算不出来就省略该键,绝不阻塞轨迹。
+          let envKey: Record<string, string> = {};
+          try {
+            envKey = { envelope: envelopeFingerprint({ model: modelAtStart ?? "", messages, tools: advertised }) };
+          } catch { /* 计算失败省略该键,不阻塞 trace */ }
           try {
             this.opts.llmTrace?.({
               sessionId, turn, step,
+              ...envKey,
               ...(modelAtStart ? { model: modelAtStart } : {}),
               durationMs: Date.now() - llmT0,
               ...(ttftMs !== undefined ? { ttftMs } : {}),
@@ -2167,6 +2446,7 @@ export class AgentLoop {
                 sessionId,
                 payload: {
                   turn, step,
+                  ...envKey,
                   ...(modelAtStart ? { model: modelAtStart } : {}),
                   ms: Date.now() - llmT0,
                   error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
@@ -2248,10 +2528,17 @@ export class AgentLoop {
         });
 
  // 轨迹旁路(全量 messages+响应落装配方);try 包裹=轨迹故障绝不打断 agent 主链。
+ // 信封指纹(成功路径,2026-11 usage-envelope):messages 用降载后的 traceMsgs(与实际留痕
+ // 正文同源,避免把几十 KB 的音频/图片占位前的 b64 灌进哈希);同样 try/catch,算不出就省略。
+        let envKey: Record<string, string> = {};
+        try {
+          envKey = { envelope: envelopeFingerprint({ model: modelAtStart ?? "", messages: traceMsgs, tools: advertised }) };
+        } catch { /* 计算失败省略该键,不阻塞 trace */ }
         try {
           const p = this.opts.llm as { model?: string; modelName?: string; describe?: () => Record<string, unknown> };
           this.opts.llmTrace?.({
             sessionId, turn, step,
+            ...envKey,
             // 模型名用 t0 快照(modelAtStart):provider.modelName 是 getter,调用途中热切换后
  // 再读会变成「切换后的模型」,与本次请求实际用的不符。
             ...(modelAtStart ? { model: modelAtStart } : {}),
@@ -2329,6 +2616,69 @@ export class AgentLoop {
           break;
         }
 
+ // 预算耗尽优雅收束:旧实现走到末步仍把本步工具真实执行完再截停——
+ // 用户拿到的是「工具刚跑完、模型没机会交代」的半截结果,且最后一步白烧一次工具预算。
+ // 新口径:末步**不执行**任何新工具,先给每个未执行的 call 补合成 tool.result(assistant 的
+ // toolCalls 与 tool 消息必须成对,否则用户下一轮追问时历史会被 provider 以 tool-pairing
+ // 拒掉),再发一次**禁用工具**的收尾请求,让模型只用文字交代「已完成/未完成/下一步」。
+        if (step === maxSteps - 1) {
+ // 合成结果文案固定:模型与用户在历史里读到同一句(不是「假装工具跑过」)。
+          const notRun = `[预算耗尽] 本步工具未执行：已达步数上限 ${maxSteps}，收尾阶段不再调用工具；如需继续请拆小任务或调大 maxSteps。`;
+          for (const call of res.toolCalls) {
+            journal.append({
+              kind: "tool.result",
+              sessionId,
+              payload: { toolCallId: call.id, name: call.name, content: notRun, durationMs: 0, turn, step },
+            });
+          }
+          journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "budget-exhausted" } });
+ // 收尾请求:恰好一次,tools 传空数组(广告面为空=想调也调不到);messages 继承本步实际
+ // 发出的 reqMessages(图片 offload / 媒体预算后的一致版本)+ 一句收尾口径。
+          const wrapAt = Date.now();
+ // attemptId 按同一派生式再造一个:序数自增即不撞主请求,后缀只是给排查留可读标记。
+          const wrapAttemptId = `${sessionId}:${turn}:${step}:${++this.attemptSeq}:budget-wrapup`;
+          const wrapModel = (llmVendor.modelName ?? llmVendor.model) as string | undefined;
+          let wrapText = "";
+          const wrapPhase: PhaseToken = phaseRecorder.begin("llm");
+          try {
+            const wrap = await this.opts.llm.chat(
+              [...reqMessages, { role: "user", content: `已达本任务步数上限(${maxSteps})。请只用文字给出：已完成什么/未完成什么/建议下一步；不能再调用工具。` }],
+              [],
+              ac.signal,
+              undefined,
+              { attemptId: wrapAttemptId },
+            );
+ // usage 合并进 turn(成本核算口径:收尾这一跳也是真实 token 消耗)。
+            if (wrap.usage) turnUsage = addUsage(turnUsage, wrap.usage);
+            wrapText = String(wrap.content ?? "");
+          } catch (err) {
+ // 取消是唯一允许上抛的失败:交给 step 的 catch 为 cancelled(与旧行为同型)。
+            if (ac.signal.aborted) throw err;
+ // 收尾调用失败(网络/上游 5xx)不炸 turn:预算耗尽本就是「正常但未完成」的,
+ // 再抛错只会把已完成的进展变成 failed。
+            wrapText = "";
+          } finally {
+            phaseRecorder.end(wrapPhase);
+          }
+          if (!wrapText.trim()) wrapText = "已达步数上限，未能生成收尾结论；请查看已完成步骤或拆小任务后重试。";
+          finalText = wrapText;
+          journal.append({
+            kind: "message.agent",
+            sessionId,
+            payload: {
+              text: wrapText,
+ // tools=[] 下正常不该有 toolCalls;个别 provider 仍会吐——**不落进历史**,
+ // 否则留下没有 tool.result 的悬空配对,下一次请求必被 400 拒。
+              turn, step,
+              llmMs: Date.now() - wrapAt,
+              attemptId: wrapAttemptId,
+              ...(typeof wrapModel === "string" && wrapModel ? { model: wrapModel } : {}),
+            },
+          });
+          turnReason = "budget-exhausted";
+          break;
+        }
+
         // 记录本步实际派发的工具名(下一步 tips 的触发依据;含被闸拒绝的调用——动作意图同样算类别)。
         this.lastStepTools = res.toolCalls.map((c) => c.name);
         // J1 轨迹统计(纯旁路,零上下文影响):步数/调用数/工具类别计数/并行步(同一步 ≥2 调用)/
@@ -2363,6 +2713,10 @@ export class AgentLoop {
 
  // 执行工具:并发安全的一起跑,不安全的独占( §1.3)
         const calls = res.toolCalls;
+ // 时间旅行:这是「模型已返回 calls、工具尚未跑」的唯一窗口——快照必须拍在这里,
+ // 拍在工具之后只能拍到改后状态,revert 无从恢复。await 保证读盘先于任何工具动文件;
+ // 回调异常吞掉(旁路能力,不打断工具执行)。
+        try { await this.opts.onStepToolPlan?.({ turn, step, calls }); } catch { /* 快照旁路失败不影响执行 */ }
  // 同参重复检测(无限循环事故:board_read 去重存根+延迟加载的 board_upsert
         // 不在广告面,模型 20+ 步逐字重复同一调用直到人工取消)。连续 ≥3 步同一签名=死循环,
         // 结果尾部注入策略提示逼模型换路。
@@ -2380,39 +2734,53 @@ export class AgentLoop {
           }
         }
         const runnable = calls.filter((c) => !guardBlocked.has(c.id));
-        const safe = runnable.filter((c) => this.tools.get(c.name)?.isConcurrencySafe?.(this.parseArgs(c)) ?? false);
-        const exclusive = runnable.filter((c) => !safe.includes(c));
+ // 并发调度从「isConcurrencySafe 二分」升级为「安全 + 路径无重叠」分段:
+ // 两个并发安全调用若碰同一路径(写/读改写)仍会互相覆盖或读到中间态,必须拆成串行屏障。
+ // 参数里抽不到路径键的调用不进路径判定,行为与旧安全批一致。
+        const plan = planToolBatch(runnable, {
+          isSafe: (c) => this.tools.get(c.name)?.isConcurrencySafe?.(this.parseArgs(c)) ?? false,
+        });
 
- // :工具批次阶段(护栏拦截 + 安全批并行 + 独占批串行同段)。
+ // :工具批次阶段(护栏拦截 + 并行段 + 串行屏障同段)。
         const phaseToolsToken: PhaseToken = phaseRecorder.begin("tools");
-        const results: ToolExecOutcome[] = [];
+        const executed: ToolExecOutcome[] = [];
         // 被护栏拦下的调用也落 tool.result(保 tool-pairing),error.origin=guard,模型据此换路。
         for (const c of calls) {
           const block = guardBlocked.get(c.id);
           if (!block) continue;
-          results.push({
+          executed.push({
             call: c,
             content: block.text,
             durationMs: 0,
             error: { origin: "guard", message: block.text.slice(0, 600), name: c.name },
           });
         }
-        // 安全批并行
-        if (safe.length > 0) {
-          for (const c of safe) this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
-          const rs = await Promise.all(safe.map((c) => this.execOne(c, ac.signal)));
-          results.push(...rs);
-          for (const c of safe) { const r0 = rs.find((x) => x.call.id === c.id); this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r0?.durationMs ?? 0 }); }
+        for (const segment of plan.segments) {
+          if (segment.parallel) {
+ // 并行段:与旧安全批逐字同型(先全部 tool-begin,Promise.all 后按调用补 tool-end)。
+            for (const c of segment.calls) this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
+            const rs = await Promise.all(segment.calls.map((c) => this.execOne(c, ac.signal)));
+            executed.push(...rs);
+            for (const c of segment.calls) { const r0 = rs.find((x) => x.call.id === c.id); this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r0?.durationMs ?? 0 }); }
+            continue;
+          }
+ // 串行段(独占屏障:不安全 / 路径重叠 / 未知路径);取消后未派发的调用补写
+ // ABORTED_BEFORE_DISPATCH 保证配对( §1.3)。
+          for (const c of segment.calls) {
+            this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
+            const r = ac.signal.aborted
+              ? { call: c, content: "[ABORTED_BEFORE_DISPATCH]", durationMs: 0, error: { origin: "aborted" as const, message: "[ABORTED_BEFORE_DISPATCH]", name: c.name } }
+              : await this.execOne(c, ac.signal);
+            executed.push(r);
+            this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r.durationMs });
+          }
         }
- // 独占批串行(barrier);取消后未派发的调用补写 ABORTED_BEFORE_DISPATCH 保证配对( §1.3)
-        for (const c of exclusive) {
-          this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
-          const r = ac.signal.aborted
-            ? { call: c, content: "[ABORTED_BEFORE_DISPATCH]", durationMs: 0, error: { origin: "aborted" as const, message: "[ABORTED_BEFORE_DISPATCH]", name: c.name } }
-            : await this.execOne(c, ac.signal);
-          results.push(r);
-          this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r.durationMs });
-        }
+ // 整批结果统一按 calls 提交序归并(guard 结果已在同一 Map 里,命中即原样返回,
+ // 不会被误补成取消);理论缺口只剩取消时未派发的调用,由 mergeBatchResults 补 ABORTED
+ // 合成结果——与串行段既有语义同源。下游(记账/落账/提示)全部按 calls 序读。
+        const byId = new Map<string, ToolExecOutcome>();
+        for (const r of executed) byId.set(r.call.id, r);
+        const results: ToolExecOutcome[] = mergeBatchResults(calls, byId);
         // 本批工具结果是否带错(下一步 tips 的 SOP 排障卡依据;在安全批+独占批都收集完后记):
         // 口径=ToolExecOutcome.error,与 tool.result 落账 `...(r?.error ? { error } : {})` 同源
         // (闸门拒绝/超时/取消/异常都归一成结构化 error;成功结果不带键)。
@@ -2474,6 +2842,8 @@ export class AgentLoop {
           const r = results.find((x) => x.call.id === call.id);
           let content = r?.content ?? "";
           let images: string[] | undefined;
+ // 展示投影只在此处归一化落账(非法 display 丢弃且不阻断工具结果);模型可见 content 一字不动。
+          const display = r?.display !== undefined ? normalizeToolDisplay(r.display) : undefined;
           if (content.startsWith(VISION_TOOL_SENTINEL)) {
             try {
               const meta = JSON.parse(content.slice(VISION_TOOL_SENTINEL.length)) as { dataUrl?: string; images?: string[]; label?: string; errors?: string[] };
@@ -2498,6 +2868,8 @@ export class AgentLoop {
               ...(images ? { images } : {}),
  // 结果去重 stub 只换模型可见文本(deriveMessages 优先取它),原文仍在上面的 content。
               ...(r?.modelContent !== undefined ? { modelContent: r.modelContent } : {}),
+ // 展示投影只进展示面(projectToolDisplays 读);deriveMessages 不读这个键。
+              ...(display ? { display } : {}),
               // txa1/txa2:结构化失败归因(仅失败时出现;成功结果的 payload 无 error 键)。
               ...(r?.error ? { error: r.error } : {}),
             },
@@ -2518,8 +2890,9 @@ export class AgentLoop {
             break;
           }
         }
-        journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: step === maxSteps - 1 ? "max-steps" : "tools-done" } });
-        if (step === maxSteps - 1) turnReason = "max-steps";
+ // 末步带 toolCalls 的情形已在上面的预算收束分支里消费(不执行工具 + 一次收尾请求),
+ // 所以这里只剩「非末步工具正常执行完」——不再有 max-steps 直接截停态。
+        journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "tools-done" } });
       } catch (err) {
  // 取消语义( §1.4):LLM 请求 abort → turn 以 cancelled,不当错误上抛。
         if (ac.signal.aborted) {

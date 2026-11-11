@@ -22,6 +22,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PPT_MASTER_PROMPT } from "./ppt-master-prompt.js";
+// 子代理工具面收敛的单一真源在 subagent-depth(纯逻辑零 IO);此处只做对外再导出与薄封装。
+import { DEFAULT_SUBAGENT_DENY, PRIMARY_ONLY_TOOLS, convergeDeny } from "./subagent-depth.js";
 
 export interface AgentProfile {
   name: string;
@@ -379,4 +381,44 @@ export function composeSubagentInstructions(profiles: AgentProfile[], agentType:
   const p = profiles.find((x) => x.name === agentType);
   if (!p) return instructions;
   return `【子智能体角色:${p.name}】\n${p.systemPrompt}\n\n【任务书】\n${instructions}`;
+}
+
+// ── :子代理工具面收敛(不改既有 profile 解析,只在解析结果上加一层「只收紧」的 deny) ──────
+/** 系统级子代理默认 deny(todowrite/task 是主 agent 独占面);单一真源在 subagent-depth。 */
+export { DEFAULT_SUBAGENT_DENY, PRIMARY_ONLY_TOOLS };
+
+export interface ConvergedProfileTools {
+ /** 收敛后的白名单(declared=声明展开后剔除被 deny 的工具;fallback="*" 由后端角色二分兜底)。 */
+  allow: string[];
+ /** 收敛后的 deny(父 deny ∪ 默认 deny ∪ primary-only),确定性排序。 */
+  deny: string[];
+ /** 是否真的施加了收敛面(sources=declared 且 deny 非空)。 */
+  converged: boolean;
+ /** 既有解析口径原样透出(declared/fallback),便于观测面区分。 */
+  source: "declared" | "fallback";
+}
+
+/**
+ * profile × 父 deny → 收敛工具面(纯函数)。
+ * 复用 resolveProfileTools 的既有语义(缺席/空=角色二分兜底),只把 deny 作为减法层:
+ * deny 不会放宽任何白名单,也不会把 fallback 变成 declared(既有行为逐字不变)。
+ */
+export function convergeProfileTools(profile: AgentProfile | undefined, parentDeny: readonly string[] = []): ConvergedProfileTools {
+  const resolved = resolveProfileTools(profile?.tools, []);
+  const convergedDeny = convergeDeny({
+    parentDeny,
+ // profile 没有独立 deny 字段:deny-only 权限档由 permission 字段表达(deriveChildRules),不在这里重复。
+    childDeny: [],
+    primaryOnly: PRIMARY_ONLY_TOOLS,
+    kind: "subagent",
+  });
+  const allow = resolved.source === "declared"
+    ? resolved.granted.filter((t) => t === "*" || !convergedDeny.deny.includes(t))
+    : ["*"];
+  return {
+    allow,
+    deny: convergedDeny.deny,
+    converged: resolved.source === "declared" && convergedDeny.deny.length > 0,
+    source: resolved.source,
+  };
 }

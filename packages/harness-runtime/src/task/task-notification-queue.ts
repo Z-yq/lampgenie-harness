@@ -18,24 +18,32 @@ export class TaskNoticeQueue {
     this.reclaimExpired()
   }
 
-  #matches(task, { ownerId, sessionId, includeOtherSessions, requested }) {
+  #matches(task, { ownerId, sessionId, includeOtherSessions, requested, branchGeneration }) {
     if (task.ownerId !== String(ownerId)) return false
     if (task.notificationStatus !== 'pending') return false
     if (sessionId !== undefined && !includeOtherSessions && task.sessionId !== String(sessionId)) return false
     if (requested && !requested.has(task.id)) return false
+ // :带 branchGeneration 时只认领同代通知——换分支/重开后的迟到通知留在队列里由 dropStale 清理,
+ // 不投递给新上下文。不传 branchGeneration 完全跳过此过滤(旧调用点行为逐字不变)。
+    if (branchGeneration !== undefined) {
+      const taskGeneration = Number(task.notificationGeneration ?? 0)
+      if (taskGeneration !== Number(branchGeneration)) return false
+    }
     return true
   }
 
-  claim({ ownerId, sessionId, includeOtherSessions = false, claimantId, taskIds }) {
+  claim({ ownerId, sessionId, includeOtherSessions = false, claimantId, taskIds, branchGeneration }) {
     this.#sweepExpired()
     const requested = taskIds?.length ? new Set(taskIds.map(String)) : null
-    const filter = { ownerId, sessionId, includeOtherSessions, requested }
+    const filter = { ownerId, sessionId, includeOtherSessions, requested, branchGeneration }
     const claimed = []
     for (const task of this.tasks.values()) {
       if (!this.#matches(task, filter)) continue
       task.notificationStatus = 'delivering'
       task.notificationClaimantId = claimantId
       task.notificationClaimedAt = this.now()
+ // 认领时记下代次,便于审计「这条通知属于哪一代」;不传时不动该字段。
+      if (branchGeneration !== undefined) task.notificationClaimedGeneration = Number(branchGeneration)
       claimed.push(this.snapshot(task))
     }
     if (claimed.length) this.onChanged()
@@ -85,6 +93,25 @@ export class TaskNoticeQueue {
     }
     if (released) this.onChanged()
     return released
+  }
+
+ /**
+ * :把 generation 与 currentGeneration 不等的 pending 通知标成 none(不投递)。
+ * 只动 pending;delivering/delivered 由 claim/reclaim 自己的代次过滤负责,避免把在途通知打回队列循环。
+ */
+  dropStale(currentGeneration, { persist = true } = {}) {
+    const current = Number(currentGeneration ?? 0)
+    let dropped = 0
+    for (const task of this.tasks.values()) {
+      if (task.notificationStatus !== 'pending') continue
+      if (Number(task.notificationGeneration ?? 0) === current) continue
+      task.notificationStatus = 'none'
+      task.notificationClaimantId = CLEAR_CLAIM.claimant
+      task.notificationClaimedAt = CLEAR_CLAIM.claimedAt
+      dropped += 1
+    }
+    if (dropped && persist) this.onChanged()
+    return dropped
   }
 
   reclaimExpired(now = this.now(), { persist = true } = {}) {

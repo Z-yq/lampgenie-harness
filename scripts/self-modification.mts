@@ -27,26 +27,32 @@ interface StoreModule {
   requestModification(
     root: string,
     req: unknown,
-    policy?: { requireCanary?: boolean; allowAgentSelfApprove?: boolean }: { ok: boolean; id?: string; code?: string; decision?: string; codes: string[]; details?: string[] };
+    policy?: { requireCanary?: boolean; allowAgentSelfApprove?: boolean },
+  ): { ok: boolean; id?: string; code?: string; decision?: string; codes: string[]; details?: string[] };
   approveModification(
     root: string,
     id: string,
-    opts?: { by?: string; kind?: "human" | "owner" | "agent"; reason?: string }: { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
+    opts?: { by?: string; kind?: "human" | "owner" | "agent"; reason?: string },
+  ): { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
   denyModification(
     root: string,
     id: string,
-    opts?: { by?: string; reason?: string }: { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
+    opts?: { by?: string; reason?: string },
+  ): { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
   markApplied(
     root: string,
     id: string,
-    opts?: { frozenHash?: string }: { ok: boolean; id?: string; code?: string; decision?: string; codes: string[]; frozenHash?: string };
+    opts?: { frozenHash?: string },
+  ): { ok: boolean; id?: string; code?: string; decision?: string; codes: string[]; frozenHash?: string };
   rollbackModification(
     root: string,
     id: string,
-    opts?: { reason?: string }: { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
+    opts?: { reason?: string },
+  ): { ok: boolean; id?: string; code?: string; decision?: string; codes: string[] };
   listModifications(
     root: string,
-    filter?: { surface?: string; decision?: string }: Array<Record<string, unknown>>;
+    filter?: { surface?: string; decision?: string },
+  ): Array<Record<string, unknown>>;
   getModification(root: string, id: string): Record<string, unknown> | undefined;
   reportModifications(root: string): Record<string, unknown>;
 }
@@ -81,7 +87,7 @@ const USAGE = `自我修改安全门 CLI(append-only jsonl)
   tsx scripts/self-modification.mts --help
 
 选项:
-  --root <dir>        存储根目录(缺省 process.cwd;落在 <root>/.genie/self-mod/requests.jsonl)
+  --root <dir>        存储根目录(缺省 process.cwd();落在 <root>/.genie/self-mod/requests.jsonl)
   --request <path>    提交一次自我修改请求 JSON;"-" 表示从 stdin 读
   --approve <id>      审批请求(--by 必填)
   --deny <id>         拒绝请求(--reason 必填)
@@ -102,7 +108,7 @@ const USAGE = `自我修改安全门 CLI(append-only jsonl)
 
 /** 手写 argv 解析:--key value 与开关两种;未知选项抛错(由 main 折成 exit 1)。 */
 function parseArgv(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { root: process.cwd, list: false, report: false, json: false, help: false };
+  const out: ParsedArgs = { root: process.cwd(), list: false, report: false, json: false, help: false };
   const valueOf = (i: number, flag: string): string => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith("--")) throw new Error(`${flag} 缺少取值`);
@@ -171,18 +177,18 @@ function parseArgv(argv: string[]): ParsedArgs {
   return out;
 }
 
-async function readStdin: Promise<string> {
+async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk as Buffer));
   return Buffer.concat(chunks).toString("utf8");
 }
 
 async function readJsonSource(src: string): Promise<unknown> {
-  const text = src === "-" ? await readStdin : await readFile(resolve(src), "utf8");
+  const text = src === "-" ? await readStdin() : await readFile(resolve(src), "utf8");
   return JSON.parse(text) as unknown;
 }
 
-async function loadStore: Promise<StoreModule> {
+async function loadStore(): Promise<StoreModule> {
   return (await import("../apps/gateway/src/self-modification-store.ts")) as unknown as StoreModule;
 }
 
@@ -208,7 +214,7 @@ function formatTable(rows: Array<Record<string, unknown>>): string {
       clip(String(row["targetRef"] ?? ""), width[4]!),
     ];
   });
-  const lines = [header, ...cells].map((cols) => cols.map((c, i) => c.padEnd(width[i]!)).join("  ").trimEnd);
+  const lines = [header, ...cells].map((cols) => cols.map((c, i) => c.padEnd(width[i]!)).join("  ").trimEnd());
   return lines.join("\n");
 }
 
@@ -259,7 +265,7 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const store = await loadStore;
+  const store = await loadStore();
   const root = resolve(args.root);
 
   if (args.request !== undefined) {
@@ -294,7 +300,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (args.approve !== undefined) {
-    const by = (args.by ?? "").trim;
+    const by = (args.by ?? "").trim();
     if (by === "") {
       process.stderr.write("--approve 需要 --by <name>\n");
       return 1;
@@ -320,7 +326,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (args.deny !== undefined) {
-    const reason = (args.reason ?? "").trim;
+    const reason = (args.reason ?? "").trim();
     if (reason === "") {
       process.stderr.write("--deny 需要 --reason <text>\n");
       return 1;
@@ -358,7 +364,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (args.rollback !== undefined) {
-    const reason = (args.reason ?? "").trim;
+    const reason = (args.reason ?? "").trim();
     if (reason === "") {
       process.stderr.write("--rollback 需要 --reason <text>\n");
       return 1;

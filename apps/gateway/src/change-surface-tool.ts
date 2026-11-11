@@ -27,6 +27,15 @@ import type {
 } from "@lampgenie/code-sense/surface";
 import { classifyChangeScope } from "@lampgenie/code-sense/surface";
 import type { ChangeScope } from "@lampgenie/code-sense/surface";
+// :分类可更正——更正结构/读取/纪律提示是纯逻辑,单测在 change-scope-correction.test.ts。
+import {
+  CHANGE_SCOPE_CORRECTION_TYPE,
+  applyChangeScopeCorrection,
+  changeScopeCorrectionEvent,
+  disciplineHintFor,
+  normalizeChangeScopeKind,
+} from "./change-scope-correction.js";
+import type { ChangeScopeCorrection } from "./change-scope-correction.js";
 // 语义孤儿检查(第二批):复用 code_review 的确定性反模式层,六维算法不重写。
 import { collectReviewTarget } from "@lampgenie/code-sense/review";
 import type { Finding, ReviewTarget } from "@lampgenie/code-sense/review";
@@ -342,6 +351,12 @@ export interface SurfaceGateInput {
   exempt: boolean;
   /** 是否已走直达实施路由(task_phase route=direct)——与既有「明确小改免板」同一尺度豁免语义。 */
   directRoute?: boolean;
+ /**
+ * 显式更正:journal 里最近一条 `change.scope.correction`。
+ * 给了就覆盖 classifyChangeScope 的结论(matched 清空,source 不参与判定);
+ * 缺省/结构非法 → 旧行为逐字不变。
+ */
+  correction?: ChangeScopeCorrection;
 }
 
 export interface SurfaceGateVerdict {
@@ -362,9 +377,16 @@ export interface SurfaceGateVerdict {
  */
 export function surfaceGateVerdict(i: SurfaceGateInput): SurfaceGateVerdict {
   const v = classifyChangeScope(i.instruction ?? "");
-  const base = { scope: v.scope, matched: v.matched, needsManifest: v.scope === "surface" };
+ // 显式更正优先:更正合法 → scope 以更正为准、matched 清空(启发式命中不再参与判定);
+ // 缺省/非法 → 下面逐字走旧逻辑。source/correctedBy 只进回执,不参与 gate 判定。
+  const corrected = i.correction
+    ? applyChangeScopeCorrection({ scope: v.scope, matched: v.matched }, i.correction)
+    : null;
+  const scope: ChangeScope = corrected?.ok ? corrected.scope : v.scope;
+  const matched = corrected?.ok ? [] : v.matched;
+  const base = { scope, matched, needsManifest: scope === "surface" };
   if (i.taskClass !== "coding") return { ...base, deny: false };
-  if (v.scope !== "surface") return { ...base, deny: false };
+  if (scope !== "surface") return { ...base, deny: false };
  // 直达实施路由:agent 已在理解阶段判定「明确具体小改」并声明 route=direct——
   // 与既有 plan-gate 的 direct 尺度豁免同一语义,不因词表命中就把它升级成全链路任务;
   // 收尾审计仍按 instruction 判 surface,漏盘点会在终稿处被标「未通过全链路审计」。
@@ -499,6 +521,11 @@ export interface ChangeSurfaceToolDeps {
   taskId: string;
   /** 扫描根(仓根或 taskRoot;与 board_upsert 同根口径)。 */
   root: string;
+ /**
+ * 本任务指令原文:action=classify 需要知道「自动分类当前判成什么」,
+ * 才能算出纪律切换提示。缺省空串 = 一律按 normal 的自动分类算(仍可用,只是 previous 可能不准)。
+ */
+  instruction?: string;
 }
 
 // ---- 验收证据规整(第二批 B3) ----
@@ -702,12 +729,15 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
       + `action=scan:按概念词扫描全仓 ${SURFACE_CATEGORIES.length} 类表面(${SURFACE_CATEGORIES.join("/")}),并生成分层/边/建议顺序的链路图,输出 markdown checklist 并落 journal;`
       + "scan 会生成概念链路图(分层+上下游边+建议改动顺序,索引可用时含调用链);audit 可带 verify 与 hard 硬门语义;"
       + "action=audit:重扫 + 对比你提交的 resolutions(resolved/removed/keep-legacy+reason),passed=false 时列出剩余项;可带 verify={e2e:[{command,passed,output?}],negatives:[{assertion,passed,evidence?}]} 交验收证据,并对 resolutions 涉及文件跑确定性语义孤儿检查;"
-      + "action=status:看本任务当前盘点与上次审计结论;action=exempt:确无链路影响时显式豁免(理由必填)。",
+      + "action=status:看本任务当前盘点与上次审计结论;action=exempt:确无链路影响时显式豁免(理由必填)。"
+      + "分类有误时 action=classify 更正(scope=surface|normal + reason),回执给出新的纪律与下一步。",
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["scan", "audit", "status", "exempt"], description: "scan=盘点 / audit=收尾审计 / status=看现状 / exempt=显式豁免(理由必填)" },
+        action: { type: "string", enum: ["scan", "audit", "status", "exempt", "classify"], description: "scan=盘点 / audit=收尾审计 / status=看现状 / exempt=显式豁免(理由必填) / classify=更正分类有误(surface|normal)" },
         concept: { type: "string", description: "被替换/迁移的概念词或符号名(多个用逗号分隔;scan/audit 必填,audit 缺省沿用上次 scan 的概念)" },
+        scope: { type: "string", enum: ["surface", "normal"], description: "classify 用:更正为哪一类——surface=全链路变更(先盘点再改)/ normal=普通变更(免盘点)" },
+        by: { type: "string", description: "classify 用:更正者标识(缺省 agent)。写进 journal 供审计" },
         resolutions: {
           type: "array",
           description: "audit 用:逐条去向。status=resolved(已改)/removed(已删)/keep-legacy(保留旧实现,必须带 reason ≥4 字)",
@@ -722,7 +752,7 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
             required: ["file", "status"],
           },
         },
-        reason: { type: "string", description: "exempt 用:为什么本任务虽含替换/迁移动词却没有全链路影响(≥8 字,落 journal)" },
+        reason: { type: "string", description: "exempt 用:为什么本任务虽含替换/迁移动词却没有全链路影响(≥8 字,落 journal);classify 用:更正理由(必填,≤300 字,落 journal)" },
         verify: {
           type: "object",
           description: "audit 用:验收证据。e2e=[{command,passed,output?}](最多 10 条);negatives=[{assertion,passed,evidence?}](最多 20 条)。全部通过才 verified,收尾硬门(hard)据此放行",
@@ -751,9 +781,32 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
     },
     isConcurrencySafe: () => false,
     async execute(args: unknown) {
-      const a = (args ?? {}) as { action?: unknown; concept?: unknown; resolutions?: unknown; reason?: unknown; root?: unknown };
+      const a = (args ?? {}) as { action?: unknown; concept?: unknown; resolutions?: unknown; reason?: unknown; root?: unknown; scope?: unknown; by?: unknown };
       const action = typeof a.action === "string" ? a.action : "";
       const root = typeof a.root === "string" && a.root.trim() ? a.root.trim() : deps.root;
+ // :分类更正——立刻落 journal,下一次 plan-gate 就按更正后的结论判定。
+      if (action === "classify") {
+        const scopeKind = normalizeChangeScopeKind(typeof a.scope === "string" ? a.scope.trim() : "");
+        const reason = typeof a.reason === "string" ? a.reason.trim() : "";
+        const by = typeof a.by === "string" && a.by.trim() ? a.by.trim() : "agent";
+        if (!scopeKind) return JSON.stringify({ ok: false, code: "INVALID", reason: "scope 必须是 surface 或 normal" });
+        if (!reason) return JSON.stringify({ ok: false, code: "INVALID", reason: "reason 必填(说明为什么自动分类不对)" });
+        if (reason.length > 300) return JSON.stringify({ ok: false, code: "INVALID", reason: "reason 超过 300 字" });
+        const heuristic = classifyChangeScope(deps.instruction ?? "");
+        const correction: ChangeScopeCorrection = { scope: scopeKind, by, reason, at: Date.now() };
+        const applied = applyChangeScopeCorrection(heuristic, correction);
+        if (!applied.ok) return JSON.stringify({ ok: false, code: applied.code });
+        try {
+          deps.journal.append({ kind: "custom", sessionId: deps.sessionId, payload: changeScopeCorrectionEvent(correction) });
+        } catch { /* 留痕失败不影响回执 */ }
+        return JSON.stringify({
+          ok: true,
+          scope: applied.scope,
+          source: "corrected",
+          hint: disciplineHintFor(applied.scope, heuristic.scope),
+          audit: CHANGE_SCOPE_CORRECTION_TYPE,
+        });
+      }
       if (action === "status") {
         const m = readChangeSurfaceManifest(deps.journal, deps.sessionId, deps.taskId);
         const au = readChangeAudit(deps.journal, deps.sessionId, deps.taskId);
@@ -879,7 +932,7 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
           ? `${receipt}\n链路图:层 ${c.stats.layers} / 节点 ${c.stats.nodes} / 边 ${c.stats.edges}(scan 时生成)`
           : receipt;
       }
-      return `未知 action: ${action}(可选 scan/audit/status/exempt)`;
+      return `未知 action: ${action}(可选 scan/audit/status/exempt/classify)`;
     },
   };
 }

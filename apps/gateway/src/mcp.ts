@@ -75,9 +75,19 @@ export class McpServerStore {
   }
 }
 
+/**
+ * 工具发现护栏:
+ * - 页数/条数上限防服务器死循环或爆量(MCP 允许 nextCursor 无限链)。
+ * - descriptor 带 contractVersion,未知键丢弃(只保留 name/description/contractVersion)。
+ */
+export const MCP_TOOL_LIST_MAX_PAGES = 10;
+export const MCP_TOOL_LIST_MAX_TOOLS = 500;
+export const MCP_TOOL_CONTRACT_VERSION = 1;
+
 export interface McpToolInfo {
   name: string;
   description: string;
+  contractVersion: number;
 }
 
 /** 单服务器 stdio 客户端:initialize → tools/list → tools/call。 */
@@ -86,8 +96,12 @@ export class McpClient {
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private nextId = 1;
   private stderrBuf = "";
+ /** onClose 只回调一次(exit/error/close 会重复触发)。 */
+  private closeNotified = false;
+ /** 最近一次 listTools 的护栏告警(重复 cursor / 达到上限);空=无异常。 */
+  listWarnings: string[] = [];
 
-  constructor(private readonly server: McpServer) {}
+  constructor(private readonly server: McpServer, private readonly onClose?: (reason: string) => void) {}
 
   get alive(): boolean {
     return !!this.child && this.child.exitCode === null;
@@ -97,6 +111,7 @@ export class McpClient {
     if (this.alive) return;
     const child = spawn(this.server.command, this.server.args, { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } });
     this.child = child;
+    this.closeNotified = false; // 新一代子进程可再次回调
     child.stderr?.on("data", (d: Buffer) => { this.stderrBuf = (this.stderrBuf + d.toString()).slice(-2000); });
     const rl = createInterface({ input: child.stdout! });
     rl.on("line", (line) => {
@@ -114,10 +129,13 @@ export class McpClient {
         else p.resolve(msg.result);
       }
     });
+    child.on("error", () => this.notifyClose("error"));
     child.on("exit", () => {
       for (const [, p] of this.pending) p.reject(new Error("MCP 服务器退出"));
       this.pending.clear();
+      this.notifyClose("exit");
     });
+    child.on("close", () => this.notifyClose("close"));
     await this.request("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
@@ -150,11 +168,49 @@ export class McpClient {
     }
   }
 
+ /**
+ * 工具发现:MCP 允许 nextCursor 无限链,这里按页数/条数双上限收敛。
+ * 停止条件:nextCursor 缺失/空、cursor 重复(记 warning,不 throw)、触顶。
+ * descriptor 只保留 name/description/contractVersion(未知键丢弃)。
+ */
   async listTools(): Promise<McpToolInfo[]> {
-    const r = (await this.request("tools/list", {})) as { tools?: { name?: string; description?: string }[] };
-    return (r.tools ?? [])
-      .filter((t) => typeof t.name === "string")
-      .map((t) => ({ name: String(t.name), description: String(t.description ?? "") }));
+    this.listWarnings = [];
+    const out: McpToolInfo[] = [];
+    const seenNames = new Set<string>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    for (let page = 0; page < MCP_TOOL_LIST_MAX_PAGES; page++) {
+      const r = (await this.request("tools/list", cursor ? { cursor } : {})) as {
+        tools?: unknown[];
+        nextCursor?: unknown;
+      };
+      for (const raw of Array.isArray(r.tools) ? r.tools : []) {
+        if (!raw || typeof raw !== "object") continue;
+        const t = raw as Record<string, unknown>;
+        if (typeof t.name !== "string" || !t.name) continue;
+        if (seenNames.has(t.name)) continue; // 跨页去重
+        seenNames.add(t.name);
+        out.push({
+          name: t.name,
+          description: typeof t.description === "string" ? t.description : "",
+          contractVersion: MCP_TOOL_CONTRACT_VERSION,
+        });
+        if (out.length >= MCP_TOOL_LIST_MAX_TOOLS) {
+          this.listWarnings.push(`tools 数量达到上限 ${MCP_TOOL_LIST_MAX_TOOLS},停止分页`);
+          return out;
+        }
+      }
+      const next = typeof r.nextCursor === "string" ? r.nextCursor : "";
+      if (!next) break;
+      if (seenCursors.has(next)) {
+        this.listWarnings.push(`tools/list cursor 重复(${next.slice(0, 64)}),停止分页`);
+        return out;
+      }
+      seenCursors.add(next);
+      cursor = next;
+    }
+    if (cursor) this.listWarnings.push(`tools/list 页数达到上限 ${MCP_TOOL_LIST_MAX_PAGES},停止分页`);
+    return out;
   }
 
   async callTool(name: string, args: unknown, timeoutMs = 60_000): Promise<string> {
@@ -170,6 +226,17 @@ export class McpClient {
     return this.stderrBuf;
   }
 
+ /** 服务器断开/主动关闭:恰好回调一次(幂等),异常不外泄。 */
+  private notifyClose(reason: string): void {
+    if (this.closeNotified) return;
+    this.closeNotified = true;
+    try {
+      this.onClose?.(reason);
+    } catch {
+ // 回调异常不影响收尾
+    }
+  }
+
   close(): void {
     try {
       this.child?.kill("SIGTERM");
@@ -177,6 +244,7 @@ export class McpClient {
       // 忽略
     }
     this.child = null;
+    this.notifyClose("closed");
   }
 }
 
@@ -197,10 +265,20 @@ export class McpManager {
   private clientFor(s: McpServer): McpClient {
     let c = this.clients.get(s.id);
     if (!c) {
-      c = new McpClient(s);
+      c = new McpClient(s, (reason) => this.onServerClosed(s.id, reason));
       this.clients.set(s.id, c);
     }
     return c;
+  }
+
+ /** 服务器退出/关闭:撤销工具缓存与能力位,不留幽灵工具(下次 tools 会重新 start)。 */
+  private onServerClosed(serverId: string, reason: string): void {
+    this.toolCache.delete(serverId);
+    this.status.set(serverId, {
+      ok: false,
+      tools: 0,
+      error: reason === "closed" ? "服务器已关闭" : "服务器已退出",
+    });
   }
 
   async tools(serverId: string): Promise<McpToolInfo[]> {

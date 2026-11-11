@@ -73,6 +73,9 @@ export type EventKind =
   // `compact-abandoned:<sessionId>:<startSeq>` 保证同一条悬空 start 只落一次。
   // deriveMessages 不读(过程遥测,不是会话真相)。
   | "compact.abandoned"
+ // overflow 单次重放留痕:provider 报 context_exceeded 且守卫放行时落一条。
+ // payload={action,code,turn,step};deriveMessages 不读(过程遥测,不是会话真相)。
+  | "compact.overflow"
  // 上下文治理( Phase 0):读侧折叠/剪枝与增长突增留痕。
   // deriveMessages 不读(不是会话真相,只是读侧治理遥测);面板/审计按需消费。
   | "context.prune"

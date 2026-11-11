@@ -1,5 +1,5 @@
 /**
- * 能力暴露 allowlist 测试。
+ *  能力暴露 allowlist 测试。
  * 三类证据:
  * 1. 对拍:panel 集合必须与 server.ts handleMessage 的 case 集合逐条一致(漏登记=面板静默 403,
  *    多登记=表外放行;两侧漂移都在这里失败)。
@@ -87,6 +87,18 @@ describe(" 能力暴露 allowlist", () => {
     expect(isChannelAllowed("agent", "git.push")).toBe(false);
     for (const ch of ["cfg.set", "git.commit", "term.exec", "plugins.install", "board.save", "file.write"]) {
       expect(isChannelAllowed("agent", ch), ch).toBe(false);
+    }
+  });
+
+  it("task.schedule / task.schedule.cancel:panel 登记,readonly/agent 不入最小集", () => {
+    for (const ch of ["task.schedule", "task.schedule.cancel"]) {
+      expect(PANEL_CHANNELS, "panel 漏登记 " + ch).toContain(ch);
+      expect(READONLY_CHANNELS, "readonly 不应登记 " + ch).not.toContain(ch);
+      expect(AGENT_CHANNELS, "agent 不应登记 " + ch).not.toContain(ch);
+      expect(isChannelAllowed("panel", ch), ch).toBe(true);
+      expect(isChannelAllowed("readonly", ch), ch).toBe(false);
+      expect(isChannelAllowed("agent", ch), ch).toBe(false);
+      expect(isMethodAllowed("panel", ch, {}), "per-method 不拦 " + ch).toBe(true);
     }
   });
 

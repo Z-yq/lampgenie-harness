@@ -70,6 +70,23 @@ const ACTION: Record<ModelErrorKind, string> = {
 
 const DETAIL_MAX = 200;
 
+/** 响应体里的机器错误码(error.code 优先,其次 error.type); 伪 200 识别复用。
+ * 只读 JSON 顶层 error 对象,不参与 classifyModelError 的既有判定。 */
+export function extractErrorCode(body?: string | null): string | undefined {
+  const raw = typeof body === "string" ? body.trim() : "";
+  if (!raw.startsWith("{")) return undefined;
+  try {
+    const j = JSON.parse(raw) as { error?: { code?: unknown; type?: unknown } };
+    const e = j.error;
+    if (!e || typeof e !== "object") return undefined;
+    if (typeof e.code === "string" && e.code) return e.code;
+    if (typeof e.type === "string" && e.type) return e.type;
+  } catch {
+ /* 非 JSON / 截断体:无机器码 */
+  }
+  return undefined;
+}
+
 /** 从响应体/异常取摘要:JSON 里优先 error.type/code/message,否则原文前 200 字。 */
 export function extractErrorDetail(body?: string | null, err?: unknown): string {
   const raw = typeof body === "string" && body ? body : errText(err);

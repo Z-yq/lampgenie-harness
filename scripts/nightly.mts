@@ -23,7 +23,7 @@ import {
   runNightly,
   startNightly,
 } from "../apps/gateway/src/nightly-store.ts";
-import type { NightlyRun } from "@genie-harness/runtime/agent/nightly-run";
+import type { NightlyRun } from "@lampgenie/runtime/agent/nightly-run";
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 1;
@@ -74,8 +74,8 @@ interface Parsed {
 }
 
 function parse(argv: string[]): Parsed | { error: string } {
-  const values = new Map<string, string>;
-  const flags = new Set<string>;
+  const values = new Map<string, string>();
+  const flags = new Set<string>();
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i] ?? "";
     if (BOOL_FLAGS.has(token)) {
@@ -98,7 +98,7 @@ function usage(message: string): never {
   console.error(`[nightly] ${message}`);
   console.error("用法: npx tsx scripts/nightly.mts --help");
   process.exit(EXIT_USAGE);
-  throw new Error("unreachable: usage");
+  throw new Error("unreachable: usage()");
 }
 
 function positiveInt(raw: string | undefined, name: string): number | undefined {
@@ -135,12 +135,14 @@ function printRun(run: NightlyRun, codes: readonly string[], asJson: boolean): v
   const done = run.steps.filter((step) => step.status === "done").length;
   console.log(
     `[nightly] runId=${run.runId} project=${run.projectId} date=${run.date} status=${run.status} ` +
-      `steps=${done}/${run.steps.length} budget=${run.budget.tokens}/${run.budget.maxTokens}`;
+      `steps=${done}/${run.steps.length} budget=${run.budget.tokens}/${run.budget.maxTokens}`,
+  );
   console.log(`  window: ${run.window.from} ~ ${run.window.to}`);
   const cov = run.coverage;
   console.log(
     `  coverage: sessions ${cov.sessionsProcessed}/${cov.sessionsTotal}(跳过 ${cov.sessionsSkipped}) ` +
-      `events ${cov.eventsRead}(跳过 ${cov.eventsSkipped})`;
+      `events ${cov.eventsRead}(跳过 ${cov.eventsSkipped})`,
+  );
   console.log(`  candidates=${run.candidates.length} unprocessed=${run.unprocessed.length}`);
   if (run.pauseReason) console.log(`  pauseReason: ${run.pauseReason}`);
   for (const step of run.steps) {
@@ -162,7 +164,7 @@ async function main(argv: string[]): Promise<number> {
   if (selected.length !== 1) usage(`需要且只需要一个动作(收到 ${selected.length} 个)`);
   const command = selected[0] ?? "--list";
 
-  const root = resolve(values.get("--root") ?? process.cwd);
+  const root = resolve(values.get("--root") ?? process.cwd());
   const asJson = flags.has("--json");
   const journalDefault = resolve(root, ".genie", "journals");
   const journalDir = resolve(values.get("--journal") ?? journalDefault);
@@ -171,7 +173,7 @@ async function main(argv: string[]): Promise<number> {
   const maxSessions = positiveInt(values.get("--max-sessions"), "--max-sessions");
   const budget = positiveInt(values.get("--budget"), "--budget");
 
-  const requireJournal = : string => {
+  const requireJournal = (): string => {
     if (!existsSync(journalDir)) usage(`journal 目录不存在: ${journalDir}`);
     return journalDir;
   };
@@ -189,7 +191,7 @@ async function main(argv: string[]): Promise<number> {
   if (command === "--start") {
     if (!project) usage("--start 缺少 --project");
     if (!dateOk(date)) usage("--start 需要 --date YYYY-MM-DD");
-    const journal = requireJournal;
+    const journal = requireJournal();
     const result = await startNightly(root, {
       date,
       projectId: project,
@@ -218,7 +220,7 @@ async function main(argv: string[]): Promise<number> {
     const run = await locate(values.get("--run"));
     const result = await runNightly(root, {
       runId: { projectId: run.projectId, date: run.date },
-      journalDir: requireJournal,
+      journalDir: requireJournal(),
       ...(maxSessions !== undefined ? { maxSessions } : {}),
     });
     printRun(result.run, result.codes, asJson);
@@ -242,7 +244,7 @@ async function main(argv: string[]): Promise<number> {
 
   if (command === "--resume" || command === "--retry") {
     const run = await locate(values.get(command));
-    const journal = requireJournal;
+    const journal = requireJournal();
     const options = {
       projectId: run.projectId,
       date: run.date,
@@ -267,7 +269,8 @@ async function main(argv: string[]): Promise<number> {
 
   if (command === "--list") {
     const runs = (await listRuns(root)).filter(
-      (run) => (project === undefined || run.projectId === project) && (date === undefined || run.date === date);
+      (run) => (project === undefined || run.projectId === project) && (date === undefined || run.date === date),
+    );
     if (asJson) {
       process.stdout.write(JSON.stringify(runs, null, 2) + "\n");
     } else if (runs.length === 0) {
@@ -277,7 +280,8 @@ async function main(argv: string[]): Promise<number> {
         const done = run.steps.filter((step) => step.status === "done").length;
         console.log(
           `${run.date} ${run.projectId} ${run.status} steps=${done}/${run.steps.length} ` +
-            `tokens=${run.budget.tokens} candidates=${run.candidates.length} runId=${run.runId}`;
+            `tokens=${run.budget.tokens} candidates=${run.candidates.length} runId=${run.runId}`,
+        );
       }
     }
     const queue = readQueue(root);

@@ -458,10 +458,16 @@ export interface TeamActivityPayload {
   category: string;
   type: string;
   summary: string;
+ /** :结构化通知载荷(buildNotification 的 notification.payload;旧消费端不读)。 */
+  structured?: Record<string, unknown>;
+ /** :GUI 投影(与 structured/text 同源,不从 summary 反解析)。 */
+  gui?: { title: string; body: string; severity: "info" | "warn" | "error" };
 }
 
 export type TeamActivitySink = {
   notifyActivity(projectId: string, category: string, type: string, summary: string): void;
+ /**  可选能力:新消费端拿整条结构化活动;缺省(旧 sink)走旧四参调用,不抛错。 */
+  notifyStructured?(activity: TeamActivityPayload): void;
 };
 
 /**
@@ -473,11 +479,17 @@ export function relayActivityHandler(getSink: () => TeamActivitySink | undefined
     const sink = getSink();
     if (!sink) return;
     const p = (payload ?? {}) as Partial<TeamActivityPayload>;
-    sink.notifyActivity(
-      typeof p.projectId === "string" ? p.projectId : "",
-      typeof p.category === "string" ? p.category : "task",
-      typeof p.type === "string" ? p.type : "",
-      String(p.summary ?? ""),
-    );
+ // 归一化一次:旧四字段照旧兜底, 新增字段只在确实是对象时透传(脏 payload 不污染 sink)。
+    const activity: TeamActivityPayload = {
+      projectId: typeof p.projectId === "string" ? p.projectId : "",
+      category: typeof p.category === "string" ? p.category : "task",
+      type: typeof p.type === "string" ? p.type : "",
+      summary: String(p.summary ?? ""),
+      ...(p.structured && typeof p.structured === "object" ? { structured: p.structured } : {}),
+      ...(p.gui && typeof p.gui === "object" ? { gui: p.gui } : {}),
+    };
+ //  双写:先给新消费端结构化,旧 notifyActivity 仍然调用(旧消费端零改动、字段逐字兼容)。
+    if (typeof sink.notifyStructured === "function") sink.notifyStructured(activity);
+    sink.notifyActivity(activity.projectId, activity.category, activity.type, activity.summary);
   };
 }

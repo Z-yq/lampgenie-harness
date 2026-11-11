@@ -5,6 +5,8 @@
  * 旧事件无 llmMs/usage 字段时按 0 计(不推断)。
  */
 import type { Journal } from "@lampgenie/core";
+import { dedupeUsage } from "./usage-envelope";
+import type { UsageEnvelopeEntry } from "./usage-envelope";
 
 /** 单个子代理的 token 消耗(子代理单独一窗,不并入主会话 tokens)。 */
 export interface TraceSubagentTokens {
@@ -80,6 +82,17 @@ export interface TraceStats {
     repCached: number;
     suspectCalls: number;
   };
+ /** 信封复用统计(2026-11 usage-envelope):仅当至少一条 `llm.trace` 事件带非空
+ * `payload.envelope` 指纹时出现(旧 journal 不出现该键——不造数)。
+ * `uniqueRequests`=不同信封数,`reusedCalls`=重复发送同一信封的次数,
+ * `reuseRate`=reusedCalls/(uniqueRequests+reusedCalls) 四舍五入 4 位(分母 0 → 0)。
+ * 意义:agent loop 反复重发同一信封,复用率是「哪些调用其实没带来新上下文」的诚实读数。 */
+  usageEnvelope?: { uniqueRequests: number; reusedCalls: number; reuseRate: number };
+ /** 决策口径 tokens(2026-11 usage-envelope):按信封指纹去重后每个唯一请求只计一次。
+ * **与 `tokens`(展示口径,API 原值逐次累加)并列存在,不是替换**——`tokens` 一个字都不变;
+ * 预算/压缩类决策该看这一套,否则同一份上下文会被按调用次数重复计费。
+ * 同样只有 ≥1 条带 envelope 的事件时才出现。 */
+  tokensDeduped?: { input: number; output: number; total: number; cached: number };
  /** 首 token 延迟(流式):流式链路均值;非流式=0。 */
   ttftMs: number;
   ttftMsMax: number;
@@ -135,6 +148,10 @@ export function deriveTraceStats(events: { kind: string; payload: unknown; time?
  // 按模型归集(成本核算):主会话 + 子代理共用同一张表——钱是一起花的。
   const modelTokens = new Map<string, { model: string; calls: number; input: number; output: number; total: number; cached: number; cacheWrite: number }>();
   const subAgents = new Map<string, TraceSubagentTokens>();
+ // 信封去重表(2026-11):只收带 `payload.envelope` 的 `llm.trace` 事件,且必须有 usage。
+ // 旧事件(无 envelope)不进去重表——每条视为唯一请求,只影响展示口径(display);展示口径即既有
+ // `tokens` 字段(来自 message.agent 的 API usage 逐次累加),逐字不变。
+  const envelopeEntries: UsageEnvelopeEntry[] = [];
   const subOf = (agentId: string): TraceSubagentTokens => {
     let a = subAgents.get(agentId);
     if (!a) {
@@ -239,6 +256,26 @@ export function deriveTraceStats(events: { kind: string; payload: unknown; time?
           if (anomaly) out.usageAnomaly = anomaly; // 最近一条(迭代序即落盘序)
         }
         const errText = typeof p.error === "string" ? p.error.trim() : "";
+ // 信封采集(2026-11):必须在失败 break **之前**——失败调用也发过同样的信封,
+ // 漏掉失败样本会让「复用率」虚高(只统计成功的那几条)。
+ // 无 usage 的事件不进 entries(没有 token 数就没有可去重的账);envelope 非空 string 才收。
+        {
+          const env = typeof p.envelope === "string" ? p.envelope.trim() : "";
+          const eu = p.usage as
+            | { inputTokens?: number; outputTokens?: number; totalTokens?: number; cachedTokens?: number }
+            | undefined;
+          if (env && eu && typeof eu === "object") {
+            envelopeEntries.push({
+              fingerprint: env,
+              usage: {
+                input: typeof eu.inputTokens === "number" ? eu.inputTokens : 0,
+                output: typeof eu.outputTokens === "number" ? eu.outputTokens : 0,
+                total: typeof eu.totalTokens === "number" ? eu.totalTokens : undefined,
+                cached: typeof eu.cachedTokens === "number" ? eu.cachedTokens : 0,
+              },
+            });
+          }
+        }
         if (errText === "") break;
         out.llmFailures += 1;
         out.failedLlmMs += typeof p.ms === "number" ? p.ms : 0;
@@ -357,6 +394,23 @@ export function deriveTraceStats(events: { kind: string; payload: unknown; time?
   }
   if (modelTokens.size > 0) {
     out.byModel = [...modelTokens.values()].sort((x, y) => (y.total - x.total) || (y.output - x.output));
+  }
+ // 信封双口径(2026-11):只在真的见到带指纹的事件时才挂这两个键——旧 journal 不出现,
+ // 不给旧断言添恒 0 字段。`tokens`(展示口径)不受影响,这里只是并列给出决策口径。
+  if (envelopeEntries.length > 0) {
+    const dedup = dedupeUsage(envelopeEntries);
+    const total = dedup.uniqueRequests + dedup.reusedCalls;
+    out.usageEnvelope = {
+      uniqueRequests: dedup.uniqueRequests,
+      reusedCalls: dedup.reusedCalls,
+      reuseRate: total > 0 ? Math.round((dedup.reusedCalls / total) * 1e4) / 1e4 : 0,
+    };
+    out.tokensDeduped = {
+      input: dedup.deduped.input,
+      output: dedup.deduped.output,
+      total: dedup.deduped.total,
+      cached: dedup.deduped.cached,
+    };
   }
   return out;
 }

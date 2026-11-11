@@ -44,9 +44,9 @@ const BOOL_FLAGS = new Set(["json", "evaluate", "apply", "status", "report", "he
 type Parsed = { values: Map<string, string>; lists: Map<string, string[]>; flags: Set<string>; positional: string[] };
 
 function parseArgs(argv: string[]): Parsed {
-  const values = new Map<string, string>;
-  const lists = new Map<string, string[]>;
-  const flags = new Set<string>;
+  const values = new Map<string, string>();
+  const lists = new Map<string, string[]>();
+  const flags = new Set<string>();
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const raw = argv[i];
@@ -88,7 +88,7 @@ function fail(code: number, message: string, json: boolean): never {
 /** `-` = stdin;JSON 数组或 NDJSON(逐行对象)都接受。 */
 function readEntries(spec: string): unknown[] {
   const text = spec === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(spec, "utf8");
-  const trimmed = text.trim;
+  const trimmed = text.trim();
   if (trimmed === "") return [];
   if (trimmed.startsWith("[")) {
     const parsed = JSON.parse(trimmed);
@@ -96,7 +96,7 @@ function readEntries(spec: string): unknown[] {
   }
   const out: unknown[] = [];
   for (const line of trimmed.split("\n")) {
-    const row = line.trim;
+    const row = line.trim();
     if (row === "") continue;
     out.push(JSON.parse(row));
   }
@@ -112,7 +112,7 @@ function parsePolicy(raw: string | undefined): Partial<RoiPolicy> | undefined {
   return parsed as Partial<RoiPolicy>;
 }
 
-function helpText: string {
+function helpText(): string {
   return [
     "用法:node --experimental-strip-types scripts/rsi-cost-roi.mts --root <dir> [子命令] [--json]",
     "  --cost <file|->            记成本条目(JSON 数组或 NDJSON;'-'=stdin;可重复)",
@@ -132,7 +132,7 @@ function num(value: number | null): string {
   return value === null ? "null" : String(Number(value.toFixed(4)));
 }
 
-async function main: Promise<number> {
+async function main(): Promise<number> {
   const parsed = parseArgs(process.argv.slice(2));
   const json = parsed.flags.has("json");
   const root = parsed.values.get("root") ?? "";
@@ -149,7 +149,7 @@ async function main: Promise<number> {
   };
 
   if (parsed.flags.has("help") || (parsed.flags.size === 0 && parsed.values.size === 0)) {
-    process.stdout.write(`${helpText}\n`);
+    process.stdout.write(`${helpText()}\n`);
     return EXIT_OK;
   }
 
@@ -206,7 +206,8 @@ async function main: Promise<number> {
           .join(",") || "(无)"}`,
         `  按机制:${Object.entries(report.costByMechanism).map(([key, value]) => `${key}=${value}`).join(",") || "(无)"}`,
         `  按项目:${Object.entries(report.costByProject).map(([key, value]) => `${key}=${value}`).join(",") || "(无)"}`,
-      ];
+      ],
+    );
   }
 
  // 3) ROI 评测
@@ -214,7 +215,7 @@ async function main: Promise<number> {
     const cyclesRaw = get("cycles");
     const policy = parsePolicy(get("policy"));
     const result = await evaluateRoiGate(root, {
-      cycleIds: cyclesRaw === undefined ? undefined : cyclesRaw.split(",").map((id) => id.trim).filter((id) => id !== ""),
+      cycleIds: cyclesRaw === undefined ? undefined : cyclesRaw.split(",").map((id) => id.trim()).filter((id) => id !== ""),
       policy,
       apply: parsed.flags.has("apply"),
       breakerRoot: get("breaker-root"),
@@ -243,7 +244,8 @@ async function main: Promise<number> {
           (result.breaker === undefined
             ? ""
             : ` 熔断:${result.breaker.ok ? "paused" : result.breaker.codes.join(",")}`),
-      ];
+      ],
+    );
   }
 
  // 4) 状态
@@ -258,7 +260,8 @@ async function main: Promise<number> {
         : [
             `ROI 门状态:${last.action} at=${last.at} streak=${last.negativeStreak}`,
             `  配额:nightlyWindowFactor=${last.quota.nightlyWindowFactor ?? "-"} experimentQuotaFactor=${last.quota.experimentQuotaFactor ?? "-"}`,
-          ];
+          ],
+    );
   }
 
  // 5) 汇总报告
@@ -307,10 +310,11 @@ function recordSummary(root: string): string[] {
   return reportCost(root).cycles;
 }
 
-main.then(
+main().then(
   (code) => process.exit(code),
   (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(`错误:${message}\n`);
     process.exit(EXIT_USAGE);
-  };
+  },
+);

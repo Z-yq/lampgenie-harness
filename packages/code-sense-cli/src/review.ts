@@ -3,7 +3,7 @@
  * 封装为 CLI 形态——人(markdown)/agent(--json)双格式,CI 门禁退出码。
  * 同源纪律:本文件是薄适配,评审行为(target 解析/确定性层/反模式/深审编排/防幻觉/
  * 引用孤儿闸/行级回写店/全文件扫描/会话续跑)全部在引擎 codeReview() 单点;CLI 与
- * gateway code_review 工具共享同一引擎,差异只在包装面。
+ * gateway code_review 工具共享同一引擎,差异只在包装面(见 docs/code-review-trigger-matrix.md)。
  */
 import { resolve } from "node:path";
 import {

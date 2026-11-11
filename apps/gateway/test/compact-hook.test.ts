@@ -89,7 +89,7 @@ describe("makeCompactHook()", () => {
     agent(j, "x", 30_000);
     agent(j, "x", 30_000);
     agent(j, "x", 30_000); // ≥ 显式阈 24000 → fire+force
- // 缩小校验(摘要必须严格小于被遮蔽的 head):hook 的 keepRecent=min(10,msgCount-1),
+ //  缩小校验(摘要必须严格小于被遮蔽的 head):hook 的 keepRecent=min(10,msgCount-1),
     // 消息数 ≤11 时 head 恒只有第 1 条(这里是 "hi"),压缩毫无收益且会被 not-smaller 拒。
     // 补齐消息数到 12 让 head 含真实体量(第 2 条 3 万字素材),与生产「长会话压缩」形态一致。
     for (let i = 0; i < 7; i++) agent(j, "x", 30_000);

@@ -13,6 +13,8 @@ import type { LlmDeltaChunk, LlmResponse, Message, ToolSpec } from "./loop";
 import type { ModelLifecycleEvent } from "../concurrency/admission";
 import type { UnknownErrorBudget } from "./model-error-policy";
 import { dumpRequestBody, postWithRetry, createStreamIdleGuard, sanitizeLoneSurrogates } from "./openai-provider";
+import { declaredPromptHints, normalizeToolsForProvider } from "./provider-schema";
+import { repairProviderBody, type ProviderRepairKind } from "./error-repair";
 
 /** 适配器运行参数(openai-provider.chat() 分派时从 cur 派生)。 */
 export interface ApiTypeAdapterCur {
@@ -23,6 +25,8 @@ export interface ApiTypeAdapterCur {
   reasoningEffort?: string;
  /** 流空闲窗(与 chat 流式分支同语义:timeoutMs 即空闲窗,下限 30s,缺省 600s。 */
   timeoutMs?: number;
+ /** 模型族路由标识(api.id):由 provider 构造参数携带,只影响请求体副本(归一族判定/风格提示)。 */
+  apiId?: string;
 }
 
 export type ApiTypeRetryCtx = { retry: number; emit: (e: ModelLifecycleEvent) => void; budget?: UnknownErrorBudget; budgetKey?: string };
@@ -128,24 +132,125 @@ function anthropicImage(img: string): Record<string, unknown> {
  * (ZCode opencode 的 1h 档是显式配置项,本适配器无该配置面,不猜)。 */
 const CACHE_CONTROL_EPHEMERAL = { type: "ephemeral" } as const;
 
-/** 给「稳定前缀末尾」的块打缓存断点(Anthropic prompt cache:命中率=前缀逐字节相同)。
- * 保持语义(ZCode anthropic-stream-compat 注释同款):块已自带 cache_control 时**保持原样**
- * 不覆盖、不重复打标——断点是配额(官方单请求上限 4,超即 400),重复=浪费一个配额。
- * 空 blocks=无块可标,原样返回。 */
-function markCacheBreakpoint(blocks: Record<string, unknown>[]): void {
-  const last = blocks[blocks.length - 1];
-  if (!last || last.cache_control !== undefined) return;
-  last.cache_control = { ...CACHE_CONTROL_EPHEMERAL };
+/** Anthropic prompt cache 单请求断点上限(官方口径 4)。超出**不是**降级警告而是端点 400,
+ * 所以预算是硬上限:计划层保证永不超,打标层不再二次判断。 */
+export const ANTHROPIC_CACHE_BREAKPOINT_LIMIT = 4;
+
+/** 断点优先级表(固定序,不随请求形态/环境变化)。预算不够就按此序从后往前舍弃。
+ * 为什么是 system > tools > messages-tail-2 > messages-tail-1:
+ * ① system/tools 是跨请求逐字节稳定的静态前缀,断在这里命中率最高且不受消息增长影响;
+ * ② 两条消息断点里「倒数第二条」优先于「末条」——追加式对话中倒数第二条是上一轮的增量末尾,
+ * 下一次请求里它仍逐字节存在,断点立刻可复用;末条是本轮新写内容,只有下一轮继续追加才命中
+ * (一问一答即结束的会话上属于只写不读)。预算不足时先舍弃末条。
+ * 表里的 message 项按「尾随偏移」命名(1=末条,2=倒数第二条),真实下标由 messageCount 现算。 */
+export const ANTHROPIC_CACHE_BREAKPOINT_PRIORITY = ["system", "tools", "messages-tail-2", "messages-tail-1"] as const;
+
+export type CacheBreakpointKind = "tools" | "system" | "message";
+
+export interface CacheBreakpointSlot {
+  kind: CacheBreakpointKind;
+ /** 仅 kind=message 有意义:目标消息在 Anthropic 请求体 messages 数组里的下标(0 基)。 */
+  index?: number;
 }
 
-/** Message[] → Anthropic 请求体:system 分离到顶层(blocks 形态,末块带缓存断点);tool 结果归
- * user tool_result 块;tools 用扁平 input_schema 形态;max_tokens 协议必填(未配置兜底 8192)。
- * 缓存断点两处(前缀序 tools → system → messages,断点即「缓存到这里为止」):
- * ① system 末块(=静态系统提示前缀末尾);② messages 末条消息的末块(=本轮对话历史前缀末尾)。
- * 合计 ≤2 < 官方上限 4;tools 未打标(tools 位置在被命中前缀之外,单独占配额无收益)。 */
+export interface CacheBreakpointSkip extends CacheBreakpointSlot {
+ /** unavailable=该位置本身不存在(无 tools/无 system/消息数不足);
+ * pre-marked=块已自带 cache_control,占配额但不新增打标;
+ * budget-exhausted=配额(上限 4)已用尽。 */
+  reason: "unavailable" | "pre-marked" | "budget-exhausted";
+}
+
+export interface CacheBreakpointPlan {
+ /** 需要**新打标**的槽位(按优先级排序,长度 ≤ ANTHROPIC_CACHE_BREAKPOINT_LIMIT)。 */
+  slots: CacheBreakpointSlot[];
+ /** 本请求实际携带的断点总数 = slots.length + 被认领的 preMarked(恒 ≤ 上限)。 */
+  used: number;
+ /** 没进 slots 的候选:空位置、已有标记、或预算用尽——跳过也要记账,否则「为什么没打在这」无从排查。 */
+  skipped: CacheBreakpointSkip[];
+}
+
+/**
+ * 规划本请求的缓存断点(纯函数:无 IO、无随机、不读时钟、不修改入参;同输入必同输出)。
+ * 断点语义(Anthropic prompt cache):断点标记「缓存到这里为止」,命中条件=该位置之前的全部
+ * 字节与上次请求逐字节相同。因此断点必须跟着**前缀末尾**走,而不是跟着「最新内容」走:
+ * 只追加尾部的请求里,tools/system/倒数第二条消息的位置不漂移,断点便能持续命中——
+ * 「稳定切分」= 切点相对固定历史定位,而不是相对消息总长的偏移(那样每轮都整体位移,永不命中)。
+ * 预算固定 ANTHROPIC_CACHE_BREAKPOINT_LIMIT(4),按 ANTHROPIC_CACHE_BREAKPOINT_PRIORITY 认领。
+ * preMarked 是调用方声明「这些位置已经有 cache_control」:它们**占配额**,对应候选不再进 slots
+ * (已带标记的块重复打标=白白浪费一个配额)。数组允许重复——同一 kind 出现多次=多处已有断点,
+ * 按优先级逐个认领,认领不到的记 budget-exhausted。
+ */
+export function planCacheBreakpoints(input: {
+  hasTools: boolean;
+  hasSystem: boolean;
+ /** Anthropic 请求体 messages 数组长度(system 已分离、tool 结果已合并后的条数)。 */
+  messageCount: number;
+  preMarked?: CacheBreakpointKind[];
+}): CacheBreakpointPlan {
+  const count = Number.isFinite(input.messageCount) ? Math.max(0, Math.floor(input.messageCount)) : 0;
+ // 候选表 = 优先级表逐项实例化(次序即优先级,勿随意重排:硬预算是靠这个顺序取舍的)。
+  const table: { slot: CacheBreakpointSlot; available: boolean }[] = [
+    { slot: { kind: "system" }, available: input.hasSystem },
+    { slot: { kind: "tools" }, available: input.hasTools },
+    { slot: count >= 2 ? { kind: "message", index: count - 2 } : { kind: "message" }, available: count >= 2 },
+    { slot: count >= 1 ? { kind: "message", index: count - 1 } : { kind: "message" }, available: count >= 1 },
+  ];
+  const budget = ANTHROPIC_CACHE_BREAKPOINT_LIMIT;
+  const pending = new Map<CacheBreakpointKind, number>();
+  for (const kind of input.preMarked ?? []) pending.set(kind, (pending.get(kind) ?? 0) + 1);
+  const slots: CacheBreakpointSlot[] = [];
+  const skipped: CacheBreakpointSkip[] = [];
+  let used = 0;
+  for (const { slot, available } of table) {
+    if (!available) { skipped.push({ ...slot, reason: "unavailable" }); continue; }
+    const claimed = pending.get(slot.kind) ?? 0;
+    if (claimed > 0) {
+      if (claimed === 1) pending.delete(slot.kind); else pending.set(slot.kind, claimed - 1);
+ // 已有断点占配额但不新增槽位;配额已满说明调用方自己超限了,如实记账交给上层判断。
+      if (used < budget) { used += 1; skipped.push({ ...slot, reason: "pre-marked" }); }
+      else skipped.push({ ...slot, reason: "budget-exhausted" });
+      continue;
+    }
+    if (used >= budget) { skipped.push({ ...slot, reason: "budget-exhausted" }); continue; }
+    slots.push(slot);
+    used += 1;
+  }
+ // 剩余 preMarked:候选表里没有对应位置(如无 tools 却声明 preMarked tools)→ 仍占配额。
+  for (const [kind, n] of pending) {
+    for (let i = 0; i < n; i++) {
+      if (used < budget) { used += 1; skipped.push({ kind, reason: "pre-marked" }); }
+      else skipped.push({ kind, reason: "budget-exhausted" });
+    }
+  }
+  return { slots, used, skipped };
+}
+
+/** 给单个内容块打缓存断点(Anthropic prompt cache:命中率=前缀逐字节相同)。
+ * 保持语义(ZCode anthropic-stream-compat 注释同款):块已自带 cache_control 时**保持原样**
+ * 不覆盖(含 ttl 等扩展字段)、不重复打标——断点是配额(官方单请求上限 4,超即 400),
+ * 重复=浪费一个配额。无块(undefined)=空态,原样返回 false。返回是否真打了标,便于调用层断言。 */
+export function markCacheBreakpoint(block: Record<string, unknown> | undefined): boolean {
+  if (!block || block.cache_control !== undefined) return false;
+  block.cache_control = { ...CACHE_CONTROL_EPHEMERAL };
+  return true;
+}
+
+/** Message[] → Anthropic 请求体:system 分离到顶层(blocks 形态);tool 结果归 user tool_result 块;
+ * tools 用扁平 input_schema 形态;max_tokens 协议必填(未配置兜底 8192)。
+ * 缓存断点按 planCacheBreakpoints 的预算计划落在「前缀末尾」(前缀序 tools → system → messages,
+ * 断点即「缓存到这里为止」):① 最后一个 tool 定义(Anthropic 支持 tool 定义级 cache_control)
+ * ② system 末块(=静态系统提示前缀末尾)③ 倒数第二条消息末块 ④ 末条消息末块,合计 ≤ 官方上限 4。
+ * 稳定切分:断点跟随前缀末尾而非「最新内容」——只追加尾部消息时,tools/system/倒数第二条的
+ * 位置与内容不漂移,缓存命中=该断点之前的前缀逐字节相同。 */
 function toAnthropicBody(cur: ApiTypeAdapterCur, messages: Message[], tools: ToolSpec[], stream: boolean): Record<string, unknown> {
   messages = messages.map((m) => ({ ...m, content: sanitizeLoneSurrogates(m.content) })); // 孤立代理防线(见 sanitizeLoneSurrogates)
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).filter(Boolean).join("\n\n");
+ // 模型族适配:只改 provider-facing copy(请求体这一层的副本),注册表本体逐字不动,
+ // 理由见 provider-schema.ts 头注;apiId 由 provider 构造参数携带(缺省=按 model 判族)。
+  const normCtx = { apiId: cur.apiId, model: cur.model };
+  const providerTools = normalizeToolsForProvider(tools, normCtx);
+  const hints = declaredPromptHints(normCtx);
+  const systemText = system && hints ? `${system}\n\n${hints}` : system; // 无 system 时不强造
   const out: Record<string, unknown>[] = [];
   /** 上一条源消息是否 tool(=同一 assistant 那批调用的一部分;用于把 tool_result 合并进同一条 user)。 */
   let lastWasTool = false;
@@ -186,17 +291,28 @@ function toAnthropicBody(cur: ApiTypeAdapterCur, messages: Message[], tools: Too
     }
     lastWasTool = false;
   }
-  const lastMsg = out[out.length - 1];
-  if (lastMsg) markCacheBreakpoint(lastMsg.content as Record<string, unknown>[]); // ② 对话历史前缀末尾
-  const systemBlocks = system ? [{ type: "text", text: system }] : [];
-  if (systemBlocks.length) markCacheBreakpoint(systemBlocks); // ① 静态系统提示前缀末尾
+  const toolDefs: Record<string, unknown>[] = providerTools.length > 0
+    ? providerTools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }))
+    : [];
+  const systemBlocks: Record<string, unknown>[] = systemText ? [{ type: "text", text: systemText }] : [];
+ // 断点按预算计划落位(决策在纯函数里、副作用在这里):本适配器不预置 cache_control,
+ // 故 preMarked 缺省为空;若将来上游块自带标记,把它传进 preMarked 即可自动让出配额。
+  const plan = planCacheBreakpoints({
+    hasTools: toolDefs.length > 0,
+    hasSystem: systemBlocks.length > 0,
+    messageCount: out.length,
+  });
+  for (const slot of plan.slots) {
+    if (slot.kind === "tools") { markCacheBreakpoint(toolDefs[toolDefs.length - 1]); continue; } // ③ 工具定义前缀末尾
+    if (slot.kind === "system") { markCacheBreakpoint(systemBlocks[systemBlocks.length - 1]); continue; } // ② 静态系统提示末尾
+    const blocks = out[slot.index ?? -1]?.content;
+    if (Array.isArray(blocks)) markCacheBreakpoint(blocks[blocks.length - 1] as Record<string, unknown> | undefined); // ④/⑤ 对话历史尾部两条
+  }
   return {
     model: cur.model,
     ...(systemBlocks.length ? { system: systemBlocks } : {}),
     messages: out,
-    ...(tools.length > 0
-      ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) }
-      : {}),
+    ...(toolDefs.length > 0 ? { tools: toolDefs } : {}),
     max_tokens: cur.maxTokens && cur.maxTokens > 0 ? cur.maxTokens : 8192,
     ...(stream ? { stream: true } : {}),
   };
@@ -392,6 +508,60 @@ async function anthropicStreamed(
   }
 }
 
+/** 参数类 400/422 报文的特征词(M122b):只有报文点名参数/字段问题才改写请求体——
+ * 同一状态码下的鉴权 / 额度 / 路由类报文不该被当成「body 多带了字段」。 */
+const REPAIRABLE_BODY_RE = /invalid_request|invalid request|unsupported|unrecognized|unknown|not supported|extra (?:field|param)/i;
+
+/**
+ * 非流式 POST(M122b):400/422 且报文点名参数类错误 → repairProviderBody 改写请求体一次并立即重发。
+ * 复用 postWithRetry 的 repair 钩子:emit model_repair(code=invalid_request, actions=applied),
+ * 且这次重发不占既有 retry 预算(attempt-- 后 continue)。
+ * 一次性语义由本函数局部 attemptedRepair 布尔保证(每次 chat 调用一个);第二次仍失败则
+ * postWithRetry 走原 stop 分支抛 ModelRequestError(与接入前同形态)。
+ * 流式路径**不**经过本函数:stream 请求体逐字不变(旧行为)。
+ */
+async function postJsonWithBodyRepair(
+  url: string,
+  headers: Record<string, string>,
+  initialBody: Record<string, unknown>,
+  signal: AbortSignal,
+  retryCtx: ApiTypeRetryCtx,
+  kind: ProviderRepairKind): Promise<Response> {
+  let body = initialBody;
+  let attemptedRepair = false;
+  let errorBody = ""; // fetch 包装里预读的非 ok 报文(peek 副本,不消费原响应体)
+  return postWithRetry(
+    async () => {
+      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal });
+      if (!res.ok) {
+        try {
+          errorBody = (await res.clone().text()).slice(0, 600);
+        } catch {
+          errorBody = "";
+        }
+      }
+      return res;
+    },
+    {
+      retry: retryCtx.retry,
+      signal,
+      emit: retryCtx.emit,
+      ...(retryCtx.budget ? { budget: retryCtx.budget } : {}),
+      ...(retryCtx.budgetKey ? { budgetKey: retryCtx.budgetKey } : {}),
+      repair: ({ status }) => {
+        if (attemptedRepair) return null;
+        if (status !== 400 && status !== 422) return null;
+        if (!REPAIRABLE_BODY_RE.test(errorBody)) return null;
+        const rp = repairProviderBody(body, kind);
+        if (rp.applied.length === 0) return null; // 没有可改字段:不虚报动作、不重发
+        attemptedRepair = true;
+        body = rp.body as Record<string, unknown>;
+        return rp.applied;
+      },
+    },
+  );
+}
+
 /** Anthropic Messages 入口(openai-provider.chat() 在 apiType=anthropic 时分派到此)。 */
 export async function anthropicChat(
   cur: ApiTypeAdapterCur,
@@ -403,14 +573,13 @@ export async function anthropicChat(
   const body = toAnthropicBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return anthropicStreamed(cur, body, signal, onDelta, retryCtx);
-  const res = await postWithRetry(
-    () => fetch(versionedUrl(cur.baseUrl, "/v1/messages"), {
-      method: "POST",
-      headers: anthropicHeaders(cur.apiKey),
-      body: JSON.stringify(body),
-      signal,
-    }),
-    { retry: retryCtx.retry, signal, emit: retryCtx.emit, ...(retryCtx.budget ? { budget: retryCtx.budget } : {}), ...(retryCtx.budgetKey ? { budgetKey: retryCtx.budgetKey } : {}) },
+  const res = await postJsonWithBodyRepair(
+    versionedUrl(cur.baseUrl, "/v1/messages"),
+    anthropicHeaders(cur.apiKey),
+    body,
+    signal,
+    retryCtx,
+    "anthropic",
   );
   if (!res.ok) throw new Error(`LLM ${res.status}: ${await errorText(res, "anthropic")}`);
   return fromAnthropicResponse((await res.json()) as { content?: AnthropicContentBlock[]; usage?: Record<string, unknown> });
@@ -424,6 +593,10 @@ export async function anthropicChat(
  * 每次全量重放——opencode route 默认同款);maxTokens→max_output_tokens(可不带)。 */
 function toResponsesBody(cur: ApiTypeAdapterCur, messages: Message[], tools: ToolSpec[], stream: boolean): Record<string, unknown> {
   messages = messages.map((m) => ({ ...m, content: sanitizeLoneSurrogates(m.content) })); // 孤立代理防线(见 sanitizeLoneSurrogates)
+ // 模型族适配:归一派生的 tools 副本 + 风格提示(只影响请求体,注册表本体不动);apiId 由 provider 携带。
+  const normCtx = { apiId: cur.apiId, model: cur.model };
+  const providerTools = normalizeToolsForProvider(tools, normCtx);
+  const hints = declaredPromptHints(normCtx);
   const input: Record<string, unknown>[] = [];
   for (const m of messages) {
     if (m.role === "system") { input.push({ role: "system", content: m.content }); continue; }
@@ -441,11 +614,21 @@ function toResponsesBody(cur: ApiTypeAdapterCur, messages: Message[], tools: Too
     }
     input.push({ type: "function_call_output", call_id: m.toolCallId, output: m.content });
   }
+ // 风格提示并入**最后一条** system 消息(无 system 时不强造,与 anthropic 分支同口径)。
+  if (hints) {
+    for (let i = input.length - 1; i >= 0; i -= 1) {
+      const item = input[i];
+      if (item?.["role"] === "system") {
+        input[i] = { ...item, content: `${String(item["content"] ?? "")}\n\n${hints}` };
+        break;
+      }
+    }
+  }
   return {
     model: cur.model,
     input,
-    ...(tools.length > 0
-      ? { tools: tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: t.parameters, strict: false })) }
+    ...(providerTools.length > 0
+      ? { tools: providerTools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: t.parameters, strict: false })) }
       : {}),
     store: false,
     ...(cur.maxTokens && cur.maxTokens > 0 ? { max_output_tokens: cur.maxTokens } : {}),
@@ -617,14 +800,13 @@ export async function responsesChat(
   const body = toResponsesBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return responsesStreamed(cur, body, signal, onDelta, retryCtx);
-  const res = await postWithRetry(
-    () => fetch(versionedUrl(cur.baseUrl, "/v1/responses"), {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${cur.apiKey}` },
-      body: JSON.stringify(body),
-      signal,
-    }),
-    { retry: retryCtx.retry, signal, emit: retryCtx.emit, ...(retryCtx.budget ? { budget: retryCtx.budget } : {}), ...(retryCtx.budgetKey ? { budgetKey: retryCtx.budgetKey } : {}) },
+  const res = await postJsonWithBodyRepair(
+    versionedUrl(cur.baseUrl, "/v1/responses"),
+    { "content-type": "application/json", authorization: `Bearer ${cur.apiKey}` },
+    body,
+    signal,
+    retryCtx,
+    "responses",
   );
   if (!res.ok) throw new Error(`LLM ${res.status}: ${await errorText(res, "openai")}`);
   return fromResponsesResponse((await res.json()) as { output?: unknown; status?: unknown; incomplete_details?: unknown; usage?: Record<string, unknown> });

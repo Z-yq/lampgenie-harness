@@ -99,6 +99,26 @@ export interface TerminalSessionOptions {
   now?: () => number;
  /** :shell 覆盖(远程 SSH shell;提供时替代默认 bash/PTY 启动)。 */
   shellOverride?: { command: string; args: string[]; env?: Record<string, string> };
+ /**
+ * 会话工作所有权:拥有该终端的会话 id(网关侧 owner=发起 open 的 task.sessionId)。
+ * 缺省回落到 owner(tool 侧 owner 本义即 task.sessionId),两者语义一致。
+ */
+  ownerSessionId?: string;
+ /**
+ * 代际:单元注册时的归属代际(会话关闭/重开换代)。缺省回落到内部 shell generation,
+ * 便于未接 ownerRegistry 的调用方保持行为不变。
+ */
+  ownerGeneration?: number;
+}
+
+/**
+ * 带所有权信息的终端会话快照。
+ * TerminalSessionInfo 定义在 types.ts(不在本次改动白名单内),故在此本地扩展:
+ * ownerSessionId/ownerGeneration 用于网关 OwnerRegistry 登记与代际关闭(stale 判定)。
+ */
+export interface OwnedTerminalSessionInfo extends TerminalSessionInfo {
+  ownerSessionId?: string;
+  ownerGeneration?: number;
 }
 
 export class TerminalSession {
@@ -149,7 +169,7 @@ export class TerminalSession {
     return this.lastActiveAt;
   }
 
-  info(): TerminalSessionInfo {
+  info(): OwnedTerminalSessionInfo {
     return {
       id: this.opts.id,
       ...(this.opts.name ? { name: this.opts.name } : {}),
@@ -163,6 +183,11 @@ export class TerminalSession {
       exitCode: this.exitCode,
       bufferedBytes: this.buffer.bufferedBytes,
       cursor: this.buffer.endCursor,
+ // owner 语义:ownerSessionId=发起 open 的会话(终端 owner 本义即 tool 侧 task.sessionId)。
+ // 仅作归属上报,不参与下面的 generation 守卫(守卫仍用内部 this.generation 丢弃旧实例数据/退出回调)。
+      ownerSessionId: this.opts.ownerSessionId ?? this.opts.owner,
+ // 代际缺省取内部 generation:未显式接入 OwnerRegistry 的调用方也能得到稳定值。
+      ownerGeneration: this.opts.ownerGeneration ?? this.generation,
     };
   }
 

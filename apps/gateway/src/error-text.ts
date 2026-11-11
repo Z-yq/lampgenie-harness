@@ -8,7 +8,7 @@
  * 浏览器侧与 Node 侧跑的是同一份文案,不存在第二份手抄表。
  * 注入源只允许纯函数 + 无外部引用的常量(模板字面量坑:字符串里不写反斜杠转义,换行用 String.fromCharCode(10))。
  */
-import { ErrorCode } from "@lampgenie/protocol";
+import { COMPAT_WINDOWS, ErrorCode, resolveErrorCodeCompat, type CompatClock } from "@lampgenie/protocol";
 
 /**
  * 单张 code → 人话映射表。类型标成 Record<ErrorCode, string>:
@@ -22,12 +22,15 @@ export const ERR_TEXT: Record<ErrorCode, string> = {
   [ErrorCode.Unknown]: "未知错误",
   [ErrorCode.Internal]: "网关内部错误",
   [ErrorCode.BadRequest]: "请求参数不合法",
+  [ErrorCode.UnsupportedOp]: "当前连接未声明该能力,请先 client.capabilities 声明 supportedOps",
+  [ErrorCode.UnknownMethod]: "网关不认识这条消息类型(面板与网关版本可能错位)",
   // ---- 任务/队列/提问 ----
   [ErrorCode.UnknownTask]: "任务不存在(可能已被删除或属别的会话)",
   [ErrorCode.UnknownQuestion]: "要回答的问题已失效",
   [ErrorCode.UnknownAsk]: "这条提问已失效或已被回答",
   [ErrorCode.UnknownAutomation]: "自动化不存在",
   [ErrorCode.QueueItemMissing]: "队列项不存在(可能已发送或已删除)",
+  [ErrorCode.QueueConflict]: "队列消息冲突:同一幂等键的载荷不同,已拒绝写入,请检查是否重复提交了不同内容",
   // ---- 会议/团队/语音 ----
   [ErrorCode.MeetingImportFailed]: "会议纪要导入失败",
   [ErrorCode.SuperFailed]: "指挥台对话失败",
@@ -105,19 +108,48 @@ export const ERR_TEXT: Record<ErrorCode, string> = {
 export const ERR_UNKNOWN_PREFIX = "未知错误(";
 
 /**
+ * legacy 别名表(Node 侧数据视图):由 protocol 兼容登记表 `COMPAT_WINDOWS` 派生,冻结。
+ * 真源永远是 protocol/compat.ts;这里是给调用方/测试对照用的派生视图。
+ */
+export const LEGACY_TEXT_ALIAS: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(COMPAT_WINDOWS.map((entry) => [entry.legacy, entry.canonical])) as Record<string, string>,
+);
+
+/**
  * code + message → 一句人话。
+ * - legacy 别名先归一(companion-* → super-*),再按 canonical 查表:旧码与新码出同一条人话;
+ * 别名表真源 = protocol/compat.ts 的 `COMPAT_WINDOWS`,与 `LEGACY_TEXT_ALIAS` 的一致性由
+ * test/error-text-compat.test.ts 双向交叉断言
  * - 已登记 code:`ERR_TEXT[code]`(有 message 就以「 — 原文」追加细节,原文不丢)
  * - 未登记 code:`未知错误(<code>):<原文>`(兜底,绝不空白)
  * 纯函数、只依赖 ERR_TEXT / ERR_UNKNOWN_PREFIX 两个常量(会被 toString() 注入面板浏览器侧,
- * 故不得调用本模块的其它函数——只允许 `as` 这类编译期断言)。
+ * 故不得调用本模块的其它函数/常量——只允许 `as` 这类编译期断言)。注入形态里没有 protocol 模块,
+ * 任何对 import 绑定的引用(bundler 会改写成 `xxx.yyy` 属性访问)在浏览器侧都会直接 ReferenceError,
+ * 所以别名必须是**函数体内的字面量**——这是本函数的唯一刻意重复点,由交叉断言守住。
  */
 export function errorText(code: unknown, message?: unknown): string {
-  const c = String(code === null || code === undefined ? "" : code);
+  const raw = String(code === null || code === undefined ? "" : code);
+  const ALIAS: Record<string, string> = {
+    "companion-failed": "super-failed",
+    "companion-announce-failed": "super-announce-failed",
+  };
+  const c = raw && Object.prototype.hasOwnProperty.call(ALIAS, raw) ? (ALIAS[raw] ?? raw) : raw;
   const detail = String(message === null || message === undefined ? "" : message).slice(0, 300);
   const table = ERR_TEXT as unknown as Record<string, string>;
   const label = Object.prototype.hasOwnProperty.call(table, c) ? table[c] : "";
   if (!label) return ERR_UNKNOWN_PREFIX + (c || "无 code") + "):" + (detail || "服务端未给出原文");
   return detail ? label + " — " + detail : label;
+}
+
+/**
+ * Node 侧(非注入形态)入口:先走 protocol 兼容登记表 `resolveErrorCodeCompat` 归一,再取文案。
+ * 与 `errorText` 的分工:`errorText` 为了能注入浏览器用函数体内联别名;本函数用登记表真源
+ * (还能带上 `now` 判窗口阶段)。两者结论必须逐字一致——由 test/error-text-compat.test.ts 交叉断言。
+ */
+export function errorTextWithCompat(code: unknown, message?: unknown, now?: CompatClock): string {
+  const raw = String(code === null || code === undefined ? "" : code);
+  const resolved = resolveErrorCodeCompat(raw, now === undefined ? undefined : { now });
+  return errorText(resolved.code, message);
 }
 
 /**

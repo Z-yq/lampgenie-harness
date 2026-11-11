@@ -50,8 +50,8 @@ const BOOL_FLAGS = new Set(["status", "pause", "resume", "evaluate", "apply", "b
 type Parsed = { values: Map<string, string>; flags: Set<string>; positional: string[] };
 
 function parseArgs(argv: string[]): Parsed {
-  const values = new Map<string, string>;
-  const flags = new Set<string>;
+  const values = new Map<string, string>();
+  const flags = new Set<string>();
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i];
@@ -106,7 +106,7 @@ function codeExit(codes: string[]): number {
   return EXIT_REJECTED;
 }
 
-async function main: Promise<number> {
+async function main(): Promise<number> {
   const parsed = parseArgs(process.argv.slice(2));
   const json = parsed.flags.has("json");
   const root = parsed.values.get("root") ?? "";
@@ -126,7 +126,8 @@ async function main: Promise<number> {
         "  --mark-rolled-back <baselineId>",
         "  --report",
         "退出码:0 成功 / 1 参数错误 / 2 被熔断阻断或被拒 / 3 重复或无效基线",
-      ].join("\n") + "\n";
+      ].join("\n") + "\n",
+    );
     return EXIT_OK;
   }
 
@@ -272,9 +273,10 @@ async function main: Promise<number> {
   fail(EXIT_USAGE, "缺少子命令(--status/--pause/--resume/--evaluate/--baseline/--baselines/--rollback-plan/--mark-rolled-back/--report)", json);
 }
 
-main.then(
+main().then(
   (code) => process.exit(code),
   (err: unknown) => {
     process.stdout.write(`error: ${(err as Error)?.message ?? String(err)}\n`);
     process.exit(EXIT_USAGE);
-  };
+  },
+);

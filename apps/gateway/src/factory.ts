@@ -9,6 +9,12 @@ import { resolveTrackApiKey, resolveTrackEndpoint, resolveLlmApiKey, resolveLlmE
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 import { DshSdkBackend, resolveDshCliCommand } from "@lampgenie/executors/dsh-sdk-backend";
 import { createOpenAiCompatProvider } from "@lampgenie/runtime/agent/openai-provider";
+import {
+  resolveTaskModelRoute,
+  type ResolveTaskModelRouteResult,
+  type RouteRef,
+  type TaskModelKind,
+} from "@lampgenie/runtime/agent/task-model-routing";
 import { createRealtimeProvider } from "@lampgenie/runtime/agent/realtime-provider";
 import { getWorkflowConcurrencyCoordinator } from "@lampgenie/runtime/concurrency/governor";
 import { resolveImplementationEffort, resolveRoleEffort } from "./effort-policy.js";
@@ -79,7 +85,82 @@ function providerFromRef(
   const meta = modelMetaOf(config, ref.model);
   const budget = resolveRequestMaxTokens(ref.maxTokens, meta?.maxTokens);
   if (budget.warning) console.warn("[gateway] " + budget.warning);
-  return createOpenAiCompatProvider({ baseUrl, model: ref.model, apiKey, timeoutMs: ref.timeoutMs, maxTokens: budget.value, ...(apiType && apiType !== "chat" ? { apiType } : {}), ...(reasoningEffort ? { reasoningEffort } : {}), retry: Number(process.env.GENIE_LLM_RETRY ?? 2), admission });
+ // api.id(providerId)贯通到 provider —— 请求体层的族判定/风格提示按 api 路由,缺省(=未配置)不传。
+  return createOpenAiCompatProvider({ baseUrl, model: ref.model, apiKey, timeoutMs: ref.timeoutMs, maxTokens: budget.value, ...(ref.providerId ? { apiId: ref.providerId } : {}), ...(apiType && apiType !== "chat" ? { apiType } : {}), ...(reasoningEffort ? { reasoningEffort } : {}), retry: Number(process.env.GENIE_LLM_RETRY ?? 2), admission });
+}
+
+/** coding.llm 的引用形状(router 合并 base/routing 项时用)。 */
+type CodingLlmRef = NonNullable<Config["coding"]["llm"]>;
+
+/** 任务类别路由(execute face:把 config.coding.models.routing + 免费供应商声明
+ * 解析成 (kind, taskClass) → provider 的**稳定实例**(同 key 恒同对象,便于调用方按需缓存/比较)。
+ * 与 buildModelProviders 并存:后者按角色槽位建 compact/review/subagent/digest,本 router 只做
+ * kind 级覆盖,未命中/构建失败一律 undefined,调用方自行回退 aux/compact,绝不抛。 */
+export interface ModelRouter {
+  resolve(kind: TaskModelKind, taskClass?: string): ResolveTaskModelRouteResult;
+  providerFor(kind: TaskModelKind, taskClass?: string): LlmProvider | undefined;
+}
+
+/** 免费供应商声明(显式约定,不发明配置字段):仓库无「免费 provider」元数据,故由运维用
+ * GENIE_FREE_PROVIDERS(逗号分隔 providerId)声明。**每次解析现读**,缺省空集=freeOnly 项
+ * 全部被过滤回 base 路由(表项被滤掉不是错误)。 */
+function freeProvidersFromEnv(): Set<string> {
+  const raw = process.env.GENIE_FREE_PROVIDERS;
+  if (!raw) return new Set<string>();
+  const out = new Set<string>();
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (id) out.add(id);
+  }
+  return out;
+}
+
+/**
+ * 建任务类别路由器。config 运行时可能是 undefined(app.ts 传 opts.config 是断言进来的),
+ * 故内部一律 optional chaining + try/catch:任何异常都降级为 undefined,绝不冒泡到装配面。
+ */
+export function createModelRouter(config: Config, repoRoot: string): ModelRouter {
+  const cfg = config as Config | undefined;
+  const llm = cfg?.coding?.llm as CodingLlmRef | undefined;
+  const table = (cfg?.coding?.models as { routing?: Record<string, RouteRef> } | undefined)?.routing;
+  const cache = new Map<string, LlmProvider | undefined>();
+
+ /** 默认路由 = coding.llm 经模型路由派生(选择即 (providerId, model) 对,同 buildLlmFromConfig)。 */
+  const baseRoute = (): RouteRef | undefined => {
+    if (!llm?.model) return undefined;
+    try {
+      return { ...(llm as RouteRef), ...(resolveCodingModelRoute(cfg as Config, llm) as RouteRef) };
+    } catch {
+      return { ...(llm as RouteRef) };
+    }
+  };
+
+  const resolve = (kind: TaskModelKind, taskClass?: string): ResolveTaskModelRouteResult =>
+    resolveTaskModelRoute({ kind, taskClass, base: baseRoute(), table, freeProviders: freeProvidersFromEnv() });
+
+  const providerFor = (kind: TaskModelKind, taskClass?: string): LlmProvider | undefined => {
+    const key = `${kind}::${taskClass ?? ""}`;
+    if (cache.has(key)) return cache.get(key);
+    let provider: LlmProvider | undefined;
+    try {
+      const r = resolve(kind, taskClass);
+      if (r.ok && r.route.model) {
+ // 命中项叠在 base 之上(未填字段继承主轨),再按 registry 语义派生端点/凭证。
+        const merged = { ...((cfg?.coding?.llm ?? {}) as CodingLlmRef), ...(r.route as CodingLlmRef) };
+        const routed = resolveCodingModelRoute(cfg as Config, merged);
+        provider = providerFromRef(
+          cfg as Config, repoRoot, "coding",
+          { ...merged, ...routed } as Parameters<typeof providerFromRef>[3],
+        ) as LlmProvider | undefined;
+      }
+    } catch {
+      provider = undefined; // 凭证不可解析/端点缺失等:静默回 undefined(调用方回退)
+    }
+    cache.set(key, provider);
+    return provider;
+  };
+
+  return { resolve, providerFor };
 }
 
 export function buildLlmFromConfig(config: Config, repoRoot: string, _sources?: Record<string, string>): LlmProvider | undefined {

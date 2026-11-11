@@ -1,5 +1,5 @@
 /**
- * web_search/web_fetch 降级链与配置层( * 「有提供搜索工具时直接用搜索工具,没有时用自身 curl/browser 能力」):
+ * web_search/web_fetch 降级链与配置层(  * 「有提供搜索工具时直接用搜索工具,没有时用自身 curl/browser 能力」):
  * ①配置层 provider(genie.config.json web.search)优先于 env 探测;
  * ②无任何 provider → 内置静态检索(DuckDuckGo HTML)兜底,fallback 标注如实;
  * ③DDG 失败 → 错误文案指路 browser 工具与设置页;

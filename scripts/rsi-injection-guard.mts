@@ -34,8 +34,8 @@ const DUPLICATE_CODES = new Set(["INJ_ALREADY_APPROVED", "INJ_ALREADY_BLACKLISTE
 type Parsed = { values: Map<string, string>; flags: Set<string>; positional: string[] };
 
 function parseArgs(argv: string[]): Parsed {
-  const values = new Map<string, string>;
-  const flags = new Set<string>;
+  const values = new Map<string, string>();
+  const flags = new Set<string>();
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i]!;
@@ -94,7 +94,7 @@ const HELP = [
   "退出码:0 通过/成功 / 1 参数错误 / 2 被拒(码打 stderr) / 3 已被批准或已拉黑",
 ].join("\n");
 
-async function main: Promise<number> {
+async function main(): Promise<number> {
   const parsed = parseArgs(process.argv.slice(2));
   const json = parsed.flags.has("json");
   const get = (name: string): string | undefined => parsed.values.get(name);
@@ -139,7 +139,8 @@ async function main: Promise<number> {
         `riskFlags=${risk}`,
         `sanitizedText=${res.sanitizedText ?? ""}`,
         `wrapped=${res.wrapped ?? ""}`,
-      ];
+      ],
+    );
     if (!res.ok) {
       process.stderr.write(`codes=${res.codes.join(",")}\n`);
       return codeExit(res.codes);
@@ -206,9 +207,10 @@ async function main: Promise<number> {
   fail(EXIT_USAGE, "缺少子命令(--guard/--approve/--blacklist/--status/--report)", json);
 }
 
-main.then(
+main().then(
   (code) => process.exit(code),
   (err: unknown) => {
     process.stderr.write(`error: ${(err as Error)?.message ?? String(err)}\n`);
     process.exit(EXIT_USAGE);
-  };
+  },
+);

@@ -52,6 +52,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --sans:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
     --sbw:264px;
+    --bnav-h:44px; /* 底部导航条高度(导航从左栏搬到窗口底部;.page/#sidebar/canvas-shell 共用) */
  /* ---- 主题变量层扩展:语义化二级变量(每套主题必答;默认值=鎏金夜 dark 现状,视觉零漂移) ---- */
     --hover-bg:rgba(255,255,255,.05);            /* 悬停叠层(列表行/按钮) */
     --hover-bg2:rgba(255,255,255,.08);           /* 悬停叠层加重 */
@@ -286,7 +287,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --anim-dur-fast:140ms;--anim-dur-base:200ms;--anim-dur-slow:300ms;--anim-decor:0}
   body.light::before{background:radial-gradient(900px 600px at 85% 8%,rgba(150,100,45,.06),transparent 60%),
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(120,90,50,.12) 100%)}
-  body.light #sidebar{background:rgba(250,246,238,.9)}
+  body.light #sidebar,body.light .sb-acts{background:rgba(250,246,238,.9)}
   body.light .cc-box{background:#fffdf8;color:var(--text)}
  /* 白板配色:暖纸浅色(light) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.light{
@@ -428,7 +429,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(900px 600px at 85% 8%,rgba(204,139,101,.10),transparent 60%),
     radial-gradient(700px 500px at 10% 90%,rgba(1,51,40,.06),transparent 60%),
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(16,12,13,.10) 100%)}
-  body.theme-sand #sidebar{background:rgba(237,231,222,.9)}
+  body.theme-sand #sidebar,body.theme-sand .sb-acts{background:rgba(237,231,222,.9)}
   body.theme-sand .cc-box{background:#F8F3EC;color:var(--text)}
  /* 白板配色:沙丘(sand) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-sand{
@@ -568,7 +569,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(900px 600px at 85% 8%,rgba(217,104,70,.10),transparent 60%),
     radial-gradient(700px 500px at 10% 90%,rgba(89,98,53,.08),transparent 60%),
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(47,48,32,.10) 100%)}
-  body.theme-olive #sidebar{background:rgba(216,214,223,.9)}
+  body.theme-olive #sidebar,body.theme-olive .sb-acts{background:rgba(216,214,223,.9)}
   body.theme-olive .cc-box{background:#F0EFF4;color:var(--text)}
  /* 白板配色:橄榄石(olive) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-olive{
@@ -636,7 +637,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     radial-gradient(900px 600px at 85% 8%,rgba(159,73,110,.09),transparent 60%),
     radial-gradient(700px 500px at 10% 90%,rgba(100,114,149,.08),transparent 60%),
     radial-gradient(ellipse at 50% 50%,transparent 60%,rgba(43,38,45,.10) 100%)}
-  body.theme-plum #sidebar{background:rgba(248,243,238,.9)}
+  body.theme-plum #sidebar,body.theme-plum .sb-acts{background:rgba(248,243,238,.9)}
   body.theme-plum .cc-box{background:#FCF8F4;color:var(--text)}
  /* 白板配色:梅紫(plum) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-plum{
@@ -704,6 +705,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     --view-shift:0px;--anim-decor:0}
   body.theme-ink::before{background:none}
   body.theme-ink #sidebar{background:rgba(255,255,255,.92);border-right:1px solid var(--border-soft)}
+  body.theme-ink .sb-acts{background:rgba(255,255,255,.92)} /* 底部导航条随主题玻璃色 */
   body.theme-ink .cc-box{background:#ffffff;color:var(--text)}
  /* 白板配色:薄墨(ink) —— 白板 CSS 区只吃 --bcv-*,此处集中覆写(派生自本主题 --window-bg/--text/--muted/--border) */
   body.theme-ink{
@@ -770,6 +772,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   #sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sbw);z-index:6;display:flex;flex-direction:column;
            background:rgba(10,7,5,.82);backdrop-filter:blur(10px);transition:transform .18s ease}
   #sidebar.hidden{transform:translateX(-100%)}
+ /* 底部导航条常驻(#sb-user 不被它压住);画布形态下端导航条仍在,但侧栏已是浮动托盘 → 不预留 */
+  body:not(.cv-shell) #sidebar{padding-bottom:var(--bnav-h)}
   #sbDrag{position:fixed;left:calc(var(--sbw) - 2px);top:0;bottom:0;width:5px;z-index:7;cursor:col-resize}
   body.sb-hidden #sbDrag{display:none}
   #sbDrag:hover{background:var(--accent-soft)}
@@ -777,15 +781,23 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   .brand-dot{width:9px;height:9px;border-radius:50%;background:var(--bronze);box-shadow:0 0 10px var(--bronze-glow)}
   .sb-brand .bn{font-family:var(--serif);font-size:14px;letter-spacing:4px;color:var(--brand)}
   .sb-brand .bs{margin-left:auto;font-size:9px;letter-spacing:2px;color:var(--faint);text-transform:uppercase}
-  /* 画布/经典形态切换常驻入口(经典模式侧栏可见;画布模式由 HUD 的「经典」退出) */
+ /* 画布/经典形态切换常驻入口:两种形态常驻(画布模式下点它回经典,与 composer 药丸/HUD「经典」同语义) */
   .sb-mode-btn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:6px 10px;flex-shrink:0;
                border:1px solid var(--border-soft);border-radius:8px;background:rgba(201,143,69,.06);
                color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;text-align:left;transition:.15s}
   .sb-mode-btn:hover{color:var(--text);border-color:var(--bronze);background:rgba(201,143,69,.13)}
   .sb-mode-btn .ic{color:var(--bronze);font-size:13px;line-height:1}
   .sb-mode-btn .kbd{margin-left:auto;font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:0}
-  body.cv-shell .sb-mode-btn{display:none}
-  .sb-acts{display:flex;flex-direction:column;padding:0 8px;flex-shrink:0}
+ /* ===== 底部导航条(§ 导航下移):原左栏 .sb-acts 整块物理搬到 </aside> 之后的 body 直属节点;
+ * 横跨整窗 fixed 贴底,常驻(Ctrl+B 折叠侧栏不影响它),18 项放不下横向滚动;
+ * 注:#sidebar 有 backdrop-filter,其子元素 fixed 不相对视口 → 必须搬 DOM,纯 CSS 无效。 */
+  .sb-acts{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;flex-direction:row;align-items:center;
+           gap:2px;padding:0 8px;height:var(--bnav-h);flex-shrink:0;
+           background:rgba(10,7,5,.86);border-top:1px solid var(--border-soft);backdrop-filter:blur(8px);
+           overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .sb-acts::-webkit-scrollbar{display:none}
+  .sb-acts .sb-act{flex:0 0 auto;white-space:nowrap;padding:6px 9px;gap:7px}
+  .sb-acts .sb-kbd{display:none} /* 底部条省宽:快捷键徽标不占位 */
   .sb-act{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12.5px;
           color:var(--muted);cursor:pointer;user-select:none;transition:.15s}
   .sb-act:hover{background:var(--hover-bg);color:var(--text)}
@@ -1190,7 +1202,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   body.cv-shell #updateFloat.on,body.sb-hidden #updateFloat.on{display:block}
 
   .page{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;
-        padding-left:calc(var(--sbw) + 8px);padding-right:28px}
+        padding-left:calc(var(--sbw) + 8px);padding-right:28px;padding-bottom:var(--bnav-h)}
   body.sb-hidden .page{padding-left:60px} /* 44px 细轨 + 16px(ZCode 折叠态仍有轨) */
   header{display:flex;align-items:center;padding:20px 28px 0;flex-shrink:0;gap:12px}
   .sb-toggle{width:28px;height:28px;border-radius:7px;border:none;background:transparent;display:flex;
@@ -1644,6 +1656,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     color:var(--bronze);background:var(--sunken);border-bottom:1px solid var(--border-soft);
     border-top:1px solid var(--border-soft)}
   .tb-trhead .h{font-family:var(--font-mono);color:var(--faint)}
+ /* 看板默认折叠 —— 行表按轮收起;屏外组 content-visibility:auto 跳过布局/绘制 */
+  .tb-rowfold{border-bottom:1px solid var(--border-soft)}
+  .tb-rowfold>summary{list-style:none;cursor:pointer}
+  .tb-rowfold>summary::-webkit-details-marker{display:none}
+  .tb-trsum{display:flex;align-items:center;gap:8px}
+  .tb-trsum .tb-trhead{flex:1;border:none;height:22px;background:transparent}
+  .tb-trnum{margin-left:auto;padding-right:10px;font-family:var(--font-mono);font-size:9.5px;color:var(--faint)}
+  .tb-trbody{content-visibility:auto;contain-intrinsic-size:auto 320px}
   .tb-warn{font-size:10.5px;color:var(--warn);padding:4px 9px;border-bottom:1px solid var(--border-soft);
     font-family:var(--font-mono)}
   .tb-empty{padding:18px;text-align:center;color:var(--faint);font-size:11px;letter-spacing:.6px}
@@ -1892,6 +1912,95 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   #view-team.tab-issues .team-only{display:none}
   #view-team.tab-issues .dash-only{display:none}
   #view-team:not(.tab-issues) .issue-only{display:none}
+ /* RSI 运行看板( RSI-PLACE:由团队第四子标签迁入指挥台子标签,全局治理面与指挥台同屏):
+ 12 分区只读状态卡;暖纸主题变量复用,零图库。显隐全走 #view-super.tab-rsi 类,不用 inline display。 */
+  #superPaneChat{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  #superPaneRsi{display:none;flex-direction:column;gap:10px;min-width:0;min-height:0;overflow-y:auto}
+ /* RSI-SESSION:固定会话窗——左 12 张机制卡,右内嵌 rsi 会话工作流(RSI 也应有会话窗) */
+  #view-super.tab-rsi #superPaneChat{display:none}
+  #view-super.tab-rsi #superPaneRsi{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:10px;min-height:0;overflow:hidden;align-items:stretch}
+  #view-super .sup-rsi-only{display:none}
+  #view-super.tab-rsi .sup-rsi-only{display:inline}
+  #view-super.tab-rsi .sup-chat-only{display:none}
+  #rsiHead{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ /* SUPER-CHAT:会话Chat 子标签(第三子标签,类驱动显隐同 tab-rsi 约定;卡片类名复用主聊天
+ .user-line/.sys-line/.tool-card/.task-reply 全局样式,观感与 coding agent 主聊天一致) */
+  #superPaneRsiChat{display:none;flex-direction:column;flex:1 1 auto;min-height:0}
+  #view-super.tab-rsichat #superPaneRsiChat{display:flex}
+  #view-super.tab-rsichat #superPaneChat,
+  #view-super.tab-rsichat #superPaneRsi{display:none}
+  #rsiChatHead{flex:0 0 auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);padding:0 0 6px}
+  #rsiChatMeta{color:var(--faint)}
+  #rsiChatNotice{flex:0 0 auto;font-size:10.5px;color:var(--faint);border:1px solid var(--border-soft);border-radius:8px;padding:4px 8px;margin-bottom:6px}
+  #rsiChatBody{flex:1 1 auto;min-height:0;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  #rsiChatBody .rsi-chat-empty{border:1px dashed var(--border-soft);border-radius:10px;padding:26px 18px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
+  #rsiChatBody .rsi-chat-empty .vw-act{margin-top:10px}
+  #rsiChatBody .rsi-chat-error{border:1px solid #b3261e;border-radius:10px;padding:14px 16px;color:#b3261e;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #rsiChatComposer{flex:0 0 auto;display:flex;gap:8px;padding:8px;border-top:1px solid var(--border-soft,rgba(201,143,69,.18))}
+  #rsiChatInput{flex:1 1 auto;min-width:0;background:rgba(0,0,0,.3);border:1px solid var(--border-soft,rgba(201,143,69,.24));border-radius:8px;color:var(--text,#ece1d1);font:inherit;font-size:12.5px;padding:7px 10px;outline:none}
+  #rsiCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:start;overflow-y:auto;min-height:0;padding-right:2px}
+  .rsi-card{border:1px solid var(--border-soft);border-radius:10px;background:var(--glass2);padding:10px 12px;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .rsi-card-h{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);letter-spacing:1px}
+  .rsi-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#b26a00}
+  .rsi-tone-ok .rsi-dot,.rsi-dot.rsi-tone-ok{background:#2e7d32}
+  .rsi-tone-warn .rsi-dot,.rsi-dot.rsi-tone-warn{background:#b26a00}
+  .rsi-tone-bad .rsi-dot,.rsi-dot.rsi-tone-bad{background:#b3261e}
+ /* RSI-DASH-UX:未启用(无 store)是中性态,灰点;不得与红色异常同款 */
+  .rsi-tone-idle .rsi-dot,.rsi-dot.rsi-tone-idle{background:#6b7280}
+  .rsi-code{font-size:9.5px;color:var(--faint);word-break:break-all}
+  .rsi-badge{margin-left:auto;font-size:9.5px;letter-spacing:0;padding:0 5px;border-radius:6px;border:1px solid var(--border-soft);color:var(--faint);white-space:nowrap}
+  .rsi-badge-ok{color:#2e7d32;border-color:#2e7d32}
+  .rsi-badge-bad{color:#b3261e;border-color:#b3261e}
+  .rsi-hint{font-size:9.5px;color:var(--faint);line-height:1.45;word-break:break-word}
+  .rsi-kv{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:10px;color:var(--muted)}
+  .rsi-kv b{color:var(--text);font-weight:500}
+  .rsi-kv b.rsi-tone-ok{color:#2e7d32}
+  .rsi-kv b.rsi-tone-warn{color:#b26a00}
+  .rsi-kv b.rsi-tone-bad{color:#b3261e}
+  .rsi-warn-line{font-size:9.5px;color:#b3261e;line-height:1.45;word-break:break-word}
+  .rsi-empty{font-size:10.5px;color:var(--faint)}
+ /* RSI 固定会话窗( RSI-SESSION):紧凑事件流,复用暖纸变量 */
+  #rsiStream{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:0;border:1px solid var(--border-soft);border-radius:10px;background:var(--glass2);padding:8px 10px;overflow:hidden}
+  #rsiStreamHead{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto}
+  #rsiStreamHead b{color:var(--text)}
+  #rsiStreamBody{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+  .rsi-ev{font-size:10.5px;line-height:1.5;color:var(--text);border-left:2px solid var(--border-soft);padding:1px 0 1px 7px;word-break:break-word}
+  .rsi-ev-task{border-left-color:#2e7d32}
+  .rsi-ev-task b{color:#2e7d32;font-weight:600;margin-right:4px}
+  .rsi-ev-agent{border-left-color:#1f6feb}
+  .rsi-ev-tool{border-left-color:#b26a00;color:var(--muted)}
+  .rsi-ev-args{color:var(--faint);font-size:9.5px}
+  .rsi-ev-res{border-left-color:#6b7280;color:var(--faint)}
+  .rsi-ev-step{border-left-color:transparent;color:var(--faint);font-size:9.5px}
+  .rsi-ev-warn{border-left-color:#b3261e;color:#b3261e}
+  .rsi-ev-txt{white-space:pre-wrap}
+  @media (max-width:1100px){#view-super.tab-rsi #superPaneRsi{grid-template-columns:minmax(0,1fr)}#rsiStream{max-height:42%}}
+ /* RSI-CTRL:每机制可开关/切驱动/运行,结果条目可改可删(暖纸主题变量复用,零图库,零内联事件) */
+  .rsi-ctrl{display:flex;align-items:center;gap:4px;margin-left:6px;flex-wrap:wrap}
+  .rsi-sw,.rsi-run,.rsi-item-act{font:inherit;font-size:9.5px;line-height:1.6;padding:0 6px;border-radius:6px;border:1px solid var(--border-soft);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .rsi-sw.on{color:#2e7d32;border-color:#2e7d32}
+  .rsi-sw.off{color:var(--faint)}
+  .rsi-sw:hover,.rsi-run:hover,.rsi-item-act:hover{border-color:var(--bronze);color:var(--bronze)}
+  .rsi-run[disabled]{opacity:.55;cursor:default;border-color:var(--border-soft);color:var(--faint)}
+  .rsi-drv{font:inherit;font-size:9.5px;padding:0 2px;border-radius:6px;border:1px solid var(--border-soft);background:transparent;color:var(--muted);cursor:pointer}
+  .rsi-run-state{font-size:9.5px;color:var(--faint);white-space:nowrap}
+  .rsi-run-err{font-size:9.5px;color:#b3261e;line-height:1.45;word-break:break-word}
+  .rsi-card-off{opacity:.55}
+  .rsi-items{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--border-soft);padding-top:6px;min-width:0}
+  .rsi-cost-row{font-size:9.5px;color:var(--faint);line-height:1.45;word-break:break-all}
+  .rsi-item{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--text);min-width:0}
+  .rsi-item-row{display:flex;align-items:center;gap:6px;min-width:0}
+  .rsi-item-t{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rsi-item.exp .rsi-item-t{cursor:pointer}
+  .rsi-item-arrow{color:var(--faint);font-style:normal;font-size:9px;margin-left:2px}
+  .rsi-item-sum{color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
+  .rsi-item-acts{margin-left:auto;display:flex;gap:4px;flex-shrink:0}
+  .rsi-item-detail{display:none;font-size:9.5px;color:var(--muted);line-height:1.45;word-break:break-word;border-left:2px solid var(--border-soft);padding-left:6px}
+  .rsi-item.exp .rsi-item-detail{display:block}
+  .rsi-item.rsi-arm .rsi-item-act[data-act="del"]{color:#b3261e;border-color:#b3261e}
+  .rsi-form{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .rsi-form input,.rsi-form textarea{width:100%;box-sizing:border-box;font:inherit;font-size:10px;color:var(--text);background:rgba(255,255,255,.03);border:1px solid var(--border-soft);border-radius:6px;padding:3px 6px;resize:vertical}
+  .rsi-form-acts{display:flex;gap:4px;justify-content:flex-end}
   .issue-col{border:1px solid var(--border-soft);border-radius:12px;padding:8px;min-height:140px;background:rgba(255,255,255,.015)}
   .issue-col-h{font-size:10px;letter-spacing:1px;color:var(--faint);margin-bottom:6px}
   .issue-cards{display:flex;flex-direction:column;gap:8px;min-height:60px}
@@ -4157,8 +4266,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   @media (max-width:860px){
     :root{--sbw:64px}
     /* 图标条模式(用户参照的成熟软件行为:装不下→省略文字只留图标);font-size:0 压掉裸文本标签,svg 不受影响 */
-    #sidebar .sb-act{justify-content:center;gap:0;font-size:0;padding:9px 6px}
-    #sidebar .sb-kbd{display:none}
+    .sb-acts .sb-act{justify-content:center;gap:0;font-size:0;padding:9px 6px}
+    .sb-acts .sb-kbd{display:none}
     #sidebar .bn,#sidebar .bs{display:none}
     .sb-brand{justify-content:center;padding:14px 6px 10px}
     .sb-tt{font-size:0;padding:3px 6px}
@@ -4431,6 +4540,62 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   <button class="sb-mode-btn" id="cvModeBtn" type="button" title="切换到画布模式:全部视图变成卡片,可平移/缩放/自由布局 (Ctrl+Shift+C)">
     <span class="ic">▦</span><span>画布模式</span><span class="kbd">Ctrl+Shift+C</span>
   </button>
+  <div class="sb-sep"></div>
+  <div class="sb-toolbar">
+    <span class="sb-tt on" id="tt-proj">项目</span>
+    <span class="sb-tt" id="tt-time">时间</span>
+    <span class="sb-tt" id="tt-group" title="按自定义分组(F3,任务行右键「移入分组」)">分组</span>
+    <span class="sb-tt" id="tt-arch" title="归档视图(F3)">归档</span>
+    <span class="sb-tt" id="tt-sort" title="排序基准:更新/创建切换">更新</span>
+    <span class="sb-tt" id="tt-fold" title="全部展开/收起(展开中分组一键收起)">全收</span>
+  </div>
+  <div class="sb-proj" id="projRow" title="点击 → 新建任务(草稿)">
+    <svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+    <span id="projName">…</span><span class="cnt" id="projCnt"></span>
+  </div>
+  <div id="projList"></div>
+  <div id="projAdd" style="display:none">
+ <!-- 目录浏览走服务端(gateway 在 WSL,才能看到 /home 真实路径);
+ 浏览器侧 webkitdirectory 选择器只能拿 Windows 侧相对路径——已删,勿恢复 -->
+    <div class="proj-add-quick">
+      <button id="projBrowseBtn" title="浏览 WSL/本地文件系统选目录(服务端目录浏览器)">打开文件夹</button>
+      <button id="projRemoteBtn" title="SSH / WSL / Docker 远程连接添加">远程连接</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input id="projPathInput" placeholder="或粘贴绝对路径,如 /home/u/myapp" autocomplete="off" spellcheck="false" style="flex:1">
+      <button id="projAddGo">添加</button><button id="projAddCancel">取消</button>
+    </div>
+  </div>
+  <div class="sb-proj-add" id="projAddBtn" title="添加项目(工作区)">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <span>添加项目</span>
+  </div>
+  <div id="taskList"></div>
+  <div class="sb-spacer"></div>
+ <!-- 文件树滑入层(ZCode WorkspaceFileTree):桶头「文件树」打开;Esc/返回关闭;用户行 z-index 常驻 -->
+  <div id="sbFt">
+    <div class="sbft-head">
+      <button class="sbft-btn" id="sbFtBack" title="返回 (Esc)">← 返回</button>
+      <span class="t" id="sbFtTitle">文件树</span>
+      <button class="sbft-btn" id="sbFtRefresh" title="刷新目录" style="margin-left:auto">刷新</button>
+    </div>
+    <div id="sbFtTree"></div>
+  </div>
+ <!-- 版本更新提示:桌面壳 update-check 状态驱动;浏览器内无 genieWindow.updates 时整块不出现 -->
+  <div class="sb-update" id="updateBar" style="display:none" role="status" aria-live="polite">
+    <div class="up-head"><span class="up-dot"></span><b id="upTitle">发现新版本</b><button class="up-close" id="upLater" type="button" title="稍后再说" aria-label="稍后再说">×</button></div>
+    <div class="up-sub" id="upSub"></div>
+    <div class="up-acts"><button class="up-go" id="upAction" type="button">下载更新</button><button class="up-link" id="upMore" type="button" style="display:none">更新说明</button></div>
+  </div>
+  <div class="sb-user">
+    <div class="u-ava" id="uAva" title="配置台 Config">G</div>
+    <div class="u-txt"><div class="u-name">本地工作台</div><div class="u-sub" id="uSub">gateway · 连接中</div></div>
+    <div class="u-gear" id="uGear" title="配置台 Config">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><line x1="12" y1="2.5" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="7.4" y2="7.4"/><line x1="16.6" y1="16.6" x2="18.7" y2="18.7"/><line x1="18.7" y1="5.3" x2="16.6" y2="7.4"/><line x1="7.4" y1="16.6" x2="5.3" y2="18.7"/></svg>
+    </div>
+  </div>
+</aside>
+<!-- 底部导航条:原左栏 .sb-acts 整块搬到窗口最底部横跨整窗(§bnav-h);内部 HTML 逐字未变(panel-card-naming 守卫) -->
   <div class="sb-acts">
     <div class="sb-act" id="act-new" title="新建任务 (Ctrl+N)">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -4441,6 +4606,11 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
     <div class="sb-act" id="act-super" title="指挥台 Super">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><path d="M12 3v4.2"/><path d="M12 16.8V21"/><path d="M3 12h4.2"/><path d="M16.8 12H21"/><circle cx="12" cy="12" r="8.4" stroke-dasharray="3.2 3.2"/></svg>
       指挥台 Super
+    </div>
+ <!-- RSI-PLACE:RSI 看板=管理整个系统的全局治理面,与指挥台同视图(两个子标签:指挥台 / RSI 看板)。 -->
+    <div class="sb-act" id="act-rsi" title="RSI 看板:管理整个系统的 RSI 机制运行状态(12 分区只读,全局治理面)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+      RSI 看板
     </div>
     <div class="sb-act" id="act-search" title="搜索 (Ctrl+K)">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
@@ -4472,7 +4642,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><path d="M3 6l3-2 3 2v12l-3-2-3 2z"/><path d="M12 4l3 2v12l-3-2-3 2V6z" transform="translate(6 0)"/><path d="M21 6v12"/></svg>
       插件市场 Market
     </div>
- <!-- 终端/文件两个左栏入口已撤(2026-10-19 不展示);浏览器入口 2026-11 恢复(见下方 act-web)。
+ <!-- 终端/文件两个左栏入口已撤(不展示);浏览器入口 2026-11 恢复(见下方 act-web)。
          未展示者的能力入口仍在,勿删对应视图与路由:
            · 终端    → Ctrl+J(KEYMAP open-terminal)/ 命令中心;视图 #view-term,WS term.exec
            · 文件    → 侧栏任务/项目桶头「文件树」滑入层 #sbFt(与 #view-files 同源 dirCache)+ 项目右键「查看文件」
@@ -4485,8 +4655,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.9.4 5 2.8 5 5.8"/></svg>
       团队 Crew
     </div>
- <!-- 总线路一级入口已并入代码档案「总路线」tab(2026-10-19 总路线与代码档案是同一功能) -->
- <!-- 运行看板顶级入口已收编进团队视图「看板」子标签(2026-10-16 运行看板是团队的一个子功能,每项目一块看板) -->
+ <!-- 总线路一级入口已并入代码档案「总路线」tab(总路线与代码档案是同一功能) -->
+ <!-- 运行看板顶级入口已收编进团队视图「看板」子标签(运行看板是团队的一个子功能,每项目一块看板) -->
     <div class="sb-act" id="act-nodes" title="节点 Fleet">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="13" width="7" height="7" rx="1.5"/><line x1="14" y1="16.5" x2="21" y2="16.5"/><line x1="17.5" y1="13" x2="17.5" y2="20"/></svg>
       节点 Fleet
@@ -4514,61 +4684,6 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       吞吐 Telemetry
     </div>
   </div>
-  <div class="sb-sep"></div>
-  <div class="sb-toolbar">
-    <span class="sb-tt on" id="tt-proj">项目</span>
-    <span class="sb-tt" id="tt-time">时间</span>
-    <span class="sb-tt" id="tt-group" title="按自定义分组(F3,任务行右键「移入分组」)">分组</span>
-    <span class="sb-tt" id="tt-arch" title="归档视图(F3)">归档</span>
-    <span class="sb-tt" id="tt-sort" title="排序基准:更新/创建切换">更新</span>
-    <span class="sb-tt" id="tt-fold" title="全部展开/收起(展开中分组一键收起)">全收</span>
-  </div>
-  <div class="sb-proj" id="projRow" title="点击 → 新建任务(草稿)">
-    <svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-    <span id="projName">…</span><span class="cnt" id="projCnt"></span>
-  </div>
-  <div id="projList"></div>
-  <div id="projAdd" style="display:none">
- <!-- 目录浏览走服务端(gateway 在 WSL,才能看到 /home 真实路径);
-         浏览器侧 webkitdirectory 选择器只能拿 Windows 侧相对路径——已删,勿恢复 -->
-    <div class="proj-add-quick">
-      <button id="projBrowseBtn" title="浏览 WSL/本地文件系统选目录(服务端目录浏览器)">打开文件夹</button>
-      <button id="projRemoteBtn" title="SSH / WSL / Docker 远程连接添加">远程连接</button>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <input id="projPathInput" placeholder="或粘贴绝对路径,如 /home/u/myapp" autocomplete="off" spellcheck="false" style="flex:1">
-      <button id="projAddGo">添加</button><button id="projAddCancel">取消</button>
-    </div>
-  </div>
-  <div class="sb-proj-add" id="projAddBtn" title="添加项目(工作区)">
-    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    <span>添加项目</span>
-  </div>
-  <div id="taskList"></div>
-  <div class="sb-spacer"></div>
-  <!-- 文件树滑入层(ZCode WorkspaceFileTree):桶头「文件树」打开;Esc/返回关闭;用户行 z-index 常驻 -->
-  <div id="sbFt">
-    <div class="sbft-head">
-      <button class="sbft-btn" id="sbFtBack" title="返回 (Esc)">← 返回</button>
-      <span class="t" id="sbFtTitle">文件树</span>
-      <button class="sbft-btn" id="sbFtRefresh" title="刷新目录" style="margin-left:auto">刷新</button>
-    </div>
-    <div id="sbFtTree"></div>
-  </div>
- <!-- 版本更新提示:桌面壳 update-check 状态驱动;浏览器内无 genieWindow.updates 时整块不出现 -->
-  <div class="sb-update" id="updateBar" style="display:none" role="status" aria-live="polite">
-    <div class="up-head"><span class="up-dot"></span><b id="upTitle">发现新版本</b><button class="up-close" id="upLater" type="button" title="稍后再说" aria-label="稍后再说">×</button></div>
-    <div class="up-sub" id="upSub"></div>
-    <div class="up-acts"><button class="up-go" id="upAction" type="button">下载更新</button><button class="up-link" id="upMore" type="button" style="display:none">更新说明</button></div>
-  </div>
-  <div class="sb-user">
-    <div class="u-ava" id="uAva" title="配置台 Config">G</div>
-    <div class="u-txt"><div class="u-name">本地工作台</div><div class="u-sub" id="uSub">gateway · 连接中</div></div>
-    <div class="u-gear" id="uGear" title="配置台 Config">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><line x1="12" y1="2.5" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="7.4" y2="7.4"/><line x1="16.6" y1="16.6" x2="18.7" y2="18.7"/><line x1="18.7" y1="5.3" x2="16.6" y2="7.4"/><line x1="7.4" y1="16.6" x2="5.3" y2="18.7"/></svg>
-    </div>
-  </div>
-</aside>
 <div id="sbDrag"></div>
 <!-- 画布模式下的更新浮层(与侧栏 #updateBar 同源状态;经典模式隐藏,避免双份入口) -->
 <div class="sb-update" id="updateFloat" role="status" aria-live="polite">
@@ -4611,7 +4726,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       </div>
       <div id="chatBody"><div class="empty-line">尚 无 任 务 —— 说 点 什 么</div></div>
     <button id="scrollBottom" title="回到底部" style="display:none;width:32px;height:32px;border-radius:50%;border:1px solid var(--border-soft);background:var(--glass2);color:var(--bronze);cursor:pointer;font-size:14px;align-items:center;justify-content:center"><svg class="icn" viewBox="0 0 24 24"><path d="M5.5 9.5l6.5 6.5 6.5-6.5"/></svg></button><!-- fixT6:定位/尺寸/层叠移交 CSS(sticky;z-index 同归 CSS)——内联 z-index 会压过 #scrollBottom 规则,故不留 -->
- <!-- turnNav 已迁 footer .aff-strip(2026-10-14 轮次时间轴与管线状态同条,右缘浮层退役) -->
+ <!-- turnNav 已迁 footer .aff-strip(轮次时间轴与管线状态同条,右缘浮层退役) -->
     </div>
  <!-- 双中心布局:会话流|IDE 之间的拖拽分隔条;CSS 默认隐藏,仅 body.dual-center 显示 -->
     <div id="dualSplit" title="拖拽调会话流宽度(双击收起 IDE)"></div>
@@ -4939,7 +5054,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <div id="exp-list" style="display:flex;flex-direction:column;gap:2px"></div>
       <div class="exp-body" id="exp-body" style="display:none"></div>
           </div>
-    <!-- 团队视图(2026-10-16 收编:运行看板=团队「看板」子标签;每项目一块看板,作用域锁定当前项目) -->
+    <!-- 团队视图(收编:运行看板=团队「看板」子标签;每项目一块看板,作用域锁定当前项目) -->
     <div class="view panel-wrap" id="view-team">
       <div class="vw-head"><span class="vw-title">团队 Crew</span>
         <span class="vw-tabs"><button class="vw-tab on" id="teamTabMembers" title="成员在线状态/活动流/团队仓资产">成员</button><button class="vw-tab" id="teamTabIssues" title="Issue 看板:待办/进行中/已完成三列拖拽;双通道(github/gitlab 原生,token 缺=仓内自建);确认后派任务">Issue</button><button class="vw-tab" id="teamTabDash" title="运行看板:会话状态灯/趋势/干预与拒绝(按项目切分)">看板</button></span>
@@ -4980,10 +5095,14 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
          task.list / project.list / nodes.list;聊天发送 super.turn,动作复用 ask.user.answer /
          permission.respond / task.resume 既有协议,零新后端。 -->
     <div class="view panel-wrap" id="view-super">
-      <div class="vw-head"><span class="vw-title">指挥台 Super</span>
-        <span class="vw-sub">调度本系统与全部工作区的 coding agent:查状态/派任务/跨项目联调;动手一律 spawn_task 派发</span>
-        <span class="vw-scope" id="superScope" title="指挥台会话按天分卷(journal 持久;刷新/重启后自动回放)">作用域:全局 · 会话 <span class="sup-mono" id="superSidDay"></span></span>
-        <button class="vw-act" id="super-refresh">刷新</button></div>
+ <div class="vw-head"><span class="sup-chat-only"><span class="vw-title">指挥台 Super</span></span>
+ <span class="vw-tabs"><button class="vw-tab on" id="superTabChat" title="指挥台:与 Super Agent 聊天 + 调度看板(全局治理入口)">指挥台</button><button class="vw-tab" id="superChatTab" title="RSI 会话工作区:机制运行的工作流以主聊天同款卡片渲染(任务卡/工具卡/markdown),底部输入框可直接给 Super Agent 发消息">会话Chat</button><button class="vw-tab" id="superTabRsi" title="RSI 看板:管理整个系统的 RSI 机制运行状态,12 分区只读状态(nightly/evidence/experiments/cost/injection/tools/changeRequests/cohort/negativeKb/prompts/atlas/pathology)">RSI 看板</button></span>
+ <span class="sup-rsi-only"><span class="vw-title">RSI 运行看板</span></span>
+ <span class="vw-sub sup-chat-only">调度本系统与全部工作区的 coding agent:查状态/派任务/跨项目联调;动手一律 spawn_task 派发</span>
+ <span class="vw-sub sup-rsi-only">管理整个系统的 RSI 机制运行状态:12 分区只读</span>
+ <span class="vw-scope sup-chat-only" id="superScope" title="指挥台会话按天分卷(journal 持久;刷新/重启后自动回放)">作用域:全局 · 会话 <span class="sup-mono" id="superSidDay"></span></span>
+ <button class="vw-act sup-chat-only" id="super-refresh">刷新</button></div>
+ <div id="superPaneChat">
       <div id="superLayout">
         <div id="superChatCol">
           <div id="superChatBody"></div>
@@ -5012,6 +5131,32 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
           </div>
           </div>
           </div>
+ <!-- RSI-PLACE:RSI 运行看板(12 分区只读状态卡,数据源 rsi.status → rsi.status.result) -->
+ <div id="superPaneRsi">
+ <div id="rsiHead">RSI 运行看板</div>
+ <div id="rsiCards"></div>
+ <!-- RSI-SESSION:固定会话窗(所有机制运行都追加到会话 rsi,这里内嵌它的实时工作流) -->
+ <div id="rsiStream">
+ <div id="rsiStreamHead">RSI 会话 · <b>rsi</b> <span id="rsiStreamMeta"></span></div>
+ <div id="rsiStreamBody"><div class="rsi-empty">尚无 RSI 运行记录。点任意机制的「运行」,工作过程会在这里实时显示。</div></div>
+          </div>
+          </div>
+ <!-- SUPER-CHAT(会话Chat 子标签):rsi 会话满渲染工作区。渲染=主聊天同款卡片构造
+ (replyBlockHtml/toolCallCard/toolResultCard/mdToHtml)薄壳复用;数据=RSI 页 2s 轮询的同一份
+ session.history.result 双消费,零新增轮询;输入=super.turn 同款通道(落 super 日卷,本地气泡即时反馈)。 -->
+ <div id="superPaneRsiChat">
+ <div id="rsiChatHead">
+ <button class="vw-act" id="rsiChatMech" title="回到 RSI 看板:机制卡/开关/驱动/运行">机制</button>
+ <span id="rsiChatMeta">等待事件…</span>
+          </div>
+ <div id="rsiChatNotice">发出的消息进 super 日卷(指挥台页回放);本页流=RSI 机制运行的工作过程。</div>
+ <div id="rsiChatBody"><div class="empty-line">读 取 会 话 …</div></div>
+ <div id="rsiChatComposer">
+ <input id="rsiChatInput" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调)" autocomplete="off" spellcheck="false">
+ <button class="vw-act" id="rsiChatSend" title="发送 (Enter)">发送</button>
+          </div>
+          </div>
+          </div>
  <!-- 原「总线路」一级视图已并入代码档案「总路线」tab -->
     <div class="view panel-wrap" id="view-nodes">
       <div class="vw-head"><span class="vw-title">节点 Fleet</span><span class="vw-sub">注册/负载/命令下发/远程项目;接入向导在设置-远程连接</span>
@@ -5027,7 +5172,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
           </div>
  <!-- n3 看板融合:「分身 Agents」独立视图已删(CV_CARDS 同步删卡)。
          原分身卡的独有能力(注册表运行态/失败原因 reap/模型/会话短码/终态文本)全部并入下面这张卡。 -->
- <!-- 子agent会话流(2026-10-21 分身消息独立一个看板,不与 coding agent 共用会话流)。
+ <!-- 子agent会话流(分身消息独立一个看板,不与 coding agent 共用会话流)。
  选中式消息流:左=子代理选择器(运行中/已结束两区),右=选中者的实时消息流
          (派发卡→assistant 文本→工具合并卡→终态卡),形态对齐主 chat。画布形态专属卡:经典布局 CSS 隐藏且无入口。
          n3 融合后左栏条目额外承载:模型标签/会话短码/失败原因(reap)/终态文本展开(≤200 字)。 -->
@@ -5041,7 +5186,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <div class="vw-head"><span class="vw-title">追踪 Trace</span><span class="vw-sub">召回·审途统计(上)+ turn × 五阶段 × 阶段任务(下)</span>
         <span class="vw-scope" id="scopeTrack" title="本卡取数作用域:跟踪的是当前选中会话">作用域:当前会话</span>
         <button class="vw-act" id="track-refresh">刷新</button></div>
- <!-- 2026-10-21 统计区与 turn 树合成一个流式数据区——
+ <!-- 统计区与 turn 树合成一个流式数据区——
            旧实现两区各自 overflow:auto + sw-slot max-height:44%,把卡切成上下两个独立滚动窗口。
            现在唯一滚动落在卡自身(.view overflow-y:auto),统计区只在有数据时作为头部块出现
            (#sw-slot:not(.sw-active) 整块隐藏,避免空态占位),turn 树即最后一个数据块。 -->
@@ -5311,9 +5456,9 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
                 <div class="cr-foot"><span class="cr-hint">不配置则只跑确定性检查,不调用模型</span><span class="sd" id="role-review-badge"></span></div>
             </div>
               <div class="cm-role">
-                <div class="cr-head"><span class="cr-name">语音任务书模型</span><span class="cr-sub" title="配置键 coding.models.voice">聊天窗 🎤 录音 → 整理成任务书</span></div>
+ <div class="cr-head"><span class="cr-name">语音任务书模型</span><span class="cr-sub" title="配置键 coding.models.voice">聊天窗 ◎ 录音 → 整理成任务书</span></div>
                 <select class="cm-select" id="role-voice"><option value="">(未配置=语音任务书不可用)</option></select>
-                <div class="cr-foot"><span class="cr-hint">只支持 omni 多模态模型(名字含 omni,如 qwen3.8-omni-flash);不配置则🎤按钮不可用</span><span class="sd" id="role-voice-badge"></span></div>
+ <div class="cr-foot"><span class="cr-hint">只支持 omni 多模态模型(名字含 omni,如 qwen3.8-omni-flash);不配置则◎按钮不可用</span><span class="sd" id="role-voice-badge"></span></div>
             </div>
             </div>
             <div class="cm-effort-row">
@@ -5589,16 +5734,16 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
       <div class="aff-stats"><span id="c-running">0</span> 运行 · <span id="c-queued">0</span> 排队 · <span id="c-done">0</span> 完成 · <span id="c-failed">0</span> 失败</div>
  <!-- 状态 chips(清单/子代理/压缩/wf/失败/重试): 自会话流顶部迁来,单行不折,不推消息 -->
       <div id="chatStatusbar"></div>
- <!-- 轮次时间轴(2026-10-14):#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
+ <!-- 轮次时间轴():#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
       <div id="turnNav" title=""></div>
     </div>
- <!-- quick-row 快捷卡已按移除(2026-10-13 视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->
+ <!-- quick-row 快捷卡已按移除(视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->
     <div class="att-bar" id="attBar" style="display:none"></div>
-    <!-- 2026-10-29 文件引用条:正文里的 [文件名](./路径) 引用渲染成 chip(与聊天气泡同形态;× 从正文移除) -->
+    <!-- 文件引用条:正文里的 [文件名](./路径) 引用渲染成 chip(与聊天气泡同形态;× 从正文移除) -->
     <div class="att-bar" id="fileRefBar" style="display:none"></div>
-    <!-- ask_user 问答条(2026-10-19 许愿式编程):agent 需求取舍时发问,这里作答(选项按钮/自由输入) -->
+    <!-- ask_user 问答条(许愿式编程):agent 需求取舍时发问,这里作答(选项按钮/自由输入) -->
     <div id="askBar" style="display:none;margin:0 0 8px;border:1px solid var(--bronze);border-radius:10px;background:var(--glass2);padding:10px 12px"></div>
- <!-- composer 容器(2026-10-13 视频 2 模型选择/模式/思考/用量全部入框,ZCode composer 对齐) -->
+ <!-- composer 容器(视频 2 模型选择/模式/思考/用量全部入框,ZCode composer 对齐) -->
  <!-- #inChip=输入框指令 chip 覆盖层(绝对定位于 composer 内,chip 态渲染指令占位符) -->
     <div class="composer">
       <div id="inChip" style="display:none"></div>
@@ -5610,7 +5755,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
         <div class="composer-plus" id="attBtn" title="添加附件(图片可直接识别)或 @ 引用项目文件">+</div>
         <input type="file" id="attInput" multiple style="display:none">
         <div class="composer-plus" id="shotBtn" title="截图标注:截取屏幕 → 画框选区 → 标注意见 → 发送给任务" style="font-size:13px">✂</div>
-        <div class="composer-plus" id="voiceBtn" title="语音输入:点击开始录音,再点一次结束 → AI 整理成任务书填入输入框" style="font-size:12px">🎤</div>
+ <div class="composer-plus" id="voiceBtn" title="语音输入:点击开始录音,再点一次结束 → AI 整理成任务书填入输入框" style="font-size:12px">◎</div>
         <span class="mode-pill" id="permPill" title="权限模式(点击选择,热生效)">询问每次</span>
         <span class="mode-pill" id="goalPill" style="display:none;cursor:pointer" title="会话目标(/goal 设置;点击查看/编辑)">目标</span>
         <span class="mode-pill" id="ctxPill" title="当前会话上下文用量(点击查看明细;粗估)">上下文</span>
@@ -5631,7 +5776,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   </footer>
 </div>
 <div id="taskMenu"></div>
-<!-- 实时白板浮窗(2026-10-14 入口统一+升级):任务卡「白板/查看白板」chip 与 composer「白板」都开这里。
+<!-- 实时白板浮窗(入口统一+升级):任务卡「白板/查看白板」chip 与 composer「白板」都开这里。
      左=本会话触发过的全部白板清单;中=Dify 风工作流画布(节点卡/贝塞尔边/缩放/框选/拖拽连线/添加模块/撤销重做全套);
      右=选中节点「干什么用」明细+评论(查看态评论直接落服务端)。与大白板视图同一板状态的两个视口。 -->
 <div class="board-float bf-big" id="boardFloat" style="display:none">
@@ -5753,12 +5898,12 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <script src="/assets/board-page-layout.js"></script> <!-- 页面结构板语义布局引擎(纯函数;加载失败画布回退旧分层) -->
 <script src="/assets/annotate-layout.js"></script> <!-- 截图标注组件拆移引擎(纯几何;加载失败组件模式禁用) -->
 <script src="/assets/annotate-coords.js"></script> <!-- 截图标注坐标换算层(纯函数;缺失/加载失败→面板内联兜底并 console.warn,不抛) -->
-<script src="/assets/ide-spectrum.js"></script> <!-- 2026-10-28 音频频谱分析件(离线 decodeAudioData+AnalyserNode;缺失/失败→媒体层仅播放,window.IdeSpectrum 不存在即降级) -->
-<script src="/assets/ide-office.js"></script> <!-- 2026-10-29 Office(pptx/docx)只读预览渲染件(纯函数;缺失/失败→IDE 落降级文案,不白屏) -->
-<script src="/assets/board-ui-flow-layout.js"></script> <!-- 2026-10-26 UI 交互流程板:多屏原型+元素锚点+彩色跳转流线(纯函数;加载失败回退页面结构板) -->
+<script src="/assets/ide-spectrum.js"></script> <!-- 音频频谱分析件(离线 decodeAudioData+AnalyserNode;缺失/失败→媒体层仅播放,window.IdeSpectrum 不存在即降级) -->
+<script src="/assets/ide-office.js"></script> <!-- Office(pptx/docx)只读预览渲染件(纯函数;缺失/失败→IDE 落降级文案,不白屏) -->
+<script src="/assets/board-ui-flow-layout.js"></script> <!-- UI 交互流程板:多屏原型+元素锚点+彩色跳转流线(纯函数;加载失败回退页面结构板) -->
 <script src="/assets/board-flow-layout.js"></script> <!-- fixH2 设计板流动 LR 布局引擎(入口→主线→出口;加载失败回退旧分层) -->
-<script src="/assets/board-type-profile.js"></script> <!-- 2026-10-26 13 类板型画像:阶段/角色/硬规则徽标/flow 分支(纯函数;加载失败回退通用卡) -->
-<script src="/assets/canvas-shell.js"></script> <!-- 2026-10-20 无限画布外壳:视图=卡片/左侧定位栏/平移缩放/布局持久化(加载失败=退回经典单视图) -->
+<script src="/assets/board-type-profile.js"></script> <!-- 13 类板型画像:阶段/角色/硬规则徽标/flow 分支(纯函数;加载失败回退通用卡) -->
+<script src="/assets/canvas-shell.js"></script> <!-- 无限画布外壳:视图=卡片/左侧定位栏/平移缩放/布局持久化(加载失败=退回经典单视图) -->
 <script>
 /* 任务B:图视口引擎 + mermaid 主题归一化挂全局。两个资产尾部带 ESM export,
  * 经典 <script src> 会整文件 SyntaxError(挂全局代码没机会执行),故用动态 import(模块上下文
@@ -5779,7 +5924,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   });
 })();
 </script>
-<script src="/assets/browser-view.js"></script> <!-- 2026-10-21 内置浏览器视图(形态来源 ZCode browser-use UnifiedBrowserView):截图面+工具栏+视口拖拽 -->
+<script src="/assets/browser-view.js"></script> <!-- 内置浏览器视图(形态来源 ZCode browser-use UnifiedBrowserView):截图面+工具栏+视口拖拽 -->
 <script src="/assets/input-policy.js"></script> <!-- 网页版输入交互策略(分区:画布/侧栏接管,文本区例外) -->
 <script>
 /* 服务重启降级(视频 T1):注册 SW 缓存面板壳。停机窗口内刷新页面→缓存壳+探活横幅(svcWaitRestart),不再裸错误页。 */
@@ -5977,7 +6122,7 @@ let organize = localStorage.getItem("zh:sb-organize") || "project"; // project |
 let showLimit = {};         // 分页: 桶键 -> 可见条数(复刻 ZCode 每页5,+5)
 const bucketCollapsed = new Set(JSON.parse(localStorage.getItem("zh:bucket-collapse") || "[]")); // 折叠桶键(持久)
 let ccHot = 0;
-const VIEW_NAMES = { chat: "", sense: "代码透镜 Lens", project: "代码档案 Atlas", wf: "自动化 Flows", exp: "经验库 Memo", sys: "配置台 Config", team: "团队 Crew", pipeline: "总线路", dash: "团队 · 看板", issues: "团队 · Issue", nodes: "节点 Fleet", approvals: "关卡 Gate", board: "白板 Sketch", files: "文件树 Files", ide: "编辑器 IDE", git: "Git", term: "命令台 Shell", market: "插件市场 Market", browser: "网页 Webview", subchat: "子代理会话流", track: "追踪 Trace", traj: "轨迹 Trail", usage: "吞吐 Telemetry", super: "指挥台 Super" };
+const VIEW_NAMES = { chat: "", sense: "代码透镜 Lens", project: "代码档案 Atlas", wf: "自动化 Flows", exp: "经验库 Memo", sys: "配置台 Config", team: "团队 Crew", pipeline: "总线路", dash: "团队 · 看板", issues: "团队 · Issue", rsi: "指挥台 · RSI 看板", rsichat: "指挥台 · 会话Chat", nodes: "节点 Fleet", approvals: "关卡 Gate", board: "白板 Sketch", files: "文件树 Files", ide: "编辑器 IDE", git: "Git", term: "命令台 Shell", market: "插件市场 Market", browser: "网页 Webview", subchat: "子代理会话流", track: "追踪 Trace", traj: "轨迹 Trail", usage: "吞吐 Telemetry", super: "指挥台 Super" };
 // ── 设置状态(全部真实生效+localStorage 持久化,参照 ZCode 设置页) ──
 const settings = {
   theme: localStorage.getItem("zh:theme") || "dark",
@@ -6599,12 +6744,18 @@ function trajBoardTableHtml(rows, turns) {
     + '<span class="st">状态</span></div>';
   if (!cap.rows.length) return html + '<div class="tb-empty">没有匹配的行</div>';
   let curTurn = null;
+ // 行表默认折叠 —— 每轮一个 <details>(无 open),点开才看到明细行;
+ // .tb-trbody 用 content-visibility:auto,屏外组浏览器跳过布局/绘制。表头与轮头始终可见。
+  const groups = [];
   cap.rows.forEach(function (r) {
-    if (r.turn !== curTurn) {
-      curTurn = r.turn;
-      html += byTurn[r.turn] ? trajBoardTurnHeadHtml(byTurn[r.turn]) : '<div class="tb-trhead">第 ' + Number(r.turn) + " 轮</div>";
-    }
-    html += trajBoardRowHtml(r);
+    if (!groups.length || groups[groups.length - 1].turn !== r.turn) groups.push({ turn: r.turn, rows: [] });
+    groups[groups.length - 1].rows.push(r);
+  });
+  groups.forEach(function (g) {
+    const head = byTurn[g.turn] ? trajBoardTurnHeadHtml(byTurn[g.turn]) : '<div class="tb-trhead">第 ' + Number(g.turn) + " 轮</div>";
+    html += '<details class="tb-rowfold" data-trfold="' + Number(g.turn) + '">'
+      + '<summary class="tb-trsum">' + head + '<span class="tb-trnum">' + g.rows.length + " 行(点击展开)</span></summary>"
+      + '<div class="tb-trbody">' + g.rows.map(trajBoardRowHtml).join("") + "</div></details>";
   });
   return html;
 }
@@ -6742,6 +6893,9 @@ function trajBoardBodyHtml(r, trace, prevTrace) {
       + (mo.toolCallId ? "<span>" + esc(String(mo.toolCallId)) + "</span>" : "") + "</div>";
     if (role === "system" && text.length > 400) {
       html += '<div class="tb-c-msg sys">' + head + '<details class="tb-c-det"><summary>system 提示词全文(完整 ' + text.length + ' 字,点击展开)</summary><pre class="tb-c-pre">' + esc(text) + "</pre></details></div>";
+    } else if (text.length > 400) {
+ // 正文默认折叠(<details> 无 open),点开才渲染成片 read
+      html += '<div class="tb-c-msg">' + head + '<details class="tb-c-det"><summary>' + esc(role) + ' 正文(完整 ' + text.length + ' 字,点击展开)</summary><pre class="tb-c-pre">' + esc(text) + "</pre></details></div>";
     } else {
       html += '<div class="tb-c-msg' + (role === "system" ? " sys" : "") + '">' + head + '<pre class="tb-c-pre">' + esc(text) + "</pre></div>";
     }
@@ -6749,12 +6903,17 @@ function trajBoardBodyHtml(r, trace, prevTrace) {
   const resp = t.response && typeof t.response === "object" ? t.response : {};
   const content = typeof resp.content === "string" ? resp.content : resp.content && typeof resp.content === "object" ? JSON.stringify(resp.content, null, 1) : "";
   html += '<div class="tb-c-sec">输出</div>';
-  html += content ? '<pre class="tb-c-pre out">' + esc(content) + "</pre>" : '<div class="tb-c-none">(无文本输出)</div>';
+  html += content
+    ? (content.length > 400
+      ? '<details class="tb-c-det"><summary>输出全文(完整 ' + content.length + ' 字,点击展开)</summary><pre class="tb-c-pre out">' + esc(content) + "</pre></details>"
+      : '<pre class="tb-c-pre out">' + esc(content) + "</pre>")
+    : '<div class="tb-c-none">(无文本输出)</div>';
   const calls = Array.isArray(resp.toolCalls) ? resp.toolCalls : [];
   for (let i = 0; i < calls.length; i++) {
     const co = calls[i] && typeof calls[i] === "object" ? calls[i] : {};
+    const argText = trajBoardArgsText(co.arguments);
     html += '<div class="tb-c-msg"><div class="h"><span class="role">toolCall</span><span>#' + (i + 1) + "</span><span>" + esc(String(co.name || "")) + "</span>"
-      + (co.id ? "<span>" + esc(String(co.id)) + "</span>" : "") + '</div><pre class="tb-c-pre">' + esc(trajBoardArgsText(co.arguments)) + "</pre></div>";
+      + (co.id ? "<span>" + esc(String(co.id)) + "</span>" : "") + '</div><details class="tb-c-det"><summary>参数(完整 ' + argText.length + ' 字,点击展开)</summary><pre class="tb-c-pre">' + esc(argText) + "</pre></details></div>";
   }
   const think = trajBoardThinkHtml(resp.reasoning);
   if (think) html += '<div class="tb-c-sec">思考</div>' + think;
@@ -6881,7 +7040,7 @@ function trajBoardCardsHtml(rows) {
   const ord = trajBoardState.ord || {};
   const byTurn = {};
   (trajBoardState.turns || []).forEach(function (t) { if (t) byTurn[Number(t.turn)] = t; });
-  let html = '<div class="tb-warn">共 ' + src.length + " 次 LLM 决策(按发生顺序平铺;干条常显,点卡头看未命中输入与输出全文)"
+  let html = '<div class="tb-warn">共 ' + src.length + " 次 LLM 决策(按发生顺序平铺;全部默认折叠,点卡头才拉取并展开正文)"
     + (prunes.length ? " · 另有 " + prunes.length + " 次上下文剪枝" : "")
     + (intakes.length ? " · " + intakes.length + " 次大结果闸门" : "") + "</div>";
   let curTurn = null, pn = 0, pi = 0, inum = 0, ii = 0;
@@ -7180,10 +7339,9 @@ function trajBoardLiveSync() {
   if (key === (trajBoardState.filesKey || "")) return;
   const host = $("trajCardsHost");
   const atBottom = host ? host.scrollTop + host.clientHeight >= host.scrollHeight - 12 : true;
-  // 新决策=新卡:自动展开最新一张并拉全文(用户上滚阅读时不抢滚,但新卡内容仍就位)
+ // 新决策=新卡:只刷新卡头列表,不自动展开、不拉全文(默认折叠,不主动展示详情)
   const prevFiles = trajBoardState.filesKey ? String(trajBoardState.filesKey).split("|") : [];
   const added = files.filter(function (f) { return prevFiles.indexOf(f) < 0; });
-  if (added.length) trajExpanded.add(added[added.length - 1]);
   trajBoardRefresh();
   if (added.length && atBottom && host) host.scrollTop = host.scrollHeight;
 }
@@ -7250,11 +7408,10 @@ function trajBoardApplyRows(rows) {
   trajBoardState.files = files;
   trajBoardState.ord = ord;
   trajBoardState.filesKey = files.join("|");
- // 最新一次决策默认展开;只在打开时做,不覆盖用户手动收起。
-  if (trajBoardState.pane !== "ledger" && files.length && !trajBoardInitDone) {
-    trajExpanded.add(files[files.length - 1]);
-    trajBoardInitDone = true;
-  }
+ // 看板所有内容默认折叠,不主动展示详情 ——
+ // 自动展开最新卡会立刻拉取 2MB 级 trace 全文并整片塞进 DOM,打开面板即卡死界面。
+ // 现在只有用户点卡头(trajBoardToggleCard)或点「全部展开」才渲染正文。
+  trajBoardInitDone = true;
   $("trajBoardSum").innerHTML = trajBoardSumHtml(summarizeTraj(src, turns), trajBoardUsageTotals(src));
   trajBoardRenderRows();
 }
@@ -7334,10 +7491,7 @@ $("trajViewRefresh").onclick = () => trajBoardRefresh();
       const pane = this.getAttribute("data-traj-pane") || "decisions";
       trajBoardState.pane = pane === "ledger" ? "ledger" : pane === "lanes" ? "lanes" : "decisions";
       for (let j = 0; j < panes.length; j++) panes[j].classList.toggle("on", panes[j] === this);
-      if (trajBoardState.pane === "decisions" && trajBoardState.files.length) {
-        // 切回逐次决策:最新卡补展开(用户此前可能在看账本表)
-        trajExpanded.add(trajBoardState.files[trajBoardState.files.length - 1]);
-      }
+ // 默认折叠,切 pane 不再补展开最新卡(展开=拉 2MB 全文,面板卡死)
       trajBoardRenderRows();
     };
   }
@@ -12388,7 +12542,7 @@ const CV_VIEW_OF_CARD = { chat: "chat", term: "term", git: "git", files: "files"
 const CARD_OF_VIEW = (() => {
   const m = {};
   for (const card of Object.keys(CV_VIEW_OF_CARD)) m[CV_VIEW_OF_CARD[card]] = card;
-  m.tasks = "chat"; m.dash = "team"; m.issues = "team"; m.pipeline = "project"; // 子标签/别名
+  m.tasks = "chat"; m.dash = "team"; m.issues = "team"; m.pipeline = "project"; m.rsi = "super"; // 子标签/别名( RSI-PLACE:RSI 看板=指挥台卡第二子标签;看板/Issue=team 卡)
   // n3 看板融合别名:旧布局存档/旧书签/旧键盘路径仍可能送来「分身 Agents」卡名(subagents / agents),
   // 一律回退到子agent会话流(该卡的注册态/模型/reap 能力已并入)——不白屏、不空视图。
   m.subagents = "subchat"; m.agents = "subchat";
@@ -12434,7 +12588,7 @@ function cvConn(ok, text) {
  *  浏览器有 act-web(2026-11 人机随时可用轮:左栏「网页 Webview」恢复,托盘随之一致)。 */
 const CV_TRAY_ACT = { git: "act-git", board: "act-board", team: "act-team", nodes: "act-nodes", approvals: "act-approvals",
   wf: "act-wf", exp: "act-exp", market: "act-market", subchat: "act-subchat", track: "act-track", traj: "act-traj", usage: "act-usage",
-  project: "act-sense", sense: "act-sense", browser: "act-web", super: "act-super" };
+  project: "act-sense", sense: "act-sense", browser: "act-web", super: "act-super", rsi: "act-rsi" };
 /** 卡片状态点同步(二期「红框条目与看板绑定」的可视化部分):
  *  把面板手里的真实状态(待审批数/Git 变更数/跑着的任务数)推到卡片头 + 托盘按钮状态点。
  *  只推有真源的项,不猜——没数据就不亮灯(宁缺勿假)。画布形态外是空操作。 */
@@ -12488,7 +12642,7 @@ function cvStatusRefresh() {
  *  画布形态下多张卡片同时可见,只认 dataset.view 会让除焦点卡外的可见卡不再刷新。
  *  例外:team 卡的子标签(dash 看板 / issues)共用一块卡片面板、同时只显示一个子面板,
  *  故这类子标签除「卡片在视口内」还要求它就是当前激活的子标签。 */
-const CANVAS_SUBTAB = { dash: "team", issues: "team" };
+const CANVAS_SUBTAB = { dash: "team", issues: "team", rsi: "super" }; // 看板/Issue=team 卡子标签;RSI 看板=指挥台卡子标签( RSI-PLACE,画布态需按身份判定活跃)
 /* ── 双中心布局状态机:会话流(chat)+IDE 右栏并列 ──
  * 状态源:localStorage dualCenter.open(开合)+ dualCenter.w(会话流宽 px,夹紧 360~视口-280)。
  * open=true 时 body.dual-center 类挂上,applyViewChrome 里 ide 与 chat 同 .on 常驻;.view CSS 零改动。
@@ -12561,7 +12715,8 @@ function lightNav(name) {
   $("act-approvals").classList.toggle("on", name === "approvals");
   $("act-track").classList.toggle("on", name === "track");
   $("act-traj").classList.toggle("on", name === "traj"); // 轨迹独立视图入口点亮
-  $("act-super").classList.toggle("on", name === "super"); // 指挥台独立视图入口点亮
+  $("act-super").classList.toggle("on", name === "super" || name === "rsi"); // /RSI-PLACE:指挥台与 RSI 看板同视图,入口同亮
+  $("act-rsi").classList.toggle("on", name === "rsi"); // RSI-PLACE:RSI 看板子标签独立点亮
   $("uGear").classList.toggle("on", name === "sys");
 }
 function switchViewActivate(name) {
@@ -12578,6 +12733,578 @@ function setViewIdentity(name) {
   document.body.dataset.view = name;
   lightNav(name); // 视图名/侧栏点亮/语音键——身份切换的唯一出口,防多处漂移
 }
+/* ── RSI 运行看板( RSI-PLACE:指挥台视图第二子标签,全局治理面)──────────────────
+ 只读状态面:12 分区(nightly/evidence/experiments/cost/injection/tools/changeRequests/
+ cohort/negativeKb/prompts/atlas/pathology)。数据源:进标签发 rsi.status,回包 rsi.status.result
+ (sections[]),15s 轮询;后端未上报时卡片区如实显示「未启用/无数据」,不抛错。
+ 全部 payload 文本过 esc,无内联事件(零 onclick/onload 属性,纯 addEventListener/onclick 赋值)。 */
+var rsiTimer = 0, rsiInflight = false, rsiUnlockTimer = 0;
+/* RSI-CTRL:交互态(全部事件委托在 #rsiCards,零内联 onclick)。
+ rsiLast=最近一拍回包(rerender 只重渲染卡片区,不回整页);rsiUi[id]={en,drv} 渲染时由 payload 播种,
+ 本地乐观翻转让点击立即有反应(服务端回包以 payload 为准覆盖);rsiPending[id]=运行请求时刻(20s 内视作运行中);
+ rsiEditKey=内联编辑中的条目("mech|item");rsiArmKey=待二次确认的删除条目(3s 窗);rsiOpen=已展开详情。 */
+var rsiLast = null, rsiBound = false, rsiUi = {}, rsiOpt = {}, rsiEditKey = "", rsiArmKey = "", rsiArmTimer = 0, rsiOpen = {}, rsiOrig = {}, rsiPending = {};
+function rsiStatusPull() {
+  if (rsiInflight) return; // 去重:上一轮未回不重发(防断链/后端缺失时请求堆积)
+  rsiInflight = true;
+  wsSafeSend(JSON.stringify({ v: 1, type: "rsi.status" }));
+ // 回包缺失兜底(后端尚未实现该 type 时不永久卡住轮询):12s 解锁下一次
+  clearTimeout(rsiUnlockTimer);
+  rsiUnlockTimer = setTimeout(function () { rsiInflight = false; }, 12000);
+}
+function rsiPollSync(name) {
+  if (name !== "rsi" && name !== "rsichat") { // 离开 rsi/会话Chat(切到任何其它视图/子标签):停表并清空句柄 + 清 in-flight
+    if (rsiTimer) { clearInterval(rsiTimer); rsiTimer = 0; }
+    clearTimeout(rsiUnlockTimer);
+    rsiInflight = false;
+    rsiEvStop();
+    return;
+  }
+  if (name === "rsichat" && !rsiEvReady) rsiChatRender(); // 会话Chat:进入即渲一拍(加载态/空态先就位,不等回包)
+  if (rsiTimer) return; // 已在轮询:不叠加 interval(防重复定时器)
+  if (name === "rsi") { rsiStatusPull(); rsiTimer = setInterval(rsiStatusPull, 15000); } // 机制卡状态轮询只在 RSI 看板跑(会话Chat 不需要 12 分区卡)
+  rsiEvStart(); // 固定会话窗:进入即拉一拍 rsi 会话历史,之后 2s 增量追平(super/rsichat 共用,单条轮询双消费)
+}
+function rsiTone(t) {
+  var s = String(t === undefined || t === null ? "" : t).toLowerCase();
+  if (s === "ok" || s === "good" || s === "green" || s === "normal") return "ok";
+  if (s === "bad" || s === "err" || s === "error" || s === "fail" || s === "red" || s === "critical") return "bad";
+  return "warn";
+}
+function rsiSecStatus(s) { var o = s || {}; if (o.ok === true) return "ok"; if (o.ok === false) { var c = String(o.code || ""); return (c.indexOf("ERROR") >= 0 || c.indexOf("CONFLICT") >= 0) ? "bad" : "warn"; } var v = o.status; if (v === undefined || v === null || v === "") v = o.tone; if (v === undefined || v === null || v === "") v = o.state; return v; }
+/** 状态三分( RSI-DASH-UX):未启用(无 store → code=UNAVAILABLE)与异常彻底分离。
+ * 此前二者都算「降级」,无任何 RSI store 的全新仓被渲染成 12 区黄色告警 = 把「尚未产生数据」误报成异常。
+ * ok=rsiSecStatus 判 ok;unavailable=!ok 且 code=UNAVAILABLE;error=其余 !ok。 */
+function rsiStateKind(s) {
+  var o = s || {};
+  if (rsiSecStatus(o) === "ok") return "ok";
+  var c = String(o.code !== undefined ? o.code : (o.codeText !== undefined ? o.codeText : ""));
+  return c === "UNAVAILABLE" ? "unavailable" : "error";
+}
+/** 三分 → 视觉色调:ok 绿 / unavailable 中性灰(idle) / error 红(bad)。 */
+function rsiKindTone(k) { return k === "ok" ? "ok" : (k === "unavailable" ? "idle" : "bad"); }
+function rsiHms(ts) {
+  var d = new Date(typeof ts === "number" ? ts : (ts ? Date.parse(String(ts)) : Date.now()));
+  if (isNaN(d.getTime())) d = new Date();
+  var p = function (n) { return (n < 10 ? "0" : "") + n; };
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+function rsiMetricsHtml(sec) {
+  var ms = sec && sec.metrics, rows = [], i, x, tn, label, val;
+  if (Array.isArray(ms)) {
+    for (i = 0; i < ms.length && rows.length < 8; i++) { // ≤8 条自然截断
+      x = ms[i] || {};
+      label = x.label !== undefined ? x.label : (x.k !== undefined ? x.k : x.key);
+      if (label === undefined || label === null || label === "") continue;
+      val = x.value !== undefined ? x.value : (x.v !== undefined ? x.v : "-");
+      tn = x.tone !== undefined ? x.tone : x.status;
+      rows.push("<span>" + esc(label) + " <b" + (tn ? ' class="rsi-tone-' + rsiTone(tn) + '"' : "") + ">" +
+        esc(String(val) + (x.unit ? " " + String(x.unit) : "")) + "</b></span>");
+    }
+  } else if (ms && typeof ms === "object") {
+    var keys = Object.keys(ms);
+    for (i = 0; i < keys.length && rows.length < 8; i++) {
+      rows.push("<span>" + esc(keys[i]) + " <b>" + esc(String(ms[keys[i]])) + "</b></span>");
+    }
+  }
+  return rows.length ? '<div class="rsi-kv">' + rows.join("") + "</div>" : "";
+}
+function rsiWarnHtml(sec) {
+  var w = sec && sec.warnings;
+  if (!w) return "";
+  var arr = Array.isArray(w) ? w : [w], out = [], i, it, txt;
+  for (i = 0; i < arr.length; i++) {
+    it = arr[i];
+    txt = it && typeof it === "object" ? (it.message !== undefined ? it.message : (it.msg !== undefined ? it.msg : it.text)) : it;
+    if (txt === undefined || txt === null || txt === "") continue;
+    out.push('<div class="rsi-warn-line">⚠ ' + esc(txt) + "</div>");
+  }
+  return out.join("");
+}
+/* ── RSI-CTRL:机制开关/驱动切换/运行 + 结果条目改删(协议 rsi.mechanism.set / rsi.mechanism.run /
+ rsi.item.update / rsi.item.delete;回包三个 *.result 分支在 WS 分发处各拉一拍 rsiStatusPull 刷新,不整页重载)── */
+function rsiSecId(s) {
+  var o = s || {}, v = o.id !== undefined ? o.id : (o.key !== undefined ? o.key : o.name);
+  return v === undefined || v === null ? "" : String(v);
+}
+function rsiSecEnabled(s) { return !(s && s.enabled === false); } // 缺省启用(旧后端不带该字段时按可运行展示)
+function rsiSecDriver(s) { return s && s.driver === "code" ? "code" : "agent"; }
+/** 条目 status(ok|warn|bad|info)→ 既有点色调名(ok/warn/bad/idle)。 */
+function rsiTextTone(v) {
+  var s = String(v === undefined || v === null ? "" : v).toLowerCase();
+  if (s === "ok" || s === "done" || s === "green") return "ok";
+  if (s === "bad" || s === "error" || s === "failed" || s === "err") return "bad";
+  if (s === "warn" || s === "warning") return "warn";
+  return "idle";
+}
+function rsiRunOf(s) { var r = s && s.run; return r && typeof r === "object" ? r : null; }
+/* ── RSI-SESSION-COST:一次运行花了多少 + 分析了哪些会话 ─────────────────
+ 数据同源:金额/token 全来自服务端 run.cost / run.analysis(journal + 单价表算出);
+ 单价缺失(amountCny===null)只写「单价缺失」,**绝不显示 ¥0**。 */
+function rsiTok(n) { var v = Number(n); if (!isFinite(v) || v < 0) v = 0; return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)); }
+function rsiMoney(a) { if (a === null || a === undefined) return "单价缺失"; var v = Number(a); if (!isFinite(v)) return "单价缺失"; return "¥" + (v >= 1 ? v.toFixed(2) : v.toFixed(4)); }
+/** 运行头第一行:金额 · 总 token(输入/缓存/输出);缺价时补一段「缺单价段」。 */
+function rsiCostHead(run) {
+  var c = run && run.cost;
+  if (!c || typeof c !== "object") return "";
+  var text = rsiMoney(c.amountCny) + " · " + rsiTok(c.totalTokens) + " tokens(输入 " + rsiTok(c.inputTokens) + " / 缓存 " + rsiTok(c.cachedTokens) + " / 输出 " + rsiTok(c.outputTokens) + ")";
+  if (c.amountCny === null && Array.isArray(c.missing) && c.missing.length > 0) text += " · 缺单价段 " + c.missing.join("/");
+  var title = c.model !== undefined && c.model !== null && String(c.model) !== "" ? "模型 " + String(c.model) : "模型未上报";
+  return '<span class="rsi-run-state" data-run-cost="1" title="' + esc(title) + '">' + esc(text) + "</span>";
+}
+/** 运行头第二行:分析 n 会话 · <项目> n / <项目> n(项目计数只按已认账会话算)。 */
+function rsiAnalysisHead(run) {
+  var a = run && run.analysis;
+  if (!a || typeof a !== "object") return "";
+  var done = Array.isArray(a.analyzed) ? a.analyzed : [], cands = Array.isArray(a.candidates) ? a.candidates : [];
+  var counts = {}, order = [], i, pid, d;
+  for (i = 0; i < done.length; i++) {
+    d = done[i] || {};
+    pid = d.projectId !== undefined && d.projectId !== null && String(d.projectId) !== "" ? String(d.projectId) : "(未绑定)";
+    if (counts[pid] === undefined) { counts[pid] = 0; order.push(pid); }
+    counts[pid] += 1;
+  }
+  var text = "分析 " + done.length + " 会话";
+  var per = [];
+  for (i = 0; i < order.length; i++) per.push(order[i] + " " + counts[order[i]]);
+  if (per.length > 0) text += " · " + per.join(" / ");
+  text += " · 候选 " + cands.length;
+  return '<span class="rsi-run-state" data-run-analysis="1">' + esc(text) + "</span>";
+}
+/** 卡片体小块:逐行候选/已分析 sessionId 与项目(全部 esc,无内联 onclick)。 */
+function rsiCostBody(run) {
+  var a = run && run.analysis;
+  if (!a || typeof a !== "object") return "";
+  var cands = Array.isArray(a.candidates) ? a.candidates : [], done = Array.isArray(a.analyzed) ? a.analyzed : [];
+  var seen = {}, rows = [], i, x, sid, pid;
+  for (i = 0; i < cands.length; i++) {
+    x = cands[i] || {};
+    sid = x.sessionId !== undefined && x.sessionId !== null ? String(x.sessionId) : "";
+    if (sid === "") continue;
+    seen[sid] = 1;
+    pid = x.projectId !== undefined && x.projectId !== null && String(x.projectId) !== "" ? "(" + esc(String(x.projectId)) + ")" : "(未绑定)";
+    rows.push('<div class="rsi-cost-row">' + esc(sid) + " " + pid + " · 候选</div>");
+  }
+  for (i = 0; i < done.length; i++) {
+    x = done[i] || {};
+    sid = x.sessionId !== undefined && x.sessionId !== null ? String(x.sessionId) : "";
+    if (sid === "") continue;
+    pid = x.projectId !== undefined && x.projectId !== null && String(x.projectId) !== "" ? "(" + esc(String(x.projectId)) + ")" : "(未绑定)";
+    var mark = seen[sid] ? "已分析" : "已分析(不在本次候选)";
+    delete seen[sid];
+    rows.push('<div class="rsi-cost-row">' + esc(sid) + " " + pid + " · " + mark + "</div>");
+  }
+  if (rows.length === 0) return '<div class="rsi-items" id="rsiCostLine" data-run-cost="1"><div class="rsi-run-state">本次未涉及会话</div></div>';
+  return '<div class="rsi-items" id="rsiCostLine" data-run-cost="1">' + rows.join("") + "</div>";
+}
+function rsiCut(t, n) { var s = String(t === undefined || t === null ? "" : t); return s.length > n ? s.slice(0, n) + "…" : s; }
+/** 服务端稳定 reason → 人话(未知原样显示,不隐藏错误)。 */
+function rsiReasonText(code) {
+  var c = String(code === undefined || code === null ? "" : code);
+  var map = {
+    UNKNOWN_MECHANISM: "未知机制",
+    MECHANISM_DISABLED: "机制已关闭,先打开开关",
+    CODE_DRIVER_CLI_ONLY: "当前为代码驱动,切到 Agent 才能运行",
+    RUNNING_ALREADY: "已有运行中的任务,等它结束",
+    SUBMIT_FAILED: "派发失败(检查模型/网关配置)",
+    ITEM_NOT_FOUND: "条目不存在(可能已删除)",
+    UNKNOWN_ID: "未知 id",
+  };
+  return map[c] ? map[c] + "(" + c + ")" : c;
+}
+function rsiMechSend(id, enabled, driver) {
+  var msg = { v: 1, type: "rsi.mechanism.set", id: String(id) };
+  if (enabled !== undefined) msg.enabled = !!enabled;
+  if (driver) msg.driver = driver === "code" ? "code" : "agent";
+  wsSafeSend(JSON.stringify(msg));
+}
+/** 条目区:未启用=关闭说明;启用且空=引导运行;非空→逐条渲染(可改可删可展开)。 */
+function rsiItemsHtml(sec, mid, enabled) {
+  var arr = sec && Array.isArray(sec.items) ? sec.items : [], out = [], i, o, iid, key;
+  if (!enabled) out.push('<div class="rsi-empty">机制已关闭,不再自动运行</div>');
+  if (!arr.length) {
+    if (enabled) out.push('<div class="rsi-empty">暂无结果条目(点「运行」让 agent 产出)</div>');
+    return '<div class="rsi-items">' + out.join("") + "</div>";
+  }
+  for (i = 0; i < arr.length; i++) {
+    o = arr[i] || {};
+    iid = o.id !== undefined && o.id !== null ? String(o.id) : "";
+    key = mid + "|" + iid;
+    out.push(rsiItemHtml(mid, iid, o, key));
+  }
+  return '<div class="rsi-items">' + out.join("") + "</div>";
+}
+/** 单条目:普通行(标题+状态点+单行摘要+改/删)/内联编辑表单/展开的 detail。全部服务端文本过 esc。 */
+function rsiItemHtml(mid, iid, o, key) {
+  var title = o.title !== undefined && o.title !== null ? String(o.title) : "(无标题)";
+  var summary = o.summary !== undefined && o.summary !== null ? String(o.summary) : "";
+  var detail = o.detail !== undefined && o.detail !== null ? String(o.detail) : "";
+  var tone = rsiTextTone(o.status);
+  var src = o.source !== undefined && o.source !== null && o.source !== ""
+    ? String(o.source) + (o.at !== undefined && o.at !== null ? " · " + rsiHms(o.at) : "") : "";
+  if (rsiEditKey === key) { // 内联编辑:原值留档(保存时只发改动字段)
+    rsiOrig[key] = { t: title, s: summary };
+    return '<div class="rsi-item rsi-tone-' + tone + ' rsi-edit" data-item="' + esc(iid) + '" data-mech="' + esc(mid) + '">' +
+      '<div class="rsi-form" data-mech="' + esc(mid) + '" data-item="' + esc(iid) + '">' +
+      '<input data-f="title" value="' + esc(title) + '" placeholder="标题" />' +
+      '<textarea data-f="summary" rows="2" placeholder="摘要">' + esc(summary) + "</textarea>" +
+      '<div class="rsi-form-acts"><button class="rsi-item-act" data-act="save" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">保存</button>' +
+      '<button class="rsi-item-act" data-act="cancel" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">取消</button></div></div></div>';
+  }
+  var canExp = detail.length > 0, exp = !!(canExp && rsiOpen[key]), arm = rsiArmKey === key;
+  return '<div class="rsi-item rsi-tone-' + tone + (exp ? " exp" : "") + (arm ? " rsi-arm" : "") + '" data-item="' + esc(iid) + '" data-mech="' + esc(mid) + '">' +
+    '<div class="rsi-item-row"><span class="rsi-dot"></span>' +
+    '<span class="rsi-item-t"' + (canExp ? ' data-act="exp" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '" title="点击' + (exp ? "收起" : "展开") + '详情"' : "") + ">" +
+    esc(title) + (canExp ? '<i class="rsi-item-arrow">⌄</i>' : "") + "</span>" +
+    '<span class="rsi-item-sum" title="' + esc(summary + (src ? " · " + src : "")) + '">' + esc(summary || src) + "</span>" +
+    '<span class="rsi-item-acts"><button class="rsi-item-act" data-act="edit" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">改</button>' +
+    '<button class="rsi-item-act" data-act="del" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">' + (arm ? "确认删" : "删") + "</button></span></div>" +
+    (canExp ? '<div class="rsi-item-detail">' + esc(detail) + (src ? ' <span class="rsi-code">' + esc(src) + "</span>" : "") + "</div>" : "") + "</div>";
+}
+/** 卡头右侧控件:开关(aria-pressed)/驱动 select/运行按钮(运行中=disabled + 「运行中…」)。 */
+function rsiCtrlHtml(sid, enabled, drv, running) {
+  return '<span class="rsi-ctrl">' +
+    '<button class="rsi-sw ' + (enabled ? "on" : "off") + '" data-act="toggle" data-id="' + esc(sid) + '" aria-pressed="' + (enabled ? "true" : "false") + '">' + (enabled ? "已启用" : "已关闭") + "</button>" +
+    '<select class="rsi-drv" data-id="' + esc(sid) + '" title="驱动方式">' +
+    '<option value="agent"' + (drv === "agent" ? " selected" : "") + ">Agent</option>" +
+    '<option value="code"' + (drv === "code" ? " selected" : "") + ">代码</option></select>" +
+    '<button class="rsi-run" data-act="run" data-id="' + esc(sid) + '"' + (running ? " disabled" : "") + ">" + (running ? "运行中…" : "运行") + "</button></span>";
+}
+/** 事件委托(绑一次):#rsiCards 上 click/change 全接管,新增交互不产生任何内联 onclick 属性。 */
+function rsiBind(box) {
+  if (!box || rsiBound) return;
+  box.addEventListener("click", rsiOnClick);
+  box.addEventListener("change", rsiOnChange);
+  rsiBound = true;
+}
+function rsiRerender() { if (rsiLast) rsiRender(rsiLast); } // 只重渲染卡片区(用最近一拍 payload),不回整页
+/** 乐观态合并:点击开关/切驱动先本地生效,payload 追上该值即丢弃覆盖(15s TTL 兜底,防服务端不生效时永久骗人)。 */
+function rsiOptMerge(sid, enabled, drv) {
+  var ov = rsiOpt[sid];
+  if (ov) {
+    if (Date.now() - ov.t > 15000) delete rsiOpt[sid];
+    else {
+      if (ov.en !== undefined) { if (ov.en === enabled) delete ov.en; else enabled = ov.en; }
+      if (ov.drv !== undefined) { if (ov.drv === drv) delete ov.drv; else drv = ov.drv; }
+      if (ov.en === undefined && ov.drv === undefined) delete rsiOpt[sid];
+    }
+  }
+  return { en: enabled, drv: drv };
+}
+function rsiItemSave(el, mid, iid, key) {
+  var form = el && el.closest ? el.closest(".rsi-form") : null;
+  var pick = function (f) { var e = form ? form.querySelector('[data-f="' + f + '"]') : null; return e && e.value !== undefined && e.value !== null ? String(e.value) : ""; };
+  var nt = pick("title"), ns = pick("summary"), o = rsiOrig[key] || {};
+  var msg = { v: 1, type: "rsi.item.update", mechanismId: mid, itemId: iid }, n = 0;
+  if (nt !== (o.t === undefined ? "" : o.t)) { msg.title = nt; n++; } // 只发改动字段
+  if (ns !== (o.s === undefined ? "" : o.s)) { msg.summary = ns; n++; }
+  rsiEditKey = "";
+  if (n) wsSafeSend(JSON.stringify(msg));
+  rsiRerender();
+}
+function rsiOnClick(ev) {
+  var t = ev && ev.target ? ev.target : null;
+  var el = t && t.closest ? t.closest("[data-act]") : null;
+  if (!el) { if (rsiArmKey) { rsiArmKey = ""; clearTimeout(rsiArmTimer); rsiRerender(); } return; } // 点别处:删除确认复原
+  var act = String(el.getAttribute("data-act") || "");
+  var mid = String(el.getAttribute("data-id") || "");
+  var iid = String(el.getAttribute("data-item") || "");
+  var key = mid + "|" + iid;
+  if (act !== "del" && rsiArmKey) { rsiArmKey = ""; clearTimeout(rsiArmTimer); } // 切到别的动作同样复原
+  if (act === "toggle") {
+    var st = rsiUi[mid] || {}, next = !(st.en !== false);
+    st.en = next; st.drv = st.drv || "agent"; rsiUi[mid] = st;
+    rsiOpt[mid] = { en: next, drv: st.drv, t: Date.now() }; // 乐观态留档:紧跟的 rerender 用 payload 播种时必须被它盖住,否则点击瞬间回弹
+    rsiMechSend(mid, next, st.drv); // 乐观翻转 + 发消息;下一次 rsi.status.result 以服务端为准
+    rsiRerender();
+    return;
+  }
+  if (act === "run") {
+    rsiPending[mid] = Date.now();
+    wsSafeSend(JSON.stringify({ v: 1, type: "rsi.mechanism.run", id: mid }));
+    rsiRerender();
+    switchView("rsichat"); // SUPER-CHAT:点运行成功发出 → 自动跳会话Chat页看实时工作流
+    return;
+  }
+  if (act === "edit") { rsiEditKey = key; rsiRerender(); return; }
+  if (act === "cancel") { rsiEditKey = ""; rsiRerender(); return; }
+  if (act === "exp") { rsiOpen[key] = !rsiOpen[key]; rsiRerender(); return; }
+  if (act === "save") { rsiItemSave(el, mid, iid, key); return; }
+  if (act === "del") {
+    if (rsiArmKey === key) { // 二次确认:3s 窗内再点才真删
+      rsiArmKey = ""; clearTimeout(rsiArmTimer);
+      wsSafeSend(JSON.stringify({ v: 1, type: "rsi.item.delete", mechanismId: mid, itemId: iid }));
+      rsiRerender();
+      return;
+    }
+    rsiArmKey = key;
+    clearTimeout(rsiArmTimer);
+    rsiArmTimer = setTimeout(function () { rsiArmKey = ""; rsiRerender(); }, 3000); // 超时复原「删」
+    rsiRerender();
+    return;
+  }
+}
+function rsiOnChange(ev) {
+  var t = ev && ev.target ? ev.target : null;
+  if (!t || !t.classList || !t.classList.contains("rsi-drv")) return;
+  var mid = String(t.getAttribute("data-id") || ""), drv = String(t.value === "code" ? "code" : "agent");
+  var st = rsiUi[mid] || {};
+  st.drv = drv; rsiUi[mid] = st;
+  rsiOpt[mid] = { drv: drv, t: Date.now() }; // 同上:切驱动乐观态留档(rerender 播种时不被旧 payload 打回)
+  rsiMechSend(mid, st.en !== false, drv); // 切驱动保留当前开/关
+}
+function rsiRender(payload) {
+  var head = $("rsiHead"), box = $("rsiCards");
+  if (!head || !box) return; // 面板不在场:静默返回(不得抛错)
+  rsiBind(box);
+  var m = payload || {};
+  rsiLast = m;
+  var raw = m.sections !== undefined ? m.sections : (m.data ? m.data.sections : undefined);
+  var secs = Array.isArray(raw) ? raw : [];
+  if (!secs.length) { // 空态(无数据/未启用):不抛错,也不降级成告警( RSI-DASH-UX)
+    head.textContent = "RSI 运行看板 · 暂无 RSI 数据";
+    box.innerHTML = '<div class="rsi-empty">暂无 RSI 数据' + (m.error ? " · " + esc(m.error) : "") + "</div>";
+    return;
+  }
+  var ok = 0, unavailable = 0, errors = 0, on = 0, kinds = [], merged = [], i, k;
+  for (i = 0; i < secs.length; i++) {
+    k = rsiStateKind(secs[i]); kinds.push(k);
+    if (k === "ok") ok++; else if (k === "unavailable") unavailable++; else errors++;
+    merged.push(rsiOptMerge(rsiSecId(secs[i]), rsiSecEnabled(secs[i]), rsiSecDriver(secs[i]))); // 乐观态合并(15s TTL):点开关/切驱动后、回包未追上时以本地为准
+    if (merged[i].en) on++; // 头部「已启用 x/N」与卡头开关同源(同一份合并结果)
+  }
+  var when = m.updatedAt !== undefined ? m.updatedAt : m.at;
+  head.innerHTML = "RSI 运行看板 · 更新于 <b>" + esc(rsiHms(when)) + "</b> · 正常 " + ok + " · 未启用 " + unavailable + " · 异常 " + errors + " · 已启用 " + on + "/" + secs.length;
+  var cards = [];
+  for (i = 0; i < secs.length; i++) {
+    var s = secs[i] || {};
+    var kind = kinds[i], tone = rsiKindTone(kind);
+    var sid = rsiSecId(s) || ("sec" + i);
+    var enabled = merged[i].en, drv = merged[i].drv;
+    rsiUi[sid] = { en: enabled, drv: drv }; // 交互真值播种(下一次回包覆盖)
+    var title = s.title !== undefined ? s.title : (s.name !== undefined ? s.name : (s.key !== undefined ? s.key : (s.id !== undefined ? s.id : "分区")));
+    var code = s.code !== undefined ? s.code : s.codeText;
+    var badge = kind === "ok" ? "正常" : (kind === "unavailable" ? "未启用" : "异常");
+    var run = rsiRunOf(s), runStatus = run && run.status ? String(run.status) : "";
+    var running = runStatus === "running";
+    var runQueued = running && run && run.taskState === "queued";
+    if (running) delete rsiPending[sid];
+    else if (rsiPending[sid]) { // 刚点「运行」:20s 内乐观显示运行中,超时收回
+      if (Date.now() - rsiPending[sid] < 20000) running = true; else delete rsiPending[sid];
+    }
+    var runHead = "", runBody = "";
+    if (running) runHead = '<span class="rsi-run-state">' + (runQueued ? "排队中(等空闲槽)" : "运行中") + (run && run.taskId !== undefined && run.taskId !== null ? "(任务 " + esc(String(run.taskId)) + ")" : "") + "</span>";
+ // RSI-SESSION-COST:成本行 + 分析行(紧贴运行态,一眼看清这次花了多少、动了哪些会话)。
+    runHead += rsiCostHead(run) + rsiAnalysisHead(run);
+    if (runStatus === "done" || runStatus === "failed") {
+      var at = run && run.finishedAt !== undefined && run.finishedAt !== null ? run.finishedAt : (run ? run.startedAt : undefined);
+      runBody = '<div class="rsi-run-state">上次运行:' + (runStatus === "done" ? "完成" : "失败") + "(" + esc(rsiHms(at)) + ")</div>";
+      if (runStatus === "failed" && run && run.error !== undefined && run.error !== null && String(run.error) !== "") runBody += '<div class="rsi-run-err">' + esc(rsiCut(run.error, 160)) + "</div>";
+    }
+    cards.push('<div class="rsi-card rsi-tone-' + tone + (enabled ? "" : " rsi-card-off") + '" data-mech="' + esc(sid) + '"><div class="rsi-card-h"><span class="rsi-dot"></span>' +
+      esc(title) + '<span class="rsi-badge rsi-badge-' + tone + '">' + badge + "</span>" + rsiCtrlHtml(sid, enabled, drv, running) + runHead + "</div>" +
+      (code ? '<div class="rsi-code">' + esc(code) + "</div>" : "") +
+      rsiMetricsHtml(s) +
+      (kind === "unavailable" ? '<div class="rsi-hint">未产生数据（运行对应 RSI 任务后自动更新）</div>' : "") +
+      rsiWarnHtml(s) + runBody + rsiCostBody(run) + rsiItemsHtml(s, sid, enabled) + "</div>");
+  }
+  box.innerHTML = cards.join("");
+}
+/* ── RSI-SESSION:固定会话窗(MECH-USER 口径)──────────────────────────────
+ 所有机制运行都追加到同一个会话 id "rsi";这里内嵌它的实时工作流:
+ 拉 session.history(sessionId="rsi") 增量,渲染 任务卡 / assistant 文本 / 工具调用+结果 / 步骤 / 授权等待。
+ 纪律:①只在 RSI 子标签在场时轮询(2s),离开即停;②replay 上限 600 条(完整历史去主会话看);
+ ③回包在 WS 分发处按 sessionId==="rsi" 前置分流,绝不并入主会话 histEvents。 */
+var RSI_EV_SID = "rsi", rsiEv = [], rsiEvMaxSeq = 0, rsiEvReady = false, rsiEvInflight = false, rsiEvTimer = 0;
+function rsiEvCut(t, n) { var s = String(t === undefined || t === null ? "" : t); return s.length > n ? s.slice(0, n) + "…" : s; }
+function rsiEvPull() {
+  if (rsiEvInflight) return;
+  rsiEvInflight = true;
+  wsSafeSend(JSON.stringify(rsiEvReady
+    ? { v: 1, type: "session.history", sessionId: RSI_EV_SID, sinceSeq: rsiEvMaxSeq }
+    : { v: 1, type: "session.history", sessionId: RSI_EV_SID, limit: 300 }));
+}
+function rsiEvStart() {
+  if (rsiEvTimer) return;
+  rsiEvPull();
+  rsiEvTimer = setInterval(rsiEvPull, 2000);
+}
+function rsiEvStop() {
+  if (rsiEvTimer) { clearInterval(rsiEvTimer); rsiEvTimer = 0; }
+  rsiEvInflight = false;
+}
+function rsiEvOnHist(m) {
+  rsiEvInflight = false;
+  var evs = Array.isArray(m.events) ? m.events : [], i, e, s, known = {};
+  if (m.hasMore !== undefined) { rsiEv = evs.slice(); rsiEvReady = true; } // 首屏尾页
+  else if (m.since !== undefined && m.since > 0 && rsiEvReady) { // 增量:按 seq 去重后追加
+    for (i = 0; i < rsiEv.length; i++) known[rsiEv[i].seq] = 1;
+    for (i = 0; i < evs.length; i++) { e = evs[i]; if (!known[e.seq]) rsiEv.push(e); }
+  } else { rsiEv = evs.slice(); rsiEvReady = true; } // 全量重放
+  var mx = 0;
+  for (i = 0; i < rsiEv.length; i++) { s = rsiEv[i].seq; if (typeof s === "number" && s > mx) mx = s; }
+  rsiEvMaxSeq = mx;
+  if (rsiEv.length > 600) rsiEv = rsiEv.slice(-600); // 上限:只留最近 600 条
+  rsiEvRender();
+  rsiChatRender(); // SUPER-CHAT:同一份回包双消费(满渲染;零新增轮询/请求)
+}
+function rsiEvRender() {
+  var box = $("rsiStreamBody"), meta = $("rsiStreamMeta");
+  if (!box) return;
+  if (!rsiEv.length) {
+    if (meta) meta.textContent = "空闲";
+    box.innerHTML = '<div class="rsi-empty">尚无 RSI 运行记录。点任意机制的「运行」,工作过程会在这里实时显示。</div>';
+    return;
+  }
+  var wasBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  var out = [], i, e, p, k, txt;
+  for (i = 0; i < rsiEv.length; i++) {
+    e = rsiEv[i] || {}; p = e.payload || {}; k = String(e.kind || "");
+    if (k === "message.user") {
+      txt = String(p.text || "");
+      out.push('<div class="rsi-ev rsi-ev-task"><b>任务</b><div class="rsi-ev-txt">' + esc(rsiEvCut(txt, 480)) + "</div></div>");
+    } else if (k === "message.agent") {
+      txt = String(p.text || "").trim();
+      if (txt) out.push('<div class="rsi-ev rsi-ev-agent"><div class="rsi-ev-txt">' + esc(rsiEvCut(txt, 1600)) + "</div></div>");
+    } else if (k === "tool.call") {
+      out.push('<div class="rsi-ev rsi-ev-tool">▸ ' + esc(String(p.name || "tool")) + ' <span class="rsi-ev-args">' + esc(rsiEvCut(String(p.arguments || ""), 160)) + "</span></div>");
+    } else if (k === "tool.result") {
+      out.push('<div class="rsi-ev rsi-ev-res">↳ ' + esc(String(p.name || "")) + " · " + esc(rsiEvCut(String(p.content || ""), 220)) + "</div>");
+    } else if (k === "step.start") {
+      out.push('<div class="rsi-ev rsi-ev-step">step ' + esc(String(p.step === undefined ? "" : p.step)) + " 开始</div>");
+    } else if (k === "permission.gate") {
+      out.push('<div class="rsi-ev rsi-ev-warn">等待授权:' + esc(rsiEvCut(String(p.toolName || p.name || p.tool || ""), 60)) + "</div>");
+    }
+  }
+  box.innerHTML = out.join("") || '<div class="rsi-empty">会话已建立,等待事件…</div>';
+  if (meta) meta.textContent = "最近 " + rsiEv.length + " 条";
+  if (wasBottom) box.scrollTop = box.scrollHeight;
+}
+/* ── SUPER-CHAT:rsi 会话满渲染(会话Chat 子标签)──────────────────────────
+ 复用方式=「薄壳调用主聊天卡片构造函数」:renderHistory 主循环(panel.ts:10923 起)与十余个全局态
+ (histEvents/findQuery/mfScan 记忆化/currentSid/settings/subWsActive/turnOutcome)强耦合,全量抽取
+ 不可行(规划已预案此降级)。这里直接调用与主聊天同一批构造函数——replyBlockHtml(assistant markdown
+ 回复卡)/toolCallCard(工具调用+结果合并卡)/toolResultCard(孤儿结果卡),卡片类名 .user-line/.sys-line/
+ .tool-card/.task-reply 均为主聊天全局样式 → 观感与 coding agent 主聊天一致。
+ 数据=rsiEv(RSI 页 2s 轮询 session.history 的同一份结果,rsiEvOnHist 双消费,600 条上限沿用)。 */
+var rsiChatErr = "", rsiChatErrAt = 0; // 错误态:最近一次断连/拉取失败时刻(空串=无错)
+function rsiChatNoteErr() { rsiChatErr = "连接断开,拉取已暂停"; rsiChatErrAt = Date.now(); if (mainView === "rsichat") rsiChatRender(); }
+function rsiChatRender() {
+  var box = $("rsiChatBody"), meta = $("rsiChatMeta");
+  if (!box) return;
+  if (rsiChatErr) { // 错误态:不白屏,给重试(重试只重拉一拍,不重启轮询节拍)
+    box.innerHTML = '<div class="rsi-chat-error"><span>拉取 RSI 会话失败:' + esc(rsiChatErr) + '</span>' +
+      '<button class="vw-act" data-rsichat-act="retry">重试</button></div>';
+    if (meta) meta.textContent = "错误";
+    return;
+  }
+  if (!rsiEvReady) { // 加载态:首屏 300 条拉取中
+    box.innerHTML = '<div class="empty-line">读 取 会 话 …</div>';
+    if (meta) meta.textContent = "拉取中…";
+    return;
+  }
+  if (!rsiEv.length) { // 空态:引导去 RSI 看板运行机制(直达按钮,事件委托见 rsiChatClick)
+    box.innerHTML = '<div class="rsi-chat-empty">RSI 会话 <b>rsi</b> 还没有运行记录。<br>去 RSI 看板点任意机制的「运行」,工作过程会以任务卡/工具卡/markdown 在这里实时显示。<br>' +
+      '<button class="vw-act" data-rsichat-act="goMech">去 RSI 看板运行机制</button></div>';
+    if (meta) meta.textContent = "空闲";
+    return;
+  }
+  var wasBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60; // 粘底跟随(主聊天同款 60px 容差)
+  var out = [], i, e, p, k;
+  for (i = 0; i < rsiEv.length; i++) {
+    e = rsiEv[i] || {}; p = e.payload || {}; k = String(e.kind || "");
+    if (k === "message.user") {
+      const utext = String(p.display || p.text || "");
+      out.push('<div class="user-line"><span class="who">你</span><span class="txt">' + userSlashHtml(utext, "") + "</span></div>");
+    } else if (k === "message.agent") {
+      if (p.reasoning && settings.thinking === "on" && settings.mode !== "office") { // 思考卡(主聊天同款,非 office)
+        out.push('<details class="think-card"><summary>思考 · ' + Math.max(1, Math.round(Number(p.llmMs || 0) / 1000)) + 's</summary><div class="th-body">' + sketchifyHtml(hl(esc(String(p.reasoning).slice(0, 4000)), "")) + "</div></details>");
+      }
+      if (p.text) out.push(replyBlockHtml(e, "")); // assistant 正文:markdown 渲染(主聊天同款)
+      if (p.toolCalls) {
+        for (var ci = 0; ci < p.toolCalls.length; ci++) {
+          var c = p.toolCalls[ci] || {};
+          var cres = rsiChatResOf(c);
+          out.push(toolCallCard(c, "", cres, null, null)); // 工具调用+结果合并卡(主聊天同款)
+        }
+      }
+    } else if (k === "tool.result") { // 孤儿结果(调用卡缺席):主聊天同款独立结果卡
+      if (!rsiChatCallKnown(String(p.toolCallId || ""))) out.push(toolResultCard(String(p.content || ""), "", null, String(p.name || ""), String(p.arguments || ""), String(p.toolCallId || "")));
+    } else if (k === "message.system") {
+      var stxt = String(p.text || "");
+      if (stxt) { var st = e.time ? '<span class="ev-time">' + new Date(e.time).toLocaleTimeString() + '</span>' : ""; out.push('<div class="sys-line">' + st + sketchifyHtml(esc(stxt)) + "</div>"); }
+    } else if (k === "permission.gate") {
+      out.push('<div class="sys-line sys-warn">' + ic("warn") + " 等待授权:" + esc(rsiEvCut(String(p.toolName || p.name || p.tool || ""), 60)) + "</div>");
+    } else if (k === "step.start") {
+      out.push('<div class="sys-line">step ' + esc(String(p.step === undefined ? "" : p.step)) + " 开始</div>");
+    } else if (k === "task.done" || k === "task.fail" || k === "task.cancel") {
+      var done = k === "task.done";
+      var fres = String(p.result || "");
+      out.push('<div class="sys-line ' + (done ? "" : "sys-warn") + '">' + (done ? "任务完成" : k === "task.cancel" ? "任务已取消" : "任务失败") +
+        (fres ? ":" + esc(rsiEvCut(fres, 200)) : "") + "</div>");
+      if (done && fres && !rsiEv.some(function (x) { return x.kind === "message.agent"; })) { // 终态兜底(无 agent 正文时,主聊天同款)
+        out.push('<div class="task-reply">' + mdToHtml(fres, "") + "</div>");
+      }
+    }
+  }
+  box.innerHTML = out.join("");
+  if (meta) meta.textContent = "最近 " + rsiEv.length + " 条";
+  if (wasBottom) box.scrollTop = box.scrollHeight;
+}
+/* 工具结果预扫(主聊天 fixH12 同语义:结果晚于调用到达,渲染全量重放先扫后用即得「调用点即见结果」)。 */
+function rsiChatResOf(c) {
+  var cid = String((c || {}).id || "");
+  for (var i = rsiEv.length - 1; i >= 0; i--) {
+    var e = rsiEv[i] || {};
+    if (e.kind !== "tool.result") continue;
+    var p = e.payload || {};
+    if (String(p.toolCallId || "") === cid) return { name: String(p.name || ""), content: String(p.content || ""), durationMs: Number(p.durationMs || 0) };
+  }
+  return null;
+}
+/* 调用 id 已在场判定(孤儿结果卡去重:调用卡已渲染的结果不再重复出卡)。 */
+function rsiChatCallKnown(cid) {
+  if (!cid) return false;
+  for (var i = 0; i < rsiEv.length; i++) {
+    var e = rsiEv[i] || {};
+    if (e.kind !== "message.agent" || !(e.payload || {}).toolCalls) continue;
+    for (var j = 0; j < e.payload.toolCalls.length; j++) if (String((e.payload.toolCalls[j] || {}).id || "") === cid) return true;
+  }
+  return false;
+}
+/** 会话Chat 事件委托:空态「去 RSI 看板」/错误态「重试」。零内联 onclick。 */
+function rsiChatClick(ev) {
+  var el = ev && ev.target ? (ev.target.closest ? ev.target.closest("[data-rsichat-act]") : null) : null;
+  if (!el) return;
+  var act = String(el.getAttribute("data-rsichat-act") || "");
+  if (act === "goMech") { switchView("rsi"); return; }
+  if (act === "retry") {
+    rsiChatErr = ""; rsiChatErrAt = 0;
+    rsiChatRender();
+    rsiEvPull(); // 只重拉一拍(不重启轮询节拍;WS 就绪即恢复增量,未就绪由断连探针再标记错误)
+    return;
+  }
+}
+/** 会话Chat 发送:复用 supSend 同款 super.turn 通道(protocol 无 sessionId,不扩协议)。
+ * 限制如实落地:消息落 super 日卷不写 rsi 流 → 本地即时气泡反馈 + 页顶说明(已发往指挥台)。 */
+function rsiChatSend() {
+  var inp = $("rsiChatInput");
+  if (!inp || supState.waiting) return;
+  var text = String(inp.value || "").trim();
+  if (!text) return;
+  if (!wsSafeSend(JSON.stringify({ v: 1, type: "super.turn", text }))) { toast("连接未就绪", true); return; }
+  inp.value = "";
+  supState.waiting = true; // 等待态与指挥台页同源(turn.done 广播清)
+  var box = $("rsiChatBody");
+  if (box) { // 本地即时气泡(诚实呈现:标注已发往指挥台,不冒充 rsi 流内容)
+    var row = document.createElement("div");
+    row.className = "user-line";
+    row.innerHTML = '<span class="who">你</span><span class="txt">' + userSlashHtml(text, "") + '</span><span class="sup-mono">已发往指挥台(super 日卷)</span>';
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+  supRenderChat(); // 指挥台页同步等待态(turn.user 广播回显正式气泡)
+}
 /** 视图外观态:经典布局的单屏显隐 + team 卡内部子标签(.on 在画布形态下不影响显示)。
  *  显隐清单由 CLASSIC_VIEWS(= CV_VIEW_OF_CARD 派生)供给,新增卡片不必再改这里。 */
 function applyViewChrome(name) {
@@ -12585,7 +13312,7 @@ function applyViewChrome(name) {
   for (const v of CLASSIC_VIEWS) {
     const el = $("view-" + v);
     if (!el) continue; // 派生清单里可能的无宿主项(如子标签别名)不炸:跳过而非 null.classList
-    let on = (name === "chat" && v === "tasks") || name === v || ((name === "dash" || name === "issues") && v === "team");
+    let on = (name === "chat" && v === "tasks") || name === v || ((name === "dash" || name === "issues") && v === "team") || (name === "rsi" && v === "super");
  // 双中心:右栏开启时 IDE 与当前视图并列常驻(任务流在左,IDE 在右)
     if (dualOpen && v === "ide" && name === "chat") on = true;
     el.classList.toggle("on", on);
@@ -12594,9 +13321,16 @@ function applyViewChrome(name) {
   $("teamPaneIssues").style.display = name === "issues" ? "flex" : "none"; // fixD5:Issue 看板面板随子标签切换
   $("view-team").classList.toggle("tab-dash", name === "dash"); // 头部控件随标签切换(team-only/dash-only)
   $("view-team").classList.toggle("tab-issues", name === "issues"); // fixD5:issue-only 控件同机制
+ // RSI-PLACE:RSI 看板=指挥台 view 的第二子标签(pane 显隐/标题/副标全部由 .tab-rsi 类驱动,CSS 见 #view-super 段)
+  $("view-super").classList.toggle("tab-rsi", name === "rsi");
+  $("view-super").classList.toggle("tab-rsichat", name === "rsichat"); // SUPER-CHAT:会话Chat 第三子标签(类驱动显隐同款)
+  $("superTabChat").classList.toggle("on", name !== "rsi" && name !== "rsichat");
+  $("superChatTab").classList.toggle("on", name === "rsichat"); // 会话Chat 子标签点亮(其余两个页签互斥)
+  $("superTabRsi").classList.toggle("on", name === "rsi"); // 两 tab 互斥点亮,切换期一次到位
   $("teamTabMembers").classList.toggle("on", name === "team");
   $("teamTabIssues").classList.toggle("on", name === "issues"); // fixD5
   $("teamTabDash").classList.toggle("on", name === "dash");
+  rsiPollSync(name); // RSI 轮询随视图进出启停(非 rsi 一律 clearInterval,防后台空转)
  // wiki 并入代码档案(product decision):tab 态决定指挥台让位
   document.body.classList.toggle("pp-wiki-tab", name === "project" && projectTab === "wiki");
 }
@@ -12612,6 +13346,7 @@ function loadViewData(name, sid) {
   if (name === "approvals") { wsSafeSend(JSON.stringify({ v: 1, type: "permission.pending" })); wsSafeSend(JSON.stringify({ v: 1, type: "permission.history", limit: 20 })); } // 挂起+最近决定一起拉
   if (name === "nodes") { wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); }
   if (name === "super") superViewLoad(); // 指挥台(聊天回放+看板四区取数)
+  if (name === "rsichat") rsiPollSync("rsichat"); // SUPER-CHAT:会话Chat 复用 rsi 会话轮询(单条 2s 轮询双消费)
   if (name === "subchat") subMsgRender(); // 子agent会话流卡:进入即重渲(卡可见=分组已读,未读角标清零;含原分身卡的注册态/模型/reap)
   if (name === "track") trackPull(s);
  // 轨迹视图数据全部来自 histEvents(前端已在场的会话重放事件),零额外请求;
@@ -13707,6 +14442,7 @@ function wsOnOpen() { lastPong = Date.now(); $("status").className = "d on"; $("
     // 重连后自动重推(onmessage merge);当前会话走 session.history sinceSeq 水位补断连窗口的新事件,
     // seq 去重=重复重连不产生重复卡(幂等);DOM/视图全程不动,不再整页刷新。
     const n = rcAttempt; rcAttempt = 0; svcBanner(false);
+    rsiChatErr = ""; rsiChatErrAt = 0; if (mainView === "rsichat") rsiChatRender(); // SUPER-CHAT:重连成功清错误态(轮询增量自动追平)
     $("conn").textContent = "已连接 · 重连成功(第 " + n + " 次尝试)";
     setTimeout(() => { if (String($("conn").textContent).indexOf("重连成功") >= 0) $("conn").textContent = "已连接"; }, 4000);
     refreshHist(); render();
@@ -13734,6 +14470,7 @@ function wsOnClose() {
  //; 的盲 reload 撞裸错误页问题随之消失——不再主动刷新)。
   svcBanner(true, "连接断开 · 自动重连中(第 " + rcAttempt + "/" + RC_MAX + " 次,约 " + delay + "s 后)——会话内容已保留");
   rcTimer = setTimeout(() => { rcTimer = 0; connectWs(); }, delay * 1000);
+  rsiChatNoteErr(); // SUPER-CHAT:断连时会话Chat 显错误态(可重试;连接恢复由既有重连+轮询增量追平)
 }
 function wireWs() {
   if (!ws) return;
@@ -14443,6 +15180,33 @@ function wsOnMessage(e) {
     // 首启引导卡依赖 projects(添加项目后「2 添加项目」要变已完成)——空会话没有 task 事件回来重渲,这里补一拍。
     if (!histEvents || !histEvents.length) { try { renderHistory(); } catch (e) { /* 首帧未就绪:忽略 */ } }
     return; } // 侧栏重渲:分桶归类依赖项目注册表(先 tasks 后 projects 到达时不重渲会错桶);看板开着且自动挡=跟随当前项目重拉
+ // ── RSI 运行看板回包(团队「RSI」子标签):解锁 in-flight + 渲染;看不到标签也静默渲染,不抛错 ──
+  if (m.type === "rsi.status.result") { rsiInflight = false; clearTimeout(rsiUnlockTimer); rsiRender(m); return; }
+ // ── RSI 机制交互回包( RSI-CTRL):成功/失败都各拉一拍 rsiStatusPull 刷新(不整页重载) ──
+  if (m.type === "rsi.mechanism.set.result") {
+    if (m.ok === false) toast("机制设置失败:" + (m.reason ? rsiReasonText(m.reason) : "未知原因"), true);
+    rsiStatusPull();
+    return;
+  }
+  if (m.type === "rsi.mechanism.run.result") {
+    if (m.ok === false) {
+      if (m.id !== undefined && m.id !== null) delete rsiPending[String(m.id)]; // 发起失败:收回乐观「运行中」
+      toast("运行失败:" + (m.reason ? rsiReasonText(m.reason) : "未知原因"), true);
+      rsiRerender();
+    } else if (m.id !== undefined && m.id !== null) {
+      var runMsg = "已启动运行" + (m.taskId ? " · 任务 " + String(m.taskId) : (m.runId ? " · 运行 " + String(m.runId) : ""));
+      rsiPending[String(m.id)] = Date.now();
+      toast(runMsg);
+    }
+    rsiStatusPull();
+    return;
+  }
+  if (m.type === "rsi.item.result") {
+    if (m.ok === false) toast("条目操作失败:" + (m.reason ? rsiReasonText(m.reason) : "未知原因"), true);
+    else { rsiEditKey = ""; rsiArmKey = ""; clearTimeout(rsiArmTimer); }
+    rsiStatusPull();
+    return;
+  }
   // ── 运行看板回包(ref dashboard /api/sessions+/api/trends 的 WS 对应物) ──
   if (m.type === "dashboard.sessions.result") { dashSessions = m.sessions || []; dashScopeLive = m.scope || "all"; dashRender(); return; }
   if (m.type === "dashboard.trends.result") { dashTrends = m; dashRender(); return; }
@@ -14532,6 +15296,8 @@ function wsOnMessage(e) {
       }
     }
   }
+ // RSI-SESSION:固定会话窗的 history 回包先分流——绝不并入主会话 histEvents(全局单例污染)
+  if (m.type === "session.history.result" && m.sessionId === RSI_EV_SID) { rsiEvOnHist(m); return; }
   if (m.type === "session.history.result") {
     const evs = m.events || [];
     const maxSeq = evs.length ? Math.max(...evs.map((e) => e.seq ?? 0)) : 0;
@@ -19917,21 +20683,31 @@ $("cvToggleBtn").onclick = () => {
   try { CanvasShell.toggleMode(); }
   catch (err) { console.warn("[canvas] 形态切换失败(资产未加载?)", err); toast("画布资产不可用,已留在经典布局", true); }
 };
-// 侧栏常驻入口(经典模式):按钮比 composer 里的小药丸显眼,避免「找不到怎么进画布」。
+// 侧栏常驻入口(两种形态都在):按钮比 composer 里的小药丸显眼;点击=toggle,与药丸/HUD「经典」同语义,
+// 画布形态下点它回经典,不再需要先找 HUD。
 $("cvModeBtn").onclick = () => {
-  try { CanvasShell.setMode("canvas"); }
+  try { CanvasShell.toggleMode(); }
   catch (err) { console.warn("[canvas] 形态切换失败(资产未加载?)", err); toast("画布资产不可用,已留在经典布局", true); }
 };
-// 形态联动:cv-mode 事件(canvas-shell.js setMode 派发)→ 更新按钮文案/提示,让「当前在哪个形态」一眼可见。
+// 形态联动:cv-mode 事件(canvas-shell.js setMode 派发)→ 同步 composer 药丸 + 侧栏常驻入口的文案/图标/提示,
+// 让「当前在哪个形态、点一下会去哪」一眼可见(侧栏按钮两形态都在,所以两态文案必须都写)。
 window.addEventListener("cv-mode", function (e) {
-  const btn = $("cvToggleBtn"); if (!btn) return;
   const d = (e && e.detail) || {};
   const inCanvas = d.mode === "canvas";
-  btn.textContent = inCanvas ? "经典模式" : "画布模式";
-  btn.classList.toggle("on", inCanvas);
-  btn.title = inCanvas
-    ? "切回经典单视图布局 (Ctrl+Shift+C)"
-    : "切换到画布模式:全部视图变成画布上的卡片,可平移/缩放/自由布局 (Ctrl+Shift+C)";
+  const titleOn = "切回经典单视图布局 (Ctrl+Shift+C)";
+  const titleOff = "切换到画布模式:全部视图变成画布上的卡片,可平移/缩放/自由布局 (Ctrl+Shift+C)";
+  const btn = $("cvToggleBtn");
+  if (btn) {
+    btn.textContent = inCanvas ? "经典模式" : "画布模式";
+    btn.classList.toggle("on", inCanvas);
+    btn.title = inCanvas ? titleOn : titleOff;
+  }
+  const sbtn = $("cvModeBtn");
+  if (sbtn && sbtn.children.length >= 2) { // children[0]=.ic 图标,children[1]=文案,children[2]=.kbd 保持不动
+    sbtn.children[0].textContent = inCanvas ? "▣" : "▦";
+    sbtn.children[1].textContent = inCanvas ? "经典模式" : "画布模式";
+    sbtn.title = inCanvas ? titleOn : titleOff;
+  }
 });
 $("bfClose").onclick = () => bfToggle(false);
 $("bfEdit").onclick = () => boardEditToggle();
@@ -27440,7 +28216,7 @@ $("go").onclick = () => {
   if (inChip) { chipSubmit(); return; } // chip 态点发=执行指令逻辑(与 Enter 同义)
   submit();
 };
-// ---- 语音任务书:🎤 录音 → voice.draft → coding.models.voice 整理 → 回填输入区 ----
+// ---- 语音任务书:◎ 录音 → voice.draft → coding.models.voice 整理 → 回填输入区 ----
 // 会话绑定语义:撰写锁按 sessionId 存Map;A 会话撰写中,A 的输入区只读+「任务书撰写中」,
 // 切到 B 可正常输入,切回 A 仍未完成则继续锁;结果到达时 A 不在前台→暂存,openSession 回 A 时自动填入。
 // 未配置 coding.models.voice=功能不可用(点击指路模型设置,不静默降级)。
@@ -27456,7 +28232,7 @@ function renderVoiceState() {
   const rec = !!voiceRec;
   if (btn) {
     btn.classList.toggle("rec", rec);
-    btn.textContent = rec ? "■" : "🎤";
+    btn.textContent = rec ? "■" : "◎";
     btn.title = rec ? "录音中 " + voiceFmt(voiceRec.seconds) + " · 再点一次结束,AI 整理成任务书"
       : "语音输入:点击开始录音,再点一次结束 → AI 整理成任务书填入输入框";
   }
@@ -27466,7 +28242,7 @@ function renderVoiceState() {
   const cmp = document.querySelector(".composer");
   if (cmp) cmp.classList.toggle("voice-wait", locked);
   if (locked) el.placeholder = "任务书撰写中,请稍候…(完成后自动填入,期间本会话不能输入)";
-  else if (rec && !inChip) el.placeholder = "录音中 " + voiceFmt(voiceRec.seconds) + "…再点 🎤 结束,AI 整理成任务书";
+  else if (rec && !inChip) el.placeholder = "录音中 " + voiceFmt(voiceRec.seconds) + "…再点 ◎ 结束,AI 整理成任务书";
 }
 function voiceRecTick() {
   if (!voiceRec) return;
@@ -28165,6 +28941,14 @@ $("teamTabMembers").onclick = () => switchView("team");
 $("teamTabIssues").onclick = () => switchView("issues"); // fixD5:Issue 看板子标签(三列拖拽+筛选+确认派发)
 $("teamTabDash").onclick = () => switchView("dash"); // 看板子标签(运行看板收编
 $("act-super").onclick = () => superOpen(); // 指挥台(画布态自动退经典后进视图)
+$("act-rsi").onclick = () => switchView("rsi"); // RSI-PLACE:RSI 看板(指挥台视图第二子标签;12 分区只读全局治理面)
+$("superTabChat").onclick = () => switchView("super"); // 指挥台子标签:聊天+调度看板
+$("superTabRsi").onclick = () => switchView("rsi"); // RSI 看板子标签
+$("superChatTab").onclick = () => switchView("rsichat"); // SUPER-CHAT:会话Chat 子标签(rsi 会话满渲染)
+$("rsiChatMech").onclick = () => switchView("rsi"); // 会话Chat 头部「机制」按钮切回 RSI 看板
+$("rsiChatSend").onclick = () => rsiChatSend(); // 发送走 super.turn 同款通道(落 super 日卷,本地气泡即时反馈)
+$("rsiChatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); rsiChatSend(); } }); // Enter 发送(空文本 rsiChatSend 内自守卫)
+$("rsiChatBody").addEventListener("click", rsiChatClick); // 空态/错误态按钮委托(零内联 onclick)
 $("act-nodes").onclick = () => switchView("nodes");
 $("act-approvals").onclick = () => switchView("approvals");
 $("act-subchat").onclick = () => switchView("subchat"); // 画布形态专属(经典 CSS 隐藏按钮);switchView 聚焦对应卡;n3 融合后原「分身 Agents」入口并入此卡
@@ -31262,7 +32046,10 @@ const CV_BRIDGE = {
  // 子标签身份保护(「看板呢」注意):team 卡承载 team/dash/issues 三子标签,
     // 焦点落在 team 卡≠用户点了「成员」——切子标签后 showCard→focus 回调会把身份洗回 team,
     // viewLive("dash") 恒假 → 看板数据到了也被渲染守卫全吞(永久空板)。dash/issues 身份只随子标签点击切换。
+ // RSI-PLACE 同理:RSI 看板是指挥台卡第二子标签,焦点回 super 卡不得把身份洗净。
     if (view === "team" && (mainView === "dash" || mainView === "issues")) return;
+    if (view === "super" && mainView === "rsi") return;
+    if (view === "super" && mainView === "rsichat") return; // SUPER-CHAT 同理:会话Chat 也是指挥台子标签,焦点不得洗身份
     setViewIdentity(view); // 身份唯一出口:mainView/sessionStorage/dataset/导航点亮一次到位
   },
   onMode(mode, initial) {
@@ -31344,7 +32131,7 @@ if (window.CanvasShell && window.CanvasShell.init) {
 }
 </script>
 
-<!-- 截图标注(2026-10-26,面板自有能力):取屏画框覆盖层 + 标注编辑器。
+<!-- 截图标注(,面板自有能力):取屏画框覆盖层 + 标注编辑器。
      交互:框选/点/全局三类编号批注,侧栏卡片写意见,拖动调位置;
      提交后服务端落盘 <项目>/.genie/feedback/ 并把反馈投递给当前会话的 coding agent。 -->
 <div id="capOverlay" style="display:none">
@@ -31815,6 +32602,11 @@ if (window.CanvasShell && window.CanvasShell.init) {
       ann = { dataUrl: dataUrl, img: img, w: img.naturalWidth, h: img.naturalHeight, zoom: 1, px: 0, py: 0, notes: [], sel: null, mode: "smart", drag: null, undo: [], redo: [], spaceDown: false, sending: false, candidates: [], hoverCand: null, hoverIndex: 0, userZoomed: false, layout: null, layoutMode: false,
         cap: { source: (opts && opts.source) || "screen", capturedAt: (opts && opts.capturedAt) || new Date().toISOString(), fileName: (opts && opts.fileName) || undefined } };
       canvas.width = ann.w; canvas.height = ann.h;
+ // viewBox=图像像素坐标系:overlay 的 rect/circle/path 全按图像像素书写,
+ // 浏览器自动映射到 stage CSS 尺寸 → 缩放/平移后标注视觉与鼠标一致。
+ // (缺它时 SVG 用户坐标系=CSS 尺寸,图像像素被当 CSS px,zoom≠1 视觉错位 zoom 倍。)
+      overlay.setAttribute("viewBox", "0 0 " + ann.w + " " + ann.h);
+      overlay.setAttribute("preserveAspectRatio", "none");
       annPaintCanvas();
       document.getElementById("annMeta").textContent = ann.w + " × " + ann.h + " px" + (ann.cap.source === "file" && ann.cap.fileName ? " · " + ann.cap.fileName : "");
       editor.style.display = "flex";
@@ -31979,16 +32771,19 @@ if (window.CanvasShell && window.CanvasShell.init) {
     ann.userZoomed = false;
     var vw = viewport.clientWidth - 24, vh = viewport.clientHeight - 24;
     ann.zoom = clamp(Math.min(vw / ann.w, vh / ann.h), 0.01, 1);
-    ann.px = Math.max(12, (viewport.clientWidth - ann.w * ann.zoom) / 2);
-    ann.py = Math.max(12, (viewport.clientHeight - ann.h * ann.zoom) / 2);
+    ann.px = (viewport.clientWidth - ann.w * ann.zoom) / 2;
+    ann.py = (viewport.clientHeight - ann.h * ann.zoom) / 2;
     annPaint();
   }
   function annZoomAt(factor, cx, cy) {
     if (!ann) return;
     var next = clamp(ann.zoom * factor, 0.02, 8);
-    var r = stage.getBoundingClientRect();
-    var ax = cx === undefined ? viewport.clientWidth / 2 : cx - r.left;
-    var ay = cy === undefined ? viewport.clientHeight / 2 : cy - r.top;
+ // 锚点统一 viewport 局部坐标(ann.px/py 即此系;stage 在 viewport 内偏移 0):
+ // 旧实现 cx-r.left 取 stage rect(与 viewport 同系,等价)但 cy 缺省混用 clientHeight,
+ // 真正的漂移源是「无参缩放锚≠用户预期中心」+fit 的 12px 下限;此处统一换算并保持锚点语义。
+    var vpr = viewport.getBoundingClientRect();
+    var ax = cx === undefined ? viewport.clientWidth / 2 : cx - vpr.left;
+    var ay = cy === undefined ? viewport.clientHeight / 2 : cy - vpr.top;
     var k = next / ann.zoom;
     ann.px = ax - (ax - ann.px) * k; ann.py = ay - (ay - ann.py) * k;
     ann.zoom = next; ann.userZoomed = true;
@@ -32372,7 +33167,8 @@ if (window.CanvasShell && window.CanvasShell.init) {
       }
       var x1 = Math.round(Math.min(d.sx, d.cur ? d.cur.x : d.sx)), y1 = Math.round(Math.min(d.sy, d.cur ? d.cur.y : d.sy));
       var x2 = Math.round(Math.max(d.sx, d.cur ? d.cur.x : d.sx)), y2 = Math.round(Math.max(d.sy, d.cur ? d.cur.y : d.sy));
-      if (x2 - x1 < 3 || y2 - y1 < 3) { annRenderAll(); return; } // 太小=取消,未入栈无须弹栈
+ // 最小框尺寸按 CSS px 判(屏幕上拖了多大):旧口径 3 图像像素在深度缩小后把几十 CSS px 的拖框全吞掉
+      if ((x2 - x1) * ann.zoom < 4 || (y2 - y1) * ann.zoom < 4) { annRenderAll(); return; } // 太小=取消,未入栈无须弹栈
       annAddNote({ kind: "region", source: { x1: x1, y1: y1, x2: Math.min(x2, ann.w), y2: Math.min(y2, ann.h) } });
       return;
     }
@@ -32403,6 +33199,8 @@ if (window.CanvasShell && window.CanvasShell.init) {
     document.getElementById("annCoords").textContent = "";
     if (ann && ann.hoverCand) { ann.hoverCand = null; annRenderOverlay(); }
   });
+ // 窗口尺寸变化:fit 态(未手动缩放)重跑 annFit 保完整居中;手动态不动用户视野
+  window.addEventListener("resize", function () { if (ann && !ann.userZoomed) annFit(); });
   pins.addEventListener("click", function (ev) {
     var id = ev.target && ev.target.getAttribute ? ev.target.getAttribute("data-apin") : null;
     if (!id || !ann) return;

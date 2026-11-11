@@ -90,6 +90,20 @@ export interface WorktreeCleanupResult {
   dryRun: boolean;
 }
 
+/** :worktree 交付回收(只读 git status,不改任何 git 状态)。 */
+export interface WorktreeCollectInput {
+ /** 工作树绝对路径(须是 git 工作树)。 */
+  path: string;
+}
+
+export interface WorktreeCollectResult {
+  ok: boolean;
+  path: string;
+ /** 相对 HEAD 的改动文件(git status --porcelain,去重排序)。 */
+  changedFiles: string[];
+  error?: { code: WorktreeErrorCode; message: string };
+}
+
 export interface WorktreeServiceOptions {
   gitCommand?: string;
   /** 每仓受管 worktree 上限;0=不限。缺省 env GENIE_WORKTREE_MAX 或 8。 */
@@ -306,6 +320,40 @@ export class WorktreeService {
   async list(input: { cwd: string }): Promise<WorktreeInfo[]> {
     const repoRoot = await this.resolveRepo(input.cwd);
     return this.listManaged(repoRoot);
+  }
+
+ /**
+ * 交付回收:列出工作树相对 HEAD 的改动文件(git status --porcelain)。
+ * 只读、不改 git 状态、不 throw——回收失败如实返回 error,不打断子代理结果交付。
+ */
+  async collect(input: WorktreeCollectInput): Promise<WorktreeCollectResult> {
+    const path = String(input?.path ?? "").trim();
+    if (!path || !isAbsolute(path)) {
+      return { ok: false, path, changedFiles: [], error: { code: "INVALID_INPUT", message: "collect: path 必须是绝对路径" } };
+    }
+    if (!existsSync(path)) {
+      return { ok: false, path, changedFiles: [], error: { code: "INVALID_INPUT", message: `collect: 路径不存在(${path})` } };
+    }
+    const r = await this.git(["status", "--porcelain"], path);
+    if (r.code === -1) {
+      return { ok: false, path, changedFiles: [], error: { code: "GIT_UNAVAILABLE", message: r.stderr } };
+    }
+    if (r.code !== 0) {
+      return { ok: false, path, changedFiles: [], error: { code: "INVALID_INPUT", message: `git status 失败:${r.stderr.trim() || `exit ${r.code}`}` } };
+    }
+    const files: string[] = [];
+    const seen = new Set<string>();
+    for (const line of r.stdout.split("\n")) {
+      if (!line.trim()) continue;
+      const raw = line.slice(3).trim();
+      const file = raw.includes(" -> ") ? raw.split(" -> ").pop()!.trim() : raw;
+      if (!file || seen.has(file)) continue;
+      seen.add(file);
+      files.push(file);
+      if (files.length >= 200) break;
+    }
+    files.sort();
+    return { ok: true, path, changedFiles: files };
   }
 
   /** 移除 worktree;缺省保留分支(deleteBranch=true 才删本服务创建的 genie/ 分支)。 */

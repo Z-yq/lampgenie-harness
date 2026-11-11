@@ -3,6 +3,7 @@
  * 把所有服务在这里显式接线,便于测试替换。
  */
 import type { Server } from "node:http";
+import { execFile } from "node:child_process";
 import * as os from "node:os";
 import { join } from "node:path";
 import { MemoryJournal, FileJournal, bus, type Config, type Journal } from "@lampgenie/core";
@@ -13,6 +14,8 @@ import { startGatewayServer, repairSessionProjectDrift } from "./server.js";
 import { repairTailBeforeResume } from "./journal-tail-repair.js";
 import { journalArchiveDirOf } from "./journal-maintenance.js";
 import { createEffectQueue, relayActivityHandler, type EffectQueue } from "./effect-queue.js";
+// :通知三面同源(结构化 payload + 人读文本 + GUI 投影);relay.activity 入队点用它生成结构化面。
+import { buildNotification } from "@lampgenie/runtime/notify/emit";
 // 终态投递义务:启动回放 seed + 启动 sweep 一次(不自动重投,等连接)。
 import { createDeliveryObligationStore, type DeliveryObligation } from "./delivery-obligation.js";
 import { hasUserStoppedSince, appendUserStoppedMarker, USER_STOPPED_EVENT, USER_STOPPED_RESUME_MESSAGE } from "./user-stop-marker.js";
@@ -24,6 +27,11 @@ import { PermissionBroker } from "./permission-broker.js";
 import { AskUserRouter } from "./ask-user-router.js";
 import { WorkflowAskRouter } from "./workflow-ask-router.js";
 import { AutomationStore, AutomationScheduler } from "./automations.js";
+// 定时任务:计划/内容门/摘要用 runtime TaskSupervisor;真正跑活经 runner 提交给主管理器。
+import { TaskSupervisor as RuntimeTaskSupervisor } from "@lampgenie/runtime/task/task-manager";
+import { preRunVerdict } from "@lampgenie/runtime/task/scheduled-content-gate";
+import { ScheduledTaskService, type ScheduledTaskManagerLike } from "./scheduled-task-service.js";
+import { ScheduledTaskFileStore } from "./scheduled-task-store.js";
 import { setPermissionMode } from "./permission-mode.js";
 import { applyPreset, currentPresetName, presetKnobsOf, resolvePreset, setCurrentPresetName } from "./permission-presets.js";
 import { CommandStore, type CommandRoot } from "./commands-store.js";
@@ -39,7 +47,8 @@ import { genBootstrapCommand, pickLanAddress } from "./remote-wizard.js";
 import { mergeSkillIndexWith } from "@lampgenie/experience";
 import { NodeRegistry } from "./nodes.js";
 import { wireExecutor } from "./executor-wiring.js";
-import { wireAgentLoop, getExperienceStore, TOOL_HINTS, ensureSubagentWatchdog, maybeContinueGoal, writeBarrierOf, imageOffloadOf } from "./agent-wiring.js";
+import { wireAgentLoop, getExperienceStore, TOOL_HINTS, ensureSubagentWatchdog, maybeContinueGoal, writeBarrierOf, imageOffloadOf, cancelOwnedUnit } from "./agent-wiring.js";
+import { OwnerRegistry } from "@lampgenie/runtime/task/ownership";
 import { readGoalFromJournal } from "@lampgenie/runtime/agent/goal";
 import { createSessionWorkerHost, type SessionWorkerHost } from "./session-worker-host.js";
 // fixD2/D3:团队 issue 双通道 + P2P 直连(app 装配根接线)。
@@ -49,7 +58,7 @@ import { configureSessionSearch, closeSessionSearch, defaultSessionSearchCacheFi
 import { otelExporterFromEnv } from "@lampgenie/runtime/agent/otel-exporter";
 import { TaskPermissionGuard } from "@lampgenie/runtime/task/permission-policy";
 import { createMemoryWiring, type MemoryWiring } from "@lampgenie/memory";
-import { buildAudioChatFromConfig, buildModelProviders } from "./factory.js";
+import { buildAudioChatFromConfig, buildModelProviders, createModelRouter } from "./factory.js";
 import { createRouter } from "./router/index.js";
 import { createSessionModelApi, createSessionModelFace, type SessionModelStore } from "./session-model.js";
 import type { EffectiveModel } from "./model-switch.js";
@@ -179,6 +188,17 @@ export interface GatewayAppOptions {
 /** env CSV 标签解析:"a,b, c"→["a","b","c"];空串→[]。 */
 function parseCsv(v: string | undefined): string[] {
   return (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// 计划持久化:exit 钩子只做同步写(exit 回调里不允许异步),flush 内部已吞错。
+// 多次 buildApp(测试)时复用同一个监听,只 flush 最新一个 store,避免监听器堆积。
+let exitFlushStore: ScheduledTaskFileStore | null = null;
+let exitFlushRegistered = false;
+function scheduleExitFlush(store: ScheduledTaskFileStore): void {
+  exitFlushStore = store;
+  if (exitFlushRegistered) return;
+  exitFlushRegistered = true;
+  process.once("exit", () => { exitFlushStore?.flush(); });
 }
 
 export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
@@ -326,6 +346,14 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     // 同一 taskId 的连续状态变化折叠为最新 payload(替换而不重复上行)。
     if (task.state === "running" || task.state === "done" || task.state === "failed" || task.state === "cancelled") {
       const summary = String(task.instruction ?? task.id).slice(0, 120);
+ // :一次生成结构化面(payload/text/gui 同源);旧四字段逐字保留,新增 structured/gui 只做增量。
+      const legacySummary = `${task.state === "running" ? "开始" : task.state === "done" ? "完成" : "失败"}:${summary}`;
+      const note = buildNotification("team.activity", {
+        projectId: "",
+        category: "task",
+        type: task.state,
+        summary: legacySummary,
+      });
       void effectQueue.enqueue({
         kind: "relay.activity",
         key: task.id,
@@ -333,7 +361,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           projectId: "",
           category: "task",
           type: task.state,
-          summary: `${task.state === "running" ? "开始" : task.state === "done" ? "完成" : "失败"}:${summary}`,
+ // summary 仍是旧文本(旧消费端/团队活动流照旧);structured 供新消费端读原值。
+          summary: legacySummary,
+          ...(note.ok ? { structured: note.notification.payload, gui: note.notification.gui } : {}),
         },
       }).catch(() => { /* 持久化失败=本地零影响(红线);外部面 fire-and-forget */ });
     }
@@ -399,12 +429,19 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
  // 权限审批中介( B2):60s 无应答自动拒;广播通道在 server 创建后 attach。
  // 记忆接线(补全):harness-memory 上下文注入+会话终态学习;
   // 无 LLM=学习链关闭(fail-soft no-op),上下文注入照常(读文档是本地操作)。
+ // 任务类别路由:models.routing.memory 优先(表项/taskClass 命中),未配或建不起来
+ // (凭证/端点缺失、freeOnly 未声明免费)才按 aux(coding 辅助轨)→ 主模型回退——不静默混轨。
+ // -b:仅当配置了 routing 表才建实例(无表=undefined,memory/摘要/压缩三轨全部走旧回退,
+ // 省掉无谓 provider 解析);同一实例同时供 memory 学习链与 server 的 summary/compact 消费点。
+  const routingTable = (opts.config as { coding?: { models?: { routing?: unknown } } } | undefined)?.coding?.models?.routing;
+  const modelRouter = routingTable ? createModelRouter(opts.config as unknown as Config, repoRoot()) : undefined;
+  const memoryLlm = modelRouter?.providerFor("memory") ?? opts.auxLlm ?? opts.llm;
   const memoryWiring: MemoryWiring = createMemoryWiring({
     root: joinPath(repoRoot(), ".genie", "memory"),
-    ...(opts.llm ? {
+    ...(memoryLlm ? {
       llmCall: async ({ system, user }: { system: string; user: string }) => {
- // 记忆学习链走辅助轨(coding),不占 realtime 主会话。
-        const res = await (opts.auxLlm ?? opts.llm!).chat([{ role: "system", content: system }, { role: "user", content: user }], []);
+ // 记忆学习链不占 realtime 主会话;step-:routing.memory > auxLlm > llm。
+        const res = await memoryLlm.chat([{ role: "system", content: system }, { role: "user", content: user }], []);
         return res.content;
       },
     } : {}),
@@ -439,6 +476,105 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     (e) => journal.append({ kind: "automation.run", sessionId: e.sessionId, payload: e }),
   );
   automationScheduler.start();
+ // 定时任务装配:
+ // - runtime TaskSupervisor 只管「什么时候跑、跑之前检查什么、把哪些摘要拼进任务书」;
+ // - 真正执行经 configureScheduledTaskRunner 提交到主 taskManager,复用既有 agent loop / 面板可见性;
+ // - pre_run 用 shell 命令 exit 0 判定(30s 超时);context_from/continuity 从主管理器已完成任务读 result。
+ // 持久化(重启不丢):store 落 .genie/scheduled-tasks.json,save 原子写 / 变更走 200ms 防抖。
+  const scheduledTaskStore = new ScheduledTaskFileStore({
+    file: join(repoRoot(), ".genie", "scheduled-tasks.json"),
+  });
+  scheduleExitFlush(scheduledTaskStore);
+  const scheduledTasks = new RuntimeTaskSupervisor({ maxConcurrent: 2, store: scheduledTaskStore as never });
+  scheduledTasks.configureScheduledTaskRunner(async (
+    objective: string,
+    ctx: { task?: { sessionId?: string; projectId?: string } },
+  ) => {
+    const sessionId = String(ctx?.task?.sessionId || "main");
+    const projectId = ctx?.task?.projectId;
+    const submitted = taskManager.submit("system", sessionId, String(objective || ""), {
+      title: String(objective || "").trim().split("\n")[0]?.slice(0, 40) || undefined,
+      ...(projectId ? { projectId } : {}),
+    });
+    return await new Promise<{ content: string }>((resolve, reject) => {
+      let unsubscribe = () => {};
+      const settle = (task: { id: string; state: string; result?: string }) => {
+        if (task.id !== submitted.id) return;
+        if (task.state === "done") {
+          unsubscribe();
+          resolve({ content: task.result ?? "" });
+        } else if (task.state === "failed" || task.state === "cancelled") {
+          unsubscribe();
+          reject(new Error(task.result || `定时任务${task.state}`));
+        }
+      };
+      unsubscribe = taskManager.onChange(settle);
+      const current = taskManager.get(submitted.id);
+      if (current) settle(current);
+    });
+  });
+  scheduledTasks.setScheduledHooks({
+    preRunCheck: (payload: { command?: string }) => new Promise<boolean>((resolve) => {
+      const command = String(payload?.command || "").trim();
+      if (!command) { resolve(false); return; }
+      execFile("sh", ["-c", command], { timeout: 30_000, maxBuffer: 256 * 1024 }, (error, stdout) => {
+        const verdict = preRunVerdict({
+          exitCode: error ? (error as { code?: unknown }).code ?? 1 : 0,
+          stdoutTail: String(stdout || ""),
+        });
+        resolve(verdict.ok);
+      });
+    }),
+    contextProvider: (payload: {
+      task?: { seriesId?: string | null; sessionId?: string };
+      contextFrom?: { taskId?: string | null; sessionId?: string | null; maxChars?: number } | null;
+      continuity?: { maxChars?: number } | null;
+    }) => {
+      const capped = (value: unknown, fallback: number) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 8000) : fallback;
+      };
+      const readDoneResult = (taskId: string) => {
+        const prev = taskManager.get(taskId);
+        return prev?.state === "done" ? String(prev.result || "") : "";
+      };
+      let contextSummary = "";
+      if (payload?.contextFrom?.taskId) {
+        contextSummary = readDoneResult(String(payload.contextFrom.taskId));
+      } else if (payload?.contextFrom?.sessionId) {
+        const recent = taskManager.list({ sessionId: String(payload.contextFrom.sessionId) })
+          .filter((t) => t.state === "done" && t.result)
+          .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        contextSummary = recent ? String(recent.result || "") : "";
+      }
+      let continuitySummary = "";
+      if (payload?.continuity) {
+        const series = payload.task?.seriesId;
+        const prev = scheduledTasks.list({ scope: "all" })
+          .filter((t: { status?: string; result?: string | null; seriesId?: string | null }) => (
+            t.status === "completed"
+            && !!t.result
+            && (!series || t.seriesId === series)
+          ))
+          .sort((a: { completedAt?: number | null }, b: { completedAt?: number | null }) =>
+            Number(b.completedAt || 0) - Number(a.completedAt || 0))[0];
+        continuitySummary = prev ? String(prev.result || "") : "";
+      }
+      return {
+        contextSummary: contextSummary.slice(0, capped(payload?.contextFrom?.maxChars, 2000)),
+        continuitySummary: continuitySummary.slice(0, capped(payload?.continuity?.maxChars, 2000)),
+      };
+    },
+  });
+  const scheduledTaskService = new ScheduledTaskService({
+    taskManager: scheduledTasks as unknown as ScheduledTaskManagerLike,
+    onEvent: (event) => {
+      try {
+        journal.append({ kind: "custom", sessionId: "system", payload: { ...event, source: "task.schedule" } });
+      } catch { /* 观测失败不影响调度 */ }
+    },
+  });
+  scheduledTaskService.start();
  // 终态任务自动归档(ZCode 自动归档阈值):每天检查;阈值热读(改配置下轮生效)。
   const archiveSweep = () => {
     const days = (opts.config as { tasks?: { autoArchiveDays?: number } } | undefined)?.tasks?.autoArchiveDays ?? 0;
@@ -678,6 +814,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           ? false
           : ((opts.config as { agent?: { sessionWorker?: boolean } } | undefined)?.agent?.sessionWorker ?? true);
 
+ // 会话工作所有权:一份注册表贯穿装配——wireAgentLoop 负责登记/settle(terminal/subagent/workflow),
+ // server 负责会话关闸时的级联取消 + completeClose。缺省不注入=两边都降级 no-op(旧行为不变)。
+  const ownerRegistry = new OwnerRegistry();
   if (opts.executor && opts.llm && sessionWorkerOn) {
     const bgAgentsMirror = (globalThis as { __bgAgents?: Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; ownerTask?: string }> }).__bgAgents
       ?? new Map<string, { outputFile: string; status: string; sessionId: string; title?: string; model?: string; lastEventAt?: number; cancel?: () => unknown; spawnedAt?: number; deadlineAt?: number; ownerTask?: string }>();
@@ -743,7 +882,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       opts.browserConfig ?? (opts.config ? browserCfgFrom(opts.config) : undefined),
       streamRelay.push, memoryWiring, opts.auxLlm, opts.config as { agent?: { maxSteps?: number; compactThresholdTokens?: number; verifyOnStop?: string }; coding?: { lsp?: import("@lampgenie/lsp").LspSettings; llm?: { vision?: boolean }; vlm?: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string } } } | undefined, opts.contextWindow,
       // per-session 主模型覆盖面(白板「per-session 主模型」):有 store+config 才注入;缺省=undefined(共享 llm 现状零变化)。
-      opts.sessionModels && opts.config ? createSessionModelFace(opts.config as unknown as Config, repoRoot(), opts.sessionModels) : undefined);
+      opts.sessionModels && opts.config ? createSessionModelFace(opts.config as unknown as Config, repoRoot(), opts.sessionModels) : undefined,
+ // 会话工作所有权:envelopeDeps 未由 app 注入(undefined),末位传注册表。
+      undefined, ownerRegistry);
   } else if (opts.executor) {
     wireExecutor(taskManager, journal, opts.executor, nodes, nodeDispatch, projects, permissionBroker);
   }
@@ -1041,7 +1182,12 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
 
   const ensureServer = (server?: Server): GatewayServer => {
     if (!wss) {
-      wss = startGatewayServer({ port: opts.port, taskManager, journal, nodes, nodeConnections, nodeDispatch, projects, permissionBroker, routerApi,
+      wss = startGatewayServer({ port: opts.port, taskManager, journal, nodes, nodeConnections, nodeDispatch, projects, permissionBroker, routerApi, scheduledTaskService,
+ // RSI-SESSION-COST:RSI 会话候选池按 journal 目录的会话文件 mtime 选(缺省=不带候选)。
+        ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
+ // 会话工作所有权:会话关闸(task.cancel closeSession:true / 无 taskId)由 server 级联取消。
+        ownerRegistry,
+        cancelOwnedUnit: (u) => cancelOwnedUnit(u),
  // 会话最近活动时间索引(侧栏排序用;启动回放已 seed,运行期 subscribe 更新)。
         sessionActivity,
  // 终态投递义务表(启动已 sweep 一次;server 侧负责 claim/重发/回收租约)。
@@ -1097,6 +1243,9 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       // 否则配了 coding.models.compact 的用户点 /compact 仍在用主轨。
       ...(opts.models ? { models: opts.models } : {}),
       ...(opts.auxLlm ? { auxLlm: opts.auxLlm } : {}),
+ // -b:任务类别路由下传——annotate 整理轨(summary)与手动 /compact(compact)优先按表选模型,
+ // 未配 routing 表=undefined,两处逐字回退旧口径。
+      ...(modelRouter ? { modelRouter } : {}),
       workflowAskRouter, askUser: askUserRouter, automations, automationScheduler, server,
       // fixD4:issue 双通道 + P2P 通道装配(issue.*/team.p2p.* 面板消息数据源)。
       issueService, teamP2p,
@@ -1213,6 +1362,7 @@ async close() {
       try { (journal as { flush?: () => void }).flush?.(); } catch { /* 清队失败不影响关停 */ }
       otelExporter?.stop();
       automationScheduler.stop();
+      scheduledTaskService.stop();
       clearInterval(archiveTimer);
       await wss?.close();
       if (externalServer) {

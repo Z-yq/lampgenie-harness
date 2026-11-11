@@ -10,6 +10,7 @@ import { createHash, generateKeyPairSync, sign as cryptoSign, verify as cryptoVe
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { bus } from "@lampgenie/core";
+import type { DeadTargetTable } from "@lampgenie/runtime/notify/delivery-target";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 export interface TeamMember {
@@ -27,9 +28,13 @@ export interface P2pMessage {
   to: string;
   text: string;
   at: number;
-  via: "p2p" | "relay" | "queued";
+  via: "p2p" | "relay" | "queued" | "rejected";
   /** 重复投递标记(对端重发同一 id;入站侧置 true 并保留首条)。 */
   duplicate?: boolean;
+ /** 拒收原因(dead-target / target-not-attested / declined;仅 via=rejected 时有)。 */
+  reason?: string;
+ /** 对端明确 decline(终态;不得再降级为 queued 重试)。 */
+  declined?: boolean;
 }
 
 export interface TeamP2POptions {
@@ -44,6 +49,12 @@ export interface TeamP2POptions {
   /** fetch 注入(单测);缺省 globalThis.fetch。 */
   fetchImpl?: typeof fetch;
   now?: () => number;
+ /** 死目标表:整聊已死的目标直接短路,不尝试 p2p/relay/queue。 */
+  deadTargets?: DeadTargetTable;
+ /** 目标归属判定;缺省=members 命中即视为已证实(旧行为兼容)。 */
+  attestedTargets?: (to: string) => boolean;
+ /** relay 通道回答 decline:返回 true=对端明确拒收,终态不排队。缺省=旧行为。 */
+  relaySendDeclined?: (to: string, text: string) => boolean;
 }
 
 const SIG_WINDOW_MS = 300_000;
@@ -238,8 +249,24 @@ export class TeamP2P {
   /** 消息发送:P2P 优先 → relay 中转兜底(via=relay)→ 离线队列(via=queued)。 */
   async send(to: string, text: string): Promise<P2pMessage> {
     const msg: P2pMessage = { id: `p2p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, from: this.username, to, text, at: Date.now(), via: "p2p" };
+ // ① 死目标短路:整聊已死的目标连尝试都不做,更不能进离线队列
+ // (进队列等于把「这个目标还值得重发」的错误结论持久化)。
+    if (this.opts.deadTargets?.isDead(to)) {
+      msg.via = "rejected";
+      msg.reason = "dead-target";
+      bus.emit("team.p2p.send.fallback", { id: msg.id, from: this.username, to, via: "rejected", reason: "dead-target" });
+      return msg;
+    }
     const m = this.members().find((x) => x.username === to);
     if (!m) {
+ // ② 未证实目标拒收:attestedTargets 明确返回 false 时拒且不落队列。
+ // 未提供 attestedTargets 时保持旧行为(members 未命中即 queued),兼容既有调用方。
+      if (this.opts.attestedTargets && this.opts.attestedTargets(to) === false) {
+        msg.via = "rejected";
+        msg.reason = "target-not-attested";
+        bus.emit("team.p2p.send.fallback", { id: msg.id, from: this.username, to, via: "rejected", reason: "target-not-attested" });
+        return msg;
+      }
       msg.via = "queued";
       this.offlineQueue.push({ ...msg, via: "queued" });
       return msg;
@@ -253,6 +280,8 @@ export class TeamP2P {
       clearTimeout(t);
       if (res.ok) {
         this.reachability.set(to, { state: "online", at: Date.now() });
+ // ③ 成功即 clear:成功是「目标未死」的最新事实,死表缓存必须让位。
+        this.opts.deadTargets?.clear(to);
         return msg;
       }
       throw new Error(`HTTP ${res.status}`);
@@ -260,6 +289,16 @@ export class TeamP2P {
       // 失败的降级原因要可观测(分辨率:面板 status 的 err 字段 + journal 侧 bus 事件)。
       const reason = String(err).slice(0, 120);
       this.reachability.set(to, { state: "offline", at: Date.now(), err: reason });
+ // ④ decline 是终态:标死 + via=rejected,绝不降级为 relay/queued。
+ // 把 decline 洗成 queued 会让调用方以为「稍后会送到」,于是重试与记账都基于假前提。
+      if (this.opts.relaySendDeclined && this.opts.relaySendDeclined(to, text)) {
+        msg.via = "rejected";
+        msg.reason = "declined";
+        msg.declined = true;
+        this.opts.deadTargets?.markDead(to, { reason: "whole-chat declined", at: Date.now() });
+        bus.emit("team.p2p.send.fallback", { id: msg.id, from: this.username, to, via: "rejected", reason: "declined" });
+        return msg;
+      }
       // relay 兜底:既有 activity 通道复用;不在=离线队列(不做登记)。
       if (this.opts.relaySend && this.opts.relaySend(to, text)) {
         msg.via = "relay";
@@ -279,6 +318,11 @@ export class TeamP2P {
     const pending = [...this.offlineQueue];
     this.offlineQueue = [];
     for (const m of pending) {
+ // ⑤ 死目标条目直接移除并记 reason:留着重发只会反复失败且污染队列。
+      if (this.opts.deadTargets?.isDead(m.to)) {
+        bus.emit("team.p2p.send.fallback", { id: m.id, from: this.username, to: m.to, via: "rejected", reason: "dead-target" });
+        continue;
+      }
       const r = await this.send(m.to, m.text);
       if (r.via !== "queued") sent++;
       else this.offlineQueue.push(r);

@@ -37,12 +37,18 @@ export const ErrorCode = {
   Internal: "internal",
   /** 入参不合法(通用 400)。 */
   BadRequest: "bad-request",
+ /** 能力门:调用了本连接未声明 supportedOps 的通道(值不变,登记进枚举供严格客户端校验)。 */
+  UnsupportedOp: "unsupported-op",
+ /** 分发门:网关不认识的 type(分发门在 switch 之前拒收;面板与网关版本可能错位)。 */
+  UnknownMethod: "unknown-method",
   // ---- 任务/队列/提问 ----
   UnknownTask: "unknown-task",
   UnknownQuestion: "unknown-question",
   UnknownAsk: "unknown-ask",
   UnknownAutomation: "unknown-automation",
   QueueItemMissing: "queue-item-missing",
+ /** 持久队列:同一幂等键但载荷指纹不同(不写入,调用方须换键或核对内容)。 */
+  QueueConflict: "queue-conflict",
   // ---- 会议/团队/语音 ----
   MeetingImportFailed: "meeting-import-failed",
  /** super agent 指挥台链(新链只发这两个)。 */
@@ -165,6 +171,31 @@ export const TaskCancel = Envelope.extend({
   type: z.literal("task.cancel"),
   taskId: z.string().min(1),
 });
+// 定时任务:创建面(内容门在 runtime validateScheduleContent 里落地)。
+// mode/preRun/contextFrom/continuity 全部 optional:旧客户端不带 = 旧行为。
+export const TaskSchedule = Envelope.extend({
+  type: z.literal("task.schedule"),
+  sessionId: z.string().min(1),
+  instruction: z.string().min(1),
+ /** 计划瞬间(毫秒时间戳)。 */
+  at: z.number(),
+  recurrence: z.string().optional(),
+  timeZone: z.string().optional(),
+  mode: z.string().optional(),
+  preRun: z.union([z.string(), z.object({ command: z.string() })]).optional(),
+  contextFrom: z.object({
+    taskId: z.string().optional(),
+    sessionId: z.string().optional(),
+    maxChars: z.number().optional(),
+  }).optional(),
+  continuity: z.union([z.boolean(), z.object({ maxChars: z.number().optional() })]).optional(),
+  title: z.string().optional(),
+  projectId: z.string().optional(),
+});
+export const TaskScheduleCancel = Envelope.extend({
+  type: z.literal("task.schedule.cancel"),
+  taskId: z.string().min(1),
+});
 // interrupted 一键续跑:面板任务卡对 interrupted(及 legacy「重启中断」cancelled)任务发;
 // 服务端 resumeInterrupted 幂等重提(idempotencyKey=resume:<原id>,双击/重连不双跑)。
 export const TaskResume = Envelope.extend({
@@ -250,6 +281,12 @@ export const SessionHistory = Envelope.extend({
   beforeSeq: z.number().int().min(0).optional(),
   /** 单页条数上限(beforeSeq 路径生效;缺省 500,钳到 [1,2000])。 */
   limit: z.number().int().min(1).max(2000).optional(),
+ /** 增量追平:上次回包的会话水位;与 atLogEpoch 一起构成 delta 游标。
+ * ring 可覆盖且 epoch 相等 → 只回 seq>atRevision 的增量;否则回整页(游标失效时带 reset)。
+ * 缺省=旧行为逐字不变。 */
+  atRevision: z.number().int().min(0).optional(),
+ /** 上次回包的网关进程 epoch(启动时刻)。用于识别网关重启/journal 重载:epoch 不等一律回整页。 */
+  atLogEpoch: z.number().int().min(0).optional(),
 });
 export const NodeRegister = Envelope.extend({
   type: z.literal("node.register"),
@@ -1491,11 +1528,178 @@ export const ClientModeDeclare = Envelope.extend({
   mode: z.string().min(1).max(32),
 });
 
+/** 客户端显式声明能力集(连接级;缺声明=legacy,服务端全量放行)。
+ * 字段值故意收 unknown:坏字段由网关能力协商回执的 droppedKeys 逐项说明,而不是在协议解析层
+ * 落通用 invalid-message(那样客户端只知道「消息非法」,不知道哪个字段被丢)。 */
+export const ClientCapabilitiesDeclare = Envelope.extend({
+  type: z.literal("client.capabilities"),
+  supportedOps: z.unknown().optional(),
+  contractVersion: z.unknown().optional(),
+  requiredOps: z.unknown().optional(),
+});
+
+// ---- RSI 状态只读快照(rsi.status; 面板「团队」页)----
+// 纯请求-响应,无连接级主动推送。结构由协议自持(不跨包引用 apps/gateway 的实现),
+// 字段与 apps/gateway/src/rsi-status.ts 的 RsiStatusSection 保持一致:
+// id/title/ok/code?/metrics[{label,value,unit?,tone?}]/warnings[]。
+/** 单条指标;value 放宽为 string|number,tone 放宽为 string(配色语义由面板解释)。 */
+export const RsiStatusMetricZ = z.object({
+  label: z.string(),
+  value: z.union([z.string(), z.number()]),
+  unit: z.string().optional(),
+  tone: z.string().optional(),
+});
+export type RsiStatusMetric = z.infer<typeof RsiStatusMetricZ>;
+/** 单条机制结果条目( RSI-MECH:覆盖层投影后的一条结果,可编辑/删除)。
+ * id 是覆盖层稳定键(agent 结果带 `<runId>:` 前缀);source 标来源,parent 据此区分「改过的视图层」与「原生台账」。 */
+export const RsiResultItemZ = z.object({
+  id: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  detail: z.string().optional(),
+  status: z.enum(["ok", "warn", "bad", "info"]).optional(),
+  source: z.enum(["agent", "code", "manual"]).optional(),
+  at: z.number().optional(),
+});
+export type RsiResultItem = z.infer<typeof RsiResultItemZ>;
+/** 一次运行的成本核算( RSI-SESSION-COST):token 来自该任务窗口内的 llm.trace 上报值,
+ * 金额由 core 单价表算;**单价缺失时 amountCny=null 且 missing 列出缺价段**,绝不按 0 冒充。 */
+export const RsiRunCostZ = z.object({
+  inputTokens: z.number(),
+  cachedTokens: z.number(),
+  cacheCreationTokens: z.number().optional(),
+  outputTokens: z.number(),
+  totalTokens: z.number(),
+ /** 窗口内最后一次 llm.trace 上报的模型名(缺=provider 未暴露)。 */
+  model: z.string().optional(),
+ /** 金额(元);null=单价缺失(面板显示「单价缺失」)。 */
+  amountCny: z.number().nullable(),
+ /** 单价缺失的段名(cacheRead/cacheWrite/inputMiss/output;整模型无价时四段全列)。 */
+  missing: z.array(z.string()),
+});
+export type RsiRunCost = z.infer<typeof RsiRunCostZ>;
+/** 本次运行的会话分析计划与结果(候选=派单时列给 agent 的,analyzed=最终回复里认账且命中候选的)。 */
+export const RsiRunAnalysisZ = z.object({
+  windowDays: z.number(),
+  candidates: z.array(z.object({
+    sessionId: z.string(),
+    projectId: z.string().optional(),
+    lastActiveAt: z.number().optional(),
+  })),
+  analyzed: z.array(z.object({
+    sessionId: z.string(),
+    projectId: z.string().optional(),
+  })),
+});
+export type RsiRunAnalysis = z.infer<typeof RsiRunAnalysisZ>;
+/** 机制最近一次运行的摘要(agent 任务)。 */
+export const RsiMechanismRunInfoZ = z.object({
+  runId: z.string().optional(),
+  taskId: z.string().optional(),
+  status: z.enum(["running", "done", "failed"]),
+ /** 任务真实状态(queued/running/…):排队时 status 仍是 running,面板据此显示「排队中」。 */
+  taskState: z.string().optional(),
+  startedAt: z.number().optional(),
+  finishedAt: z.number().optional(),
+  error: z.string().optional(),
+ /** 本次运行花了多少(旧网关不带=面板不显示成本行)。 */
+  cost: RsiRunCostZ.optional(),
+ /** 本次运行分析了哪些会话(旧网关不带=面板不显示分析行)。 */
+  analysis: RsiRunAnalysisZ.optional(),
+});
+export type RsiMechanismRunInfo = z.infer<typeof RsiMechanismRunInfoZ>;
+/** 单个 RSI 检查项(ok=false 时 code 给机器可读原因,warnings 给人读提示)。
+ * 增可选 enabled/driver/items/run(旧网关不带这些字段仍能 parse)。 */
+export const RsiStatusSectionZ = z.object({
+  id: z.string(),
+  title: z.string(),
+  ok: z.boolean(),
+  code: z.string().optional(),
+  metrics: z.array(RsiStatusMetricZ),
+  warnings: z.array(z.string()),
+ /** 机制开关(缺省=未上报,面板按启用渲染)。 */
+  enabled: z.boolean().optional(),
+ /** 驱动方式:agent=派 agent 任务;code=沿用确定性代码/CLI。 */
+  driver: z.enum(["agent", "code"]).optional(),
+ /** 结果条目(覆盖层投影后;缺省=未上报)。 */
+  items: z.array(RsiResultItemZ).optional(),
+ /** 最近一次运行摘要。 */
+  run: RsiMechanismRunInfoZ.optional(),
+});
+export type RsiStatusSection = z.infer<typeof RsiStatusSectionZ>;
+/** 客户端请求:空载荷(无字段)。 */
+export const RsiStatusQuery = Envelope.extend({ type: z.literal("rsi.status") });
+export const RsiStatusResult = Envelope.extend({
+  type: z.literal("rsi.status.result"),
+ /** 采集时刻(ms epoch)。 */
+  at: z.number(),
+  sections: z.array(RsiStatusSectionZ),
+ /** 汇总:ok=true 的项数 / warnings 总数(面板直接展示,不重算)。 */
+  okCount: z.number(),
+  warnCount: z.number(),
+});
+
+// ---- RSI 机制治理面( RSI-MECH):开关 / 驱动 / 运行 / 结果条目改删 ----
+// 全部请求-响应,不主动推;旧 rsi.status 不变,新能力是新增型。
+export const RsiMechanismSet = Envelope.extend({
+  type: z.literal("rsi.mechanism.set"),
+  id: z.string(),
+  enabled: z.boolean().optional(),
+  driver: z.enum(["agent", "code"]).optional(),
+});
+export const RsiMechanismSetResult = Envelope.extend({
+  type: z.literal("rsi.mechanism.set.result"),
+  ok: z.boolean(),
+  id: z.string(),
+  enabled: z.boolean().optional(),
+  driver: z.enum(["agent", "code"]).optional(),
+  reason: z.string().optional(),
+});
+export const RsiMechanismRun = Envelope.extend({
+  type: z.literal("rsi.mechanism.run"),
+  id: z.string(),
+});
+export const RsiMechanismRunResult = Envelope.extend({
+  type: z.literal("rsi.mechanism.run.result"),
+  ok: z.boolean(),
+  id: z.string(),
+  runId: z.string().optional(),
+  taskId: z.string().optional(),
+  sessionId: z.string().optional(),
+  reason: z.string().optional(),
+});
+export const RsiItemUpdate = Envelope.extend({
+  type: z.literal("rsi.item.update"),
+  mechanismId: z.string(),
+  itemId: z.string(),
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  detail: z.string().optional(),
+  status: z.enum(["ok", "warn", "bad", "info"]).optional(),
+});
+export const RsiItemDelete = Envelope.extend({
+  type: z.literal("rsi.item.delete"),
+  mechanismId: z.string(),
+  itemId: z.string(),
+  reason: z.string().optional(),
+});
+export const RsiItemResult = Envelope.extend({
+  type: z.literal("rsi.item.result"),
+  ok: z.boolean(),
+  mechanismId: z.string(),
+  itemId: z.string(),
+  reason: z.string().optional(),
+ /** 改删后的最新条目投影(面板直接替换,不必再拉一拍)。 */
+  items: z.array(RsiResultItemZ).optional(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   ClientSurface,
   ClientModeDeclare,
+  ClientCapabilitiesDeclare,
+  RsiMechanismSet, RsiMechanismRun, RsiItemUpdate, RsiItemDelete,
   BrowserViewOpen, BrowserViewClose, BrowserViewCommand,
-  TaskSubmit, TaskCancel, TaskResume, QueueDispatchNow, QueueRemove, AskUserAnswer, TaskRename, TaskPin, TaskArchive, TaskDelete, TaskDeleteSession, ArchiveClear, TaskDetailGet, FilesSearch, SessionSearch, FileRead, FileWrite, IdeOfficeEdit, WorkflowAnswer, GitLog, GitCommitMsg, ExpDisable, CheckpointPreview, CheckpointRewind, TaskDiffstat, StatsSummary, TaskFileDiff, ModelsProbe, AgentsList, SkillsList, SkillsDisableBuiltin, CommandsList, CommandsUpsert, CommandsRemove, CommandsCatalog, HooksList, HooksUpsert, HooksUpdate, HooksRemove, McpList, McpUpsert, McpUpdate, McpRemove, McpTest, MemoryView, TermExec, TermCancel, PluginsList, PluginsInstall, PluginsUninstall, PluginsToggle, NodesList, NodeExec, WizardGen, ProfileGet, ProfileRebuild, ProfilePlanUpsert, ProfilePlanRemove, ProfilePlanApply, ProfileSenseGet, AutomationList, AutomationCreate, AutomationUpdate, AutomationDelete, AutomationRun, TaskList, SessionHistory, NodeRegister, NodeHeartbeat, NodeTaskResult, PermissionRespond, ProjectAdd, ProjectRemove, ProjectActivate, ProjectList, ProjectRename, SshKeyImport, SshConfigList, SshTest, WslList, WslTest, WslBrowse, SshBrowse, RemoteLs, RemoteRead, RemoteDeploy, FsList, FsOpen, FsMkdir, FsRemove, FsRename, FsGrep, LspDiagnostics, TermSessionOpen, TermSessionSend, TermSessionRead, TermSessionClose, GitShow, GitStatus, GitDiff, GitBranches, GitCheckout, GitCommit, GitPush, GitPull, SenseQuery, WikiList, WikiGet, WikiRebuild, ReviewStoreGet, ExpList, ExpView, ExpRemove, SysMeta, CfgGet, CfgSet, CfgSecretStatus, CfgSecretSet, ModelsList, SessionStatus, TraceStats, CompanionTurn, SuperTurn, SuperHistory, SuperInbox, VoiceTranscribe, CompanionHistory, ProfileFile, Ping, MeetingImport, MeetingSchedule, SessionExport, VoiceTts, VoiceList, TeamStatus, TeamInvite, PermissionPending, TaskGroup, ExpDistill, CheckpointList, CheckpointRestore, GoalSet, GoalGet, SessionCompact, PlanApprove, TaskOutputQuery, BoardGet, BoardList, BoardDiagramRequest, BoardSave, BoardContinue, BoardOverlaySave, BoardOverlayGet, BoardComment, BoardFromCode, BoardFromSense, BoardArchiveList, BoardWorkflowCompile, BoardWorkflowRun, TeamaiPull, TeamaiPush, TeamaiInspect, TeamaiContribute, TeamaiRemove, SessionFork, DashboardSessions, DashboardTrends, SubagentCancel, ReviewInject, IssueList, IssueCreate, IssueUpdate, IssueComment, IssueSync, IssueConfirmDispatch, TeamP2pStatus, TeamP2pSend, SubagentsList, WorkersList, TrackView, UsageView, SessionModelSet, SessionModelGet, SessionOwnerGet, AnnotateSubmit, TraceQuery, VoiceDraft, PermissionHistory,
+  TaskSubmit, TaskCancel, TaskSchedule, TaskScheduleCancel, TaskResume, QueueDispatchNow, QueueRemove, AskUserAnswer, TaskRename, TaskPin, TaskArchive, TaskDelete, TaskDeleteSession, ArchiveClear, TaskDetailGet, FilesSearch, SessionSearch, FileRead, FileWrite, IdeOfficeEdit, WorkflowAnswer, GitLog, GitCommitMsg, ExpDisable, CheckpointPreview, CheckpointRewind, TaskDiffstat, StatsSummary, TaskFileDiff, ModelsProbe, AgentsList, SkillsList, SkillsDisableBuiltin, CommandsList, CommandsUpsert, CommandsRemove, CommandsCatalog, HooksList, HooksUpsert, HooksUpdate, HooksRemove, McpList, McpUpsert, McpUpdate, McpRemove, McpTest, MemoryView, TermExec, TermCancel, PluginsList, PluginsInstall, PluginsUninstall, PluginsToggle, NodesList, NodeExec, WizardGen, ProfileGet, ProfileRebuild, ProfilePlanUpsert, ProfilePlanRemove, ProfilePlanApply, ProfileSenseGet, AutomationList, AutomationCreate, AutomationUpdate, AutomationDelete, AutomationRun, TaskList, SessionHistory, NodeRegister, NodeHeartbeat, NodeTaskResult, PermissionRespond, ProjectAdd, ProjectRemove, ProjectActivate, ProjectList, ProjectRename, SshKeyImport, SshConfigList, SshTest, WslList, WslTest, WslBrowse, SshBrowse, RemoteLs, RemoteRead, RemoteDeploy, FsList, FsOpen, FsMkdir, FsRemove, FsRename, FsGrep, LspDiagnostics, TermSessionOpen, TermSessionSend, TermSessionRead, TermSessionClose, GitShow, GitStatus, GitDiff, GitBranches, GitCheckout, GitCommit, GitPush, GitPull, SenseQuery, WikiList, WikiGet, WikiRebuild, ReviewStoreGet, ExpList, ExpView, ExpRemove, SysMeta, CfgGet, CfgSet, CfgSecretStatus, CfgSecretSet, ModelsList, SessionStatus, TraceStats, CompanionTurn, SuperTurn, SuperHistory, SuperInbox, VoiceTranscribe, CompanionHistory, ProfileFile, Ping, MeetingImport, MeetingSchedule, SessionExport, VoiceTts, VoiceList, TeamStatus, TeamInvite, PermissionPending, TaskGroup, ExpDistill, CheckpointList, CheckpointRestore, GoalSet, GoalGet, SessionCompact, PlanApprove, TaskOutputQuery, BoardGet, BoardList, BoardDiagramRequest, BoardSave, BoardContinue, BoardOverlaySave, BoardOverlayGet, BoardComment, BoardFromCode, BoardFromSense, BoardArchiveList, BoardWorkflowCompile, BoardWorkflowRun, TeamaiPull, TeamaiPush, TeamaiInspect, TeamaiContribute, TeamaiRemove, SessionFork, DashboardSessions, DashboardTrends, SubagentCancel, ReviewInject, IssueList, IssueCreate, IssueUpdate, IssueComment, IssueSync, IssueConfirmDispatch, TeamP2pStatus, TeamP2pSend, SubagentsList, WorkersList, TrackView, UsageView, SessionModelSet, SessionModelGet, SessionOwnerGet, AnnotateSubmit, TraceQuery, VoiceDraft, PermissionHistory, RsiStatusQuery,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -1650,19 +1854,48 @@ export const SurfaceResult = Envelope.extend({
   error: z.string().optional(),
 });
 
+/** 能力协商回执(复用 result 型,不走 error 帧:协商本身成功,code 描述的是协商结论)。 */
+export const CapabilitiesResult = Envelope.extend({
+  type: z.literal("capabilities.result"),
+  ok: z.boolean(),
+  mode: z.enum(["legacy", "negotiated"]),
+ /** LEGACY | OK | CONTRACT_TOO_OLD | NO_OPS(协商结论,不是错误码)。 */
+  code: z.string(),
+  acceptedOps: z.array(z.string()),
+  rejectedOps: z.array(z.string()),
+  droppedKeys: z.array(z.string()),
+  summary: z.string().optional(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SurfaceResult,
+  CapabilitiesResult,
   BrowserViewFrame, BrowserViewEvent, BrowserViewSubscribed, BrowserViewCommandResult,
   // fixI4: hello 附全量会话排队快照(页面刷新后队列恢复);queue.update=队列任何变更广播(入队/出队/删除/抢占)。
  // build=面板产物戳——老窗口收到与自身 __PANEL_BUILD 不符时自愈重载(IDE 空白根治)。
  // sessionActivity = sid → 最近活动时间(ms)首帧快照(侧栏排序用;独立字段,不污染 TaskIndex)。
-  Envelope.extend({ type: z.literal("hello"), build: z.string().optional(), tasks: z.array(TaskIndex), queue: z.array(QueueItem).optional(), sessionActivity: z.record(z.number()).optional() }),
+ // 能力自报(可选):contractVersion=协商契约版本(只增),ops=服务端能力命名空间清单,
+ // health=实装能力位(只列 true)。旧客户端忽略该字段,零影响。
+  Envelope.extend({ type: z.literal("hello"), build: z.string().optional(), tasks: z.array(TaskIndex), queue: z.array(QueueItem).optional(), sessionActivity: z.record(z.number()).optional(), capabilities: z.object({ contractVersion: z.number(), ops: z.array(z.string()), health: z.array(z.string()) }).optional() }),
   Envelope.extend({ type: z.literal("queue.update"), sessionId: z.string(), items: z.array(QueueItem) }),
   Envelope.extend({ type: z.literal("task.submitted"), task: Task }),
   Envelope.extend({ type: z.literal("task.changed"), task: TaskIndex }),
   Envelope.extend({ type: z.literal("task.list"), tasks: z.array(TaskIndex) }),
   /** 单任务详情回执(正文只在被点名时出现):task=null 表示 id 不存在/已删(面板须显示不可用,不得当正文渲染)。 */
   Envelope.extend({ type: z.literal("task.detail.result"), taskId: z.string(), task: Task.nullable() }),
+ // 定时任务:创建/取消回执(ok=false 时 error+issues 说明内容门拒收原因)。
+  Envelope.extend({
+    type: z.literal("task.schedule.result"),
+    ok: z.boolean(),
+    task: z.record(z.unknown()).optional(),
+    error: z.string().optional(),
+    issues: z.array(z.string()).optional(),
+  }),
+  Envelope.extend({
+    type: z.literal("task.schedule.cancel.result"),
+    ok: z.boolean(),
+    taskId: z.string(),
+  }),
  // super-agent Router( P1):Ticket 阶段变化广播(observed/open/closed;P3 面板 Ticket 阶段表消费)。
   // P1 保持 payload 字段稳定:ticketId/phase/taskId?/triggerId/threadKey。
   Envelope.extend({
@@ -1682,6 +1915,12 @@ export const ServerMessage = z.discriminatedUnion("type", [
     hasMore: z.boolean().optional(),
     /** 下一页游标(本页最小 seq);仅 hasMore=true 时给——游标必须严格推进,否则前端 loop 会死转。 */
     nextBeforeSeq: z.number().int().optional(),
+ /** 增量回放:events 只含 seq>请求 atRevision 的行;atRevision/atLogEpoch 供下次游标。 */
+    atRevision: z.number().int().min(0).optional(),
+    atLogEpoch: z.number().int().min(0).optional(),
+    delta: z.boolean().optional(),
+ /** 客户端游标失效(epoch 不匹配/ring 未覆盖)且本次回的是整页 → true,面板应丢弃本地缓存重建。 */
+    reset: z.boolean().optional(),
   }),
  // 会议导入/会话导出
   Envelope.extend({ type: z.literal("meeting.extraction"), extraction: z.record(z.unknown()), draftPath: z.string() }),
@@ -2619,6 +2858,12 @@ export const ServerMessage = z.discriminatedUnion("type", [
   AnnotateResult,
   // 聊天窗语音任务书回执(voice.draft 的应答;ok=false 带「未配置」指路)。
   VoiceDraftResult,
+ // RSI 状态只读快照应答(rsi.status 的应答;请求-响应,不主动推)。
+  RsiStatusResult,
+ // RSI 机制治理面应答(开关/运行/条目改删;同样请求-响应)。
+  RsiMechanismSetResult,
+  RsiMechanismRunResult,
+  RsiItemResult,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 
@@ -2664,3 +2909,5 @@ export function explainClientMessageError(raw: string): string | null {
 
 // Team Relay 协议( §8 子集):独立消息族,与 gateway 命令族互不掺入。
 export * from "./relay.js";
+/** :legacy 错误码封闭兼容登记表 + 读侧归一/投影助手(纯逻辑零 IO,不改 ErrorCode 既有值)。 */
+export * from "./compat.js";

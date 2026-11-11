@@ -82,6 +82,62 @@ function normDiag(d: any): BoardDiagramDiagnostic {
   };
 }
 
+/**
+ * flowkit 的节点文字折行只对「文字安全框 == 节点框」的形状生效(rect/rounded,见其 pp):
+ * 其余形状(diamond/ellipse/hexagon/cylinder/...)走 inset 安全框分支,直接返回默认
+ * sizingPolicy(overflow="visible"),长 label/summary 会单行冲出图形边界。
+ * 这里在 create_diagram 之后、export 之前给非矩形节点显式打开 wrap,交给库自己折行。
+ */
+const WRAP_READY_SHAPES = new Set(["", "rect", "rounded"]);
+
+/** 形状 → 文字左右内边距(按节点宽度取比例 + 下限):让折行后的行宽落在图形内接区域内。 */
+const SHAPE_TEXT_PADDING: Record<string, (width: number) => number> = {
+  diamond: (w) => Math.max(12, Math.round(w * 0.24)),
+  circle: (w) => Math.max(10, Math.round(w * 0.2)),
+  ellipse: (w) => Math.max(10, Math.round(w * 0.1)),
+  hexagon: (w) => Math.max(10, Math.round(w * 0.14)),
+  parallelogram: (w) => Math.max(10, Math.round(w * 0.14)),
+  cloud: (w) => Math.max(10, Math.round(w * 0.14)),
+  queue: (w) => Math.max(10, Math.round(w * 0.1)),
+  cylinder: (w) => Math.max(10, Math.round(w * 0.08)),
+  doc: (w) => Math.max(10, Math.round(w * 0.08)),
+  note: (w) => Math.max(10, Math.round(w * 0.08)),
+  mobile: (w) => Math.max(10, Math.round(w * 0.1)),
+  browser: (w) => Math.max(10, Math.round(w * 0.08)),
+  component: (w) => Math.max(10, Math.round(w * 0.1)),
+  person: (w) => Math.max(10, Math.round(w * 0.08)),
+};
+
+/** 给非矩形节点写 sizingPolicy.overflow="wrap"(+ 形状相关 textPadding);返回命中节点数。 */
+function applyTextWrapPolicy(document: any): number {
+  let hit = 0;
+  const pages = Array.isArray(document?.pages) ? document.pages : [];
+  for (const page of pages) {
+    const nodes = Array.isArray(page?.nodes) ? page.nodes : [];
+    for (const node of nodes) {
+      const content = node?.content;
+      if (!content || typeof content !== "object") continue;
+      const shape = typeof content.shape === "string" ? content.shape : "";
+      if (WRAP_READY_SHAPES.has(shape)) continue;
+      const width = typeof node?.size?.width === "number" ? node.size.width : 0;
+      content.sizingPolicy = {
+        version: 1,
+        mode: "fixed",
+        minSize: { width: 24, height: 24 },
+        maxSize: { width: 1600, height: 1200 },
+        overflow: "wrap",
+        clipContent: false,
+        maxLines: 4,
+      };
+      const padOf = SHAPE_TEXT_PADDING[shape];
+      const pad = padOf ? padOf(width) : 0;
+      if (pad > 0) node.appearance = { ...(node.appearance ?? {}), textPadding: pad };
+      hit++;
+    }
+  }
+  return hit;
+}
+
 /** 布局器最小面(`{ run(graph, signal) }`;headlessElkLayout / createBoardElkLayout 都满足)。 */
 interface BoardLayoutLike {
   run(graph: any, signal?: AbortSignal): Promise<any>;
@@ -149,6 +205,8 @@ export async function renderBoardSvg(
         { dsl: ofk },
         { document: doc0, pageId: pid, capabilities },
       );
+ // 排版完成(尺寸定稿)后、导出前打开非矩形节点的折行;export 用的就是这份 document。
+      applyTextWrapPolicy(created?.document ?? doc0);
       diags.push(...((created?.output?.diagnostics ?? []) as any[]).map(normDiag));
       return ofkMod.runAgentOp(
         ofkMod.findAgentOp("export"),

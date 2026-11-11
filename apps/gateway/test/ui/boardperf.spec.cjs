@@ -55,7 +55,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   await page.click("#act-board");
   await poll(() => evalJ(() => boardDoc && boardDoc.taskId === "t-perf" && document.querySelectorAll(".cv-node").length === 60));
 
- // 整板重建冷渲(清签名强制全量)
+ // :整板重建冷渲(清签名强制全量)
   const m1 = await evalJ(() => {
     const g = document.getElementById("boardGraph");
     g.__cvSig = null;
@@ -65,7 +65,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   });
   check("M1 60节点/120边 首渲(整板重建) < 500ms", m1 < 500, m1 + "ms");
 
- // 同结构增量补丁(翻 10 个 done + 改 5 个 summary)
+ // :同结构增量补丁(翻 10 个 done + 改 5 个 summary)
   const m2 = await evalJ(() => {
     const d = JSON.parse(JSON.stringify(boardDoc));
     for (let i = 0; i < 10; i++) d.nodes[i].done = !d.nodes[i].done;
@@ -76,7 +76,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   });
   check("M2 60节点 增量补丁 < 50ms(丝滑实测确认)", m2 < 50, m2 + "ms");
 
- // 拖拽帧率(真实 pointer 事件 + rAF 计数 1s)
+ // :拖拽帧率(真实 pointer 事件 + rAF 计数 1s)
   const m3 = await evalJ(async () => {
     const el = document.querySelector('.cv-node[data-cv="p10"]');
     if (!el) return { fps: 0, err: "no node" };
@@ -97,7 +97,7 @@ const SHOTS = (process.env.GENIE_JOURNAL_DIR || "/tmp/j-s072") + "/shots";
   });
   check("M3 60节点 拖拽帧率 ≥ 30fps", m3.fps >= 30, m3.fps + "fps(" + m3.frames + " 帧/" + m3.elapsed + "ms)");
 
- // 200 节点/380 边 直驱(超协议上限档,渲染层压力)
+ // :200 节点/380 边 直驱(超协议上限档,渲染层压力)
   const m4 = await evalJ(() => {
     const nodes = [], edges = [];
     for (let i = 0; i < 200; i++) nodes.push({ id: "q" + i, kind: "function", label: "bigNode" + i, summary: "超上限档节点 " + i, change: "keep", done: i % 2 === 0, comments: [], flow: [] });

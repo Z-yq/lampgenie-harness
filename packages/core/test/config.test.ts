@@ -45,14 +45,20 @@ describe("ConfigSchema 默认值(就地)", () => {
     expect(c.journal.dir).toBe(".genie/journals");
     expect(c.concurrency.maxConcurrent).toBe(4);
     expect(c.agent.maxSteps).toBe(3000); // schema 已于 改为 3000 上限/默认;旧断言未同步
-    // 上下文模型评分默认本地 150M Jev(/decide)
-    expect(c.context.modelScoring.mode).toBe("shadow");
+ // 上下文模型评分默认关闭:本地 150M Jev 只是缺省端点,不显式开 mode 就不跑
+    expect(c.context.modelScoring.mode).toBe("off");
     expect(c.context.modelScoring.providerUrl).toBe("http://127.0.0.1:8105");
     expect(c.context.modelScoring.model).toBe("jev-150m");
     expect(c.context.modelScoring.apiType).toBe("jev");
     expect(c.context.modelScoring.maxCandidates).toBe(12);
     expect(HOT_CONFIG_PATHS.has("context.modelScoring.mode")).toBe(true);
     expect(HOT_CONFIG_PATHS.has("context.modelScoring.providerUrl")).toBe(true);
+  });
+  it("context.modelScoring.mode 三档显式开启(缺省 off,非法值被 schema 拒)", () => {
+    expect(ConfigSchema.parse({}).context.modelScoring.mode).toBe("off");
+    expect(ConfigSchema.parse({ context: { modelScoring: { mode: "shadow" } } }).context.modelScoring.mode).toBe("shadow");
+    expect(ConfigSchema.parse({ context: { modelScoring: { mode: "active" } } }).context.modelScoring.mode).toBe("active");
+    expect(ConfigSchema.safeParse({ context: { modelScoring: { mode: "bogus" } } }).success).toBe(false);
   });
   it("context.modelScoring 可热应用;URL/模型/协议进 applied", () => {
     const c = ConfigSchema.parse({});
@@ -344,5 +350,43 @@ describe(" 服务商预设:authMode 与密钥写入", () => {
     writeFileSync(join(root, ".genie", "secrets.json"), "{ broken", "utf-8");
     expect(setSecretValue(root, "GOOD_KEY", "v").existed).toBe(false);
     expect(listSecretKeys(root)).toEqual(["GOOD_KEY"]);
+  });
+});
+
+describe("coding.models.routing()", () => {
+  it("缺省 undefined=旧行为", () => {
+    const c = ConfigSchema.parse({});
+    expect(c.coding.models.routing).toBeUndefined();
+  });
+
+  it("合法路由表:按 kind 覆盖 providerId/model,fallbackChain 只一层", () => {
+    const c = ConfigSchema.parse({
+      coding: {
+        models: {
+          routing: {
+            memory: { providerId: "p1", model: "m1", freeOnly: true, taskClasses: ["coding"], fallbackChain: [{ providerId: "p2", model: "m2" }] },
+            compact: { providerId: "p1", model: "m3" },
+          },
+        },
+      },
+    });
+    const routing = c.coding.models.routing;
+    expect(routing?.memory?.model).toBe("m1");
+    expect(routing?.memory?.freeOnly).toBe(true);
+    expect(routing?.memory?.taskClasses).toEqual(["coding"]);
+    expect(routing?.memory?.fallbackChain?.[0]?.providerId).toBe("p2");
+    expect(routing?.memory?.fallbackChain?.[0]?.model).toBe("m2");
+    expect(routing?.compact?.model).toBe("m3");
+    expect(routing?.compact?.freeOnly).toBeUndefined(); // 未填=继承/未设置
+  });
+
+  it("非法 kind 被拒", () => {
+    const r = ConfigSchema.safeParse({ coding: { models: { routing: { bogus: { model: "x" } } } } });
+    expect(r.success).toBe(false);
+  });
+
+  it("非法 fallbackChain 类型被拒", () => {
+    const r = ConfigSchema.safeParse({ coding: { models: { routing: { memory: { model: "m1", fallbackChain: "x" } } } } });
+    expect(r.success).toBe(false);
   });
 });

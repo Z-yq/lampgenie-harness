@@ -11,6 +11,9 @@ import { buildRemoteSshIdentity, buildRemoteWslIdentity, parseRemoteProject, pro
 import { processAnnotateSubmit, type AnnotateNoteInput, type AnnotateRefineDeps, type AnnotateVoiceDeps } from "./annotate.js";
 import { createVoiceParser, parseAudioDataUrl, VOICE_PARSE_API_KEY_ENV, VOICE_PARSE_MODEL } from "./annotate-voice.js";
 import { createVoiceDrafter } from "./voice-draft.js";
+import { collectRsiStatus } from "./rsi-status.js"; // RSI 状态面:rsi.status 只读快照(请求-响应)
+import { annotateRsiSections, startMechanismRun } from "./rsi-agent-runner.js"; // RSI-MECH:机制开关/结果/agent 运行
+import { collectMechanismItems, deleteResultItem, setMechanism, updateResultItem } from "./rsi-mechanism-store.js";
 import type { EmbeddedTeamHandle } from "./team-embedded.js"; // 团队绑定实时种子(仅类型;运行面走 seedRegistryProjects)
 import { seedRegistryProjects } from "./team-embedded.js";
 import type { TeamaiDigest } from "@lampgenie/runtime/team/teamai-bridge"; // 门面(仅类型;运行面动态 import)
@@ -78,12 +81,27 @@ import { WsByteLedger, flushWsLedger, WS_LEDGER_FLUSH_MS } from "./ws-byte-ledge
 import { WebSocketServer, WebSocket } from "ws";
 import { bus, resolveCodingModelRoute, resolveTrackApiKey, type Journal } from "@lampgenie/core";
 import { parseClientMessage, explainClientMessageError, PROTOCOL_VERSION, ErrorCode, type ClientMessage } from "@lampgenie/protocol";
-import { CLIENT_MODES, DEFAULT_CLIENT_MODE, isChannelAllowed, isClientMode, isMethodAllowed, type ClientMode } from "./client-capabilities.js";
+import type { OwnerRegistry, OwnerUnit } from "@lampgenie/runtime/task/ownership";
+import { CLIENT_MODES, DEFAULT_CLIENT_MODE, PANEL_CHANNELS, UNIVERSAL_CHANNELS, isChannelAllowed, isClientMode, isMethodAllowed, type ClientMode } from "./client-capabilities.js";
+// 协议能力协商(纯逻辑,零 IO):能力目录/协商/分发门。
+import {
+  CAPABILITY_CONTRACT_VERSION,
+  LEGACY_NEGOTIATION,
+  SERVER_CAPABILITY_OPS,
+  checkDispatch,
+  describeCapabilities,
+  healthBits,
+  negotiateClientCapabilities,
+  type NegotiatedCapabilities,
+} from "@lampgenie/runtime/protocol/capabilities";
 import { reapOrphanSubagents } from "./agent-wiring.js";
 import { registerTraceStatsBroadcaster } from "./compact-hook.js";
 import { beginRetry, clearOnProgress, clearOnTerminal, snapshot as retrySnapshot } from "./session-retry-state.js";
 import { TurnNoCounter } from "./track-turns.js";
+import { DurableInbox, assertQueueBoundary, fingerprintOf, resolveOwner } from "@lampgenie/runtime/session/durable-inbox";
+import { freezeAdmission, injectionVerdict, nextTurnAdmission, readFrozenAdmission } from "@lampgenie/runtime/session/turn-boundary";
 import { restoreQueues, writeQueueSync, queueItemKey } from "./queue-store.js";
+import type { QueueItemWithInbox } from "./queue-store.js";
 import type { TaskSupervisor } from "./task-manager.js";
 import type { RouterApi } from "./router/index.js";
 import type { NodeRegistry, NodeConnections, NodeDispatch } from "./nodes.js";
@@ -94,6 +112,7 @@ import type { WorkflowAskRouter } from "./workflow-ask-router.js";
 import type { AskUserRouter } from "./ask-user-router.js";
 import type { SubagentBackend } from "@lampgenie/executors";
 import type { AutomationStore, AutomationScheduler } from "./automations.js";
+import type { ScheduledTaskService } from "./scheduled-task-service.js";
 import { computeStatsSummary, computeUsageDashboard } from "./stats.js";
 import { rebuildDashboardSessions } from "./dashboard-collector.js";
 import { aggregateDailySessions, computeDailyBuckets, summarizeTrendWindow, dailyWindow } from "./dashboard-trends.js";
@@ -129,6 +148,129 @@ function denyChannel(
   } catch { /* 审计失败不影响拒收 */ }
 }
 
+// ---- 协议能力协商:每连接一份 negotiated(缺省 legacy=服务端全量放行,旧客户端零变化) ----
+const negotiatedCapsByWs = new WeakMap<WebSocket, NegotiatedCapabilities>();
+
+/**
+ * 已知客户端通道全集 =  panel 白名单 + 引导通道 + 本批新增协商通道。
+ * 能力目录(SERVER_CAPABILITY_OPS)只覆盖已编目的命名空间;voice/exp/team/issue 等尚未编目的
+ * 既有通道不在目录里,必须按「已知通道」保持旧行为——否则一次升级会把面板自身打成 unknown-method。
+ */
+const KNOWN_CLIENT_CHANNELS: ReadonlySet<string> = new Set([
+  ...PANEL_CHANNELS,
+  ...UNIVERSAL_CHANNELS,
+  "client.capabilities",
+]);
+
+/** 从原始帧里探 type:未知 type 在协议解析层会落通用 invalid-message,拿不到稳定码,只能先预判。 */
+function peekMessageType(rawText: string): string | null {
+  try {
+    const parsed = JSON.parse(rawText) as { type?: unknown } | null;
+    return parsed !== null && typeof parsed === "object" && typeof parsed.type === "string" ? parsed.type : null;
+  } catch {
+    return null; // 非 JSON 交给既有解析错误路径(那边文案更精确)
+  }
+}
+
+/** 会话工作所有权:task.cancel 的「关整会话」形态判定(宽松读取原始 payload)。
+ * protocol 的 TaskCancel 要求 taskId 非空(不许改 protocol),所以「无 taskId / closeSession:true」
+ * 只能在解析前识别;返回 false = 做法径(有 taskId 且未声明 closeSession),逐字走原有解析与处理。 */
+function isOwnerClosePayload(rawText: string): boolean {
+  try {
+    const parsed = JSON.parse(rawText) as { taskId?: unknown; closeSession?: unknown } | null;
+    if (parsed === null || typeof parsed !== "object") return false;
+    const hasTaskId = typeof parsed.taskId === "string" && parsed.taskId.length > 0;
+    return parsed.closeSession === true || !hasTaskId;
+  } catch {
+    return false;
+  }
+}
+
+/** 代际关闭:closeByOwner → 逐单元 cancel → settle → completeClose,回执带 closed/pending。
+ * 取消异常吞掉并 warn,仍按单元 settle(不让单个取消失败卡住整次关闸);单元状态不记 error。 */
+async function closeOwnedWorksBySession(ws: WebSocket, rawText: string, opts: GatewayServerOptions): Promise<void> {
+  let sessionId = "";
+  try {
+    const parsed = JSON.parse(rawText) as { sessionId?: unknown } | null;
+    sessionId = typeof parsed?.sessionId === "string" ? parsed.sessionId : "";
+  } catch { /* 调用方已判定可解析 */ }
+  if (!sessionId) {
+    safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.InvalidMessage, message: "关闭会话需要 sessionId" });
+    return;
+  }
+  const registry = opts.ownerRegistry;
+  if (!registry) {
+    safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "会话工作所有权未启用(ownerRegistry 未注入)" });
+    return;
+  }
+  const begun = registry.closeByOwner(sessionId);
+  const units: OwnerUnit[] = begun.units ?? [];
+  const closed: string[] = [];
+  for (const unit of units) {
+    try {
+      await opts.cancelOwnedUnit?.(unit);
+    } catch (err) {
+      console.warn(`[ownership] 单元取消失败(${unit.kind}:${unit.unitId}):`, err instanceof Error ? err.message : String(err));
+    }
+    const settled = registry.settle(unit.unitId, { generation: unit.generation });
+    if (settled.code === "STALE_GENERATION") {
+      console.warn(`[ownership] 丢弃旧代际终态:${unit.unitId}@${unit.generation}(不写回新实例)`);
+      continue;
+    }
+    if (settled.code === "OK") closed.push(unit.unitId);
+  }
+  const done = registry.completeClose(sessionId);
+  const pending = done.pending ?? [];
+  safeSend(ws, {
+    v: PROTOCOL_VERSION,
+    type: "git.ok",
+    op: "session-owner-close",
+    detail: `会话 ${sessionId} 关闭:closed=${closed.length}${pending.length ? ` pending=${pending.join(",")}` : ""}`,
+  });
+}
+
+/**
+ * 分发门判定:null=放行;否则返回要回的稳定码。 * UNKNOWN_METHOD 只对「真未知通道」生效:目录外但已在  白名单里的既有通道保持旧行为。
+ */
+function dispatchDenialOf(type: string, negotiated: NegotiatedCapabilities): ErrorCode | null {
+  const gate = checkDispatch({ type, negotiated });
+  if (gate.code === "UNSUPPORTED_OP") return ErrorCode.UnsupportedOp;
+  if (gate.code === "UNKNOWN_METHOD" && !KNOWN_CLIENT_CHANNELS.has(type)) return ErrorCode.UnknownMethod;
+  return null;
+}
+
+/** 分发拒收帧 + journal 审计(unknown-method / unsupported-op 的现场证据,不静默)。 */
+function denyDispatch(
+  ws: WebSocket,
+  journal: Journal,
+  code: ErrorCode,
+  type: string,
+  negotiated: NegotiatedCapabilities): void {
+  const namespace = type.split(".")[0] ?? type;
+  safeSend(ws, {
+    v: PROTOCOL_VERSION,
+    type: "error",
+    code,
+    message:
+      code === ErrorCode.UnsupportedOp
+        ? `本连接未声明能力 ${namespace}:请先用 client.capabilities 声明 supportedOps 再调用 ${type.slice(0, 60)}`
+        : `未知方法:${type.slice(0, 60)}(不在协议方法表内)`,
+  });
+  try {
+    journal.append({
+      kind: "custom",
+      sessionId: "",
+      payload: {
+        type: "client.dispatch.denied",
+        code,
+        channel: type.slice(0, 80),
+        mode: negotiated.mode,
+        at: Date.now(),
+      },
+    });
+  } catch { /* 审计失败不影响拒收 */ }
+}
+
 // ---- 面板 IDE 第二批:持久终端服务(term.session.*;journal 键控单例) ----
 // 注:agent 侧装配在 agent-wiring.ts(模块私有,不在本批改动许可面),无法直接 import 共享;
 // 此处同构单例(同款 journal 实例键控)保证面板侧同进程去重,owner 隔离语义一致——偏离点见报告。
@@ -151,10 +293,23 @@ async function panelTerminalService(journal: Journal): Promise<PanelTerminalServ
   return service;
 }
 
+/** RSI 成本核算用的生效配置(`opts.cfg` 热生效视图;取不到=undefined → 只用内置单价表)。 */
+function rsiCostConfigOf(opts: { cfg?: { view?: () => { config?: unknown } } }): import("@lampgenie/core").Config | undefined {
+  try {
+    const cfg = opts.cfg?.view?.().config;
+    return (cfg ?? undefined) as unknown as import("@lampgenie/core").Config | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface GatewayServerOptions {
   port: number;
   taskManager: TaskSupervisor;
   journal: Journal;
+ /** journal 目录( RSI-SESSION-COST:RSI 会话候选池按 `<journalDir>/sessions/*.jsonl` 的
+ * mtime 选;缺省=RSI 运行不带会话候选,只是不算会话维度,其余行为不变)。 */
+  journalDir?: string;
   nodes?: NodeRegistry;
  /** 节点 WS 连接表(node.register 登记,委派下发用);缺省=不登记。 */
   nodeConnections?: NodeConnections;
@@ -171,6 +326,10 @@ export interface GatewayServerOptions {
     capabilitySnapshot?: () => CapabilitySnapshot;
     policy?: () => EnvelopePolicy;
   };
+ /** 会话工作所有权:代际关闭注册表(装配方注入;缺省=不接管工作单元,老行为逐字不变)。 */
+  ownerRegistry?: OwnerRegistry;
+ /** 关会话时对每个工作单元发 cancel(app.ts 注入 agent-wiring 的实现);单单元失败由本层兜底 settle。 */
+  cancelOwnedUnit?: (unit: OwnerUnit) => Promise<void> | void;
  /** 权限审批中介( B2);缺省=ask 流走 auto-fail-closed(旧行为)。 */
   permissionBroker?: PermissionBroker;
   /** workflow ask 面板应答路由(F6);缺省=ask 全走 executor(旧行为)。 */
@@ -181,6 +340,8 @@ export interface GatewayServerOptions {
   executor?: SubagentBackend;
  /** 定时自动化;缺省=automation.* 报 not-implemented。 */
   automations?: AutomationStore;
+ /** 定时任务调度器(内容门在 runtime createScheduled);缺省=task.schedule 报 not-implemented。 */
+  scheduledTaskService?: ScheduledTaskService;
  /** 主 LLM(AI 提交信息;缺省=确定性兜底文案)。 */
   llm?: unknown;
  /** 角色模型轨(手动 /compact 与自动压缩同源——生产压缩走 coding.models.compact)。 */
@@ -191,6 +352,11 @@ export interface GatewayServerOptions {
   };
  /** 辅助链轨(archLlm/压缩等辅助调用;缺省回退主轨)。 */
   auxLlm?: import("@lampgenie/runtime/agent/loop").LlmProvider;
+ /** -b 任务类别路由(summary/compact 轨):注入时优先建表项 provider;未命中/建不起来
+ * 一律 undefined → 回退 models.compact/auxLlm(旧口径逐字不变)。结构类型=不引 factory 包依赖。 */
+  modelRouter?: {
+    providerFor(kind: "summary" | "compact", taskClass?: string): import("@lampgenie/runtime/agent/loop").LlmProvider | undefined;
+  };
   automationScheduler?: AutomationScheduler;
   /** 内部广播钩子(startGatewayServer 注入;project.* 变更全客户端推送用)。 */
   broadcast?: (msg: import("@lampgenie/protocol").ServerMessage) => void;
@@ -295,12 +461,37 @@ export interface GatewayServerOptions {
 /** keepalive 生产默认:30s ping,75s 无 pong 判死(待标定)。 */
 const KA_DEFAULTS = { intervalMs: 30_000, timeoutMs: 75_000 };
 
+/** :队列项 → inbox 项(启动回放回灌用)。旧快照缺 admittedSeq 时按恢复顺序补号
+ * (inbox.restore 也会补,但显式给 index+1 让 seq 与队列顺序同向);缺指纹时按载荷重算。 */
+function inboxItemOf(item: QueueItemWithInbox, index: number): import("@lampgenie/runtime/session/durable-inbox").InboxItem {
+  const admittedSeq =
+    typeof item.admittedSeq === "number" && item.admittedSeq > 0 ? item.admittedSeq : index + 1;
+  return {
+    id: item.id,
+    sessionId: item.sessionId,
+    instruction: item.instruction,
+    ownerId: item.ownerId ?? "unowned",
+    ...(item.idempotencyKey ? { idempotencyKey: item.idempotencyKey } : {}),
+    fingerprint: item.fingerprint ?? fingerprintOf(item.instruction, item.attachments),
+    admittedSeq,
+    ...(item.promotedSeq !== undefined ? { promotedSeq: item.promotedSeq } : {}),
+    delivery: "pending" as const,
+    admittedAt: item.createdAt,
+  };
+}
+
+/** :入队回执。DUPLICATE=同幂等键+同载荷(不重复入队,回执 ok+duplicate);
+ * CONFLICT=同幂等键+异载荷(不写入,调用方须换键;WS error code="queue-conflict")。 */
+type EnqueueResult =
+  | { ok: true; item: QueueItemWithInbox; duplicate?: true }
+  | { ok: false; code: typeof ErrorCode.QueueConflict | "queue-invalid"; message: string };
+
 /** fixI7: 会话消息队列 API(startGatewayServer 构造注入 opts,handleMessage 消费)。 */
 interface QueueApi {
   /** 全量队列快照(hello 恢复用)。 */
-  snapshot(): import("@lampgenie/protocol").QueueItem[];
-  /** 入队(session 忙碌时 task.submit 走这里);广播 queue.update。 */
-  enqueue(msg: { sessionId: string; instruction: string; projectId?: string; attachments?: { name: string; path: string; mime?: string; size?: number }[] }): import("@lampgenie/protocol").QueueItem;
+  snapshot(): QueueItemWithInbox[];
+ /** 入队(session 忙碌时 task.submit 走这里);广播 queue.update。:先过 durable inbox 准入。 */
+  enqueue(msg: { sessionId: string; instruction: string; projectId?: string; attachments?: { name: string; path: string; mime?: string; size?: number }[]; ownerId?: string; idempotencyKey?: string }): EnqueueResult;
   /** 抢占:取消当前任务+立即提交该排队项。 */
   dispatchNow(msg: { sessionId: string; itemId: string }): { ok: true; task?: import("@lampgenie/core").Task } | { ok: false; reason: string };
   /** 删除队列项;不存在=false。 */
@@ -339,6 +530,36 @@ let warmStarted = false; // :预热单次守卫(原每连接重触发;进程级�
 
 /** TTS 客户端懒缓存(voice.tts;配置热更由重启生效——与 provider 同语义)。 */
 let ttsClientCache: { speak(text: string): Promise<{ mime: string; base64: string }> } | undefined | null = null;
+
+/* (session.history 行分页 + 流合帧):delta 游标与增量环。
+ * - historyLogEpoch:进程启动时刻。网关重启(或 journal 重载)后 epoch 变化,客户端旧游标一律判失效——
+ * 新进程的 seq 可能重新分配/日志被 restore 回退,只比 revision 会把「不可增量」误判成可增量。
+ * - historyRings:每会话一个有界 DeltaRing(Map 容量 64 会话,LRU 淘汰最久未用);只有 replaySince 命中
+ * 才回增量,否则回整页并(reset)提示面板重建本地缓存。 */
+const historyLogEpoch = Date.now();
+const HISTORY_RING_MAX_ROWS = 200;
+const HISTORY_RING_SESSIONS = 64;
+const historyRings = new Map<string, import("@lampgenie/runtime/session/history-pager").DeltaRing>();
+
+/** 取该会话的增量环(命中即提到 LRU 尾;超容量淘汰队首会话)。 */
+function historyRingFor(
+  sessionId: string,
+  Ring: new (maxRows?: number) => import("@lampgenie/runtime/session/history-pager").DeltaRing): import("@lampgenie/runtime/session/history-pager").DeltaRing {
+  const hit = historyRings.get(sessionId);
+  if (hit) {
+    historyRings.delete(sessionId);
+    historyRings.set(sessionId, hit);
+    return hit;
+  }
+  const ring = new Ring(HISTORY_RING_MAX_ROWS);
+  historyRings.set(sessionId, ring);
+  while (historyRings.size > HISTORY_RING_SESSIONS) {
+    const oldest = historyRings.keys().next().value;
+    if (oldest === undefined) break;
+    historyRings.delete(oldest);
+  }
+  return ring;
+}
 
 /** repo wiki的 LLM 适配:主 LLM(chat) → 单 prompt generate。
  * 结构型判定,不改 GatewayServerOptions.llm 的既有类型;缺 LLM=确定性骨架(调用方降级)。 */
@@ -528,9 +749,15 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
   // 队列快照随 hello 下发(页面刷新恢复);任何变更广播 queue.update。
  // (P3 登记根治):队列不再是纯内存态——每次变更经 queueBroadcast 落一条
   // queue.sync 全量快照到 journal,启动时 restoreQueues 回放重建(重启不丢)。
-  const sessionQueues = new Map<string, import("@lampgenie/protocol").QueueItem[]>();
+  const sessionQueues = new Map<string, QueueItemWithInbox[]>();
+ // durable inbox 是准入/放行水位的真源(进程内)。回放结果先回灌它——否则重启后
+ // admittedSeq/promotedSeq 从 0 起算,排队项会被当成「从未受理」,同 key 重发不再判 DUPLICATE。
+  const inbox = new DurableInbox();
   const restored = restoreQueues(opts.journal);
-  for (const [sid, items] of restored) sessionQueues.set(sid, items);
+  for (const [sid, items] of restored) {
+    sessionQueues.set(sid, items);
+    inbox.restore(sid, items.map((it, i) => inboxItemOf(it, i)));
+  }
   if (restored.size > 0) {
     const n = [...restored.values()].reduce((a, b) => a + b.length, 0);
     console.error(`[gateway] 启动回放:恢复 ${n} 条排队消息(${restored.size} 个会话,来源 journal queue.sync)`);
@@ -543,14 +770,22 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
   // 落账失败(磁盘满/句柄失效)不阻断广播:队列内存态已变更,面板仍须看到真相;
   // 异常就地吞掉并告警——沿调用方(pumpQueue/onChange 回调/dispatchNow 的 finally)
   // 冒泡会升级成未捕获异常(与文件顶 B1 注记的「同步异常杀进程」同类风险)。
-  const queueBroadcast = (sessionId: string) => {
+  const queueBroadcast = (sessionId: string, boundaryCode?: string) => {
     const items = sessionQueues.get(sessionId) ?? [];
     try {
       writeQueueSync(opts.journal, sessionId, items);
     } catch (err) {
       console.error(`[gateway] 队列快照落账失败(重启可能丢该会话排队消息):${String(err).slice(0, 160)}`);
     }
-    opts.broadcast?.({ v: PROTOCOL_VERSION, type: "queue.update", sessionId, items });
+ // :边界不成立时顺带把稳定码带给面板(旧客户端忽略未知字段;协议零改动)。
+    const msg = {
+      v: PROTOCOL_VERSION,
+      type: "queue.update" as const,
+      sessionId,
+      items,
+      ...(boundaryCode ? { boundaryCode } : {}),
+    };
+    opts.broadcast?.(msg);
   };
   const sessionActive = (sid: string) =>
     opts.taskManager.list().some((t) => t.sessionId === sid && (t.state === "queued" || t.state === "running" || t.state === "blocked"));
@@ -570,19 +805,76 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     opts.broadcast?.({ v: PROTOCOL_VERSION, type: "task.submitted", task });
     return task;
   };
+ // 该会话 journal 末事件类型(promote 边界判据)。终态事件天然是边界,但 journal
+ // 尾部可能是 tool.call(工具执行中网关崩溃/被手工改写),那种情况下 promote 必须等。
+  const sessionLastEventKind = (sessionId: string): string | undefined => {
+    const events = opts.journal.readAll();
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i]!;
+      if (ev.sessionId === sessionId) return ev.kind;
+    }
+    return undefined;
+  };
   // 终态泵:该 session 无在跑/排队任务且队列非空 → 队头出队提交(逐条 FIFO:本条再终态时续泵)。
   const pumpQueue = (sessionId: string) => {
     if (suppressPump.has(sessionId)) return;
     const q = sessionQueues.get(sessionId);
     if (!q || q.length === 0) return;
     if (sessionActive(sessionId)) return;
-    const item = q.shift()!;
+ // promote 前置两判(见 durable-inbox 头注):会话空闲 + 完整 tool batch 边界。
+ // 批内(tool.call/tool.result/step.start)放行会把新用户消息插进 tool_call 与
+ // tool_result 之间,模型侧调用链断裂;等下一次终态事件再泵即可。
+    if (!assertQueueBoundary(sessionLastEventKind(sessionId))) return;
+    const head = q[0]!;
+ // :消息步进边界唯一判定入口(injectionVerdict)——tool batch 未闭合 / turn 未开始 /
+ // 本 turn 准入已冻结时不提交(保持排队);不稳定码随 queue.update 下发(旧客户端忽略)。
+    const verdict = injectionVerdict({
+      events: opts.journal.readSession(sessionId),
+      sessionId,
+      kind: "user",
+      ...(typeof head.admittedSeq === "number" && head.admittedSeq > 0 ? { admittedSeq: head.admittedSeq } : {}),
+    });
+    if (!verdict.ok) {
+      console.error(`[gateway] 队列泵保持排队(session=${sessionId}):${verdict.code} ${verdict.reason.slice(0, 120)}`);
+      queueBroadcast(sessionId, verdict.code);
+      return;
+    }
+ // 只放行到队头为止(cutoff=队头 admittedSeq):一次只提交一条(同 session 不并行)。
+ // 不用「全部 pending」做 cutoff——把还没轮到的项提前标 delivered,重启回放会因
+ // delivered 过滤把它们静默丢掉(promote 水位与 FIFO 相交处的坑)。
+    const cutoff = typeof head.admittedSeq === "number" && head.admittedSeq > 0 ? head.admittedSeq : undefined;
+    const promoted = inbox.promote(sessionId, cutoff === undefined ? {} : { cutoff });
+    if (promoted.length === 0) return;
+    const promotedIds = new Set(promoted.map((p) => p.id));
+    const idx = q.findIndex((it) => promotedIds.has(it.id));
+    if (idx < 0) return;
+    const [item] = q.splice(idx, 1);
+    if (!item) return;
     if (q.length === 0) sessionQueues.delete(sessionId);
     // 先提交再落账:两步之间崩溃时 journal 的旧快照仍含该项,但该项已带 queue.<id> 幂等键
     // 的 task.* 事件 → 回放判「已提交」丢弃,不丢也不重;反序则崩在中间=消息凭空消失。
     submitQueueItem(item);
     queueBroadcast(sessionId);
   };
+ // :turn.start 落账即冻结本轮准入水位(turn.admission.frozen,自定义事件)。冻结点之后
+ // 受理的输入(admittedSeq>cutoffSeq)本 turn 不再扩增,由 pump 排队到下一 turn。
+ // 同 turn+cutoffSeq 重复触发不重复落账(补发/重放幂等);失败只告警,不阻断 turn.start 主链。
+  opts.journal.subscribe((e) => {
+    if (e.kind !== "turn.start") return;
+    const sid = typeof e.sessionId === "string" ? e.sessionId.trim() : "";
+    if (!sid) return;
+    try {
+      const events = opts.journal.readSession(sid);
+      const turnRaw = Number((e.payload as { turn?: unknown } | undefined)?.turn ?? 0);
+      const turn = Number.isFinite(turnRaw) ? turnRaw : 0;
+      const cutoffSeq = nextTurnAdmission(events, sid);
+      const existing = readFrozenAdmission(events, sid);
+      if (existing && existing.turn === turn && existing.cutoffSeq === cutoffSeq) return;
+      opts.journal.append(freezeAdmission({ sessionId: sid, turn, cutoffSeq, at: e.time ?? Date.now() }));
+    } catch (err) {
+      console.error(`[gateway] 准入冻结落账失败(turn.start 已落,按无冻结继续):${String(err).slice(0, 160)}`);
+    }
+  });
   opts.taskManager.onChange((task) => {
     if (task.state !== "done" && task.state !== "failed" && task.state !== "cancelled") return;
     pumpQueue(task.sessionId);
@@ -591,22 +883,62 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
   const queueApi: QueueApi = {
     snapshot: () => [...sessionQueues.values()].flat(),
     enqueue(msg) {
-      const q = sessionQueues.get(msg.sessionId) ?? [];
  // 归属固化(漂移根治):入队时就把 projectId 定下来,出队/重启回放不再依赖
-      // 「出队当刻的 active 项目」——排队期间用户切项目不该改写这条消息的归属。
+ // 「出队当刻的 active 项目」——排队期间用户切项目不该改写这条消息的归属。
       const ownerProjectId = resolveSubmitProjectId(opts.taskManager, msg.sessionId, msg.projectId, opts);
-      const item: import("@lampgenie/protocol").QueueItem = {
-        id: `q-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+ // 先准入再入队。幂等键+载荷指纹都在 admit 里判:
+ // - 同 key 同载荷 → DUPLICATE,复用已有项,不产生第二条消息(客户端重试安全);
+ // - 同 key 异载荷 → CONFLICT,不写入(静默重复=丢消息,静默新入=重复执行,见 inbox 头注)。
+      const admitted = inbox.admit(msg.sessionId, msg.instruction, {
+        ...(msg.idempotencyKey ? { idempotencyKey: msg.idempotencyKey } : {}),
+ // 归属:只认本会话的 owner;异常回退/未带 owner 一律落 unowned(不猜其它 owner)。
+        ownerId: resolveOwner({ sessionId: msg.sessionId, fallbackOwner: msg.ownerId }),
+        ...(msg.attachments?.length ? { attachments: msg.attachments } : {}),
+      });
+      if (admitted.code === "INVALID") {
+        return { ok: false as const, code: "queue-invalid" as const, message: "入队参数非法(sessionId/instruction 为空)" };
+      }
+      if (admitted.code === "CONFLICT" || !admitted.item) {
+        return {
+          ok: false as const,
+          code: ErrorCode.QueueConflict,
+          message: "同一幂等键的载荷指纹不一致(此前已受理的是另一条消息;请换 key 或核对内容)",
+        };
+      }
+      if (admitted.code === "DUPLICATE") {
+ // 不重复入队:还在队列 → 原项回执;已提交/已放行 → 回放已入账的项(不复活、不二次执行)。
+        const q0 = sessionQueues.get(msg.sessionId) ?? [];
+        const existing = q0.find((x) => x.id === admitted.item!.id);
+        const item: QueueItemWithInbox = existing ?? {
+          id: admitted.item.id,
+          sessionId: msg.sessionId,
+          instruction: admitted.item.instruction,
+          createdAt: admitted.item.admittedAt,
+          ownerId: admitted.item.ownerId,
+          fingerprint: admitted.item.fingerprint,
+          admittedSeq: admitted.item.admittedSeq,
+          delivery: admitted.item.delivery,
+        };
+        return { ok: true as const, duplicate: true as const, item };
+      }
+      const q = sessionQueues.get(msg.sessionId) ?? [];
+      const item: QueueItemWithInbox = {
+        id: admitted.item.id,
         sessionId: msg.sessionId,
         instruction: msg.instruction,
-        createdAt: Date.now(),
+        createdAt: admitted.item.admittedAt,
+        ownerId: admitted.item.ownerId,
+        fingerprint: admitted.item.fingerprint,
+        admittedSeq: admitted.item.admittedSeq,
+        delivery: admitted.item.delivery,
+        ...(admitted.item.idempotencyKey ? { idempotencyKey: admitted.item.idempotencyKey } : {}),
         ...(ownerProjectId !== undefined ? { projectId: ownerProjectId } : {}),
         ...(msg.attachments?.length ? { attachments: msg.attachments } : {}),
       };
       q.push(item);
       sessionQueues.set(msg.sessionId, q);
       queueBroadcast(msg.sessionId);
-      return item;
+      return { ok: true as const, item };
     },
     dispatchNow(msg) {
       const q = sessionQueues.get(msg.sessionId) ?? [];
@@ -622,6 +954,10 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
         for (const t of opts.taskManager.list().filter((x) => x.sessionId === msg.sessionId && (x.state === "queued" || x.state === "running" || x.state === "blocked"))) {
           opts.taskManager.setState(t, "cancelled", "被新消息抢占(立即发送)");
         }
+ // 抢占是用户显式意图,取消链路已闭合本 turn——这里不再要求 tool batch 边界
+ // (与自动泵不同),但仍按 seq 放行:cutoff=该队头项,排在它后面的项保持 pending。
+        const seqOfItem = typeof item.admittedSeq === "number" && item.admittedSeq > 0 ? item.admittedSeq : undefined;
+        inbox.promote(msg.sessionId, seqOfItem === undefined ? {} : { cutoff: seqOfItem });
         const task = submitQueueItem(item);
         if (!task) return { ok: false as const, reason: "任务管理器拒绝了提交(会话或项目状态)" };
         return { ok: true as const, task };
@@ -764,6 +1100,32 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
       console.error("[gateway] 终态投递义务失败(不阻塞主链):", String(err).slice(0, 200));
     }
   });
+ // :Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
+  opts.taskManager.onChange((task) => {
+    if (task.state !== "done" && task.state !== "failed" && task.state !== "cancelled") return;
+    const svc = opts.issueService;
+    const journal = opts.journal;
+    if (!svc || !journal) return;
+    const link = svc.findIssueByTask(task.id);
+    if (!link) return;
+    const state = task.state === "done" ? "completed" : task.state;
+    void (async () => {
+      try {
+        const { writeBackIssueTask } = await import("./issue-service.js");
+        const ch = await svc.channelFor(link.projectId);
+        await writeBackIssueTask(ch.channel, {
+          projectId: link.projectId,
+          number: link.number,
+          taskId: task.id,
+          state,
+          journal,
+          sessionId: task.sessionId,
+        });
+      } catch (err) {
+        console.warn("[gateway] issue 终态回写失败(不阻塞主链):", String(err).slice(0, 200));
+      }
+    })();
+  });
   // 周期 sweep:回收超租约 attempting(进程内发送挂住/连接中途断开)→ pending,并仅在已连接时重投。
   const deliverySweepTimer = setInterval(() => {
     try {
@@ -807,6 +1169,26 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
  // P3:非法原因的文案只有一个来源 = explainClientMessageError(含非 JSON 与
       // 字段校验两类),旧的两条重复分类路径已收敛(避免以后只改一处)。
       const rawText = raw.toString();
+ // 分发门:必须在解析之前——未知 type 在协议层只会落通用 invalid-message,拿不到稳定码。
+ // 已知通道照旧(legacy 零变化),只有「真未知 type」与「声明后调集外 op」被拒。
+      const negotiatedNow = negotiatedCapsByWs.get(ws) ?? LEGACY_NEGOTIATION;
+      const peekedType = peekMessageType(rawText);
+      if (peekedType !== null) {
+        const denied = dispatchDenialOf(peekedType, negotiatedNow);
+        if (denied) {
+          denyDispatch(ws, opts.journal, denied, peekedType, negotiatedNow);
+          return;
+        }
+      }
+ // 会话工作所有权:task.cancel 的「关整会话」形态(无 taskId 或 closeSession:true)
+ // 在协议 schema 之外(TaskCancel 要求 taskId 非空),故在解析前用宽松读取拦截。
+ // 有 taskId 且无 closeSession 的做法径逐字不变(下面 parseClientMessage → handleMessage 照旧)。
+      if (peekedType === "task.cancel" && isOwnerClosePayload(rawText)) {
+        void closeOwnedWorksBySession(ws, rawText, opts).catch((err: unknown) => {
+          console.warn("[ownership] 会话关闸失败:", err instanceof Error ? err.message : String(err));
+        });
+        return;
+      }
       let msg;
       try {
         msg = parseClientMessage(rawText);
@@ -823,6 +1205,68 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
           // 唯一来源 = explain(非 JSON 与字段校验两类都从此出);?? 兜底只在 schema 判定漂移时可达。
           message: explainClientMessageError(rawText) ?? "非法消息(信封 v:1 必填/未知类型/字段缺失)",
         });
+        return;
+      }
+ // :automation.update 的乐观并发字段 expectedRevision 不在协议 schema 内(zod 默认剥掉未知键),
+ // 处理器拿不到;这里从原始 payload 补回(仅 automation.update 生效,其它通道零变化)。
+      if (msg.type === "automation.update") {
+        try {
+          const cas = (JSON.parse(rawText) as { expectedRevision?: unknown }).expectedRevision;
+          if (typeof cas === "number" && Number.isFinite(cas) && cas >= 0) {
+            (msg as unknown as { expectedRevision?: number }).expectedRevision = cas;
+          }
+        } catch { /* parseClientMessage 已成功解析,此处不可达 */ }
+      }
+ // 时间旅行:checkpoint.* 的 step/boundary 与 session.fork 的 atSeq 不在协议 schema 内
+ // (zod 默认剥掉未知键),从原始 payload 补回——与上面 automation.update 同款,协议零改动。
+ // 2026-11 增补 mode(files|messages|both)与 boundarySeq:同样只走 raw payload,协议包不动。
+      if (msg.type === "checkpoint.preview" || msg.type === "checkpoint.rewind" || msg.type === "session.fork") {
+        try {
+          const extra = JSON.parse(rawText) as { step?: unknown; boundary?: unknown; atSeq?: unknown; mode?: unknown; boundarySeq?: unknown };
+          const rec = msg as unknown as { step?: string; boundary?: string; atSeq?: number; mode?: string; boundarySeq?: number };
+          if (typeof extra.step === "string" && extra.step.trim()) rec.step = extra.step.trim();
+          if (typeof extra.boundary === "string" && extra.boundary.trim()) rec.boundary = extra.boundary.trim();
+          if (typeof extra.atSeq === "number" && Number.isFinite(extra.atSeq)) rec.atSeq = extra.atSeq;
+ // 只认三个合法模式(其余值当没传 → 调用方按 files 旧行为处理,不做静默猜测)
+          if (extra.mode === "files" || extra.mode === "messages" || extra.mode === "both") rec.mode = extra.mode;
+          if (typeof extra.boundarySeq === "number" && Number.isFinite(extra.boundarySeq) && extra.boundarySeq > 0) {
+            rec.boundarySeq = Math.floor(extra.boundarySeq);
+          }
+        } catch { /* 已成功解析,此处不可达 */ }
+      }
+ // 连接级能力协商(与 client.mode 同层的引导通道):必须早于  allowlist——
+ // 协商结果只作用于本连接,且 client.* 自身不受能力集约束(否则声明 NO_OPS 后再也协商不回来)。
+      if (msg.type === "client.capabilities") {
+        const negotiatedNext = negotiateClientCapabilities(msg, {
+          serverOps: SERVER_CAPABILITY_OPS,
+          currentContractVersion: CAPABILITY_CONTRACT_VERSION,
+        });
+        negotiatedCapsByWs.set(ws, negotiatedNext);
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "capabilities.result",
+          ok: true,
+          mode: negotiatedNext.mode,
+          code: negotiatedNext.code,
+          acceptedOps: [...negotiatedNext.acceptedOps],
+          rejectedOps: [...negotiatedNext.rejectedOps],
+          droppedKeys: [...negotiatedNext.droppedKeys],
+          summary: describeCapabilities(negotiatedNext),
+        });
+        try {
+          opts.journal.append({
+            kind: "custom",
+            sessionId: "",
+            payload: {
+              type: "client.capabilities.negotiated",
+              mode: negotiatedNext.mode,
+              code: negotiatedNext.code,
+              accepted: negotiatedNext.acceptedOps.length,
+              rejected: negotiatedNext.rejectedOps.length,
+              at: Date.now(),
+            },
+          });
+        } catch { /* 审计失败不影响协商 */ }
         return;
       }
  //  能力暴露 allowlist(闸在分发最顶部):连接级 clientMode 白名单命中才进 switch。
@@ -855,7 +1299,13 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
       if (opts.workflowAskRouter) opts.workflowAskRouter.online = wss.clients.size > 0;
       if (opts.askUser) opts.askUser.online = wss.clients.size > 0;
     });
-    safeSend(ws, { v: PROTOCOL_VERSION, type: "hello", build: PANEL_BUILD, platform: process.platform, tasks: taskIndexList(opts.taskManager.list()), ...(queueApi ? { queue: queueApi.snapshot() } : {}), ...(opts.sessionActivity && opts.sessionActivity.size() ? { sessionActivity: opts.sessionActivity.snapshot() } : {}) });
+    safeSend(ws, { v: PROTOCOL_VERSION, type: "hello", build: PANEL_BUILD, platform: process.platform, capabilities: {
+      contractVersion: CAPABILITY_CONTRACT_VERSION,
+      ops: [...SERVER_CAPABILITY_OPS],
+ // health 位按 deps 实际装配:没装配就不列(不臆测能力)。terminal 服务按需懒装配,恒为 true;
+ // llm 看主 LLM 是否注入;memory 看记忆面视图是否注入;modelScoring 网关侧未装配。
+      health: healthBits({ ws: true, journal: !!opts.journal, llm: !!opts.llm, modelScoring: false, terminal: true, memory: !!opts.memoryView }),
+    }, tasks: taskIndexList(opts.taskManager.list()), ...(queueApi ? { queue: queueApi.snapshot() } : {}), ...(opts.sessionActivity && opts.sessionActivity.size() ? { sessionActivity: opts.sessionActivity.snapshot() } : {}) });
     if (opts.projects) safeSend(ws, projectListMessage(opts.projects));
  // 新连接补投:把仍未 delivered 的终态义务(限 100)重发给本连接。
     // 逐条 claim → 发同一终态帧 → delivered;发送失败 release 回 pending(等下次 hello/sweep)。
@@ -1147,6 +1597,16 @@ async function handleMessage(
   msg: ClientMessage,
   opts: GatewayServerOptions): Promise<void> {
   const { taskManager: tm, journal, nodes } = opts;
+ // 入口复核(ws 层已挡一次):保证任何进入 switch 的消息都过了能力协商门。
+ // legacy 连接这里恒放行,旧客户端行为逐字不变。
+  {
+    const negotiated = negotiatedCapsByWs.get(ws) ?? LEGACY_NEGOTIATION;
+    const denied = dispatchDenialOf(String(msg.type), negotiated);
+    if (denied) {
+      denyDispatch(ws, opts.journal, denied, String(msg.type), negotiated);
+      return;
+    }
+  }
   switch (msg.type) {
     case "client.mode": {
  // :连接级 clientMode 声明。只对本连接生效(允许任意设置:面板可降级,
@@ -1229,7 +1689,32 @@ async function handleMessage(
       // 同 session 双 loop 交错 journal);任务终态 FIFO 自动续发。非忙碌=原直提路径不变。
       const queueApi = (opts as { queueApi?: QueueApi }).queueApi;
       if (queueApi && tm.list().some((t) => t.sessionId === msg.sessionId && (t.state === "queued" || t.state === "running" || t.state === "blocked"))) {
-        queueApi.enqueue(msg);
+ // 入队必经 durable inbox 准入(幂等键+载荷指纹)。请求侧可带 ownerId/idempotencyKey
+ // (协议未加字段,按存在性读取);CONFLICT 回 WS error code="queue-conflict"(HTTP 409 语义)。
+        const rawOwner = (msg as { ownerId?: unknown }).ownerId;
+        const r = queueApi.enqueue({
+          sessionId: msg.sessionId,
+          instruction: msg.instruction,
+          ...(msg.projectId !== undefined ? { projectId: msg.projectId } : {}),
+          ...(msg.attachments?.length ? { attachments: msg.attachments } : {}),
+          ...(typeof rawOwner === "string" && rawOwner ? { ownerId: rawOwner } : {}),
+          ...(msg.idempotencyKey !== undefined ? { idempotencyKey: msg.idempotencyKey } : {}),
+        });
+        if (!r.ok) {
+ // 回帧走协议枚举(ErrorCode.QueueConflict;值仍是队列边界产出的稳定串,客户端判串零漂移)。
+          safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: r.code, message: r.message });
+          break;
+        }
+        if (r.duplicate) {
+ // 回执 ok+duplicate:广播之外向请求方补一帧,证明「已受理过,不再重复入队」。
+          safeSend(ws, {
+            v: PROTOCOL_VERSION,
+            type: "queue.update",
+            sessionId: msg.sessionId,
+            items: queueApi.snapshot().filter((x) => x.sessionId === msg.sessionId),
+            duplicate: true,
+          });
+        }
         break;
       }
  // super-agent Router P1:面板主径 Trigger 入 router(intake 三判据→gate→
@@ -1292,7 +1777,8 @@ async function handleMessage(
         const annCfg = (opts.config as {
           annotate?: { refine?: boolean; voiceParse?: { baseUrl?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number } };
         } | undefined)?.annotate;
-        const smallLlm = opts.models?.compact ?? opts.auxLlm;
+ // -b:routing.summary 优先(表项按 category 选模型),未命中/未配→旧口径(models.compact ?? auxLlm)。
+        const smallLlm = opts.modelRouter?.providerFor("summary") ?? opts.models?.compact ?? opts.auxLlm;
         const refine: AnnotateRefineDeps = {
           enabled: annCfg?.refine !== false,
           ...(smallLlm ? { llm: smallLlm as unknown as AnnotateRefineDeps["llm"] } : {}),
@@ -1465,6 +1951,56 @@ async function handleMessage(
       if (task) tm.setState(task, "cancelled");
       break;
     }
+ // 定时任务:创建走内容门(runtime createScheduled 校验 mode/preRun/contextFrom/continuity),
+ // 到点由 ScheduledTaskService 的 30s tick 起跑。projectId/owner 按 session 归属决议。
+    case "task.schedule": {
+      const service = opts.scheduledTaskService;
+      if (!service) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "定时任务调度器未启用" });
+        break;
+      }
+      const projectId = resolveSubmitProjectId(tm, msg.sessionId, msg.projectId, opts);
+      const created = service.schedule({
+        instruction: msg.instruction,
+        at: msg.at,
+        recurrence: msg.recurrence,
+        timeZone: msg.timeZone,
+        mode: msg.mode,
+        preRun: msg.preRun,
+        contextFrom: msg.contextFrom,
+        continuity: msg.continuity,
+        title: msg.title,
+        sessionId: msg.sessionId,
+        ownerId: msg.sessionId,
+        projectId: projectId ?? null,
+        type: "task",
+      });
+      if (created.error) {
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "task.schedule.result",
+          ok: false,
+          error: String(created.error),
+          issues: Array.isArray(created.issues) ? created.issues.map(String) : [],
+        });
+      } else {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "task.schedule.result", ok: true, task: created });
+      }
+      opts.broadcast?.({ v: PROTOCOL_VERSION, type: "task.list", tasks: taskIndexList(tm.list()) });
+      break;
+    }
+    case "task.schedule.cancel": {
+      const service = opts.scheduledTaskService;
+      if (!service) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "定时任务调度器未启用" });
+        break;
+      }
+      void service.cancel(msg.taskId).then(
+        () => safeSend(ws, { v: PROTOCOL_VERSION, type: "task.schedule.cancel.result", ok: true, taskId: msg.taskId }),
+        () => safeSend(ws, { v: PROTOCOL_VERSION, type: "task.schedule.cancel.result", ok: false, taskId: msg.taskId }),
+      );
+      break;
+    }
  // interrupted 一键续跑:幂等重提同 session 续跑任务(idempotencyKey=resume:<原id>);
     // 任务不在/不可续跑时如实回错(不静默)。legacy「重启中断」cancelled 也放行(存量迁移期)。
     case "task.resume": {
@@ -1508,7 +2044,16 @@ async function handleMessage(
     // 未知/已删 id 回 task:null(不抛、不回全量列表),面板据此显示「不可用」。
     case "task.detail.get": {
       const t = tm.get(msg.taskId);
-      safeSend(ws, { v: PROTOCOL_VERSION, type: "task.detail.result", taskId: msg.taskId, task: t ?? null });
+ // :任务侧能查到关联 issue 编号(仅内存 link 命中时附带;不改协议必需字段)。
+      const link = t && opts.issueService ? opts.issueService.findIssueByTask(t.id) : null;
+      const issue = link ? { projectId: link.projectId, number: link.number } : undefined;
+      safeSend(ws, {
+        v: PROTOCOL_VERSION,
+        type: "task.detail.result",
+        taskId: msg.taskId,
+        task: t ?? null,
+        ...(issue ? { issue } : {}),
+      });
       break;
     }
     case "meeting.import": {
@@ -1748,6 +2293,114 @@ async function handleMessage(
       safeSend(ws, { v: PROTOCOL_VERSION, type: "issue.dispatch.result", ok: true, taskId: task.id });
       break;
     }
+    case "rsi.status": {
+ // RSI 状态只读快照:纯请求-响应,连接建立后不主动推(无广播)。
+ // RSI-MECH:叠加机制治理面(开关/驱动/结果条目/最近运行态);单区失败 fail-open。
+      try {
+        const root = repoRoot();
+        const r = await collectRsiStatus({ root, journal, now: Date.now() });
+        const annotated = await annotateRsiSections({
+          root,
+          sections: r.sections,
+          taskState: (taskId) => tm.get(taskId)?.state,
+ // 收尾补账( RSI-SESSION-COST):按 taskId 切窗口算成本 + 认账已分析会话。
+          readSession: (sessionId) => journal.readSession(sessionId),
+          config: rsiCostConfigOf(opts),
+        });
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.status.result", ...r, sections: annotated.sections });
+      } catch (e) {
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "error",
+          code: ErrorCode.Internal,
+          message: `RSI 状态采集失败:${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+      break;
+    }
+    case "rsi.mechanism.set": {
+ // 机制开关 / 驱动方式(写 .genie/rsi/mechanisms.json;未知 id 回 reason,不断连接)。
+      try {
+        const r = await setMechanism(repoRoot(), msg.id, { enabled: msg.enabled, driver: msg.driver }, "panel");
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "rsi.mechanism.set.result",
+          ok: r.ok,
+          id: msg.id,
+          ...(r.mechanism === undefined ? {} : { enabled: r.mechanism.enabled, driver: r.mechanism.driver }),
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+        });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.set.result", ok: false, id: msg.id, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
+    case "rsi.mechanism.run": {
+ // 手动运行一次机制:按机制 brief 派 system agent 任务;关闭/code 驱动/已有运行中一律回 reason。
+      try {
+        const r = await startMechanismRun(
+          {
+            root: repoRoot(),
+            submit: (kind, sessionId, instruction, extra) => tm.submit(kind, sessionId, instruction, extra),
+            taskState: (taskId) => tm.get(taskId)?.state,
+ // RSI-SESSION-COST:近 3 日未分析会话的候选池 + 会话归属 + 成本核算配置。
+ // 复用本层已有的 journal/tm 实例,不新建。
+            ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
+            projectOf: (sessionId) => sessionOwnerProjectId(tm, sessionId) ?? sessionBindProjectId(journal, sessionId),
+            readSession: (sessionId) => journal.readSession(sessionId),
+            config: rsiCostConfigOf(opts),
+          },
+          msg.id);
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.run.result", ...r });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.run.result", ok: false, id: msg.id, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
+    case "rsi.item.update": {
+ // 结果条目改(覆盖层 append,不改原生台账)。
+      try {
+        const patch = {
+          ...(msg.title === undefined ? {} : { title: msg.title }),
+          ...(msg.summary === undefined ? {} : { summary: msg.summary }),
+          ...(msg.detail === undefined ? {} : { detail: msg.detail }),
+          ...(msg.status === undefined ? {} : { status: msg.status }),
+        };
+        const r = await updateResultItem(repoRoot(), msg.mechanismId, msg.itemId, patch, "panel");
+        const items = r.ok ? (await collectMechanismItems(repoRoot(), msg.mechanismId)).items : undefined;
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "rsi.item.result",
+          ok: r.ok,
+          mechanismId: msg.mechanismId,
+          itemId: msg.itemId,
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+          ...(items === undefined ? {} : { items }),
+        });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.item.result", ok: false, mechanismId: msg.mechanismId, itemId: msg.itemId, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
+    case "rsi.item.delete": {
+ // 结果条目删(墓碑覆盖层;agent-runs 结果文件物理保留可追溯)。
+      try {
+        const r = await deleteResultItem(repoRoot(), msg.mechanismId, msg.itemId, "panel", msg.reason);
+        const items = r.ok ? (await collectMechanismItems(repoRoot(), msg.mechanismId)).items : undefined;
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "rsi.item.result",
+          ok: r.ok,
+          mechanismId: msg.mechanismId,
+          itemId: msg.itemId,
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+          ...(items === undefined ? {} : { items }),
+        });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.item.result", ok: false, mechanismId: msg.mechanismId, itemId: msg.itemId, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
     case "team.p2p.status": {
       if (!opts.teamP2p) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "P2P 通道未装配" }); break; }
       await opts.teamP2p!.probeUnknown(); // 首答前探未知成员(签名 ping;离线项不重复探)
@@ -1877,7 +2530,8 @@ async function handleMessage(
       // (agent-wiring.ts:2174 `models?.compact ?? auxLlm ?? llm`)——手动命令此前恒走主轨
       // llm,配了 coding.models.compact 的用户点 /compact 实际是在用主模型压(且主轨是 realtime,
       // 端点上还开新会话)。三者皆无才报「LLM 未装配」。
-      const compactLlm = opts.models?.compact ?? opts.auxLlm ?? (opts.llm as import("@lampgenie/runtime/agent/loop").LlmProvider | undefined);
+ // -b:routing.compact 优先(表项按 category 选模型),未命中/未配→旧口径(compact ?? aux ?? 主轨)。
+      const compactLlm = opts.modelRouter?.providerFor("compact") ?? opts.models?.compact ?? opts.auxLlm ?? (opts.llm as import("@lampgenie/runtime/agent/loop").LlmProvider | undefined);
       // 状态帧构造(2026-11 边界元数据):四出口(started/failed/skipped/completed)共用,字段缺省省略。
       const compactStatus = (
         phase: "started" | "completed" | "failed" | "skipped",
@@ -2180,24 +2834,49 @@ async function handleMessage(
       // uplink 丢失三个误判的源头)。水位失效:会话事件数(append-only 只增)与 wfId 集 unchanged
       // =直接复用上次投影;容量 64 会话,超限淘汰最旧。
       const statusT0 = Date.now();
-      const { projectSession, mergeProjection, emptyProjectionCarry } = await import("@lampgenie/runtime/session/projection");
+      const { projectSession, mergeProjection, emptyProjectionCarry, PROJECTION_STATE_VERSION, projectionFloorOf, filterFromFloor, projectionCacheVerdict } = await import("@lampgenie/runtime/session/projection");
       const state = sessionStatusMemo.get(msg.sessionId);
       const sinceSeq = msg.sinceSeq;
-      let projection: ReturnType<typeof projectSession>;
+ // TS 定值断言:下面两条路径(增量 applied / 全量)互斥且必居其一,其中一条必给 projection 赋值。
+      let projection!: ReturnType<typeof projectSession>;
       // 本请求实际归约的新事件数(慢日志用:增量路径=新事件数,不再是会话总事件数)。
       let freshCount = 0;
  // 增量化(治 网关 OOM:11k 事件会话 × 3s 全量回拉 → 每次 1.4~9.2s/MB 级载荷):
       // 客户端带 sinceSeq(= 上次回包 status.seq)且与累积态水位相等时,只归约 seq>sinceSeq 的新事件并合并进累积态。
       // 不带 sinceSeq(老客户端/首拉)=现场全量投影,语义与改造前逐字一致。
+ // :增量准入标志——缓存判定要求重建时整段回落全量(不拿旧 carry/wfAsks 硬拼)。
+      let incrementalApplied = false;
       if (sinceSeq !== undefined && state && state.watermark === sinceSeq) {
         // sinceSeq+1:journal.readSession 的比较是 e.seq >= sinceSeq,不 +1 会把水位那条重复归约
         // (spawnCount/resultCount 翻倍、rowCount 多 1)——有负面用例锁。
         const deltaEvents = journal.readSession(msg.sessionId, sinceSeq + 1);
         freshCount = deltaEvents.length;
-        if (deltaEvents.length === 0) {
+ //  三道保险(增量侧):先判定缓存可信度——版本键不符 / floor 变化 / 日志收缩 / 水位回退
+ // (restore 回退)任一命中即退全量重建。批内没有新 restoreFloor 事件时 floor 沿用 memo,
+ // 否则「无事件=0」会被误判成 floor 变化,把稳态的空增量轮询全打回全量。
+        const batchHasFloor = deltaEvents.some(
+          (e) => e.kind === "custom" && (e.payload as { what?: unknown } | undefined)?.what === "session.restoreFloor",
+        );
+        const nextFloor = batchHasFloor ? projectionFloorOf(deltaEvents) : state.floor;
+        const verdict = projectionCacheVerdict({
+          version: state.version,
+          expectedVersion: PROJECTION_STATE_VERSION,
+          floor: nextFloor,
+          prevFloor: state.floor,
+          nextCount: state.eventCount + deltaEvents.length,
+          prevCount: state.eventCount,
+ // 空增量不推水位(否则 0 < watermark 会把「无事发生」误判成 restore 回退)。
+          nextWatermark: deltaEvents.length === 0 ? state.watermark : maxSeqOf(deltaEvents),
+          prevWatermark: state.watermark,
+        });
+        if (verdict.rebuild) {
+ // 不重建累积态:直接落回下面 if (!incrementalApplied) 的全量分支(旧 carry/wfAsks 一并丢弃)。
+        } else if (deltaEvents.length === 0) {
+          incrementalApplied = true;
           // 空增量:memo 命中路径——不调用 projectSession,直接用累积态(只做 task/subagentList/apiRetry 组装)。
           projection = state.projection;
         } else {
+          incrementalApplied = true;
           // workflows[].asks 是唯一跨会话依赖(ask 落在 sessionId=wfId 的流里,主会话增量批看不到):
           // 新出现的 wfId 首次全量读一次它的 ask 计数,之后只读 seq>上次 ask 水位的增量累加。
           // 绝不允许每请求全量重读 wf 会话——那就是原 bug 本身。
@@ -2246,22 +2925,44 @@ async function handleMessage(
           state.projection = merged;
           state.watermark = deltaEvents[deltaEvents.length - 1]!.seq;
           state.wfKey = [...state.carry.wfSeen].sort().join(",");
+ // :memo 三字段随写入更新(version 经 verdict 保证=当前版本;floor 未变;事件数累加)。
+          state.eventCount += deltaEvents.length;
+          state.floor = nextFloor;
           projection = merged;
         }
-      } else {
-        // 全量路径(老客户端/首拉/水位对不上):读全部会话事件 + wf 会话全量 filter,投影后写入累积态基线。
+      }
+      if (!incrementalApplied) {
+ // 全量路径(老客户端/首拉/水位对不上/缓存判定要求重建):读全部会话事件 → floor 截断 → 投影,
+ // 写入累积态基线(:floor 之前的历史不再参与投影;版本/floor/收缩任一变化都丢弃旧 carry/wfAsks)。
         const sessionEvents = journal.readSession(msg.sessionId);
-        freshCount = sessionEvents.length;
+ // :恢复 floor——restore 后只投影 floor 之后的事件;filterFromFloor 是纯函数(floor<=0 同引用)。
+        const floor = projectionFloorOf(sessionEvents);
+        const scoped = filterFromFloor(sessionEvents, floor);
+        freshCount = scoped.length;
         const wfIds = new Set<string>();
-        for (const e of sessionEvents) {
+        for (const e of scoped) {
           if (e.kind === "workflow.run.start" || e.kind === "workflow.run.done") {
             const id = String((e.payload as { wfId?: unknown }).wfId ?? "");
             if (id) wfIds.add(id);
           }
         }
         const wfKey = [...wfIds].sort().join(",");
-        if (state && state.watermark === maxSeqOf(sessionEvents) && state.wfKey === wfKey) {
-          // memo 命中(改造前的双 unchanged 判据):投影与 wf 集都没变 → 不重投影,直接用累积态。
+        const watermark = maxSeqOf(scoped);
+ // :全量侧缓存判定——版本键/floor/日志收缩/水位回退任一变化 → 丢弃旧 carry/wfAsks 重建。
+        const verdict = state
+          ? projectionCacheVerdict({
+              version: state.version,
+              expectedVersion: PROJECTION_STATE_VERSION,
+              floor,
+              prevFloor: state.floor,
+              nextCount: scoped.length,
+              prevCount: state.eventCount,
+              nextWatermark: watermark,
+              prevWatermark: state.watermark,
+            })
+          : { rebuild: true, reason: "version" as const };
+        if (state && !verdict.rebuild && state.watermark === watermark && state.wfKey === wfKey) {
+ // memo 命中(原双 unchanged 判据 +  verdict 全绿):投影与 wf 集都没变 → 不重投影,直接用累积态。
           projection = state.projection;
           freshCount = 0;
         } else {
@@ -2282,15 +2983,19 @@ async function handleMessage(
  // 去掉逐事件 map 拷贝(巨型会话每次 miss 分配 36K 包装对象,纯 GC 压力;
         // 结构化类型允许直传——多余字段(seq/time/sessionId)对投影透明)。
         const facts: { todoSeen: boolean; compactStart: { at: number; tokens?: number } | null } = { todoSeen: false, compactStart: null };
-        const full = projectSession(sessionEvents as never, related, facts);
+        const full = projectSession(scoped as never, related, facts);
         projection = full;
         if (sessionStatusMemo.size > 64 && !sessionStatusMemo.has(msg.sessionId)) {
           const oldest = sessionStatusMemo.keys().next().value;
           if (oldest !== undefined) sessionStatusMemo.delete(oldest);
         }
         sessionStatusMemo.set(msg.sessionId, {
-          watermark: maxSeqOf(sessionEvents),
+          watermark,
           wfKey,
+ // :缓存可信度三字段(版本键/投影事件数/恢复 floor),下次请求据此判可复用。
+          version: PROJECTION_STATE_VERSION,
+          eventCount: scoped.length,
+          floor,
           projection: full,
           carry: (() => {
  // 统一走 emptyProjectionCarry(字段扩展时不必逐处改字面量)。
@@ -2375,18 +3080,45 @@ async function handleMessage(
       // nextBeforeSeq=本页最小 seq 且严格小于 beforeSeq,否则一律 false/不给——防前端 loop 死转。
       // sinceSeq 在场则一律走下面的旧全量/增量路径(逐字不变,不回归)。
       if (msg.beforeSeq !== undefined || (msg.limit !== undefined && msg.sinceSeq === undefined)) {
+        const { pageHistory, validateHistoryCursor, DeltaRing } = await import("@lampgenie/runtime/session/history-pager");
+        const all = journal.readSession(msg.sessionId);
+        const page = pageHistory(all, { sessionId: msg.sessionId, limit: msg.limit, beforeSeq: msg.beforeSeq });
+        const ring = historyRingFor(msg.sessionId, DeltaRing);
+ // 每次分页都把本次页的行登记进环:后续请求带 atRevision 时才能回放「那一页之后」的增量。
+        ring.push(msg.sessionId, page.rows, page.atRevision);
+ // 游标在场才谈增量。epoch 不等(网关重启/journal 重载)或 ring 未覆盖该水位 → 整页 + reset。
+        const verdict = validateHistoryCursor(
+          { atRevision: msg.atRevision, atLogEpoch: msg.atLogEpoch },
+          {
+            currentRevision: page.atRevision,
+            currentEpoch: historyLogEpoch,
+            canReplay: (revision) => ring.replaySince(msg.sessionId, revision) !== null,
+          },
+        );
+        if (msg.atRevision !== undefined && verdict.mode === "delta") {
+          const deltaRows = ring.replaySince(msg.sessionId, msg.atRevision) ?? [];
+          safeSend(ws, {
+            v: PROTOCOL_VERSION, type: "session.history.result", sessionId: msg.sessionId,
+            since: msg.atRevision, events: deltaRows,
+            delta: true, atRevision: page.atRevision, atLogEpoch: historyLogEpoch,
+          });
+          break;
+        }
         const before = msg.beforeSeq ?? Number.POSITIVE_INFINITY;
-        const pageSize = Math.min(2000, Math.max(1, msg.limit ?? 500));
-        const older = journal.readSession(msg.sessionId).filter((e) => e.seq < before); // seq 升序(readSession 保序)
-        const page = older.slice(Math.max(0, older.length - pageSize));
-        const hasMore = older.length > page.length;
-        const minSeq = page.length > 0 ? page[0]!.seq : undefined;
-        const cursorAdvances = minSeq !== undefined && minSeq < before;
+        const minSeq = page.rows.length > 0 ? page.rows[0]!.seq : undefined;
+ // 整页回包保持旧事件原样(sessionId 等字段不丢),pager 只负责游标数学与环登记。
+        const pageSeqs = new Set(page.rows.map((row) => row.seq));
+        const events = all.filter((e) => pageSeqs.has(e.seq));
+        const staleCursor = msg.atRevision !== undefined
+          && (verdict.reason === "epoch-mismatch" || verdict.reason === "ring-miss");
         safeSend(ws, {
           v: PROTOCOL_VERSION, type: "session.history.result", sessionId: msg.sessionId,
-          since: minSeq ?? (Number.isFinite(before) ? before : 0), events: page,
-          hasMore: hasMore && cursorAdvances,
-          ...(hasMore && cursorAdvances ? { nextBeforeSeq: minSeq } : {}),
+          since: minSeq ?? (Number.isFinite(before) ? before : 0), events,
+          hasMore: page.nextBeforeSeq !== undefined,
+          ...(page.nextBeforeSeq !== undefined ? { nextBeforeSeq: page.nextBeforeSeq } : {}),
+          atRevision: page.atRevision,
+          atLogEpoch: historyLogEpoch,
+          ...(staleCursor ? { reset: true } : {}),
         });
         break;
       }
@@ -2455,12 +3187,28 @@ async function handleMessage(
       }
       const forkId = "fork-" + Date.now().toString(36);
       let copied = 0;
-      for (const e of srcEvents) {
-        if (SESSION_FORK_EXCLUDED_KINDS.has(e.kind)) continue;
+      let dropped = 0;
+      const atSeq = Number((msg as unknown as { atSeq?: unknown }).atSeq);
+      if (Number.isFinite(atSeq)) {
+ // 时间旅行 atSeq:只复制 seq<=atSeq 的事件(不再全量继承),compact.done 之后一并丢弃;
+ // 排除集语义与旧路径逐字一致(任务生命周期噪声不继承)。
+        const { TimeTravelStore } = await import("./time-travel-store.js");
+        const store = new TimeTravelStore({ root: repoRoot(), journal });
+        const fr = await store.forkEvents(msg.sessionId, atSeq, forkId, SESSION_FORK_EXCLUDED_KINDS);
+        if (!fr.ok) {
+          safeSend(ws, { v: PROTOCOL_VERSION, type: "session.fork.result", ok: false, reason: "时间旅行分叉失败:" + String(fr.code ?? "unknown") });
+          break;
+        }
+        copied = fr.copied;
+        dropped = fr.dropped;
+      } else {
+        for (const e of srcEvents) {
+          if (SESSION_FORK_EXCLUDED_KINDS.has(e.kind)) continue;
         // 幂等键必须剥除:journal 幂等表是全局的,带着原键会被判重复而静默丢弃继承件;
         // time 保留原值(继承历史的时序可读),seq 由 journal 重新分配。
-        journal.append({ kind: e.kind, sessionId: forkId, payload: e.payload, time: e.time });
-        copied++;
+          journal.append({ kind: e.kind, sessionId: forkId, payload: e.payload, time: e.time });
+          copied++;
+        }
       }
       journal.append({
         kind: "message.system",
@@ -2479,6 +3227,7 @@ async function handleMessage(
       }
       safeSend(ws, {
         v: PROTOCOL_VERSION, type: "session.fork.result", ok: true, sessionId: forkId, copied,
+        ...(dropped ? { dropped } : {}),
         ...(modelOverride ? { modelOverride } : {}),
       });
       break;
@@ -3146,6 +3895,119 @@ async function handleMessage(
     }
     case "checkpoint.preview":
     case "checkpoint.rewind": {
+ // 时间旅行:请求带 step/boundary(tNsM)时走文件树快照恢复;无 step=旧 git sha 路径逐字不变。
+      const ttStep = String(
+        (msg as unknown as { step?: string }).step ?? (msg as unknown as { boundary?: string }).boundary ?? "",
+      ).trim();
+      if (ttStep) {
+        const { TimeTravelStore } = await import("./time-travel-store.js");
+        const sid = tm.get(msg.taskId)?.sessionId ?? msg.taskId;
+        const store = new TimeTravelStore({ root: repoRoot(), journal });
+ // 时间旅行三模式(2026-11):files=旧行为(只恢复文件);messages=只删 boundary 之后的对话;
+ // both=先恢复文件再删对话。非法/缺省一律按 files——旧客户端逐字走做法。
+        const requestedMode = (msg as unknown as { mode?: unknown }).mode;
+        const ttMode: "files" | "messages" | "both" =
+          requestedMode === "messages" || requestedMode === "both" ? requestedMode : "files";
+ // boundarySeq:优先显式请求值;否则从 stepId(tNsM)解析该步 step.start 的 seq。
+ // 两条都拿不到 → null(messages 回 INVALID_BOUNDARY,both 回「文件已恢复但对话未截断」)。
+        let boundarySeq: number | null = null;
+        const explicitSeq = Number((msg as unknown as { boundarySeq?: unknown }).boundarySeq);
+        if (Number.isFinite(explicitSeq) && explicitSeq > 0) {
+          boundarySeq = Math.floor(explicitSeq);
+        } else {
+          try {
+            const { boundaryOfStep } = await import("@lampgenie/runtime/agent/time-travel");
+            const b = boundaryOfStep(journal.readAll() as never, sid, { stepId: ttStep });
+            if (b) boundarySeq = b.seq;
+          } catch { /* journal 异常按解析不到处理 */ }
+        }
+        if (msg.type === "checkpoint.preview") {
+          const p = await store.preview(sid, ttStep);
+          safeSend(ws, {
+            v: PROTOCOL_VERSION, type: "checkpoint.preview.result", taskId: msg.taskId, sha: null,
+            files: p.ok ? p.files.map((f) => f.path) : [],
+            mode: ttMode,
+            ...(boundarySeq !== null ? { boundarySeq } : {}),
+            ...(p.ok ? {} : { code: p.code }),
+          });
+          break;
+        }
+ // rewind:后台子代理/工作流未收敛拒绝(回滚会与它们正在写的文件打架)。
+ // 三种模式共用同一道闸,且必须早于 restore/truncate(messages 虽不写文件,仍改写会话上下文)。
+        const { rewindGuard } = await import("@lampgenie/runtime/agent/time-travel");
+        const reg = (globalThis as { __bgAgents?: Map<string, { status?: string }> }).__bgAgents;
+        let activeSubagents = 0;
+        if (reg) for (const en of reg.values()) if (String(en?.status ?? "") === "running") activeSubagents++;
+        const guard = rewindGuard({ activeSubagents, workflowRunning: false });
+        if (!guard.ok) {
+          safeSend(ws, { v: PROTOCOL_VERSION, type: "checkpoint.preview.result", taskId: msg.taskId, sha: null, files: [], code: guard.code });
+          break;
+        }
+ // messages:只删对话,文件面一行不碰。
+        if (ttMode === "messages") {
+          if (boundarySeq === null) {
+            safeSend(ws, {
+              v: PROTOCOL_VERSION, type: "checkpoint.preview.result", taskId: msg.taskId, sha: null, files: [],
+              mode: ttMode, code: "INVALID_BOUNDARY",
+            });
+            break;
+          }
+          const tr = await store.truncateMessages(sid, boundarySeq);
+          if (!tr.ok) {
+            safeSend(ws, {
+              v: PROTOCOL_VERSION, type: "checkpoint.preview.result", taskId: msg.taskId, sha: null, files: [],
+              mode: ttMode, boundarySeq, code: tr.code,
+            });
+            break;
+          }
+          journal.append({
+            kind: "checkpoint.restore",
+            sessionId: sid,
+            payload: { taskId: msg.taskId, mode: "time-travel", ttMode, stepId: ttStep, boundarySeq, files: 0 },
+          });
+          safeSend(ws, {
+            v: PROTOCOL_VERSION, type: "git.ok", op: "rewind",
+            detail: `已截断对话(边界 seq=${boundarySeq},step ${ttStep}):文件未改动`,
+          });
+          break;
+        }
+        const rr = await store.restore(sid, ttStep);
+        if (!rr.ok) {
+          safeSend(ws, { v: PROTOCOL_VERSION, type: "checkpoint.preview.result", taskId: msg.taskId, sha: null, files: [], code: rr.code });
+          break;
+        }
+ // both:文件恢复成功后再删对话;截断失败**不撤销**已恢复文件,detail 里如实说明两者结果。
+        let truncateNote = "";
+        let truncateOk: boolean | undefined;
+        let truncateCode = "";
+        if (ttMode === "both") {
+          if (boundarySeq === null) {
+            truncateOk = false;
+            truncateCode = "INVALID_BOUNDARY";
+          } else {
+            const tr = await store.truncateMessages(sid, boundarySeq);
+            truncateOk = tr.ok;
+            if (!tr.ok) truncateCode = tr.code;
+          }
+          truncateNote = truncateOk
+            ? `;已截断对话(边界 seq=${boundarySeq})`
+            : `;对话未截断(${truncateCode})`;
+        }
+        journal.append({
+          kind: "checkpoint.restore",
+          sessionId: sid,
+          payload: {
+            taskId: msg.taskId, mode: "time-travel", ttMode, stepId: ttStep,
+            restored: rr.restored, deleted: rr.deleted, missing: rr.missing,
+            ...(ttMode === "both" ? { boundarySeq, truncateOk, ...(truncateCode ? { truncateCode } : {}) } : {}),
+          },
+        });
+        safeSend(ws, {
+          v: PROTOCOL_VERSION, type: "git.ok", op: "rewind",
+          detail: `已恢复到 ${ttStep}:恢复 ${rr.restored} 个文件,删除 ${rr.deleted} 个,缺失时快照 ${rr.missing.length} 个${truncateNote}`,
+        });
+        break;
+      }
       const svc = await import("./git-service.js");
       const ev = journal.readAll().filter((e) => e.kind === "checkpoint.create" && (e.payload as { taskId?: string }).taskId === msg.taskId).at(-1);
       const sha = ev ? ((ev.payload as { sha?: string | null }).sha ?? null) : null;
@@ -3244,8 +4106,21 @@ async function handleMessage(
       if (!opts.automations) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "自动化未启用" }); break; }
       const r = msg.type === "automation.create"
         ? opts.automations.create({ name: msg.name, instruction: msg.instruction, everyMinutes: msg.everyMinutes, ...(msg.scope ? { scope: msg.scope } : {}) })
-        : opts.automations.update(msg.id, msg);
-      if ("error" in r) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.AutomationInvalid, message: r.error }); break; }
+        : opts.automations.update(msg.id, msg, {
+            ...(typeof (msg as { expectedRevision?: unknown }).expectedRevision === "number"
+              ? { expectedRevision: (msg as unknown as { expectedRevision: number }).expectedRevision }
+              : {}),
+          });
+      if ("error" in r) {
+ // :CAS 冲突回稳定码 automation-conflict(不覆盖他人编辑);其余校验错沿用 AutomationInvalid。
+        if (r.error === "conflict") {
+          const currentRev = (r as { revision?: number }).revision;
+          safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: "automation-conflict", message: `版本冲突(当前 revision ${currentRev ?? "?"},请刷新后重试)` });
+          break;
+        }
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.AutomationInvalid, message: r.error });
+        break;
+      }
       opts.broadcast?.({ v: PROTOCOL_VERSION, type: "automation.list.result", automations: opts.automations.list() });
       break;
     }
@@ -5361,6 +6236,12 @@ const sessionStatusMemo = new Map<string, {
   watermark: number;
   /** 已见 wfId 集的排序快照(全量路径的 memo 命中判据,沿用改造前口径)。 */
   wfKey: string;
+ /** :投影状态版本键——与当前 PROJECTION_STATE_VERSION 不符即整份丢弃(升级后旧缓存不可信)。 */
+  version: number;
+ /** :上次投影源事件数(floor 过滤后)。变小=日志收缩/截断 → 丢弃重建。 */
+  eventCount: number;
+ /** :上次投影的恢复 floor(restore 后只投影 floor 之后)。变化 → 丢弃重建。 */
+  floor: number;
   projection: ReturnType<typeof import("@lampgenie/runtime/session/projection").projectSession>;
   carry: import("@lampgenie/runtime/session/projection").ProjectionCarry;
   wfAsks: Map<string, { count: number; seq: number }>;

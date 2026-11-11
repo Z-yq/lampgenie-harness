@@ -58,6 +58,9 @@ import {
 import { basename, dirname, join } from 'node:path'
 
 import { buildMemoryBriefing } from './context'
+import { SnapshotCache } from './snapshot'
+// 冻结/召回门是包级公共面(网关 agent-wiring 直接用),经 index 的 `export *` 透出。
+export * from './snapshot'
 import { MemoryMiner } from './learning/extractor'
 import {
   PROFILE_KEYS,
@@ -1111,8 +1114,11 @@ export interface MemoryWiring {
   readonly promoter: PromoterInstance
   /** 学习链路可用性(缺 llmCall 时 extractor/observer 为 false)。 */
   learningEnabled(): { extractor: boolean; observer: boolean; promoter: boolean }
-  /** 读 user+memory 两份文档并渲染注入块;空库返回 ''(调用方无需前缀处理)。 */
+ /** 读 user+memory 两份文档并渲染注入块;空库返回 ''(调用方无需前缀处理)。
+ * 同一 owner 且内容/revision 未变时复用冻结快照(文本逐字节与重建结果一致)。 */
   contextBlock(ownerId: string): string
+ /** 冻结视图(观察/测试面):注入块 + 内容指纹 + 是否复用上一份快照。 */
+  contextBlockFrozen(ownerId: string): { block: string; hash: string; reused: boolean; revision?: string }
   /**
    * 会话关闭钩子:把转写喂给抽取器与画像观察器(各自内部门控),随后尝试晋升。
    * 永不抛错;审计 op='error' 带失败阶段。每个转写只应关一次 —— consume() 是
@@ -1160,6 +1166,22 @@ function sanitizeTranscript(transcript: unknown): TranscriptMessage[] {
     messages.push({ role: role as TranscriptMessage['role'], content })
   }
   return messages
+}
+
+// 摘要两份记忆文档的 revision(排序拼接,稳定)。渲染文本已含 revision 属性,
+// 这里再单列一份是为了让冻结缓存能按「内容/revision 未变」直接判定复用。
+function documentRevision(memories: unknown): string | undefined {
+  const list = Array.isArray(memories) ? memories : []
+  const parts: string[] = []
+  for (const item of list) {
+    const doc = (item ?? {}) as { scope?: unknown; revision?: unknown }
+    const revision = doc.revision
+    if (revision === undefined || revision === null || String(revision).trim() === '') continue
+    parts.push(`${String(doc.scope ?? '')}=${String(revision).trim()}`)
+  }
+  if (parts.length === 0) return undefined
+  parts.sort()
+  return parts.join(',')
 }
 
 export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
@@ -1276,6 +1298,22 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
     }
   }
 
+ // 冻结缓存:同一会话内 USER.md/MEMORY.md 渲染块按 owner 复用——中途写盘只要
+ // 内容/revision 未变就不换快照,系统提示的前缀不会整节失效(省下重复计费的输入 token)。
+  const snapshots = new SnapshotCache()
+  const freezeContext = (ownerId: string): { block: string; hash: string; reused: boolean; revision?: string } => {
+    const memories = provider.list(ownerId)
+    const text = buildMemoryBriefing({ memories })
+    const revision = documentRevision(memories)
+    const { snapshot, reused } = snapshots.getOrFreeze(ownerId, text, revision)
+    return {
+      block: snapshot.text,
+      hash: snapshot.hash,
+      reused,
+      ...(snapshot.revision ? { revision: snapshot.revision } : {}),
+    }
+  }
+
   return {
     root,
     provider,
@@ -1291,7 +1329,10 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
       }
     },
     contextBlock(ownerId: string): string {
-      return buildMemoryBriefing({ memories: provider.list(ownerId) })
+      return freezeContext(String(ownerId ?? '')).block
+    },
+    contextBlockFrozen(ownerId: string) {
+      return freezeContext(String(ownerId ?? ''))
     },
     async onSessionClose(input: SessionCloseInput): Promise<void> {
       const ownerId = String(input?.ownerId ?? '').trim()

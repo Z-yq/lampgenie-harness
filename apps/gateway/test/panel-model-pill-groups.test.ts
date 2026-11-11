@@ -93,7 +93,6 @@ describe(" 模型菜单 provider 两层分组", () => {
       hints,
       sliceTopFn("function modelVisionCapable("),
       sliceTopFn("function presetOfProvider("),
-      sliceTopFn("function modelKeyLockReason("),
       sliceTopFn("function modelProviderBadge("),
       sliceTopFn("function pillMenuModelGroups("),
       sliceTopFn("function modelItemHtml("),
@@ -170,7 +169,7 @@ describe(" 模型菜单 provider 两层分组", () => {
     // 当前模型不在任何 provider 目录 → 「当前」兜底组(directItems,providerId 空=不误改路由)
     const g4 = mk([], []).pillMenuModelGroups("手填模型");
     expect(g4[0]).toMatchObject({ key: "@current", label: "当前", directItems: true, containsCurrent: true });
-    expect(g4[0].items).toEqual([{ value: "手填模型", name: "手填模型", sub: "", providerId: "", vision: false, visionInferred: false, unverified: false, locked: false, lockReason: "" }]);
+    expect(g4[0].items).toEqual([{ value: "手填模型", name: "手填模型", sub: "", providerId: "", vision: false, visionInferred: false, unverified: false }]);
     expect(g4.length).toBe(4);
 
     // A3 两级 HTML:一级=直展组平铺 + 折叠组单行(chevron) + sticky footer;二级=原位面板 + ‹ 返回

@@ -40,6 +40,8 @@ export const PANEL_CHANNELS: readonly string[] = [
   "archive.clear",
   "task.cancel",
   "task.resume",
+  "task.schedule",
+  "task.schedule.cancel",
   "queue.dispatch.now",
   "queue.remove",
   "task.list",
@@ -220,6 +222,11 @@ export const PANEL_CHANNELS: readonly string[] = [
   "session.model.set",
   "session.model.get",
   "session.owner.get",
+  "rsi.status",
+  "rsi.mechanism.set",
+  "rsi.mechanism.run",
+  "rsi.item.update",
+  "rsi.item.delete",
   "ping",
 ];
 

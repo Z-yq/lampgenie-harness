@@ -119,6 +119,32 @@ describe("renderBoardSvg", () => {
     expect(r.svg).toContain("唯一节点");
   });
 
+  it("非矩形节点(decision/start/tool/retrieval)长 label 折行,不再单行排开", async () => {
+    const long = "菱形判断节点一个比较长的标题测试文字再来一些补充";
+    const doc = mkDoc([
+      mkNode("d1", long, "decision", { summary: "s" }),
+      mkNode("s1", long, "start", { summary: "s" }),
+      mkNode("t1", long, "tool", { summary: "s" }),
+      mkNode("r1", long, "retrieval", { summary: "s" }),
+    ]);
+    const r = await renderBoardSvg(doc);
+    expect(r.ok).toBe(true);
+ /** 取节点组(从组开始到下一个节点组之前)。 */
+    const group = (id: string): string => {
+      const start = r.svg.indexOf(`data-node-id="${id}"`);
+      expect(start).toBeGreaterThan(-1);
+      const rest = r.svg.slice(start);
+      const next = rest.search(/<g data-node-id="/);
+      return next > 0 ? rest.slice(0, next) : rest;
+    };
+    for (const id of ["d1", "s1", "t1", "r1"]) {
+      const g = group(id);
+ // 折行 = 出多行 tspan;未折行时整条 label 会以单行文本出现(超出图形边界)
+      expect(g).toContain("<tspan");
+      expect(g).not.toContain(long);
+    }
+  });
+
   it("warmupBoardDiagram 幂等且不抛", async () => {
     await expect(warmupBoardDiagram()).resolves.toBeUndefined();
     await expect(warmupBoardDiagram()).resolves.toBeUndefined();

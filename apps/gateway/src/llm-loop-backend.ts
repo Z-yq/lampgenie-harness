@@ -12,8 +12,10 @@ import { renderSubagentHeavyOpDiscipline } from "@lampgenie/runtime/agent/system
 import type { SubagentBackend, SubagentEvent, SubagentHandle, TaskResult, TaskSpec } from "@lampgenie/executors";
 import { AgentLoop, type Message } from "@lampgenie/runtime/agent/loop";
 import { checkRepeatRead, recordFileRead, readFilesOf, renderParentReadHint, type ReadFileEntry } from "@lampgenie/runtime/agent/read-file-state";
+import { renderSystemReminder } from "@lampgenie/runtime/agent/reminder-source";
 import { makeLlmTraceSink } from "./llm-trace.js";
 import { attachToolView } from "./tool-view.js";
+import { permissionMode } from "./permission-mode.js";
 import { shellErrorHint, shellInvocation } from "./shell-invocation.js";
 import { fenceCommand } from "./file-tools.js";
 // 输入边界防御:子代理读/写入口与主 agent 同源(设备/伪文件→stat special→denylist→binary→read;
@@ -191,11 +193,20 @@ export const PRODUCTIVE_NUDGE_STEPS = 25;
  *  `seenText=true` 永久关闭 → 一行短文就把闸门焊死,一个都不会触发。 */
 export const PRODUCTIVE_SUBSTANTIVE_CHARS = 200;
 
-/** 强制产出提醒文本(与 task 口径同源:三段式 + 禁开新勘察方向)。 */
-export function buildProductiveNudge(idleSteps: number): string {
-  return "<system-reminder>[产出纪律] 已连续 " + idleSteps + " 步只调工具、未输出任何文本结论。"
+/** 产出纪律提醒 body(不含外层 reminder 标签;外层由登记源渲染,标签语法只此一处定义)。 */
+function productiveNudgeBody(idleSteps: number): string {
+  return "[产出纪律] 已连续 " + idleSteps + " 步只调工具、未输出任何文本结论。"
     + "现在立刻用一段文字写出:①已完成什么(带 file:line 证据)②结论是什么 ③还差什么。"
-    + "写完再决定是否继续查。禁止再开新勘察方向。</system-reminder>";
+    + "写完再决定是否继续查。禁止再开新勘察方向。";
+}
+
+/** 强制产出提醒文本(与 task 口径同源:三段式 + 禁开新勘察方向)。
+ * 走 reminder-source 的 productive-nudge 源(inline 形态,tip 之后);body 是固定文本,
+ * 显式 escapeNested:false 避免双重处理。失败(理论不可达)回退旧完整串,零行为变化。 */
+export function buildProductiveNudge(idleSteps: number): string {
+  const body = productiveNudgeBody(idleSteps);
+  const rendered = renderSystemReminder("productive-nudge", body, { inline: true, escapeNested: false });
+  return rendered.ok ? rendered.text : "<system-reminder>" + body + "</system-reminder>";
 }
 
 /** 串台守卫兜底:从子 journal 事件流里逐条筛选「可用 agent 文本」。
@@ -954,7 +965,20 @@ export class LlmLoopBackend implements SubagentBackend {
  // 工具面契约统一:子代理与主 loop 同款——长描述摘要化 + 大 schema 工具延迟
     // 加载(用时 tool_view 激活)。此前子代理面保留原文长描述/全量 schema,两侧策略不一致
  // (经验证子代理 15 工具里 code_sense/terminal/browser/session_search 均超 240 字符)。
-    const wireTools = attachToolView(tools);
+ // :子代理工具面与主面同款上下文投影(此前这里只有静态描述)。
+ // - agentType=本子代理角色(planner/explore/worker…),只留痕不参与判定;
+ // - permissionMode 取本进程权威源(与主面 agent-wiring 同源 permission-mode),plan/readonly 下
+ // 写类工具描述带只读前缀;
+ // - availableTools=本子代理实际工具名单:委派类描述据此只列真实可调的 agent——子代理池里通常
+ // 没有 agent 名,于是描述变成「当前无可委派 agent」,不会把自己/兄弟角色列成可委派对象。
+ // 只换 wire 描述(projectToolsForContext 派生新对象),工具集合/白名单/execute 一律不动。
+    const wireTools = attachToolView(tools, {
+      contract: {
+        agentType: role,
+        permissionMode: permissionMode(),
+        availableTools: tools.map((t) => t.name),
+      },
+    });
  // 权限传递:父会话有效规则快照进子 loop 闸门(onAsk 回调→装配方审批链;缺省 ask=fail-closed deny)。
  // parentAsk 在场时叠加 heavyOp 重操作闸(绕过 allow 规则强制父 agent 审批)——
     // 两者可独立在场(无规则也有重操作闸;rules??[] 已在 loop 侧加固)。

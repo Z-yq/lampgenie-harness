@@ -21,6 +21,85 @@ import type { PermissionBroker, PermissionOutcome } from "./permission-broker.js
 import type { SessionWorkerSpec, WorkerToHost, HostToWorker, WorkerRequest } from "./session-worker-protocol.js";
 import { SESSION_WORKER_PROTOCOL_VERSION } from "./session-worker-protocol.js";
 import { snapshotApprovalObject, verifyApprovalObject } from "./approval-object.js";
+// 启动期阶段租约(纯逻辑;ready 超时判决与杀前取证都走它)。
+import { STARTUP_STAGES, StartupLease, threadStackHint, type StartupStage } from "./startup-lease.js";
+import {
+  cleanEnvForOrigin,
+  resolveCredential,
+  credentialAuditLine,
+  type CredentialOrigin,
+  type CredentialAuditLine,
+} from "./credential-resolver.js";
+
+/* ---------------------------------------------------------------------------
+ *  凭证引用 → 子进程执行环境边界。
+ * worker 进程默认整份继承 gateway 的 process.env(LLM Key / git token / npm token 全在里面)。
+ * 子进程只该看到它跑任务真正需要的那一个凭证:env 从「安全基线」起算,带 credentialRef 时
+ * 按 task origin 解析、成功才注入单个变量;失败不注入(fail-closed)并落一条不含值的审计。
+ * GENIE_CREDENTIAL_BOUNDARY=off 可整体回退旧行为(整份 env 继承),用于排障/紧急兜底。
+ * ------------------------------------------------------------------------- */
+
+/** 读 repoRoot/.genie/secrets.json(与 team-p2p/issue-service 同一读法;失败=空表,绝不抛)。 */
+export function readGenieSecrets(repoRoot: string): Record<string, unknown> {
+  try {
+    const p = join(repoRoot, ".genie", "secrets.json");
+    if (!existsSync(p)) return {};
+    const parsed = JSON.parse(readFileSync(p, "utf-8")) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export interface WorkerEnvOptions {
+ /** 清洗来源(缺省 process.env;测试传 fake 基线)。 */
+  baseEnv?: Record<string, string | undefined>;
+ /** secrets 读取器(缺省空表;生产传 => readGenieSecrets(repoRoot),测试传 fake)。 */
+  readSecrets?: () => Record<string, unknown>;
+ /** true=回退旧行为(整份 env 原样继承,不清洗不注入);缺省读 GENIE_CREDENTIAL_BOUNDARY。 */
+  boundaryOff?: boolean;
+ /** 按 origin 覆写允许名单(测试/未来按来源细化用)。 */
+  allowNamesByOrigin?: Partial<Record<CredentialOrigin, readonly string[]>>;
+}
+
+/** 子进程 env 构建结果:audit 仅在 credentialRef 解析失败时给出(不含明文)。 */
+export interface WorkerEnvBuild {
+  env: Record<string, string | undefined>;
+  audit?: { what: "credential.resolve" } & CredentialAuditLine;
+}
+
+/**
+ * 构建 fork 子进程的 env:
+ * 1) 基线 = cleanEnvForOrigin(baseEnv, "task")(安全基线变量 + task origin 白名单);
+ * 2) credentialRef 存在 → resolveCredential(ref,"task",{env,secrets});成功只注入该变量;
+ * 3) 失败不注入,返回审计对象(ref/origin/code,不含值)交由调用方落 journal。
+ */
+export function buildWorkerEnv(credentialRef: string | undefined | null, opts: WorkerEnvOptions = {}): WorkerEnvBuild {
+  const baseEnv = opts.baseEnv ?? process.env;
+  const off = opts.boundaryOff ?? process.env.GENIE_CREDENTIAL_BOUNDARY === "off";
+ // 旧行为:整份 env 原样继承(仍返回副本,不把 process.env 本体交给 fork)
+  if (off) return { env: { ...baseEnv } };
+  const byOrigin = opts.allowNamesByOrigin;
+  const env = cleanEnvForOrigin(baseEnv, "task", byOrigin ? { allowNamesByOrigin: byOrigin } : {});
+  const ref = typeof credentialRef === "string" ? credentialRef.trim() : "";
+  if (!ref) return { env };
+  let secrets: Record<string, unknown> = {};
+  try {
+    secrets = opts.readSecrets ? opts.readSecrets() : {};
+  } catch {
+    secrets = {}; // 读失败按空表:解析会落到 MISSING(fail-closed)
+  }
+  const result = resolveCredential(ref, "task", {
+    env: baseEnv,
+    secrets,
+    ...(byOrigin ? { allowNamesByOrigin: byOrigin } : {}),
+  });
+  if (!result.ok) {
+ // 失败审计只带 code,绝不带值(值和 ref 的明文都不落日志)
+    return { env, audit: { what: "credential.resolve", ...credentialAuditLine(ref, "task", result) } };
+  }
+  return { env: { ...env, ...result.env } };
+}
 
 /** 审批对象=执行对象:permission.ask 的可执行面(tool+summary+可选 args)。 */
 export interface PermissionAskPayload {
@@ -173,6 +252,14 @@ interface WorkerRun {
   lastDiskWaitNote?: number;
   stderrTail: string[];
   ready: boolean;
+ /** 启动期阶段租约:spawn→config→executor→providers→loop-ready,ready 超时判决读它。 */
+  lease: StartupLease;
+ /** 已落 journal 的 startup.progress 阶段(同一 stage 只落一次)。 */
+  startupStagesLogged?: Set<string>;
+ /** ready 定时器句柄(ready 到达即停判决)。 */
+  readyTimer?: ReturnType<typeof setTimeout>;
+ /** CPU 采样上一拍(/proc/<pid>/stat utime+stime ticks 与时刻;首拍=只建基线)。 */
+  cpuPrev?: { ticks: number; at: number };
   rpcId: number;
   /** 本 run 上行落账后的权威 seq 集(订阅转发时跳过=回声去重;>5000 清空冷重建)。 */
   selfSeqs: Set<number>;
@@ -344,9 +431,17 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
  // worker 的 session_search 代理到 gateway 真 journal(全历史索引)。
           // 现场建工具执行(sessionSearchTool 内部走 WeakMap 单例+盘上缓存,不重复构建);
           // 缺 sessionId 的 discover 由工具默认排除当前会话(worker 上报)。
-          const p = req.payload as { op: "discover" | "scroll" | "read"; args: unknown; currentSessionId?: string };
-          const { sessionSearchTool } = await import("./session-search.js");
-          const out = await sessionSearchTool(deps.journal, p.currentSessionId).execute(p.args);
+ // :op=capsule 走同一条 gateway 实现(runSessionSearchCapsule),不复制胶囊逻辑。
+          const p = req.payload as {
+            op: "discover" | "scroll" | "read" | "capsule";
+            args: unknown;
+            currentSessionId?: string;
+          };
+          const { sessionSearchTool, runSessionSearchCapsule } = await import("./session-search.js");
+          const out =
+            p.op === "capsule"
+              ? runSessionSearchCapsule(deps.journal, p.args as { sessionId?: unknown; focus?: unknown })
+              : await sessionSearchTool(deps.journal, p.currentSessionId).execute(p.args);
           return { ok: true, value: out };
         }
         case "mcp.tools": {
@@ -421,9 +516,34 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
   const handleNotice = (run: WorkerRun, msg: WorkerToHost): void => {
     run.lastEventAt = Date.now();
     if ("t" in msg) {
+ // 启动阶段进度(worker 上报 config/executor/providers/loop-ready)。
+ // 协议不动(WorkerNotice 未加成员):按字符串识别,未知形态按普通未知通知忽略。
+      if ((msg as { t?: string }).t === "startup.progress") {
+        const raw = (msg as { stage?: unknown }).stage;
+        if (typeof raw === "string" && (STARTUP_STAGES as readonly string[]).includes(raw)) {
+          const stage = raw as StartupStage;
+          const advanced = run.lease.begin(stage);
+          if (advanced.ok) {
+            run.startupStagesLogged ??= new Set();
+            if (!run.startupStagesLogged.has(stage)) {
+              run.startupStagesLogged.add(stage);
+ // 阶段证据落 journal:复盘能看到启动推进到哪一段、每段耗时多少(同一 stage 只落一次)。
+              try {
+                deps.journal.append({ kind: "custom", sessionId: run.sessionId, payload: { type: "worker.startup.progress", taskId: run.taskId, stage, elapsedMs: Math.max(0, Date.now() - run.startedAt) } });
+              } catch { /* 观测落账失败不影响启动 */ }
+            }
+          } else {
+            console.warn(`[session-worker] 启动阶段回退被拒(${stage},当前 ${advanced.stage})——worker 上报乱序,忽略`);
+          }
+        }
+        return;
+      }
       switch (msg.t) {
         case "ready":
+ // ready 到达=启动完成(loop-ready 终态),同时停掉超时判决。
+          run.lease.begin("loop-ready");
           run.ready = true;
+          if (run.readyTimer) clearTimeout(run.readyTimer);
           run.pid = typeof msg.pid === "number" ? msg.pid : run.child.pid;
           run.readyAt = Date.now();
           break;
@@ -483,6 +603,29 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       return;
     }
     handleNotice(run, msg);
+  };
+
+ /** :worker 进程 CPU 占比采样(启动期 CPU 兜底证据)。
+ * /proc/<pid>/stat 的 utime+stime 增量 / USER_HZ(常规 100)/ 采样间隔;
+ * 首拍(无基线)/进程已退/非 Linux=undefined(=无 CPU 证据,判决退 NO_PROGRESS)。 */
+  const readCpuPercent = (run: WorkerRun): number | undefined => {
+    const pid = run.pid ?? run.child.pid;
+    if (!pid) return undefined;
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
+ // comm 可含空格:取最右括号后字段;utime/stime 是全量字段 14/15 → 切分后 index 11/12
+      const after = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      const ticks = Number(after[11]) + Number(after[12]);
+      if (!Number.isFinite(ticks)) return undefined;
+      const at = Date.now();
+      const prev = run.cpuPrev;
+      run.cpuPrev = { ticks, at };
+      if (!prev || at <= prev.at) return undefined;
+      const pct = ((ticks - prev.ticks) / 100) / ((at - prev.at) / 1000) * 100;
+      return Math.max(0, Math.min(100, pct));
+    } catch {
+      return undefined;
+    }
   };
 
   /** 收尸阶梯(三轮复审 ③:抄 ACP/sense-index 三板凶——SIGTERM 后 3s 仍活着升 SIGKILL;
@@ -697,11 +840,28 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       failTask(task, `描述符写入失败:${String(err).slice(0, 120)}`);
       return;
     }
-    const run: WorkerRun = { child: undefined as unknown as ChildProcess, taskId: task.id, sessionId: task.sessionId, startedAt: Date.now(), stderrTail: [], ready: false, rpcId: 0, selfSeqs: new Set(), pending: new Map() };
+    const run: WorkerRun = { child: undefined as unknown as ChildProcess, taskId: task.id, sessionId: task.sessionId, startedAt: Date.now(), stderrTail: [], ready: false, rpcId: 0, selfSeqs: new Set(), pending: new Map(), lease: new StartupLease({ timeoutMs: READY_TIMEOUT_MS }) };
+ // 起租。spawn 是最长的一段(进程起来→loadConfig),也是唯一没有 worker 上报的阶段。
+    run.lease.begin("spawn", run.startedAt);
+ // :子进程 env 从安全基线起算;带 credentialRef 时按 task origin 解析,成功才注入那一个变量。
+ // 失败=不注入 + 审计落账(custom 事件只带 code,不含值);GENIE_CREDENTIAL_BOUNDARY=off 回退旧 env。
+    const envBuild = buildWorkerEnv(task.credentialRef, {
+      baseEnv: process.env,
+      readSecrets: () => readGenieSecrets(deps.repoRoot),
+    });
+    if (envBuild.audit) {
+      try {
+        deps.journal.append({ kind: "custom", sessionId: task.sessionId, payload: envBuild.audit });
+      } catch {
+ /* 审计落账失败不挡派发(凭证本身已 fail-closed 未注入) */
+      }
+    }
     try {
       const heapMb = Math.max(512, Number(process.env.GENIE_SESSION_WORKER_HEAP_MB ?? 2048));
       run.child = fork(entry.file, [specFile], {
         cwd: deps.repoRoot,
+ // :只给子进程安全基线 + 解析出的单个凭证变量(不再是整份 process.env)
+        env: envBuild.env as NodeJS.ProcessEnv,
         stdio: ["ignore", "pipe", "pipe", "ipc"],
         // 堆帽(F5-2:agent loop 大上下文;可配 GENIE_SESSION_WORKER_HEAP_MB,下限 512)
         execArgv: entry.isTs ? ["--import", "tsx", `--max-old-space-size=${heapMb}`] : [`--max-old-space-size=${heapMb}`],
@@ -731,26 +891,58 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       if (run.stderrTail.length > 40) run.stderrTail.shift();
     });
     run.child.on("message", onMessage(run));
- // ready 超时(带饥饿免疫, 晚间事故:gateway 消息处理被巨型会话轮询饿死,
-    // worker 的 ready 消息还在队列里,超时判决先处理→健康 worker 被误判「30s 未就绪」)。
-    // 定时器超睡(实际耗时远超预算)= gateway 自身拥堵,通道仍连则重武装(至多 2 次)不判决。
+ // ready 超时判决(阶段租约替代黑盒总超时)。
+ // 每次 tick 读 lease:wait→短定时器再采;retry→阶段刚推进过,重武装整窗(落 worker.startup.retry);
+ // kill→先落 worker.startup.evidence(阶段轨迹+线程栈取证建议+stderr 尾)再 failTask/killLadder。
+ // 饥饿免疫(晚间事故)保留在 sample 之前:定时器超睡=gateway 自身拥堵,
+ // 期间的静默不可归因于 worker,通道仍连则重武装(至多 2 次)不判决。
     const readyTimerHolder: { t?: ReturnType<typeof setTimeout> } = {};
-    const readyScheduledAt = Date.now();
-    const armReadyTimer = (): void => {
+    let windowStartAt = Date.now();
+ // 首拍只建 CPU 基线(否则 30s 后第一次判决读不到增量,只能按「无 CPU 证据」杀)。
+    readCpuPercent(run);
+    const armReadyTimer = (windowMs: number = READY_TIMEOUT_MS): void => {
       readyTimerHolder.t = setTimeout(() => {
         if (run.ready) return;
-        const elapsed = Date.now() - readyScheduledAt;
-        if (elapsed > READY_TIMEOUT_MS * 2 && run.child.connected && (run.readyRetries ?? 0) < 2) {
+        const tickAt = Date.now();
+        const sinceSchedule = tickAt - windowStartAt;
+        if (sinceSchedule > windowMs * 2 && run.child.connected && (run.readyRetries ?? 0) < 2) {
           run.readyRetries = (run.readyRetries ?? 0) + 1;
-          console.warn(`[session-worker] ready 定时器超睡(elapsed=${elapsed}ms 远超预算 ${READY_TIMEOUT_MS}ms=gateway 拥堵),重武装第 ${run.readyRetries} 次(ready 可能仍在队列)`);
+          console.warn(`[session-worker] ready 定时器超睡(elapsed=${sinceSchedule}ms 远超预算 ${windowMs}ms=gateway 拥堵),重武装第 ${run.readyRetries} 次(ready 可能仍在队列)`);
+          windowStartAt = tickAt;
           armReadyTimer();
           return;
         }
-        console.error(`[session-worker] ready 超时(${READY_TIMEOUT_MS}ms,实际 ${elapsed}ms),任务 ${task.id} 判失败`);
-        failTask(task, `worker ${READY_TIMEOUT_MS / 1000}s 未就绪`);
+        const cpuPercent = readCpuPercent(run);
+        const verdict = run.lease.sample({ ...(cpuPercent !== undefined ? { cpuPercent } : {}), at: tickAt });
+        if (verdict.action === "wait") {
+          if (verdict.code === "OK") return; // loop-ready 已上报,判决停止
+          armReadyTimer(Math.min(windowMs, 1_000));
+          return;
+        }
+        if (verdict.action === "retry") {
+ // 阶段刚推进过(stageElapsed 小)= 还在干活:重武装整窗再观察,不急于杀。
+          try {
+            deps.journal.append({ kind: "custom", sessionId: run.sessionId, payload: { type: "worker.startup.retry", taskId: run.taskId, stage: verdict.stage, elapsedMs: verdict.elapsedMs, stageElapsedMs: verdict.stageElapsedMs } });
+          } catch { /* 观测落账失败不挡判决 */ }
+          windowStartAt = tickAt;
+          armReadyTimer(); // 重武装整窗
+          return;
+        }
+ // kill:先取证再动手——阶段轨迹 + 线程栈/报告路径 + stderr 尾 20 行入 journal。
+        const evidence = {
+          ...run.lease.evidence(),
+          threadStack: threadStackHint(run.pid),
+          stderrTail: run.stderrTail.join("").split("\n").slice(-20),
+        };
+        try {
+          deps.journal.append({ kind: "custom", sessionId: run.sessionId, payload: { type: "worker.startup.evidence", taskId: run.taskId, stage: verdict.stage, code: verdict.code, reason: verdict.reason, evidence } });
+        } catch { /* 证据落账失败不挡收割 */ }
+        console.error(`[session-worker] 启动超时(阶段 ${verdict.stage},${verdict.code},${verdict.elapsedMs}ms):${verdict.reason},任务 ${task.id} 判失败`);
+        failTask(task, `worker 启动卡在阶段 ${verdict.stage}(${verdict.code},已 ${Math.round(verdict.elapsedMs / 1000)}s 未就绪)`);
         reap(task.id);
-      }, READY_TIMEOUT_MS);
+      }, windowMs);
       readyTimerHolder.t.unref?.();
+      run.readyTimer = readyTimerHolder.t;
     };
     armReadyTimer();
     run.child.on("exit", (code, signal) => {

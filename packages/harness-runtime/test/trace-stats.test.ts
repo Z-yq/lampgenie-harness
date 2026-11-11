@@ -54,7 +54,7 @@ describe("loop 追踪事件( D1/D2)", () => {
     expect(stats.toolMs).toBeGreaterThanOrEqual(20);
   }, 10_000);
 
-  it("max-steps 路径 turn.end 带原因;LLM 抛错 turn.end=error", async () => {
+  it("预算耗尽路径 turn.end=budget-exhausted;LLM 抛错 turn.end=error", async () => {
     const j2 = new MemoryJournal();
     const l2 = new AgentLoop({
       journal: j2, sessionId: "tr2", system: "s",
@@ -62,7 +62,7 @@ describe("loop 追踪事件( D1/D2)", () => {
       tools: [tool], maxSteps: 2,
     });
     await l2.runTurn("循环");
-    expect((j2.readAll().find((e) => e.kind === "turn.end")?.payload as { reason: string }).reason).toBe("max-steps");
+    expect((j2.readAll().find((e) => e.kind === "turn.end")?.payload as { reason: string }).reason).toBe("budget-exhausted");
 
     const j3 = new MemoryJournal();
     const l3 = new AgentLoop({

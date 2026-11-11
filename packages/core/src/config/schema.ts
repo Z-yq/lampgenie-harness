@@ -42,6 +42,30 @@ const roleRef = z.object({
 const emptyToUndefined = (v: unknown): unknown =>
   typeof v === "string" && v.trim() === "" ? undefined : v;
 
+/** 路由表可覆盖的任务 kind(本地重列,不 import @lampgenie/runtime:
+ * runtime 依赖 core,core→runtime 会构成循环依赖,故此处只按 kind 字面量对齐)。 */
+const taskModelKindList = ["main", "compact", "title", "summary", "vision", "memory", "review", "digest", "subagent"] as const;
+
+/** 单条路由引用(按 kind 覆盖 providerId/model 等端点字段)。 */
+const routeRefSchema = z.object({
+  providerId: z.string().optional(),
+  model: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  freeOnly: z.boolean().optional(),
+  taskClasses: z.array(z.string()).optional(),
+});
+
+/** 兜底引用:与 routeRefSchema 同形(只一层,不含 fallbackChain,防无限递归)。 */
+const fallbackRefSchema = z.object({
+  providerId: z.string().optional(),
+  model: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  freeOnly: z.boolean().optional(),
+  taskClasses: z.array(z.string()).optional(),
+});
+
 export const ConfigSchema = z.object({
   gateway: z.object({
     port: z.number().int().min(1).max(65535).default(7700),
@@ -81,6 +105,12 @@ export const ConfigSchema = z.object({
  /** 语音任务书模型:聊天窗麦克风录音→整理成任务书;需支持音频输入的
        * 多模态模型(如 qwen3.8-omni-flash)。未配置=该功能不可用(面板按钮明确指路,不静默降级)。 */
       voice: roleRef.optional(),
+ /** 路由表:按任务 kind 覆盖 providerId/model(等端点字段),缺省 undefined=旧行为
+ * (全部 kind 走上面各角色槽位/主 llm 的解析结果)。fallbackChain 只一层引用,不嵌套。 */
+      routing: z.record(
+        z.enum(taskModelKindList),
+        routeRefSchema.extend({ fallbackChain: z.array(fallbackRefSchema).optional() }),
+      ).optional(),
     }).default({}),
  /** 停用模型(设置页模型列表):不进快切菜单;空数组=全部可用。 */
     disabledModels: z.array(z.string()).default([]),
@@ -99,12 +129,14 @@ export const ConfigSchema = z.object({
       includeWarnings: z.boolean().default(false),
     }).default({}),
   }).default({}),
- /** 上下文模型评分( Phase 1):默认本地 150M Jev(/decide);
-   * 也可填任意 OpenAI 兼容“提炼 provider”。mode=off/shadow/active。
-   * shadow 只记录不剪;active 用高置信度 keep/drop 参与 microcompact。 */
+ /** 上下文模型评分( Phase 1; 默认关):缺省端点本地 150M Jev(/decide),
+ * 也可填任意 OpenAI 兼容“提炼 provider”。mode 三档:
+ * off = 完全不跑(不加载模型、不记录、不剪枝)—— 缺省值,须显式开启;
+ * shadow = 只记录不剪(落 context.model.score 留痕,不改上下文);
+ * active = 高置信 keep/drop 参与 microcompact。 */
   context: z.object({
     modelScoring: z.object({
-      mode: z.enum(["off", "shadow", "active"]).default("shadow"),
+      mode: z.enum(["off", "shadow", "active"]).default("off"),
       /** 本地 150M 默认 05_serve.py --serve --port 8105(8000/8102/8103 已被本机服务占用);
        * 其它 provider 填自己的 baseUrl。 */
       providerUrl: z.string().min(1).max(500).default("http://127.0.0.1:8105"),

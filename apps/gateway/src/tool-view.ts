@@ -7,7 +7,17 @@
  * 其中 browser 2242 / board_upsert 1697+schema / spawn_subagent 1091 全是 description 大头。
  */
 import type { Tool } from "@lampgenie/runtime/agent/loop";
+import {
+  projectToolsForContext,
+  type ToolContractContext,
+  type DescribedTool,
+} from "@lampgenie/runtime/agent/tool-contract";
 import { fullDocFor } from "./tool-full-docs.js";
+
+/** 工具契约投影:装配期按执行上下文(权限模式/任务类别/可用 agent)重写 wire 描述。
+ * 这里只是转发入口——实现与规则在 runtime 的 tool-contract.ts(纯函数,零 IO)。 */
+export { projectToolsForContext };
+export type { ToolContractContext, DescribedTool };
 
 /** description 超过此字符数才摘要化(短的天然全量,无枚举豁免名单可维护)。 */
 export const TOOL_SUMMARY_CHARS = 240;
@@ -349,8 +359,7 @@ function toolViewTool(full: Map<string, Tool>, deferredNames: string[], catalogM
  */
 export function attachToolView(
   tools: Tool[],
-  opts?: { defer?: boolean; deferMinChars?: number; catalogMaxChars?: number },
-): Tool[] {
+  opts?: ToolViewOptions): Tool[] {
   try {
     return attachToolViewInner(tools, opts);
   } catch (err) {
@@ -359,15 +368,26 @@ export function attachToolView(
   }
 }
 
+/** 装配选项。contract缺省=不投影,生产行为逐字节不变。 */
+export interface ToolViewOptions {
+  defer?: boolean;
+  deferMinChars?: number;
+  catalogMaxChars?: number;
+ /** 执行上下文:传了就按它投影 wire 描述(plan/readonly 只读前缀、qa/office 类别提示、委派 agent 名单)。 */
+  contract?: ToolContractContext;
+}
+
 function attachToolViewInner(
   tools: Tool[],
-  opts?: { defer?: boolean; deferMinChars?: number; catalogMaxChars?: number },
-): Tool[] {
+  opts?: ToolViewOptions): Tool[] {
   if (tools.length === 0) return tools;
+ // 先按上下文投影一份 wire 口径的工具面(纯函数,不改入参);full 仍取**原始** tools——
+ // tool_view(name) 的全文说明必须是原始完整用法,不能被投影过的描述污染。
+  const wireTools = opts?.contract ? projectToolsForContext(tools, opts.contract) : tools;
   const full = new Map(tools.map((t) => [t.name, t]));
   const deferEnabled = opts?.defer ?? String(process.env.GENIE_TOOL_DEFER ?? "").toLowerCase() !== "off";
   const minChars = opts?.deferMinChars ?? TOOL_DEFER_MIN_CHARS;
-  const summarized = tools.map((t) =>
+  const summarized = wireTools.map((t) =>
     t.description.length > TOOL_SUMMARY_CHARS ? { ...t, description: summarizeToolDescription(t.name, t.description) } : t);
   if (!deferEnabled) {
     summarized.push(

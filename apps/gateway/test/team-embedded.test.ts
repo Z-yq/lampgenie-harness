@@ -29,7 +29,7 @@ describe("resolveTeamMode 三态", () => {
     expect(resolveTeamMode({ RELAY_URLS: "ws://10.0.0.8:7870, ws://127.0.0.1:7870" })).toEqual({ kind: "external" });
   });
   it("用户名清洗:非法字符→-,空/./..→owner", () => {
-    expect(sanitizeUsername("zhongyuqi")).toBe("zhongyuqi");
+    expect(sanitizeUsername("deployer")).toBe("deployer");
     expect(sanitizeUsername("../../etc")).toBe("..-..-etc"); // 仅精确「..」是穿越;多点前缀是合法文件名
     expect(sanitizeUsername("")).toBe("owner");
     expect(sanitizeUsername("..")).toBe("owner");

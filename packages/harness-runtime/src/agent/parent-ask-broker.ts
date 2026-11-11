@@ -17,6 +17,7 @@
  */
 import type { Journal, HeavyOpMatch } from "@lampgenie/core";
 import type { LlmProvider, Tool, ToolSpec } from "./loop";
+import { renderSystemReminder } from "./reminder-source";
 
 /** 审批缺省时限:父 LLM 决策一次 mini-turn 的合理窗(面板 broker 是 60s;此处略宽)。 */
 export const HEAVY_ASK_TIMEOUT_MS = 120_000;
@@ -162,14 +163,15 @@ function stripResolve(e: PendingEntry): HeavyQuestion {
 export function renderPendingQuestionsBlock(questions: HeavyQuestion[]): string {
   if (questions.length === 0) return "";
   const lines = [
-    "<system-reminder>",
     `[子代理重操作审批] 有 ${questions.length} 个待决申请需要你决策——立即用 answer_subagent 工具逐条应答(超时未答=自动拒绝)。决策看三点:该命令对任务是否必要、当前资源余量、是否已有重操作在跑;批准或拒绝都给一句理由。`,
   ];
   questions.forEach((q, i) => {
     lines.push(`${i + 1}. [${q.requestId}] 子代理 ${q.role}(task=${q.taskId})经 ${q.tool} 请求执行 [${q.match.category}] \`${q.command.slice(0, 160)}\`(判重:${q.match.note ?? q.match.pattern})${q.note ? ";补充:" + q.note.slice(0, 120) : ""}`);
   });
-  lines.push("</system-reminder>");
-  return lines.join("\n");
+ // 提醒来源登记:命令文本属外部输入,内层 reminder 标签默认被转义(防伪造嵌套块);
+ // 常态文本与旧拼接逐字节一致,失败(空/超长)=不产出(调用方走空块分支)。
+  const rendered = renderSystemReminder("pending-questions", lines.join("\n"));
+  return rendered.ok ? rendered.text : "";
 }
 
 /** answer_subagent 工具 schema(决策 mini-turn 与父 loop 工具共用同一名义与参数)。 */

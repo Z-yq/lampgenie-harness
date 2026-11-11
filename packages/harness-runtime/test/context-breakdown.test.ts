@@ -203,7 +203,9 @@ describe("loop 接线:请求成功后落 context.breakdown", () => {
     const frames = journal
       .readAll()
       .filter((e) => e.kind === "custom" && (e.payload as Record<string, unknown>)["what"] === "context.breakdown");
-    expect(n).toBe(3);
+ // 3 步主请求之后还有 1 次预算收尾请求(tools=[],不发 breakdown)→ n=4;
+ // breakdown 帧仍只在 step 0/2(收尾不是新 step)。
+    expect(n).toBe(4);
     expect(frames.map((e) => (e.payload as Record<string, unknown>)["step"])).toEqual([0, 2]);
   });
 });

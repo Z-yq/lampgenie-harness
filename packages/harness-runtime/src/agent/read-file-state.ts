@@ -16,6 +16,8 @@
  *   normalizeReadFileStateMtimeMs 同语义)。
  */
 
+import { renderSystemReminder } from "./reminder-source";
+
 /** 单条已读记录:path 相对项目根(已归一化)、mtimeMs 读时刻文件 mtime(取整)、readAt 读取时刻。 */
 export interface ReadFileEntry {
   path: string;
@@ -266,12 +268,13 @@ export function buildReadFilesReminder(sessionId: string, now: number = Date.now
   if (all.length === 0) return null;
   const shown = all.slice(0, MAX_REMINDER_FILES);
   const more = all.length - shown.length;
-  return [
-    "<system-reminder>",
+ // 提醒来源登记:源必须登记在册,未知来源 fail-closed 不产文本;body 本身不含内层标签。
+  const body = [
     "本会话已读文件清单(按读取时间新→旧):",
     ...shown.map((e) => `- ${e.path}(${relativeTime(e.readAt, now)})`),
     ...(more > 0 ? [`(共 ${all.length} 个,只列最近 ${MAX_REMINDER_FILES} 个)`] : []),
     "重读前先看清单:文件未变就不要整读,要细节用 offset/limit 局部读。",
-    "</system-reminder>",
   ].join("\n");
+  const rendered = renderSystemReminder("read-files", body);
+  return rendered.ok ? rendered.text : null;
 }

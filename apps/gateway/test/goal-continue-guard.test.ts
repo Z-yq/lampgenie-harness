@@ -1,5 +1,5 @@
 /**
- * goal 续跑身份护栏专项。
+ *  goal 续跑身份护栏专项。
  * 锚定:
  * ① goalContinueVerdict 五码纯判据(INACTIVE / ROUND_LIMIT / SUBAGENTS_ACTIVE / BUDGET / REVISION_STALE);
  * ② maybeContinueGoal 在 paused / 预算 / 子代理活跃 / 轮数上限下不 submit 且落 goal.blocked;

@@ -46,6 +46,7 @@ function loadCardFns(html: string): Record<string, any> {
   const names = [
     "trajBoardTurnHeadHtml", "trajBoardCardHeadHtml", "trajBoardThinkHtml", "trajBoardArgsText",
     "trajBoardBodyHtml", "trajBoardCardHtml", "trajBoardCardsHtml", "filterDecisionRows",
+    "trajBoardRowHtml", "trajBoardTableHtml",
   ];
   const srcs = names.map((n) => extractFn(html, n)).join(NL);
   const body = "function esc(s){return String(s==null?'':s)"
@@ -197,10 +198,10 @@ describe("轨迹看板逐次决策卡", () => {
         + "return {live:trajBoardLiveSync,on:trajBoardOn,host:host,box:box,expanded:trajExpanded,state:trajBoardState,count:function(){return refreshCount;},set:function(v){histEvents=v;}};";
       // eslint-disable-next-line no-new-func
       const t = new Function(body)() as Record<string, any>;
-      // 首帧:看板在场 → 一次渲染,最新(唯一)卡自动展开
+ // 首帧:看板在场 → 一次渲染; → 不自动展开、不拉全文
       t.live();
       expect(t.count()).toBe(1);
-      expect(t.expanded.has("/t/a.json")).toBe(true);
+      expect(t.expanded.has("/t/a.json")).toBe(false);
       // 无新增再调:不重渲(filesKey 未变)
       t.live();
       expect(t.count()).toBe(1);
@@ -209,14 +210,14 @@ describe("轨迹看板逐次决策卡", () => {
       t.set([{ seq: 1, kind: "llm.trace", payload: { file: "/t/a.json" } }, { seq: 2, kind: "llm.trace", payload: { file: "/t/b.json" } }]);
       t.live();
       expect(t.count()).toBe(2);
-      expect(t.expanded.has("/t/b.json")).toBe(true);
+      expect(t.expanded.has("/t/b.json")).toBe(false);
       expect(t.host.scrollTop).toBe(200);
       // 上滚阅读时新决策到达:不抢滚(内容仍就位)
       t.host.scrollTop = 10;
       t.set([{ seq: 1, kind: "llm.trace", payload: { file: "/t/a.json" } }, { seq: 2, kind: "llm.trace", payload: { file: "/t/b.json" } }, { seq: 3, kind: "llm.trace", payload: { file: "/t/c.json" } }]);
       t.live();
       expect(t.count()).toBe(3);
-      expect(t.expanded.has("/t/c.json")).toBe(true);
+      expect(t.expanded.has("/t/c.json")).toBe(false);
       expect(t.host.scrollTop).toBe(10);
       // 看板关闭:零渲染
       t.box.style.display = "none";
@@ -224,6 +225,25 @@ describe("轨迹看板逐次决策卡", () => {
       t.set([]);
       t.live();
       expect(t.count()).toBe(3);
+    });
+  }, 30_000);
+
+  it("⑧默认折叠(2026-11-10):行表按轮 details 收起;卡内长正文二级折叠", async () => {
+    await withPanel(7904, (html) => {
+      const fn = loadCardFns(html);
+      const rows = [row(), row({ idx: 4, traceFile: "/x/2.json", turn: 3 }), row({ idx: 5, traceFile: "/x/3.json", turn: 3 })];
+      const table = fn.trajBoardTableHtml(rows, []);
+      expect(table).toContain('class="tb-rowfold"');
+      expect(table).not.toContain("tb-rowfold\" open");
+      expect(table).toContain("2 行(点击展开)");
+ // 长正文(消息/输出/工具参数)一律进 <details class="tb-c-det">,且不带 open
+      const body = fn.trajBoardBodyHtml(row(), trace([SYS, USR, AST, TOOL]), null);
+      expect(body).toContain('class="tb-c-det"');
+      expect(body).toContain("点击展开");
+      expect(body).not.toContain("<details open");
+ // 短正文保持直出(折叠短文本只是徒增点击)
+      const short = fn.trajBoardBodyHtml(row(), trace([{ role: "user", content: "hi" }]), null);
+      expect(short).toContain('<pre class="tb-c-pre">hi</pre>');
     });
   }, 30_000);
 });

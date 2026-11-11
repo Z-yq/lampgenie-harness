@@ -92,6 +92,9 @@ export function createRouter(deps: RouterDeps): RouterApi {
       ...(d.policyVersion !== undefined ? { policyVersion: d.policyVersion } : {}),
       ...(d.reason !== undefined ? { reason: d.reason } : {}),
       ...(d.intent_evidence !== undefined ? { intent_evidence: d.intent_evidence } : {}),
+ // 冻结路由身份随审计行落盘(key/tenant/source/subject/thread/generation,无凭证字段)。
+      ...(d.routeIdentity !== undefined ? { routeIdentity: d.routeIdentity } : {}),
+      ...(d.routeIdentityCode !== undefined ? { routeIdentityCode: d.routeIdentityCode } : {}),
     });
     ticketSink.touch();
   };

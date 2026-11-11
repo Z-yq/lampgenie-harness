@@ -12,6 +12,19 @@
  * 纪律:指标全部确定性(零 LLM、零启发式打分);没有真源就留 0,不写「看起来合理」的假数。
  */
 import { isVerificationCommand } from "./verification-ledger.js";
+import {
+  compareOutcomes,
+  computeGuidanceOutcome,
+  stratifyOutcomes,
+  toExperimentSample,
+  type GuidanceExperimentSample,
+  type GuidanceOutcome,
+  type GuidanceOutcomeEvent,
+  type OutcomeCompare,
+  type OutcomeMetricName,
+  type OutcomeRates,
+  type OutcomeStratum,
+} from "@lampgenie/runtime/agent/guidance-outcome";
 
 /** 六条验证指标口径(趋势分析维度)+ unknown(未登记 tip 的诚实兜底)。 */
 export type GuidanceMetricKind =
@@ -293,3 +306,38 @@ export function renderGuidanceSummary(m: GuidanceMetrics): string {
   const text = [head, ...(tipLines.length ? ["tips:", ...tipLines] : [])].join("\n");
   return text.length > 800 ? text.slice(0, 799) + "…" : text;
 }
+
+// ----  结果指标层:同一份任务事件,回答「干预有没有让任务变好」 ----
+// 计数层(summarizeGuidance 之上的 counters/rates)口径逐字不变;结果层只新增导出,
+// 语义全在 @lampgenie/runtime/agent/guidance-outcome(纯逻辑、确定性、不 throw)。
+
+/** buildGuidanceOutcome 的评价输入(events 仍是调用方的 taskStartSeq 窗口切片)。 */
+export interface GuidanceOutcomeInput {
+  events: readonly GuidanceOutcomeEvent[];
+  taskClass: string;
+  model?: string;
+  projectId?: string;
+ /** 覆盖 taskClass 的经验步数基线(qa 8 / office 20 / coding 40)。 */
+  baselineSteps?: number;
+}
+
+/** 结果指标薄接入:无事件/旧 journal → 全 0(率也为 0),不 throw。 */
+export function buildGuidanceOutcome(input: GuidanceOutcomeInput): GuidanceOutcome {
+  const src = (input && typeof input === "object" ? input : {}) as Partial<GuidanceOutcomeInput>;
+  return computeGuidanceOutcome(src.events ?? [], {
+    taskClass: typeof src.taskClass === "string" && src.taskClass ? src.taskClass : "coding",
+    model: src.model,
+    projectId: src.projectId,
+    baselineSteps: src.baselineSteps,
+  });
+}
+
+export { compareOutcomes, stratifyOutcomes, toExperimentSample };
+export type {
+  GuidanceExperimentSample,
+  GuidanceOutcomeEvent,
+  OutcomeCompare,
+  OutcomeMetricName,
+  OutcomeRates,
+  OutcomeStratum,
+};
