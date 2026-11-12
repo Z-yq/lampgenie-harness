@@ -9,11 +9,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PANEL_SRC } from "./panel-source.js";
 
-const SRC = fileURLToPath(new URL("../src/panel.ts", import.meta.url));
+const SRC = PANEL_SRC;
 
 function loadRecordOf(): (e: { kind: string; payload: unknown }) => { err?: boolean; sub?: string } | null {
-  const text = readFileSync(SRC, "utf8");
+  const text = SRC;
   const start = text.indexOf("const TRAJ_LANE_ERR_LABEL");
   const end = text.indexOf("/** 三泳道 HTML");
   if (start < 0 || end < 0 || end <= start) throw new Error("panel.ts 抽取失败:TRAJ_LANE_ERR_LABEL..trajLaneHtml 段找不到(函数被重命名或移动)");

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { parseDocFile } from "../src/doc-text.js";
 import { parseOffice, getExternalLinkStats } from "../src/office-ooxml.js";
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 
 const SRC_DIR = fileURLToPath(new URL("../src/", import.meta.url));
 const TMP = mkdtempSync(join(tmpdir(), "genie-doc-probe-wiring-"));
@@ -35,7 +36,7 @@ function writeSample(name: string, data: Buffer | Uint8Array): string {
 describe("wiring: 源码接线", () => {
   const docTextSrc = readFileSync(join(SRC_DIR, "doc-text.ts"), "utf8");
   const officeSrc = readFileSync(join(SRC_DIR, "office-ooxml.ts"), "utf8");
-  const agentWiringSrc = readFileSync(join(SRC_DIR, "agent-wiring.ts"), "utf8");
+  const agentWiringSrc = AGENT_WIRING_SRC;
 
   it("doc-text 从 ./doc-probe.js 导入 probeDocument", () => {
     expect(docTextSrc).toContain('from "./doc-probe.js"');

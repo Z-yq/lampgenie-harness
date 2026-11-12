@@ -6,8 +6,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(resolve(__dirname, "../src/panel.ts"), "utf8");
+const src = PANEL_SRC;
 
 describe("子代理工作区渲染同构(面板契约)", () => {
   it("流式:subStreams 按 subagent-<taskId> 收流,工作区渲染 live 草稿(与主会话 stStream 同形态)", () => {

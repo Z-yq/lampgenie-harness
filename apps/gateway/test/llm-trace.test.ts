@@ -17,6 +17,7 @@ import { setCalibrationFile, resetForTest, calibrationOf } from "@lampgenie/runt
 import { MemoryJournal } from "@lampgenie/core";
 import type { Journal } from "@lampgenie/core";
 import type { LlmProvider, LlmResponse } from "@lampgenie/runtime/agent/loop";
+import { PANEL_SRC as src } from "./panel-source.js";
 
 /** 等异步落盘完成(冻结治理:写改 fs.promises fire-and-forget,测试轮询等文件)。 */
 const waitFiles = async (dir: string, n: number, ms = 3000): Promise<string[]> => {
@@ -437,8 +438,7 @@ describe("llm.trace 指针事件不丢失(2026-11 丢事件修复:重试 + drop 
 
 describe("panel LLM 调用速览行(源结构锁)", () => {
   it("④ 渲染分支+点击复制路径绑定在场", () => {
-    const src = readFileSync(resolve(__dirname, "../src/panel.ts"), "utf-8");
-    expect(src).toContain('ev.kind === "llm.trace"');
+        expect(src).toContain('ev.kind === "llm.trace"');
     expect(src).toContain("llm-trace-line");
     expect(src).toContain("data-trace-file");
     expect(src).toContain("轨迹文件路径已复制");

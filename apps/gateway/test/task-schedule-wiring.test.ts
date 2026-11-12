@@ -1,3 +1,4 @@
+import { PROTOCOL_SRC } from "./panel-source.js";
 /**
  * WS 接线(纯源码断言,不连网):协议面 / server case / app 装配三处缺一即假接线。
  */
@@ -8,7 +9,7 @@ function source(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), 'utf8')
 }
 
-const protocol = source('../../../packages/protocol/src/index.ts')
+const protocol = PROTOCOL_SRC;
 const server = source('../src/server.ts')
 const app = source('../src/app.ts')
 const service = source('../src/scheduled-task-service.ts')

@@ -38,6 +38,7 @@ export function taskIndexOf(t: Task): TaskIndex {
   if (t.group !== undefined) idx.group = t.group;
   if (t.titleCustom !== undefined) idx.titleCustom = t.titleCustom;
   if (t.startedAt !== undefined) idx.startedAt = t.startedAt;
+  if (t.submittedBy !== undefined) idx.submittedBy = t.submittedBy; // 派发卡过滤面(super 派发卡按它过滤)
   return idx;
 }
 

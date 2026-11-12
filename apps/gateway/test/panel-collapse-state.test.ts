@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PANEL_SRC = readFileSync(join(HERE, "../src/panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 describe("折叠态总账机制(<details> 类)", () => {
   it("总账 + 身份 key + 全局采集/回填在场", () => {

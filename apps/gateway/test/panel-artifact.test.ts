@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 富图形交付契约测试:md 围栏 ```html / ```svg → 图卡
  *  ① ```html 产 .md-artifact.md-html + sandbox="" iframe + CSP(default-src 'none')+ srcdoc 转义;
@@ -190,7 +191,7 @@ describe("富图形交付:html/svg 图卡围栏", () => {
   }, 30_000);
 
   it("⑧ SYSTEM_TAIL 带图卡通道指引(≤2 行,且不改其它提示词段)", () => {
-    const src = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+    const src = AGENT_WIRING_SRC;
     const i = src.indexOf("const SYSTEM_TAIL = `");
     expect(i).toBeGreaterThan(0);
     const tail = src.slice(i, src.indexOf("`;", i + 20));

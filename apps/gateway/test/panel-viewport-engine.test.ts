@@ -20,7 +20,7 @@ import { servePanel } from "../src/panel.js";
 import * as DV from "../src/assets/diagram-viewport.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const SHELL = join(here, "..", "src", "assets", "canvas-shell.js");
-const PANEL_SRC = readFileSync(join(here, "..", "src", "panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 /** 最小沙箱跑 canvas-shell,取 __geom 纯函数(与 canvas-shell.test.ts 同构)。 */
 function loadGeom() {

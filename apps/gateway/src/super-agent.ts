@@ -26,10 +26,11 @@ import { repoRoot } from "./repo-root.js";
 import { captureBaseline } from "./turn-change-ledger.js";
 import { runTaskCloseout } from "./task-closeout.js";
 
-/** super agent 会话 id:按天滚动(长对话自然分卷; 起前缀 super:)。 */
-export function superSessionId(now = new Date()): string {
-  const d = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  return `super:${d}`;
+/** super agent 会话 id(聊天为主工作区):固定持久会话 "super"(D1:复用既有 session
+ * 存储/journal/session.history 管线,零新存储)。旧按天日卷 super:YYYYMMDD(前)只读
+ * 兼容不迁移——app.ts history 过滤仍认 super:/companion: 前缀,旧数据可读;新写入一律落 "super"。 */
+export function superSessionId(_now = new Date()): string {
+  return "super";
 }
 
 /** @deprecated legacy 别名:旧调用面仍引用 `companionSessionId`;语义已切到 super 前缀。 */
@@ -112,6 +113,11 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 ### 权限口径
 - 你有全部操作权限:取消任务、重发任务、增删工作区,都直接执行,不请示、不确认;执行后在回复里用一句话说明做了什么(用户要可追溯)。
 - 唯一边界:你不直接写代码/改文件——动手一律 spawn_task 派给对应工作区的 coding agent。
+### 指挥官纪律(聊天为主工作区)
+- 你是 super agent 指挥官:不直接编码、不跑构建、不改文件。
+- 收到任务先拆解为可独立执行的子任务;每个子任务用 spawn_task(task.submit)派发到 coding agent session,优先复用相关既有 session。
+- 回复用户时给出拆解方案与派发明细(每个子任务:目标 session/任务要点)。
+- 仅用户明确要求时才亲自回答问题(仍不改码)。
 - accepted≠完成:spawn_task 返回只代表「已派出」。要说「已派出,完成会告诉你」,绝不说「做完了」;结果只认 task_status/task_result/系统通知。
 ### 路由三判定(每轮先想清楚走哪条,选最直接且足够的)
 1. 直接答:凭当前对话与上方状态摘要就能完整回答(闲聊/状态问答)→ 直接说,不调工具。
@@ -295,10 +301,13 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       }
       const group = a.group?.trim();
       const sid = `ws-${Date.now().toString(36)}`;
+ // 派发卡:super 派出的任务打 submittedBy="super"(随 task.* 事件 payload 落 journal,
+ // 面板聊天流按它过滤渲染派发卡;TaskIndex 亦投影,task.list/task.changed 同源)。
       const t = tm.submit("user", sid, a.instruction, {
         ...(pid ? { projectId: pid } : {}),
         ...(a.title ? { title: a.title } : {}),
         ...(group ? { group } : {}),
+        submittedBy: "super",
       });
       // fixC6: 派出的任务终态会自动播报;此处只报「已派出」(accepted≠完成)。
       return `已派出任务 ${t.id.slice(0, 8)} → ${pid || "__harness__"}${routing}${group ? `(组:${group})` : ""}。已派出≠完成,完成/失败会播报。`;
@@ -364,6 +373,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
         ...(t.projectId ? { projectId: t.projectId } : {}),
         ...(t.group ? { group: t.group } : {}), // 联调组重发保持同组(看板聚类不断)
         title: `${String(t.title ?? t.instruction).slice(0, 34)}(重发)`,
+        submittedBy: "super", // 派发卡:super 重发同样打标(派发卡生命周期跟随新任务)
       });
       return `已重发为新任务 ${nt.id.slice(0, 8)}(原任务 ${t.id.slice(0, 8)} 的任务书${a.note ? "+补充" : ""})`;
     },

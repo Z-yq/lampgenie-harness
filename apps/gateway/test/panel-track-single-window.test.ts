@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { servePanel } from "../src/panel.js";
+import { PANEL_SRC as src } from "./panel-source.js";
 
 // 追踪 Trace 看板「只有一个数据窗口」契约守卫:
 // 现状病灶 = 统计区 #sw-slot(max-height:44%;overflow:auto)与 turn 树 #track-body(overflow:auto)
@@ -47,7 +48,6 @@ describe("追踪 Trace:单数据窗口 + turn 三层树", () => {
 
   it("turn 树渲染:三条层级(一级 turn / 二级五阶段 / 三级阶段任务)齐备", () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const src = readFileSync(join(here, "../src/panel.ts"), "utf-8");
     // 一级
     expect(src).toContain('class="tk-turn"');
     // 二级:恒定五阶

@@ -15,6 +15,8 @@ import { TaskSupervisor } from "../src/task-manager.js";
 import { MemoryJournal } from "@lampgenie/core";
 import type { Task } from "@lampgenie/core";
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
+import { PANEL_SRC as panel } from "./panel-source.js";
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 
 /** 共享工作区双改动现场:b.ts=开工前已在途(别人的),a.ts/mine-new.ts=本任务开工后改的。
  * 快照形态与生产环境 checkpointCreate 一致(git stash create 悬空 commit,不动工作区)。 */
@@ -89,7 +91,7 @@ describe("fixG1 codeReviewTool checkpoint 基线接线", () => {
 });
 
 describe("fixG2/G3 提示词纪律与工具语义在场", () => {
-  const src = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf-8");
+  const src = AGENT_WIRING_SRC;
 
   it("G2:分档纪律含派发与等待纪律(不空轮询/并行派/等待零 LLM 通道)", () => {
     expect(src).toContain("fixG2 派发与等待纪律");
@@ -150,7 +152,6 @@ describe("fixG4 重启收编文案与面板渲染", () => {
   });
 
   it("面板:task.cancel/progress(cancelled) 渲染分支+「重发」按钮+绑定标记在场(源结构锁)", () => {
-    const panel = readFileSync(resolve(__dirname, "../src/panel.ts"), "utf-8");
     // 渲染分支两形态都认(journal 取消终态实际 kind=task.progress+state=cancelled)
     expect(panel).toContain('ev.payload.state === "cancelled"');
     // 重启中断系统行+重发按钮(err-banner 通道形态,新老文案都识别)
@@ -163,7 +164,7 @@ describe("fixG4 重启收编文案与面板渲染", () => {
 });
 
 describe("上下文卫生纪律(2026-10-20 繁重 coding 拆子任务,主上下文只进结论)", () => {
-  const aw = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf-8");
+  const aw = AGENT_WIRING_SRC;
   it("系统提示含拆派纪律与子代理返回要求", () => {
     expect(aw).toContain("上下文卫生纪律");
     expect(aw).toContain("主上下文只进结论不进过程");

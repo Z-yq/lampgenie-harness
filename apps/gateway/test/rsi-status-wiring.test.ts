@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PANEL_SRC as PANEL_SRC_AGG, PROTOCOL_SRC as PROTOCOL_SRC_AGG } from "./panel-source.js";
+import { SERVER_SRC } from "./panel-source.js";
 
 /** RSI 状态面接线:
  * ①协议面:rsi.status 请求 + rsi.status.result 结果(只加新增型,不动既有消息);
@@ -11,9 +13,9 @@ import { join } from "node:path";
  * 源码文本断言的意义:防「纯逻辑写了但没接线」。 */
 
 const src = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
-const SERVER_SRC = src("../src/server.ts");
-const PROTOCOL_SRC = src("../../../packages/protocol/src/index.ts");
-const PANEL_SRC = src("../src/panel.ts");
+const SERVER_SRC = SERVER_SRC;
+const PROTOCOL_SRC = PROTOCOL_SRC_AGG;
+const PANEL_SRC = PANEL_SRC_AGG;
 
 /** 取一段源码:从 startMarker 到 endMarker(不含)。缺失返回空串。 */
 function sliceBetween(s: string, startMarker: string, endMarker: string): string {
@@ -83,21 +85,29 @@ describe("gateway server.ts 接线:rsi.status → collectRsiStatus → safeSend"
     expect(body).toMatch(/type:\s*"error"/);
   });
 
-  it("不主动推:case 体内无广播/无 wss.clients 遍历", () => {
+  it("不主动推:case 体内无广播/无 wss.clients 遍历( note 注入器只写 super 会话 journal,rsi.status 回包本体仍单发)", () => {
     const body = caseBody();
-    expect(body).not.toContain("broadcast");
+ // rsi.status 回包本体不广播:case 体内不得出现对回包 r 的广播调用(rsiNoteInjector 的
+ // broadcast 是运行事件注入器路径,只挂 rsi.mechanism.run/annotate 收尾,与回包无关;
+ // 断言收窄为「不把 rsi.status 回包广播给所有连接」。)
+    expect(body).not.toMatch(/broadcast[^\n]{0,120}rsi\.status/);
+    expect(body).not.toContain("sendTerminalFrame");
     expect(body).not.toContain("wss.clients");
  // 全文件层面:不存在「向所有连接广播 rsi.status」的写法。
     expect(SERVER_SRC).not.toMatch(/wss\.clients[\s\S]{0,200}rsi\.status/);
   });
 });
 
-describe("panel.ts 指挥台第二子标签 rsi 面板(2026-11-11 RSI-PLACE 归位)", () => {
-  it("superTabRsi/superPaneRsi 在指挥台视图,团队视图不再有 rsi 子标签,rsi.status 请求 + 结果处理仍在", () => {
-    expect(PANEL_SRC).toContain("superTabRsi");
-    expect(PANEL_SRC).toContain('id="superPaneRsi"');
+describe("panel.ts super 指挥台 IDE 三栏做梦区(布局归位)", () => {
+  it("superIdeAct/superMainDream 在 super 视图,团队视图不再有 rsi 子标签,rsi.status 请求 + 结果处理仍在", () => {
+    expect(PANEL_SRC).toContain("superIdeWrap");
+    expect(PANEL_SRC).toContain('id="superMainDream"');
+    expect(PANEL_SRC).toContain('id="superIdeAct"'); // IDE 三栏:活动栏
+    expect(PANEL_SRC).toContain('id="superSbDreamList"'); // 侧栏做梦区
     expect(PANEL_SRC).not.toContain("teamTabRsi");
     expect(PANEL_SRC).not.toContain('id="teamPaneRsi"');
+    expect(PANEL_SRC).not.toContain('id="superTabRsi"'); // 旧页签退役
+    expect(PANEL_SRC).not.toContain('id="superPaneRsiChat"'); // 会话Chat pane 退役
     expect(PANEL_SRC).toContain('"rsi.status"');
     expect(PANEL_SRC).toContain("rsi.status.result");
   });

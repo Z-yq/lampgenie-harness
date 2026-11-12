@@ -1,3 +1,5 @@
+import { SERVER_SRC } from "./panel-source.js";
+import { PROTOCOL_SRC } from "./panel-source.js";
 /**
  * 客户端协议探测与能力协商:wiring 断言(读源码)+ 协议帧纯路径。
  * 为什么不启真网关:本用例要锁的是「接线位置」与「稳定字面量码」——一旦有人把分发门挪到
@@ -17,8 +19,8 @@ import {
 import { parseClientMessage, ServerMessage, ErrorCode } from "@lampgenie/protocol";
 import { PANEL_CHANNELS } from "../src/client-capabilities.js";
 
-const serverSrc = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
-const protocolSrc = readFileSync(new URL("../../../packages/protocol/src/index.ts", import.meta.url), "utf8");
+const serverSrc = SERVER_SRC;
+const protocolSrc = PROTOCOL_SRC;
 const capabilitiesSrc = readFileSync(
   new URL("../../../packages/harness-runtime/src/protocol/capabilities.ts", import.meta.url),
   "utf8",

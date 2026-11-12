@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  *  用户停止 → 不复活专项。
  * 锚定:
@@ -100,7 +101,7 @@ describe("冷恢复:用户停止过的任务收编 cancelled", () => {
 
 describe("接线断言(源码级,非端到端:整链需真 provider/executor)", () => {
   it("取消路径先落标记再 abort(进程内 agent-wiring + session-worker 形态 app.ts)", () => {
-    const wiring = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+    const wiring = AGENT_WIRING_SRC;
     const wireIdx = wiring.indexOf('appendUserStoppedMarker(journal, { taskId: task.id, sessionId: task.sessionId, source: "cancel" });');
     const cancelIdx = wiring.indexOf('loop.cancel("task.cancel");');
     expect(wireIdx).toBeGreaterThan(0);

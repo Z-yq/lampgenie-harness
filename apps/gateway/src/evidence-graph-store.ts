@@ -121,23 +121,14 @@ interface EvidenceRuntime {
   ): { ok: boolean; graph: EvidenceGraph; rescored: string[]; code?: string };
 }
 
-let evidenceRuntime: EvidenceRuntime | undefined;
-
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadEvidenceRuntime(): Promise<EvidenceRuntime> {
-  if (evidenceRuntime) return evidenceRuntime;
-  const spec = "@lampgenie/runtime/agent/evidence-graph";
-  try {
-    evidenceRuntime = (await import(spec)) as EvidenceRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/evidence-graph.ts", import.meta.url).href;
-    evidenceRuntime = (await import(srcUrl)) as EvidenceRuntime;
-  }
-  return evidenceRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadEvidenceRuntime();
+/**
+ * runtime 面:静态导入。
+ * 旧实现是「两跳动态 import + 顶层 await」,在 dist/gateway.mjs 里退化成运行时解析:
+ * 解析到的 @lampgenie/runtime/agent/evidence-graph 自身 dist 带无扩展名相对导入 → 解析失败
+ * → 回落 import 一个 .ts URL → 再失败 → 该顶层 await 的 promise 永不 settle,整包模块图挂住,
+ * 网关启动即静默 exit 13(依据)。bundle 本就把 runtime 内联,静态导入零成本。
+ */
+import * as rt from "@lampgenie/runtime/agent/evidence-graph";
 
 /** 图谱文件绝对路径:`<root>/.genie/evidence/graph.jsonl`。 */
 export function evidenceGraphPath(root: string): string {

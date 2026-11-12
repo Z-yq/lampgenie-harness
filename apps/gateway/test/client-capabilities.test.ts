@@ -1,3 +1,4 @@
+import { SERVER_SRC } from "./panel-source.js";
 /**
  *  能力暴露 allowlist 测试。
  * 三类证据:
@@ -25,7 +26,7 @@ import {
   isMethodAllowed,
 } from "../src/client-capabilities.js";
 
-const SERVER_SRC = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const SERVER_SRC = SERVER_SRC;
 const SCHEMA_SRC = readFileSync(new URL("../../../packages/core/src/config/schema.ts", import.meta.url), "utf8");
 
 /** server.ts 里 handleMessage 的顶层 case(4 空格缩进;嵌套 switch 的 case 更深,不会误收)。 */

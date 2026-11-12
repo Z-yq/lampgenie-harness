@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PANEL_CSS_SRC as PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 /** 白板 CSS 区 = `#view-board .vw-scope` 起 → `.cv-dot` 规则前止(与 panel-board-theme.test.ts 同锚点)。 */
 function boardCss(): string {

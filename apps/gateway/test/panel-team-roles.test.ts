@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PANEL_SRC } from "./panel-source.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, "..", "src", "panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 describe("团队页角色卡(roles 资源命名空间)", () => {
   it("digest.roles 渲染为「角 色(资源命名空间)」分区,空态有提示", () => {

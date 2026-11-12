@@ -262,6 +262,23 @@ function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch
     console.log("  [诊断] 页面收到的指针事件(" + diag.events.length + "):" + JSON.stringify(diag.events.slice(0, 3)));
     const cti = await page.evaluate(() => window.__cti || []);
     console.log("  [诊断] 换算调用(" + cti.length + "):" + JSON.stringify(cti.slice(0, 3)));
+ // ---- ①b 滚轮缩放/中键平移后,选框仍贴住同一块图像内容(治「一缩放选框就废」) ----
+    const selSizeBefore = await page.evaluate(() => ((document.getElementById("capSize") || {}).textContent || "").trim());
+    const ctr = await page.evaluate(() => {
+      const r = document.getElementById("capCanvas").getBoundingClientRect();
+      return { x: r.left + r.width * 0.62, y: r.top + r.height * 0.68 };
+    });
+    await page.mouse.move(ctr.x, ctr.y);
+    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -240); await page.waitForTimeout(80); }
+    const selSizeZoom = await page.evaluate(() => ((document.getElementById("capSize") || {}).textContent || "").trim());
+    await page.mouse.move(ctr.x, ctr.y);
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(ctr.x + 60, ctr.y + 30, { steps: 6 });
+    await page.mouse.up({ button: "middle" });
+    await page.waitForTimeout(120);
+    const selSizePan = await page.evaluate(() => ((document.getElementById("capSize") || {}).textContent || "").trim());
+    check("①b 滚轮缩放后选框仍贴同一图像内容(capSize 不变)", /^\d+ × \d+$/.test(selSizeZoom) && selSizeBefore === selSizeZoom, `before=${selSizeBefore} afterZoom=${selSizeZoom}`);
+    check("①c 中键平移后选框仍贴同一图像内容", selSizeZoom === selSizePan, `afterZoom=${selSizeZoom} afterPan=${selSizePan}`);
     await page.click("#capOk");
     await page.waitForFunction(() => {
       const e = document.getElementById("annEditor");

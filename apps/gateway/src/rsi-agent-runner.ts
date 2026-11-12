@@ -69,6 +69,9 @@ export interface StartRunDeps {
   readSession?: (sessionId: string) => unknown[];
  /** 生效配置(单价表覆盖来源);缺省=只用内置单价表。 */
   config?: Config;
+ /** 做梦卡:运行事件注入 super 会话(message.system;开始卡/完成卡由调用方定文案)。
+ * 缺省=不注入(runner 零新依赖,单测不破)。 */
+  note?: (payload: { phase: "start" | "done" | "failed"; mechanismId: string; runId: string; taskId?: string; title: string; cost?: RsiRunCostRecord; summary?: string }) => void;
 }
 
 export interface StartRunResult {
@@ -228,6 +231,10 @@ export async function startMechanismRun(
         ? {}
         : { analysis: { windowDays: plan.windowDays, candidates: plan.candidates, analyzed: [] } }),
     });
+ // 做梦开始卡:注入 super 会话(机制标题+runId;面板聊天流渲染,点卡跳做梦视图)。
+    try {
+      deps.note?.({ phase: "start", mechanismId: id, runId: record.runId, taskId: task.id, title: spec.title });
+    } catch { /* 注卡失败不碰任务链 */ }
     return { ok: true, id, runId: record.runId, taskId: task.id, sessionId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -268,6 +275,8 @@ export async function annotateRsiSections(
     readSession?: (sessionId: string) => unknown[];
  /** 生效配置(单价表覆盖来源);缺省=只用内置单价表。 */
     config?: Config;
+ /** 做梦卡:就地收尾时注入 super 会话(完成卡,带 run.cost);缺省=不注入。 */
+    note?: StartRunDeps["note"];
   },
 ): Promise<AnnotateResult> {
   const { root } = opts;
@@ -305,6 +314,18 @@ export async function annotateRsiSections(
           await finishRun(root, section.id, run.runId, failed ? "failed" : "done", failed ? `task ${stateText}` : undefined);
           run = (await getRun(root, section.id, run.runId)) ?? run;
           finalized += 1;
+ // 做梦完成卡:就地收尾时注入 super 会话(成本 run.cost + 摘要;失败带原因)。
+          try {
+            opts.note?.({
+              phase: failed ? "failed" : "done",
+              mechanismId: section.id,
+              runId: run.runId,
+              ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
+              title: section.title,
+              ...(run.cost === undefined ? {} : { cost: run.cost }),
+              ...(run.error !== undefined ? { summary: run.error } : {}),
+            });
+          } catch { /* 注卡失败不影响收尾 */ }
         }
       }
     } catch (err) {

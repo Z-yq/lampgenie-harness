@@ -10,6 +10,7 @@ import { parseWslPath, wslErrorHint } from "./wsl.js"; // :WSL 项目执行/目�
 import { buildRemoteSshIdentity, buildRemoteWslIdentity, parseRemoteProject, probeRemoteProject, remoteWslFromUncPath } from "./remote-project.js"; // 远程项目(remote:ssh / remote:wsl,/27)
 import { processAnnotateSubmit, type AnnotateNoteInput, type AnnotateRefineDeps, type AnnotateVoiceDeps } from "./annotate.js";
 import { createVoiceParser, parseAudioDataUrl, VOICE_PARSE_API_KEY_ENV, VOICE_PARSE_MODEL } from "./annotate-voice.js";
+import { createRecordParser, processAnnotateRecord, RECORD_PARSE_MODEL, type RecordStroke } from "./annotate-record.js";
 import { createVoiceDrafter } from "./voice-draft.js";
 import { collectRsiStatus } from "./rsi-status.js"; // RSI 状态面:rsi.status 只读快照(请求-响应)
 import { annotateRsiSections, startMechanismRun } from "./rsi-agent-runner.js"; // RSI-MECH:机制开关/结果/agent 运行
@@ -634,6 +635,20 @@ async function profileSensePayload(
   };
 }
 
+/** 做梦卡注入器(顶层,handleMessage 与 startGatewayServer 共用):机制运行
+ * 开始/完成/失败事件注入 super 固定会话(journal kind=super.dream)+ 广播同帧给面板聊天流。
+ * 开始卡=机制标题+runId;完成卡=run.cost(¥/tokens)+摘要。注入失败不碰运行链(fail-soft)。 */
+function rsiNoteInjector(
+  journal: import("@lampgenie/core").Journal,
+  broadcast: ((msg: import("@lampgenie/protocol").ServerMessage) => void) | undefined): NonNullable<import("./rsi-agent-runner.js").StartRunDeps["note"]> {
+  return (p) => {
+    try {
+      journal.append({ kind: "super.dream", sessionId: "super", payload: { ...p, at: Date.now() } });
+      broadcast?.({ v: PROTOCOL_VERSION, type: "super.dream", ...p });
+    } catch { /* 注卡失败不影响运行链 */ }
+  };
+}
+
 export function startGatewayServer(opts: GatewayServerOptions & { server?: import("node:http").Server }): { close: () => Promise<void>; broadcast: (msg: import("@lampgenie/protocol").ServerMessage) => void } {
   const wss = opts.server ? new WebSocketServer({ server: opts.server }) : new WebSocketServer({ port: opts.port });
   const ka = { ...KA_DEFAULTS, ...keepaliveResolved(), ...(opts.keepalive ?? {}) };
@@ -1101,6 +1116,11 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     }
   });
  // :Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
+ // 做梦卡注入器:机制运行开始/完成事件注入 super 会话(journal kind=super.dream,
+ // payload={phase,mechanismId,runId,taskId?,title,cost?,summary?})+ 广播同帧给面板聊天流。
+ // 开始卡=机制标题+runId;完成卡=run.cost(¥/tokens)+摘要。注入失败不碰任务链(fail-soft)。
+ // 顶层函数(handleMessage 与本函数都要用):journal 落 super 会话 + broadcast 同帧。
+  const rsiNote = rsiNoteInjector(opts.journal, opts.broadcast);
   opts.taskManager.onChange((task) => {
     if (task.state !== "done" && task.state !== "failed" && task.state !== "cancelled") return;
     const svc = opts.issueService;
@@ -1828,6 +1848,61 @@ async function handleMessage(
       }
       break;
     }
+    case "annotate.record": {
+ // 录屏批注:屏幕+笔迹+语音的 webm → 落盘 <项目>/.genie/feedback/ →
+ // omni(qwen3.8-omni-flash)解析(音频转写 + 关键帧 + 笔迹时间轴)→ 任务书投递。
+ // 与 annotate.submit 同语义:远程项目拒绝、忙则入队、解析失败 fail-soft。
+      const fail = (message: string): void => { safeSend(ws, { v: PROTOCOL_VERSION, type: "annotate.record.result", ok: false, message }); };
+      try {
+        if (!opts.projects) { fail("项目注册表未启用,无法落盘录屏批注"); break; }
+        const projectId = resolveSubmitProjectId(tm, msg.sessionId, undefined, opts);
+        const annCfg = (opts.config as {
+          annotate?: {
+            voiceParse?: { baseUrl?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number };
+            videoParse?: { baseUrl?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number };
+          };
+        } | undefined)?.annotate;
+        const vp = annCfg?.videoParse ?? annCfg?.voiceParse ?? {};
+        const recordModel = vp.model ?? RECORD_PARSE_MODEL;
+        let parser: { parse: ReturnType<typeof createRecordParser>; model: string } | undefined;
+        if (vp.baseUrl) {
+          const apiKey = resolveTrackApiKey("audio.asr", vp.apiKeyEnv ?? VOICE_PARSE_API_KEY_ENV, { repoRoot: repoRoot() });
+          if (apiKey) {
+            try { parser = { parse: createRecordParser({ baseUrl: vp.baseUrl, model: recordModel, apiKey, ...(vp.timeoutMs ? { timeoutMs: vp.timeoutMs } : {}) }), model: recordModel }; } catch { parser = undefined; }
+          }
+        }
+        const outcome = await processAnnotateRecord(
+          {
+            projects: opts.projects, tm, journal, queueApi: (opts as { queueApi?: QueueApi }).queueApi,
+ // 录屏复制进 /uploads 白名单根,聊天侧可回放(mime 按真实类型给,不沿用图片口径)。
+            prepareAttachments: (info) => {
+              const bytes = fsSync.readFileSync(info.videoPath);
+              const dir = join(repoRoot(), ".genie", "uploads", info.sessionId);
+              fsSync.mkdirSync(dir, { recursive: true });
+              const base = info.videoPath.split(/[\\/]/).pop() || "record.webm";
+              const attPath = join(dir, "annotate-" + base);
+              fsSync.writeFileSync(attPath, bytes);
+              return [{ name: base, path: attPath, mime: "video/webm", size: bytes.length }];
+            },
+            ...(parser ? { parser } : {}),
+          },
+          {
+            sessionId: msg.sessionId, videoUrl: msg.videoUrl, projectId,
+            ...(msg.audioUrl !== undefined ? { audioUrl: msg.audioUrl } : {}),
+            ...(msg.keyframes !== undefined ? { keyframes: msg.keyframes } : {}),
+            ...(msg.strokes !== undefined ? { strokes: msg.strokes as unknown as RecordStroke[] } : {}),
+            durationMs: msg.durationMs,
+            ...(msg.capture !== undefined ? { capture: msg.capture } : {}),
+            ...(msg.pageContext !== undefined ? { pageContext: msg.pageContext } : {}),
+          },
+          { mkdirSync: fsSync.mkdirSync, existsSync: fsSync.existsSync, writeFileSync: fsSync.writeFileSync },
+        );
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "annotate.record.result", ...outcome });
+      } catch (err) {
+        fail(err instanceof Error ? err.message : "录屏批注提交失败");
+      }
+      break;
+    }
     case "voice.draft": {
  // 聊天窗语音任务书:录音 dataURL → coding.models.voice 角色模型(qwen3.8-omni-flash
       // 形态的 OpenAI 兼容端点)→ 任务书文本回填聊天输入区。未配置角色模型=功能不可用(明确指路,
@@ -2306,6 +2381,8 @@ async function handleMessage(
  // 收尾补账( RSI-SESSION-COST):按 taskId 切窗口算成本 + 认账已分析会话。
           readSession: (sessionId) => journal.readSession(sessionId),
           config: rsiCostConfigOf(opts),
+ // 做梦卡:运行终态就地收尾时注入 super 会话完成卡(成本+摘要)。
+          note: rsiNoteInjector(journal, opts.broadcast),
         });
         safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.status.result", ...r, sections: annotated.sections });
       } catch (e) {
@@ -2349,6 +2426,8 @@ async function handleMessage(
             projectOf: (sessionId) => sessionOwnerProjectId(tm, sessionId) ?? sessionBindProjectId(journal, sessionId),
             readSession: (sessionId) => journal.readSession(sessionId),
             config: rsiCostConfigOf(opts),
+ // 做梦卡:开始即注入 super 会话(机制清单卡);广播给面板聊天流。
+            note: rsiNoteInjector(journal, opts.broadcast),
           },
           msg.id);
         safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.run.result", ...r });
@@ -2795,12 +2874,15 @@ async function handleMessage(
       }
       try {
         sa.onActivity?.(); // 指挥台聊天窗活跃标记(ask_user 转接/任务播报的触发判据)
+ // 可选 sessionId(缺省="super" 固定持久会话;与 superSessionId 同源)。旧客户端不传=同一会话。
+ // 窄化:companion.turn(legacy)无 sessionId 字段,走缺省。
+        const sid = (msg.type === "super.turn" ? msg.sessionId : undefined)?.trim() || superSessionId();
         // 用户轮次先广播给全部客户端(turn.user),再回 done(出站只发 super.*)。
-        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.user", text: msg.text });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.user", text: msg.text, sessionId: sid });
         const text = await sa.turn(msg.text);
  // done 改广播(原单发发起 socket——第二个标签页/指挥台 view 只见 user 气泡
  // 却永远等不到回复,经验证断链;error 帧仍只发发起端,避免其它端弹无关错误)。
-        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.done", text, sessionId: superSessionId() });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.done", text, sessionId: sid });
       } catch (err) {
         safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.SuperFailed, message: String(err).slice(0, 200) });
       }

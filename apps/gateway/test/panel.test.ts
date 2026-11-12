@@ -335,6 +335,31 @@ describe("斜杠命令面板(n8/n9:内置补齐 + teamai 注册 + 新建入口)"
     });
   });
 
+  it("④ 浮窗逃逸+伪 chip 收口+选命令保正文(2026-11-12 渲染bug三修)", async () => {
+    await withPanel(7899, (html) => {
+ // 浮窗逃逸:输入框外 pointerdown 收起面板;面板自身与输入框除外(按下收起会让条目 click 落空)
+      expect(html).toContain('t.closest("#slashMenu") || t.closest("#instruction")');
+      const upd = extractFn(html, "slashUpdate");
+      expect(upd).toContain("} else slashClose();");
+ // submit 两处程序化清空都同步收起面板(typed 直发路径 + finishSubmit 统一收尾)——
+ // 否则「/xxx 已有text」空态面板开着时发送,输入清空后面板永留(注意截图路径)
+      const fin = extractFn(html, "finishSubmit");
+      expect(fin).toContain('$("instruction").value = "";');
+      expect(fin).toContain("slashClose();");
+ // 选命令不再清空已有正文:「/cmd rest」首空格后文本进 chip 参数(ui 纯动作保留 rest)
+      const ex = extractFn(html, "slashExec");
+      expect(ex).toContain("chipMount(c, ck, rest)");
+      expect(ex).toContain("v0.slice(sp3 + 1).trim()");
+ // 伪 chip :userSlashHtml 先按注册表/自定义命令解析,未知名字回落纯文本渲染(不再吞整段首行)
+      const us = extractFn(html, "userSlashHtml");
+      expect(us).toContain("knownSlash");
+      expect(us).toContain("customCommands.find((x) => x.name.toLowerCase() === nm0)");
+ // 面板过滤只取命令名段(首空格前):带参数过滤不再闪「无匹配命令」
+      const sf = extractFn(html, "slashFilter");
+      expect(sf).toContain("t.slice(0, sp0)");
+    });
+  });
+
   it("画布/经典切换入口常驻:侧栏按钮 + CanvasShell HUD + composer 文案联动", async () => {
     const panel = servePanel(7896, () => {});
     try {
@@ -389,149 +414,210 @@ describe("RSI 看板三分状态语义(未启用≠异常)", () => {
 });
 
 // RSI-PLACE:RSI 看板=全局治理面,从团队第四子标签迁到指挥台视图第二子标签(画布复用指挥台卡)。
-describe("RSI 看板归位:指挥台第二子标签(团队视图不再承载)", () => {
-  it("侧栏有 act-rsi,团队无 RSI 子标签,指挥台含两子标签与 RSI 面板,画布映射指回 super", async () => {
+describe(" super 指挥台 IDE 三栏布局(活动栏/侧栏/中栏+右缘聊天窗)", () => {
+  it("侧栏有 act-rsi,团队无 RSI 子标签,super=IDE 三栏(活动栏/侧栏两区/中栏+聊天窗右缘),画布映射指回 super", async () => {
     await withPanel(7930, (html) => {
- // ① 侧栏新入口(位于指挥台下方)
+ // ① 侧栏入口(做梦视图直达)
       expect(html).toContain('id="act-rsi"');
       expect(html).toContain('$("act-rsi")');
  // ② 团队视图不再有 RSI 子标签/面板
       expect(html).not.toContain("teamTabRsi");
       expect(html).not.toContain('id="teamPaneRsi"');
       expect(html).not.toContain("#view-team.tab-rsi");
- // ③ 指挥台视图:两子标签 + RSI 面板 + 类驱动显隐 CSS
+ // ③ super 视图:IDE 三栏骨架(活动栏/侧栏两区/中栏)+聊天窗右缘叠层(容器 id 全 superIde* 前缀)
       const superStart = html.indexOf('id="view-super"');
       expect(superStart).toBeGreaterThan(0);
-      const superScope = html.slice(superStart, superStart + 4000);
-      expect(superScope).toContain('id="superTabChat"');
-      expect(superScope).toContain('id="superTabRsi"');
-      expect(superScope).toContain('id="superPaneChat"');
-      expect(superScope).toContain('id="superPaneRsi"');
+      const superScope = html.slice(superStart, superStart + 4600);
+      expect(superScope).toContain('id="superIdeWrap"'); // 三栏 grid 骨架
+      expect(superScope).toContain('id="superIdeAct"'); // 活动栏(任务/做梦)
+      expect(superScope).toContain('id="superIdeSide"'); // 侧栏(两区列表)
+      expect(superScope).toContain('id="superIdeMain"'); // 中栏(结果呈现)
+      expect(superScope).toContain('id="superIdeChat"'); // 聊天窗(右缘叠层)
+      expect(superScope).toContain('id="superSbTaskList"'); // 任务区:派发任务列表
+      expect(superScope).toContain('id="superSbDreamList"'); // 做梦区:机制列表
+      expect(superScope).toContain('id="superMainWelcome"'); // 中栏欢迎空态
+      expect(superScope).toContain('id="superMainTask"'); // 中栏任务详情
+      expect(superScope).toContain('id="superMainDream"'); // 中栏做梦报告
+ // 做梦报告沿用 RSI 机制卡(rsiCards 迁入中栏)+ rsi 会话流(RSI-SESSION 沿用)
       expect(superScope).toContain('id="rsiCards"');
- // RSI-SESSION:固定会话窗——RSI 面板改为左卡右流双栏,内嵌会话 rsi 的工作流
       expect(superScope).toContain('id="rsiStream"');
       expect(superScope).toContain('id="rsiStreamBody"');
-      expect(html).toContain("#view-super.tab-rsi #superPaneRsi{display:grid;");
-      expect(html).toContain('#rsiStream{');
- // ④ 画布映射:RSI 看板复用指挥台卡片,托盘可定位
+      expect(superScope).toContain('id="rsiRunAll"'); // 全量运行按钮(逐个 startMechanismRun;防重入禁用)
+ // 聊天窗:superChatBody/superComposer 原样迁入右栏容器(DOM 移动不重建)
+      expect(superScope).toContain('id="superChatBody"');
+      expect(superScope).toContain('id="superComposer"');
+      expect(superScope).toContain('id="superIdeChatFold"'); // 聊天窗折叠把手
+ // 三栏 CSS:grid 列规格 + 聊天窗右缘叠层 + 折叠态 + 窄屏退化(全部 spide-* 包 #view-super)
+ // 中栏下限 minmax(420px,1fr) + 卡宽 1400(三栏在全宽下中栏≥500 的两道保险)
+      expect(html).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(420px,1fr)");
+      expect(html).toContain(".spide-chat{position:absolute;top:0;right:0;bottom:0;width:var(--superChatW,360px)");
+      expect(html).toContain("#view-super.spide-chat-folded #superIdeWrap{padding-right:40px}");
+      expect(html).toContain("@media (max-width:1200px)");
+      expect(html).toContain("@media (max-width:900px)");
+      expect(html).toContain(".spide-act");
+ // ④ 画布映射:做梦视图复用指挥台卡片,托盘可定位
       expect(html).toContain('m.rsi = "super"');
       expect(html).toContain('issues: "team", rsi: "super" }');
       expect(html).toContain('rsi: "act-rsi"');
- // ⑤ 视图名:指挥台 · RSI 看板
-      expect(html).toContain('rsi: "指挥台 · RSI 看板"');
+ // ⑤ 视图名:指挥台 · 做梦 / 指挥台 · 任务(别名保留)
+      expect(html).toContain('rsi: "指挥台 · 做梦"');
+      expect(html).toContain('task: "指挥台 · 任务"');
+ // ⑥ 旧结构退役:三段导航按钮/tab-rsi/tab-rsichat/切换 pane 壳不再存在
+      expect(html).not.toContain('id="superSegChat"');
+      expect(html).not.toContain('id="superSegTask"');
+      expect(html).not.toContain('id="superSegDream"');
+      expect(html).not.toContain('id="superPaneChat"');
+      expect(html).not.toContain('id="superPaneRsi"');
+      expect(html).not.toContain('id="superPaneTask"');
+      expect(html).not.toContain("tab-dream");
+      expect(html).not.toContain("tab-task");
+      expect(html).not.toContain("tab-rsichat");
+      expect(html).not.toContain('id="superPaneRsiChat"');
+      expect(html).not.toContain('id="superChatTab"');
+      expect(html).not.toContain('id="superTabRsi"');
+      expect(html).not.toContain('id="superTabChat"');
     });
   });
 });
 
-// SUPER-CHAT:super 页第三子标签「会话Chat」——rsi 会话满渲染(主聊天同款卡片)+底部输入框。
-describe("会话Chat 子标签(rsi 会话满渲染工作区)", () => {
-  it("① 容器/页签/输入:第三子标签按钮 + 独立 pane + composer + 类驱动显隐 CSS", async () => {
+// 聊天窗主线:super 固定会话(sessionId="super")+主聊天卡片薄壳+派发卡/做梦卡+三态。
+describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/做梦卡)", () => {
+  it("① 输入带 sessionId=\"super\":supSend 走 super.turn 显式固定会话", async () => {
     await withPanel(7933, (html) => {
-      const superStart = html.indexOf('id="view-super"');
-      expect(superStart).toBeGreaterThan(0);
-      const superScope = html.slice(superStart, superStart + 6000);
-      expect(superScope).toContain('id="superChatTab"');
-      expect(superScope).toContain('id="superPaneRsiChat"');
-      expect(superScope).toContain('id="rsiChatBody"');
-      expect(superScope).toContain('id="rsiChatComposer"');
-      expect(superScope).toContain('id="rsiChatInput"');
-      expect(superScope).toContain('id="rsiChatSend"');
-      expect(superScope).toContain('id="rsiChatMech"'); // 头部「机制」按钮切回 RSI
- // 类驱动显隐(沿 tab-rsi 约定):tab-rsichat 时其余两 pane 隐藏、本 pane 显示
-      expect(html).toContain("#view-super.tab-rsichat #superPaneRsiChat{display:flex}");
-      expect(html).toContain("#view-super.tab-rsichat #superPaneChat,");
-      expect(html).toContain("#view-super.tab-rsichat #superPaneRsi{display:none}");
- // 视图名
-      expect(html).toContain('rsichat: "指挥台 · 会话Chat"');
- // 无内联 onclick(模板段)
-      const paneStart = superScope.indexOf('id="superPaneRsiChat"');
-      const paneEnd = superScope.indexOf("</div>", superScope.indexOf('id="rsiChatComposer"'));
-      const paneHtml = paneStart >= 0 && paneEnd > paneStart ? superScope.slice(paneStart, paneEnd) : "";
-      expect(paneHtml).not.toContain("onclick=");
+      const sStart = html.indexOf("function supSend");
+      expect(sStart).toBeGreaterThan(0);
+      const sBody = html.slice(sStart, sStart + 1200);
+      expect(sBody).toContain('type: "super.turn", text, sessionId: "super"'); // 显式固定会话
+      expect(sBody).toContain('toast("连接未就绪", true)'); // WS 未就绪守卫
+ // superViewLoad:supDayLabel=固定会话 "super"(旧按天日卷退役)
+      const dStart = html.indexOf("function supDayLabel");
+      expect(html.slice(dStart, dStart + 200)).toContain('return "super"');
     });
   });
-  it("② 渲染复用=主聊天同款卡片构造(薄壳):rsiChatRender 调 replyBlockHtml/toolCallCard/toolResultCard", async () => {
+  it("② 渲染复用=主聊天同款卡片构造(薄壳):supRenderChat 调 replyBlockHtml/toolCallCard/userSlashHtml", async () => {
     await withPanel(7934, (html) => {
-      const start = html.indexOf("function rsiChatRender");
+      const start = html.indexOf("function supRenderChat");
       expect(start).toBeGreaterThan(0);
-      const body = html.slice(start, start + 9000);
-      expect(body).toContain("replyBlockHtml(e, \"\")"); // assistant 正文 markdown(主聊天同款)
-      expect(body).toContain("toolCallCard(c, \"\""); // 工具调用+结果合并卡(主聊天同款)
-      expect(body).toContain("toolResultCard("); // 孤儿结果卡(主聊天同款)
+      const body = html.slice(start, start + 6000);
+      expect(body).toContain("replyBlockHtml("); // assistant 正文 markdown(主聊天同款构造)
+      expect(body).toContain("toolCallCard("); // 工具调用+结果合并卡(主聊天同款)
       expect(body).toContain('class="user-line"'); // 用户气泡类名同款
       expect(body).toContain("userSlashHtml"); // slash/chip 渲染同款
- // 三态:加载(rsiEvReady 未就绪)/空(引导去 RSI)/错误(可重试)
-      expect(body).toContain("读 取 会 话 …");
-      expect(body).toContain("去 RSI 看板运行机制");
-      expect(body).toContain('data-rsichat-act="retry"');
-      expect(body).toContain('data-rsichat-act="goMech"');
+      expect(body).toContain("think-card"); // 思考卡(主聊天同款,settings.thinking=on 且非 office)
+ // 空态:欢迎语+示例
+      expect(body).toContain("还没有对话");
+      expect(body).toContain("示例:");
+ // 粘底跟随(主聊天同款 60px 容差)
+      expect(body).toContain("wasBottom");
     });
   });
-  it("③ 单次拉取双消费:rsiEvOnHist 尾部挂满渲染;不新增第二条 rsi 轮询", async () => {
+  it("③ 历史回放含做梦卡+工具结果回填;旧 rsi 满渲染双消费退役", async () => {
     await withPanel(7935, (html) => {
- // 双消费挂点:同一份回包既喂紧凑流又喂满渲染
-      const hStart = html.indexOf("function rsiEvOnHist");
+      const hStart = html.indexOf("function supApplyHistory");
       expect(hStart).toBeGreaterThan(0);
-      const hBody = html.slice(hStart, hStart + 2200);
-      expect(hBody).toContain("rsiEvRender();");
-      expect(hBody).toContain("rsiChatRender();");
- // 负面断言:rsiEv 定时器/拉取只有一处(sessionId="rsi" 的 session.history 请求只出自 rsiEvPull)
+      const hBody = html.slice(hStart, hStart + 3000);
+      expect(hBody).toContain('kind === "super.dream"'); // 做梦卡回放
+      expect(hBody).toContain('kind: "dream"');
+      expect(hBody).toContain("toolRes"); // 工具结果收集回填(fixH12 同语义)
+ // 负面断言:rsi 会话满渲染退役(rsiEvOnHist 不再双消费;rsiChat 函数族删除)
+      const eStart = html.indexOf("function rsiEvOnHist");
+      const eBody = html.slice(eStart, eStart + 2000);
+      expect(eBody).not.toContain("rsiChatRender();");
+      expect(html).not.toContain("function rsiChatSend");
+      expect(html).not.toContain("function rsiChatClick");
+ // rsiEv 轮询仍只一处(sessionId="rsi" 供做梦视图 rsiStream 消费)
       expect((html.match(/setInterval\(rsiEvPull/g) || []).length).toBe(1);
-      expect((html.match(/rsiEvTimer = setInterval/g) || []).length).toBe(1);
-      expect((html.match(/sessionId: RSI_EV_SID/g) || []).length).toBe(2); // 首屏+增量两条请求形态,与基线一致
-      expect(html).not.toContain("rsiChatTimer"); // 会话Chat 无自有轮询
-      expect(html).not.toContain("rsiChatPoll"); // 会话Chat 无自有拉取函数
     });
   });
-  it("④ 输入通道:super.turn 同款 wsSafeSend(不扩协议),本地气泡+页顶说明", async () => {
+  it("④ 派发卡:task 实时帧按 submittedBy=super 过滤,排队→运行→完成,点卡跳目标 session", async () => {
     await withPanel(7936, (html) => {
-      const sStart = html.indexOf("function rsiChatSend");
-      expect(sStart).toBeGreaterThan(0);
-      const sBody = html.slice(sStart, sStart + 3000);
-      expect(sBody).toContain('type: "super.turn", text'); // 与 supSend 同款载荷(无 sessionId,协议零扩)
-      expect(sBody).not.toContain("sessionId"); // 不私带 sessionId
-      expect(sBody).toContain("已发往指挥台"); // 本地气泡诚实标注
-      expect(sBody).toContain('toast("连接未就绪", true)'); // WS 未就绪守卫
-      expect(html).toContain('id="rsiChatNotice"'); // 页顶说明
-      expect(html).toContain("发出的消息进 super 日卷");
- // Enter 发送接线
-      expect(html).toContain('$("rsiChatInput").addEventListener("keydown"');
-      expect(html).toContain('$("rsiChatSend").onclick');
+      const tStart = html.indexOf("function supTrackDispatch");
+      expect(tStart).toBeGreaterThan(0);
+      const tBody = html.slice(tStart, tStart + 1600);
+      expect(tBody).toContain('!== "super"'); // 只跟 super 派出的任务
+      expect(tBody).toContain('kind: "dispatch"');
+ // task.submitted/task.changed 通用分支挂 supTrackDispatch
+      const gStart = html.indexOf('m.type === "task.submitted" || m.type === "task.changed"');
+      expect(html.slice(gStart, gStart + 900)).toContain("supTrackDispatch(m);");
+ // 派发卡构造:状态徽章+摘要+点卡跳 session(data-supact="open" data-sid)
+      const cStart = html.indexOf("function supDispatchCardHtml");
+      const cBody = html.slice(cStart, cStart + 2000);
+      expect(cBody).toContain('data-supact="open"');
+      expect(cBody).toContain("data-sid");
+ // supRenderChat 渲染 dispatch/dream 两类卡
+      const rStart = html.indexOf("function supRenderChat");
+      expect(html.slice(rStart, rStart + 6000)).toContain('t.kind === "dispatch"');
     });
   });
-  it("⑤ 互跳:机制卡运行后切会话Chat;会话Chat 头部切回 RSI;轮询启停含 rsichat", async () => {
+  it("⑤ 做梦卡:super.dream 广播进聊天流;成本 ¥/tokens;supDreamCardHtml 三相", async () => {
     await withPanel(7937, (html) => {
- // 机制卡「运行」→ 自动跳会话Chat
+ // superOnMsg 挂 super.dream 分支
+      const mStart = html.indexOf("function superOnMsg");
+      expect(mStart).toBeGreaterThan(0);
+      const mBody = html.slice(mStart, mStart + 3500);
+      expect(mBody).toContain('m.type === "super.dream"');
+      expect(mBody).toContain('kind: "dream"');
+ // 做梦卡构造:三相(start/done/failed)+成本行
+      const dStart = html.indexOf("function supDreamCardHtml");
+      const dBody = html.slice(dStart, dStart + 2500);
+      expect(dBody).toContain("做梦开始");
+      expect(dBody).toContain("做梦完成");
+      expect(dBody).toContain("做梦失败");
+      expect(dBody).toContain("amountCny"); // ¥(缺价=如实标注,不按 0 冒充)
+      expect(dBody).toContain("totalTokens"); // tokens
+      expect(dBody).toContain("missing"); // 缺价段名
+    });
+  });
+  it("⑥ 三栏联动+全量运行;rsiPollSync 跟随 super;模板零内联 onclick", async () => {
+    await withPanel(7938, (html) => {
+ // 机制卡「运行」→ 回 super 视图(做梦卡注入 super 会话)
       const rStart = html.indexOf('if (act === "run")');
       expect(rStart).toBeGreaterThan(0);
-      expect(html.slice(rStart, rStart + 400)).toContain('switchView("rsichat")');
- // 页签/头部按钮互跳
-      expect(html).toContain('$("superChatTab").onclick');
-      expect(html).toContain('switchView("rsichat")');
-      expect(html).toContain('$("rsiChatMech").onclick');
-      expect(html).toContain('switchView("rsi"); // 会话Chat 头部「机制」按钮切回 RSI 看板');
- // rsiPollSync:rsichat 也启动 rsi 会话轮询;离开两者都停
+      expect(html.slice(rStart, rStart + 400)).toContain('switchView("super")');
+ // 三栏交互绑定:活动栏/侧栏/中栏/聊天流详情/聊天窗折叠
+      expect(html).toContain('document.getElementById("superIdeAct").addEventListener');
+      expect(html).toContain('document.getElementById("superIdeSide").addEventListener');
+      expect(html).toContain('document.getElementById("superIdeMain").addEventListener');
+      expect(html).toContain('document.getElementById("superChatBody").addEventListener');
+      expect(html).toContain('document.getElementById("superIdeChatFold").addEventListener');
+      expect(html).toContain("superIdeZoneSet");
+      expect(html).toContain("function superIdeOpen");
+      expect(html).toContain('data-idedetail="task"'); // 派发卡「详情→」
+      expect(html).toContain('data-idedetail="dream"'); // 做梦完成卡「查看报告→」
+      expect(html).toContain('superIdeZoneSet("health")'); // 初始区=健康一屏(默认首屏)
+      expect(html).toContain("function superHealthRender"); // 健康一屏渲染器(缺失即页面首屏 ReferenceError)
+      expect(html).toContain("function rsiHealthAgg");
+      expect(html).toContain("function renderMechCards");
+      expect(html).toContain("spide-mcard"); // 12 机制体检卡
+      expect(html).toContain('data-health-act="runall"'); // 空态引导按钮
+      expect(html).toContain('data-health-act="refresh"'); // 加载/错误态重试入口
+      expect(html).toContain("spide-health-loading"); // 从未收到 rsi.status 时=加载中,不伪装"无数据"
+      expect(html).toContain("rsi-card-focus"); // 体检卡→机制卡聚焦高亮
+      expect(html).toContain('$("rsiRunAll").onclick');
+ // 全量运行:只发已启用机制 + 防重入 + 发出后停留 super 视图
+      const aStart = html.indexOf("function rsiRunAllFire");
+      const aBody = html.slice(aStart, aStart + 1800);
+      expect(aBody).toContain("if (!id || !en) continue");
+      expect(aBody).toContain("btn.disabled");
+      expect(aBody).toContain('type: "rsi.mechanism.run", id');
+      expect(aBody).toContain('switchView("super")');
+ // rsiRender:运行中态同步禁用全量运行按钮
+      expect(html).toContain("allBtn.disabled = anyRunning");
+ // rsiPollSync:跟随 super(做梦区轮询不停摆);离开指挥台停表
       const pStart = html.indexOf("function rsiPollSync");
       const pBody = html.slice(pStart, pStart + 900);
-      expect(pBody).toContain('name !== "rsi" && name !== "rsichat"');
+      expect(pBody).toContain('name !== "rsi" && name !== "dream" && name !== "super"');
       expect(pBody).toContain("rsiEvStart()");
- // applyViewChrome 点亮三页签互斥
-      expect(html).toContain('$("superChatTab").classList.toggle("on", name === "rsichat")');
- // 断连错误态挂点 + 重连清错
-      expect(html).toContain("rsiChatNoteErr()");
-      expect(html).toContain('rsiChatErr = ""; rsiChatErrAt = 0');
-    });
-  });
-  it("⑥ 空态/输入模板零内联 onclick,交互全走事件委托", async () => {
-    await withPanel(7938, (html) => {
-      const start = html.indexOf('id="superPaneRsiChat"');
-      const end = html.indexOf('id="rsiChatInput"');
-      expect(start).toBeGreaterThan(0);
-      const seg = html.slice(start, end + 400);
+      expect(pBody).not.toContain("rsichat");
+ // applyViewChrome:rsi/dream/task 别名收敛为 super 单视图(旧三段互斥点亮退役)
+      expect(html).toContain('if (name === "rsi" || name === "dream" || name === "task") name = "super";');
+      expect(html).not.toContain('classList.toggle("tab-dream"');
+      expect(html).not.toContain('classList.toggle("tab-task"');
+ // super pane 模板段零内联 onclick
+      const segStart = html.indexOf('id="view-super"');
+      const seg = html.slice(segStart, html.indexOf('id="view-nodes"'));
       expect(seg).not.toContain("onclick=");
       expect(seg).not.toContain("onload=");
- // 委托挂点存在
-      expect(html).toContain('$("rsiChatBody").addEventListener("click", rsiChatClick)');
     });
   });
 });
@@ -722,6 +808,41 @@ describe("RSI 机制交互(开关/驱动/运行/条目改删)", () => {
  // 空态
       expect(api.body({ analysis: { windowDays: 3, candidates: [], analyzed: [] } })).toContain("本次未涉及会话");
       expect(api.body({})).toBe("");
+    });
+  });
+});
+
+// nav-to-sidebar(用户):「新建任务/指挥台/RSI 看板」三入口从底部条迁左侧栏顶部块。
+// markup/id 逐字保留(onclick 绑定零改),底部条只留其余入口不重复保留。
+describe(" 三入口迁左侧栏(新建任务/指挥台/RSI 看板)", () => {
+  it("侧栏 #sbNav 含三入口;底部条 .sb-acts 内无三入口(act-new/super/rsi 各只出现在侧栏)", async () => {
+    await withPanel(7931, (html) => {
+ // ① 侧栏顶部块:容器标记 + 三入口 markup 在块内
+      expect(html).toContain('<nav class="sb-nav" id="sbNav" data-nav="sb-nav"');
+      const navStart = html.indexOf('id="sbNav"');
+      expect(navStart).toBeGreaterThan(0);
+      const navScope = html.slice(navStart, navStart + 1500);
+      expect(navScope).toContain('id="act-new"');
+      expect(navScope).toContain('id="act-super"');
+      expect(navScope).toContain('id="act-rsi"');
+ // ② 点击处理复用既有绑定(零内联 onclick,事件在 script-2 的 $.onclick)
+      expect(html).toContain('$("act-super").onclick = () => superOpen()');
+      expect(html).toContain('$("act-rsi").onclick = () => switchView("rsi")');
+      expect(html).toContain('$("act-new").onclick = newDraft');
+ // ③ 底部条 .sb-acts 里不再有三入口:三 id 各只在全文出现一次(即侧栏处)
+      for (const id of ["act-new", "act-super", "act-rsi"]) {
+        const hits = html.split(`id="${id}"`).length - 1;
+        expect(hits).toBe(1);
+      }
+ // 底部条容器仍在(其余入口不动),且其起始点在侧栏块之后
+      const actsStart = html.indexOf('<div class="sb-acts">');
+      expect(actsStart).toBeGreaterThan(navStart);
+      const actsScope = html.slice(actsStart, actsStart + 6000);
+      expect(actsScope).not.toContain('id="act-new"');
+      expect(actsScope).not.toContain('id="act-super"');
+      expect(actsScope).not.toContain('id="act-rsi"');
+ // ④ 窄屏塌折:侧栏三入口随 860px 图标条规则收成纯图标(不额外做悬浮)
+      expect(html).toContain(".sb-nav .sb-act{justify-content:center;gap:0;font-size:0;padding:9px 6px}");
     });
   });
 });

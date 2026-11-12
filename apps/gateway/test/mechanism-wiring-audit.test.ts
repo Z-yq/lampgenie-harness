@@ -1,3 +1,5 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
+import { SERVER_SRC } from "./panel-source.js";
 /**
  * 机制接线审计回归锚。
  * 背景:一批机制实现完成后,反复出现「代码在、但生产 7700 路径没接线 / 配置缺省关闭 /
@@ -22,14 +24,14 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const src = (rel: string): string => readFileSync(`${ROOT}${rel}`, "utf-8");
 const count = (hay: string, needle: string): number => hay.split(needle).length - 1;
 
-const WIRING = src("apps/gateway/src/agent-wiring.ts");
+const WIRING = AGENT_WIRING_SRC;
 const CLOSEOUT = src("apps/gateway/src/task-closeout.ts");
 const SUB = src("apps/gateway/src/llm-loop-backend.ts");
 const SUPER = src("apps/gateway/src/super-agent.ts");
 const WORKER = src("apps/gateway/src/session-worker.ts");
 const WORKER_LIB = src("apps/gateway/src/session-worker-lib.ts");
 const APP = src("apps/gateway/src/app.ts");
-const SERVER = src("apps/gateway/src/server.ts");
+const SERVER = SERVER_SRC;
 const SCHEMA = src("packages/core/src/config/schema.ts");
 const LOOP = src("packages/harness-runtime/src/agent/loop.ts");
 const PROVIDER = src("packages/harness-runtime/src/agent/openai-provider.ts");

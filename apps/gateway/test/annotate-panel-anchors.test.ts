@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
  * ③录音状态机(MediaRecorder/opus/120s/删除);④提交链 audioUrl + 8MB 上限 + 回执整理状态文案。 */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PANEL_SRC = readFileSync(join(HERE, "../src/panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 /** 取一个函数体(从 `function name(` 到下一个同缩进的 `}` 行)。 */
 function bodyOf(name: string): string {

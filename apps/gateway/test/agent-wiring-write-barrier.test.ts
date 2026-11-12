@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * config.agent.writeBarrier 从 gateway 装配面透传到 AgentLoop 的回归锚(2026-11 验收)。
  * 契约:
@@ -126,7 +127,7 @@ describe("静态断言:装配面四处都挂上了 writeBarrier(口径=源码静
     expect(superAgent).toContain("deps.writeBarrier");
     expect(superAgent).toContain("writeBarrier?: \"off\" | \"hard\";");
 
-    const wiring = src("../src/agent-wiring.ts");
+    const wiring = AGENT_WIRING_SRC;
     expect(wiring).toContain("writeBarrierOf(agentConfig)");
     // 子代理后端与主构造点两处装配(主点=局部 const,子代理点=直接取值)
     expect(wiring.match(/writeBarrierOf\(agentConfig\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);

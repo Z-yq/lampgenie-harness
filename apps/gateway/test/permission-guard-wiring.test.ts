@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 权限 guard 链 + session-always 的接线测试(apps/gateway 侧)。
  * 两类断言:
@@ -20,7 +21,7 @@ import {
 } from "../src/agent-wiring.js";
 import type { Guard } from "@lampgenie/runtime/agent/permission-guard";
 
-const SRC = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+const SRC = AGENT_WIRING_SRC;
 const countOf = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
 
 function denyGuard(id: string, reason: string): Guard {

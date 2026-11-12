@@ -77,6 +77,9 @@
     "body.cv-shell #sc-root .sc-body,body.cv-shell #sc-root .sc-foot," +
       "body[data-view=board] #sc-root .sc-body,body[data-view=board] #sc-root .sc-foot," +
       "body.dual-center #sc-root .sc-body,body.dual-center #sc-root .sc-foot{display:none}",
+ // 指挥台视图已有全功能右栏聊天窗(#superIdeChat),右下角悬浮 widget 会叠在它上面
+ // 挡住 #superInput 的点击(经验证 elementFromPoint 命中 sc-turns)——super 视图整个 widget 退场。
+    "body[data-view=super] #superConsole{display:none}",
     "body.cv-shell #superConsole,body[data-view=board] #superConsole,body.dual-center #superConsole{width:auto;max-width:calc(100vw - 32px)}",
     "body.cv-shell #sc-overlay,body[data-view=board] #sc-overlay,body.dual-center #sc-overlay{display:none}",
     "body.pp-wiki-tab #superConsole{display:none}",

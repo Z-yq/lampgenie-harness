@@ -128,6 +128,9 @@ export type EventKind =
   // relay=coding 助手 ask_user 转接(payload={requestId,text})。语义/可见性同 companion.* 一族。
   | "super.notice"
   | "super.relay"
+ // 做梦卡:机制运行开始/完成注入 super 固定会话(payload={phase,mechanismId,runId,
+ // taskId?,title,cost?,summary?,at});deriveMessages 白名单不读(纯面板可见/可回放),语义同 tip.injected 一族。
+  | "super.dream"
  // LLM 调用轨迹指针:全量 messages+响应落 .genie/llm-trace/ 文件,
   // journal 只记指针(payload={file,turn,step,model,ms});deriveMessages 不读,回放/导出排除。
   | "llm.trace"

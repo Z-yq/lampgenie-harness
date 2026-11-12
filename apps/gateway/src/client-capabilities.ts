@@ -31,6 +31,7 @@ export const UNIVERSAL_CHANNELS: ReadonlySet<string> = new Set(["client.mode", "
 export const PANEL_CHANNELS: readonly string[] = [
   "task.submit",
   "annotate.submit",
+  "annotate.record",
   "voice.draft",
   "task.rename",
   "task.pin",

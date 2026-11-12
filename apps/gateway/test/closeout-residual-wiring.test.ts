@@ -1,9 +1,10 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { runTaskCloseout, type CloseoutEvent, type CloseoutJournal } from "../src/task-closeout.js";
 import { RESIDUAL_CODES, residualFindings, residualVerdict } from "../src/closeout-residual.js";
 
-const WIRING = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+const WIRING = AGENT_WIRING_SRC;
 const CLOSEOUT = readFileSync(new URL("../src/task-closeout.ts", import.meta.url), "utf8");
 
 /** 假 journal:记录 append,读取走内存数组(纯路径,零 IO)。 */

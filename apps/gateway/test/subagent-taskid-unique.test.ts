@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 子代理 taskId 唯一性(注意):同一父任务并行派两个 explore,旧实现两者都拿
  * `${task.id}-sub` → 子 loop sessionId / 轨迹目录 subagent-<taskId>-sub / subagent.event.taskId
@@ -7,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const src = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf-8");
+const src = AGENT_WIRING_SRC;
 
 describe("subagent taskId 唯一化(源结构锁)", () => {
   it("① 每次派发生成 subTaskId(父 id 前缀 + agentId 片段)", () => {

@@ -18,7 +18,7 @@ import { EchoChildBackend } from "@lampgenie/executors";
  * 面板 UI 面在 panel.ts 模板字符串内,同文件锁结构性锚点(按钮/锁/回填/角色卡)。 */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PANEL_SRC = readFileSync(join(HERE, "../src/panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 /** 手工构造最小 webm dataURL(仅形态校验,服务端不碰音频字节)。 */
 function webmDataUrl(bytes = "opus-bytes"): string {

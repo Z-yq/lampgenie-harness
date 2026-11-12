@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * / 子代理控制面接线测试(读源码 + 纯路径,零真实 spawn)。
  * 契约:
@@ -21,7 +22,7 @@ import {
   steerVerdict,
 } from "@lampgenie/runtime/agent/subagent-control";
 
-const wiring = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf-8");
+const wiring = AGENT_WIRING_SRC;
 const worktreeSrc = readFileSync(new URL("../src/worktree-service.ts", import.meta.url), "utf-8");
 const loopBackend = readFileSync(new URL("../src/llm-loop-backend.ts", import.meta.url), "utf-8");
 

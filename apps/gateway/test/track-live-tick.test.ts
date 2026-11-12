@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
+import { PANEL_SRC } from "./panel-source.js";
 
 // 追踪 Trace 轮询存活守卫(用户用户反馈:「任务都完成了,但追踪 trace 看板的数据却没有」)。
 // 根因两条,都在 panel.ts 的 trackLiveTick / trackRender:
@@ -15,7 +16,7 @@ import { Script } from "node:vm";
 // 不可见时必须续约(下个 tick 仍会触发),且脚本语法合法。
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, "../src/panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 /** 从源码里按括号配平抽出一个顶层函数体(panel.ts 是单文件内嵌脚本,索引不可见,只能源码切)。 */
 function extractFn(code: string, name: string): string {

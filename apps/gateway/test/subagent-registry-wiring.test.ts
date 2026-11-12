@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  *  子代理控制面接线测试(读源码 + 纯路径)。
  * 契约:
@@ -11,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { SubagentRegistry } from "@lampgenie/runtime/agent/subagent-registry";
 
-const wiring = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf-8");
+const wiring = AGENT_WIRING_SRC;
 const loopBackend = readFileSync(new URL("../src/llm-loop-backend.ts", import.meta.url), "utf-8");
 
 function between(src: string, startMarker: string, endMarker: string): string {

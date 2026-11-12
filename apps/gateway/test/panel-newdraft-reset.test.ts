@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
  *  ④ 草稿态只移除 zh:sid,不写任何新存储键;公共重置函数本身不碰 localStorage/sessionStorage。 */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PANEL_SRC = readFileSync(join(HERE, "../src/panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 /** 取一个函数体(从 `function name(` 到下一个顶格 `}` 行)。 */
 function bodyOf(name: string): string {

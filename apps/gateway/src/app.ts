@@ -1199,9 +1199,10 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           // 用户轮次走 channel 串行队列(与播报/转述轮互斥,防答复与转述并发互相看不见)。
           turn: (text: string) =>
             (superChannel ?? { turn: async (t: string) => (await runSuperAgentTurn(superDeps!, t, superSoul!)).text }).turn(text),
-          // 历史过滤:super: 新链 + companion: 旧数据(不迁移、不重写,journal 连续可读)。
+ // 历史过滤:固定 super 会话 + 旧按天日卷 super:YYYYMMDD + companion: 旧数据
+ // (都不迁移、不重写,journal 连续可读;面板按 sessionId 分隔展示)。
           history: (sinceSeq?: number) => journal.readAll(sinceSeq ?? 0)
-            .filter((e) => e.sessionId.startsWith("super:") || e.sessionId.startsWith("companion:")) as unknown[],
+            .filter((e) => e.sessionId === "super" || e.sessionId.startsWith("super:") || e.sessionId.startsWith("companion:")) as unknown[],
           // inbox 聚合:ask_user 挂起 + 权限挂起 + 任务态(interrupted/blocked/近 24h failed)。
           inbox: (limit?: number) => buildSuperInbox({ taskManager }, {
             asks: askUserRouter.pending(),

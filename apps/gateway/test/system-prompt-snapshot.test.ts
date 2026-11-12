@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * system 提示词快照落账(token 轮 P1 · designs/token-opt-round3-p1 §5-1/§5-2):
  * ① 同 session 同 sha 两次调用只落一条 system.prompt;② chars === text.length;
@@ -95,8 +96,8 @@ describe("system.prompt 快照落账", () => {
 
   it("装配点接线:runWithAgent 审计锚同处落快照(与 task.context 同一 sys / 同一 sha 口径)", () => {
     // 与 task-class.test.ts 的板规范固化同风格:装配点漏接线时这里立刻红(单测覆盖不到 runWithAgent)。
-    const aw = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf8");
-    expect(aw).toContain('import { systemPromptSha, recordSystemPromptSnapshot } from "./system-prompt-snapshot.js"');
+    const aw = AGENT_WIRING_SRC;
+    expect(aw).toContain('import { systemPromptSha, recordSystemPromptSnapshot } from "../system-prompt-snapshot.js"');
     expect(aw).toContain("recordSystemPromptSnapshot(journal, task.sessionId, sys)");
     expect(aw).toContain("systemSha: systemPromptSha(sys)");
   });

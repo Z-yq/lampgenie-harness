@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 工具契约投影的两处接线(源码级 + 行为级断言):
  * - tool-view.ts:导出 projectToolsForContext、attachToolView 增 opts.contract、投影只作用于 wire 描述,
@@ -11,7 +12,7 @@ import type { Tool } from "@lampgenie/runtime/agent/loop";
 import { attachToolView, projectToolsForContext } from "../src/tool-view.js";
 
 const TOOL_VIEW_SRC = readFileSync(new URL("../src/tool-view.ts", import.meta.url), "utf8");
-const WIRING_SRC = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+const WIRING_SRC = AGENT_WIRING_SRC;
 
 function mkTool(name: string, description: string): Tool {
   return {

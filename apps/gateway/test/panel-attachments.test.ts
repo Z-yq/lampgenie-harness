@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { servePanel } from "../src/panel.js";
+import { PANEL_SRC as src } from "./panel-source.js";
 
 /** 附件端到端的结构+行为回归。
  * 真 UI 在 panel.ts 模板字符串内(浏览器侧脚本,code_index/code_sense 不可见),这里锁关键面:
@@ -140,8 +141,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     }
     // 服务端路由/handler 在模板字符串之外(servePanel 的 TS 代码),真源读 src/panel.ts;
     // 行为面另由本文件后面的 GET /uploads 端到端断言锁死。
-    const src = readFileSync(fileURLToPath(new URL("../src/panel.ts", import.meta.url)), "utf8");
-    for (const marker of [
+        for (const marker of [
       // 精确路径 + method 区分(前缀重叠不打歪:POST 只认 "/upload" 或 "/upload?")
       'if (req.method === "POST" && (req.url === "/upload" || (req.url !== undefined && req.url.indexOf("/upload?") === 0)))',
       'if (req.method === "GET" && req.url !== undefined && (req.url === "/uploads" || req.url.indexOf("/uploads?") === 0))',

@@ -3,8 +3,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(import.meta.dirname ?? ".", "..", "src", "panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 describe("Git 面板同步操作面", () => {
   it("git-bar 有拉取/推送按钮且接线 git.pull/git.push", () => {

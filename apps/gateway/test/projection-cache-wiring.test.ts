@@ -1,3 +1,4 @@
+import { SERVER_SRC } from "./panel-source.js";
 /**
  *  接线守卫:session.status 投影 memo 的版本键与恢复 floor。
  * 两层锁:
@@ -16,7 +17,7 @@ import {
   filterFromFloor,
 } from "@lampgenie/runtime/session/projection";
 
-const SERVER_PATH = fileURLToPath(new URL("../src/server.ts", import.meta.url));
+const SERVER_PATH = SERVER_SRC;
 const server = readFileSync(SERVER_PATH, "utf8");
 
 /** memo 声明块(从 `const sessionStatusMemo = new Map<string, {` 到收尾 `}>;`)。 */

@@ -19,6 +19,7 @@ import {
 } from "../src/rsi-mechanism-store.js";
 import { analyzedSessionsPath, loadAnalyzedIds } from "../src/rsi-sessions.js";
 import type { RsiStatusSection } from "../src/rsi-status.js";
+import { PANEL_SRC as src } from "./panel-source.js";
 
 const SRC = join(process.cwd(), "src");
 
@@ -207,8 +208,7 @@ describe("源码接线", () => {
     }
   });
   it("panel.ts 有开关/驱动/运行/结果节点与三条回包分支", async () => {
-    const src = await readFile(join(SRC, "panel.ts"), "utf8");
-    for (const key of ["rsi-sw", "rsi-drv", "rsi-run", "rsi-items", "rsi.item.result", "rsi.mechanism.set.result", "rsi.mechanism.run.result"]) {
+        for (const key of ["rsi-sw", "rsi-drv", "rsi-run", "rsi-items", "rsi.item.result", "rsi.mechanism.set.result", "rsi.mechanism.run.result"]) {
       expect(src).toContain(key);
     }
  // RSI-SESSION-COST:成本/分析节点在场(卡片体小块 + 两行运行头)。

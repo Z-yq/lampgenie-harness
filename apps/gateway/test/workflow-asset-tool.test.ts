@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * :run_workflow 接资产 / caps / 运行中 amend(生产工具面)。
  * - 读源码断言接线在(asset-store 实例、runningWorkflows set/delete、action 参数面);
@@ -88,7 +89,7 @@ afterEach(() => {
 });
 
 describe("源码接线(读 agent-wiring.ts 断言)", () => {
-  const src = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf-8");
+  const src = AGENT_WIRING_SRC;
 
   it("生产工具面接了 WorkflowAssetStore + runningWorkflows set/delete", () => {
     expect(src).toContain("new WorkflowAssetStore(");

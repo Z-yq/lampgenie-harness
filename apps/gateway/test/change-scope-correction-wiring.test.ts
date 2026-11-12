@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * :更正路径的接线验收——两条线:
  * 1) 纯路径:surfaceGateVerdict 吃 correction(双向覆盖 / 非法回落旧行为);
@@ -187,7 +188,7 @@ describe("change_surface action=classify(工具路径)", () => {
 });
 
 describe("agent-wiring 源码接线(gate 传 correction)", () => {
-  const wiring = src("../src/agent-wiring.ts");
+  const wiring = AGENT_WIRING_SRC;
 
   it("读更正走 readChangeScopeCorrection(journal.readSession(...), sessionId)", () => {
     expect(wiring).toContain("readChangeScopeCorrection(journal.readSession(task.sessionId), task.sessionId)");

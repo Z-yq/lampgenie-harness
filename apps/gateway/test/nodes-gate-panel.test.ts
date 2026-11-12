@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 节点 Fleet + 关卡 Gate 丰满测试。
  * 覆盖:①纯函数(pickLanAddress LAN 推导/riskOfTool 启发式/sampleLoad 界内)②broker 决议 ring
@@ -183,7 +184,7 @@ describe(" 面板静态契约(Fleet/Gate 区块+WS 泵+统一应答口)+源码�
   let wiringSrc = "";
   beforeAll(async () => {
     pageHtml = await (await fetch(`http://127.0.0.1:${PORT}/`)).text();
-    wiringSrc = readFileSync(fileURLToPath(new URL("../src/agent-wiring.ts", import.meta.url)), "utf8");
+    wiringSrc = AGENT_WIRING_SRC;
   });
   afterAll(() => { try { panel.close(); } catch { /* 忽略 */ } });
   it("Gate 视图:头部计数/批量按钮/TTL/会话链接/最近决定/空态用户文案", () => {

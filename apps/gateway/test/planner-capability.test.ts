@@ -21,6 +21,7 @@ import { BUILTIN_AGENT_PROFILES, expandToolTokens } from "@lampgenie/runtime/age
 import { ExperienceStore } from "@lampgenie/experience";
 import { MemoryJournal } from "@lampgenie/core";
 import type { Tool } from "@lampgenie/runtime/agent/loop";
+import { PANEL_SRC as src } from "./panel-source.js";
 
 const mk = () => mkdtempSync(join(tmpdir(), "s138planner-"));
 
@@ -223,8 +224,7 @@ describe("主链路:planner 落板 → 父 agent board_read 读回并按板引�
 
 describe("面板角色显示(planner→「规划」)", () => {
   it("panel 源含 planner 身份色与「规划」显示名,三处渲染都走 subagentRoleName", () => {
-    const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
-    expect(src).toContain("planner: \"#9b7ad9\""); // 身份色表补一项
+        expect(src).toContain("planner: \"#9b7ad9\""); // 身份色表补一项
     expect(src).toContain("function subagentRoleName(role)");
     expect(src).toContain('role === "planner" ? "规划" : role');
     // 过程卡 / 等待卡 / 子代理目录三处渲染统一走显示名(不直显英文 role)

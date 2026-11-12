@@ -1,3 +1,5 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
+import { SERVER_SRC } from "./panel-source.js";
 /**
  * 表面/通道能力包测试。
  * 覆盖:
@@ -61,8 +63,8 @@ const LAST_CUSTOM = (j: FakeJournal, type: string): Record<string, unknown> | un
   return evs.length ? (evs[evs.length - 1]!.payload as Record<string, unknown>) : undefined;
 };
 
-const SRC_AGENT_WIRING = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
-const SRC_SERVER = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const SRC_AGENT_WIRING = AGENT_WIRING_SRC;
+const SRC_SERVER = SERVER_SRC;
 
 describe("resolveSurfaceCaps", () => {
   it("缺省(无任何字段)= LEGACY 且 source=legacy", () => {

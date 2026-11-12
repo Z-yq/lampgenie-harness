@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
@@ -282,7 +283,7 @@ describe("isBinaryLikeMime(read_attachment 类型门槛)", () => {
 
 describe("源码断言:假指路措辞必须绝迹(不存在「对应工具」这个工具)", () => {
   it("agent-wiring.ts 不含「请用对应工具解析」/「用对应工具解析」", () => {
-    const src = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf-8");
+    const src = AGENT_WIRING_SRC;
     expect(src).not.toContain("请用对应工具解析");
     expect(src).not.toContain("用对应工具解析");
     // 文档附件必须走 doc-text 解析器接线(不是只改文案)

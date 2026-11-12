@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  *  后台子代理 idle wake 接线测试(读源码 + 纯路径,零真实 spawn/零真实 submit)。
  * 契约:
@@ -14,7 +15,7 @@ import { wakeVerdict } from "@lampgenie/runtime/task/idle-wake";
 import type { PendingNotification } from "@lampgenie/runtime/task/idle-wake";
 import { maybeWakeIdleSession } from "../src/agent-wiring.js";
 
-const wiring = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf-8");
+const wiring = AGENT_WIRING_SRC;
 const NOW = 5_000_000;
 
 function between(src: string, startMarker: string, endMarker: string): string {

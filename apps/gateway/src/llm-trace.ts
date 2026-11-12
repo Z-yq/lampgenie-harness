@@ -498,7 +498,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
         response: redactDeep(info.response),
         ...(reminders.length ? { reminders } : {}),
       };
-      const env = envelopeOf(info); // 信封指纹(同步段取值)
+      const env = envelopeOf(info); // M56:信封指纹(同步段取值)
       const bodyStr = JSON.stringify(body, null, 1);
       void (async () => {
         try {

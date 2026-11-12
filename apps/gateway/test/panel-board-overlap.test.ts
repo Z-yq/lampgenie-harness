@@ -7,8 +7,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 /** 取一条 CSS 规则的正文(行首 `  .sel{` → 首个 `}`),用于「这条规则里不该再有绝对定位」。
  *  用换行+缩进前缀定位,避免 `.cv-rail .cv-legend{` 这类后代规则被误命中。 */

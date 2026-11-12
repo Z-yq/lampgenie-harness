@@ -10,8 +10,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PANEL_SRC } from "./panel-source.js";
 
-const SRC = fileURLToPath(new URL("../src/panel.ts", import.meta.url));
+const SRC = PANEL_SRC;
 const START = "function trajLaneShortModel(";
 const END = "/** 三泳道 HTML";
 
@@ -27,7 +28,7 @@ interface Api {
 
 /** 抽 panel.ts 里 trajLaneShortModel..trajLaneHtml 之前这段(recordOf/摘要/短模型名三者同域)。 */
 function loadApi(): Api {
-  const text = readFileSync(SRC, "utf8");
+  const text = SRC;
   const i = text.indexOf(START);
   const j = text.indexOf(END);
   if (i < 0 || j < 0 || j <= i) throw new Error("抽取失败:panel.ts trajLaneShortModel..trajLaneHtml 段定位不到(函数被移动/重命名)");

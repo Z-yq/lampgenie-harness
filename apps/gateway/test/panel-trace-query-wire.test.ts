@@ -1,3 +1,4 @@
+import { PANEL_SRC, SERVER_SRC } from "./panel-source.js";
 /**
  * 轨迹数据面接线守卫(改写)。
  * 历史:轨迹曾是 status-widget.js 里的「#sw-trace 全屏浮层」,数据由服务端 `trace.query` 提供
@@ -14,12 +15,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const WIDGET = fileURLToPath(new URL("../src/assets/status-widget.js", import.meta.url));
-const PANEL = fileURLToPath(new URL("../src/panel.ts", import.meta.url));
-const SERVER = fileURLToPath(new URL("../src/server.ts", import.meta.url));
+
 
 const widget = readFileSync(WIDGET, "utf8");
-const panel = readFileSync(PANEL, "utf8");
-const server = readFileSync(SERVER, "utf8");
+const panel = PANEL_SRC;
+const server = SERVER_SRC;
 
 describe("① 前端浮层已摘除", () => {
   it("status-widget.js 不含 sw-trace 浮层与全套函数", () => {

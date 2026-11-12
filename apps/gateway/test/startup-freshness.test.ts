@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  *  开工前置门:基线新鲜度 + 规则旧措辞(2026-11)。
  * 契约:
@@ -352,10 +353,10 @@ describe("CLI(真 spawn tsx)", () => {
 });
 
 describe("接线静态断言(装配面:首轮 runTurn 之前)", () => {
-  const src = readFileSync(join(REPO, "apps/gateway/src/agent-wiring.ts"), "utf8");
+  const src = AGENT_WIRING_SRC;
 
   it("导入 + 跳过/拦截/警告三条路径都在,且拦在 runTurn 之前", () => {
-    expect(src).toContain('from "./startup-freshness.js"');
+    expect(src).toContain('from "../startup-freshness.js"');
     expect(src).toContain("planFreshnessSkip({ taskClass: taskClassState.value");
     expect(src).toContain('type: "task.freshness"');
     expect(src).toContain('effect: "blocked"');

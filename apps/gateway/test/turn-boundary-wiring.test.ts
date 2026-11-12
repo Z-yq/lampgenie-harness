@@ -1,3 +1,4 @@
+import { SERVER_SRC } from "./panel-source.js";
 /**
  *  接线断言:server.ts 的队列泵在提交前走 injectionVerdict(边界不成立保持排队并把
  * 稳定码写进 queue.update 的可选 boundaryCode);turn.start 观察点落 freezeAdmission;
@@ -10,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { injectionVerdict, openToolCalls, type BoundaryEvent } from "@lampgenie/runtime/session/turn-boundary";
 
-const serverSrc = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const serverSrc = SERVER_SRC;
 
 const SID = "sess-1";
 const AT = 1_700_000_000_000;

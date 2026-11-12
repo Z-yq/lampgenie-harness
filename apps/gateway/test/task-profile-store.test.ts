@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -204,7 +205,7 @@ describe("resolveTaskProfileAt:fail-closed", () => {
 });
 
 describe("装配静态断言(:journal task.profile / effectiveMaxSteps)", () => {
-  const wiring = readFileSync(new URL("../src/agent-wiring.ts", import.meta.url), "utf8");
+  const wiring = AGENT_WIRING_SRC;
 
   it("装配侧写 task.profile 留痕(含 applied 与 fail-closed 分支)", () => {
     expect(wiring).toContain('what: "task.profile"');

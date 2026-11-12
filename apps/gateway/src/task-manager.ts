@@ -61,7 +61,7 @@ export class TaskSupervisor {
     kind: TaskKind,
     sessionId: string,
     instruction: string,
-    extra: Partial<Pick<Task, "targetNode" | "resourceTags" | "idempotencyKey" | "credentialRef" | "projectId" | "title" | "attachments" | "group">> = {},
+    extra: Partial<Pick<Task, "targetNode" | "resourceTags" | "idempotencyKey" | "credentialRef" | "projectId" | "title" | "attachments" | "group" | "submittedBy">> = {},
   ): Task {
     if (extra.idempotencyKey) {
       const existingId = this.idempotency.get(extra.idempotencyKey);

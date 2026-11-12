@@ -56,14 +56,14 @@ function nextMessage(ws: WebSocket, type: string, ms = 5000, after = 0): Promise
 
 describe("remote:ssh identity 构造/解析", () => {
   it("构造+解析对偶:path 归一、host 小写、port 数字", () => {
-    const id = buildRemoteSshIdentity("192.0.2.10", 22, "deployer", "/home/deployer/");
-    expect(id).toBe("remote:ssh:192.0.2.10:22:deployer:/home/deployer");
+    const id = buildRemoteSshIdentity("10.10.18.72", 22, "zhongyuqi", "/home/zhongyuqi/");
+    expect(id).toBe("remote:ssh:10.10.18.72:22:zhongyuqi:/home/zhongyuqi");
     const p = parseRemoteSshProject(id);
     expect(p).not.toBeNull();
-    expect(p!.host).toBe("192.0.2.10");
+    expect(p!.host).toBe("10.10.18.72");
     expect(p!.port).toBe(22);
-    expect(p!.username).toBe("deployer");
-    expect(p!.workspacePath).toBe("/home/deployer");
+    expect(p!.username).toBe("zhongyuqi");
+    expect(p!.workspacePath).toBe("/home/zhongyuqi");
     expect(p!.identity).toBe(id);
   });
 
@@ -89,7 +89,7 @@ describe("remote:ssh identity 构造/解析", () => {
   });
 
   it("label = host:尾段路径", () => {
-    expect(remoteProjectLabel(parseRemoteSshProject("remote:ssh:192.0.2.10:22:deployer:/home/deployer")!)).toBe("192.0.2.10:deployer");
+    expect(remoteProjectLabel(parseRemoteSshProject("remote:ssh:10.10.18.72:22:zhongyuqi:/home/zhongyuqi")!)).toBe("10.10.18.72:zhongyuqi");
   });
 });
 
@@ -99,15 +99,15 @@ describe("ProjectRegistry 远程 add 语义", () => {
     try {
       const file = join(dir, "projects.json");
       const reg = new ProjectRegistry("/harness", file);
-      const id = "remote:ssh:192.0.2.10:22:deployer:/home/deployer";
+      const id = "remote:ssh:10.10.18.72:22:zhongyuqi:/home/zhongyuqi";
       const r1 = reg.add(id);
       expect(r1.ok).toBe(true);
       if (r1.ok) {
         expect(r1.project.path).toBe(id);
-        expect(r1.project.label).toBe("192.0.2.10:deployer");
+        expect(r1.project.label).toBe("10.10.18.72:zhongyuqi");
         expect(r1.project.availability).toBe("unavailable-remote-unverified");
       }
-      const r2 = reg.add("remote:ssh:192.0.2.10:22:deployer:/home/deployer/");
+      const r2 = reg.add("remote:ssh:10.10.18.72:22:zhongyuqi:/home/zhongyuqi/");
       expect(r2.ok).toBe(true);
       if (r1.ok && r2.ok) expect(r2.project.id).toBe(r1.project.id);
       // 本地路径语义不回归:相对路径仍拒。
@@ -158,7 +158,7 @@ describe("WS project.add 远程路径", () => {
     app = createGatewayApp({ port: 7797 });
     const ws = await connect(7797);
     await nextMessage(ws, "project.list.result"); // 连接即推的初始清单(第 1 条)
-    const id = "remote:ssh:192.0.2.10:22:deployer-test:/home/deployer";
+    const id = "remote:ssh:10.10.18.72:22:zhongyuqi-test:/home/zhongyuqi";
     ws.send(JSON.stringify({ v: 1, type: "project.add", path: id }));
     // 探测 1.2s 后会再广播一次(unreachable 回写);等待第 3 条=探测回写后的稳定态。
     const afterProbe = (await nextMessage(ws, "project.list.result", 15_000, 2)) as { projects: { path: string; availability: string; id: string }[] };
@@ -179,7 +179,7 @@ describe("WS project.add 远程路径", () => {
 
 describe("probeRemoteSsh", () => {
   it("ssh 失败→false 不抛错;成功→true(exec 注入短路,不真连网)", async () => {
-    const p = parseRemoteSshProject("remote:ssh:192.0.2.10:22:deployer:/home/deployer")!;
+    const p = parseRemoteSshProject("remote:ssh:10.10.18.72:22:zhongyuqi:/home/zhongyuqi")!;
     // 探活(-V)恒成功;真探测阶段抛错=远端不可达 → false。
     const fail = await probeRemoteSsh(p, { password: "x", exec: async (cmd, args) => {
       if (args[0] === "-V") return { stdout: "sshpass 1.06", stderr: "" };

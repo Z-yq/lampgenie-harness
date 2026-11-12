@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * agent-wiring 逐类守卫接线测试:纯路径(runtime task-kind 纯函数 + TaskSupervisor 真实例)
  * + 源码断言(接线必须在场,防止「能力表写了但没接上」)。
@@ -17,7 +18,7 @@ import {
 } from "@lampgenie/runtime/task/task-kind";
 import { TaskSupervisor as RuntimeTaskSupervisor } from "@lampgenie/runtime/task/task-manager";
 
-const WIRING = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf8");
+const WIRING = AGENT_WIRING_SRC;
 const MANAGER = readFileSync(resolve(__dirname, "../../../packages/harness-runtime/src/task/task-manager.ts"), "utf8");
 
 const ALL_NAMES = [

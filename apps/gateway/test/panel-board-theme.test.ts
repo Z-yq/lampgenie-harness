@@ -9,8 +9,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PANEL_CSS_SRC, PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
+const src = PANEL_CSS_SRC;
 
 /** 与源码一致的行范围定位:白板 CSS 区 = `#view-board .vw-scope` 起 → `.cv-dot` 规则前止
  *  (跳过 PROFILE_PAGE:该模板无 .cv-* 白板规则)。 */
@@ -118,6 +119,7 @@ describe("白板配色接入主题令牌", () => {
   });
 
   it("JS 侧色相读令牌:lane 色相数组与板型画像都走 var(--bcv-lane-N) 并带兜底值", () => {
+    const src = PANEL_SRC; // JS 侧锚点(PG_HUES/bdC)在主脚本分片,用聚合源
     const hues = src.slice(src.indexOf("const PG_HUES = ["), src.indexOf("// w4 空壳泳道降噪"));
     expect((hues.match(/var\(--bcv-lane-[1-6],/g) || []).length).toBeGreaterThanOrEqual(15);
     expect(hues).toContain('bg: "var(--bcv-page-1-bg,rgba(20,24,32,.93))"');

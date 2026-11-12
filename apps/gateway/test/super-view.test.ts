@@ -187,7 +187,7 @@ describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", (
     expect(pageHtml).toContain('{ name: "super", node: "view-super", title: "指挥台 Super"');
     expect(pageHtml).toContain('usage: "usage", super: "super"'); // CV_VIEW_OF_CARD
     expect(pageHtml).toContain('super: "act-super"'); // CV_TRAY_ACT(画布托盘点亮)
-    expect(pageHtml).toContain('if (name === "super") superViewLoad()');
+    expect(pageHtml).toContain("if (name === \"super\" || name === \"rsi\" || name === \"dream\" || name === \"task\") superViewLoad()");
     expect(pageHtml).toContain('if (name === "super") { try { supRenderBoard(); }'); // canvasAfterResize 卡内重排
     expect(pageHtml).toContain('m.type === "super.turn.done"'); // WS 泵早退分支
     expect(pageHtml).toContain('"genie:open-super"');
@@ -196,10 +196,12 @@ describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", (
     expect(pageHtml).toContain("function supApplyHistory");
     expect(pageHtml).toContain("function superOnMsg");
     expect(pageHtml).toContain("function supSend");
-    expect(pageHtml).toContain('type: "super.turn", text }'); // 发送载荷
+    expect(pageHtml).toContain('type: "super.turn", text, sessionId: "super" }'); // 发送载荷(起带固定会话 id)
     expect(pageHtml).toContain('type: "ask.user.answer", requestId: it.requestId'); // 回答动作与 widget 同协议
-    // 画布卡内布局:单列竖排(聊天上/看板下),经典宽屏双列
-    expect(pageHtml).toContain("body.cv-shell #superLayout{grid-template-columns:1fr");
+ // IDE 三栏:画布卡内单列退化(旧 superLayout 双列退役);三栏骨架 CSS 在场
+ // 中栏下限 minmax(420px,1fr)(旧 minmax(0,1fr) 在 900 卡宽下 1fr 只剩 182px,结果呈现栏名存实亡)
+    expect(pageHtml).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(420px,1fr)");
+    expect(pageHtml).toContain("@media (max-width:900px)");
   });
   it("widget:error 帧显式消费 + 打开指挥台入口(super-failed 才渲染,无关错误不抢)", () => {
     expect(widgetJs).toContain('case "error"');

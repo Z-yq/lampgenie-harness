@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(resolve(__dirname, "../src/panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 describe("permPill 首同步诚实化(源结构锁)", () => {
   it("① 同步中态:.mode-pill.sync 半透明样式+pillRender 按 permSynced 摘挂", () => {

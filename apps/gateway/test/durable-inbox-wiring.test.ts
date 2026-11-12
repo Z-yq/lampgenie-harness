@@ -1,3 +1,4 @@
+import { SERVER_SRC } from "./panel-source.js";
 /**
  * 接线断言:server.ts 入队走 admit / CONFLICT 回 WS error code="queue-conflict" /
  * 泵 promote 前置「会话空闲 + 完整 tool batch 边界」/ queue-store 回放过滤 delivered /
@@ -19,7 +20,7 @@ import {
 } from "@lampgenie/runtime/session/durable-inbox";
 import { restoreQueues, writeQueueSync, queueItemKey } from "../src/queue-store.js";
 
-const serverSrc = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const serverSrc = SERVER_SRC;
 const storeSrc = readFileSync(new URL("../src/queue-store.ts", import.meta.url), "utf8");
 const inboxSrc = readFileSync(
   new URL("../../../packages/harness-runtime/src/session/durable-inbox.ts", import.meta.url),

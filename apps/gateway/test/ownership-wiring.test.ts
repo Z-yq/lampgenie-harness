@@ -1,3 +1,5 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
+import { SERVER_SRC } from "./panel-source.js";
 /**
  * 会话工作所有权与代际关闭的接线测试。
  * 两类断言,全部确定性(不启服务、不 spawn 进程、不写文件):
@@ -11,8 +13,8 @@ import { OwnerRegistry } from "@lampgenie/runtime/task/ownership";
 
 const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf-8");
 
-const WIRING = read("../src/agent-wiring.ts");
-const SERVER = read("../src/server.ts");
+const WIRING = AGENT_WIRING_SRC;
+const SERVER = SERVER_SRC;
 const APP = read("../src/app.ts");
 const SESSION = read("../../../packages/harness-terminal/src/session.ts");
 

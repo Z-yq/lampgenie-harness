@@ -55,10 +55,12 @@ async function geo(page) {
   return page.evaluate(() => {
     const vp = document.getElementById("annViewport").getBoundingClientRect();
     const st = document.getElementById("annStage").getBoundingClientRect();
+    const cv = document.getElementById("annCanvas").getBoundingClientRect();
     const m = /(\d+)\s*×\s*(\d+)/.exec(document.getElementById("annMeta").textContent || "");
     return {
       vp: { l: vp.left, t: vp.top, r: vp.right, b: vp.bottom, w: vp.width, h: vp.height },
       st: { l: st.left, t: st.top, r: st.right, b: st.bottom, w: st.width, h: st.height },
+      cv: { l: cv.left, t: cv.top, r: cv.right, b: cv.bottom, w: cv.width, h: cv.height },
       imgW: m ? Number(m[1]) : 0, imgH: m ? Number(m[2]) : 0,
       zoomLabel: document.getElementById("annZoomLabel").textContent || "",
       cards: Array.from(document.querySelectorAll("#annCards .ann-card-pos")).map((e) => e.textContent || ""),
@@ -147,6 +149,12 @@ async function dragInImage(page, fx, fy, wCss, hCss) {
     check("B fit 居中(左右差≤2 上下差≤2)", Math.abs(gapL - gapR) <= 2 && Math.abs(gapT - gapB) <= 2,
       `左右 ${gapL.toFixed(1)}/${gapR.toFixed(1)} 上下 ${gapT.toFixed(1)}/${gapB.toFixed(1)}px`);
     check("B0 fit 缩放<1(大图自适应)", g.imgW === 3000 && g.st.w < g.vp.w && g.st.h < g.vp.h, `img=${g.imgW}×${g.imgH} stage=${g.st.w.toFixed(0)}×${g.st.h.toFixed(0)}`);
+ // A2 治本断言:#annCanvas 曾用 inset:0+固有尺寸(图像 px),不随 stage 缩放 → 只露原图左上角。
+    const cvAligned = (gg) => Math.abs(gg.cv.l - gg.st.l) <= 1 && Math.abs(gg.cv.t - gg.st.t) <= 1
+      && Math.abs(gg.cv.w - gg.st.w) <= 1 && Math.abs(gg.cv.h - gg.st.h) <= 1;
+    const cvInside = (gg) => gg.cv.l >= gg.vp.l - 1 && gg.cv.r <= gg.vp.r + 1 && gg.cv.t >= gg.vp.t - 1 && gg.cv.b <= gg.vp.b + 1;
+    check("A2 图像层(canvas)与 stage 重合(fit 时)", cvAligned(g), `canvas=${g.cv.w.toFixed(0)}×${g.cv.h.toFixed(0)}@(${g.cv.l.toFixed(0)},${g.cv.t.toFixed(0)}) stage=${g.st.w.toFixed(0)}×${g.st.h.toFixed(0)}@(${g.st.l.toFixed(0)},${g.st.t.toFixed(0)})`);
+    check("A3 图像层完整落在视口内(不是左上角局部)", cvInside(g) && g.cv.w <= g.vp.w + 1 && g.cv.h <= g.vp.h + 1, `canvas=${g.cv.w.toFixed(0)}×${g.cv.h.toFixed(0)} vp=${g.vp.w.toFixed(0)}×${g.vp.h.toFixed(0)}`);
 
  // ---- C:按钮放大 5 次,每步保持居中 ----
     let centeredOk = true, maxDrift = 0;
@@ -160,6 +168,10 @@ async function dragInImage(page, fx, fy, wCss, hCss) {
       if (dx > 2.5 || dy > 2.5) { centeredOk = false; break; }
     }
     check("C 按钮放大×5 保持居中(每步中心差≤2.5px)", centeredOk, `最大漂移 ${maxDrift.toFixed(2)}px`);
+    {
+      const gC = await geo(page);
+      check("C2 放大后 canvas 仍与 stage 重合", cvAligned(gC), `canvas=${gC.cv.w.toFixed(0)}×${gC.cv.h.toFixed(0)} stage=${gC.st.w.toFixed(0)}×${gC.st.h.toFixed(0)}`);
+    }
 
  // ---- E:8× 下 10 CSS px 小拖框(旧 3 图像像素阈值会吞) ----
     await page.click("#annFitBtn");
@@ -185,15 +197,19 @@ async function dragInImage(page, fx, fy, wCss, hCss) {
     for (let i = 0; i < 20; i++) { await page.click("#annZoomOut"); await page.waitForTimeout(25); }
     g = await geo(page);
     const pct = parseInt(g.zoomLabel, 10) || 100;
+    const fitPct = Math.round(Math.min((g.vp.w - 24) / g.imgW, (g.vp.h - 24) / g.imgH) * 100);
     const insideSmall = g.st.l >= g.vp.l - 1 && g.st.r <= g.vp.r + 1 && g.st.t >= g.vp.t - 1 && g.st.b <= g.vp.b + 1;
     const ctrSmall = Math.abs((g.st.l - g.vp.l) - (g.vp.r - g.st.r)) <= 2 && Math.abs((g.st.t - g.vp.t) - (g.vp.b - g.st.b)) <= 2;
-    check("D 缩小到下限(≤3%)且 stage 完整可见", pct <= 3 && insideSmall, `label=${g.zoomLabel} stage=${g.st.w.toFixed(0)}×${g.st.h.toFixed(0)} inside=${insideSmall}`);
+    check("D 缩到最小=适应比例且整图完整可见", Math.abs(pct - fitPct) <= 1 && insideSmall, `label=${g.zoomLabel} fit≈${fitPct}% stage=${g.st.w.toFixed(0)}×${g.st.h.toFixed(0)} inside=${insideSmall}`);
     check("D2 深度缩小后仍居中", ctrSmall, `label=${g.zoomLabel}`);
+    check("D3 缩到最小 canvas 完整可见(整图不再是左上角)", cvInside(g) && Math.abs(g.cv.w - g.st.w) <= 1 && Math.abs(g.cv.h - g.st.h) <= 1,
+      `canvas=${g.cv.w.toFixed(0)}×${g.cv.h.toFixed(0)}@(${g.cv.l.toFixed(0)},${g.cv.t.toFixed(0)}) stage=${g.st.w.toFixed(0)}×${g.st.h.toFixed(0)} vp=${g.vp.w.toFixed(0)}×${g.vp.h.toFixed(0)}`);
 
- // ---- F/G:缩小(~6%)→空格平移→框选,数据坐标与视觉都跟鼠标 ----
+ // ---- F/G:放大(图大于视口)→空格平移→框选,数据坐标与视觉都跟鼠标 ----
     await page.click("#annFitBtn");
     await page.waitForTimeout(80);
-    for (let i = 0; i < 9; i++) { await page.click("#annZoomOut"); await page.waitForTimeout(25); }
+    for (let i = 0; i < 3; i++) { await page.click("#annZoomIn"); await page.waitForTimeout(40); }
+    await page.click('.ann-tool[data-amode="rect"]');
     const gPre = await geo(page);
     const pcx = (gPre.vp.l + gPre.vp.r) / 2, pcy = (gPre.vp.t + gPre.vp.b) / 2;
     await page.keyboard.down("Space");
@@ -203,7 +219,11 @@ async function dragInImage(page, fx, fy, wCss, hCss) {
     await page.mouse.up();
     await page.keyboard.up("Space");
     await page.waitForTimeout(80);
-    const d1 = await dragInImage(page, 0.3, 0.35, 80, 30);
+    const d1 = { sx: pcx - 100, sy: pcy - 60, ex: pcx - 20, ey: pcy - 30 }; // 视口中心附近拖 80×30
+    await page.mouse.move(d1.sx, d1.sy);
+    await page.mouse.down();
+    await page.mouse.move(d1.ex, d1.ey, { steps: 8 });
+    await page.mouse.up();
     await page.waitForTimeout(350);
     const inline2 = await page.$("#annInlineText");
     if (inline2) { await inline2.fill("移动后框选", { timeout: 5000 }); await page.keyboard.press("Enter"); }
@@ -242,8 +262,12 @@ async function dragInImage(page, fx, fy, wCss, hCss) {
     await page.mouse.up();
     await page.keyboard.up("Space");
     await page.waitForTimeout(80);
- // 第二轮拖拽取点收在图内(0.2 分位+60px,不越右缘触发 clamp)
-    const d2 = await dragInImage(page, 0.2, 0.3, 60, 24);
+ // 第二轮拖拽同样取视口中心附近的固定 client 坐标(放大态 stage 已大于视口,不能按分位取点)
+    const d2 = { sx: pcx - 120, sy: pcy - 40, ex: pcx - 60, ey: pcy - 16 }; // 60×24
+    await page.mouse.move(d2.sx, d2.sy);
+    await page.mouse.down();
+    await page.mouse.move(d2.ex, d2.ey, { steps: 8 });
+    await page.mouse.up();
     await page.waitForTimeout(350);
     const inline3 = await page.$("#annInlineText");
     if (inline3) { await inline3.fill("第二轮", { timeout: 5000 }); await page.keyboard.press("Enter"); }

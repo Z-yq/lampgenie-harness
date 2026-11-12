@@ -4,8 +4,9 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { servePanel } from "../src/panel.js";
+import { PANEL_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(process.cwd(), "src", "panel.ts"), "utf-8");
+const src = PANEL_SRC;
 
 describe("code 板工程师图形态", () => {
   it("code 分支启用 cv-code-world/cv-code-node，并解析 [Component: tech] 摘要", () => {

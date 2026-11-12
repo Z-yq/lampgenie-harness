@@ -66,7 +66,12 @@ describe("看板绑会话 · 会话作用域(n6/n9)", () => {
       // onSessionChange 按新 sid 逐视图重载,已在场则幂等跳过
       const osc = extractFn(html, "onSessionChange");
       expect(osc).toContain("cvActKey(next, view)");
-      expect(osc).toContain("if (cvActivated.has(key)) continue;");
+ // 画布新鲜度:白板目录按会话分片(board-store 的 boardDir(root,sid)),
+ // board 卡切会话一律重取(旧一次性门会把上次离开该会话时的快照当本会话数据);
+ // 其余会话维度视图仍按幂等门跳过。
+      expect(osc).toContain('if (view === "board") bdViewDirty = false;');
+      expect(osc).toContain('if (cvActivated.has(key) && view !== "board") continue;');
+      expect(osc).not.toContain("if (cvActivated.has(key)) continue;");
       // 「曾激活过的视图」由任意会话键反推(lastIndexOf("|"))
       expect(osc).toContain('String(key).lastIndexOf("|")');
       // 行为:同视图不同会话 → 不同键;空会话统一 "_"

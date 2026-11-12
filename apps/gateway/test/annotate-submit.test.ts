@@ -19,7 +19,7 @@ import { EchoChildBackend } from "@lampgenie/executors";
  * ④协议消息双向可解析。UI 面在 panel.ts 模板字符串内,这里锁结构性锚点(按钮/覆盖层/提交链)。 */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PANEL_SRC = readFileSync(join(HERE, "../src/panel.ts"), "utf8");
+import { PANEL_SRC } from "./panel-source.js";
 
 /** 手工构造 PNG 头(仅 parsePngDataUrl 消费的 magic+IHDR 前 24 字节;CRC 不校验,补齐 33 字节)。 */
 function pngBytes(w: number, h: number): string {

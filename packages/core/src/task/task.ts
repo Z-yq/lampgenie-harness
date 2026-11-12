@@ -69,6 +69,8 @@ export interface Task {
   attachments?: { name: string; path: string; mime?: string; size?: number }[];
   /** 任务进展(TaskSupervisor.touch 写入):面板防御式读取,全部字段可选;正交元数据,不改状态机。 */
   progress?: { phase?: string; step?: number; note?: string; at?: number };
+ /** 派发卡:super agent 派出的任务打 "super";随 task.* 事件 payload 落 journal,面板据此过滤派发卡。 */
+  submittedBy?: string;
 }
 
 /** 校验一次状态迁移是否合法。 */

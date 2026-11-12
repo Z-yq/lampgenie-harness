@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC , PROTOCOL_SRC } from "./panel-source.js";
 /**
  * 接线测试:读源码确认 loop/agent-wiring/server 的插入点与契约,并测纯路径提取。
  * 不起网关、不碰工作区文件(源码只读)。
@@ -35,7 +36,7 @@ describe("loop 钩子(快照必须在工具执行前)", () => {
 });
 
 describe("agent-wiring 接线", () => {
-  const wiring = read("apps/gateway/src/agent-wiring.ts");
+  const wiring = AGENT_WIRING_SRC;
 
   it("注入 onStepToolPlan → TimeTravelStore.capture(tNsM)", () => {
     expect(wiring).toContain("onStepToolPlan: async (p) => {");
@@ -167,7 +168,7 @@ function guardCodeExpression(): string {
 
 describe("协议未被改动", () => {
   it("CheckpointPreview/SessionFork schema 仍只有 taskId/sessionId", () => {
-    const protocol = read("packages/protocol/src/index.ts");
+    const protocol = PROTOCOL_SRC;
     expect(protocol).toMatch(/CheckpointPreview = Envelope\.extend\(\{ type: z\.literal\("checkpoint\.preview"\), taskId: z\.string\(\)\.min\(1\) \}\)/);
     expect(protocol).toMatch(/type: z\.literal\("session\.fork"\),\s*\n\s*sessionId: z\.string\(\)\.min\(1\),/);
   });

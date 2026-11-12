@@ -13,19 +13,20 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { START_BRIEF_STOP_RULES, SOP_TIPS, renderStartProfileTip, sopTipText } from "../src/agent-wiring-sop-tips.js";
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 
-const src = readFileSync(join(process.cwd(), "src", "agent-wiring.ts"), "utf8");
+const src = AGENT_WIRING_SRC;
 
 describe("agent-wiring 接线:import 与探测入口", () => {
   it("引入 probeWorkStart/renderWorkStartBrief/verifyCommandsFor(work-start-profile.ts)", () => {
-    expect(src).toMatch(/from "\.\/work-start-profile\.js"/);
+    expect(src).toMatch(/from "\.\.?\/work-start-profile\.js"/); // 拆分后相对路径 ../
     for (const sym of ["probeWorkStart", "renderWorkStartBrief", "verifyCommandsFor"]) {
       expect(src, sym).toContain(sym);
     }
   });
 
   it("引入 renderStartProfileTip(包装器在 sop-tips 模块,不自造第二套)", () => {
-    expect(src).toMatch(/import \{[^}]*renderStartProfileTip[^}]*\} from "\.\/agent-wiring-sop-tips\.js"/);
+    expect(src).toMatch(/import \{[^}]*renderStartProfileTip[^}]*\} from "\.\.?\/agent-wiring-sop-tips\.js"/);
   });
 
   it("探测 root 用项目 workdir(taskRoot),模型名按主 llm 读数", () => {

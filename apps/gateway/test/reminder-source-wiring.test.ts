@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 接线验收:三处提醒渲染必须真的走登记表(reminder-source),且输出与旧拼接逐字等价。
  * 只定义函数不接线 = 没生效,故一半用例锁源码锚点,一半用真函数跑 golden 对比。
@@ -143,7 +144,7 @@ describe("旧文本 golden 等价(真函数跑)", () => {
 });
 
 // ── :轨迹回看提醒 / 产出纪律 nudge 也走登记表 ──────────────────────
-const WIRING_SRC = src("apps/gateway/src/agent-wiring.ts");
+const WIRING_SRC = AGENT_WIRING_SRC;
 const LOOPBACK_SRC = src("apps/gateway/src/llm-loop-backend.ts");
 
 describe("接线锚点:gateway 两处提醒走登记表", () => {

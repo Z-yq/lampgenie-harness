@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 任务类别(理解阶段定类,tips/plan-gate 全消费同一结果):
  * - classifyTaskClass 纯函数:写代码信号优先(复合指令必须落 coding)→办公/产出 →问答/调研;
@@ -251,7 +252,7 @@ describe("直达实施路由(e2e,2026-10-24 理解阶段路由判定)", () => {
 
 describe("板规范固化(2026-10-25 变更契约图)", () => {
   it("board_upsert 描述含控制流程图/与仓库的关系/硬规则/四类 accept;SYSTEM 任务书四要素", () => {
-    const aw = readFileSync(resolve(__dirname, "../src/agent-wiring.ts"), "utf8");
+    const aw = AGENT_WIRING_SRC;
     const docs = readFileSync(resolve(__dirname, "../src/tool-full-docs.ts"), "utf8");
  // 工具面瘦身:board_upsert 的完整画法搬到 tool-full-docs.ts(BOARD_UPSERT_FULL_DOC),
     // agent-wiring 只留 wire description。断言按各自真实去处校验,别让「文本搬家」被当成口径丢失。

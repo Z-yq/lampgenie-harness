@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * task_output 降级回归(task_output 免独立往返)。
  * **级别说明:本文件是源码级断言,不是行为级。** task_output 工具对象定义在 wireAgentLoop
@@ -15,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SRC = fileURLToPath(new URL("../src/agent-wiring.ts", import.meta.url));
+const SRC = AGENT_WIRING_SRC;
 const TEXT = readFileSync(SRC, "utf8");
 
 /** 截取 taskOutputTool 定义块(到下一个工具定义 taskPhaseTool 之前)。 */

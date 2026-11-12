@@ -15,8 +15,9 @@ import {
   spawnDepthVerdict,
 } from "@lampgenie/runtime/agent/subagent-depth";
 import { DEFAULT_SUBAGENT_DENY, PRIMARY_ONLY_TOOLS, convergeProfileTools } from "@lampgenie/runtime/agent/agent-profiles";
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 
-const wiring = readFileSync(join(__dirname, "..", "src", "agent-wiring.ts"), "utf-8");
+const wiring = AGENT_WIRING_SRC;
 
 /** 取两个锚点之间的源码段(锚点不命中直接失败,不静默返回空)。 */
 function between(text: string, start: string, end: string): string {

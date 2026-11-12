@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  *  图片 offload 在 gateway 的**生产装配**接通回归(2026-11 验收)。
  * 背景:runtime 侧 loop 已实现 `imageOffload` 分支(首调报图片预算/尺寸错误 → data URL 落盘
@@ -35,7 +36,7 @@ describe("imageOffload 装配口径(纯函数)", () => {
 
 describe("三处构造点静态断言(源码级)", () => {
   it("agent-wiring:主 loop 与子代理 backend 构造都传 imageOffloadOf(repoRoot())", () => {
-    const text = src("../src/agent-wiring.ts");
+    const text = AGENT_WIRING_SRC;
     const hits = text.split("imageOffload: imageOffloadOf(repoRoot()),").length - 1;
     // 2 = 主 AgentLoop 选项 + LlmLoopBackend 选项;少一处即漏接(子代理不再 offload)
     expect(hits, "agent-wiring 里 imageOffload 装配点应为 2 处(主 loop + 子代理 backend)").toBe(2);

@@ -1,3 +1,4 @@
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
  * 摘要前缀复用的「装配面」验收:
  * ①源码级接线锚——compact-hook 必须真的把 prefix 透传给 autoCompact,agent-wiring 必须在
@@ -20,7 +21,7 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const src = (rel: string): string => readFileSync(`${ROOT}${rel}`, "utf-8");
 
 const HOOK_SRC = src("apps/gateway/src/compact-hook.ts");
-const WIRING_SRC = src("apps/gateway/src/agent-wiring.ts");
+const WIRING_SRC = AGENT_WIRING_SRC;
 const AUTO_COMPACT_SRC = src("packages/harness-runtime/src/agent/auto-compact.ts");
 
 const tmp = mkdtempSync(join(tmpdir(), "m176-prefix-wiring-"));
