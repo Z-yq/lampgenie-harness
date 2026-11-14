@@ -1,15 +1,11 @@
 # lampgenie-harness 第三方声明(NOTICE)
 
-本仓为自研 harness agent 项目。**不包含任何第三方项目的源码拷贝**:历史版本曾在
-`vendor/` 目录存放参考件,现已全部移除,相关功能均以本仓自有实现交付(出处见下表
-「参考关系」列,仅作思路致谢)。
+本仓为自研 harness agent 项目。**不包含任何第三方项目的源码拷贝,亦不随包分发
+第三方组件**:面板编辑器、图渲染器、token 估算器、插件解压器等此前依赖的标准库
+均已替换为本仓自有实现;仓库内不再存在 vendor 目录与第三方库的打包产物。
 
-仓库内随包分发的标准前端库(均为 MIT 许可的常规依赖做法,保留其许可文本):
-
-| 库 | 版本 | 许可证 | 位置 | 许可文本 |
-|---|---|---|---|---|
-| Monaco Editor | 0.52.2 | MIT | apps/gateway/src/assets/vendor/monaco/ | 同目录 LICENSE.txt |
-| mermaid(esbuild 打包产物) | 11.17.2 | MIT | apps/gateway/src/assets/mermaid.min.js | https://github.com/mermaid-js/mermaid (MIT) |
+运行时依赖(通过包管理器安装的 npm 库)以各 package.json 声明为准,不随源码仓
+分发;随安装包分发的运行时依赖同样保留其上游许可文本,详见安装包内 NOTICE 副本。
 
 ## 参考致谢(仅思路参考,无代码携带)
 
@@ -28,5 +24,6 @@
 | open-code-review(alibaba) | Apache-2.0 | 代码评审的过滤保护主题与评论定位思想;TS 实现为本仓独立 |
 | gitdiagram | MIT | archmap 管线设计(采样→摘录→索引→LLM 两段式→校验修复环)参考;实现为本仓独立 |
 | code2flow / deepwiki-open | MIT / AGPL-3.0 | 代码流程图与代码档案(wiki)的呈现思路;实现为本仓 code-sense 自研 |
+| Monaco Editor / mermaid / tiktoken | MIT | 早期版本曾随包分发,现均已替换为本仓自有实现(编辑器/图渲染器/估算器);思路致谢保留 |
 
 若上游项目要求署名而本表有所遗漏,请提 issue,我们会补正。

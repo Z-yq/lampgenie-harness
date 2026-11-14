@@ -156,7 +156,7 @@ Windows(实机)与 Linux/WSL 上开发经验证;macOS 理论可运行但未验�
 
 ## 致谢
 
-本项目的设计在演进中参考过若干开源项目的思路(qwen-audio-agent、ZCode、deepseek-harness、opencode、teamai-cli、EditHere、open-code-review、gitdiagram、code2flow、deepwiki-open 等)——**均只作思路致谢,仓库不含任何第三方项目源码拷贝**,对应模块为本仓独立实现。完整致谢与随包第三方组件(Monaco Editor、mermaid,MIT)许可见 [NOTICE.md](./NOTICE.md)。
+本项目的设计在演进中参考过若干开源项目的思路(qwen-audio-agent、ZCode、deepseek-harness、opencode、teamai-cli、EditHere、open-code-review、gitdiagram、code2flow、deepwiki-open 等)——**均只作思路致谢,仓库不含任何第三方项目源码拷贝,也不随包分发第三方组件**:面板编辑器、图渲染器、token 估算器等均为本仓自有实现。完整致谢见 [NOTICE.md](./NOTICE.md)。
 
 > 名称说明:LampGenie(神灯里的灯神)与 Cisco pyATS「Genie harness」、Databricks「Genie」等均无关联。
 
