@@ -15,6 +15,8 @@ import {
   decayScore,
   evidenceIdOf,
   historyOf,
+  linkEvidence,
+  linksOf,
   markAuthoritative,
   normalizeStatement,
   queryEvidence,
@@ -606,3 +608,44 @@ describe("健壮性", () => {
 function g_new(): EvidenceGraph {
   return createEvidenceGraph();
 }
+
+describe("link 边(2026-11-14)", () => {
+  function twoNodeGraph(): { graph: EvidenceGraph; a: EvidenceNode; b: EvidenceNode } {
+    const g = createEvidenceGraph();
+    const a = addEvidence(g, { kind: "fact", statement: "结论 a", associations: [...MODULE], at: T0 })!;
+    const b = addEvidence(a.graph, { kind: "insight", statement: "结论 b", associations: [...MODULE], at: T0 })!;
+    return { graph: b.graph, a: a.node!, b: b.node! };
+  }
+
+  it("加边成功:端点存在、from≠to、note 截 300 字、linksOf 出入边就位", () => {
+    const { graph, a, b } = twoNodeGraph();
+    const res = linkEvidence(graph, { from: a.id, to: b.id, type: "supports", note: "n".repeat(400), at: T1 });
+    expect(res.ok).toBe(true);
+    expect(res.link!.note!.length).toBe(300);
+    expect(res.graph.links!.length).toBe(1);
+    const adj = linksOf(res.graph, a.id);
+    expect(adj.outgoing[0]!.type).toBe("supports");
+    expect(linksOf(res.graph, b.id).incoming[0]!.from).toBe(a.id);
+ // 旧图(无 links 字段)消费方按 ?? [] 读
+    expect(linksOf(createEvidenceGraph(), a.id)).toEqual({ outgoing: [], incoming: [] });
+  });
+
+  it("端点缺失 → NOT_FOUND;自环/非法 type → INVALID_INPUT;重复 → DUPLICATE", () => {
+    const { graph, a, b } = twoNodeGraph();
+    expect(linkEvidence(graph, { from: a.id, to: "ev-gone", type: "supports" }).code).toBe(EVIDENCE_CODES.NOT_FOUND);
+    expect(linkEvidence(graph, { from: a.id, to: a.id, type: "supports" }).code).toBe(EVIDENCE_CODES.INVALID_INPUT);
+    expect(linkEvidence(graph, { from: a.id, to: b.id, type: "nope" as never }).code).toBe(EVIDENCE_CODES.INVALID_INPUT);
+    const linked = linkEvidence(graph, { from: a.id, to: b.id, type: "contradicts", at: T1 });
+    expect(linked.ok).toBe(true);
+    const dup = linkEvidence(linked.graph, { from: a.id, to: b.id, type: "contradicts", at: T1 + 1 });
+    expect(dup.code).toBe(EVIDENCE_CODES.DUPLICATE);
+    expect(dup.graph.links!.length).toBe(1); // 幂等:不新增
+  });
+
+  it("边在版本化操作(supersede/add)后保留(图操作不丢 links)", () => {
+    const { graph, a, b } = twoNodeGraph();
+    const linked = linkEvidence(graph, { from: a.id, to: b.id, type: "derives-from", at: T1 });
+    const grown = addEvidence(linked.graph, { kind: "fact", statement: "第三条", associations: [...MODULE], at: T1 })!;
+    expect(grown.graph.links!.length).toBe(1);
+  });
+});

@@ -275,6 +275,9 @@ export interface FileToolsOptions {
  /** 大结果 dump 根(`.genie/tool-dumps`):result_read 按 callId/路径取回原文片段。
    * 不传=result_read 只能吃 dump 路径(仍可用,不报错)。 */
   toolDumpDir?: string;
+ /** B:首次编辑某文件时给一次「本模块历史缺陷基因」提示(每任务每模块最多一次,
+ * 由调用方闭包自己计数);返回非空串即追加到 edit_file 回执尾部。 */
+  editHint?: (rel: string) => string | undefined;
 }
 
 /**
@@ -697,7 +700,10 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
           const anchor = text.indexOf(oldStr);
           snippet = editedSnippet(relDisplay(root, abs), finalText, newStr, n, anchor);
         } catch { /* 快照失败不影响编辑回执 */ }
-        return `已编辑 ${relDisplay(root, abs)}:替换 ${n} 处(${text.length} → ${replaced.length} 字符)。` + (snippet ? "\n" + snippet : "") + suffix;
+ // B:首次改动某模块时把「该模块历史缺陷基因」注入回执(每任务每模块一次)。
+        let hint = "";
+        try { hint = opts.editHint ? String(opts.editHint(relDisplay(root, abs)) ?? "") : ""; } catch { hint = ""; }
+        return `已编辑 ${relDisplay(root, abs)}:替换 ${n} 处(${text.length} → ${replaced.length} 字符)。` + (snippet ? "\n" + snippet : "") + suffix + (hint ? "\n" + hint : "");
       } catch (err) {
         return "错误:" + String(err).slice(0, 150);
       }

@@ -4,7 +4,7 @@
  * B. 接线(agent-wiring):done 与 failed 两路都落 journal custom `turn.change-ledger`,
  *    且账本内容绝不进 finalOut/模型上下文。
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,6 +14,7 @@ import { buildExecutorFromConfig } from "../src/factory.js";
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
 import {
   captureBaseline,
+  __resetBaselineCacheForTest,
   collectToolTouched,
   computeChangeLedger,
   parsePorcelainZ,
@@ -270,4 +271,62 @@ describe("接线:turn.change-ledger 只进 journal,不进 finalOut", () => {
     expect((p as Record<string, unknown>).state).toBe("failed");
     expect(r.result).not.toContain("turn.change-ledger");
   }, 120_000);
+});
+
+// K:captureBaseline 缓存 —— 同 root+同 index mtime 60s 内复用,省 6-9s 全量 git status。
+describe("captureBaseline 基线缓存(K)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    __resetBaselineCacheForTest();
+  });
+
+  it("60s 内同 root 复用缓存(文件变了也返回首次基线)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T00:00:00Z"));
+    const dir = makeRepo();
+    writeFileSync(join(dir, "untracked.txt"), "a\n");
+    const first = await captureBaseline(dir);
+    writeFileSync(join(dir, "untracked.txt"), "a-much-longer\n");
+    const second = await captureBaseline(dir);
+    expect(second.files["untracked.txt"]).toEqual(first.files["untracked.txt"]);
+    expect(second.files["untracked.txt"]?.size).toBe(2);
+  });
+
+  it("TTL 60s 过期后能看到新 mtime/size", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T00:00:00Z"));
+    const dir = makeRepo();
+    writeFileSync(join(dir, "untracked.txt"), "a\n");
+    const first = await captureBaseline(dir);
+    writeFileSync(join(dir, "untracked.txt"), "a-much-longer\n");
+    vi.setSystemTime(new Date("2026-11-14T00:01:01Z"));
+    const later = await captureBaseline(dir);
+    expect(later.files["untracked.txt"]?.size).toBe(14);
+    expect(later.files["untracked.txt"]?.size).not.toBe(first.files["untracked.txt"]?.size);
+  });
+
+  it("git index 变化(git add)使缓存立即失效", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T00:00:00Z"));
+    const dir = makeRepo();
+    const clean = await captureBaseline(dir);
+    expect(clean.files["tracked.txt"]).toBeUndefined(); // 干净仓基线为空
+    writeFileSync(join(dir, "tracked.txt"), "v2\n");
+    git(dir, ["add", "tracked.txt"]); // index mtime 变化 → 缓存失效
+    const after = await captureBaseline(dir);
+    expect(after.files["tracked.txt"]?.status).toBe("M ");
+  });
+
+  it("命中缓存返回副本,调用方改写不回污缓存", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T00:00:00Z"));
+    const dir = makeRepo();
+    writeFileSync(join(dir, "untracked.txt"), "abc\n");
+    const first = await captureBaseline(dir);
+    const original = first.files["untracked.txt"]?.size ?? 0;
+    const entry = first.files["untracked.txt"];
+    if (entry) entry.size = -1;
+    const second = await captureBaseline(dir);
+    expect(second.files["untracked.txt"]?.size).toBe(original);
+  });
 });

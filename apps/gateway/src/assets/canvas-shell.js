@@ -14,7 +14,7 @@
   "use strict";
   if (window.CanvasShell) return;
 
-  var VERSION = "002";
+  var VERSION = "003"; // 003:全览/单卡取景可读下限(LOD_OUT)+ 播种列高上限(「画布模式挂了」)
   var LS_LAYOUT = "zh:cv-layout";
   var LS_MODE = "zh:cv-mode";
   var MIN_W = 320;
@@ -112,20 +112,25 @@
     };
   }
   /** 升级播种(纯函数):savedNames 里缺席、defLayout 里在册的卡 = 本次升级新增的卡。
-   *  落位紧贴 chat 卡右侧竖排(28/24 间距),避免按默认坐标落到用户视口外(x:5320 之远)
+ * 落位紧贴 chat 卡右侧(28/24 间距),避免按默认坐标落到用户视口外(x:5320 之远)
  * 造成「新卡不存在」的错觉( 用户用户反馈:子agent会话流卡找不到)。
+ * 列高上限:卡量涨到 21 张后单列竖排成了 1.2 万 px 深柱(18 张新卡只有头 2-3 张
+ * 可见,全览取景/找新卡都不可用)→ 每列 ~1800px 换新列,播种区是 chat 右侧的紧凑网格。
    *  无 chat 几何或无缺失卡返回 null(调用方不动任何卡;全新用户无存档也不走此路径)。 */
   function seedMissing(savedNames, defLayout, chatG) {
     if (!chatG || !defLayout) return null;
     var out = [];
     var x = chatG.x + chatG.w + 28;
-    var y = chatG.y;
+    var y0 = chatG.y, y = y0, colW = 0;
+    var COL_H = 1800;
     for (var n in defLayout) {
       if (!Object.prototype.hasOwnProperty.call(defLayout, n)) continue;
       if (savedNames && savedNames[n]) continue;
       var d = defLayout[n];
       out.push({ n: n, x: x, y: y, w: d.w, h: d.h });
+      colW = Math.max(colW, d.w);
       y += d.h + 24;
+      if (y - y0 > COL_H) { x += colW + 28; y = y0; colW = 0; }
     }
     return out.length ? out : null;
   }
@@ -281,7 +286,7 @@
       "body.cv-lod .cv-card-ico svg{width:calc(15px / var(--cv-s,1));height:calc(15px / var(--cv-s,1))}",
       "body.cv-lod .cv-card-txt{gap:calc(1px / var(--cv-s,1))}",
       "body.cv-lod .cv-card-title{font-size:calc(12.5px / var(--cv-s,1));letter-spacing:calc(1.2px / var(--cv-s,1))}",
-      "body.cv-lod .cv-card-sub{font-size:max(calc(9.5px / var(--cv-s,1)),10px);color:var(--muted)}",
+      "body.cv-lod .cv-card-sub{font-size:max(calc(9.5px / var(--cv-s,1)),10px);color:color-mix(in srgb, var(--muted) 62%, var(--text) 38%)}",
  /* :离屏卡跳过渲染布局(治 LOD 跨阈 87ms 长任务峰),进入视口自动恢复 */
       ".cv-card-body{content-visibility:auto;contain-intrinsic-size:auto 400px}",
       "body.cv-lod .cv-card-dot{width:calc(7px / var(--cv-s,1));height:calc(7px / var(--cv-s,1))}",
@@ -299,8 +304,8 @@
       ".cv-card-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}",
       ".cv-card-title{font-family:var(--serif);font-size:12.5px;letter-spacing:1.5px;color:var(--text);",
       "  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}",
-      ".cv-card-sub{font-size:9.5px;letter-spacing:.4px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-      ".cv-card.on .cv-card-sub{color:var(--muted)}",
+      ".cv-card-sub{font-size:9.5px;letter-spacing:.4px;color:color-mix(in srgb, var(--muted) 50%, var(--text) 50%);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".cv-card.on .cv-card-sub{color:color-mix(in srgb, var(--muted) 62%, var(--text) 38%)}",
       /* 状态点(忙/警告/就绪;面板可经 setCardStatus 推) */
       ".cv-card-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0;margin-right:1px}",
       ".cv-card-dot.st-run{background:var(--bronze);box-shadow:0 0 8px var(--bronze-glow);animation:cvDotBreath 1.6s ease-in-out infinite}",
@@ -359,6 +364,13 @@
       ".cv-tray-rs{display:none}",
       "body.cv-shell .cv-tray-rs{display:block;position:absolute;top:8px;bottom:8px;right:0;width:5px;cursor:ew-resize;z-index:3}",
       "body.cv-shell .cv-tray-rs:hover{background:var(--accent-soft)}",
+ /* ⑧ 画布体验修复(经验证 1600×900):底部导航条 44px 被右下角悬浮件压住 ——
+ * Super 指挥台(折叠成头部条)与 #toastHost 都贴在 bottom:16~18px,正好盖住导航条末项
+ * (act-track/act-traj/act-usage 命中到 .sc-head / .toast,点不到);
+ * → 画布形态下把两者抬到导航条之上;底条项内边距微收 1px,1600px 下 18 项不再横向溢出。 */
+      "body.cv-shell #superConsole{bottom:calc(var(--bnav-h,44px) + 10px)}",
+      "body.cv-shell #toastHost{bottom:calc(var(--bnav-h,44px) + 14px)}",
+      "body.cv-shell .sb-acts .sb-act{padding:6px 8px}",
       /* ⑥ 收起态:托盘隐藏后由既有 #sbRail 细轨(44px,logo+新建)承接唤回(Ctrl+B 同源)——
        *    cvRail 退役后不再需要互斥避让;sbRail 的让位在 safeArea 里按需计算 */
       /* ⑦ 文件树滑入层仍是托盘内的 absolute;托盘改 fixed 后它仍以托盘为包含块(不铺满全屏) */
@@ -483,6 +495,7 @@
       var card = el("div", "cv-card" + (HEAVY[sp.name] ? " cv-heavy" : ""));
       card.dataset.name = sp.name;
       var head = el("div", "cv-card-head");
+      head.title = "双击打开卡片 · 拖动标题移动";
       head.innerHTML =
         '<span class="cv-card-ico">' + iconOf(sp) + "</span>" +
         '<span class="cv-card-txt"><span class="cv-card-title">' + esc(sp.title || sp.name) + "</span>" +
@@ -771,13 +784,15 @@
   }
   /** 在安全区内居中(保持给定缩放)。 */
   function centerInSafe(rect, scale) {
-    var h = hostRect();
-    var a = safeArea(h);
-    var s = clamp(scale, Z_MIN, Z_MAX);
+    return viewCenterIn(rect, safeArea(hostRect()), scale);
+  }
+ /** 纯函数:按区域中心与给定缩放取景(fitAll 全览下限 / focus 单卡下限共用,单测口径)。 */
+  function viewCenterIn(rect, area, s) {
+    var k = clamp(s, Z_MIN, Z_MAX);
     return {
-      x: a.x + a.w / 2 - (rect.x + rect.w / 2) * s,
-      y: a.y + a.h / 2 - (rect.y + rect.h / 2) * s,
-      s: s,
+      x: area.x + area.w / 2 - (rect.x + rect.w / 2) * k,
+      y: area.y + area.h / 2 - (rect.y + rect.h / 2) * k,
+      s: k,
     };
   }
 
@@ -808,7 +823,16 @@
     var a = safeArea(h);
     var b = boundsOf(visibleRects());
     // 两侧各留 24px 呼吸位(否则最外列卡缘贴死安全区边界,看着像被切了一刀)
-    setView(fitInArea(b, a, 24, Z_MAX));
+    var v = fitInArea(b, a, 24, Z_MAX);
+ // 全览可读下限(「画布模式挂了」用户用户反馈):卡量涨到 21 张后全览包围盒上到 12k px,
+ // fit 会压到 Z_MIN(~15%)→ 低于 LOD 入槛整屏卡片降级成占位色块,观感=画布挂了,且无任何提示。
+ // 处置:全览取景不低于 LOD 出槛(56%)——装不下就部分入画,以包围盒中心取景,配 toast 指路;
+ // 想看全景仍可手动滚轮缩小(LOD 概览语义不变,只是不再被「全部入画」一键制造)。
+    if (v.s < LOD_OUT) {
+      v = viewCenterIn(b, a, LOD_OUT);
+      toast2("卡片较多,已停在 " + Math.round(LOD_OUT * 100) + "% 保证可读 · 空白拖拽/小地图可看全部");
+    }
+    setView(v);
   }
 
   function focus(name, opts) {
@@ -829,6 +853,9 @@
     // 走与「全部入画」同一个 fitInArea:口径统一(safeArea + 0.7 可读性下限),不再各算一套。
     var target = S.view.s;
     var v = o.zoom ? fitInArea(rect, a, 20, 1) : centerInSafe(rect, target);
+ // 单卡取景同样不低于 LOD 出槛:超大卡(拖出 2-3 屏宽)fit 出 0.3x 会让整卡 LOD 降级成
+ // 占位色块( 与全览同根因)——停在 56% 看中间大半,边缘平移,可读优先。
+    if (o.zoom && v.s < LOD_OUT) v = centerInSafe(rect, LOD_OUT);
     setView(v);
     notifyCards(); // 唤回被隐藏的卡片后托盘灰态同步刷新(否则卡片回来了按钮还是灰的)
     if (S.bridge && typeof S.bridge.activate === "function") {
@@ -1771,6 +1798,10 @@
       if (S.bridge && S.bridge.activate && S.focused) { try { S.bridge.activate(S.focused); } catch (e) {} }
     }, 80);
     setTimeout(scheduleDraw, 120);
+ // 进入画布后延时复写一次形态档——经验证存在一个绕过 Storage 原型钩子的
+ // "classic" 回写把刚写入的 canvas 档翻回(写入者未定位,零报错);复写放最后,
+ // 刷新后保持用户显式选择的画布形态。
+    setTimeout(function () { try { if (S.mode === "canvas") localStorage.setItem(LS_MODE, "canvas"); } catch (e) {} }, 200);
   }
 
   function exitCanvas() {
@@ -1784,6 +1815,10 @@
   function setMode(mode, opts) {
     var m = mode === "classic" ? "classic" : "canvas";
     var initial = !!(opts && opts.initial);
+ // 先落权威值再进退场——经典引导时 exitCanvas 因 !S.built 早退不写 S.mode,
+ // 旧实现 S.mode 恒留初始 "canvas" → toggleMode 永远反向调 setMode("classic") 再次早退,
+ // 「画布模式切不过去」(用户用户反馈;零报错的静默 no-op)。
+    S.mode = m;
     try { localStorage.setItem(LS_MODE, m); } catch (e) {}
     if (m === "classic") exitCanvas();
     else enterCanvas();
@@ -1845,6 +1880,7 @@
       clamp: clamp, snap: snap, normRect: normRect, normSavedCard: normSavedCard, zoomAround: zoomAround, boundsOf: boundsOf,
       fitView: fitView, centerOn: centerOn, layoutFromSpecs: layoutFromSpecs, seedMissing: seedMissing,
       fitInArea: fitInArea,        // 统一取景(首屏开卡 + 全部入画共用)
+      viewCenterIn: viewCenterIn,  // 区域中心取景(全览/单卡可读下限共用
       zoomAt: zoomAt,              // 任务B:光标锚点缩放(diagram-viewport.zoomAtPoint 同式,单测口径)
       zoomToScale: zoomToScale,    // 档位(50/100/200)落点
       pinchToView: pinchToView,    // 双指捏合数学(纯函数:d0/d1+中心位移→view)

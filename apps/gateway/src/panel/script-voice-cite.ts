@@ -726,8 +726,8 @@ $("act-team").onclick = () => switchView("team");
 $("teamTabMembers").onclick = () => switchView("team");
 $("teamTabIssues").onclick = () => switchView("issues"); // fixD5:Issue 看板子标签(三列拖拽+筛选+确认派发)
 $("teamTabDash").onclick = () => switchView("dash"); // 看板子标签(运行看板收编
-$("act-super").onclick = () => superOpen(); // 指挥台(画布态自动退经典后进视图)
-$("act-rsi").onclick = () => switchView("rsi"); // 做梦视图入口(机制卡+全量运行;rsi 内部视图名)
+$("act-super").onclick = () => { superOpen(); superIdeZoneSet("health"); superIdeOpen("health"); }; // 指挥台(侧栏入口=健康一屏默认;从做梦/RSI 回来也落到健康,不留在机制面板)
+$("act-rsi").onclick = () => { switchView("rsi"); superIdeZoneSet("dream"); superIdeOpen("dream", ""); }; // 做梦视图入口(机制卡+全量运行;rsi 内部视图名;显式进 dream 面板,别落到健康一屏)
 /** 全量运行:按最近一拍 rsiLast 逐个发 rsi.mechanism.run(只发已启用机制;服务端
  * startMechanismRun 自带运行中拒绝;rsiRender 把运行中态同步成按钮禁用防重入)。发出后回聊天段看做梦卡。 */
 function rsiRunAllFire() {

@@ -621,6 +621,8 @@ function subAgentDraftOf(agentEvents) {
 }
 function onStreamEv(m) {
   if (!m) return;
+ // Super 轮次流式:固定会话 id=super;与主会话 stStream 分离,只更新指挥台聊天窗的 live 气泡
+  if (m.sessionId === "super") { supOnStream(m.ev || {}); return; }
  // 子代理流(sid=subagent-*):进 subStreams,激活的工作区实时渲染;不碰主会话 stStream。
   if (String(m.sessionId || "").indexOf("subagent-") === 0) {
     const ev = m.ev || {};

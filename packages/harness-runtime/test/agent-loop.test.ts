@@ -122,3 +122,48 @@ describe(" 思考链路", () => {
     expect((ev!.payload as { reasoning?: string }).reasoning).toBeUndefined();
   });
 });
+
+describe("2026-11-13 RSI 机制隔离:freshFromLastUser / freshContext", () => {
+  it("deriveMessages(freshFromLastUser):只从最后一条 user 消息起重建", () => {
+    const journal = new MemoryJournal();
+    journal.append({ kind: "message.user", sessionId: "s1", payload: { text: "task A" } });
+    journal.append({ kind: "message.agent", sessionId: "s1", payload: { text: "A done" } });
+    journal.append({ kind: "message.user", sessionId: "s1", payload: { text: "task B" } });
+    journal.append({ kind: "message.agent", sessionId: "s1", payload: { text: "B start" } });
+    expect(deriveMessages(journal, "s1").map((m) => String(m.content))).toEqual(["task A", "A done", "task B", "B start"]);
+    expect(deriveMessages(journal, "s1", { freshFromLastUser: true }).map((m) => String(m.content))).toEqual(["task B", "B start"]);
+  });
+
+  it("AgentLoop(freshContext):上一个独立任务的对话不进本次请求", async () => {
+    const journal = new MemoryJournal();
+    journal.append({ kind: "message.user", sessionId: "s1", payload: { text: "OLD TASK" } });
+    journal.append({ kind: "message.agent", sessionId: "s1", payload: { text: "OLD ANSWER" } });
+    let seen: Message[] = [];
+    const llm: LlmProvider = {
+      async chat(messages: Message[]) {
+        seen = messages;
+        return { content: "OK" };
+      },
+    };
+    const loop = new AgentLoop({ journal, sessionId: "s1", system: "", llm, tools: [], maxSteps: 1, freshContext: true });
+    await loop.runTurn("NEW TASK");
+    expect(seen.some((m) => String(m.content).includes("OLD TASK"))).toBe(false);
+    expect(seen.some((m) => String(m.content).includes("OLD ANSWER"))).toBe(false);
+    expect(seen.some((m) => String(m.content).includes("NEW TASK"))).toBe(true);
+  });
+});
+
+describe("2026-11-13 freshFromLastUser:非单调 seq(worker ProxyJournal)", () => {
+  it("按数组位置切,不按 seq 切", () => {
+ // session-worker 的 ProxyJournal:种子事件保留 gateway seq(大),本地 append 用副本下标(小)。
+    const fake = {
+      readAll: () => [
+        { kind: "message.user", sessionId: "s1", seq: 900, payload: { text: "OLD" } },
+        { kind: "message.agent", sessionId: "s1", seq: 901, payload: { text: "A" } },
+        { kind: "message.user", sessionId: "s1", seq: 3, payload: { text: "NEW" } },
+        { kind: "message.agent", sessionId: "s1", seq: 4, payload: { text: "B" } },
+      ],
+    } as unknown as import("@lampgenie/core").Journal;
+    expect(deriveMessages(fake, "s1", { freshFromLastUser: true }).map((m) => String(m.content))).toEqual(["NEW", "B"]);
+  });
+});

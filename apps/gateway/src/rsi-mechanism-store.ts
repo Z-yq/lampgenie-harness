@@ -32,6 +32,9 @@ import {
   type RsiMechanismId,
   type RsiResultStatus,
 } from "@lampgenie/runtime/agent/rsi-mechanisms";
+// RSI 产出注入安全边界(#197):agent 结果文本进面板/聊天卡前统一转义控制标签,
+// 轨迹里的 `<system>`/`<|…|>` 不能借结果条目升级成指令。纯函数,runtime 既有实现。
+import { escapeControlTags } from "@lampgenie/runtime/agent/rsi-injection-guard";
 
 /** 机制结果条目的来源(agent 产物 / 代码派生 / 人工新增)。 */
 export const RSI_RESULT_SOURCES = ["agent", "code", "manual"] as const;
@@ -70,11 +73,28 @@ export interface RsiResultItem {
   title: string;
   summary: string;
   detail?: string;
+ /** 质量契约 v2:每条结论必须带证据/影响/建议(旧条目无这些字段,向后兼容)。 */
+  evidence?: string;
+  impact?: string;
+  action?: string;
   status?: RsiResultStatus;
   source?: RsiResultSource;
   runId?: string;
   at: number;
   deleted?: boolean;
+}
+
+/** 单次运行的结果质量评估(拒绝流水账;由 rsi-quality 纯函数计算,随 run 落盘)。 */
+export interface RsiRunQuality {
+  items: number;
+  evidenced: number;
+  impacted: number;
+  actionable: number;
+  shallow: number;
+  duplicates: number;
+  overLimit: boolean;
+  score: number;
+  issues: { code: string; itemId?: string; note: string }[];
 }
 
 export type RsiResultEventType = "upsert" | "update" | "delete";
@@ -84,7 +104,15 @@ export interface RsiResultEventInput {
   mechanismId: string;
   itemId: string;
   item?: Partial<RsiResultItem>;
-  patch?: { title?: string; summary?: string; detail?: string; status?: RsiResultStatus };
+  patch?: {
+    title?: string;
+    summary?: string;
+    detail?: string;
+    evidence?: string;
+    impact?: string;
+    action?: string;
+    status?: RsiResultStatus;
+  };
   by?: string;
   at?: number;
 }
@@ -121,6 +149,23 @@ export interface RsiRunRecord {
   cost?: RsiRunCostRecord;
  /** 本次运行的会话分析计划与认账结果(同一批:派单时写 candidates,收尾时补 analyzed)。 */
   analysis?: RsiRunAnalysisRecord;
+ /** 自动调度周期 id( RSI-SELF-DRIVE;手动运行/旧数据无此字段)。 */
+  cycleId?: string;
+ /** 本次运行是重试哪一次 run(缺省=首次运行)。 */
+  retryOf?: string;
+ /** 已被自动重试的次数(重试后写在旧记录上;上限由调度器策略控制)。 */
+  retryCount?: number;
+ /** 本次 token 预算(0/缺省=未设预算)。 */
+  budgetTokens?: number;
+ /** 实验配额因子(ROI downshift 的 experimentQuotaFactor 首次有了消费方——
+ * experiments 机制的任务书按它限「最多转入多少条候选」;只在 <1 时记录)。 */
+  experimentQuotaFactor?: number;
+ /** 收尾判定:总 token 超过预算(true 时调度器会追加一条 warn 结果并暂停本周期)。 */
+  budgetExceeded?: boolean;
+ /** 收尾判定:注入了候选会话但 agent 一个都没认账(轨迹类机制的质量门)。 */
+  analysisMissing?: boolean;
+ /** 结果质量评估(质量契约 v2;旧记录无此字段)。 */
+  quality?: RsiRunQuality;
 }
 
 /** 重放出来的条目:多一个 `synthetic`(由 update/delete 在缺失基础上造出的占位,不并入基础层)。 */
@@ -160,6 +205,13 @@ function asSource(value: unknown): RsiResultSource | undefined {
 
 function truncate(text: string, limit = MAX_TEXT): string {
   return text.length > limit ? text.slice(0, limit) : text;
+}
+
+/** RSI 产出文本的统一净化:先剥掉 agent 自带的「权威前缀」(只能由系统加),再转义控制标签。 */
+const RSI_AUTHORITY_PREFIX = "[RSI 生成·非系统权威]";
+function sanitizeRsiText(text: string): string {
+  const body = text.startsWith(RSI_AUTHORITY_PREFIX) ? text.slice(RSI_AUTHORITY_PREFIX.length).trimStart() : text;
+  return escapeControlTags(body).text;
 }
 
 function assertRoot(root: string): string {
@@ -336,6 +388,13 @@ function itemFromPartial(mechanismId: string, itemId: string, raw: Record<string
   };
   const detail = asString(raw.detail);
   if (detail !== undefined) item.detail = detail;
+ // 质量四件套(旧条目没有这些字段,读取侧保持 undefined)。
+  const evidence = asString(raw.evidence);
+  if (evidence !== undefined) item.evidence = truncate(evidence);
+  const impact = asString(raw.impact);
+  if (impact !== undefined) item.impact = truncate(impact);
+  const action = asString(raw.action);
+  if (action !== undefined) item.action = truncate(action);
   const status = asStatus(raw.status);
   if (status !== undefined) item.status = status;
   const source = asSource(raw.source);
@@ -351,6 +410,9 @@ function applyPatchTo(item: ReplayItem, patch: Record<string, unknown>, at: numb
   if (typeof patch.title === "string") next.title = truncate(patch.title);
   if (typeof patch.summary === "string") next.summary = truncate(patch.summary);
   if (typeof patch.detail === "string") next.detail = patch.detail;
+  if (typeof patch.evidence === "string") next.evidence = truncate(patch.evidence);
+  if (typeof patch.impact === "string") next.impact = truncate(patch.impact);
+  if (typeof patch.action === "string") next.action = truncate(patch.action);
   const status = asStatus(patch.status);
   if (status !== undefined) next.status = status;
   if (patch.deleted === true) next.deleted = true;
@@ -445,7 +507,15 @@ export async function updateResultItem(
   root: string,
   mechanismId: string,
   itemId: string,
-  patch: { title?: string; summary?: string; detail?: string; status?: RsiResultStatus },
+  patch: {
+    title?: string;
+    summary?: string;
+    detail?: string;
+    evidence?: string;
+    impact?: string;
+    action?: string;
+    status?: RsiResultStatus;
+  },
   by?: string): Promise<{ ok: boolean; reason?: string; item?: RsiResultItem }> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
@@ -514,6 +584,12 @@ export async function startRun(
     runId?: string;
  /** 派单时的会话分析计划(候选名单;analyzed 收尾时才填)。 */
     analysis?: RsiRunAnalysisRecord;
+ /** 自动调度周期 id / 重试来源 / token 预算( RSI-SELF-DRIVE)。 */
+    cycleId?: string;
+    retryOf?: string;
+    budgetTokens?: number;
+ /** 实验配额因子(experiments 机制的降频入参;缺省=不设限)。 */
+    experimentQuotaFactor?: number;
   },
 ): Promise<RsiRunRecord> {
   const base = assertRoot(root);
@@ -533,8 +609,35 @@ export async function startRun(
   if (sessionId !== undefined) record.sessionId = sessionId;
   const analysis = parseAnalysisRecord(input.analysis);
   if (analysis !== undefined) record.analysis = analysis;
+ // RSI-SELF-DRIVE:周期/重试/预算三字段(旧调用不传=不写,旧行为不变)。
+  const cycleId = asString(input.cycleId);
+  if (cycleId !== undefined) record.cycleId = cycleId;
+  const retryOf = asString(input.retryOf);
+  if (retryOf !== undefined) record.retryOf = retryOf;
+  if (typeof input.budgetTokens === "number" && Number.isFinite(input.budgetTokens) && input.budgetTokens > 0) {
+    record.budgetTokens = Math.floor(input.budgetTokens);
+  }
+ // 实验配额只在降频(<1)时记录:配额=1 等于没降频,写了只会噪声。
+  if (
+    typeof input.experimentQuotaFactor === "number" && Number.isFinite(input.experimentQuotaFactor)
+    && input.experimentQuotaFactor > 0 && input.experimentQuotaFactor < 1
+  ) {
+    record.experimentQuotaFactor = input.experimentQuotaFactor;
+  }
   await writeJsonAtomic(runFilePath(base, mechanismId, record.runId), record);
   return record;
+}
+
+/** 记一次自动重试(在旧记录上 +1;读写原子,失败静默交给调用方的兜底)。 */
+export async function markRunRetried(root: string, mechanismId: string, runId: string): Promise<void> {
+  const base = assertRoot(root);
+  const mech = asString(mechanismId);
+  const id = asString(runId);
+  if (!mech || !id) throw new TypeError("markRunRetried: mechanismId/runId 必须是非空字符串");
+  const existing = await readRunFile(base, mech, id);
+  if (!existing) return;
+  existing.retryCount = (existing.retryCount ?? 0) + 1;
+  await writeJsonAtomic(runFilePath(base, mech, id), existing);
 }
 
 /** 结束一次运行(记录不存在时按最小记录补写,不让收尾丢事件)。 */
@@ -544,8 +647,17 @@ export async function finishRun(
   runId: string,
   status: "done" | "failed",
   error?: string,
- /** 收尾时补落的成本/分析(可选;缺省=保留 run 文件里已有的值,兼容旧调用)。 */
-  extra?: { cost?: RsiRunCostRecord; analysis?: RsiRunAnalysisRecord; finishedAt?: number },
+ /** 收尾时补落的成本/分析/质量门(可选;缺省=保留 run 文件里已有的值,兼容旧调用)。 */
+  extra?: {
+    cost?: RsiRunCostRecord;
+    analysis?: RsiRunAnalysisRecord;
+    finishedAt?: number;
+ /** RSI-SELF-DRIVE:预算超限/分析未认账两条收尾判定。 */
+    budgetExceeded?: boolean;
+    analysisMissing?: boolean;
+ /** 质量契约 v2:一次运行的结果质量评估。 */
+    quality?: RsiRunQuality;
+  },
 ): Promise<void> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
@@ -565,6 +677,11 @@ export async function finishRun(
   if (cost !== undefined) record.cost = cost;
   const analysis = parseAnalysisRecord(extra?.analysis);
   if (analysis !== undefined) record.analysis = analysis;
+ // 显式布尔落盘:false 也写(=「已判定,不超限/未缺失」),否则每次 rsi.status 都会重算一次。
+  if (typeof extra?.budgetExceeded === "boolean") record.budgetExceeded = extra.budgetExceeded;
+  if (typeof extra?.analysisMissing === "boolean") record.analysisMissing = extra.analysisMissing;
+  const quality = parseQualityRecord(extra?.quality);
+  if (quality !== undefined) record.quality = quality;
   await writeJsonAtomic(runFilePath(base, mech, id), record);
 }
 
@@ -620,6 +737,39 @@ function parseAnalysisRecord(raw: unknown): RsiRunAnalysisRecord | undefined {
   return { windowDays: windowDays ?? 3, candidates, analyzed };
 }
 
+/** 质量记录净化:计数只留非负有限数,score 0~100,issues 只留 code+note(上限 20)。 */
+function parseQualityRecord(raw: unknown): RsiRunQuality | undefined {
+  if (!isRecord(raw)) return undefined;
+  const count = (key: string): number => {
+    const v = asNumber(raw[key]);
+    return v === undefined || v < 0 ? 0 : Math.floor(v);
+  };
+  const score = Math.max(0, Math.min(100, count("score")));
+  const issues: RsiRunQuality["issues"] = [];
+  if (Array.isArray(raw.issues)) {
+    for (const row of raw.issues) {
+      if (!isRecord(row)) continue;
+      const code = asString(row.code);
+      const note = asString(row.note);
+      if (code === undefined || note === undefined) continue;
+      const itemId = asString(row.itemId);
+      issues.push({ code, note: truncate(note, 200), ...(itemId === undefined ? {} : { itemId }) });
+      if (issues.length >= 20) break;
+    }
+  }
+  return {
+    items: count("items"),
+    evidenced: count("evidenced"),
+    impacted: count("impacted"),
+    actionable: count("actionable"),
+    shallow: count("shallow"),
+    duplicates: count("duplicates"),
+    overLimit: raw.overLimit === true,
+    score,
+    issues,
+  };
+}
+
 function parseRunRecord(mechanismId: string, raw: unknown): RsiRunRecord | undefined {
   if (!isRecord(raw)) return undefined;
   const runId = asString(raw.runId);
@@ -644,6 +794,21 @@ function parseRunRecord(mechanismId: string, raw: unknown): RsiRunRecord | undef
   if (cost !== undefined) record.cost = cost;
   const analysis = parseAnalysisRecord(raw.analysis);
   if (analysis !== undefined) record.analysis = analysis;
+ // RSI-SELF-DRIVE(旧记录无这些字段,读取侧保持 undefined)。
+  const cycleId = asString(raw.cycleId);
+  if (cycleId !== undefined) record.cycleId = cycleId;
+  const retryOf = asString(raw.retryOf);
+  if (retryOf !== undefined) record.retryOf = retryOf;
+  const retryCount = asNumber(raw.retryCount);
+  if (retryCount !== undefined) record.retryCount = retryCount;
+  const budgetTokens = asNumber(raw.budgetTokens);
+  if (budgetTokens !== undefined) record.budgetTokens = budgetTokens;
+  const experimentQuotaFactor = asNumber(raw.experimentQuotaFactor);
+  if (experimentQuotaFactor !== undefined) record.experimentQuotaFactor = experimentQuotaFactor;
+  if (typeof raw.budgetExceeded === "boolean") record.budgetExceeded = raw.budgetExceeded;
+  if (typeof raw.analysisMissing === "boolean") record.analysisMissing = raw.analysisMissing;
+  const quality = parseQualityRecord(raw.quality);
+  if (quality !== undefined) record.quality = quality;
   return record;
 }
 
@@ -731,6 +896,56 @@ function normalizeItemId(raw: string, index: number): string {
 }
 
 /**
+ * 结果文件路径自愈(经验证):agent 偶发把 runId 抄错一位(如 run_mwewx6py → run_mwewxpy),
+ * 结果写到相邻文件名,主流程读不到 → 本轮零产出且质量被误判为空(实际 5 条高质量结论)。
+ * 口径:期望文件存在 → found;否则在**同机制目录**找 mtime ≥ 开始时刻的 `*.result.json`,
+ * 唯一候选才 rename 成期望名(多候选不猜,避免把别人的结果算到本轮)。只挪结果文件,不碰 run 记录。
+ */
+export async function salvageResultFile(
+  root: string,
+  mechanismId: string,
+  runId: string,
+  startedAt: number): Promise<{ found: boolean; movedFrom?: string; error?: string }> {
+  const base = assertRoot(root);
+  const mech = asString(mechanismId);
+  const id = asString(runId);
+  if (!mech || !id) return { found: false, error: "INVALID" };
+  const expected = resultFilePath(base, mech, id);
+  try {
+    await stat(expected);
+    return { found: true };
+  } catch {
+ // 继续找相邻候选
+  }
+  const dir = runsDir(base, mech);
+  let names: string[] = [];
+  try {
+    names = (await readdir(dir)).filter((name) => name.endsWith(".result.json") && name !== `${id}.result.json`);
+  } catch {
+    return { found: false };
+  }
+  const cutoff = startedAt - 5_000;
+  const candidates: { name: string; mtimeMs: number }[] = [];
+  for (const name of names) {
+    try {
+      const info = await stat(join(dir, name));
+      if (info.isFile() && info.mtimeMs >= cutoff) candidates.push({ name, mtimeMs: info.mtimeMs });
+    } catch {
+ // 单个文件 stat 失败不影响其它候选
+    }
+  }
+  if (candidates.length === 0) return { found: false };
+  if (candidates.length > 1) return { found: false, error: "AMBIGUOUS" };
+  const picked = candidates[0]!;
+  try {
+    await rename(join(dir, picked.name), expected);
+    return { found: true, movedFrom: picked.name };
+  } catch {
+    return { found: false, error: "MOVE_FAILED" };
+  }
+}
+
+/**
  * 读一次运行的结果文件(`{items:[…]}`,由 agent 按 brief 写出)。
  * 坏文件 / 缺字段 → [];id 缺省 `i<index>`;全局 id = `<runId>:<normalized>`;
  * title/summary 截断 ≤300 字;status 非法省略;at = 文件 mtime(取不到用 Date.now)。
@@ -765,14 +980,21 @@ export async function readRunResults(root: string, mechanismId: string, runId: s
     const item: RsiResultItem = {
       id: `${id}:${normalized}`,
       mechanismId: mech,
-      title: truncate(typeof raw.title === "string" && raw.title.trim() !== "" ? raw.title : normalized),
-      summary: truncate(typeof raw.summary === "string" ? raw.summary : ""),
+      title: truncate(sanitizeRsiText(typeof raw.title === "string" && raw.title.trim() !== "" ? raw.title : normalized)),
+      summary: truncate(sanitizeRsiText(typeof raw.summary === "string" ? raw.summary : "")),
       at,
       source: asSource(raw.source) ?? "agent",
       runId: id,
     };
     const detail = asString(raw.detail);
-    if (detail !== undefined) item.detail = detail;
+    if (detail !== undefined) item.detail = sanitizeRsiText(detail);
+ // 质量四件套字段(旧结果文件没有=undefined;有则同样过注入边界)。
+    const evidence = asString(raw.evidence);
+    if (evidence !== undefined) item.evidence = truncate(sanitizeRsiText(evidence));
+    const impact = asString(raw.impact);
+    if (impact !== undefined) item.impact = truncate(sanitizeRsiText(impact));
+    const action = asString(raw.action);
+    if (action !== undefined) item.action = truncate(sanitizeRsiText(action));
     const status = asStatus(raw.status);
     if (status !== undefined) item.status = status;
     items.push(item);

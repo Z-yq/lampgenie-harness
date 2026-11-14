@@ -391,6 +391,8 @@ export interface DetectStoreResult {
   }[];
   /** matched 每条按 routeInterventions 展开(已过 tip 门)。 */
   interventions?: { formId: string; carriers: string[]; tipAllowed: boolean }[];
+ /** 同签名 24h 去重命中:未落行( pathology 机制注意「同一快照重复落三行」)。 */
+  deduped?: boolean;
 }
 
 /**
@@ -455,10 +457,30 @@ export function detect(
       reason: item.reason,
     }));
 
+ // pathology 机制注意「同一快照重复落三行,追加台账无去重」:与最近一条 detect
+ // 的原语命中向量+计数完全一致且在 24h 内 → 不再落行(观测没变化=没有新信息)。
+    const at = isFiniteNumber(opts?.at) ? (opts?.at as number) : Date.now();
+    const lastDetect = [...readLedger(root).lines].reverse().find((l) => l.type === "detect");
+    if (lastDetect && lastDetect.type === "detect" && at - lastDetect.at < 24 * 3600_000) {
+      const sigOf = (prim: Record<string, unknown> | undefined) =>
+        Object.keys(prim ?? {}).sort().map((k) => `${k}:${(prim as Record<string, { hit?: unknown; count?: unknown }>)[k]?.hit === true ? 1 : 0}:${(prim as Record<string, { count?: unknown }>)[k]?.count ?? 0}`).join("|");
+      if (sigOf(lastDetect.primitives as Record<string, unknown>) === sigOf(primitives as unknown as Record<string, unknown>)) {
+        return {
+          ok: true,
+          code: "PATHOLOGY_DETECT_UNCHANGED",
+          codes: ["PATHOLOGY_DETECT_UNCHANGED"],
+          primitives,
+          matched,
+          candidates: matchedResult.candidates.map((item) => ({ signature: [...item.signature], familySuggestion: item.familySuggestion, reason: item.reason })),
+          interventions,
+          deduped: true,
+        };
+      }
+    }
     const writeOk = appendLine(root, {
       v: 1,
       type: "detect",
-      at: isFiniteNumber(opts?.at) ? (opts?.at as number) : Date.now(),
+      at,
       primitives: Object.fromEntries(
         Object.entries(primitives).map(([key, value]) => [
           key,

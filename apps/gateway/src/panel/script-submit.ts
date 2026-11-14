@@ -172,6 +172,12 @@ function sideToSuper(label, text) {
 // ─────────────────────────────────────────────────────────────────────────────
 const supState = {
   entries: [],      // 聊天渲染条目:{kind:"u"|"a"|"sys"|"relay"|"day", text, ts, sid?}
+  results: [],      // Coding Agent 结果流(任务/做梦/系统通知;中栏呈现,聊天窗不承载)
+  taskHist: {},     // 派发任务状态轨迹:id → [{state,ts}](任务详情时间线;≤12 步)
+  detailAsked: {},  // 已发过 task.detail.get 的任务 id(防重复拉取)
+  pendingNoticeAt: {}, // notice 先于 task.changed 到达时的回执时间暂存(taskId → ts)
+  stream: null,     // Super 轮次流式 live 气泡({text,reasoning,tool,at});与主会话 stStream 分离
+  run: null,        // 指挥运行态({active,phase,action,startedAt}):聊天头下方状态条(研判/调度/委托)
   waiting: false,   // 一轮进行中(禁重复发送;turn.done/error 解除)
   inbox: [],        // SuperInboxItem[](super.inbox.result)
   dismissed: [],    // 本地忽略的 inbox id(localStorage 持久)
@@ -184,7 +190,7 @@ function supEsc(s) {
   });
 }
 function supClip(s, n) {
-  const t = String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+  const t = String(s == null ? "" : s).replace(/\\s+/g, " ").trim();
   return t.length > n ? t.slice(0, n) + "…" : t;
 }
 function supHhmm(ms) {
@@ -205,7 +211,11 @@ function superViewLoad() {
   }
   wsSafeSend(JSON.stringify({ v: 1, type: "super.inbox", limit: 30 }));
   wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" }));
-  supRenderChat(); supRenderBoard(); supIdeSideRender();
+  supRehydrateDispatch(); // 进指挥台即从已在场的 task.list 恢复派发卡(刷新/重连后协作链不丢)
+ // 网关刚重启/大 journal 时 task.list 可能晚到:短重试两次,避免首屏派发区空着
+  setTimeout(function () { try { supRehydrateDispatch(); } catch (e) {} }, 800);
+  setTimeout(function () { try { supRehydrateDispatch(); } catch (e) {} }, 2500);
+  supRenderChat(); supRenderBoard(); supIdeSideRender(); supRenderResults();
 }
 /* ── super IDE 三栏:侧栏两区(任务/做梦)+ 中栏路由(superIdeMain.open)────────────
  数据同源:任务区=supState.dispatch(submittedBy=super 实时帧+历史回放派发卡同源);做梦区=rsiLast(rsi.status 回包)。
@@ -213,24 +223,125 @@ function superViewLoad() {
 var superIdeZone = "health"; // 活动栏当前区(task|dream|health; 健康一屏为默认)
 var superIdeSel = { task: "", dream: "" }; // 各区最近选中(切区不改中栏内容)
 function superIdeZoneSet(z) {
-  superIdeZone = z === "dream" ? "dream" : (z === "health" ? "health" : "task");
+  superIdeZone = z === "dream" ? "dream" : z === "health" ? "health" : (z === "inbox" ? "inbox" : "task");
   const vs = $("view-super");
-  if (vs) { vs.classList.toggle("spide-zone-task", superIdeZone === "task"); vs.classList.toggle("spide-zone-dream", superIdeZone === "dream"); vs.classList.toggle("spide-zone-health", superIdeZone === "health"); }
+  if (vs) {
+    vs.classList.toggle("spide-zone-task", superIdeZone === "task");
+    vs.classList.toggle("spide-zone-dream", superIdeZone === "dream");
+    vs.classList.toggle("spide-zone-health", superIdeZone === "health");
+    vs.classList.toggle("spide-zone-inbox", superIdeZone === "inbox");
+  }
   const btns = document.querySelectorAll("#superIdeAct .spide-actbtn");
   for (let i = 0; i < btns.length; i++) btns[i].classList.toggle("on", String(btns[i].dataset.spidezone || "") === superIdeZone);
   supIdeSideRender();
   superHealthRender(); // 健康一屏随区渲染(数据 rsiLast;无数据走空态引导)
+  if (superIdeZone === "inbox") supRenderBoard(); // 待办区:进入即刷新提问/权限/中断清单
   if (superIdeZone === "health") superIdeOpen("health"); // 点「健」直接进健康一屏(侧栏无需先选条目)
+ // 修复:活动栏「梦/任务」此前只切左栏列表,不切中栏文档——健康屏的 spide-open-health
+ // 会一直压住 #superMainDream(梦区/自动周期条永远不可见)。这里显式打开对应文档;
+ // 任务无选中回欢迎态(不渲染「任务不存在」假错误)。
+  else if (superIdeZone === "dream") superIdeOpen("dream", superIdeSel.dream);
+  else if (superIdeZone === "task") { if (superIdeSel.task) superIdeOpen("task", superIdeSel.task); else superIdeOpen(""); }
 }
 /* ── 健康一屏渲染(纯前端聚合;数据=rsi.status 同一份 rsiLast)────────────────
  层级:结论层(健康度+三色计数+Top3)→ 解释层(12 体检卡一句话)→ 证据层(点卡进做梦明细)。
  健康度=100−25×bad−8×warn(下限 0);idle(未启用)不罚分;待处理=warn+bad。
  纪律:全部文本过 esc;无内联 onclick(事件委托绑一次);无数据/字段缺失一律降级不抛错。 */
+/* ── 结果可读层:机制 12 句话 + 条目严重度 + 人话文本 ───────────────────
+。不改数据/协议,只把服务端事实翻译成三件事:
+ ①这个机制是干什么的 ②最近一次发现了什么 ③有没有要处理的。
+ 纪律:所有外部文本先 rsiPlainText(去 markdown/表格/代码围栏、按整句截断)再 esc。 */
+var RSI_MECH_PURPOSE = {
+  nightly: "夜间自动跑一遍固定流程,沉淀当天的经验与队列",
+  evidence: "给结论挂证据,检查证据链是否完整",
+  experiments: "登记实验与决策,跟踪还没结论的实验",
+  cost: "统计 LLM 花费,盯着预算与熔断线",
+  injection: "检查提示词注入风险和防护演练结果",
+  tools: "盘点数据工具的注册、版本与退役线索",
+  changeRequests: "收集对机制的改进请求并跟踪处理",
+  cohort: "同批任务/会话的横向指标对比",
+  negativeKb: "记录走不通的路,避免重复踩坑",
+  prompts: "管理提示词版本与当前生效版本",
+  atlas: "维护方向目标图与达成状态",
+  pathology: "登记反复出现的问题与根治状态",
+};
+function rsiMechPurpose(id) { var k = String(id === undefined || id === null ? "" : id); return RSI_MECH_PURPOSE[k] || ""; }
+/** 当前运行条目(与卡片渲染同源):有 runId 时只认本次;失败运行不回退旧条目(旧结果不能冒充本次)。 */
+function rsiCurrentItems(sec, runFailed) {
+  var arr = sec && Array.isArray(sec.items) ? sec.items : [];
+  var r = rsiRunOf(sec);
+  var rid = r && r.runId ? String(r.runId) : "";
+  if (!rid) return arr;
+  var cur = [], i, it;
+  for (i = 0; i < arr.length; i++) {
+    it = arr[i] || {};
+    if (it.runId === undefined || it.runId === null || String(it.runId) === rid) cur.push(it);
+  }
+  if (!cur.length && !runFailed) return arr;
+  return cur;
+}
+/** 条目 status → 三色词(ok|warn|bad|info;info 不计警)。 */
+function rsiItemTone(it) {
+  var st = String(it && it.status !== undefined && it.status !== null ? it.status : "").toLowerCase();
+  if (st === "bad" || st === "error" || st === "failed") return "bad";
+  if (st === "warn" || st === "warning") return "warn";
+  if (st === "ok") return "ok";
+  return "info";
+}
+function rsiItemRank(t) { return t === "bad" ? 3 : t === "warn" ? 2 : t === "info" ? 1 : 0; }
+function rsiWorstItem(items) {
+  var arr = Array.isArray(items) ? items : [], best = null, rank = -1, i, it, t, r2;
+  for (i = 0; i < arr.length; i++) {
+    it = arr[i] || {}; t = rsiItemTone(it); r2 = rsiItemRank(t);
+    if (r2 > rank) { rank = r2; best = it; }
+  }
+  return best;
+}
+/** 条目区最差色调(健康卡状态用):有 bad→bad,有 warn→warn,否则空。 */
+function rsiWorstTone(items) {
+  var best = rsiWorstItem(items);
+  var t = best ? rsiItemTone(best) : "";
+  return t === "bad" ? "bad" : t === "warn" ? "warn" : "";
+}
+/** 服务端文本 → 人话:去代码围栏/表格/标题/粗体/链接,按整句截断;未知格式原样保留。 */
+function rsiPlainText(s, max) {
+  var t = String(s === undefined || s === null ? "" : s);
+  var BT = String.fromCharCode(96);
+  t = t.replace(new RegExp(BT + "{3}[\\s\\S]*?" + BT + "{3}", "g"), " ");
+  t = t.replace(new RegExp(BT, "g"), "");
+  t = t.replace(/^\\s*\\|.*$/gm, " ");
+  t = t.replace(/^#{1,6}\\s+/gm, "");
+  t = t.replace(/\\*\\*([^*]+)\\*\\*/g, "$1");
+  t = t.replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, "$1");
+  t = t.replace(/\\s+/g, " ").trim();
+  if (!t) return "";
+  var cut = max && max > 0 ? max : 120;
+  var m = t.match(/^[\\s\\S]{1,220}?[。；;!?！？](?=\\s|$)/);
+  if (m && m[0].length <= cut + 30) t = m[0];
+  return t.length > cut ? t.slice(0, cut) + "…" : t;
+}
+/** 常见英文状态 → 中文(只换独立词,不动标识符)。 */
+function rsiHumanText(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/\\brun\\s+(\\d+)\\s*步全\\s*done\\b/gi, "$1 步全部完成")
+    .replace(/\\bstatus\\s*=\\s*done\\b/g, "状态=完成")
+    .replace(/\\bcontinue\\s*\\/\\s*iterate\\b/gi, "继续迭代")
+    .replace(/\\bcontinue\\b/gi, "继续")
+    .replace(/\\biterate\\b/gi, "迭代")
+    .replace(/\\bdone\\b/g, "完成")
+    .replace(/\\bfailed\\b/g, "失败")
+    .replace(/\\brunning\\b/g, "运行中");
+}
 function rsiHealthKind(sec) {
-  if (rsiSecStatus(sec) === "ok") return "ok";
+  var run = sec && sec.run;
+  if (run && String(run.status) === "failed") return "bad"; // 运行失败=异常(不能被 section.ok 掩盖)
+  if (run && String(run.status) === "running") return "warn"; // 运行中=关注
   var c = String((sec && (sec.code !== undefined ? sec.code : sec.codeText)) || "");
-  if (c === "UNAVAILABLE") return "idle";
-  return /ERROR|CONFLICT|FAILED|PAUSED|STORE_BAD/.test(c) ? "bad" : "warn";
+  if (c === "UNAVAILABLE") return rsiCurrentItems(sec, false).length ? "warn" : "idle";
+  var worst = rsiWorstTone(rsiCurrentItems(sec, false)); // 机制自己报的 warn/bad 必须进体检结论
+  if (worst === "bad") return "bad";
+  if (worst === "warn") return "warn";
+  return rsiSecStatus(sec) === "ok" ? "ok" : "warn";
 }
 function rsiHealthAgg(sections) {
   var secs = Array.isArray(sections) ? sections : [];
@@ -239,21 +350,28 @@ function rsiHealthAgg(sections) {
   for (i = 0; i < secs.length; i++) {
     s = secs[i] || {}; kind = rsiHealthKind(s);
     agg[kind] = (agg[kind] || 0) + 1;
+    run = rsiRunOf(s);
     if (kind === "warn" || kind === "bad") {
       agg.pending++;
-      warning = Array.isArray(s.warnings) && s.warnings.length ? String(s.warnings[0]) : "";
-      items = Array.isArray(s.items) ? s.items : [];
-      for (j = 0; j < items.length; j++) {
-        it = items[j] || {};
-        text = String(it.summary !== undefined && it.summary !== null && String(it.summary).trim() !== "" ? it.summary : (it.title !== undefined && it.title !== null ? it.title : "")).trim();
-        if (!text) continue;
-        (kind === "bad" ? badFindings : warnFindings).push({ kind: kind, mech: rsiSecId(s), title: String(it.title !== undefined && it.title !== null && String(it.title).trim() !== "" ? it.title : (s.title !== undefined ? s.title : rsiSecId(s))), text: text });
-        break; // 每机制只取首条发现
+      if (run && String(run.status) === "failed") { // 失败运行优先报失败原因,不拿历史条目当本次发现
+        text = "运行失败:" + (run.error !== undefined && run.error !== null && String(run.error).trim() !== "" ? String(run.error) : "未记录原因");
+        (kind === "bad" ? badFindings : warnFindings).push({ kind: kind, mech: rsiSecId(s), title: String(s.title !== undefined ? s.title : rsiSecId(s)), text: rsiPlainText(text, 90) });
+      } else {
+        items = rsiCurrentItems(s, false);
+        it = rsiWorstItem(items); // 发现=最严重的那条(不再是列表第一条)
+        if (it) {
+          (kind === "bad" ? badFindings : warnFindings).push({
+            kind: kind, mech: rsiSecId(s),
+            title: rsiPlainText(rsiHumanText(it.title), 42) || String(s.title !== undefined ? s.title : rsiSecId(s)),
+            text: rsiPlainText(rsiHumanText(it.summary !== undefined && it.summary !== null ? it.summary : ""), 88),
+          });
+        } else {
+          warning = Array.isArray(s.warnings) && s.warnings.length ? String(s.warnings[0]) : "";
+          if (warning) (kind === "bad" ? badFindings : warnFindings).push({ kind: kind, mech: rsiSecId(s), title: String(s.title !== undefined ? s.title : rsiSecId(s)), text: rsiPlainText(warning, 90) });
+        }
       }
-      if (!items.length && warning) (kind === "bad" ? badFindings : warnFindings).push({ kind: kind, mech: rsiSecId(s), title: String(s.title !== undefined ? s.title : rsiSecId(s)), text: warning });
     }
-    run = rsiRunOf(s);
-    if (run) {
+    if (run && kind !== "idle") { // 未启用机制的历史运行不计入「最近体检」成本/时间(会与「未启用」自相矛盾)
       cost = run.cost && typeof run.cost === "object" ? run.cost : null;
       if (cost) {
         agg.hasCost = true;
@@ -283,8 +401,8 @@ function rsiHealthAgo(ts) {
   return Math.floor(d / 86400000) + " 天前";
 }
 function rsiHealthCostText(agg) {
-  if (!agg.hasCost) return "近一次运行无成本记录";
-  var money = agg.costMissing > 0 ? (agg.costCny > 0 ? "¥" + agg.costCny.toFixed(2) + "+单价缺失" : "单价缺失") : "¥" + agg.costCny.toFixed(2);
+  if (!agg.hasCost) return "暂无成本记录";
+  var money = agg.costMissing > 0 ? (agg.costCny > 0 ? "¥" + agg.costCny.toFixed(2) + "(部分未计价)" : "未计价") : "¥" + agg.costCny.toFixed(2);
   return money + " · " + rsiTok(agg.costTokens) + " tokens";
 }
 function rsiHealthTopHtml(agg, loading) {
@@ -294,23 +412,29 @@ function rsiHealthTopHtml(agg, loading) {
   var sc = rsiHealthScoreClass(agg), f = [], i, x;
   for (i = 0; i < agg.findings.length; i++) {
     x = agg.findings[i];
-    f.push('<div class="spide-health-f t-' + x.kind + '"><span class="fdot"></span><span class="ft">' + esc(String(x.title)) + '</span><span class="fs" title="' + esc(String(x.text)) + '">' + esc(rsiCut(String(x.text), 60)) + '</span></div>');
+    f.push('<div class="spide-health-f t-' + x.kind + '" data-health-mech="' + esc(String(x.mech || "")) + '" title="打开机制详情"><span class="fdot"></span><span class="ft">' + esc(String(x.title)) + '</span><span class="fs" title="' + esc(String(x.text)) + '">' + esc(String(x.text)) + '</span></div>');
   }
   if (!f.length) f.push(allIdle
     ? '<div class="spide-health-f t-idle"><span class="fdot"></span><span class="ft">全部未启用</span><span class="fs">运行任意机制后产生体检数据</span></div>'
     : '<div class="spide-health-f t-ok"><span class="fdot"></span><span class="ft">全部正常</span><span class="fs">没有需要处理的机制</span></div>');
+ // 一眼结论:大数字=最要紧的那件事(异常几个/待关注几个/全部正常),不再用 0-100 分数(机制自报的提醒项会把分数打到 0,看不懂)
+  var big, blabel, bcls;
+  if (allIdle) { big = "—"; blabel = "未启用"; bcls = "idle"; }
+  else if (agg.bad > 0) { big = String(agg.bad); blabel = "个机制有异常"; bcls = "bad"; }
+  else if (agg.warn > 0) { big = String(agg.warn); blabel = "个机制有待关注发现"; bcls = "warn"; }
+  else { big = String(agg.ok); blabel = "个机制全部正常"; bcls = "ok"; }
   return '<div class="spide-health-top">' +
-    '<div class="spide-health-score s-' + sc + '">' + (allIdle ? "—" : agg.score) + '<span style="font-size:12px;font-weight:500;color:var(--faint,#7d6c58)">' + (allIdle ? "未启用" : "/100") + '</span></div>' +
-    '<div class="spide-health-bar"><i class="s-' + sc + '" style="width:' + (allIdle ? 0 : agg.score) + '%"></i></div>' +
+    '<div class="spide-health-verdict s-' + bcls + '"><b>' + esc(big) + '</b><span>' + esc(blabel) + '</span></div>' +
     '<div class="spide-health-counts"><span class="c-ok">正常 <b>' + agg.ok + '</b></span><span class="c-warn">关注 <b>' + agg.warn + '</b></span><span class="c-bad">异常 <b>' + agg.bad + '</b></span><span class="c-idle">未启用 <b>' + agg.idle + '</b></span></div>' +
-    '<div class="spide-health-dream">最近做梦 ' + esc(rsiHealthAgo(agg.lastRunAt)) + ' · ' + esc(rsiHealthCostText(agg)) + '</div>' +
+    '<div class="spide-health-dream">' + (agg.ok + agg.warn + agg.bad > 0 ? (agg.ok + agg.warn + agg.bad) + ' 个机制有数据 · ' : "") + '最近体检 ' + esc(rsiHealthAgo(agg.lastRunAt)) + ' · ' + esc(rsiHealthCostText(agg)) + '</div>' +
     '<div class="spide-health-findings">' + f.join("") + '</div>' +
-    '<div class="spide-health-pending">待处理 ' + agg.pending + ' 条</div>' +
+    '<div class="spide-health-pending">' + (agg.bad + agg.warn) + ' 个机制有待处理发现</div>' +
+    '<div class="spide-health-legend">正常=没发现要处理的事 · 关注=有提醒项 · 异常=运行失败或严重发现 · 点卡片看这个机制管什么、发现了什么</div>' +
     '<button class="vw-act" data-health-act="refresh" title="重新拉取 rsi.status">刷新</button></div>';
 }
 /** 体检卡结论行:优先 item.title(短结论),其次首句摘要;按句号/分号截断,避免卡片变成文件分析长文。 */
 function rsiCardLead(text, max) {
-  var s = String(text === undefined || text === null ? "" : text).replace(/\s+/g, " ").trim();
+  var s = String(text === undefined || text === null ? "" : text).replace(/\\s+/g, " ").trim();
   var m = s.search(/[。；;]/);
   if (m > 0 && m <= max) s = s.slice(0, m);
   return s.length > max ? s.slice(0, max) + "…" : s;
@@ -323,26 +447,41 @@ function renderMechCards(sections, loading) {
     var s = secs[i] || {}, kind = rsiHealthKind(s), sid = rsiSecId(s) || ("sec" + i);
     var title = s.title !== undefined ? s.title : (s.name !== undefined ? s.name : sid);
     var badge = kind === "ok" ? "正常" : kind === "warn" ? "关注" : kind === "bad" ? "异常" : "未启用";
-    var items = Array.isArray(s.items) ? s.items : [];
-    var item0 = items[0] || {};
-    var itemTitle = String(item0.title === undefined || item0.title === null ? "" : item0.title).trim();
-    var itemSummary = String(item0.summary === undefined || item0.summary === null ? "" : item0.summary).trim();
-    var lead = items.length ? (itemTitle !== "" ? itemTitle : rsiCardLead(itemSummary, 80)) : (Array.isArray(s.warnings) && s.warnings.length ? String(s.warnings[0]) : (kind === "idle" ? "未产生数据(运行对应 RSI 任务后自动更新)" : "暂无结果条目"));
-    var sub = items.length && itemSummary !== "" && itemSummary !== itemTitle ? rsiCardLead(itemSummary, 96) : "";
-    var kv = [], ms = Array.isArray(s.metrics) ? s.metrics : [];
-    for (j = 0; j < ms.length && kv.length < 2; j++) {
-      var m = ms[j] || {};
-      if (m.label === undefined || m.label === null || m.label === "") continue;
-      kv.push('<span>' + esc(String(m.label)) + ' <b>' + esc(String(m.value)) + (m.unit !== undefined && m.unit !== null ? esc(String(m.unit)) : "") + '</b></span>');
+    var run = rsiRunOf(s), runFailed = run && String(run.status) === "failed";
+    var runError = run && run.error !== undefined && run.error !== null ? String(run.error) : "";
+    var items = rsiCurrentItems(s, runFailed);
+    var worst = rsiWorstItem(items);
+    var lead = "", sub = "", watch = 0, j2;
+    for (j2 = 0; j2 < items.length; j2++) { var tw = rsiItemTone(items[j2]); if (tw === "warn" || tw === "bad") watch++; }
+    if (runFailed) {
+      lead = "最近一次运行失败" + (runError ? ":" + rsiPlainText(rsiHumanText(runError), 56) : "");
+      sub = items.length ? "中断前已产出 " + items.length + " 条结果,点开看详情" : "";
+    } else if (worst) {
+      lead = rsiPlainText(rsiHumanText(worst.title), 64) || rsiPlainText(rsiHumanText(worst.summary), 64);
+      var wsum = rsiPlainText(rsiHumanText(worst.summary !== undefined && worst.summary !== null ? worst.summary : ""), 88);
+      if (wsum && wsum !== lead) sub = wsum;
+    } else if (items.length) {
+      lead = rsiPlainText(rsiHumanText(items[0].title), 64);
+    } else {
+      lead = kind === "idle" ? (run ? "机制未启用,当前数据源不可用" : "还没产生数据(运行这个机制后自动更新)") : "本次运行没有产出条目";
     }
-    var run = rsiRunOf(s), cost = run && run.cost && typeof run.cost === "object" ? run.cost : null;
-    var costLine = cost ? ((cost.amountCny === null || cost.amountCny === undefined) ? "单价缺失" : "¥" + Number(cost.amountCny).toFixed(2)) + " · " + rsiTok(cost.totalTokens) + " tokens" : "";
-    out.push('<div class="spide-mcard" data-mech="' + esc(sid) + '" title="点击查看机制详情">' +
-      '<div class="spide-mcard-h"><span class="mdot s-' + kind + '"></span><span class="mname">' + esc(String(title)) + '</span><span class="mlabel">' + badge + '</span></div>' +
-      '<div class="spide-mcard-lead l-' + kind + '">' + esc(rsiCut(lead, 80)) + '</div>' +
+ // 一行元信息:结果几条 / 几条待关注 / 上次运行 / 成本(只在有 token 或金额时显示)
+    var meta = [];
+    if (items.length) meta.push(items.length + " 条结果");
+    if (watch) meta.push(watch + " 条待关注");
+    var at = run && (run.finishedAt !== undefined && run.finishedAt !== null ? run.finishedAt : (run.startedAt !== undefined ? run.startedAt : undefined));
+    if (at) meta.push(rsiHealthAgo(at));
+    var cost = run && run.cost && typeof run.cost === "object" ? run.cost : null;
+    if (cost && kind !== "idle" && (Number(cost.totalTokens) > 0 || (cost.amountCny !== null && cost.amountCny !== undefined))) {
+      meta.push(((cost.amountCny === null || cost.amountCny === undefined) ? "未计价" : "¥" + Number(cost.amountCny).toFixed(2)) + " · " + rsiTok(cost.totalTokens) + " tok");
+    }
+    var purpose = rsiMechPurpose(sid);
+    out.push('<div class="spide-mcard" data-mech="' + esc(sid) + '" title="点开看这个机制的详细结果">' +
+      '<div class="spide-mcard-h"><span class="mdot s-' + kind + '"></span><span class="mname">' + esc(String(title)) + '</span><span class="mlabel m-' + kind + '">' + badge + '</span></div>' +
+      (purpose ? '<div class="spide-mcard-purpose">' + esc(purpose) + '</div>' : '') +
+      '<div class="spide-mcard-lead l-' + kind + '">' + esc(lead) + '</div>' +
       (sub ? '<div class="spide-mcard-sub">' + esc(sub) + '</div>' : '') +
-      (kv.length ? '<div class="spide-mcard-kv">' + kv.join("") + '</div>' : '') +
-      (costLine ? '<div class="spide-mcard-cost">' + esc(costLine) + '</div>' : '') + '</div>');
+      (meta.length ? '<div class="spide-mcard-meta">' + esc(meta.join(" · ")) + '</div>' : '') + '</div>');
   }
   return out.join("");
 }
@@ -375,7 +514,7 @@ function superHealthRender() {
   var cnt = $("superSbHealthCnt"); if (cnt) cnt.textContent = loading ? "…" : String(secs.length);
   var list = $("superSbHealthList"); if (list) list.innerHTML = err ? '<div class="spide-empty">读取失败,点上方重试。</div>' : rsiHealthSideHtml(secs, loading);
   var hint = $("superSbHealthHint");
-  if (hint) hint.textContent = loading ? "正在读取 rsi.status…" : (err ? "读取失败;点「重试」重新拉取。" : (agg.total ? ("健康度 " + (agg.ok + agg.warn + agg.bad === 0 ? "—" : agg.score + "/100") + " · 待处理 " + agg.pending + " 条 · 点卡片看机制详情") : "还没有体检数据;点「全量运行」让 Super 做一次全身扫描。"));
+  if (hint) hint.textContent = loading ? "正在读取 rsi.status…" : (err ? "读取失败;点「重试」重新拉取。" : (agg.total ? (agg.ok + agg.warn + agg.bad === 0 ? "还没有可运行的机制;点「全量运行」开始体检" : (agg.bad > 0 ? agg.bad + " 个机制有异常 · " : "") + (agg.warn > 0 ? agg.warn + " 个机制有待关注发现 · " : "") + "点卡片看这个机制管什么、发现了什么") : "还没有体检数据;点「全量运行」让 Super 做一次全身扫描。"));
  // 事件委托绑一次:体检卡/侧栏项→做梦明细;空态「全量运行」→rsiRunAllFire
   if (grid && !grid.__healthBound) {
     grid.addEventListener("click", function (ev) {
@@ -401,7 +540,12 @@ function superHealthRender() {
       var run = t && t.closest ? t.closest('[data-health-act="runall"]') : null;
       if (run) { rsiRunAllFire(); return; }
       var ref = t && t.closest ? t.closest('[data-health-act="refresh"]') : null;
-      if (ref) rsiStatusPull();
+      if (ref) { rsiStatusPull(); return; }
+      var find = t && t.closest ? t.closest("[data-health-mech]") : null; // 发现行可点→机制详情
+      if (find) {
+        var mid = String(find.getAttribute("data-health-mech") || "");
+        if (mid) { superIdeZoneSet("dream"); superIdeOpen("dream", mid); }
+      }
     });
     top.__healthBound = true;
   }
@@ -413,6 +557,183 @@ function superHealthRender() {
     for (var i = 0; i < secs.length; i++) { rr = rsiRunOf(secs[i] || {}); if (rr && String(rr.status) === "running") anyRunning = true; }
     allBtnH.disabled = loading || err !== "" || anyRunning;
   }
+}
+/** Super 工具 → 指挥台动词(状态条用人话,不把原始工具名甩给用户)。 */
+function supToolVerb(name) {
+  var map = {
+    spawn_task: "委托任务", list_tasks: "盘点任务", task_status: "查询任务状态", task_result: "读取任务结果",
+    task_cancel: "终止任务", task_resend: "重发任务", task_resume: "恢复任务", recall_tasks: "找回任务",
+    list_projects: "查看工作区", project_add: "添加工作区", project_remove: "移除工作区",
+    list_nodes: "检查远程节点", relay_answer: "回交答复",
+    sys_status: "体检系统", sys_config: "读写配置", sys_provider: "配置服务商",
+    sys_logs: "读取日志", sys_restart: "安排重启", sys_rsi: "体检机制",
+  };
+  return map[String(name || "")] || ("调用 " + String(name || "工具"));
+}
+function supRunSecs(r) {
+  var s = Math.max(0, Math.round((Date.now() - (r && r.startedAt ? r.startedAt : Date.now())) / 1000));
+  return s >= 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
+}
+/** 运行状态条:阶段 + 当前动作 + 秒表;仅在 Super 轮次/在途委托时显示。 */
+function supRunBarRender() {
+  var el = document.getElementById("superRunBar");
+  if (!el) return;
+  var r = supState.run;
+  if (!r || !r.active) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "flex";
+  var steps = Array.isArray(r.steps) ? r.steps : [], stHtml = "";
+  for (var i = 0; i < steps.length; i++) {
+    var s = steps[i] || {};
+    stHtml += '<span class="sr-step' + (s.done ? " on" : "") + '">' + esc(String(s.verb || s.name || "")) + (s.done ? " ✓" : "") + "</span>";
+  }
+  el.innerHTML = '<span class="sr-dot"></span><span class="sr-phase">' + esc(String(r.phase || "指挥中")) + '</span>' +
+    '<span class="sr-act">' + esc(String(r.action || "正在调度")) + "</span>" +
+    (stHtml ? '<span class="sr-steps">' + stHtml + "</span>" : "") +
+    '<span class="sr-time">' + esc(supRunSecs(r)) + "</span>";
+}
+function supRunStart(action) { supState.run = { active: true, phase: "指挥中", action: String(action || "正在理解指令"), startedAt: Date.now(), steps: [] }; supRunBarRender(); }
+var supRunPhaseTimer = 0; // 工具阶段最短停留:spawn_task 89ms 就结束,不让「委托中」一闪而过
+function supRunPhase(phase, action) {
+  var r = supState.run;
+  if (!r || !r.active) return;
+  if (!supState.waiting) return; // 播报轮(非用户轮次)不覆盖「已委托/已交付」状态条
+  if (supRunPhaseTimer) { clearTimeout(supRunPhaseTimer); supRunPhaseTimer = 0; }
+  if (phase) r.phase = String(phase);
+  if (action) r.action = String(action);
+  supRunBarRender();
+}
+function supRunPhaseAfter(ms, phase, action) {
+  if (supRunPhaseTimer) clearTimeout(supRunPhaseTimer);
+  supRunPhaseTimer = setTimeout(function () { supRunPhaseTimer = 0; supRunPhase(phase, action); }, Math.max(0, Number(ms) || 0));
+}
+function supRunEnd() { if (supRunPhaseTimer) { clearTimeout(supRunPhaseTimer); supRunPhaseTimer = 0; } if (supState.run) supState.run.active = false; supRunBarRender(); }
+/** 轮次结束/任务状态变化后:有在途委托→「已委托」态;全部终态→「已交付」4s 后收起。 */
+function supRunAfterTaskChange() {
+  if (!supState || supState.waiting) return;
+  var running = 0, queued = 0, k, d = supState.dispatch || {};
+  for (k in d) { var s = String((d[k] || {}).state || ""); if (s === "running") running++; else if (s === "queued") queued++; }
+  var r = supState.run;
+  if (running > 0 || queued > 0) {
+    if (!r || !r.active || r.phase !== "已委托") supState.run = { active: true, phase: "已委托", action: "", startedAt: (r && r.startedAt) || Date.now(), steps: (r && r.steps) || [] };
+    supState.run.action = (running ? running + " 个任务执行中" : "") + (running && queued ? " · " : "") + (queued ? queued + " 个排队中" : "") + " · 结果回到中栏";
+    supRunBarRender();
+    return;
+  }
+  if (r && r.phase === "已委托") {
+    supState.run = { active: true, phase: "已交付", action: "Coding Agent 回执已到 · 结果在中栏", startedAt: Date.now(), steps: (r && r.steps) || [] };
+    supRunBarRender();
+    setTimeout(function () { if (supState.run && supState.run.phase === "已交付") { supState.run.active = false; supRunBarRender(); } }, 4000);
+  }
+}
+/** 聊天窗头部状态:空闲/思考中/等你回答/派发中;数据全来自已在场状态,零新协议。 */
+/* ── Super 上下文经济面板 ─────────────────────────────────
+ * ① 上下文 pill:主值=trace.stats(super).contextTokens(API 经验证),回退=supState.entries 尾部
+ * message.agent 的 usage.inputTokens;分母=同帧 contextWindow;无数据显示「上下文 —」。
+ * ② 压缩按钮:session.compact(sessionId=super,与 coding /compact 同一服务端路径);status/result
+ * 帧 toast,完成后重拉 super.history(压缩标记即时可见)。 */
+function supCtxRequest() {
+  try { wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: "super" })); } catch (e) {}
+}
+function supCtxTok(n) { const v = Number(n) || 0; return v >= 1000 ? (Math.round(v / 100) / 10) + "k" : String(v); }
+function supCtxPillRender() {
+  var el = document.getElementById("supCtxPill");
+  if (!el) return;
+  var st = (typeof traceStats !== "undefined" && traceStats) ? (traceStats["super"] || {}) : {};
+  var main = Number(st.contextTokens) > 0 ? Number(st.contextTokens) : 0;
+  if (!main) { // 回退:entries 尾部实测 usage
+    var evs = supState.entries || [];
+    for (var i = evs.length - 1; i >= 0; i--) {
+      var u = (evs[i] || {}).usage || {};
+      if (Number(u.inputTokens) > 0) { main = Number(u.inputTokens); break; }
+    }
+  }
+  if (!main) { el.textContent = "上下文 —"; el.title = "尚无 LLM 调用实测;发一轮对话后出现"; return; }
+  var win = Number(st.contextWindow) || 0;
+  var msgs = 0; evs = supState.entries || [];
+  for (i = 0; i < evs.length; i++) if (evs[i].kind === "u" || evs[i].kind === "a") msgs++;
+  el.textContent = "上下文 " + msgs + " 条 · " + supCtxTok(main) + (win ? "/" + supCtxTok(win) + " · " + Math.min(100, Math.round((main / win) * 100)) + "%" : " tok");
+  el.title = "主值=最近一次 LLM 调用实测输入" + (win ? ";窗口 " + supCtxTok(win) : "") + ";超阈值自动压缩(与 coding 同源),也可点右侧「压缩」手动压";
+}
+var supCompactPending = false;
+function supCompactSend() {
+  if (supCompactPending) { toast("压缩进行中,稍候"); return; }
+  supCompactPending = true;
+  try { wsSafeSend(JSON.stringify({ v: 1, type: "session.compact", sessionId: "super" })); } catch (e) { supCompactPending = false; }
+  var btn = document.getElementById("supCompactBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "压缩中…"; }
+  setTimeout(function () { // 20s 兜底解锁(admin n7 同款)
+    if (!supCompactPending) return;
+    supCompactPending = false;
+    var b = document.getElementById("supCompactBtn");
+    if (b) { b.disabled = false; b.textContent = "压缩"; }
+  }, 20000);
+}
+function supCompactDone() { // ws-router 的 compact 终态帧回调:解锁按钮+重拉实测+历史重放(压缩标记可见)
+  supCompactPending = false;
+  var b = document.getElementById("supCompactBtn");
+  if (b) { b.disabled = false; b.textContent = "压缩"; }
+  supCtxRequest();
+  try { wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 })); } catch (e) {}
+}
+function supCtxWire() {
+  var btn = document.getElementById("supCompactBtn");
+  if (btn && !btn.__bound) { btn.__bound = true; btn.addEventListener("click", supCompactSend); }
+  var pill = document.getElementById("supCtxPill");
+  if (pill && !pill.__bound) { pill.__bound = true; pill.addEventListener("click", function () { supCtxRequest(); toast("已刷新上下文用量"); }); }
+}
+function supChatHeadSync() {
+  var st = document.getElementById("superChatState"), sub = document.getElementById("superChatSub");
+  if (!st || !sub) return;
+  var running = 0, queued = 0, k, d = supState.dispatch || {};
+  for (k in d) { var s = String((d[k] || {}).state || ""); if (s === "running") running++; else if (s === "queued") queued++; }
+  var urgent = 0, backlog = 0, inbox = supState.inbox || [], dismissed = supState.dismissed || [], i, it, kind;
+  for (i = 0; i < inbox.length; i++) {
+    it = inbox[i] || {};
+    if (it.id && dismissed.indexOf(it.id) >= 0) continue;
+    kind = String(it.kind || "");
+    if (kind === "ask" || kind === "permission") urgent++;
+    else if (kind === "interrupted" || kind === "blocked" || kind === "failed") backlog++;
+  }
+  var state, subText, cls;
+  if (supState.waiting) { state = "思考中"; subText = "正在调度,可继续输入(消息会排队)"; cls = "sch-state busy"; }
+  else if (urgent > 0) { state = "等你回答 " + urgent; subText = "提问/权限待处理 · 点这里打开待办区"; cls = "sch-state wait"; }
+  else if (running > 0 || queued > 0) { state = "派发中"; subText = (running ? running + " 个任务运行中" : "") + (running && queued ? " · " : "") + (queued ? queued + " 个排队中" : "") + " · 结果在中栏"; cls = "sch-state busy"; }
+  else if (backlog > 0) { state = "待办 " + backlog; subText = "中断/失败任务待处理 · 点这里打开待办区"; cls = "sch-state todo"; }
+  else { state = "空闲"; subText = "任务与结果在中栏 · 说需求、查状态或派任务"; cls = "sch-state"; }
+  st.textContent = state; st.className = cls;
+  if (urgent > 0 || backlog > 0) { st.dataset.zone = "inbox"; st.title = "打开待办区"; } else { delete st.dataset.zone; st.title = ""; }
+  sub.textContent = subText;
+ // 画布形态状态点——super 卡头圆点/托盘按钮徽态与聊天头同一真源(waiting/待答/派发中/待办/空闲)。
+  if (typeof cvCardStatus === "function") {
+    if (supState.waiting) cvCardStatus("super", "run", "Super 正在处理");
+    else if (urgent > 0) cvCardStatus("super", "warn", urgent + " 条待你回答");
+    else if (running + queued > 0) cvCardStatus("super", "run", (running + queued) + " 个任务执行中");
+    else if (backlog > 0) cvCardStatus("super", "warn", backlog + " 条待办(中断/失败)"); // 琥珀不红——常驻历史积压不该常年红灯告警
+    else cvCardStatus("super", "", "");
+  }
+  supCtxPillRender();
+}
+/** 聊天窗滚动态:离开底部时显示「↓ 最新」;快捷指令 chip 点击填入输入框。 */
+function supChatInit() {
+  var body = document.getElementById("superChatBody"), latest = document.getElementById("superChatLatest");
+  if (body && latest && !body.__latestBound) {
+    body.addEventListener("scroll", function () {
+      latest.classList.toggle("on", body.scrollHeight - body.scrollTop - body.clientHeight > 80);
+    });
+    latest.addEventListener("click", function () {
+      body.scrollTop = body.scrollHeight;
+      latest.classList.remove("on");
+    });
+    body.__latestBound = true;
+  }
+  var stateEl = document.getElementById("superChatState");
+  if (stateEl && !stateEl.__zoneBound) {
+    stateEl.addEventListener("click", function () {
+      if (stateEl.dataset.zone === "inbox") superIdeZoneSet("inbox");
+    });
+    stateEl.__zoneBound = true;
+  }
+  supChatHeadSync();
 }
 /** 任务状态 → 人话徽标(排队/运行/完成/失败)。 */
 function superIdeStLabel(st) {
@@ -458,6 +779,22 @@ function superIdeDreamListHtml() {
   }
   return rows.join("");
 }
+/** 面板加载/重连后从 task.list 重建 Super 派发任务(否则派发卡/协作链只在实时帧里存在,刷新即丢)。
+ * task.list 是 TaskIndex 全量(含 submittedBy);取最近 20 条 Super 任务重放 supTrackDispatch,
+ * 终态会触发详情补拉,恢复任务书/结果回执。 */
+function supRehydrateDispatch() {
+  if (!supState || typeof tasks === "undefined" || !tasks || typeof tasks.forEach !== "function") return;
+  var list = [];
+  tasks.forEach(function (t) { if (t && String(t.submittedBy || "") === "super" && t.id) list.push(t); });
+  if (!list.length) return;
+  list.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+  var added = 0;
+  for (var i = 0; i < list.length && i < 20; i++) {
+    var t = list[i];
+    if (!supState.dispatch || !supState.dispatch[t.id]) { supTrackDispatch({ task: t }); added++; }
+  }
+  if (added) { try { supRenderChat(); } catch (e) {} } // 重渲聊天:spawn_task 关系条按新 dispatch 反查 task id
+}
 /** 侧栏整体重渲(两区列表+计数);空态兜底不抛错。 */
 function supIdeSideRender() {
   const tl = $("superSbTaskList"), dl = $("superSbDreamList");
@@ -493,31 +830,180 @@ function superIdeOpen(kind, id) {
   supIdeSideRender();
 }
 /** 中栏任务详情:标题/状态徽标/目标 session/过程摘要+「打开会话」按钮(跳目标 session)。 */
+/** 任务状态轨迹:id → [{state,ts}](只记状态变化;≤12 步;任务详情时间线/回执来源)。 */
+function supTaskHistPush(id, state, ts) {
+  var tid = String(id || ""), st = String(state || "?");
+  if (!tid) return;
+  if (!supState.taskHist) supState.taskHist = {};
+  var h = supState.taskHist[tid] || (supState.taskHist[tid] = []);
+  if (!h.length || String(h[h.length - 1].state) !== st) {
+    h.push({ state: st, ts: Number(ts) || Date.now() });
+    if (h.length > 12) h.shift();
+  }
+}
+/** task.detail.result → Super 派发任务补全正文(索引帧不带 instruction/result;协作链/结果呈现需要)。
+ * 主聊天同一帧也会更新 tasks 表;这里只补 Super 自己的 dispatch 表,互不影响。 */
+function supOnTaskDetail(id, task) {
+  var tid = String(id || "");
+  if (!tid || !task) return;
+  var has = !!(supState.dispatch || {})[tid];
+  if (!has && String(task.submittedBy || "") !== "super") return; // 非 Super 派发的任务不混进派发区
+  var merged = Object.assign({}, (supState.dispatch || {})[tid] || {}, task);
+  if (supState.pendingNoticeAt && supState.pendingNoticeAt[tid]) { merged.noticeAt = supState.pendingNoticeAt[tid]; delete supState.pendingNoticeAt[tid]; }
+  if (!supState.dispatch) supState.dispatch = {};
+  supState.dispatch[tid] = merged;
+  supTaskHistPush(tid, merged.state, merged.updatedAt);
+  pushSuperResult({ kind: "task", taskId: tid, title: String(merged.title || merged.instruction || "(未命名)"), state: String(merged.state || "?"), summary: String(merged.result || merged.title || merged.instruction || ""), sessionId: String(merged.sessionId || ""), projectId: String(merged.projectId || ""), createdAt: merged.createdAt || 0, updatedAt: merged.updatedAt || 0, ts: Date.now(), key: "task:" + tid });
+  supIdeSideRender();
+  supChatHeadSync();
+  supRunAfterTaskChange();
+  if (superIdeSel.task === tid) { var box = $("superMainTask"); if (box) box.innerHTML = superIdeTaskDocHtml(tid); }
+}
 function superIdeTaskDocHtml(id) {
   const t = (supState.dispatch || {})[String(id || "")];
   if (!t) return '<div class="spide-doc-h"><button class="spide-back" data-ideback="1">← 返回</button></div><div class="sup-empty">任务不存在或已被清理(WS 实时帧未到/重启后等 super.history 回放)。</div>';
   const st = String(t.state || "?");
-  const summary = st === "done" || st === "failed" ? String(t.result || "") : String(t.title || t.instruction || "");
+  const stLabel = superIdeStLabel(st);
+  const terminal = st === "done" || st === "failed" || st === "cancelled";
+  const instruction = String(t.instruction || t.title || "");
+  const result = String(t.result || "");
+  const ret = st === "done" ? { t: t.noticeAt ? "Super 已收到回执" : "已回执", c: "ok", m: "✓" } : st === "failed" ? { t: "失败回执", c: "bad", m: "✗" } : st === "cancelled" ? { t: "已取消", c: "bad", m: "×" } : st === "running" ? { t: "等待回执", c: "run", m: "…" } : { t: "排队中", c: "run", m: "…" };
+  const sid = String(t.sessionId || "");
+ // 状态轨迹(排队→运行→完成/失败):Super 与 Coding Agent 之间发生了什么,一眼可追。
+ // 刷新后 taskHist 只剩当前帧:用 createdAt/startedAt/updatedAt 合成「创建→(运行)→终态」,
+ // 时间取任务时间戳而不是重建时刻(不伪造 14:38 完成)。
+  const hist = (supState.taskHist || {})[String(t.id || id)] || [];
+  let steps = hist.slice();
+  if (steps.length < 2 && t.createdAt && t.updatedAt && t.updatedAt > t.createdAt) {
+    steps = [{ state: "created", ts: t.createdAt }];
+    if (t.startedAt && t.startedAt > t.createdAt && t.startedAt < t.updatedAt) steps.push({ state: "running", ts: t.startedAt });
+    steps.push({ state: st, ts: t.updatedAt });
+  } else if (!steps.length) steps = [{ state: st, ts: t.updatedAt || Date.now() }];
+  const toneOf = (s) => s === "done" ? "ok" : (s === "failed" || s === "cancelled") ? "bad" : (s === "running" || s === "queued") ? "run" : "idle";
+  const stepLabel = (s) => s === "created" ? "创建" : superIdeStLabel(s);
+  const timeline = steps.map((x) => '<span class="rel-step s-' + toneOf(String(x.state || "")) + '"><b>' + supEsc(stepLabel(String(x.state || ""))) + "</b><span>" + supEsc(supHhmm(x.ts)) + "</span></span>").join("");
   return '<div class="spide-doc-h"><button class="spide-back" data-ideback="1">← 返回</button>' +
-    '<span class="sup-badge ' + supEsc(st) + '">' + supEsc(superIdeStLabel(st)) + "</span>" +
+    '<span class="sup-badge ' + supEsc(st) + '">' + supEsc(stLabel) + "</span>" +
     supEsc(supClip(String(t.title || t.instruction || "(未命名)"), 80)) +
     '<span class="sup-mono">' + supEsc(supHhmm(t.updatedAt)) + "</span>" +
-    (t.sessionId ? '<button class="vw-act" data-supact="open" data-sid="' + supEsc(t.sessionId) + '">打开会话 ' + supEsc(t.sessionId) + "</button>" : "") +
+    (sid ? '<button class="vw-act" data-supact="open" data-sid="' + supEsc(sid) + '">打开会话 ' + supEsc(sid) + "</button>" : "") +
     "</div>" +
-    '<div class="sup-sec"><div class="sup-sec-h">过程摘要</div>' +
-    '<div class="sup-sum">' + supEsc(supClip(summary || "(暂无摘要;任务运行中,完成后 task.changed 会同帧刷新这里)", 600)) + "</div>" +
-    (t.instruction ? '<div class="sup-sec-h" style="margin-top:8px">任务书</div><div class="sup-sum">' + supEsc(supClip(String(t.instruction), 800)) + "</div>" : "") +
-    "</div>";
+ // 协作链:这张卡回答「谁派给谁、执行到哪、回执是什么」——Super 与 Coding Agent 的关系一眼可见
+    '<div class="spide-rel">' +
+      '<div class="spide-rel-chain">' +
+        '<div class="rel-node sup" title="Super Agent · 指挥/拆解/派发"><b>S</b><span><span class="rn-t">Super</span><span class="rn-s">指挥 · 拆解派发</span></span></div>' +
+        '<div class="rel-link"><span class="rel-line"></span><span>派发</span></div>' +
+        '<div class="rel-node code" title="Coding Agent · 目标会话执行"><b>C</b><span><span class="rn-t">Coding</span><span class="rn-s">执行 · ' + supEsc(stLabel) + '</span></span></div>' +
+        '<div class="rel-link"><span class="rel-line"></span><span>回执</span></div>' +
+        '<div class="rel-node ret t-' + ret.c + '" title="Coding Agent 回执给 Super 的结果"><b>' + ret.m + '</b><span><span class="rn-t">结果</span><span class="rn-s">' + supEsc(ret.t) + '</span></span></div>' +
+      "</div>" +
+      '<div class="rel-meta">' +
+        '<span>任务 <b>' + supEsc(supClip(String(t.id || id || ""), 12)) + "</b></span>" +
+        (t.projectId ? '<span>项目 <b>' + supEsc(String(t.projectId)) + "</b></span>" : "") +
+        (sid ? '<span>会话 <b>' + supEsc(sid) + "</b></span>" : "") +
+        (t.group ? '<span>组 <b>' + supEsc(String(t.group)) + "</b></span>" : "") +
+        '<span>更新 <b>' + supEsc(supHhmm(t.updatedAt)) + "</b></span>" +
+      "</div>" +
+      '<div class="rel-timeline" title="任务状态轨迹(面板收到的 task.changed 帧)">' + timeline + "</div>" +
+      '<div class="rel-note">Super 只拆解与派发,不直接写代码;Coding Agent 在目标会话执行,完成/失败回执到中栏结果流与 Super 对话。accepted≠完成,结果只认回执。</div>' +
+    "</div>" +
+    '<div class="sup-sec"><div class="sup-sec-h">任务书 · Super → Coding Agent</div>' +
+    '<div class="spide-doc-md">' + mdToHtml(String(instruction || "(无任务书)"), "") + "</div></div>" +
+    '<div class="sup-sec"><div class="sup-sec-h">结果回执 · Coding Agent → Super</div>' +
+    '<div class="spide-doc-md">' + mdToHtml(String(terminal ? (result || "(无结果摘要)") : "Coding Agent 仍在执行,完成后 task.changed 会同帧刷新这里。"), "") + "</div></div>";
 }
-/** 指挥台总入口(侧栏 act-super / widget ▦ / genie:open-super 事件共用):画布态先退经典。 */
+/** 指挥台总入口(侧栏 act-super / widget ▦ / genie:open-super 事件共用):画布态聚焦 super 卡(起不再退经典)。 */
 function superOpen() {
-  switchView("super"); // switchView 内已对 super 族退经典(画布安全区装不下三栏);经典态此调用为纯激活
+  switchView("super"); // 画布态=聚焦 super 卡并整卡缩放入画;经典态此调用为纯激活
+  supCtxWire(); supCtxRequest(); // 上下文 pill 接线+首次实测拉取
   setTimeout(() => { const i = document.getElementById("superInput"); if (i) i.focus(); }, 60);
+}
+/* ── Super IDE 可拖拽布局:左栏宽度 --superSb / 聊天窗宽度 --superChatW ───────────────
+ 两个手柄:superSbGrip(活动栏右侧边界)、superChatGrip(聊天窗左缘)。拖动改 CSS 变量,
+ pointerup 落 localStorage(genie.super.layout.v1);聊天窗不可折叠(=常驻宽度)。 */
+var SUPER_LAYOUT_KEY = "genie.super.layout.v1";
+function superLayoutVar(name, fallback) {
+  var vs = $("view-super");
+  if (!vs) return fallback;
+  var v = parseInt(getComputedStyle(vs).getPropertyValue(name), 10);
+  return isFinite(v) && v > 0 ? v : fallback;
+}
+function superLayoutApply(sb, chat) {
+  var vs = $("view-super");
+  if (!vs) return;
+  if (sb > 0) vs.style.setProperty("--superSb", Math.round(sb) + "px");
+  if (chat > 0) vs.style.setProperty("--superChatW", Math.round(chat) + "px");
+}
+function superLayoutSave() {
+  try {
+    localStorage.setItem(SUPER_LAYOUT_KEY, JSON.stringify({ sb: superLayoutVar("--superSb", 280), chat: superLayoutVar("--superChatW", 360) }));
+  } catch (e) { /* 隐私模式:忽略 */ }
+}
+function superLayoutLoad() {
+  try {
+    var d = JSON.parse(localStorage.getItem(SUPER_LAYOUT_KEY) || "{}");
+    var sb = Number(d && d.sb) || 280, chat = Number(d && d.chat) || 360;
+    var vs = $("view-super");
+ // 视图在启动时可能还 hidden(clientWidth=0);用 window.innerWidth 兜底,别用 0 宽做 clamp
+    var viewW = vs && vs.clientWidth > 0 ? vs.clientWidth : (window.innerWidth || 0);
+ // 启动瞬间页面可能未完成布局(innerWidth=0):跳过 clamp 直接应用已保存值,避免把 420 误压成 360
+    if (viewW >= 800) {
+      var maxTotal = Math.max(640, viewW - 56 - 420);
+      if (sb + chat > maxTotal) {
+        chat = Math.max(280, maxTotal - sb);
+        if (sb + chat > maxTotal) sb = Math.max(180, maxTotal - chat);
+      }
+    }
+    superLayoutApply(sb, chat);
+  } catch (e) { /* 坏 JSON:用默认 */ }
+}
+function superLayoutGrip(el, kind) {
+  if (!el || el.__superGrip) return;
+  el.__superGrip = true;
+  el.addEventListener("pointerdown", function (ev) {
+    ev.preventDefault();
+    var vs = $("view-super");
+    if (!vs) return;
+    var startX = ev.clientX;
+    var sb0 = superLayoutVar("--superSb", 280), chat0 = superLayoutVar("--superChatW", 360);
+    var maxTotal = Math.max(640, vs.clientWidth - 56 - 420); // 中心至少 420px
+ // 画布卡片是缩放容器:屏幕 dx 要除以卡片缩放比,分隔线才跟着光标走(经典布局 scale=1)
+    var scale = 1;
+    try { var vr = vs.getBoundingClientRect(); if (vs.offsetWidth > 0) scale = vr.width / vs.offsetWidth; } catch (e) { /* 忽略 */ }
+    if (!(scale > 0.1 && scale < 10)) scale = 1;
+    function move(e) {
+      var dx = (e.clientX - startX) / scale;
+      if (kind === "sb") {
+        var sb = Math.max(180, Math.min(480, sb0 + dx));
+        sb = Math.min(sb, maxTotal - chat0);
+        superLayoutApply(Math.max(180, sb), 0);
+      } else {
+        var chat = Math.max(280, Math.min(640, chat0 - dx));
+        chat = Math.min(chat, maxTotal - sb0);
+        superLayoutApply(0, Math.max(280, chat));
+      }
+    }
+    function up() {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.body.classList.remove("super-resizing");
+      superLayoutSave();
+    }
+    document.body.classList.add("super-resizing");
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+}
+function superLayoutInit() {
+  superLayoutLoad();
+  superLayoutGrip($("superSbGrip"), "sb");
+  superLayoutGrip($("superChatGrip"), "chat");
 }
 /** super.history.result → 渲染条目(journal 事件回放;kinds: message.user/message.agent/super.notice/
  * super.relay/super.dream;message.agent 的 toolCalls/tool.result 合并进条目供 supToolResOf 预扫)。 */
 function supApplyHistory(events) {
   const out = [];
+  const resultEntries = []; // Coding Agent 结果(通知/做梦):走中栏结果流,不进聊天
   let lastSid = "";
   const toolRes = []; // tool.result 事件收集(供 assistant 卡调用点即见结果)
   for (const e of (Array.isArray(events) ? events : [])) {
@@ -526,15 +1012,30 @@ function supApplyHistory(events) {
     const p = (e && e.payload) || {};
     const ts = typeof (e && e.time) === "number" ? e.time : (typeof (e && e.ts) === "number" ? e.ts : undefined);
     if (kind === "tool.result") { toolRes.push({ toolCallId: String(p.toolCallId || ""), name: String(p.name || ""), content: String(p.content || ""), durationMs: Number(p.durationMs || 0) }); continue; }
+    if (kind === "super.notice" || kind === "companion.notice") { // 通知=任务/agent 结果 → 结果流
+      resultEntries.push({ kind: "notice", taskId: String(p.taskId || ""), state: String(p.state || ""), title: "系统通知", summary: String(p.text || ""), ts: ts || Date.now(), key: "notice:" + String(p.taskId || "") + ":" + String(ts || 0) + ":" + resultEntries.length });
+      continue;
+    }
+    if (kind === "super.dream") { // 做梦开始/完成 → 结果流
+      resultEntries.push({ kind: "dream", mechanismId: String(p.mechanismId || ""), runId: String(p.runId || ""), title: String(p.title || p.mechanismId || "机制"), phase: String(p.phase || ""), cost: p.cost || null, summary: String(p.summary || ""), ts: ts || Date.now(), key: "dream:" + String(p.runId || ts || "") });
+      continue;
+    }
     if (sid && sid !== lastSid) { out.push({ kind: "day", text: sid, ts }); lastSid = sid; }
-    if (kind === "message.user") out.push({ kind: "u", text: String(p.text || ""), ts, sid });
-    else if (kind === "message.agent") out.push({ kind: "a", text: String(p.text || ""), reasoning: String(p.reasoning || ""), llmMs: Number(p.llmMs || 0), toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : null, ts, sid });
-    else if (kind === "super.notice" || kind === "companion.notice") out.push({ kind: "sys", text: "[通知] " + String(p.text || ""), ts, sid });
+    if (kind === "message.user") {
+ // 播报轮的输入是系统通知/转接(不是人说的话):历史回放不能渲染成「你」的聊天消息。
+ // 通知→一行紧凑系统行(结果在中栏);转接→由 super.relay 行承载,跳过避免重复。
+      var utext = String(p.text || "");
+      var ntm = utext.match(/^\\[系统通知\\]\\s*任务「([^」]+)」已(完成|失败|取消)/);
+      if (ntm) { out.push({ kind: "sys", text: "系统通知 · 任务「" + ntm[1] + "」已" + ntm[2] + "(结果见中栏)", ts, sid }); continue; }
+      if (/^\\[系统转接/.test(utext)) continue;
+      out.push({ kind: "u", text: utext, ts, sid });
+    }
+    else if (kind === "message.agent") out.push({ kind: "a", text: String(p.text || ""), reasoning: String(p.reasoning || ""), llmMs: Number(p.llmMs || 0), toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : null, ts, sid, usage: p.usage || null }); // usage: 上下文 pill(实测 inputTokens)
     else if (kind === "super.relay" || kind === "companion.relay") out.push({ kind: "relay", text: String(p.text || ""), ts, sid });
-    else if (kind === "super.dream") out.push({ kind: "dream", payload: p, ts, sid }); // 做梦卡回放
   }
  // 工具结果回填:挂到最后一条带 toolCalls 的 assistant 条目(全量重放先扫后用,主聊天 fixH12 同语义)
   if (toolRes.length) for (let i = out.length - 1; i >= 0; i--) if (out[i].kind === "a" && out[i].toolCalls) { out[i].toolResults = toolRes; break; }
+  supSetResults(resultEntries); // 先重建结果流(历史为权威),再渲染聊天
   supState.entries = out.slice(-400); // 上限护栏:超长历史只渲染尾部(journal 全量仍在,可再刷新重放)
   supRenderChat();
 }
@@ -551,6 +1052,7 @@ function supRenderBoard() {
       const can = (a) => !acts || acts.indexOf(a) >= 0;
       const btns = [];
       const k = String(it.kind || "ask");
+      const kLabel = ({ interrupted: "中断", blocked: "阻塞", failed: "失败", ask: "提问", permission: "权限" })[k] || k; // 待办徽标说人话
       if (k === "ask" && can("answer")) btns.push('<button class="sup-btn pri" data-supact="answer" data-id="' + supEsc(it.id) + '">回答</button>');
       if (k === "permission") {
         btns.push('<button class="sup-btn pri" data-supact="permit" data-d="allow-once" data-id="' + supEsc(it.id) + '">批准</button>');
@@ -560,7 +1062,7 @@ function supRenderBoard() {
       if (it.sessionId) btns.push('<button class="sup-btn" data-supact="open" data-sid="' + supEsc(it.sessionId || "") + '">打开会话</button>');
       btns.push('<button class="sup-btn mut" data-supact="dismiss" data-id="' + supEsc(it.id) + '">忽略</button>');
       return '<div class="sup-row' + (k === "failed" ? " hot" : "") + '" data-supitem="' + supEsc(it.id) + '">' +
-        '<div class="sup-row-h"><span class="sup-badge ' + supEsc(k) + '">' + supEsc(k) + '</span>' +
+        '<div class="sup-row-h"><span class="sup-badge ' + supEsc(k) + '">' + supEsc(kLabel) + '</span>' +
         '<span class="sup-it" title="' + supEsc(it.title || "") + '">' + supEsc(supClip(it.title || "(未命名)", 70)) + "</span>" +
         '<span class="sup-mono">' + supEsc(supHhmm(it.since)) + "</span></div>" +
         (it.summary ? '<div class="sup-sum">' + supEsc(supClip(it.summary, 200)) + "</div>" : "") +
@@ -569,6 +1071,8 @@ function supRenderBoard() {
   }
   const cnt = document.getElementById("supInboxCnt");
   if (cnt) cnt.textContent = items.length ? "· " + items.length : "";
+  const ibBadge = document.getElementById("superInboxBadge"); // 活动栏红点:待办数量(三栏布局下的唯一入口提示)
+  if (ibBadge) { ibBadge.textContent = items.length > 99 ? "99+" : String(items.length); ibBadge.classList.toggle("on", items.length > 0); }
  // ② 工作区 × 任务矩阵(每区最近 3 条;▶ running / ✗ failed / · 其余;点击 openSession)
   const projEl = document.getElementById("supProjects");
   if (projEl) {
@@ -639,6 +1143,7 @@ function supRenderBoard() {
     }
     healthEl.innerHTML = rows.join("");
   }
+  supChatHeadSync(); // 待办数量/中断恢复后聊天头与活动栏同步
 }
 function pLabel(pid) {
   const p = (Array.isArray(projects) ? projects : []).find((x) => x.id === pid);
@@ -653,27 +1158,53 @@ function supSend() {
  // 显式 sessionId="super"(固定持久会话;与 server superSessionId 同源;旧缺省行为不变)
   if (!wsSafeSend(JSON.stringify({ v: 1, type: "super.turn", text, sessionId: "super" }))) { toast("连接未就绪", true); return; }
   inp.value = "";
+  try { inp.style.height = "auto"; } catch (e) {}
   supState.waiting = true;
+  supRunStart("正在理解指令");
   supRenderChat();
 }
 /** 指挥台相关 WS 帧(super.* + super-failed error)统一入口;wsOnMessage 早退分支调用。 */
 function superOnMsg(m) {
   if (m.type === "super.history.result") { supApplyHistory(m.events); return; }
   if (m.type === "super.turn.user") {
+    supState.stream = null; // 新一轮:清掉上一轮流式 live 气泡
     supState.entries.push({ kind: "u", text: String(m.text || ""), ts: Date.now(), sid: supDayLabel() });
     supRenderChat();
     return;
   }
   if (m.type === "super.turn.done") {
     supState.waiting = false;
+    supState.stream = null;
+    supCtxRequest(); // 轮次结束刷新上下文实测(自动压缩若发生,数值即刻反映)
+    supState.revealReplyTop = true; // 终稿回放后翻到回复开头(结论在头上),见 supRenderChat // 终稿由 history 回放渲染,清 live 气泡(避免与终稿重复)
+    supRunEnd();
+    supRunAfterTaskChange(); // 有在途委托→状态条转「已委托」;否则收起
     supState.entries.push({ kind: "a", text: String(m.text || ""), ts: Date.now(), sid: String(m.sessionId || supDayLabel()) });
     supRenderChat();
+ // 实时 done 帧只带终稿文本(toolCalls 在 journal):拉一次 super.history 回放,本轮工具卡/
+ // spawn_task 关系条立即出现,不必手动刷新(协作观测)。
+    wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 }));
     return;
   }
   if (m.type === "super.notice") {
-    supState.entries.push({ kind: "sys", text: "[通知] " + String(m.text || ""), ts: Date.now() });
-    supRenderChat();
-    supPullInboxSoft();
+    supPullInboxSoft(); // 任务/agent 结果进中栏结果流,聊天窗不再承载
+    var ntext = String(m.text || ""), ntask = String(m.taskId || ""), nstate = String(m.state || "");
+    if (/\\[RSI\\]/.test(ntext)) return; // 机制运行由 super.dream 结果行完整代表(含成本/摘要),通知不重复进结果流
+    var nts = Date.now();
+ // noticeAt 标记「Super 已收到回执」;dispatch 可能尚未建(notice 先到)→ 暂存,待 task.changed merge 时补上
+    if (ntask) {
+      if (supState.dispatch && supState.dispatch[ntask]) supState.dispatch[ntask].noticeAt = nts;
+      else { if (!supState.pendingNoticeAt) supState.pendingNoticeAt = {}; supState.pendingNoticeAt[ntask] = nts; }
+    }
+    var arr0 = supState.results || [], hit = -1;
+    for (var ri = 0; ri < arr0.length; ri++) if (ntask && arr0[ri].kind === "task" && String(arr0[ri].taskId || "") === ntask) { hit = ri; break; }
+    if (hit >= 0) {
+      arr0[hit].noticeText = ntext; arr0[hit].noticeAt = nts;
+      if (nstate) arr0[hit].state = nstate;
+      supRenderResults();
+      if (ntask && superIdeSel.task === ntask) { var tbox = $("superMainTask"); if (tbox) tbox.innerHTML = superIdeTaskDocHtml(ntask); }
+    }
+    else pushSuperResult({ kind: "notice", taskId: ntask, state: nstate, title: "系统通知", summary: ntext, ts: Date.now(), key: ntask ? "notice:task:" + ntask : "notice:" + Date.now() + ":" + Math.random().toString(36).slice(2, 8) });
     return;
   }
   if (m.type === "super.relay") {
@@ -682,12 +1213,10 @@ function superOnMsg(m) {
     supPullInboxSoft();
     return;
   }
-  if (m.type === "super.inbox.result") { supState.inbox = Array.isArray(m.items) ? m.items : []; supRenderBoard(); return; }
+  if (m.type === "super.inbox.result") { supState.inbox = Array.isArray(m.items) ? m.items : []; supRenderBoard(); supChatHeadSync(); return; }
   if (m.type === "super.inbox.changed") { supPullInboxSoft(); return; }
-  if (m.type === "super.dream") { // 做梦卡:机制运行开始/完成广播(journal 同帧落 super 会话;刷新可回放)
-    supState.entries.push({ kind: "dream", payload: { phase: m.phase, mechanismId: m.mechanismId, runId: m.runId, taskId: m.taskId, title: m.title, cost: m.cost, summary: m.summary }, ts: Date.now() });
-    if (supState.entries.length > 400) supState.entries = supState.entries.slice(-400);
-    supRenderChat();
+  if (m.type === "super.dream") { // 做梦卡:机制运行开始/完成广播 → 中栏结果流(聊天只留对话)
+    pushSuperResult({ kind: "dream", mechanismId: String(m.mechanismId || ""), runId: String(m.runId || ""), title: String(m.title || m.mechanismId || "机制"), phase: String(m.phase || ""), cost: m.cost || null, summary: String(m.summary || ""), ts: Date.now(), key: "dream:" + String(m.runId || m.mechanismId || Date.now()) });
     supIdeSideRender(); // 做梦完成 → 侧栏机制列表同帧刷新(成本/最近运行由 15s rsi.status 轮询追平)
     return;
   }
@@ -698,6 +1227,8 @@ function supPullInboxSoft() {
 function supOnError(m) {
  // 服务端 super-failed/super-announce-failed:清等待气泡,聊天区显式报错(对齐 widget error 分支)。
   supState.waiting = false;
+  supState.stream = null;
+  supRunEnd();
   supState.entries.push({ kind: "sys", text: "[出错] 调度中枢:" + supClip(String(m.message || m.code || "未知错误"), 200), ts: Date.now() });
   supRenderChat();
 }
@@ -717,7 +1248,12 @@ function supBoardClick(ev) {
   if (act === "open") { const sid = btn.dataset.sid || ""; if (sid) openSession(sid); return; }
   if (act === "resume") {
     const it = supState.inbox.find((x) => x.id === btn.dataset.id);
-    if (it && it.taskId) { wsSafeSend(JSON.stringify({ v: 1, type: "task.resume", taskId: it.taskId })); toast("已请求恢复任务"); }
+    if (it && it.taskId) {
+      wsSafeSend(JSON.stringify({ v: 1, type: "task.resume", taskId: it.taskId }));
+      supState.inbox = supState.inbox.filter((x) => x.id !== it.id); // 乐观移除(服务端 queued/running 不一定再推 inbox.changed)
+      supRenderBoard();
+      toast("已请求恢复任务");
+    }
     return;
   }
   if (act === "permit") {
@@ -771,7 +1307,29 @@ document.getElementById("superSend").addEventListener("click", supSend);
 document.getElementById("superInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); supSend(); }
 });
-document.getElementById("supSecInbox").addEventListener("click", supBoardClick);
+/* 与主聊天同款 composer 行为:textarea 随内容增高(≤160px);+ 菜单=三个常用指令 */
+(function () {
+  const si = document.getElementById("superInput");
+  if (si) si.addEventListener("input", function () { si.style.height = "auto"; si.style.height = Math.min(160, si.scrollHeight) + "px"; });
+  const qb = document.getElementById("superQuickBtn"), qm = document.getElementById("superQuickMenu");
+  if (qb && qm && !qb.__bound) {
+    qb.addEventListener("click", function (e) { e.stopPropagation(); qm.style.display = qm.style.display === "none" ? "flex" : "none"; });
+    qm.addEventListener("click", function (e) {
+      const b = e.target && e.target.closest ? e.target.closest("[data-supquick]") : null;
+      if (!b) return;
+      const inp = document.getElementById("superInput");
+      if (inp) { inp.value = String(b.dataset.supquick || ""); inp.focus(); inp.style.height = "auto"; inp.style.height = Math.min(160, inp.scrollHeight) + "px"; }
+      qm.style.display = "none";
+    });
+    document.addEventListener("click", function (e) {
+      if (qm.style.display === "none") return;
+      if (qm.contains(e.target) || e.target === qb) return;
+      qm.style.display = "none";
+    });
+    qb.__bound = true;
+  }
+})();
+document.getElementById("supInbox").addEventListener("click", supBoardClick); // 待办区已迁到三栏侧栏
 document.getElementById("supProjects").addEventListener("click", supBoardClick);
 document.getElementById("supActive").addEventListener("click", supBoardClick);
 /* ── IDE 三栏交互(事件委托,零内联 onclick)─────────────────────────
@@ -796,6 +1354,14 @@ document.getElementById("superIdeMain").addEventListener("click", (ev) => {
   if (open) { const sid = open.dataset.sid || ""; if (sid) openSession(sid); return; }
 });
 document.getElementById("superChatBody").addEventListener("click", (ev) => {
+  const quick = ev.target && ev.target.closest ? ev.target.closest("[data-supquick]") : null; // 空态快捷指令:填入输入框(不代发,用户可改)
+  if (quick) {
+    const inp = document.getElementById("superInput");
+    if (inp) { inp.value = String(quick.dataset.supquick || ""); inp.focus(); }
+    return;
+  }
+  const sysLong = ev.target && ev.target.closest ? ev.target.closest("#superChatBody .sys-line.sys-long") : null;
+  if (sysLong) { sysLong.classList.toggle("exp"); return; } // 长系统通知:点击展开/收起
   const det = ev.target && ev.target.closest ? ev.target.closest("[data-idedetail]") : null; // 派发卡「详情→」/做梦卡「查看报告→」
   if (det) {
     ev.stopPropagation();
@@ -803,13 +1369,9 @@ document.getElementById("superChatBody").addEventListener("click", (ev) => {
     superIdeOpen(String(det.dataset.idedetail || ""), String(det.dataset.id || ""));
   }
 });
-document.getElementById("superIdeChatFold").addEventListener("click", () => {
-  const vs = document.getElementById("view-super");
-  if (!vs) return;
-  vs.classList.toggle("spide-chat-folded");
-  const fb = document.getElementById("superIdeChatFold");
-  if (fb) fb.textContent = vs.classList.contains("spide-chat-folded") ? "«" : "»";
-});
+superLayoutInit(); // 左栏/聊天窗宽度拖拽手柄(localStorage 持久;聊天窗不可折叠)
+supChatInit(); // 聊天窗头部状态 + 回最新按钮 + 快捷指令
+setInterval(function () { try { if (supState.run && supState.run.active) supRunBarRender(); } catch (e) {} }, 1000); // 状态条秒表
 superIdeZoneSet("health"); // 初始区=健康一屏(默认首屏;侧栏/中栏类就位)
 document.getElementById("super-refresh").addEventListener("click", () => {
   supState.histLoaded = true;
@@ -832,7 +1394,7 @@ function editResend(text) {
 function forkSessionAndSubmit(src, instruction, opt) {
   const o = opt || {};
  // 标题「[fork] 原摘要」:调用方给的标题优先(原任务标题),否则指令首行压空白取前 40 字符(task.rename 需 taskId,提交后补)
-  const forkLabel = "[fork] " + String(o.title || instruction || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const forkLabel = "[fork] " + String(o.title || instruction || "").replace(/\\s+/g, " ").trim().slice(0, 40);
   const listenOnce = function (match, fn) {
     const h = function (ev) {
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }

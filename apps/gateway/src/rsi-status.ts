@@ -63,6 +63,28 @@ export interface RsiStatusRunInfo {
   cost?: RsiStatusRunCost;
  /** 本次运行的会话分析计划与认账(旧数据无此字段)。 */
   analysis?: RsiStatusRunAnalysis;
+ /** RSI-SELF-DRIVE:自动周期/重试/预算/质量门(旧数据无这些字段)。 */
+  cycleId?: string;
+  retryOf?: string;
+  retryCount?: number;
+  budgetTokens?: number;
+  budgetExceeded?: boolean;
+  analysisMissing?: boolean;
+ /** 质量契约 v2:结果四件套/浅层/重复/上限评分(旧数据无此字段)。 */
+  quality?: RsiStatusRunQuality;
+}
+
+/** 结果质量评估(与 protocol RsiRunQualityZ / rsi-mechanism-store RsiRunQuality 同形)。 */
+export interface RsiStatusRunQuality {
+  items: number;
+  evidenced: number;
+  impacted: number;
+  actionable: number;
+  shallow: number;
+  duplicates: number;
+  overLimit: boolean;
+  score: number;
+  issues: { code: string; itemId?: string; note: string }[];
 }
 
 /** 运行成本(与 protocol RsiRunCostZ / rsi-mechanism-store RsiRunCostRecord 同形)。 */

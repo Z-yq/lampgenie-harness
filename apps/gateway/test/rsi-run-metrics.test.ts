@@ -43,6 +43,28 @@ describe("taskWindowOf", () => {
     expect(taskWindowOf([], "t-1")).toEqual([]);
   });
 
+  it("缺 task.start:退化为第一个带 taskId 的事件,并在下一任务/终态义务处收口", () => {
+    const list: Event[] = [
+      { kind: "message.user", payload: { text: "before" } },
+      { kind: "task.context", payload: { taskId: "t-9" } },
+      { kind: "llm.trace", payload: { model: "m", usage: { inputTokens: 50, outputTokens: 5 } } },
+      { kind: "task.trajectory", payload: { taskId: "t-9" } },
+      { kind: "delivery.obligation", payload: { taskId: "t-9", terminalState: "done" } },
+      { kind: "llm.trace", payload: { usage: { inputTokens: 9999 } } },
+    ];
+    const w = taskWindowOf(list, "t-9");
+    expect(w.map((e) => e.kind)).toEqual(["task.context", "llm.trace", "task.trajectory"]);
+    expect(usageOfWindow(w)).toMatchObject({ inputTokens: 50, outputTokens: 5, calls: 1 });
+
+    const list2: Event[] = [
+      { kind: "task.context", payload: { taskId: "t-a" } },
+      { kind: "llm.trace", payload: { usage: { inputTokens: 10 } } },
+      { kind: "task.context", payload: { taskId: "t-b" } },
+      { kind: "llm.trace", payload: { usage: { inputTokens: 20 } } },
+    ];
+    expect(usageOfWindow(taskWindowOf(list2, "t-a"))).toMatchObject({ inputTokens: 10, calls: 1 });
+  });
+
   it("task.fail 也是窗口终点", () => {
     const list: Event[] = [
       { kind: "task.start", payload: { id: "t-3" } },

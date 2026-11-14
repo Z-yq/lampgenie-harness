@@ -7,13 +7,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NIGHTLY_CODES, markStep } from "@lampgenie/runtime/agent/nightly-run";
+import { addEvidence } from "../src/evidence-graph-store.js";
 import {
   NIGHTLY_DIR,
   finalizeNightly,
   getRun,
   listRuns,
+  markQueueConsumed,
   nightlyPaths,
   nightlyReport,
+  parseSessionFile,
   pauseNightly,
   readQueue,
   resumeNightly,
@@ -386,5 +389,219 @@ describe("nightly-store", () => {
     const resumed = await resumeNightly(root, { projectId: PROJECT, date, journalDir, now: NOW + 100 });
     expect(resumed.run.status).toBe("done");
     expect(resumed.run.steps.every((step) => step.status === "done")).toBe(true);
+  });
+});
+
+
+describe("2026-11-14 nightly 机制同晚实测确认的两处修复", () => {
+  it("tool.call 与 message.agent.toolCalls 同 callId 双登记只计一次(failedSteps 不再虚高)", () => {
+    const { root, journalDir } = makeFixture();
+    writeSession(journalDir, "ws-double", [
+      JSON.stringify({ kind: "message.agent", sessionId: "ws-double", payload: { toolCalls: [{ id: "d1", name: "read_file", arguments: JSON.stringify({ path: "a" }) }] } }),
+      JSON.stringify({ kind: "tool.call", sessionId: "ws-double", payload: { toolCallId: "d1", name: "read_file", arguments: JSON.stringify({ path: "a" }) } }),
+      JSON.stringify({ kind: "tool.result", sessionId: "ws-double", payload: { toolCallId: "d1", name: "read_file", content: "ok" } }),
+    ]);
+    const stats = parseSessionFile(join(journalDir, "sessions", "ws-double.jsonl"), "ws-double");
+    expect(stats.tools["read_file"]).toBe(1); // 双事件单调用
+    expect(stats.failedSteps).toBe(0); // 修复前:d1 首条登记永远 unanswered → failedSteps=1
+  });
+
+});
+
+describe("2026-11-14 decay 步 + cursor 覆盖口径", () => {
+  it("update-graph 之后跑 applyDecay:graph.jsonl 落 decay 行,step note 带 stale/archived 计数", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+ // 预置两条证据:一条 90 天前(0.7×0.5^3≈0.09 < 0.5 → stale),一条刚发生(active)
+    addEvidence(root, {
+      kind: "fact",
+      statement: "旧结论:夜间零衰减",
+      associations: [{ type: "module", ref: "src/a.ts" }],
+      observedAt: Date.now() - 90 * 86_400_000,
+      validFrom: Date.now() - 90 * 86_400_000,
+    });
+    addEvidence(root, {
+      kind: "fact",
+      statement: "新结论:衰减已接入",
+      associations: [{ type: "module", ref: "src/a.ts" }],
+      observedAt: Date.now(),
+      validFrom: Date.now(),
+    });
+    const { result } = await fullRun(root, journalDir);
+    expect(result.run.status).toBe("done");
+    const updateGraph = result.run.steps.find((step) => step.name === "update-graph");
+    expect(updateGraph?.note).toContain("decay: stale=1");
+    const graphLines = readFileSync(join(root, ".genie", "evidence", "graph.jsonl"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim() !== "");
+    const decayLines = graphLines.map((line) => JSON.parse(line) as Record<string, unknown>).filter((l) => l["type"] === "decay");
+    expect(decayLines.length).toBe(1);
+    expect((decayLines[0]!["report"] as Record<string, unknown>)["stale"]).toBe(1);
+  });
+
+  it("update-graph 之后刷新世界模型:atlas 快照落盘带 derived 层,note 带采集计数", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const { result } = await fullRun(root, journalDir);
+    expect(result.run.status).toBe("done");
+    const updateGraph = result.run.steps.find((step) => step.name === "update-graph");
+    expect(updateGraph?.note).toContain("atlas: themes=");
+    expect(updateGraph?.note).toContain("pathology: matched=");
+    expect(updateGraph?.note).toContain("rework: chains="); // 返工因果链采集接线
+    const atlasFile = join(root, ".genie", "rsi", "atlas", `${PROJECT}.json`);
+    expect(existsSync(atlasFile)).toBe(true);
+    const parsed = JSON.parse(readFileSync(atlasFile, "utf8")) as { derived?: { sessionsScanned?: number; moduleActivity?: unknown[] } };
+    expect(parsed.derived).toBeDefined();
+    expect(parsed.derived!.moduleActivity!.length).toBeGreaterThan(0); // seedStandard 有 edit_file
+ // 病理采集:nightly 落一行 detect(原语命中与否由数据决定,行本身必须在)
+    const pathologyLines = readFileSync(join(root, ".genie", "rsi", "pathology.jsonl"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim() !== "");
+    expect(pathologyLines.length).toBe(1);
+    expect((JSON.parse(pathologyLines[0]!) as Record<string, unknown>)["type"]).toBe("detect");
+  });
+
+  it("maxSessions 截断:unselected 入账、收尾 unprocessed + window.to 收紧到 cursor + 报表带 cursor 行", async () => {
+    const { root, journalDir } = makeFixture();
+    const mt = Date.UTC(2026, 2, 5, 0, 30) / 1000; // 窗口内凌晨(任何时区都在窗口尾部之前)
+    const files = [
+      writeSession(journalDir, "ws-alpha", [toolCall("x1", "read_file", { path: "a" }), toolResult("x1", "read_file", "a")]),
+      writeSession(journalDir, "ws-beta", [toolCall("x2", "read_file", { path: "b" }), toolResult("x2", "read_file", "b")]),
+      writeSession(journalDir, "ws-gamma", [toolCall("x3", "read_file", { path: "c" }), toolResult("x3", "read_file", "c")]),
+      writeSession(journalDir, "ws-delta", [toolCall("x4", "read_file", { path: "d" }), toolResult("x4", "read_file", "d")]),
+    ];
+    files.forEach((file, index) => utimesSync(file, new Date((mt + index * 60) * 1000), new Date((mt + index * 60) * 1000)));
+
+    const started = await startNightly(root, {
+      date: "2026-03-05",
+      projectId: PROJECT,
+      journalDir,
+      maxSessions: 2,
+      now: NOW,
+    });
+ // 覆盖口径:sessionsTotal = 符合增量条件的全部 4 个(不是截断后的 2 个)
+    expect(started.run!.coverage.sessionsTotal).toBe(4);
+    const selection = JSON.parse(
+      readFileSync(join(root, NIGHTLY_DIR, PROJECT, "2026-03-05.selection.json"), "utf8"),
+    ) as { sessions: string[]; unselected?: { sessionId: string }[] };
+    expect(selection.sessions.length).toBe(2);
+    expect(selection.unselected?.map((e) => e.sessionId).sort()).toEqual(["ws-delta", "ws-gamma"]);
+
+    const result = await runNightly(root, { runId: started.run!.runId, journalDir, now: NOW + 10 });
+    expect(result.run.status).toBe("done");
+ // 未读会话显式入 unprocessed(不再被「窗口判完成」吞掉)
+    const unprocessedIds = result.run.unprocessed.map((item) => item.sessionId).sort();
+    expect(unprocessedIds).toEqual(["ws-delta", "ws-gamma"]);
+ // window.to 收紧到实际 cursor 时间;报表带 cursor 行
+    expect(result.run.window.to).toBe(new Date((mt + 60) * 1000).toISOString());
+    expect(result.run.report?.some((line) => line.startsWith("cursor: last=ws-beta"))).toBe(true);
+ // 下一轮 start:未读的 2 个因 mtime > cursor 仍被选中
+    const next = await startNightly(root, {
+      date: "2026-03-06",
+      projectId: PROJECT,
+      journalDir,
+      now: NOW + 86_400_000,
+    });
+    expect(next.run).not.toBeNull();
+    const nextSelection = JSON.parse(
+      readFileSync(join(root, NIGHTLY_DIR, PROJECT, "2026-03-06.selection.json"), "utf8"),
+    ) as { sessions: string[] };
+    expect(nextSelection.sessions.map((e: { sessionId: string }) => e.sessionId).sort()).toEqual(["ws-delta", "ws-gamma"]);
+  });
+});
+
+describe("RSI 残余 E/F/G/C(2026-11-14)", () => {
+  const userMsg = (text: string, sessionId = "s") =>
+    JSON.stringify({ kind: "message.user", sessionId, payload: { text } });
+
+  it("E:主题簇 → proposed-goals.json(覆盖写幂等,不进 entries.jsonl)", async () => {
+    const { root, journalDir } = makeFixture();
+    writeSession(journalDir, "theme-a", [userMsg("面板折叠抖动修复"), toolCall("a1", "edit_file", { path: "src/panel.ts" })]);
+    writeSession(journalDir, "theme-b", [userMsg("面板折叠抖动补测"), toolCall("b1", "edit_file", { path: "src/panel.ts" })]);
+    const { result } = await fullRun(root, journalDir);
+    const file = join(root, ".genie", "rsi", "atlas", "proposed-goals.json");
+    expect(existsSync(file)).toBe(true);
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as {
+      runId: string;
+      goals: { id: string; status: string; sessions: number }[];
+    };
+    expect(parsed.runId).toBe(result.run.runId);
+    expect(parsed.goals.length).toBeGreaterThan(0);
+    expect(parsed.goals.every((g) => g.status === "proposed" && g.sessions >= 2)).toBe(true);
+    const before = readFileSync(file, "utf8");
+    await runNightly(root, { runId: result.run.runId, journalDir, now: NOW + 20 });
+    expect(readFileSync(file, "utf8")).toBe(before); // 重跑幂等(覆盖写,不追加)
+    expect(existsSync(join(root, ".genie", "rsi", "atlas", "entries.jsonl"))).toBe(false); // 不直接进 curated 层
+  });
+
+  it("F:cohort 采集器登记 delivery,重跑不重复追加", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const { result } = await fullRun(root, journalDir);
+    const file = join(root, ".genie", "rsi", "cohort.jsonl");
+    expect(existsSync(file)).toBe(true);
+    const lines = () =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as { type: string; delivery?: { id: string }; fix?: { id: string } });
+    const first = lines();
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.every((l) => l.type === "delivery" || l.type === "fix")).toBe(true);
+    expect(new Set(first.map((l) => l.delivery?.id ?? l.fix?.id)).size).toBe(first.length); // id 唯一
+    await runNightly(root, { runId: result.run.runId, journalDir, now: NOW + 20 });
+    expect(lines().length).toBe(first.length); // 重跑幂等
+  });
+
+  it("G:消费标记幂等,已消费候选不再重复入队", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const { result } = await fullRun(root, journalDir);
+    const queueFile = join(root, NIGHTLY_DIR, "queue.jsonl");
+    const first = readQueue(root);
+    expect(first.length).toBe(3);
+    const ids = first.map((l) => l.candidate.id);
+    expect(markQueueConsumed(root, ids, "mechanism-test", NOW + 30)).toEqual({ marked: ids.length, already: 0 });
+    expect(markQueueConsumed(root, ids, "mechanism-test", NOW + 31)).toEqual({ marked: 0, already: ids.length });
+ // 新日期重跑(清 cursor 让会话重新入选):候选 id 稳定 → 已消费的不再入队
+    rmSync(join(root, NIGHTLY_DIR, "cursor.json"), { force: true });
+    await fullRun(root, journalDir, "2026-03-06");
+    expect(readQueue(root).length).toBe(first.length);
+    expect(readFileSync(queueFile, "utf8").split("\n").filter((line) => line.trim() !== "").length).toBe(first.length);
+    void result;
+  });
+
+  it("C:pull-traces note 统计带基因标记 vs 不带", async () => {
+    const { root, journalDir } = makeFixture();
+    writeSession(journalDir, "g-marked", [
+      JSON.stringify({ kind: "custom", sessionId: "g-marked", payload: { type: "gene.brief.shown", modules: ["src/panel.ts"], classes: ["contract"] } }),
+      toolCall("m1", "read_file", { path: "src/a.ts" }, "g-marked"),
+      toolResult("m1", "read_file", "ok", "g-marked"),
+    ]);
+    writeSession(journalDir, "g-plain", [
+      toolCall("p1", "read_file", { path: "src/b.ts" }, "g-plain"),
+      toolResult("p1", "read_file", "ok", "g-plain"),
+    ]);
+    const { result } = await fullRun(root, journalDir);
+    const pull = result.run.steps.find((step) => step.name === "pull-traces");
+    expect(pull?.note).toContain("geneBrief: marked=1(hit=0) vs unmarked=1(hit=0)");
+  });
+});
+
+describe("2026-11-13 journal 同 seq 去重", () => {
+  it("同 seq 重复行只计一次:eventsRead 去重、dedupRows 记账、工具不重复计", () => {
+    const { journalDir } = makeFixture();
+    const file = writeSession(journalDir, "dup", [
+      JSON.stringify({ seq: 1, kind: "tool.call", sessionId: "dup", payload: { toolCallId: "c1", name: "read_file", arguments: "{}" } }),
+      JSON.stringify({ seq: 1, kind: "tool.call", sessionId: "dup", payload: { toolCallId: "c2", name: "read_file", arguments: "{}" } }),
+      JSON.stringify({ seq: 2, kind: "tool.result", sessionId: "dup", payload: { toolCallId: "c1", name: "read_file", content: "ok" } }),
+      "{bad",
+    ]);
+    const stats = parseSessionFile(file, "dup");
+    expect(stats.eventsRead).toBe(2);
+    expect(stats.eventsSkipped).toBe(1);
+    expect(stats.dedupRows).toBe(1);
+    expect(stats.tools.read_file).toBe(1);
+    expect(stats.failedSteps).toBe(0); // 重复 tool.call 不再造出一个「未答复」失败
   });
 });

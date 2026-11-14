@@ -17,6 +17,7 @@ import { computeCost } from "@lampgenie/core/config/model-cost";
 import { resolveModelPrice } from "@lampgenie/core/config/model-prices";
 import type { Config } from "@lampgenie/core";
 import type { RsiStatusSection } from "./rsi-status.js";
+import { assessResultQuality } from "./rsi-quality.js"; // 质量契约 v2(纯逻辑,零 LLM)
 import { buildAnalysisPlan, markAnalyzed, type RsiAnalysisPlan } from "./rsi-sessions.js";
 import {
   finalAgentText,
@@ -26,13 +27,16 @@ import {
   type RsiRunUsage,
 } from "./rsi-run-metrics.js";
 import {
+  appendResultEvent,
   collectMechanismItems,
   finishRun,
   getRun,
   listRuns,
   loadMechanisms,
   newRunId,
+  readRunResults,
   resultFilePath,
+  salvageResultFile,
   startRun,
   type RsiResultItem,
   type RsiRunAnalysisRecord,
@@ -72,6 +76,15 @@ export interface StartRunDeps {
  /** 做梦卡:运行事件注入 super 会话(message.system;开始卡/完成卡由调用方定文案)。
  * 缺省=不注入(runner 零新依赖,单测不破)。 */
   note?: (payload: { phase: "start" | "done" | "failed"; mechanismId: string; runId: string; taskId?: string; title: string; cost?: RsiRunCostRecord; summary?: string }) => void;
+ /** 单次运行 token 软预算( RSI-SELF-DRIVE;缺省=不设预算,旧行为不变)。
+ * 写进任务书是软约束;收尾按经验证 usage 判 budgetExceeded 并追加一条 warn 结果。 */
+  budgetTokens?: number;
+ /** 实验配额因子(ROI downshift 的 experimentQuotaFactor 消费面)。
+ * 0<f<1 时进 experiments 机制任务书(限转入条数)+ run 记录;缺省=不设限,旧行为不变。 */
+  experimentQuotaFactor?: number;
+ /** 自动调度周期 id / 重试来源(缺省=手动运行,旧行为不变)。 */
+  cycleId?: string;
+  retryOf?: string;
 }
 
 export interface StartRunResult {
@@ -116,6 +129,15 @@ function costRecordOf(usage: RsiRunUsage, config: Config | undefined): RsiRunCos
   };
   if (usage.model !== undefined) record.model = usage.model;
   return record;
+}
+
+/**
+ * 「看起来有成本记录、其实没测到用量」的空账( fresh run 经验证):
+ * costRecordOf 对空窗口也会产出一条 0 token / null 金额 / 全缺价段的记录。若把它当真账,
+ * run 就再也不会重算(needsCost=false),费用永久丢失。此函数用于把这类记录判成「待重算」。
+ */
+export function costUnmeasured(cost: RsiRunCostRecord | undefined): boolean {
+  return cost !== undefined && cost.totalTokens === 0 && cost.amountCny === null && cost.missing.length > 0;
 }
 
 /** agent 认账的 sessionId ∩ 本次候选名单(不在候选里的 id 不算数:写错/幻觉不污染账本)。 */
@@ -209,13 +231,16 @@ export async function startMechanismRun(
  // 固定会话:所有机制运行都追加到同一个 RSI 会话窗(kind=user,会话列表可见、走正常渲染与并发配额)。
   const sessionId = RSI_SESSION_ID;
   const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
- // 会话候选池(近 3 日 · 所有项目 · 未分析过):只在给了 journalDir 时才组,旧调用行为不变。
-  const plan = await planFor(deps);
+ // 会话候选池(近 3 日 · 所有项目 · 未分析过):只有轨迹类机制才需要(按职责投放;
+ // 台账类机制不再被塞 12 个候选——既省 token,也让「分析 0 会话」不再是所有机制的假红)。
+  const plan = spec.analyzesSessions ? await planFor(deps) : undefined;
   const instruction = `${buildAgentBrief({
     id,
     root: deps.root,
     resultPath,
     ...(plan === undefined ? {} : { analysis: plan }),
+    ...(deps.budgetTokens === undefined ? {} : { budgetTokens: deps.budgetTokens }),
+    ...(deps.experimentQuotaFactor === undefined ? {} : { experimentQuotaFactor: deps.experimentQuotaFactor }),
   })}\n\n完成后把结果 JSON 写到上面的 resultPath,并在最终回复里按 brief 要求列出全部结果条目(只改这一个结果文件,不动仓库其它文件)。`;
 
   try {
@@ -230,6 +255,10 @@ export async function startMechanismRun(
       ...(plan === undefined
         ? {}
         : { analysis: { windowDays: plan.windowDays, candidates: plan.candidates, analyzed: [] } }),
+      ...(deps.cycleId === undefined ? {} : { cycleId: deps.cycleId }),
+      ...(deps.retryOf === undefined ? {} : { retryOf: deps.retryOf }),
+      ...(deps.budgetTokens === undefined ? {} : { budgetTokens: deps.budgetTokens }),
+      ...(deps.experimentQuotaFactor === undefined ? {} : { experimentQuotaFactor: deps.experimentQuotaFactor }),
     });
  // 做梦开始卡:注入 super 会话(机制标题+runId;面板聊天流渲染,点卡跳做梦视图)。
     try {
@@ -247,6 +276,10 @@ export async function startMechanismRun(
         ...(plan === undefined
           ? {}
           : { analysis: { windowDays: plan.windowDays, candidates: plan.candidates, analyzed: [] } }),
+        ...(deps.cycleId === undefined ? {} : { cycleId: deps.cycleId }),
+        ...(deps.retryOf === undefined ? {} : { retryOf: deps.retryOf }),
+        ...(deps.budgetTokens === undefined ? {} : { budgetTokens: deps.budgetTokens }),
+      ...(deps.experimentQuotaFactor === undefined ? {} : { experimentQuotaFactor: deps.experimentQuotaFactor }),
       });
       await finishRun(deps.root, id, rec.runId, "failed", message.slice(0, 300));
       return { ok: false, id, runId: rec.runId, reason: "SUBMIT_FAILED" };
@@ -260,6 +293,166 @@ export interface AnnotateResult {
   sections: RsiStatusSection[];
  /** 本次自动收尾的运行数(诊断用)。 */
   finalized: number;
+}
+
+/** 单次运行收尾所需的外部依赖(annotate 与调度器共用;缺 readSession=不算成本)。 */
+export interface SettleRunOptions {
+  root: string;
+  taskState?: (taskId: string) => string | undefined;
+  readSession?: (sessionId: string) => unknown[];
+  config?: Config;
+  note?: StartRunDeps["note"];
+}
+
+/**
+ * 把一个运行记录推进到「可结账」状态(自 annotate 抽出,调度器同一跑法):
+ * 1) running + 任务已到终态 → finishRun(done/failed) + 完成/失败卡;
+ * 2) 终态 run 按 taskId 切窗口算成本、认账已分析会话、判定预算超限/分析缺失;
+ * 3) 预算超限 → 追加一条 code 来源 warn 条目(ROI 门:超预算必须可见)。
+ * 幂等:已结过账且两条判定都落盘的 run 不重算。单步失败折叠进 warnings(不 throw 给调用方)。
+ */
+export async function settleRunRecord(
+  opts: SettleRunOptions,
+  section: { id: string; title: string },
+  runIn: RsiRunRecord): Promise<{ run: RsiRunRecord; finalized: number; taskStateText?: string; warnings: string[] }> {
+  const { root } = opts;
+  let run = runIn;
+  let finalized = 0;
+  let taskStateText: string | undefined;
+  const warnings: string[] = [];
+ // ① 运行中任务已到终态:就地收尾(失败原因只写运行记录,不改结果条目)。
+  if (run.status === "running" && run.taskId !== undefined && opts.taskState !== undefined) {
+    const stateText = opts.taskState(run.taskId);
+    taskStateText = stateText;
+    if (stateText !== undefined && (stateText === "done" || TERMINAL_FAILED.has(stateText))) {
+      const failed = TERMINAL_FAILED.has(stateText);
+      await finishRun(root, section.id, run.runId, failed ? "failed" : "done", failed ? `task ${stateText}` : undefined);
+      run = (await getRun(root, section.id, run.runId)) ?? run;
+      finalized += 1;
+ // 做梦完成卡:就地收尾时注入 super 会话(成本 run.cost + 摘要;失败带原因)。
+      try {
+        opts.note?.({
+          phase: failed ? "failed" : "done",
+          mechanismId: section.id,
+          runId: run.runId,
+          ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
+          title: section.title,
+          ...(run.cost === undefined ? {} : { cost: run.cost }),
+          ...(run.error !== undefined ? { summary: run.error } : {}),
+        });
+      } catch { /* 注卡失败不影响收尾 */ }
+    }
+  }
+ // ② 终态补账( RSI-SESSION-COST + RSI-SELF-DRIVE)。
+  if (run.status !== "running" && run.taskId !== undefined && run.sessionId !== undefined && opts.readSession !== undefined) {
+ // fresh run 经验证:任务结束瞬间 journal 写后读可能还看不到窗口,
+ // costRecordOf(空窗口) 会写 0 token 空账 → 之后永不重算。这里把空账判成「待重算」,
+ // 并且只有真拿到 llm.trace(usage.calls>0)才落成本/预算判定;分析门也只在窗口非空时才判。
+    const emptyCost = costUnmeasured(run.cost);
+    const needsCost = run.cost === undefined || emptyCost;
+    const needsBudget = run.budgetTokens !== undefined && run.budgetTokens > 0
+      && (run.budgetExceeded === undefined || emptyCost);
+    const needsAnalysis = run.analysis !== undefined && (run.analysisMissing === undefined || emptyCost);
+    if (needsCost || needsBudget || needsAnalysis) {
+      const settled = run;
+      try {
+        const events = opts.readSession(run.sessionId);
+        const window = taskWindowOf(events, run.taskId);
+        const usage = usageOfWindow(window);
+        const measured = usage.calls > 0;
+        const cost = needsCost && measured ? costRecordOf(usage, opts.config) : run.cost;
+        let analysis: RsiRunAnalysisRecord | undefined = run.analysis;
+        if (analysis !== undefined) {
+          const analyzed = analysis.analyzed.length > 0
+            ? analysis.analyzed
+            : recognizedSessions(parseAnalyzedSessions(finalAgentText(window)), analysis.candidates);
+          analysis = { ...analysis, analyzed };
+        }
+        const budgetExceeded = needsBudget && measured ? usage.totalTokens > (run.budgetTokens ?? 0) : run.budgetExceeded;
+ // 只有真测到 llm.trace 才判分析门:空窗口多半是写后读延迟,过早判 missing 会把重试机会钉死。
+        const analysisMissing = needsAnalysis && measured
+          ? analysis !== undefined && analysis.candidates.length > 0 && analysis.analyzed.length === 0
+          : run.analysisMissing;
+        await finishRun(root, section.id, run.runId, run.status, run.error, {
+          ...(cost === undefined ? {} : { cost }),
+          ...(analysis === undefined ? {} : { analysis }),
+          ...(budgetExceeded === undefined ? {} : { budgetExceeded }),
+          ...(analysisMissing === undefined ? {} : { analysisMissing }),
+          ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
+        });
+        if (analysis !== undefined && analysis.analyzed.length > 0) {
+          await markAnalyzed(
+            root,
+            analysis.analyzed.map((entry) => ({
+              sessionId: entry.sessionId,
+              ...(entry.projectId === undefined ? {} : { projectId: entry.projectId }),
+              mechanismId: section.id,
+              runId: settled.runId,
+              at: Date.now(),
+            })),
+          );
+        }
+ // 预算超限:追加一条 code 来源的 warn 结果条目(ROI 门的一部分:超预算必须可见,不能静默)。
+        if (budgetExceeded === true && run.budgetExceeded !== true) {
+          const limit = run.budgetTokens ?? 0;
+          try {
+            await appendResultEvent(root, {
+              type: "upsert",
+              mechanismId: section.id,
+              itemId: `budget:${run.runId}`,
+              item: {
+                id: `budget:${run.runId}`,
+                mechanismId: section.id,
+                title: "本次运行超出 token 预算",
+                summary: `实测 ${usage.totalTokens} tokens,超过预算 ${limit};调度器已暂停本周期余下机制,下一周期恢复。`,
+                status: "warn",
+                source: "code",
+                runId: run.runId,
+                at: Date.now(),
+              },
+            });
+          } catch { /* 预算提示落盘失败不碰收尾 */ }
+        }
+        run = (await getRun(root, section.id, run.runId)) ?? run;
+      } catch (err) {
+        warnings.push(`运行成本核算失败:${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+ // ③ 质量评估(质量契约 v2):终态且有结果文件 → 四件套/浅层/重复/上限打分,
+ // 随 run 落盘(只算一次)。失败且零条目不做质量判定(避免「失败=高质量」的假象)。
+  if (run.status !== "running" && run.quality === undefined) {
+    try {
+ // 先自愈文件名(agent 抄错 runId 一位时,结果会落在相邻文件名;同目录唯一候选才纠正)。
+      const salvage = await salvageResultFile(root, section.id, run.runId, run.startedAt);
+      const items = await readRunResults(root, section.id, run.runId);
+      if (!(run.status === "failed" && items.length === 0)) {
+        let quality = assessResultQuality(items);
+        if (!salvage.found && run.status === "done") {
+ // 完成但完全没有结果文件:不是「诚实空产出」,而是交付缺失 → 0 分并点名。
+          quality = {
+            items: 0, evidenced: 0, impacted: 0, actionable: 0, shallow: 0, duplicates: 0, overLimit: false,
+            score: 0,
+            issues: [{ code: "RESULT_MISSING", note: "未找到结果文件(agent 可能没写或 runId 抄错);本轮视为零交付" }],
+          };
+        } else if (salvage.movedFrom !== undefined) {
+          quality = {
+            ...quality,
+            score: Math.max(0, quality.score - 5),
+            issues: [...quality.issues, { code: "PATH_REPAIRED", note: `结果文件名写错(${salvage.movedFrom}),已自动纠正` }],
+          };
+        }
+        await finishRun(root, section.id, run.runId, run.status, run.error, {
+          quality,
+          ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
+        });
+        run = (await getRun(root, section.id, run.runId)) ?? run;
+      }
+    } catch (err) {
+      warnings.push(`结果质量评估失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { run, finalized, ...(taskStateText === undefined ? {} : { taskStateText }), warnings };
 }
 
 /**
@@ -304,73 +497,16 @@ export async function annotateRsiSections(
     try {
       const collected = await collectMechanismItems(root, section.id);
       items = collected.items;
-      run = collected.run;
- // 运行中任务已到终态:就地收尾(失败原因只写运行记录,不改结果条目)。
-      if (run !== undefined && run.status === "running" && run.taskId !== undefined && opts.taskState !== undefined) {
-        const stateText = opts.taskState(run.taskId);
-        taskStateText = stateText;
-        if (stateText !== undefined && (stateText === "done" || TERMINAL_FAILED.has(stateText))) {
-          const failed = TERMINAL_FAILED.has(stateText);
-          await finishRun(root, section.id, run.runId, failed ? "failed" : "done", failed ? `task ${stateText}` : undefined);
-          run = (await getRun(root, section.id, run.runId)) ?? run;
-          finalized += 1;
- // 做梦完成卡:就地收尾时注入 super 会话(成本 run.cost + 摘要;失败带原因)。
-          try {
-            opts.note?.({
-              phase: failed ? "failed" : "done",
-              mechanismId: section.id,
-              runId: run.runId,
-              ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
-              title: section.title,
-              ...(run.cost === undefined ? {} : { cost: run.cost }),
-              ...(run.error !== undefined ? { summary: run.error } : {}),
-            });
-          } catch { /* 注卡失败不影响收尾 */ }
-        }
+      if (collected.run !== undefined) {
+ // 收尾/补账/质量门统一走 settleRunRecord(与调度器同一跑法,避免两套逻辑漂移)。
+        const settled = await settleRunRecord(opts, { id: section.id, title: section.title }, collected.run);
+        run = settled.run;
+        taskStateText = settled.taskStateText;
+        finalized += settled.finalized;
+        extraWarnings.push(...settled.warnings);
       }
     } catch (err) {
       extraWarnings.push(`机制治理面读取失败:${err instanceof Error ? err.message : String(err)}`);
-    }
- // 收尾补账( RSI-SESSION-COST):终态 run、还没算过成本 → 按 taskId 切窗口算钱与认账会话。
- // 只补一次(cost 已在=不重算),重复轮询不会把账本越写越长。
-    if (
-      run !== undefined &&
-      run.status !== "running" &&
-      run.cost === undefined &&
-      run.taskId !== undefined &&
-      run.sessionId !== undefined &&
-      opts.readSession !== undefined
-    ) {
- // 收窄后的快照:闭包(map 回调)里不能再依赖 let run 的控制流收窄(TS18048)。
-      const settled = run;
-      try {
-        const events = opts.readSession(run.sessionId);
-        const window = taskWindowOf(events, run.taskId);
-        const cost = costRecordOf(usageOfWindow(window), opts.config);
-        const analysis: RsiRunAnalysisRecord | undefined = run.analysis === undefined
-          ? undefined
-          : { ...run.analysis, analyzed: recognizedSessions(parseAnalyzedSessions(finalAgentText(window)), run.analysis.candidates) };
-        await finishRun(root, section.id, run.runId, run.status, run.error, {
-          cost,
-          ...(analysis === undefined ? {} : { analysis }),
-          ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
-        });
-        if (analysis !== undefined && analysis.analyzed.length > 0) {
-          await markAnalyzed(
-            root,
-            analysis.analyzed.map((entry) => ({
-              sessionId: entry.sessionId,
-              ...(entry.projectId === undefined ? {} : { projectId: entry.projectId }),
-              mechanismId: section.id,
-              runId: settled.runId,
-              at: Date.now(),
-            })),
-          );
-        }
-        run = (await getRun(root, section.id, run.runId)) ?? run;
-      } catch (err) {
-        extraWarnings.push(`运行成本核算失败:${err instanceof Error ? err.message : String(err)}`);
-      }
     }
     const metrics = Array.isArray(section.metrics) ? section.metrics : [];
     const warnings = Array.isArray(section.warnings) ? section.warnings : [];
@@ -394,6 +530,14 @@ export async function annotateRsiSections(
               ...(run.error === undefined ? {} : { error: run.error }),
               ...(run.cost === undefined ? {} : { cost: run.cost }),
               ...(run.analysis === undefined ? {} : { analysis: run.analysis }),
+ // RSI-SELF-DRIVE:周期/重试/预算/两条质量门(面板要显示「超预算/未认账」)。
+              ...(run.cycleId === undefined ? {} : { cycleId: run.cycleId }),
+              ...(run.retryOf === undefined ? {} : { retryOf: run.retryOf }),
+              ...(run.retryCount === undefined ? {} : { retryCount: run.retryCount }),
+              ...(run.budgetTokens === undefined ? {} : { budgetTokens: run.budgetTokens }),
+              ...(run.budgetExceeded === undefined ? {} : { budgetExceeded: run.budgetExceeded }),
+              ...(run.analysisMissing === undefined ? {} : { analysisMissing: run.analysisMissing }),
+              ...(run.quality === undefined ? {} : { quality: run.quality }),
             },
           }),
     });

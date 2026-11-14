@@ -42,28 +42,14 @@ interface DirectionAtlasRuntime {
   renderAtlasJson(atlas: DirectionAtlas): string;
 }
 
-let directionAtlasRuntime: DirectionAtlasRuntime | undefined;
-
 /**
- * 两跳解析 runtime 模块(同 fanout-cluster-store.ts 的既有套路):
- * ① 带 `--conditions=development` 的运行时(vitest / NODE_OPTIONS)走包导出 src 入口;
- * ② 裸 tsx 时包导出落到 dist/agent/direction-atlas.js(新文件未构建)→ 回退到仓内源文件
- *    (new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
+ * runtime 面:静态导入(修)。
+ * 旧实现是「两跳动态 import + 顶层 await」——顶层 await 在被 spawn 的 session-worker 模块图里
+ * 退化成运行时解析,解析不到时 promise 永不 settle,worker 永不 ready( plan-gate
+ * e2e 10/15 挂死注意;同型坑 evidence-graph-store 已修,当时网关静默 exit 13)。
+ * bundle 本就把 runtime 内联,静态导入零成本。
  */
-async function loadDirectionAtlasRuntime(): Promise<DirectionAtlasRuntime> {
-  if (directionAtlasRuntime) return directionAtlasRuntime;
-  const spec = "@lampgenie/runtime/agent/direction-atlas";
-  try {
-    directionAtlasRuntime = (await import(spec)) as DirectionAtlasRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/direction-atlas.ts", import.meta.url).href;
-    directionAtlasRuntime = (await import(srcUrl)) as DirectionAtlasRuntime;
-  }
-  return directionAtlasRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadDirectionAtlasRuntime();
+import * as rt from "@lampgenie/runtime/agent/direction-atlas";
 
 /** store 层自有码:纯逻辑的 9 码在 runtime(ATLAS_RUNTIME_CODES),这几条只在 IO 面出现。 */
 export const ATLAS_NOT_FOUND = "ATLAS_NOT_FOUND" as const;
@@ -289,13 +275,30 @@ function projectEntries(events: AtlasEvent[]): AtlasProjection {
       case "decision":
         if (isRecord(event.payload)) projection.decisions.push(event.payload);
         break;
-      case "defects":
-        if (Array.isArray(event.payload)) {
-          for (const item of event.payload) if (isRecord(item)) projection.defectGenes.push(item);
-        } else if (isRecord(event.payload)) {
-          projection.defectGenes.push(event.payload);
+      case "defects": {
+ // atlas 机制注意「缺陷基因跨批重复累加,类别权重虚高 1.8 倍」:每批 defects
+ // 事件是**快照**不是增量,同 id 多批出现时按 count 取最大(重测删台账重放会重复投)。
+        const batch: Record<string, unknown>[] = Array.isArray(event.payload)
+          ? event.payload.filter(isRecord)
+          : isRecord(event.payload)
+            ? [event.payload]
+            : [];
+        const byId = new Map<string, Record<string, unknown>>(
+          projection.defectGenes.map((g) => [String((g as Record<string, unknown>)["id"] ?? ""), g as Record<string, unknown>] as const),
+        );
+        for (const item of batch) {
+          const id = String(item["id"] ?? "");
+          const prev = byId.get(id);
+          if (prev === undefined) {
+            projection.defectGenes.push(item);
+            byId.set(id, item);
+          } else if (Number(item["count"] ?? 0) > Number(prev["count"] ?? 0)) {
+            projection.defectGenes.splice(projection.defectGenes.indexOf(prev), 1, item);
+            byId.set(id, item);
+          }
         }
         break;
+      }
       case "resolve":
         resolutions.push(event);
         break;
@@ -319,7 +322,8 @@ function toAtlasInput(projectId: string, projection: AtlasProjection): AtlasInpu
 }
 
 /** 原子写快照:mkdir → 写 `<file>.tmp-<pid>` → rename(同 board-store.ts:1166-1168 范式)。 */
-function writeAtlasFile(path: string, atlas: DirectionAtlas): boolean {
+/** 快照落盘(原子写; 起导出——atlas-harvest 的 refresh 要把 derived 层合入快照)。 */
+export function writeAtlasFile(path: string, atlas: DirectionAtlas): boolean {
   const rename = renameSync;
   try {
     mkdirSync(dirname(path), { recursive: true });

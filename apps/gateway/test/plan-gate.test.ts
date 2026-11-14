@@ -18,7 +18,7 @@ import { repoRoot } from "../src/repo-root.js";
 // env 互斥:threads pool 共享 process.env,动 GENIE_PERMISSION_RULES 等进程级开关的
 // 测试文件必须串行,否则并行文件互相拆 env=间歇假红。
 import { acquireEnvLock, releaseEnvLock } from "./support/env-lock.js";
-beforeAll(async () => { await acquireEnvLock("plan-gate"); }, 240_000); // 等锁可能长(hook 默认 10s 会假红)
+beforeAll(async () => { await acquireEnvLock("plan-gate"); }, 300_000); // 等锁可能长(hook 默认 10s 会假红)
 afterAll(() => { releaseEnvLock("plan-gate"); });
 
 const apps: ReturnType<typeof createGatewayApp>[] = [];
@@ -41,7 +41,10 @@ function boardPathOf(sid: string, taskId: string): string {
 
 async function drive(app: ReturnType<typeof createGatewayApp>, sid: string) {
   app.taskManager.submit("user", sid, "改点东西");
-  for (let k = 0; k < 120; k++) {
+ // 时序余量:夹具跑在生产仓根上,每任务 3~5 次 git 基线(turn-change-ledger 开工/
+ // 收尾 + work-start 画像),9p 下单次 `git status --untracked-files=all` 6~9s,经验证任务地板
+ // 33.2s——120×150ms=18s 的窗口在冷 index/高负载下必然假红(当日 10/15 假红注意)。320×150=48s。
+  for (let k = 0; k < 320; k++) {
     const t = app.taskManager.list().find((x) => x.sessionId === sid);
     if (t && (t.state === "done" || t.state === "failed")) return t;
     await new Promise((r) => setTimeout(r, 150));
@@ -69,7 +72,7 @@ it("无板:派 worker 被拒并指路 planner;再派 planner 放行(第二次工
   expect(final).toContain("rejected");
   expect(final).toContain("planner"); // 拒绝文本指路 planner
   expect(final).toContain("规划"); // planner 派发的结果(echo 回显任务书)进了上下文=派发走通
-}, 30_000);
+}, 300_000);
 
 it("阶段与板解耦(2026-10-21):task_phase 不建板;无板+已声明仍拒;落设计板后放行", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }, { permission: "task_phase", pattern: "*", action: "allow" }]);
@@ -112,7 +115,7 @@ it("阶段与板解耦(2026-10-21):task_phase 不建板;无板+已声明仍拒;�
   const final = seen.find((x) => x.startsWith("final:"))?.slice(6) ?? "";
   expect((final.match(/被拦/g) ?? []).length, "仅无板那次被拦(阶段已声明,被拦的只能是板门)").toBe(1);
   expect(final).toContain("再干"); // 板落地后派发真实执行(echo 回显进上下文)
-}, 30_000);
+}, 300_000);
 
 // 板根统一:board_upsert 实际写盘根 = repoRoot(storeRoot 缺省),闸门也必须读同根。
 // 任务 projectId 指向非 harness 项目时 taskRoot≠repoRoot——旧实现按 taskRoot 读板恒读不到 → 死循环。
@@ -155,7 +158,7 @@ it("板根统一:任务 projectId 指向非 harness 项目(taskRoot≠repoRoot),
   expect(final).toContain("干活甲"); // 写角色子代理真的派发出去(echo 回显任务书)
   try { rmSync(join(repoRoot(), ".genie", "boards", sid), { recursive: true, force: true }); } catch { /* 清理失败容忍 */ }
   rmSync(projDir, { recursive: true, force: true });
-}, 40_000);
+}, 300_000);
 
 // 逃生阀:同一 task 同因「无板」拒绝累计到第 3 次 → 降级放行 + journal 留痕,
 // 防「闸门根错位/板真落不了」时 agent 被同一 reason 钉死无限重试。
@@ -192,7 +195,7 @@ it("逃生阀:同任务连续 3 次「无板」拒绝后第 3 次降级放行,jo
   const esc = app.journal.readAll().filter((e) => e.kind === "custom" && (e.payload as { type?: string }).type === "plan.gate" && (e.payload as { effect?: string }).effect === "escalated");
   expect(esc).toHaveLength(1);
   expect((esc[0]!.payload as { count?: number }).count).toBe(3);
-}, 40_000);
+}, 300_000);
 
 it("规划委托:主 agent 内联 >3 节点板且未派 planner → 写角色被拒;派 planner 后放行", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }]);
@@ -244,7 +247,7 @@ it("规划委托:主 agent 内联 >3 节点板且未派 planner → 写角色被
   } finally {
     try { rmSync(join(repoRoot(), ".genie", "boards", sid), { recursive: true, force: true }); } catch { /* 清理失败容忍 */ }
   }
-}, 40_000);
+}, 300_000);
 
 it("createFileTools planGate 回调:write_file/edit_file 被拦,read 不受影响", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pg-ft-"));
@@ -314,7 +317,7 @@ it("纯步骤板不开门:拒绝话术点名步骤板并教内容要求;补 targ
   expect(final).toContain("targets");
   // 内容板落地后真正放行(三试的 echo 回显进上下文)
   expect(final).toContain("三试");
-}, 30_000);
+}, 300_000);
 
 // ── 阶段门自动推进 + 记账收敛 ─────────────────────────────────────────
 // 背景:7 天 telemetry(n=108 次 phase 拒绝/33 会话)中 100% 的 by=plan-gate/phase 拒绝发生在
@@ -376,7 +379,7 @@ it("阶段门自动推进:板在场但从未 task_phase,首个写操作放行且
   } finally {
     try { rmSync(join(repoRoot(), ".genie", "boards", sid), { recursive: true, force: true }); } catch { /* 清理失败容忍 */ }
   }
-}, 40_000);
+}, 300_000);
 
 it("逃生阀记账收敛:13 次无板拒绝只落 2 条 escalated(attempt=3 与 13),首条带结构化字段", async () => {
   const prevMode = process.env.GENIE_PLAN_GATE;
@@ -407,7 +410,7 @@ it("逃生阀记账收敛:13 次无板拒绝只落 2 条 escalated(attempt=3 与
   } finally {
     if (prevMode === undefined) delete process.env.GENIE_PLAN_GATE; else process.env.GENIE_PLAN_GATE = prevMode;
   }
-}, 40_000);
+}, 300_000);
 
 it("规划委托闸记账收敛:13 次写角色派发只落 planner-required×2 + escalated×2(attempt=3 与 13)", async () => {
  // 背景( N1 基线):旧实现 escalated 后每次写操作都落一条,320 条里 316 条是重复记
@@ -458,7 +461,7 @@ it("规划委托闸记账收敛:13 次写角色派发只落 planner-required×2 
     try { rmSync(join(repoRoot(), ".genie", "boards", sid), { recursive: true, force: true }); } catch { /* 清理失败容忍 */ }
     delete process.env.GENIE_PERMISSION_RULES;
   }
-}, 60_000);
+}, 300_000);
 
 it("无板 permission.gate 结构化:payload.reason=no-board 且 rule/decisionBy/taskId 在场", async () => {
   process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "spawn_subagent", pattern: "*", action: "allow" }]);
@@ -482,7 +485,7 @@ it("无板 permission.gate 结构化:payload.reason=no-board 且 rule/decisionBy
   expect(p.taskId).toBe(t.id);
   expect(p.effect).toBe("denied");
   expect(p.hint).toBe("本任务无规划板——先 spawn planner 落规划契约"); // 话术逐字不动
-}, 30_000);
+}, 300_000);
 
 
 // ── 白板适用面(「白板不要任何内容都进行落板;白板一定是开发内容逻辑,
@@ -531,7 +534,7 @@ describe("白板适用面收口:office 硬闸 + exemptReason 豁免通道", () =
     const gate = app.journal.readAll().find((e) => e.kind === "permission.gate" && (e.payload as { reason?: string }).reason === "no-composition-board");
     expect(gate, "office 无板拒绝要结构化留痕").toBeTruthy();
     expect((gate!.payload as { rule?: string }).rule).toBe("plan-gate/composition-board");
-  }, 40_000);
+  }, 300_000);
 
   it("office 任务 + composition 板(≥3 节点)→ 写操作放行", async () => {
     process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "write_file", pattern: "*", action: "allow" }]);
@@ -574,7 +577,7 @@ describe("白板适用面收口:office 硬闸 + exemptReason 豁免通道", () =
     } finally {
       try { rmSync(join(repoRoot(), ".genie", "boards", sid), { recursive: true, force: true }); } catch { /* 清理失败容忍 */ }
     }
-  }, 40_000);
+  }, 300_000);
 
   it("coding 任务 + exemptReason 过短 → 仍拒;合法理由 → 放行且 journal 有 board.exempt", async () => {
     process.env.GENIE_PLAN_GATE = "hard";
@@ -616,7 +619,7 @@ describe("白板适用面收口:office 硬闸 + exemptReason 豁免通道", () =
     } finally {
       if (prevMode === undefined) delete process.env.GENIE_PLAN_GATE; else process.env.GENIE_PLAN_GATE = prevMode;
     }
-  }, 40_000);
+  }, 300_000);
 
   it("qa 任务 → 无板直写仍放行(既有行为不回归)", async () => {
     process.env.GENIE_PERMISSION_RULES = JSON.stringify([{ permission: "write_file", pattern: "*", action: "allow" }]);
@@ -644,5 +647,5 @@ describe("白板适用面收口:office 硬闸 + exemptReason 豁免通道", () =
     expect(second).not.toContain("规划板");
     expect(second).not.toContain("作业思路板");
     expect(second).toContain("已创建");
-  }, 40_000);
+  }, 300_000);
 });

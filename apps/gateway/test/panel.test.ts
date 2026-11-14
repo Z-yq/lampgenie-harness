@@ -396,8 +396,8 @@ describe("斜杠命令面板(n8/n9:内置补齐 + teamai 注册 + 新建入口)"
 describe("RSI 看板三分状态语义(未启用≠异常)", () => {
   it("头部模板为「正常/未启用/异常」三分,UNAVAILABLE 单独归类,空态为「暂无 RSI 数据」", async () => {
     await withPanel(7901, (html) => {
- // ① 头部文案模板(源码字面量出现在页面脚本里)
-      expect(html).toContain('· 正常 " + ok + " · 未启用 " + unavailable + " · 异常 " + errors');
+ // ① 头部文案模板(源码字面量出现在页面脚本里; 起与健康一屏同一分类,含「关注」)
+      expect(html).toContain('· 正常 " + ok + " · 关注 " + warn + " · 未启用 " + unavailable + " · 异常 " + errors');
  // ② 旧的「正常 X / 降级 Y」硬编码不再出现
       expect(html).not.toContain('正常 " + ok + " / 降级 ');
  // ③ UNAVAILABLE 归类分支明确存在于面板源码
@@ -408,7 +408,7 @@ describe("RSI 看板三分状态语义(未启用≠异常)", () => {
  // ⑤ 卡片:未启用用中性灰点 + 提示文案;异常仍走红色
       expect(html).toContain(".rsi-tone-idle .rsi-dot");
       expect(html).toContain("未产生数据（运行对应 RSI 任务后自动更新）");
-      expect(html).toContain('kind === "ok" ? "正常" : (kind === "unavailable" ? "未启用" : "异常")');
+      expect(html).toContain('kind === "ok" ? "正常" : kind === "warn" ? "关注" : (kind === "idle" ? "未启用" : "异常")');
     });
   });
 });
@@ -427,7 +427,7 @@ describe(" super 指挥台 IDE 三栏布局(活动栏/侧栏/中栏+右缘聊天
  // ③ super 视图:IDE 三栏骨架(活动栏/侧栏两区/中栏)+聊天窗右缘叠层(容器 id 全 superIde* 前缀)
       const superStart = html.indexOf('id="view-super"');
       expect(superStart).toBeGreaterThan(0);
-      const superScope = html.slice(superStart, superStart + 4600);
+      const superScope = html.slice(superStart, superStart + 7600); // 待办区/聊天头/协作链加入后骨架变长
       expect(superScope).toContain('id="superIdeWrap"'); // 三栏 grid 骨架
       expect(superScope).toContain('id="superIdeAct"'); // 活动栏(任务/做梦)
       expect(superScope).toContain('id="superIdeSide"'); // 侧栏(两区列表)
@@ -446,12 +446,16 @@ describe(" super 指挥台 IDE 三栏布局(活动栏/侧栏/中栏+右缘聊天
  // 聊天窗:superChatBody/superComposer 原样迁入右栏容器(DOM 移动不重建)
       expect(superScope).toContain('id="superChatBody"');
       expect(superScope).toContain('id="superComposer"');
-      expect(superScope).toContain('id="superIdeChatFold"'); // 聊天窗折叠把手
+      expect(superScope).toContain('id="superSbGrip"'); // 左栏拖拽手柄
+      expect(superScope).toContain('id="superChatGrip"'); // 聊天窗拖拽手柄
+      expect(superScope).toContain('id="superResultFeed"'); // Coding Agent 结果流(中栏)
+      expect(superScope).not.toContain('id="superIdeChatFold"'); // 聊天窗不可折叠
  // 三栏 CSS:grid 列规格 + 聊天窗右缘叠层 + 折叠态 + 窄屏退化(全部 spide-* 包 #view-super)
  // 中栏下限 minmax(420px,1fr) + 卡宽 1400(三栏在全宽下中栏≥500 的两道保险)
       expect(html).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(420px,1fr)");
       expect(html).toContain(".spide-chat{position:absolute;top:0;right:0;bottom:0;width:var(--superChatW,360px)");
-      expect(html).toContain("#view-super.spide-chat-folded #superIdeWrap{padding-right:40px}");
+      expect(html).toContain(".spide-grip{position:absolute");
+      expect(html).toContain(".spide-chat-grip{position:absolute");
       expect(html).toContain("@media (max-width:1200px)");
       expect(html).toContain("@media (max-width:900px)");
       expect(html).toContain(".spide-act");
@@ -509,6 +513,11 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(body).toContain("示例:");
  // 粘底跟随(主聊天同款 60px 容差)
       expect(body).toContain("wasBottom");
+ // 指挥状态条:工具动词人话 + 委托/调度阶段
+      expect(html).toContain('id="superRunBar"');
+      expect(html).toContain("function supToolVerb");
+      expect(html).toContain("function supRunBarRender");
+      expect(html).toContain('"spawn_task" ? "委托中" : "调度中"');
     });
   });
   it("③ 历史回放含做梦卡+工具结果回填;旧 rsi 满渲染双消费退役", async () => {
@@ -519,6 +528,9 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(hBody).toContain('kind === "super.dream"'); // 做梦卡回放
       expect(hBody).toContain('kind: "dream"');
       expect(hBody).toContain("toolRes"); // 工具结果收集回填(fixH12 同语义)
+ // 播报轮输入(系统通知/转接)不得回放成「你」的聊天消息:通知→紧凑系统行,转接→super.relay 行
+      expect(hBody).toContain("播报轮的输入是系统通知/转接");
+      expect(hBody).toContain("结果见中栏");
  // 负面断言:rsi 会话满渲染退役(rsiEvOnHist 不再双消费;rsiChat 函数族删除)
       const eStart = html.indexOf("function rsiEvOnHist");
       const eBody = html.slice(eStart, eStart + 2000);
@@ -535,7 +547,7 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(tStart).toBeGreaterThan(0);
       const tBody = html.slice(tStart, tStart + 1600);
       expect(tBody).toContain('!== "super"'); // 只跟 super 派出的任务
-      expect(tBody).toContain('kind: "dispatch"');
+      expect(tBody).toContain('kind: "task"');
  // task.submitted/task.changed 通用分支挂 supTrackDispatch
       const gStart = html.indexOf('m.type === "task.submitted" || m.type === "task.changed"');
       expect(html.slice(gStart, gStart + 900)).toContain("supTrackDispatch(m);");
@@ -546,10 +558,48 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(cBody).toContain("data-sid");
  // supRenderChat 渲染 dispatch/dream 两类卡
       const rStart = html.indexOf("function supRenderChat");
-      expect(html.slice(rStart, rStart + 6000)).toContain('t.kind === "dispatch"');
+      expect(html.slice(rStart, rStart + 6000)).not.toContain('t.kind === "dispatch"');
+      expect(html).toContain("function supRenderResults"); // 结果流渲染器
+      expect(html).toContain("function pushSuperResult"); // 结果入流(不写聊天 entries)
     });
   });
-  it("⑤ 做梦卡:super.dream 广播进聊天流;成本 ¥/tokens;supDreamCardHtml 三相", async () => {
+ // 派发卡时间:运行中「已运行 X 分钟」(now-createdAt),终态「用时 X 分钟」(updatedAt-createdAt),<1 分钟「刚刚」
+  it("④b 派发卡时间:运行中→已运行,终态→用时,不足 1 分钟→刚刚", async () => {
+    await withPanel(7946, (html) => {
+      const src = extractFn(html, "supDurText") + String.fromCharCode(10) + extractFn(html, "supTaskElapsedText");
+      const run = new Function("supState", src + String.fromCharCode(10) + "return { supDurText, supTaskElapsedText };") as
+        (s: unknown) => { supDurText: (ms: unknown) => string; supTaskElapsedText: (r: Record<string, unknown>) => string };
+      const f = run({ dispatch: {} });
+      const now = Date.now();
+ // 运行中:从 createdAt 起到现在,分钟向下取整
+      expect(f.supTaskElapsedText({ taskId: "t1", state: "running", createdAt: now - 5 * 60000 - 20000 })).toBe("已运行 5 分钟");
+      expect(f.supTaskElapsedText({ taskId: "t1", state: "queued", createdAt: now - 90000 })).toBe("已运行 1 分钟");
+ // 终态:createdAt → updatedAt
+      const c0 = now - 60 * 60000;
+      expect(f.supTaskElapsedText({ taskId: "t2", state: "done", createdAt: c0, updatedAt: c0 + 12 * 60000 })).toBe("用时 12 分钟");
+      expect(f.supTaskElapsedText({ taskId: "t3", state: "failed", createdAt: c0, updatedAt: c0 + 3 * 60000 + 40000 })).toBe("用时 3 分钟");
+      expect(f.supTaskElapsedText({ taskId: "t3", state: "cancelled", createdAt: c0, updatedAt: c0 + 2 * 60000 })).toBe("用时 2 分钟");
+ // 不足 1 分钟:只显示「刚刚」,不出现「0 分钟」;缺时间字段不编数
+      expect(f.supTaskElapsedText({ taskId: "t4", state: "running", createdAt: now - 40000 })).toBe("刚刚");
+      expect(f.supTaskElapsedText({ taskId: "t4", state: "done", createdAt: now - 30000, updatedAt: now })).toBe("刚刚");
+      expect(f.supTaskElapsedText({ taskId: "t5", state: "running" })).toBe("");
+      expect(f.supDurText(5.9 * 60000)).toBe("5 分钟"); // 向下取整
+ // 条目缺 createdAt/updatedAt 时回退 supState.dispatch 同 taskId
+      const g = run({ dispatch: { t9: { state: "done", createdAt: c0, updatedAt: c0 + 7 * 60000 } } });
+      expect(g.supTaskElapsedText({ taskId: "t9" })).toBe("用时 7 分钟");
+ // 卡头真的渲染出来(.srf-dur + 运行中/终态两种色调)
+      const cardSrc = extractFn(html, "supTaskCardHtml");
+      expect(cardSrc).toContain("srf-dur");
+      expect(cardSrc).toContain('dur.indexOf("已运行") === 0 ? "run" : "ok"');
+ // 透传面:supTrackDispatch 的载荷带 createdAt/updatedAt;索引帧 merge 不覆盖正文/noticeAt;终态补拉
+      const tBody = html.slice(html.indexOf("function supTrackDispatch"), html.indexOf("function supTrackDispatch") + 2600);
+      expect(tBody).toContain("createdAt: merged.createdAt");
+      expect(tBody).toContain("updatedAt: merged.updatedAt");
+      expect(tBody).toContain("Object.assign({}, prev || {}, t)");
+      expect(tBody).toContain("terminalNow && asked !== stateNow");
+    });
+  });
+  it("⑤ 做梦卡:super.dream 广播进结果流;结果卡=条数/待关注+成本", async () => {
     await withPanel(7937, (html) => {
  // superOnMsg 挂 super.dream 分支
       const mStart = html.indexOf("function superOnMsg");
@@ -557,15 +607,17 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       const mBody = html.slice(mStart, mStart + 3500);
       expect(mBody).toContain('m.type === "super.dream"');
       expect(mBody).toContain('kind: "dream"');
- // 做梦卡构造:三相(start/done/failed)+成本行
+ // turn.done 实时帧不带 toolCalls:回拉一次 history,让工具卡/派发关系条立即出现
+      expect(mBody).toContain('m.type === "super.turn.done"');
+      expect(mBody).toContain('type: "super.history", sinceSeq: 0');
+ // 结果卡:点卡进机制报告 + 「几条结果/几条待关注」+ 成本(缺价如实标注)
       const dStart = html.indexOf("function supDreamCardHtml");
       const dBody = html.slice(dStart, dStart + 2500);
-      expect(dBody).toContain("做梦开始");
-      expect(dBody).toContain("做梦完成");
-      expect(dBody).toContain("做梦失败");
+      expect(dBody).toContain('data-idedetail="dream"');
+      expect(dBody).toContain("待关注");
       expect(dBody).toContain("amountCny"); // ¥(缺价=如实标注,不按 0 冒充)
       expect(dBody).toContain("totalTokens"); // tokens
-      expect(dBody).toContain("missing"); // 缺价段名
+      expect(dBody).toContain("未计价"); // 缺价词
     });
   });
   it("⑥ 三栏联动+全量运行;rsiPollSync 跟随 super;模板零内联 onclick", async () => {
@@ -579,7 +631,9 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(html).toContain('document.getElementById("superIdeSide").addEventListener');
       expect(html).toContain('document.getElementById("superIdeMain").addEventListener');
       expect(html).toContain('document.getElementById("superChatBody").addEventListener');
-      expect(html).toContain('document.getElementById("superIdeChatFold").addEventListener');
+      expect(html).toContain("superLayoutInit()");
+      expect(html).toContain('superLayoutGrip($("superSbGrip"), "sb")');
+      expect(html).toContain('superLayoutGrip($("superChatGrip"), "chat")');
       expect(html).toContain("superIdeZoneSet");
       expect(html).toContain("function superIdeOpen");
       expect(html).toContain('data-idedetail="task"'); // 派发卡「详情→」
@@ -826,8 +880,8 @@ describe(" 三入口迁左侧栏(新建任务/指挥台/RSI 看板)", () => {
       expect(navScope).toContain('id="act-super"');
       expect(navScope).toContain('id="act-rsi"');
  // ② 点击处理复用既有绑定(零内联 onclick,事件在 script-2 的 $.onclick)
-      expect(html).toContain('$("act-super").onclick = () => superOpen()');
-      expect(html).toContain('$("act-rsi").onclick = () => switchView("rsi")');
+      expect(html).toContain('$("act-super").onclick = () => { superOpen(); superIdeZoneSet("health"); superIdeOpen("health"); }');
+      expect(html).toContain('$("act-rsi").onclick = () => { switchView("rsi"); superIdeZoneSet("dream"); superIdeOpen("dream", ""); }');
       expect(html).toContain('$("act-new").onclick = newDraft');
  // ③ 底部条 .sb-acts 里不再有三入口:三 id 各只在全文出现一次(即侧栏处)
       for (const id of ["act-new", "act-super", "act-rsi"]) {

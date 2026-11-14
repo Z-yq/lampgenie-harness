@@ -6,6 +6,13 @@ import type { Server } from "node:http";
 import { execFile } from "node:child_process";
 import * as os from "node:os";
 import { join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { makeCompactHook } from "./compact-hook.js";
+import { autoCompactGate } from "./compact-gate.js";
+import { mainRequestMaxTokens } from "./agent-wiring/deadline-wire.js";
+import { buildDefaultMicrocompactThreshold } from "@lampgenie/runtime/agent/microcompact";
+import { collectRsiStatus } from "./rsi-status.js";
+import { annotateRsiSections } from "./rsi-agent-runner.js";
 import { MemoryJournal, FileJournal, bus, type Config, type Journal } from "@lampgenie/core";
 import { TaskSupervisor } from "./task-manager.js";
 import { SessionActivityIndex } from "./session-activity.js";
@@ -21,12 +28,13 @@ import { createDeliveryObligationStore, type DeliveryObligation } from "./delive
 import { hasUserStoppedSince, appendUserStoppedMarker, USER_STOPPED_EVENT, USER_STOPPED_RESUME_MESSAGE } from "./user-stop-marker.js";
 import { NodeConnections, NodeDispatch } from "./nodes.js";
 import { ProjectRegistry, cleanupProjectTaskRefs, HARNESS_PROJECT_ID } from "./projects.js";
-import { runSuperAgentTurn, SuperAgentChannel, SuperAgentActivity, buildSuperInbox } from "./super-agent.js";
+import { runSuperAgentTurn, SuperAgentChannel, SuperAgentActivity, buildSuperInbox, type SuperAgentDeps } from "./super-agent.js";
 import { MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { PermissionBroker } from "./permission-broker.js";
 import { AskUserRouter } from "./ask-user-router.js";
 import { WorkflowAskRouter } from "./workflow-ask-router.js";
 import { AutomationStore, AutomationScheduler } from "./automations.js";
+import { tickRsiScheduler } from "./rsi-scheduler.js"; // RSI-SELF-DRIVE:自动周期 tick
 // 定时任务:计划/内容门/摘要用 runtime TaskSupervisor;真正跑活经 runner 提交给主管理器。
 import { TaskSupervisor as RuntimeTaskSupervisor } from "@lampgenie/runtime/task/task-manager";
 import { preRunVerdict } from "@lampgenie/runtime/task/scheduled-content-gate";
@@ -47,7 +55,8 @@ import { genBootstrapCommand, pickLanAddress } from "./remote-wizard.js";
 import { mergeSkillIndexWith } from "@lampgenie/experience";
 import { NodeRegistry } from "./nodes.js";
 import { wireExecutor } from "./executor-wiring.js";
-import { wireAgentLoop, getExperienceStore, TOOL_HINTS, ensureSubagentWatchdog, maybeContinueGoal, writeBarrierOf, imageOffloadOf, cancelOwnedUnit } from "./agent-wiring.js";
+import { wireAgentLoop, getExperienceStore, TOOL_HINTS, ensureSubagentWatchdog, maybeContinueGoal, writeBarrierOf, imageOffloadOf, cancelOwnedUnit, setRuntimePromptProvider } from "./agent-wiring.js";
+import { resolvePromptForSessionSync, resolvePromptOverrideSync } from "./prompt-runtime.js"; // #209:提示词版本运行时消费( v2 会话钉扎)
 import { OwnerRegistry } from "@lampgenie/runtime/task/ownership";
 import { readGoalFromJournal } from "@lampgenie/runtime/agent/goal";
 import { createSessionWorkerHost, type SessionWorkerHost } from "./session-worker-host.js";
@@ -168,6 +177,9 @@ export interface GatewayAppOptions {
   };
   /** 端点模型列表(设置页模型选择器数据源);providerId=按该 provider 端点拉。 */
   listModels?: (providerId?: string) => Promise<string[]>;
+ /** 允许 Super 的 sys_restart 计划性重启(仅生产入口 main.ts 传 true;
+ * 缺省=不接线,工具如实回「未接线」。测试/嵌入场景永不自重启)。 */
+  allowSelfRestart?: boolean;
   /** per-session 主模型覆盖 store(白板「per-session 主模型」;main load-once 注入):
    *  set/get 处理器与 agent 接线派生面都从这里出;缺省=session.model.* 报 not-implemented。 */
   sessionModels?: SessionModelStore;
@@ -219,6 +231,12 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
  // 会话全文检索:只登记缓存路径,索引首次查询才构建(不占启动时间);
   // 缓存随 journalDir 隔离——测试临时目录不会污染生产索引。
   configureSessionSearch(journal, { cacheFile: defaultSessionSearchCacheFile(opts.journalDir) });
+ // #209 运行面:任务开工读一次提示词 book,revision>1 的显式覆盖生效(否则内置常量)。
+ // v2 会话钉扎:带 sessionId 的解析先查 pins.json——同会话拿到首钉版本,
+ // 中途保存的新覆盖只影响之后的新会话(跑一半的会话不被切轴)。
+  setRuntimePromptProvider((key, sessionId) =>
+    sessionId ? resolvePromptForSessionSync(repoRoot(), sessionId, key) : resolvePromptOverrideSync(repoRoot(), key),
+  );
 
  // 持久效果队列:外部副作用先落 effect 行(commit 后才执行),崩溃后可折叠恢复。
   // 本轮只接 team 活动推送这一处真实外部面;其它推送/通知保持原路径不变。
@@ -476,6 +494,44 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     (e) => journal.append({ kind: "automation.run", sessionId: e.sessionId, payload: e }),
   );
   automationScheduler.start();
+ // RSI-SELF-DRIVE:RSI 自动周期(默认关闭,用户在「做梦」区打开)。
+ // 60s tick 内部自带「到点/空闲让路/全局单跑/熔断暂停」判定;不用面板轮询也能自转。
+ // unref:定时器不吊住进程退出(与 automationScheduler/预热定时器同口径)。
+  const rsiSchedulerTimer = setInterval(() => {
+    void tickRsiScheduler({
+      root: repoRoot(),
+      submit: (kind, sessionId, instruction, extra) => taskManager.submit(kind, sessionId, instruction, extra),
+      taskState: (taskId) => taskManager.get(taskId)?.state,
+ // 在线繁忙让路:前台 user 任务在跑/排队就不开新周期(system/自动化/RSI 自身不算)。
+      isOnlineBusy: () => {
+        try {
+          return taskManager.list().some((t) => {
+            if (t.state !== "running" && t.state !== "queued") return false;
+            if (t.sessionId === "rsi") return false;
+            if (t.sessionId.startsWith("auto-") || t.sessionId.startsWith("sched-")) return false;
+            if (t.instruction.startsWith("sys:")) return false;
+            return true;
+          });
+        } catch {
+          return true; // 探测失败按繁忙处理:宁可晚跑,不抢在线资源
+        }
+      },
+      ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
+      readSession: (sessionId) => journal.readSession(sessionId),
+      ...(opts.config === undefined ? {} : { config: opts.config as unknown as import("@lampgenie/core").Config }),
+ // 自动周期同样注入 super 做梦卡(开始/完成/失败);broadcastRaw 在 ensureServer 时替换为真广播,
+ // 此闭包读取的是最新值(定时器触发时已初始化)。注入失败不影响调度主链。
+      note: (p) => {
+        try {
+          journal.append({ kind: "super.dream", sessionId: "super", payload: { ...p, at: Date.now() } });
+        } catch { /* 注卡失败不碰调度 */ }
+        try {
+          broadcastRaw({ v: 1, type: "super.dream", ...p });
+        } catch { /* 广播失败不碰调度 */ }
+      },
+    }).catch(() => { /* 调度失败下一拍重试;不冒泡到进程 */ });
+  }, 60_000);
+  rsiSchedulerTimer.unref?.();
  // 定时任务装配:
  // - runtime TaskSupervisor 只管「什么时候跑、跑之前检查什么、把哪些摘要拼进任务书」;
  // - 真正执行经 configureScheduledTaskRunner 提交到主 taskManager,复用既有 agent loop / 面板可见性;
@@ -729,7 +785,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // 广播先经 broadcastRaw 占位(ensureServer 前为 no-op)——服务未起时只落 journal 不广播,零行为差异。
   const superActivity = new SuperAgentActivity();
   const superSoul = opts.llm ? new MemoryStore(join(repoRoot(), ".genie", "soul", "memories")) : undefined;
-  const superDeps = opts.llm
+  const superDeps: SuperAgentDeps | undefined = opts.llm
     ? {
         journal, taskManager, projects,
         llm: opts.llm,
@@ -753,6 +809,32 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         writeBarrier: writeBarrierOf((opts.config as { agent?: { writeBarrier?: "off" | "hard" } } | undefined)),
  //  图片 offload:与 coding 轨同根(默认开启;管家轮次带图时 provider 报图片预算错误可自愈)。
         imageOffload: imageOffloadOf(repoRoot()),
+ // 上下文经济面(coding 主轨同源):阈值压缩 compactHook + microcompact 组清理
+ // + spill 超大结果落盘。Super 每轮重建 loop、journal 历史无界增长,此前零治理。
+        contextEconomy: (() => {
+          const cw = Number(opts.contextWindow) || 0;
+          const agentCfg = (opts.config as { agent?: { compactThresholdTokens?: number } } | undefined)?.agent;
+          const effort = (() => { try { const d = (opts.llm as unknown as { describe?: () => { reasoningEffort?: string } }).describe; return typeof d === "function" ? d.call(opts.llm as never)?.reasoningEffort : undefined; } catch { return undefined; } })();
+          const micro = { thresholdTokens: buildDefaultMicrocompactThreshold(autoCompactGate([], "", cw, Number(agentCfg?.compactThresholdTokens ?? 0) || 0, mainRequestMaxTokens(opts.llm), effort).threshold) };
+          const compactLlm = opts.models?.compact ?? opts.auxLlm ?? opts.llm;
+          return {
+            compactHook: makeCompactHook({
+              contextWindow: cw,
+              maxOutputTokens: mainRequestMaxTokens(opts.llm),
+              explicitThreshold: Number(agentCfg?.compactThresholdTokens ?? 0) || 0,
+              ...(effort ? { reasoningEffort: effort } : {}),
+              microcompact: micro,
+              compactLlm,
+              expLlm: compactLlm,
+              devlogDir: join(repoRoot(), "devlog"),
+              taskId: "super",
+              fallbackInstruction: "Super Agent 指挥台(全局调度与系统管理)持久会话",
+              store: getExperienceStore(),
+            }),
+            microcompact: micro,
+            spill: { dir: join(repoRoot(), ".genie", "spill") },
+          };
+        })(),
  // list_nodes 工具数据源(与 WS nodes.list 同源注册表+60s 心跳在线判定)。
         listNodes: () => nodes.list().map((n) => ({
           nodeId: n.nodeId,
@@ -761,11 +843,80 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           reachability: [...n.reachability],
           runningTasks: n.load.runningTasks,
         })),
+ // 系统管理面(全系统管理者)——与面板 cfg.*/models.list 同源;闭包引用下方 cfg
+ // (superDeps 只在轮次里调用,届时 cfg 已初始化,无 TDZ 风险)。
+ // 密钥红线:secretSet 刻意不注入——Key 值永不进 super 对话/journal,只给 secretKeys 查在场。
+        sysAdmin: {
+          configView: () => (cfg ? cfg.view() : { config: opts.config }) as { config?: unknown; readOnly?: boolean },
+          configSet: (patch) => {
+            if (!cfg) throw new Error("配置通道未启用(生产入口 main.ts 才有)");
+            return cfg.set(patch as Record<string, unknown>);
+          },
+          secretKeys: () => (cfg ? cfg.secretKeys() : []),
+          listModels: async (providerId) => {
+            if (!opts.listModels) throw new Error("模型列表未启用(生产入口 main.ts 才有)");
+            return opts.listModels(providerId);
+          },
+ // 网关日志尾(最新 gateway.log.*;只读,不 touch 活跃日志写句柄)。
+          logTail: (lines) => {
+            try {
+              const dir = join(repoRoot(), ".genie", "logs");
+              const files = readdirSync(dir).filter((f) => f.startsWith("gateway.log.")).sort();
+              const file = files[files.length - 1];
+              if (!file) return { error: "未找到网关日志文件" };
+              const raw = readFileSync(join(dir, file), "utf8").split("\n");
+              return { file: join(dir, file), lines: raw.slice(-lines) };
+            } catch (err) {
+              return { error: String(err).slice(0, 160) };
+            }
+          },
+ // RSI 机制体检摘要——与 WS rsi.status 同源管线(collect+annotate),压成中文摘要给 Super。
+          rsiSummary: async () => {
+            const root = repoRoot();
+            const r = await collectRsiStatus({ root, journal, now: Date.now() });
+            const ann = await annotateRsiSections({
+              root,
+              sections: r.sections,
+              taskState: (taskId) => taskManager.get(taskId)?.state,
+              readSession: (sessionId) => journal.readSession(sessionId),
+            }); // config(单价表覆盖)缺省=内置单价表;摘要不需要成本细节,不引 server.ts 内部函数(免环)
+            const lines: string[] = [`RSI 机制体检摘要:${ann.sections.filter((x) => x.ok).length}/${ann.sections.length} 区正常(采集于 ${new Date(r.at).toISOString().slice(11, 19)} UTC)`];
+            for (const sec of ann.sections) {
+              const items = sec.items ?? [];
+              const bad = items.filter((x) => x.status === "bad");
+              const warn = items.filter((x) => x.status === "warn");
+              const head = `- ${sec.title}${sec.ok ? "" : "(异常)"}${sec.enabled === false ? "[已停用]" : ""}`;
+              const bits: string[] = [];
+              if (bad.length) bits.push(`异常条目 ${bad.length}:${bad.slice(0, 3).map((x) => String(x.title).slice(0, 30)).join("/")}`);
+              if (warn.length) bits.push(`关注 ${warn.length}`);
+              if (sec.warnings?.length) bits.push(`警告:${String(sec.warnings[0]).slice(0, 60)}`);
+              if (sec.run) bits.push(`最近运行 ${sec.run.status}${sec.run.error ? ":" + String(sec.run.error).slice(0, 50) : ""}`);
+              lines.push(bits.length ? `${head} — ${bits.join(";")}` : head);
+            }
+            return lines.join("\n").slice(0, 6000);
+          },
+ // 计划性重启(仅 main.ts allowSelfRestart):审计落 journal → 延迟 6s 退出
+ // (让本轮回复先送达面板)→ 看门狗探测到端口空缺自动拉起新进程(15-30s)。
+ // 活跃任务守卫在工具层(super-agent.ts),此处只做最后复核。
+          restart: opts.allowSelfRestart
+            ? (reason) => {
+                if (taskManager.list().some((t) => t.state === "running" || t.state === "queued")) {
+                    return { ok: false, error: "复核发现活跃任务(与工具层判定竞态),放弃重启" };
+                }
+ // 审计走既有 super.notice kind(EventKind 封闭联合不新开门)——重启后 Super 下一轮
+ // 经 recentSystemInjections 自动可见「刚才发生过计划性重启」。
+                journal.append({ sessionId: "super", kind: "super.notice", payload: { text: `[系统审计] 计划性重启已安排(原因:${reason};旧 pid=${process.pid});数秒后退出,看门狗自动拉起新进程。`, taskId: "", state: "restarting" } });
+                setTimeout(() => process.exit(0), 6_000);
+                return { ok: true };
+              }
+            : undefined,
+        },
       }
     : undefined;
   const superChannel = superDeps && superSoul
     ? new SuperAgentChannel(superDeps, superSoul, { activity: superActivity, broadcast: (m) => broadcastRaw(m) })
     : undefined;
+  if (superDeps) superDeps.onStream = (ev) => streamRelay.push("super", ev); // :Super 轮次流式(与 coding 轨同款)
   if (superChannel) taskManager.onChange((t) => superChannel.onTaskChanged(t));
   askUserRouter.onAsk = (p) => superChannel?.relayAsk(p);
  // ASR(语音输入转写):config.audio.chat 同一 provider 一次 chat 调用(消息带 audio),
@@ -1363,6 +1514,7 @@ async close() {
       try { (journal as { flush?: () => void }).flush?.(); } catch { /* 清队失败不影响关停 */ }
       otelExporter?.stop();
       automationScheduler.stop();
+      clearInterval(rsiSchedulerTimer);
       scheduledTaskService.stop();
       clearInterval(archiveTimer);
       await wss?.close();

@@ -216,29 +216,97 @@ export interface AskUserPayloadLike {
   context?: string;
 }
 
+/**
+ * ask_user 选项归一化(经验证):模型偶尔把 options 写成 `[{key,text}]` 对象,
+ * 旧实现 `String(o)` 得到 `[object Object]` → 面板显示垃圾、用户选择丢失。
+ * 口径:字符串原样;对象取 text/label/title → key → JSON;空结果丢弃。
+ */
+export function normalizeAskOption(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    for (const field of ["text", "label", "title", "key"] as const) {
+      const v = rec[field];
+      if (typeof v === "string" && v.trim() !== "") return v.trim();
+    }
+    try {
+      const json = JSON.stringify(rec);
+      return json === "{}" ? "" : json;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 export type GuardedAsk =
-  | { ok: true; words: number; question: string; options?: string[]; context?: string }
+  | { ok: true; words: number; question: string; options?: string[]; context?: string; truncated?: boolean }
   | { ok: false; code: string; message: string };
 
+/** ask_user 的 context(背景)字符帽:超长截断——背景是给用户看的辅助信息,不该因长度拦任务。 */
+export const ASK_CONTEXT_CHAR_LIMIT = 2000;
+
+/** 截 context 到字符帽(保留开头,补省略号)。 */
+function capAskContext(text: string): string {
+  if (text.length <= ASK_CONTEXT_CHAR_LIMIT) return text;
+  return text.slice(0, ASK_CONTEXT_CHAR_LIMIT - 1).trimEnd() + "…";
+}
+
 /** ask_user 入口门:结构化 + 用途 decision。把 options 编号并入校验文本——
- *  工具本就把 options 作为结构化选择项,不该因为 question 句子里没写「1.」而误杀。 */
+ * 工具本就把 options 作为结构化选择项,不该因为 question 句子里没写「1.」而误杀。
+ * 超长优雅降级:question+options 超词限时**不再拒收**——问题截到预算内、
+ * 原文全文并入 context(用户看得到完整背景),任务继续。拒收只留给结构性问题
+ * (多问号/无结构)与「options 本身超限」(截选项会改变语义,必须回模型改)。 */
 export function guardAskUserPayload(payload: AskUserPayloadLike): GuardedAsk {
   const question = String(payload.question ?? "");
-  const options = payload.options?.map(String);
-  const structuredText = options?.length
-    ? question + "\n" + options.map((o, i) => `${i + 1}. ${o}`).join("\n")
-    : question;
+ // 选项先归一化(对象 {key,text} → 文本),不再 String(object) 出 [object Object]。
+  const options = Array.isArray(payload.options)
+    ? payload.options.map(normalizeAskOption).filter((s) => s !== "")
+    : undefined;
+  const numbered = (q: string) =>
+    options?.length ? q + "\n" + options.map((o, i) => `${i + 1}. ${o}`).join("\n") : q;
+  const structuredText = numbered(question);
   const q = validateStructuredQuestion(structuredText);
-  if (!q.ok) return { ok: false, code: q.code, message: askHint(q.code) };
-  const o = validateOutbound({ kind: "ask", purpose: "decision", text: structuredText });
-  if (!o.ok) return { ok: false, code: o.code, message: askHint(o.code) };
-  return {
-    ok: true,
-    words: o.words,
-    question,
-    ...(options?.length ? { options } : {}),
-    ...(payload.context ? { context: String(payload.context) } : {}),
-  };
+  const o = q.ok ? validateOutbound({ kind: "ask", purpose: "decision", text: structuredText }) : undefined;
+  if (q.ok && o?.ok) {
+    return {
+      ok: true,
+      words: o.words,
+      question,
+      ...(options?.length ? { options } : {}),
+      ...(payload.context ? { context: capAskContext(String(payload.context)) } : {}),
+    };
+  }
+ // 超词限(结构校验与 outbound 校验同限,先撞哪个都一样)→ 优雅降级。
+  const tooLong =
+    (!q.ok && q.code === "OUTBOUND_TOO_LONG") || (o !== undefined && !o.ok && o.code === "OUTBOUND_TOO_LONG");
+  if (tooLong) {
+    const marker = "(超长已截断,全文见背景)";
+    const optionWords = options?.length ? countWords(options.map((s, i) => `${i + 1}. ${s}`).join("\n")) : 0;
+    const budget = Math.max(20, ASK_WORD_LIMIT - optionWords - countWords(marker));
+    let truncatedQuestion = truncateToWords(question, budget).replace(/…$/, "").trimEnd();
+    if (!/[?？]$/.test(truncatedQuestion)) truncatedQuestion += "?";
+    const degraded = numbered(truncatedQuestion);
+    const restructured = validateStructuredQuestion(degraded);
+    const reout = validateOutbound({ kind: "ask", purpose: "decision", text: degraded });
+    if (restructured.ok && reout.ok) {
+      const mergedContext = [question, payload.context ? String(payload.context) : ""]
+        .filter((s) => s !== "")
+        .join("\n\n");
+      return {
+        ok: true,
+        words: reout.words,
+        question: truncatedQuestion + marker,
+        ...(options?.length ? { options } : {}),
+        ...(mergedContext !== "" ? { context: capAskContext(mergedContext) } : {}),
+        truncated: true,
+      };
+    }
+ // 截完仍不过(典型:options 自身超词限)——退回拒收,让模型收窄选项。
+  }
+  const code = !q.ok ? q.code : o !== undefined && !o.ok ? o.code : "OUTBOUND_EMPTY";
+  return { ok: false, code, message: askHint(code) };
 }
 
 function askHint(code: string): string {

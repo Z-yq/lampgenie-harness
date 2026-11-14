@@ -398,10 +398,277 @@ describe("companion 全轮(D1)", () => {
     const out = await runSuperAgentTurn(d, "现在有哪些工作区在干什么?", soulStore);
     expect(out.text).toContain("主仓");
     const sid = superSessionId();
-    expect(sid).toMatch(/^super:\d{8}$/);
+    expect(sid).toBe("super"); // 固定持久会话 "super"(旧按天日卷格式退役)
     const evs = d.journal.readAll().filter((e) => e.sessionId === sid);
     expect(evs.some((e) => e.kind === "message.user")).toBe(true);
     expect(evs.some((e) => e.kind === "message.agent")).toBe(true);
     expect(evs.some((e) => e.kind === "turn.start")).toBe(true);
   }, 90_000);
+});
+
+describe("系统管理面(全系统管理者:sys_status/sys_config/sys_provider)", () => {
+  interface FakeCfg { providers: Array<Record<string, unknown>>; coding?: { llm?: Record<string, unknown> }; webSearch?: { enabled?: boolean } }
+  function sysDeps(mutate?: (c: FakeCfg) => void, seen?: { patch?: unknown }) {
+    const base: FakeCfg = {
+      providers: [
+        { id: "maas-bj", name: "百炼", baseUrl: "https://dashscope.example/v1", apiKeyEnv: "DASHSCOPE_API_KEY", models: ["qwen-max", "qwen-plus"] },
+        { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.example/v1", models: [] },
+      ],
+      coding: { llm: { providerId: "maas-bj", model: "qwen-plus", baseUrl: "https://dashscope.example/v1" } },
+    };
+    if (mutate) mutate(base);
+    const d = deps();
+    d.sysAdmin = {
+      configView: () => ({ config: base, readOnly: false }),
+      configSet: (patch) => { if (seen) seen.patch = patch; return { applied: ["providers"], needsRestart: [] }; },
+      secretKeys: () => ["DASHSCOPE_API_KEY"],
+      listModels: async (providerId) => { if (providerId === "maas-bj") return ["qwen-max", "qwen-plus", "qwen-turbo"]; throw new Error("401 unauthorized"); },
+    };
+    return { d, base };
+  }
+  async function tm2(d: SuperAgentDeps) {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    return new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
+  }
+  it("三件在场;未接线时如实回话不假造", async () => {
+    const bare = deps();
+    const tools = await tm2(bare);
+    expect(tools.has("sys_status")).toBe(true);
+    expect(tools.has("sys_config")).toBe(true);
+    expect(tools.has("sys_provider")).toBe(true);
+    expect(String(await tools.get("sys_config")!.execute({ action: "get" }))).toContain("未接线");
+    expect(String(await tools.get("sys_provider")!.execute({ action: "list" }))).toContain("未接线");
+  });
+  it("sys_status:任务分布/服务商凭证在场(env+secrets 双源)/生效模型/只读态", async () => {
+    const { d } = sysDeps();
+    d.taskManager.submit("user", "s-1", "修 A", { title: "A" });
+    const r = JSON.parse(String(await (await tm2(d)).get("sys_status")!.execute({})));
+    expect(r.tasks.running + r.tasks.queued + r.tasks.done).toBeGreaterThanOrEqual(1);
+    expect(r.providers).toHaveLength(2);
+    expect(r.providers[0]).toMatchObject({ id: "maas-bj", keyEnv: "DASHSCOPE_API_KEY", keyPresent: true, models: 2 });
+    expect(r.providers[1].keyPresent).toBe(false);
+    expect(r.effectiveCoding).toMatchObject({ providerId: "maas-bj", model: "qwen-plus" });
+    expect(r.readOnly).toBe(false);
+    expect(String(r.uptimeMin)).toMatch(/^\d+$/);
+  });
+  it("sys_config:get 打码密钥字段;set 拒疑似密钥值、透传补丁回执", async () => {
+    const { d } = sysDeps((c) => { (c.providers[0] as Record<string, unknown>).secret = "sk-xxx"; });
+    const tools = await tm2(d);
+    const got = String(await tools.get("sys_config")!.execute({ action: "get" }));
+    expect(got).toContain("«不回显»");
+    expect(got).not.toContain("sk-xxx");
+ // set:密钥值字段直接拒
+    const refused = String(await tools.get("sys_config")!.execute({ action: "set", patch: { webSearch: { apiToken: "sk-live-123" } } }));
+    expect(refused).toContain("拒改疑似密钥字段");
+    expect(refused).toContain("webSearch.apiToken");
+ // set:正常补丁透传,回执带 applied
+    const seen: { patch?: unknown } = {};
+    const { d: d2 } = sysDeps(undefined, seen);
+    const okr = JSON.parse(String(await (await tm2(d2)).get("sys_config")!.execute({ action: "set", patch: { webSearch: { enabled: true } } })));
+    expect(okr.applied).toContain("providers"); // 夹具回执固定值;断言透传链路在
+    expect((seen.patch as Record<string, unknown>).webSearch).toEqual({ enabled: true });
+  });
+  it("sys_provider:list 目录+模型名归一;probe 成功/失败如实;set 增量合并并可切生效轨;apiKeyEnv 拒 key 值", async () => {
+    const seen: { patch?: unknown } = {};
+    const { d } = sysDeps(undefined, seen);
+    const tools = await tm2(d);
+    const list = JSON.parse(String(await tools.get("sys_provider")!.execute({ action: "list" })));
+    expect(list.providers[0].models).toEqual(["qwen-max", "qwen-plus"]);
+    expect(list.effectiveCoding.model).toBe("qwen-plus");
+    const probeOk = JSON.parse(String(await tools.get("sys_provider")!.execute({ action: "probe", providerId: "maas-bj" })));
+    expect(probeOk).toMatchObject({ ok: true, providerId: "maas-bj" });
+    expect(probeOk.models).toContain("qwen-turbo");
+    const probeBad = JSON.parse(String(await tools.get("sys_provider")!.execute({ action: "probe", providerId: "deepseek" })));
+    expect(probeBad.ok).toBe(false);
+    expect(probeBad.error).toContain("401");
+ // apiKeyEnv 传疑似 key 值 → 拒
+    const refused = String(await tools.get("sys_provider")!.execute({ action: "set", providerId: "x", entry: { baseUrl: "https://x/v1", apiKeyEnv: "sk-abc123" } }));
+    expect(refused).toContain("疑似密钥值");
+ // set:新条目 + setEffective 切生效轨(模型取目录首个)
+    const r = JSON.parse(String(await tools.get("sys_provider")!.execute({
+      action: "set", providerId: "volc", setEffective: true,
+      entry: { name: "火山", baseUrl: "https://ark.example/v1", apiKeyEnv: "ARK_API_KEY", models: ["doubao-pro"] },
+    })));
+    expect(r.applied).toContain("providers");
+    const patch = seen.patch as { providers: Array<Record<string, unknown>>; coding?: { llm?: Record<string, unknown> } };
+    expect(patch.providers).toHaveLength(3); // 旧 2 + 新 1(增量合并不覆盖旧表)
+    const added = patch.providers.find((p) => p.id === "volc") as Record<string, unknown>;
+    expect(added).toMatchObject({ name: "火山", baseUrl: "https://ark.example/v1", apiKeyEnv: "ARK_API_KEY", models: ["doubao-pro"] });
+    expect(patch.coding!.llm).toMatchObject({ providerId: "volc", model: "doubao-pro", baseUrl: "https://ark.example/v1", apiKeyEnv: "ARK_API_KEY" });
+ // set:已存在条目按 id 合并(改名不丢 baseUrl/models)
+    const { d: d3 } = sysDeps(undefined, seen);
+    await (await tm2(d3)).get("sys_provider")!.execute({ action: "set", providerId: "deepseek", entry: { name: "深度求索" } });
+    const patch2 = seen.patch as { providers: Array<Record<string, unknown>> };
+    const ds = patch2.providers.find((p) => p.id === "deepseek") as Record<string, unknown>;
+    expect(ds.name).toBe("深度求索");
+    expect(ds.baseUrl).toBe("https://api.deepseek.example/v1");
+  });
+  it("纪律文本:全系统管理者口径 + 密钥红线在场", () => {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const sys = buildSuperAgentSystem(deps(), soulStore);
+    expect(sys).toContain("系统管理面");
+    expect(sys).toContain("全系统管理者");
+    expect(sys).toContain("API Key 值永不进对话");
+    expect(sys).toContain("不把「已写入」说成「已生效」");
+  });
+});
+
+describe("系统管理面二期(sys_logs/sys_restart)", () => {
+  function sysDeps2(extra: Partial<NonNullable<SuperAgentDeps["sysAdmin"]>>, taskStates: string[] = []) {
+    const d = deps();
+    for (const st of taskStates) {
+      const t = d.taskManager.submit("user", "s-" + st, "任务 " + st, { title: st });
+      if (st === "running") (t as unknown as { state: string }).state = "running";
+    }
+    d.sysAdmin = {
+      configView: () => ({ config: {}, readOnly: false }),
+      configSet: () => ({ applied: [] }),
+      secretKeys: () => [],
+      listModels: async () => [],
+      ...extra,
+    };
+    return d;
+  }
+  async function tm3(d: SuperAgentDeps) {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    return new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
+  }
+  it("sys_logs:未接线如实;错误过滤/行数钳制/单行截断", async () => {
+    const bare = deps();
+    expect(String(await (await tm3(bare)).get("sys_logs")!.execute({}))).toContain("未接线");
+    const lines = ["[ok] boot fine", "[error] ECONNREFUSED 127.0.0.1:8105", "[warn] x".repeat(400), "[gateway] uncaught TypeError boom"];
+    const d = sysDeps2({ logTail: (n) => ({ file: "/x/.genie/logs/gateway.log.1-2", lines: lines.slice(-n) }) });
+    const tools = await tm3(d);
+    const all = String(await tools.get("sys_logs")!.execute({ lines: 999 }));
+    expect(all).toContain("gateway.log.1-2");
+    expect(all).toContain("boot fine");
+    expect(all).toContain("…"); // 超长行截断
+    const errs = String(await tools.get("sys_logs")!.execute({ filter: "errors" }));
+    expect(errs).toContain("ECONNREFUSED");
+    expect(errs).toContain("uncaught TypeError");
+    expect(errs).not.toContain("boot fine");
+    expect(errs).not.toContain("[warn]");
+  });
+  it("sys_restart:未接线/未确认/活跃任务三道门 + 确认后接线回调与审计话术", async () => {
+    const bare = deps();
+    expect(String(await (await tm3(bare)).get("sys_restart")!.execute({ confirm: true }))).toContain("未接线");
+    const calls: string[] = [];
+    const d = sysDeps2({ restart: (reason) => { calls.push(reason); return { ok: true }; } });
+    const tools = await tm3(d);
+ // ① 未确认 → 指引先征得用户同意
+    const noConfirm = String(await tools.get("sys_restart")!.execute({ reason: "配置生效" }));
+    expect(noConfirm).toContain("未确认");
+    expect(calls).toHaveLength(0);
+ // ② 活跃任务 → 拒(即使确认)
+    const dRunning = sysDeps2({ restart: (r) => { calls.push(r); return { ok: true }; } }, ["running"]);
+    const tools2 = await tm3(dRunning);
+    const refused = String(await tools2.get("sys_restart")!.execute({ confirm: true, reason: "配置生效" }));
+    expect(refused).toContain("拒绝重启");
+    expect(calls).toHaveLength(0);
+ // ③ 确认 + 0 活跃 → 执行并带看门狗/重连话术
+    const ok = String(await tools.get("sys_restart")!.execute({ confirm: true, reason: "模型配置生效" }));
+    expect(ok).toContain("已安排重启");
+    expect(ok).toContain("看门狗");
+    expect(calls).toEqual(["模型配置生效"]);
+ // ④ 回调失败如实透传
+    const dFail = sysDeps2({ restart: () => ({ ok: false, error: "复核竞态" }) });
+    const fail = String(await (await tm3(dFail)).get("sys_restart")!.execute({ confirm: true }));
+    expect(fail).toContain("重启安排失败:复核竞态");
+  });
+  it("纪律文本:日志诊断与重启纪律在场", () => {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const sys = buildSuperAgentSystem(deps(), soulStore);
+    expect(sys).toContain("sys_logs");
+    expect(sys).toContain("重启纪律");
+    expect(sys).toContain("不许派任务去 kill 进程");
+  });
+});
+
+describe("sys_rsi(RSI 机制体检摘要)", () => {
+  it("未接线如实;摘要文本透传;采集异常如实报错", async () => {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const mk = async (rsi?: () => Promise<string>) => {
+      const d = deps();
+      d.sysAdmin = { configView: () => ({}), configSet: () => ({ applied: [] }), secretKeys: () => [], listModels: async () => [], ...(rsi ? { rsiSummary: rsi } : {}) };
+      return new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
+    };
+    const bare = await mk();
+    expect(String(await bare.get("sys_rsi")!.execute({}))).toContain("未接线");
+    const ok = await mk(async () => "RSI 机制体检摘要:10/12 区正常\n- 区A(异常) — 异常条目 1:某问题\n- 区B");
+    const r = String(await ok.get("sys_rsi")!.execute({}));
+    expect(r).toContain("10/12 区正常");
+    expect(r).toContain("区A(异常)");
+    const boom = await mk(async () => { throw new Error("journal busy"); });
+    expect(String(await boom.get("sys_rsi")!.execute({}))).toContain("采集失败");
+    expect(String(await boom.get("sys_rsi")!.execute({}))).toContain("journal busy");
+  });
+  it("纪律文本:机制体检路由锚在场", () => {
+    const sys = buildSuperAgentSystem(deps(), new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test")));
+    expect(sys).toContain("sys_rsi");
+    expect(sys).toContain("系统自检机制");
+  });
+});
+
+describe("派发承诺——亲自派出的任务终态必播(不随活跃窗过期)", () => {
+  it("spawn_task 登记 markDispatched;超窗终态仍播报;播后集合清空", async () => {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const d = deps();
+    const activity = new SuperAgentActivity();
+    const announced: string[] = [];
+    const ch = new SuperAgentChannel(d, soulStore, {
+      activity,
+      broadcast: (m) => { if ((m as { type?: string }).type === "super.turn.done") announced.push(String((m as { text?: string }).text ?? "")); },
+    });
+    const tools = new Map(buildSuperAgentTools({ ...d, channel: ch }, soulStore).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
+ // ① spawn_task 派出 → markDispatched 登记
+    const r = String(await tools.get("spawn_task")!.execute({ instruction: "测试任务甲", title: "甲" }));
+    expect(r).toContain("已派出任务");
+    const t0 = d.taskManager.list().find((t) => String(t.title) === "甲")!;
+    expect(t0).toBeTruthy();
+ // ② 活跃窗完全过期(最后活跃在 1 小时前)→ 终态仍要播(承诺优先)
+    activity.mark();
+    const stale = new Date(Date.now() - 3600_000).getTime();
+ // @ts-expect-error 测试注入:把 lastAt 拨回 1 小时前
+    (activity as unknown as { lastAt: number }).lastAt = stale;
+    expect(activity.active()).toBe(false); // 前置:活跃窗确实已过期
+ // 直接走通道终态路径:模拟任务完成(TaskManager finish 走 onChange 链)
+ // @ts-expect-error 测试注入:调用私有 finish 太重,直接触发 onTaskChanged 等价终态
+    (d.taskManager as unknown as { listeners?: Set<(t: unknown) => void> });
+ // TaskManager 完成:submit 后立即置 done 会走 notify;用任务对象克隆置 done 直推 onTaskChanged
+    ch.onTaskChanged({ ...t0, state: "done", result: "ok" } as never);
+    await new Promise((res) => setTimeout(res, 50)); // notice 同步落
+    const notices = d.journal.readAll().filter((e) => e.kind === "super.notice" && String((e.payload as { taskId?: string }).taskId ?? "").startsWith(t0.id.slice(0, 8)));
+    expect(notices.length).toBe(1);
+ // ③ 未派出且超窗的外部任务 → 不播(notice 照落)
+    const ext = d.taskManager.submit("user", "s-ext", "外部任务乙", { title: "乙" });
+    ch.onTaskChanged({ ...ext, state: "done", result: "ok" } as never);
+    for (let i = 0; i < 80 && announced.length === 0; i++) await new Promise((res) => setTimeout(res, 500)); // 播报轮=真实 AgentLoop(假 LLM),秒级
+    const extNotices = d.journal.readAll().filter((e) => e.kind === "super.notice" && String((e.payload as { taskId?: string }).taskId ?? "") === ext.id);
+    expect(extNotices.length).toBe(1); // notice 落了
+    expect(announced.length).toBe(1); // 但只有派发任务甲触发了播报轮(乙超窗未派出→静默)
+    expect(typeof announced[0]).toBe("string"); // 播报文本由 LLM 生成(夹具假回复),只断言播报轮发生
+  }, 60_000);
+});
+
+describe("Super 上下文经济面(coding 同源)", () => {
+  it("contextEconomy 三件透传 AgentLoop(compactHook 每步被调,sessionId=super)", async () => {
+    const d = deps();
+    const hookCalls: Array<{ sid: string; opts?: { reason?: string } }> = [];
+    d.contextEconomy = {
+      compactHook: async (j, sid, opts) => { hookCalls.push({ sid, opts }); },
+      microcompact: { thresholdTokens: 1000 },
+      spill: { dir: "/tmp/super-spill-test" },
+    };
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const r = await runSuperAgentTurn(d, "只回一句话", soulStore);
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(hookCalls.length).toBeGreaterThanOrEqual(1); // loop 每步前调 hook(由实现方判定阈值)
+    expect(hookCalls[0].sid).toBe("super");
+  }, 60_000);
+  it("未注入=零行为差异(hook 不被调,轮次照常)", async () => {
+    const d = deps(); // 不带 contextEconomy
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const r = await runSuperAgentTurn(d, "只回一句话", soulStore);
+    expect(r.text.length).toBeGreaterThan(0);
+  }, 60_000);
 });

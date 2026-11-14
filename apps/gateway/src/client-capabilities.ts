@@ -228,6 +228,10 @@ export const PANEL_CHANNELS: readonly string[] = [
   "rsi.mechanism.run",
   "rsi.item.update",
   "rsi.item.delete",
+ // RSI-SELF-DRIVE:自动周期配置/快照/手动推一拍(写面,仅 panel)。
+  "rsi.scheduler.get",
+  "rsi.scheduler.set",
+  "rsi.scheduler.run",
   "ping",
 ];
 

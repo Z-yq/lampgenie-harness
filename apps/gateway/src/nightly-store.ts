@@ -17,6 +17,12 @@
  * 被杀掉,下一次 runNightly 都能从 `nextStep` 接上。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { applyDecay } from "./evidence-graph-store.js";
+import { collectWorkSessions, loadProjectRoots, logicalPathKey, refreshAtlasSnapshot, type AtlasReworkSummary } from "./atlas-harvest.js";
+import { recordDelivery, recordFix } from "./cohort-metrics-store.js"; // F:cohort 同批采集器
+import { detect } from "./pathology-store.js";
+import { detectReworkChains, readReworkChains } from "./rework-chain.js"; // 返工因果链采集(设想灵魂)
+import { getAtlas, ingestDefects } from "./direction-atlas-store.js"; // defectGenes 生产者(atlas 机制点名)
 import { dirname, join } from "node:path";
 import {
   NIGHTLY_CODES,
@@ -62,6 +68,28 @@ const QUEUE_FILE = "queue.jsonl";
 const CURSOR_FILE = "cursor.json";
 const DONE_STEP_STATUSES: ReadonlySet<string> = new Set(["done", "skipped"]);
 
+/** F:cohort 采集器判定「修复类会话」的标题词表(与 rework-chain 的分类口径对齐)。 */
+const FIX_TITLE_RE = /(修复|回归|崩溃|报错|\bfix\b|bugfix)/i;
+
+/** G:已消费候选的去重窗口(窗口内已消费的同 id 候选不再入队)。 */
+const QUEUE_CONSUMED_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** 返工链 defectClass → cohort 的缺陷类别(两套词表不同口径,映射在此显式列出,未知给 undefined)。 */
+function cohortDefectClassOf(
+  defectClass: string | undefined): "verification-coverage" | "impact-analysis" | "wrong-assumption" | undefined {
+  switch (defectClass) {
+    case "missing-test":
+      return "verification-coverage";
+    case "contract":
+    case "concurrency":
+      return "impact-analysis";
+    case "boundary":
+      return "wrong-assumption";
+    default:
+      return undefined;
+  }
+}
+
 /** queue.jsonl 的单行形状(append-only,每行一个 JSON)。 */
 export interface NightlyQueueLine {
   queuedAt: string;
@@ -69,6 +97,10 @@ export interface NightlyQueueLine {
   projectId: string;
   date: string;
   candidate: NightlyCandidate;
+ /** G:该候选被机制运行消费的时刻(ISO);缺省=未消费。 */
+  consumedAt?: string;
+ /** 消费方标识(机制 runId / 子代理名)。 */
+  consumedBy?: string;
 }
 
 /** 单个会话的统计(pull-traces 产物,也是 mine 的输入)。 */
@@ -76,6 +108,8 @@ export interface NightlySessionStats {
   sessionId: string;
   eventsRead: number;
   eventsSkipped: number;
+ /** 同 (sessionId,seq) 的重复行数(journal 双写残留会污染 eventsRead/工具计数)。 */
+  dedupRows?: number;
   tools: Record<string, number>;
   repeatedReads: number;
   unresolvedAsks: number;
@@ -104,6 +138,12 @@ export interface NightlySelectionEntry {
   mtimeMs: number;
 }
 
+/**
+ * 夜间证据衰减缺省策略(findings「全图零 decay」——
+ * update-graph 之后跑一次 applyDecay 并落 decay 行;schema 早就有,只是流水线没接)。
+ */
+export const NIGHTLY_DECAY_POLICY = { halfLifeDays: 30, staleBelow: 0.5 } as const;
+
 /** `<date>.selection.json` 的文件形状:选中集合是 run 落盘时的快照,后续步骤只读它。 */
 export interface NightlySelectionFile {
   runId: string;
@@ -113,6 +153,8 @@ export interface NightlySelectionFile {
   sessions: NightlySelectionEntry[];
   lastSessionId?: string;
   lastMtimeMs?: number;
+ /** 窗口内符合增量条件但被 maxSessions 截断、本轮未读的会话(覆盖口径:诚实入账)。 */
+  unselected?: NightlySelectionEntry[];
 }
 
 /** `<date>.evidence-pending.json` 的文件形状:只落盘待审候选,不碰任何既有图谱/账本。 */
@@ -297,13 +339,15 @@ interface CallRecord {
  * 解析一个 session 的 jsonl,产出统计。
  * 坏行(JSON.parse 失败)只计 eventsSkipped,绝不抛。
  */
-function parseSessionFile(filePath: string, sessionId: string): NightlySessionStats {
+export function parseSessionFile(filePath: string, sessionId: string): NightlySessionStats {
   const tools: Record<string, number> = {};
   const groups = new Map<string, number>();
   const calls: CallRecord[] = [];
   const callIndex = new Map<string, number>();
   let eventsRead = 0;
   let eventsSkipped = 0;
+  let dedupRows = 0;
+  const seenSeq = new Set<number>();
   let filesEdited = 0;
   let fanoutEdges = 0;
   let directFailures = 0;
@@ -318,13 +362,17 @@ function parseSessionFile(filePath: string, sessionId: string): NightlySessionSt
   const register = (id: unknown, name: unknown, args: unknown): void => {
     const toolName = asString(name);
     if (toolName === "") return;
+    const callId = asString(id);
+ // nightly 机制注意:同一调用会以 tool.call 与 message.agent.toolCalls 两种事件
+ // 各出现一次;重复登记会让前一条 calls 永远 unanswered → failedSteps 虚高成工具调用总数,
+ // tools/重复读/filesEdited/fanout 也被双计。同 callId 只认第一次出现。
+    if (callId !== "" && callIndex.has(callId)) return;
     tools[toolName] = (tools[toolName] ?? 0) + 1;
     const argsKey = typeof args === "string" ? args : JSON.stringify(args ?? "");
     const groupKey = `${toolName}\u0000${argsKey}`;
     groups.set(groupKey, (groups.get(groupKey) ?? 0) + 1);
     if (EDIT_TOOL_NAMES.has(toolName)) filesEdited += 1;
     if (toolName === "spawn_subagent") fanoutEdges += 1;
-    const callId = asString(id);
     calls.push({ name: toolName, answered: false, unansweredMarker: false });
     if (callId !== "") callIndex.set(callId, calls.length - 1);
   };
@@ -347,9 +395,16 @@ function parseSessionFile(filePath: string, sessionId: string): NightlySessionSt
       eventsSkipped += 1;
       continue;
     }
-    eventsRead += 1;
     const event = asRecord(parsed);
-    if (!event) continue;
+    if (!event) { eventsRead += 1; continue; }
+ // 同 seq 只计一次(经验证:super.jsonl 403 行仅 343 个 distinct seq);
+ // 保留首次出现,重复行计入 dedupRows,不再污染 eventsRead/工具失败/重复读统计。
+    const seq = typeof event.seq === "number" && Number.isFinite(event.seq) ? event.seq : undefined;
+    if (seq !== undefined) {
+      if (seenSeq.has(seq)) { dedupRows += 1; continue; }
+      seenSeq.add(seq);
+    }
+    eventsRead += 1;
     const kind = asString(event.kind);
     const lowerKind = kind.toLowerCase();
     const payload = asRecord(event.payload) ?? {};
@@ -388,6 +443,7 @@ function parseSessionFile(filePath: string, sessionId: string): NightlySessionSt
     sessionId,
     eventsRead,
     eventsSkipped,
+    dedupRows,
     tools,
     repeatedReads,
     unresolvedAsks,
@@ -449,6 +505,7 @@ function advanceCursor(cursorFile: string, projectId: string, selection: Nightly
 }
 
 interface StepContext {
+  root: string;
   paths: NightlyPaths;
   run: NightlyRun;
   step: NightlyStepName;
@@ -471,6 +528,33 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
   const sessions = selection.sessions.map((entry) =>
     parseSessionFile(join(journalDir, "sessions", entry.file), entry.sessionId),
   );
+ // C:基因行 A/B 度量 —— 带 gene.brief.shown 标记的会话 vs 不带的,后续作为
+ // 建设者(verdict=preventable)的返工命中对比。只统计,不改任何账本。
+  let geneNote = "geneBrief=skipped";
+  try {
+    const preventableBuilds = new Set(
+      readReworkChains(ctx.root).chains
+        .filter((c) => c.attribution?.verdict === "preventable")
+        .map((c) => c.buildSession),
+    );
+    let marked = 0;
+    let markedHit = 0;
+    let unmarked = 0;
+    let unmarkedHit = 0;
+    for (const entry of selection.sessions) {
+      const file = join(journalDir, "sessions", entry.file);
+      if (hasGeneBriefMarker(file)) {
+        marked += 1;
+        if (preventableBuilds.has(entry.sessionId)) markedHit += 1;
+      } else {
+        unmarked += 1;
+        if (preventableBuilds.has(entry.sessionId)) unmarkedHit += 1;
+      }
+    }
+    geneNote = `geneBrief: marked=${marked}(hit=${markedHit}) vs unmarked=${unmarked}(hit=${unmarkedHit})`;
+  } catch {
+    geneNote = "geneBrief=error(不阻塞本步)";
+  }
   const file: NightlySessionStatsFile = {
     generatedAt: iso(ctx.at),
     runId: run.runId,
@@ -481,6 +565,7 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
   writeJsonAtomic(paths.statsFile, file);
   const eventsRead = sessions.reduce((sum, session) => sum + session.eventsRead, 0);
   const eventsSkipped = sessions.reduce((sum, session) => sum + session.eventsSkipped, 0);
+  const dedupRows = sessions.reduce((sum, session) => sum + (session.dedupRows ?? 0), 0);
   const next = recordCoverage(run, {
     coverage: { sessionsProcessed: sessions.length, eventsRead, eventsSkipped },
     at: ctx.at,
@@ -488,10 +573,25 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
   return {
     run: next,
     codes: [],
+ // pull-traces 是纯确定性统计,不烧 LLM;这里的 tokens 是**工作预算**口径
+ // (1 事件=1 工作单元,用于 maxTokens 限流),不是 LLM 计费 token——成本看 cost.jsonl。
     tokens: eventsRead,
     artifactRef: artifactRef(run.projectId, run.date, ".session-stats.json"),
-    note: `sessions=${sessions.length} events=${eventsRead} badLines=${eventsSkipped}`,
+    note: `sessions=${sessions.length} events=${eventsRead} badLines=${eventsSkipped} dedupRows=${dedupRows}(tokens=work-units,非LLM计费) ${geneNote}`,
   };
+}
+
+/** C:journal 里是否有开工基因行标记(逐行容忍坏行,只在 event.payload.type 上判)。 */
+function hasGeneBriefMarker(file: string): boolean {
+  let raw = "";
+  try { raw = readFileSync(file, "utf8"); } catch { return false; }
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const parsed = readJsonLine(line);
+    const payload = asRecord(asRecord(parsed)?.payload);
+    if (asString(payload?.type) === "gene.brief.shown") return true;
+  }
+  return false;
 }
 
 function stepDenoise(ctx: StepContext): StepOutcome {
@@ -558,19 +658,197 @@ function stepUpdateGraph(ctx: StepContext): StepOutcome {
     candidates,
   };
   writeJsonAtomic(paths.evidenceFile, file);
+ // decay : findings「全图零 decay、validTo 全空」——schema/applyDecay 早就有,
+ // 夜间流水线没接。update-graph 之后跑一次衰减(半衰期 30 天、score<0.5 判 stale),有状态变化才落
+ // decay 行(applyDecay 内部 updates 为空不写),幂等。
+  let decayNote = "decay=skipped";
+  try {
+    const decayed = applyDecay(ctx.root, NIGHTLY_DECAY_POLICY);
+    decayNote = `decay: stale=${decayed.report?.stale ?? 0} archived=${decayed.report?.archived ?? 0}`;
+  } catch {
+    decayNote = "decay=error(不阻塞本步)";
+  }
+ // 世界模型生成闭环(mechanisms.md #217「每日更新」):journal 会话 → derived 层
+ // (主题/模块活动/返工信号/噪声账)合入 atlas 快照。curated 事件层不动;失败不阻塞本步。
+ // 返工因果链(设想灵魂):链识别三路投票 → 分类 → 缺陷定位 → 根因归因(A 决策时
+ // 信息可得性)+ 扇出簇;append-only 幂等台账 .genie/rsi/rework-chains.jsonl。失败不阻塞本步。
+  let reworkNote = "rework=skipped";
+  let reworkSummary: AtlasReworkSummary | undefined;
+  try {
+    const rework = detectReworkChains(ctx.root, run.projectId, { journalDir: ctx.journalDir, windowDays: 14, now: ctx.at });
+    reworkNote = rework.ok
+      ? `rework: chains=${rework.chains}(fanout=${rework.fanoutClusters},new=${rework.appended})`
+      : "rework=error(不阻塞本步)";
+ // defectGenes 生产者(atlas 机制点名「curated 缺陷基因全空与 37 条返工链矛盾」):
+ // 新落链里可分类的(boundary/contract/concurrency/missing-test)聚合为 DefectGene 事件进
+ // curated 层;只投新链 → 天然幂等。
+    const classifiable = rework.freshChains.filter((c) => c.defectClass !== "uncategorized");
+ // atlas 机制注意「基因跨批重复累加 1.8 倍」:重测删台账重放会让同批链再次
+ // 变「新链」——同 id 已有 count >= 本批 count 的基因不再投(快照聚合视图判)。
+    const existingGenes = new Map<string, number>();
+    try {
+      for (const g of (getAtlas(ctx.root, run.projectId).atlas?.defectGenes ?? [])) {
+        existingGenes.set(String(g.id ?? ""), Math.max(existingGenes.get(String(g.id ?? "")) ?? 0, Number(g.count ?? 0)));
+      }
+    } catch { /* 快照不可读:按无既有处理 */ }
+    const worthIngest = classifiable.length > 0;
+    if (rework.ok && worthIngest) {
+      const genes = new Map<string, { id: string; defectClass: string; module: string; count: number; lastAt: string }>();
+      for (const chain of classifiable) {
+        const id = `gene-${chain.defectClass}-${chain.logicalKey.replace(/[^\w\u4e00-\u9fff-]+/g, "-").slice(-60)}`;
+        const gene = genes.get(id) ?? { id, defectClass: chain.defectClass, module: chain.path, count: 0, lastAt: iso(ctx.at) };
+        gene.count += 1;
+        genes.set(id, gene);
+      }
+      const fresh = [...genes.values()].filter((g) => (existingGenes.get(g.id) ?? 0) < g.count);
+      if (fresh.length > 0) ingestDefects(ctx.root, run.projectId, fresh, iso(ctx.at));
+      reworkNote += ` genes=${genes.size}`;
+    }
+    const ledger = readReworkChains(ctx.root);
+    reworkSummary = {
+      chains: ledger.chains.length,
+      fanoutClusters: ledger.fanoutClusters.length,
+ // atlas 机制注意「slice(-3) 把 6 簇砍半」:按修复数降序取前 5,不藏簇。
+      impactNotClosed: [...ledger.fanoutClusters]
+        .sort((a, b) => b.fixSessions.length - a.fixSessions.length)
+        .slice(0, 5)
+        .map((c) => ({ buildSession: c.buildSession, fixes: c.fixSessions.length, units: c.logicalKeys.length })),
+    };
+  } catch {
+    reworkNote = "rework=error(不阻塞本步)";
+  }
+  let atlasNote = "atlas=skipped";
+  try {
+    const refreshed = refreshAtlasSnapshot(ctx.root, run.projectId, { journalDir: ctx.journalDir, windowDays: 7, reworkSummary });
+    atlasNote = refreshed.ok
+      ? `atlas: themes=${refreshed.harvest?.themes.length ?? 0} modules=${refreshed.harvest?.moduleActivity.length ?? 0} rework=${refreshed.harvest?.reworkSignals.length ?? 0} noise=${refreshed.harvest?.noiseSessions ?? 0}`
+      : `atlas=${refreshed.code ?? "error"}(不阻塞本步)`;
+  } catch {
+    atlasNote = "atlas=error(不阻塞本步)";
+  }
+ // 病理采集闭环:harvest 的工作会话(重入=同文件跨会话再改)+ nightly 统计的
+ // fanout 边 → pathology detect 落一行(此前 detect 只有 11-11 首跑一条手工线,
+ // pathology 机制读的是死台账)。失败不阻塞本步。
+ // F:工作会话视图只采一次(J 兜底:projectRoots 让「外部项目绑定但编辑路径全在本仓」
+ // 的会话计入),pathology 与 cohort 共用。
+  let workSessions: ReturnType<typeof collectWorkSessions> | null = null;
+  try {
+    workSessions = collectWorkSessions(ctx.journalDir, {
+      windowDays: 7,
+      now: ctx.at,
+      projectRoots: loadProjectRoots(ctx.journalDir),
+    });
+  } catch {
+    workSessions = null;
+  }
+ // E:curated 目标层生产者 —— 当日主题簇 → goal 候选,写观察队列 proposed-goals.json;
+ // 不直接进 entries.jsonl(curated 层仍只由人审/atlas 机制决定)。
+  let goalsNote = "goals=skipped";
+  try {
+ // DirectionAtlas 类型本身不含 derived(derived 由 refresh 合入快照文件),这里按宽松视图读。
+    const snapshot = getAtlas(ctx.root, run.projectId).atlas as unknown as
+      | { derived?: { themes?: Array<{ id: string; sessions: number; titles?: string[] }> } }
+      | undefined;
+    const themes = snapshot?.derived?.themes ?? [];
+    const goals = themes
+      .filter((t) => t.sessions >= 2)
+      .map((t) => {
+        const sample = t.titles?.[t.titles.length - 1] ?? "";
+        return {
+          id: `pg:${run.projectId}:${t.id}`,
+          theme: t.id,
+          sessions: t.sessions,
+          at: iso(ctx.at),
+          status: "proposed" as const,
+          reason: `主题簇 ${t.sessions} 会话${sample !== "" ? `:${sample}` : ""}`,
+        };
+      });
+    const goalPath = join(ctx.root, ".genie", "rsi", "atlas", "proposed-goals.json");
+    mkdirSync(dirname(goalPath), { recursive: true });
+    writeJsonAtomic(goalPath, { v: 1, at: iso(ctx.at), runId: run.runId, projectId: run.projectId, goals });
+    goalsNote = `goals: proposed=${goals.length}`;
+  } catch {
+    goalsNote = "goals=error(不阻塞本步)";
+  }
+ // F:cohort 同批采集器 —— build 类会话登记 delivery、返工链 fixSession 登记 fix;
+ // 落盘走 cohort-metrics-store 的既有真源 .genie/rsi/cohort.jsonl;id 确定性 → 重跑幂等(重复 id 拒收)。
+  let cohortNote = "cohort=skipped";
+  try {
+    const ledger = readReworkChains(ctx.root);
+    const fixClass = new Map<string, string | undefined>();
+    for (const c of ledger.chains) fixClass.set(c.fixSession, c.defectClass);
+    let deliveries = 0;
+    let fixes = 0;
+    let dup = 0;
+    for (const session of workSessions?.sessions ?? []) {
+      const first = session.editedPaths?.[0];
+      if (!first) continue;
+      const module = logicalPathKey(first);
+      const idBase = `nightly:${run.date}:${session.sessionId}`;
+      if (fixClass.has(session.sessionId)) {
+        const cls = cohortDefectClassOf(fixClass.get(session.sessionId));
+        const r = recordFix(ctx.root, {
+          id: `${idBase}:fix`,
+          taskId: session.sessionId,
+          module,
+          at: session.mtimeMs,
+          foundAt: "nightly",
+          ...(cls !== undefined ? { defectClass: cls } : {}),
+        });
+        if (r.ok) fixes += 1;
+        else if (r.code === "COHORT_DUPLICATE") dup += 1;
+      } else if (!FIX_TITLE_RE.test(session.title)) {
+        const r = recordDelivery(ctx.root, {
+          id: `${idBase}:delivery`,
+          taskId: session.sessionId,
+          module,
+          taskClass: "unknown",
+          boardType: "unknown",
+          at: session.mtimeMs,
+        });
+        if (r.ok) deliveries += 1;
+        else if (r.code === "COHORT_DUPLICATE") dup += 1;
+      }
+    }
+    cohortNote = `cohort: delivery=${deliveries} fix=${fixes} dup=${dup}`;
+  } catch {
+    cohortNote = "cohort=error(不阻塞本步)";
+  }
+  let pathologyNote = "pathology=skipped";
+  try {
+    const work = workSessions ?? collectWorkSessions(ctx.journalDir, { windowDays: 7, now: ctx.at });
+    const stats = readStatsFile(paths.statsFile);
+    const changeNodes = (stats?.sessions ?? [])
+      .filter((s) => (s.fanoutEdges ?? 0) > 0)
+      .map((s) => ({ at: ctx.at, fanoutEdges: s.fanoutEdges ?? 0 }));
+    const detected = detect(
+      ctx.root,
+      {
+        sessions: work.sessions.map((s) => ({ id: s.sessionId, files: s.editedPaths })),
+        ...(changeNodes.length > 0 ? { changeNodes } : {}),
+      },
+      { at: ctx.at },
+    );
+    pathologyNote = `pathology: matched=${detected.matched.length} candidates=${detected.candidates.length}`;
+  } catch {
+    pathologyNote = "pathology=error(不阻塞本步)";
+  }
   return {
     run: ctx.run,
     codes: [],
     tokens: 1,
     artifactRef: artifactRef(run.projectId, run.date, ".evidence-pending.json"),
-    note: `pendingReview=${candidates.length}`,
+    note: `pendingReview=${candidates.length} ${decayNote} ${atlasNote} ${goalsNote} ${cohortNote} ${pathologyNote} ${reworkNote}`,
   };
 }
 
 function stepGenerateCandidates(ctx: StepContext): StepOutcome {
   const { paths, run } = ctx;
   const evidence = readJson<NightlyEvidencePendingFile>(paths.evidenceFile);
-  const incoming = Array.isArray(evidence?.candidates) ? evidence.candidates : [];
+  const all = Array.isArray(evidence?.candidates) ? evidence.candidates : [];
+ // G:本日已消费的候选不再进 run.candidates(重复候选不重复入队的前置闸)。
+  const consumed = consumedCandidateIds(paths.queueFile, ctx.at);
+  const incoming = all.filter((c) => !consumed.has(c.id));
   const added = addCandidates(run, incoming);
   return {
     run: added.run,
@@ -581,10 +859,12 @@ function stepGenerateCandidates(ctx: StepContext): StepOutcome {
   };
 }
 
-/** 只入队不 adopt;按 (runId, candidate.id) 去重,重跑本步不产生重复行。 */
+/** 只入队不 adopt;按 (runId, candidate.id) 去重,重跑本步不产生重复行。
+ * G:候选若在 14 天内已被机制消费(consumedAt 在册),不再重复入队。 */
 function appendQueue(queueFile: string, run: NightlyRun, at: number): number {
   mkdirSync(dirname(queueFile), { recursive: true });
   const seen = new Set<string>();
+  const consumed = consumedCandidateIds(queueFile, at);
   try {
     for (const line of readFileSync(queueFile, "utf8").split(/\r?\n/)) {
       if (line.trim() === "") continue;
@@ -600,6 +880,7 @@ function appendQueue(queueFile: string, run: NightlyRun, at: number): number {
   const queuedAt = iso(at);
   const lines: string[] = [];
   for (const candidate of run.candidates) {
+    if (consumed.has(candidate.id)) continue; // G:已消费的不重复入队
     const key = `${run.runId}\u0000${candidate.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -614,6 +895,62 @@ function appendQueue(queueFile: string, run: NightlyRun, at: number): number {
   }
   if (lines.length > 0) writeFileSync(queueFile, `${lines.join("\n")}\n`, { encoding: "utf8", flag: "a" });
   return lines.length;
+}
+
+/** G:窗口内已消费的候选 id 集合(坏行跳过)。 */
+function consumedCandidateIds(queueFile: string, at: number): Set<string> {
+  const out = new Set<string>();
+  let raw = "";
+  try { raw = readFileSync(queueFile, "utf8"); } catch { return out; }
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const parsed = asRecord(readJsonLine(line));
+    if (!parsed) continue;
+    const id = asString(asRecord(parsed.candidate)?.id);
+    const consumedAt = asString(parsed.consumedAt);
+    if (id === "" || consumedAt === "") continue;
+    const t = Date.parse(consumedAt);
+    if (Number.isFinite(t) && at - t <= QUEUE_CONSUMED_WINDOW_MS) out.add(id);
+  }
+  return out;
+}
+
+/**
+ * G:回写队列消费标记(机制任务收尾/机制生成侧调用)。幂等:已标记的行原样保留;
+ * 除目标行外其余行逐字保留(仅重建换行,不改字段)。队列文件不存在时返回全 0。
+ */
+export function markQueueConsumed(
+  root: string,
+  ids: string[],
+  by: string,
+  at: number = Date.now(),
+): { marked: number; already: number } {
+  const queueFile = join(root, NIGHTLY_DIR, QUEUE_FILE);
+  let raw = "";
+  try { raw = readFileSync(queueFile, "utf8"); } catch { return { marked: 0, already: 0 }; }
+  const wanted = new Set(ids);
+  const out: string[] = [];
+  let marked = 0;
+  let already = 0;
+  const atIso = iso(at);
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const parsed = asRecord(readJsonLine(line));
+    const id = asString(asRecord(parsed?.candidate)?.id);
+    if (!parsed || !wanted.has(id)) {
+      out.push(line);
+      continue;
+    }
+    if (asString(parsed.consumedAt) !== "") {
+      already += 1;
+      out.push(line);
+      continue;
+    }
+    out.push(JSON.stringify({ ...parsed, consumedAt: atIso, consumedBy: by }));
+    marked += 1;
+  }
+  if (marked > 0) writeFileSync(queueFile, `${out.join("\n")}\n`, "utf8");
+  return { marked, already };
 }
 
 function readJsonLine(line: string): unknown {
@@ -722,6 +1059,9 @@ export async function startNightly(root: string, options: StartNightlyOptions): 
   const fresh = all.filter((entry) =>
     typeof cursor.lastMtimeMs === "number" ? entry.mtimeMs > cursor.lastMtimeMs : true);
   const selected = fresh.slice(0, maxSessions);
+ // 覆盖口径:被 maxSessions 截断的会话不再被「窗口判完成」的报表口径吞掉——
+ // 快照进 selection.unselected,收尾时入 unprocessed,报表如实说「尾部未读」。
+  const unselected = fresh.slice(maxSessions);
 
   const config: NightlyConfig = { ...(options.config ?? {}) };
   if (options.onlineBusy === true) config.onlineBusy = true;
@@ -730,7 +1070,9 @@ export async function startNightly(root: string, options: StartNightlyOptions): 
   if (started.run.status === "skipped") return { run: started.run, codes: started.codes };
 
   const last = lastEntry(selected);
-  let run = recordCoverage(started.run, { coverage: { sessionsTotal: selected.length }, at: now });
+ // sessionsTotal=本轮**符合增量条件的会话总数**(不是被截断后的 selected 数):
+ // 「14/14 覆盖」只在真读了 14 个时才成立( findings 注意窗口内 3 会话未读却报满)。
+  let run = recordCoverage(started.run, { coverage: { sessionsTotal: fresh.length }, at: now });
   run = { ...run, cursor: last ? { lastSessionId: last.sessionId, lastMtimeMs: last.mtimeMs } : {} };
 
   const selection: NightlySelectionFile = {
@@ -739,6 +1081,7 @@ export async function startNightly(root: string, options: StartNightlyOptions): 
     date: run.date,
     selectedAt: iso(now),
     sessions: selected,
+    ...(unselected.length > 0 ? { unselected } : {}),
   };
   if (last) {
     selection.lastSessionId = last.sessionId;
@@ -777,6 +1120,7 @@ export async function runNightly(root: string, options: RunNightlyOptions): Prom
     let outcome: StepOutcome;
     try {
       outcome = executeStep({
+        root,
         paths,
         run,
         step: step.name,
@@ -810,6 +1154,32 @@ export async function runNightly(root: string, options: RunNightlyOptions): Prom
   }
 
   if (run.status !== "done" && run.status !== "failed" && allStepsFinished(run)) {
+ // 覆盖口径收尾对齐( findings「夜报申报 14/14 覆盖但窗口内 3 会话未读」):
+ // ①被 maxSessions 截断的会话显式进 unprocessed(不再被「窗口判完成」吞掉);
+ // ②window.to 收紧到实际 cursor 时间(报表不再声称覆盖到窗口尾,未读部分如实可见);
+ // ③补一行 cursor 说明,下一轮从哪续读一目了然。
+    const overflow = Array.isArray(selection.unselected) ? selection.unselected : [];
+    if (overflow.length > 0) {
+      const known = new Set(run.unprocessed.map((item) => item.sessionId));
+      const fresh = overflow
+        .filter((entry) => !known.has(entry.sessionId))
+        .map((entry) => ({ sessionId: entry.sessionId, reason: "max-sessions 超出,本轮未读(下轮按 cursor 续读)" }));
+      if (fresh.length > 0) {
+        const added = addUnprocessed(run, fresh);
+        run = added.run;
+      }
+    }
+    let cursorLine = "";
+    if (typeof selection.lastMtimeMs === "number" && Number.isFinite(selection.lastMtimeMs)) {
+      const honestTo = iso(selection.lastMtimeMs);
+ // nightly 机制注意:window.from 可能是无时区本地串、to 被 clamp 成 UTC Z 串,
+ // 字典序比较会倒挂误判——必须按时间值比较(解析失败的怪格式不动,宁可不收紧)。
+      const currentToMs = Date.parse(run.window.to);
+      if (Number.isFinite(currentToMs) && Date.parse(honestTo) < currentToMs) {
+        run = { ...run, window: { ...run.window, to: honestTo } };
+      }
+      cursorLine = `cursor: last=${selection.lastSessionId ?? "?"} at=${honestTo}(实际覆盖到此;尾部未读见 unprocessed)`;
+    }
     // 报告在收尾后重算一次:finalize 之前 run.status 还是 running,直接取会给已完成的 run 留下
     // `status: running` 的失真审计行。
     const finalized = finalizeRun(run, { at: at + 1, report: buildRunReport(run) });
@@ -819,6 +1189,7 @@ export async function runNightly(root: string, options: RunNightlyOptions): Prom
         report: [
           ...buildRunReport(finalized.run),
           `window: ${finalized.run.window.from} ~ ${finalized.run.window.to}`,
+          ...(cursorLine !== "" ? [cursorLine] : []),
           `artifacts: stats=${artifactRef(finalized.run.projectId, finalized.run.date, ".session-stats.json")} evidence=${artifactRef(finalized.run.projectId, finalized.run.date, ".evidence-pending.json")} queue=${NIGHTLY_DIR}/${QUEUE_FILE}`,
         ],
       };

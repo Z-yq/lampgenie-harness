@@ -465,6 +465,37 @@ describe("权限链对拍(permission-passing 同形态:主 loop 闸门 × 文件
   });
 });
 
+describe("editHint(B 首次改动基因提示,2026-11-14)", () => {
+  const editOnce = async (root: string, hint: (rel: string) => string | undefined) => {
+    const journal = new MemoryJournal();
+    const tools = createFileTools({ root, journal, sessionId: "t-gene", editHint: hint });
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    writeFileSync(join(root, "panel.ts"), "const a = 1;\n");
+    await byName.get("read_file")!.execute({ path: "panel.ts" });
+    const out = String(await byName.get("edit_file")!.execute({ path: "panel.ts", old_string: "const a = 1;", new_string: "const a = 2;" }));
+    return { out, journal };
+  };
+
+  it("命中时把提示追加到 edit_file 回执尾部", async () => {
+    const root = mk();
+    let calls = 0;
+    const { out } = await editOnce(root, (rel) => { calls++; return rel === "panel.ts" ? "<system-reminder>基因提示</system-reminder>" : undefined; });
+    expect(out).toContain("已编辑");
+    expect(out).toContain("基因提示");
+    expect(calls).toBe(1);
+  });
+
+  it("未命中不追加;hook 抛错也不影响编辑成功", async () => {
+    const root = mk();
+    const miss = await editOnce(root, () => undefined);
+    expect(miss.out).not.toContain("基因提示");
+    const root2 = mk();
+    const thrown = await editOnce(root2, () => { throw new Error("boom"); });
+    expect(thrown.out).toContain("已编辑");
+    expect(thrown.out).not.toContain("boom");
+  });
+});
+
 describe("上下文卫生尾注(2026-10-20:大输出提醒主 agent 拆子任务派子代理)", () => {
   it("grep 输出超 6KB 附尾注;小输出不附", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ft-hyg-"));

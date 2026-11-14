@@ -70,18 +70,21 @@
 
   // ---------------- styles ----------------
   var CSS = [
-    "#superConsole{position:fixed;right:16px;bottom:16px;z-index:60;width:min(360px,32vw);max-height:calc(100vh - 32px);",
+    "#superConsole{position:fixed;right:16px;bottom:calc(var(--bnav-h,44px) + 10px);z-index:60;width:min(360px,32vw);max-height:calc(100vh - 96px);", /* :经典态避让底部导航条(画布态同款);max-height 同步让位 */
     "  font-family:var(--sans,ui-sans-serif,system-ui,'PingFang SC',sans-serif);font-size:12px;color:var(--reply,#ece1d1)}",
- // 布局兼容:画布/白板/双中心是「内容优先」形态,指挥台折叠成头部条(只留头部一行),
-    // 不遮内容但仍在场;全屏 wiki 阅读态整块退场。绝不整块隐藏——否则默认画布形态下用户看不到待处理。
-    "body.cv-shell #sc-root .sc-body,body.cv-shell #sc-root .sc-foot," +
-      "body[data-view=board] #sc-root .sc-body,body[data-view=board] #sc-root .sc-foot," +
+ // 布局兼容:白板/双中心是「内容优先」形态,指挥台折叠成头部条(只留头部一行),
+ // 不遮内容但仍在场;全屏 wiki 阅读态整块退场。
+ // (用户点名):画布形态整块退场——画布上已有 super 卡(全功能指挥台)+托盘「指挥台
+ // Super」入口+卡头状态点,右下悬浮条是重复入口,删。旧理由「整块隐藏用户看不到待处理」已由
+ // 卡头状态点/托盘徽态承接,不再成立。
+    "body.cv-shell #superConsole{display:none}",
+    "body[data-view=board] #sc-root .sc-body,body[data-view=board] #sc-root .sc-foot," +
       "body.dual-center #sc-root .sc-body,body.dual-center #sc-root .sc-foot{display:none}",
  // 指挥台视图已有全功能右栏聊天窗(#superIdeChat),右下角悬浮 widget 会叠在它上面
  // 挡住 #superInput 的点击(经验证 elementFromPoint 命中 sc-turns)——super 视图整个 widget 退场。
-    "body[data-view=super] #superConsole{display:none}",
-    "body.cv-shell #superConsole,body[data-view=board] #superConsole,body.dual-center #superConsole{width:auto;max-width:calc(100vw - 32px)}",
-    "body.cv-shell #sc-overlay,body[data-view=board] #sc-overlay,body.dual-center #sc-overlay{display:none}",
+    "body[data-view=super] #superConsole,body[data-view=rsi] #superConsole{display:none}",
+    "body[data-view=board] #superConsole,body.dual-center #superConsole{width:auto;max-width:calc(100vw - 32px)}",
+    "body[data-view=board] #sc-overlay,body.dual-center #sc-overlay{display:none}",
     "body.pp-wiki-tab #superConsole{display:none}",
     "#sc-root{display:flex;flex-direction:column;gap:0;border:1px solid var(--border-soft,rgba(201,143,69,.28));border-radius:14px;",
     "  background:var(--glass2,rgba(18,14,11,.88));backdrop-filter:blur(10px);box-shadow:0 10px 32px rgba(0,0,0,.42);overflow:hidden}",

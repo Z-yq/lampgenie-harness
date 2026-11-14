@@ -414,7 +414,7 @@ function trackRender(m) {
     const atTxt = t.at ? new Date(t.at).toLocaleTimeString() : "";
  // 一级:turn(最新一个默认展开;运行中恒展开)
     const openTurn = ti === 0 || st === "running";
-    const user = String(t.userText || "").replace(/\s+/g, " ").trim();
+    const user = String(t.userText || "").replace(/\\s+/g, " ").trim();
     parts.push('<details class="tk-turn" data-tkturn="' + esc(String(t.taskId || "")) + '"' + (openTurn ? " open" : "") + ">" +
       '<summary title="' + esc(user || "(无用户文本)") + '">' +
       '<span class="bd3-dot ' + tone + '"></span>' +

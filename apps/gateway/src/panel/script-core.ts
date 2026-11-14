@@ -17,10 +17,11 @@ connectWs();
 var wsQueue = [];
 function wsSafeSend(payload) {
   try {
-    if (ws.readyState === 1) { ws.send(payload); return; }
-    if (ws.readyState === 0) { wsQueue.push(payload); return; }
-    if (ws.readyState === 3 && rcAttempt > 0 && wsQueue.length < 100) { wsQueue.push(payload); return; }
+    if (ws.readyState === 1) { ws.send(payload); return true; }
+    if (ws.readyState === 0) { wsQueue.push(payload); return true; }
+    if (ws.readyState === 3 && rcAttempt > 0 && wsQueue.length < 100) { wsQueue.push(payload); return true; }
   } catch (e) { /* 已关闭=丢弃 */ }
+  return false; // 调用方按返回值判成败(submit 曾因恒 undefined 误报「连接未就绪」)
 }
 // 重连状态:rcAttempt=已发生的断连次数(重连成功清零);RC_MAX=连续失败上限,
 // 超过退回 svcWaitRestart(reload 保底)。声明在文件头部:wsSafeSend 等早期求值路径零 TDZ 风险。

@@ -6,7 +6,8 @@
  * - system 每轮重组:SOUL+记忆块(soul 双库,super agent 专有)+用户偏好摘要+ 全局状态摘要
  *   (工作区/最近任务/活跃 todo)+ 近期系统注入(通知/转接)+ 调度纪律;
  * - 工具:调度六件 + 任务全生命周期件(task_status/cancel/resend/result/resume + recall_tasks)
- *   + relay_answer(ask_user 双通道答复回交);
+ * + relay_answer(ask_user 双通道答复回交)+ 系统管理五件(sys_status/sys_config/sys_provider/
+ * sys_logs/sys_restart/sys_rsi,/1560/1561 全系统管理者;密钥值通道刻意不注入——Key 永不进对话/journal);
  * - 动手永远派给 coding 轨(唯一不动手边界);其余操作(取消/增删工作区/改派)直接执行+事后说明;
  * - SuperAgentChannel:ask_user 转接(coding agent 提问经指挥台转述)+ 任务状态播报
  *   (journal/广播 super.notice;interrupted/blocked/failed 额外发 super.inbox.changed);
@@ -36,11 +37,36 @@ export function superSessionId(_now = new Date()): string {
 /** @deprecated legacy 别名:旧调用面仍引用 `companionSessionId`;语义已切到 super 前缀。 */
 export const companionSessionId = superSessionId;
 
+/** sys_* 工具视角的配置形状(松散读取;明文密钥值本就不入配置,读取侧再打码一道)。 */
+export interface SuperSysAdminDeps {
+  configView(): { config?: unknown; readOnly?: boolean };
+  configSet(patch: unknown): { applied?: string[]; needsRestart?: string[]; effective?: unknown; routeError?: string; warning?: string };
+  secretKeys(): string[];
+  listModels(providerId?: string): Promise<string[]>;
+ /** 网关日志尾(读最新 gateway.log.*;app.ts 接线,测试注入假尾)。 */
+  logTail?: (lines: number) => { file: string; lines: string[] } | { error: string };
+ /** 计划性重启(app.ts 仅在 main.ts allowSelfRestart 时接线):
+ * 调用即安排延迟退出+看门狗拉起;活跃任务守卫在工具层做(要先于本回调)。 */
+  restart?: (reason: string) => { ok: boolean; error?: string };
+ /** RSI 机制体检摘要(app.ts 注入 collectRsiStatus+annotateRsiSections 同源管线;
+ * 返回压缩后的中文摘要文本——12 区 ok/异常、warnings/坏条目点名、最近运行态)。 */
+  rsiSummary?: () => Promise<string>;
+}
+
+/** sys_* 工具读取的配置切片(providers/coding.llm;详见 core config schema)。 */
+export interface SysConfigShape {
+  providers?: Array<{ id: string; name?: string; baseUrl?: string; apiKeyEnv?: string; models?: unknown[] }>;
+  coding?: { llm?: { providerId?: string; model?: string; baseUrl?: string; apiKeyEnv?: string } };
+}
+
 export interface SuperAgentDeps {
   journal: Journal;
   taskManager: TaskSupervisor;
   projects: ProjectRegistry;
   llm: LlmProvider;
+ /** 系统管理面(全系统管理者定位)——配置读/服务商目录/密钥在场/模型连通,与面板 cfg.* 同源。
+ * 红线:只有 secretKeys(查「是否已配置」);密钥值写入通道(secretSet)刻意不注入——Key 值永不进对话/journal。 */
+  sysAdmin?: SuperSysAdminDeps;
   /** fixC5: relay_answer 的答复回交(AskUserRouter.answer;缺省=转接通道未启用)。 */
   askAnswer?: (requestId: string, answer: string) => boolean;
  /** task_resume 工具注入的续跑回调(app.ts 用 taskManager.resumeInterrupted 接线;
@@ -55,6 +81,16 @@ export interface SuperAgentDeps {
  /** list_nodes 工具的节点清单注入(app.ts 用 NodeRegistry 接线,在线判定与 WS nodes.list 同源
    *  60s 心跳窗;缺省=工具如实回「未接线」,不假造节点)。 */
   listNodes?: () => { nodeId: string; online: boolean; capabilities: string[]; reachability: string[]; runningTasks: number }[];
+ /** 聊天窗对齐:Super 轮次的流式出口(与 coding 轨同款 streamRelay;缺省=不流式,旧行为不变)。 */
+  onStream?: (ev: import("./stream-relay.js").RelayStreamEvent) => void;
+ /** 上下文经济面(与 coding 主轨同源三件,app.ts 用 makeCompactHook/microcompact/spill
+ * 同款助手装配)。Super 每轮重建 loop、历史经 journal 无界增长,此前零治理——现在超阈值自动压缩
+ * +组清理+超大结果落盘,与 coding agent 同一套工作模式。 */
+  contextEconomy?: {
+    compactHook?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["compactHook"];
+    microcompact?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["microcompact"];
+    spill?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["spill"];
+  };
 }
 
 function soulDir(): string {
@@ -111,8 +147,15 @@ export function recentSystemInjections(journal: Journal, now = new Date()): stri
 // 叠加 C4 指令层级、C5 转接契约、C6 播报契约;保留「不直接写代码」红线。
 const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与答复中枢)
 ### 权限口径
-- 你有全部操作权限:取消任务、重发任务、增删工作区,都直接执行,不请示、不确认;执行后在回复里用一句话说明做了什么(用户要可追溯)。
+- 你有全部操作权限:取消任务、重发任务、增删工作区、读写系统配置、管理服务商与生效模型,都直接执行,不请示、不确认;执行后在回复里用一句话说明做了什么(用户要可追溯)。
 - 唯一边界:你不直接写代码/改文件——动手一律 spawn_task 派给对应工作区的 coding agent。
+### 系统管理面(全系统管理者)
+- 你是全系统管理者:sys_status 体检系统、sys_config 读写配置、sys_provider 管服务商与模型(连通探测/切换生效轨)、project_add/remove 管工作区、task_* 管任务全生命周期——除写代码外的系统操作你都有权直接执行,事后一句话说明。
+- 密钥红线:API Key 值永不进对话。用户要配 key 时,指路面板「设置 → 服务商」写入(.genie/secrets.json 或 env 变量);你可以查 keyEnv 变量名、key 在场状态、端点连通性。
+- 配置改动如实转述生效方式:热键立即生效 / 需重启才生效(cfg.set 回执里分列),不把「已写入」说成「已生效」。
+- 日志诊断:用户问「最近有什么报错/哪里不对劲」→ sys_logs(filter=errors) 看错误行,结合 sys_status 综合判断;日志只读不改。
+- 机制体检:用户问「体检结果/机制健康」→ sys_rsi 读 12 区摘要(它就是系统自检机制的读数),不要为此派任务。
+- 重启纪律:sys_restart 只在用户明确同意后调(confirm:true);活跃任务>0 它会自己拒——如实转告用户,不要绕过(不许派任务去 kill 进程,那会打断一切)。
 ### 指挥官纪律(聊天为主工作区)
 - 你是 super agent 指挥官:不直接编码、不跑构建、不改文件。
 - 收到任务先拆解为可独立执行的子任务;每个子任务用 spawn_task(task.submit)派发到 coding agent session,优先复用相关既有 session。
@@ -121,7 +164,7 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 - accepted≠完成:spawn_task 返回只代表「已派出」。要说「已派出,完成会告诉你」,绝不说「做完了」;结果只认 task_status/task_result/系统通知。
 ### 路由三判定(每轮先想清楚走哪条,选最直接且足够的)
 1. 直接答:凭当前对话与上方状态摘要就能完整回答(闲聊/状态问答)→ 直接说,不调工具。
-2. 专用工具查:查任务状态/结果/历史回忆/工作区清单 → 调对应工具(task_status/task_result/task_resend/recall_tasks/list_tasks/list_projects),不要为查状态派任务。
+2. 专用工具查:查任务状态/结果/历史回忆/工作区清单/系统配置 → 调对应工具(task_status/task_result/task_resend/recall_tasks/list_tasks/list_projects/sys_status/sys_config/sys_provider),不要为查状态派任务。
 3. 派后台任务:要动手改东西、持续执行、制作交付物 → spawn_task。
 - 调工具前不口头铺垫(「我看一下」「稍等」都不说);工具返回后再作答;不要用口头承诺代替工具调用。
 - 一轮里含多个意图就逐项处理,不要只办第一件;也不要因需要多次查工具就转去派任务。
@@ -309,6 +352,7 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
         ...(group ? { group } : {}),
         submittedBy: "super",
       });
+      if (deps.channel) deps.channel.markDispatched(t.id); // 终态必播(超出活跃窗也兑现「完成会告诉你」)
       // fixC6: 派出的任务终态会自动播报;此处只报「已派出」(accepted≠完成)。
       return `已派出任务 ${t.id.slice(0, 8)} → ${pid || "__harness__"}${routing}${group ? `(组:${group})` : ""}。已派出≠完成,完成/失败会播报。`;
     },
@@ -452,7 +496,251 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       return r.ok ? `已恢复任务 ${t.id.slice(0, 8)},新任务 ${String(r.newTaskId ?? "").slice(0, 8)}` : `恢复失败:${r.reason ?? "任务当前状态不可续跑"}`;
     },
   };
-  return [listProjects, listNodes, projectAdd, projectRemove, spawnTask, listTasks, taskStatus, taskCancel, taskResend, taskResult, recallTasks, taskResume, relayAnswer, memoryTool(soulStore)];
+ // ── 系统管理面(全系统管理者)——体检/配置/服务商;密钥值永不入对话 ──
+ /** 疑似密钥值字段名(secret 值本就不入配置;读取/写入双侧都打这道防线)。 */
+  const SECRET_FIELD_RE = /(secret|token|password|passwd|credential)/i;
+  function sysCfgOf(): { config?: SysConfigShape; readOnly?: boolean } | undefined {
+    const v = deps.sysAdmin?.configView() as { config?: SysConfigShape; readOnly?: boolean } | undefined;
+    return v;
+  }
+ /** 凭证在场(env 或 secrets.json 双源;只报在场布尔,绝不解析/回显值)。 */
+  function keyPresent(apiKeyEnv: string | undefined, secretKeys: string[]): boolean {
+    if (!apiKeyEnv) return false;
+    try { if (process.env[apiKeyEnv]) return true; } catch { /* env 不可读按不在场 */ }
+    return secretKeys.includes(apiKeyEnv);
+  }
+  const sysStatus: Tool = {
+    name: "sys_status",
+    description: "系统体检:网关运行时长/内存/任务分布(运行·排队·完成·失败)/工作区与在线节点/服务商目录与凭证在场/生效模型/只读态。回答「系统现在怎么样」「健康吗」先调它。",
+    parameters: { type: "object", properties: {} },
+    isConcurrencySafe: () => true,
+    async execute() {
+      const tasks = tm.list();
+      const by = (s: string) => tasks.filter((t) => t.state === s).length;
+      const admin = deps.sysAdmin;
+      const view = sysCfgOf();
+      const keys = admin ? admin.secretKeys() : [];
+      const providers = (view?.config?.providers ?? []).map((p) => ({
+        id: p.id, name: p.name || p.id, baseUrl: p.baseUrl,
+        keyEnv: p.apiKeyEnv ?? "",
+        keyPresent: keyPresent(p.apiKeyEnv, keys),
+        models: p.models?.length ?? 0,
+      }));
+      const llm = view?.config?.coding?.llm;
+      return JSON.stringify({
+        uptimeMin: Math.round(process.uptime() / 60),
+        rssMB: Math.round(process.memoryUsage().rss / 1048576),
+        tasks: { running: by("running"), queued: by("queued"), done: by("done"), failed: by("failed") },
+        projects: projects.list().length,
+        nodesOnline: deps.listNodes ? deps.listNodes().filter((n) => n.online).length : "未接线",
+        providers,
+        effectiveCoding: llm ? { providerId: llm.providerId ?? "(自配 baseUrl)", model: llm.model ?? "" } : null,
+        readOnly: view?.readOnly === true,
+        configChannel: admin ? "on" : "未接线",
+      });
+    },
+  };
+ /** 深扫打码(防御纵深:配置里本不该有密钥值,若有也绝不回显)。 */
+  function maskSecrets(v: unknown, depth = 0): unknown {
+    if (depth > 4) return "[层级截断]";
+    if (Array.isArray(v)) return v.slice(0, 60).map((x) => maskSecrets(x, depth + 1));
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        out[k] = SECRET_FIELD_RE.test(k) && typeof val === "string" && val ? "«不回显»" : maskSecrets(val, depth + 1);
+      }
+      return out;
+    }
+    if (typeof v === "string" && v.length > 400) return v.slice(0, 400) + "…";
+    return v;
+  }
+  const sysConfig: Tool = {
+    name: "sys_config",
+    description: "读写系统配置(与面板设置页同源):action=get 返回脱敏配置全貌;action=set 应用 patch,回执分列「热键已生效 / 需重启」。密钥值不在本工具面(见 sys_provider)。",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["get", "set"], description: "get=查看全貌;set=应用 patch" },
+        patch: { type: "object", description: "set 时的配置补丁(结构同设置页)" },
+      },
+      required: ["action"],
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      const a = args as { action?: string; patch?: unknown };
+      if (!deps.sysAdmin) return "系统配置面未接线(本网关未启用配置通道)";
+      if (a.action === "get") {
+        const view = sysCfgOf();
+        const masked = maskSecrets(view?.config ?? {});
+        let s: string;
+        try { s = JSON.stringify(masked); } catch { return "配置序列化失败(含循环引用?)"; }
+        if (s.length > 8000) {
+          const top = view?.config as Record<string, unknown> | undefined;
+          return JSON.stringify({ readOnly: view?.readOnly === true, hint: "配置过大,只列顶层键;查具体面用 sys_provider/sys_status", topKeys: top ? Object.keys(top) : [] });
+        }
+        return JSON.stringify({ readOnly: view?.readOnly === true, config: masked });
+      }
+      if (a.action === "set") {
+        const patch = a.patch;
+        if (!patch || typeof patch !== "object" || Array.isArray(patch)) return "patch 必须是对象";
+        const bad: string[] = [];
+        (function scan(v: unknown, path: string, depth: number) {
+          if (depth > 3 || !v || typeof v !== "object") return;
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            const p = path ? path + "." + k : k;
+            if (SECRET_FIELD_RE.test(k) && typeof val === "string" && val) bad.push(p);
+            else scan(val, p, depth + 1);
+          }
+        })(patch, "", 0);
+        if (bad.length) return `拒改疑似密钥字段:${bad.join(",")}——密钥值不进对话/配置;请走面板「设置 → 服务商」写入 .genie/secrets.json 或 env 变量(Super 可查在场与连通)。`;
+        if (sysCfgOf()?.readOnly) return "配置只读(panelReadOnly 运行态),禁止修改。";
+        const r = deps.sysAdmin.configSet(patch);
+        return JSON.stringify(r);
+      }
+      return "action 只支持 get|set";
+    },
+  };
+ // ── 日志诊断 + 计划性重启(全系统管理者两件)──
+  const sysLogs: Tool = {
+    name: "sys_logs",
+    description: "读网关日志尾(最新 gateway.log):默认 60 行,可到 200;filter=errors 只看错误/异常行(诊断「最近报了什么错」先调它)。只读,不改任何东西。",
+    parameters: {
+      type: "object",
+      properties: {
+        lines: { type: "number", description: "尾行数 10-200(缺省 60)" },
+        filter: { type: "string", enum: ["all", "errors"], description: "errors=只看错误/异常行" },
+      },
+    },
+    isConcurrencySafe: () => true,
+    async execute(args) {
+      const a = args as { lines?: number; filter?: string };
+      if (!deps.sysAdmin?.logTail) return "日志通道未接线(本网关未启用)";
+      const n = Math.max(10, Math.min(200, Math.round(Number(a.lines ?? 60)) || 60));
+      const r = deps.sysAdmin.logTail(n);
+      if ("error" in r) return `读日志失败:${r.error}`;
+      let lines = r.lines;
+      if (a.filter === "errors") {
+        lines = lines.filter((l) => /error|fail|异常|失败|denied|timeout|uncaught|rejected/i.test(l));
+        if (!lines.length) return `最近 ${n} 行无错误/异常行(来源 ${r.file.split("/").pop()})。`;
+      }
+ // 单行 300 字 + 总量 12KB 双帽(日志行可能巨长,别撑爆上下文)
+      const cut = lines.map((l) => (l.length > 300 ? l.slice(0, 300) + "…" : l));
+      let out = cut.join("\n");
+      if (out.length > 12000) out = out.slice(0, 12000) + `\n…(截断,共 ${cut.length} 行)`;
+      return `来源 ${r.file.split("/").pop()} · 尾 ${n} 行${a.filter === "errors" ? "(错误过滤)" : ""}:\n${out}`;
+    },
+  };
+  const sysRestart: Tool = {
+    name: "sys_restart",
+    description: "计划性重启网关(改配置需重启生效时用):活跃任务>0 直接拒;须用户明确同意后才带 confirm:true 调用。执行=延迟数秒退出,看门狗自动拉起新进程,面板自动重连(全程约 15-30 秒)。",
+    parameters: {
+      type: "object",
+      properties: {
+        confirm: { type: "boolean", description: "必须用户明确同意(说了「重启吧/确认重启」)才传 true" },
+        reason: { type: "string", description: "重启原因(进审计日志)" },
+      },
+      required: ["confirm"],
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      const a = args as { confirm?: boolean; reason?: string };
+      if (!deps.sysAdmin?.restart) return "计划性重启未接线(仅生产入口 main.ts 启用)";
+      if (a.confirm !== true) return "未确认:重启会断开面板十几秒。先向用户说明影响,用户明确同意后再带 confirm:true 调用。";
+      const active = tm.list().filter((t) => t.state === "running" || t.state === "queued");
+      if (active.length) return `拒绝重启:${active.length} 个任务在运行/排队(${active.slice(0, 3).map((t) => String(t.title ?? t.instruction).slice(0, 30)).join(" / ")}…)。等它们完成,或用户同意先 task_cancel。`;
+      const r = deps.sysAdmin.restart(String(a.reason ?? "super 指令(未注明原因)"));
+      if (!r.ok) return `重启安排失败:${r.error ?? "未知原因"}`;
+      return "已安排重启:数秒后网关退出,看门狗自动拉起新进程(约 15-30 秒),面板会自动重连。请立刻向用户说明:期间面板短暂断连属预期。";
+    },
+  };
+ // RSI 机制体检摘要——「系统自检自己」的读数(12 区开关/结果条目/最近运行态)。
+  const sysRsi: Tool = {
+    name: "sys_rsi",
+    description: "RSI 机制体检摘要(系统自检机制自身的状态):12 个机制区的健康度、异常/关注条目点名、各机制最近一次运行态。回答「机制体检怎么样/最近体检结果」先调它。",
+    parameters: { type: "object", properties: {} },
+    isConcurrencySafe: () => true,
+    async execute() {
+      if (!deps.sysAdmin?.rsiSummary) return "RSI 体检面未接线(本网关未启用)";
+      try { return await deps.sysAdmin.rsiSummary(); } catch (err) { return `RSI 摘要采集失败:${String(err).slice(0, 200)}`; }
+    },
+  };
+  const sysProvider: Tool = {
+    name: "sys_provider",
+    description: "服务商与模型管理(与设置页同源):action=list 目录+凭证在场+生效轨;action=probe 连通探测(拉模型清单);action=set 写服务商条目(name/baseUrl/apiKeyEnv 变量名/模型目录),setEffective 可同时切 coding 生效轨。密钥值写入只走面板设置页——Super 不受理 key 值(防入对话/journal),其余字段都可配。",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "probe", "set"], description: "list=目录;probe=连通;set=写条目" },
+        providerId: { type: "string", description: "probe/set 的服务商 id" },
+        entry: { type: "object", description: "set 时的条目字段:name/baseUrl/apiKeyEnv(环境变量名,非 key 值)/models(模型名字符串数组)" },
+        setEffective: { type: "boolean", description: "set 时同时把 coding 生效轨切到该服务商" },
+        model: { type: "string", description: "setEffective 时的生效模型(缺省=目录首个)" },
+      },
+      required: ["action"],
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      const a = args as { action?: string; providerId?: string; entry?: { name?: string; baseUrl?: string; apiKeyEnv?: string; models?: string[] }; setEffective?: boolean; model?: string };
+      if (!deps.sysAdmin) return "系统配置面未接线(本网关未启用配置通道)";
+      const view = sysCfgOf();
+      const keys = deps.sysAdmin.secretKeys();
+      if (a.action === "list") {
+        const llm = view?.config?.coding?.llm;
+        return JSON.stringify({
+          providers: (view?.config?.providers ?? []).map((p) => ({
+            id: p.id, name: p.name || p.id, baseUrl: p.baseUrl,
+            keyEnv: p.apiKeyEnv ?? "", keyPresent: keyPresent(p.apiKeyEnv, keys),
+            models: (p.models ?? []).map((m) => (typeof m === "string" ? m : String((m as { name?: string }).name ?? ""))).slice(0, 30),
+          })),
+          effectiveCoding: llm ? { providerId: llm.providerId ?? "(自配 baseUrl)", model: llm.model ?? "", baseUrl: llm.baseUrl ?? "" } : null,
+          hint: "密钥值写入走面板「设置 → 服务商」;probe 可测连通。",
+        });
+      }
+      if (a.action === "probe") {
+        const pid = String(a.providerId ?? "").trim();
+        const target = view?.config?.providers?.find((p) => p.id === pid);
+        if (!pid || !target) return `未找到服务商 ${pid || "(空)"};先 action=list 看目录。`;
+        try {
+          const ids = await deps.sysAdmin.listModels(pid);
+          return JSON.stringify({ ok: true, providerId: pid, models: ids.slice(0, 50) });
+        } catch (err) {
+          return JSON.stringify({ ok: false, providerId: pid, error: String(err).slice(0, 200) });
+        }
+      }
+      if (a.action === "set") {
+        const id = String(a.providerId ?? "").trim();
+        const entry = a.entry ?? {};
+        if (!id) return "providerId 必填";
+        if (!entry.baseUrl && !entry.models?.length && !entry.apiKeyEnv && !entry.name) return "entry 至少给 name/baseUrl/apiKeyEnv/models 之一";
+        if (entry.apiKeyEnv && (entry.apiKeyEnv.length > 64 || /\s/.test(entry.apiKeyEnv) || /^(sk-|gx-|bearer)/i.test(entry.apiKeyEnv))) {
+          return "apiKeyEnv 只接受环境变量名(如 DASHSCOPE_API_KEY);检测到疑似密钥值——密钥值永不进对话,请走面板「设置 → 服务商」。";
+        }
+        if (view?.readOnly) return "配置只读(panelReadOnly 运行态),禁止修改。";
+        const old = view?.config?.providers ?? [];
+        const idx = old.findIndex((p) => p.id === id);
+        const fallback: NonNullable<SysConfigShape["providers"]>[number] = { id, baseUrl: "" };
+        const base: NonNullable<SysConfigShape["providers"]>[number] = (idx >= 0 ? old[idx] : undefined) ?? fallback;
+        const merged: NonNullable<SysConfigShape["providers"]>[number] = {
+          id,
+          name: entry.name ?? base.name ?? id,
+          baseUrl: entry.baseUrl ?? base.baseUrl,
+          ...(entry.apiKeyEnv ? { apiKeyEnv: entry.apiKeyEnv } : base.apiKeyEnv ? { apiKeyEnv: base.apiKeyEnv } : {}),
+          ...(entry.models?.length ? { models: entry.models } : base.models?.length ? { models: base.models } : {}),
+        };
+        const providers = idx >= 0 ? old.map((p, i) => (i === idx ? merged : p)) : [...old, merged];
+        const patch: Record<string, unknown> = { providers };
+        if (a.setEffective) {
+          const model = String(a.model ?? (entry.models ?? [])[0] ?? (merged.models ?? [])[0] ?? "");
+          if (!model || typeof model !== "string") return "setEffective 需要模型:给 model 或 entry.models";
+          patch.coding = { llm: { providerId: id, baseUrl: merged.baseUrl, ...(merged.apiKeyEnv ? { apiKeyEnv: merged.apiKeyEnv } : {}), model } };
+        }
+        const r = deps.sysAdmin.configSet(patch);
+        return JSON.stringify(r);
+      }
+      return "action 只支持 list|probe|set";
+    },
+  };
+  return [listProjects, listNodes, projectAdd, projectRemove, spawnTask, listTasks, taskStatus, taskCancel, taskResend, taskResult, recallTasks, taskResume, relayAnswer, sysStatus, sysConfig, sysProvider, sysLogs, sysRestart, sysRsi, memoryTool(soulStore)];
 }
 
 // ── fixC5/C6: super agent 活跃跟踪 + 转接/播报通道 ──
@@ -511,6 +799,8 @@ export interface SuperAgentChannelOptions {
 export class SuperAgentChannel {
   private seen = new Set<string>();
   private selfManaged = new Set<string>();
+ /** spawn_task 派出的任务 id(终态必播;播完/终态即删,防泄漏)。 */
+  private dispatched = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -524,6 +814,14 @@ export class SuperAgentChannel {
   markSelfManaged(taskId: string): void {
     this.selfManaged.add(taskId);
     if (this.selfManaged.size > 200) this.selfManaged.clear();
+  }
+
+ /** 亲自派出的任务(spawn_task)——终态**必播**,不随活跃窗(10min)过期。
+ * 依据:d791e18b 画布走查跑 32 分钟,Super 09:44 后无轮次,10:06 done 时 activity 已过期 →
+ * 静默,违背纪律承诺「已派出,完成会告诉你」;notice/feed 仍在,但聊天窗无人说话。 */
+  markDispatched(taskId: string): void {
+    this.dispatched.add(taskId);
+    if (this.dispatched.size > 500) this.dispatched.clear();
   }
 
   /** 可能触发 inbox 变化的终态(契约 §2:interrupted/blocked/failed 额外廉价触发)。 */
@@ -543,7 +841,8 @@ export class SuperAgentChannel {
     if (!terminal) return;
     const selfManaged = this.selfManaged.has(task.id);
     this.selfManaged.delete(task.id);
-    if (selfManaged || !this.opts.activity.active()) return;
+    const promised = this.dispatched.delete(task.id); // 亲自派出的任务终态必播(承诺优先于活跃窗)
+    if (selfManaged || (!promised && !this.opts.activity.active())) return;
     void this.serialize(() => this.announce(text));
   }
 
@@ -593,11 +892,17 @@ export async function runSuperAgentTurn(deps: SuperAgentDeps, text: string, soul
  // super agent 轨同享 LLM 轨迹(全量 messages+响应,.genie/llm-trace/)。
     llmTrace: makeLlmTraceSink(deps.journal),
     tools: buildSuperAgentTools(deps, soulStore),
+ // 上下文经济面(coding 同源):超阈自动压缩/组清理/超大结果落盘。
+    ...(deps.contextEconomy?.compactHook ? { compactHook: deps.contextEconomy.compactHook } : {}),
+    ...(deps.contextEconomy?.microcompact ? { microcompact: deps.contextEconomy.microcompact } : {}),
+    ...(deps.contextEconomy?.spill ? { spill: deps.contextEconomy.spill } : {}),
     maxSteps: 6,
     // 写前持久化屏障(config.agent.writeBarrier):undefined 不写键 → loop 缺省 hard,行为同旧版。
     ...(deps.writeBarrier ? { writeBarrier: deps.writeBarrier } : {}),
  //  图片 offload:管家轮次也可能带图(视觉输入),与 coding 轨同根落盘 .genie/image-offload/。
     ...(deps.imageOffload ? { imageOffload: deps.imageOffload } : {}),
+ // Super 轮次流式(与 coding 轨同款 relay;缺省不传=旧行为)
+    ...(deps.onStream ? { onStream: deps.onStream } : {}),
   });
  // 收尾聚合(/////):与主 agent 同一实现;super 轮次 warn-only,
   // 绝不 hardFail,终稿只追加紧凑「## 收尾审计」段(全 na 不追加)。

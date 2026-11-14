@@ -1174,8 +1174,9 @@ function renderSidebar() {
     }
     if (archView && list.length >= 20) html += '<div class="t-more" id="archToggle">' + (archShowAll ? "收起" : "显示全部 " + list.length + " 条归档") + "</div>";
   }
-  if (!shownAny) html = '<div class="t-bucket" style="padding-top:14px">暂无任务</div>';
-  if (archView) html = '<div class="t-bucket" style="display:flex;justify-content:space-between;align-items:center">归档视图<span class="tm-item" id="archClear" style="color:var(--red);font-size:10px">清空归档</span></div>' + html;
+  if (!shownAny) html = '<div class="t-bucket" style="padding-top:14px">' + (archView ? "暂无归档" : "暂无任务") + '</div>';
+ // 归档视图工具条:只有确实存在归档任务时才给「清空归档」入口(0 条时点它无任何反馈=死按钮)
+  if (archView) html = '<div class="t-bucket" style="display:flex;justify-content:space-between;align-items:center">归档视图' + (list.length ? '<span class="tm-item" id="archClear" style="color:var(--red);font-size:10px">清空归档</span>' : "") + '</div>' + html;
   $("taskList").innerHTML = html;
   $("taskList").classList.toggle("sticky-heads", organize === "group" && !archView);
   bindArchClear();

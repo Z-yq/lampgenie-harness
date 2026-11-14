@@ -84,6 +84,8 @@ export interface EvidenceNode {
 export interface EvidenceGraph {
   schemaVersion: number;
   nodes: Record<string, EvidenceNode>;
+ /** 证据间连线(可选——旧图/空图没有边,消费方按 `links ?? []` 读)。 */
+  links?: EvidenceLink[];
 }
 
 /** 稳定码:调用方按码断言,不解析文案。 */
@@ -490,6 +492,94 @@ export function markAuthoritative(graph: EvidenceGraph, id: string): MarkAuthori
   }
   demoted.sort(cmpStr);
   return { ok: true, graph: next, demoted };
+}
+
+// ---------------------------------------------------------------- link 边
+
+/** 证据间连线类型:谁支撑/反驳/派生谁。 */
+export type EvidenceLinkType = "supports" | "contradicts" | "derives-from" | "relates-to";
+
+const LINK_TYPES: readonly EvidenceLinkType[] = ["supports", "contradicts", "derives-from", "relates-to"];
+
+export function isEvidenceLinkType(value: unknown): value is EvidenceLinkType {
+  return typeof value === "string" && (LINK_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * 证据间连线:一条「A supports B」的断言本身也是证据结构的一部分(可审计、可被反驳)。
+ * 背景: RSI evidence 机制注意「图只有 nodes,谁支撑谁在 schema 上不可表达」——
+ * 闭合度审计只能靠人读 statement 猜。有了边,「空口断言的连线」才可判定。
+ */
+export interface EvidenceLink {
+ /** 发出方证据节点 id(断言的持有者)。 */
+  from: string;
+ /** 被指向证据节点 id。 */
+  to: string;
+  type: EvidenceLinkType;
+  at: number;
+ /** 为什么有这条边(≤300 字;空=无备注)。 */
+  note?: string;
+}
+
+export interface LinkEvidenceInput {
+  from: string;
+  to: string;
+  type: EvidenceLinkType;
+  note?: string;
+  at?: number;
+}
+
+export interface LinkEvidenceResult {
+  ok: boolean;
+  graph: EvidenceGraph;
+  link?: EvidenceLink;
+  code?: EvidenceCode;
+}
+
+/** 图内连线上限:防止台账被无界刷边(节点自身另有容量策略)。 */
+export const EVIDENCE_LINKS_MAX = 20_000;
+
+/** 边的备注上限(字符)。 */
+export const EVIDENCE_LINK_NOTE_MAX_CHARS = 300;
+
+/**
+ * 加一条边:端点必须都存在(from ≠ to;指向不存在节点的边=空口断言,直接拒)。
+ * 同 (from,to,type) 只留一条(重复 → DUPLICATE,幂等不写)。
+ */
+export function linkEvidence(graph: EvidenceGraph, input: LinkEvidenceInput): LinkEvidenceResult {
+  if (!isGraph(graph) || !isObject(input)) return { ok: false, graph, code: EVIDENCE_CODES.INVALID_INPUT };
+  const from = typeof input.from === "string" ? input.from.trim() : "";
+  const to = typeof input.to === "string" ? input.to.trim() : "";
+  if (from === "" || to === "" || from === to) return { ok: false, graph, code: EVIDENCE_CODES.INVALID_INPUT };
+  if (!isEvidenceLinkType(input.type)) return { ok: false, graph, code: EVIDENCE_CODES.INVALID_INPUT };
+  if (graph.nodes[from] === undefined || graph.nodes[to] === undefined) {
+    return { ok: false, graph, code: EVIDENCE_CODES.NOT_FOUND };
+  }
+  const note = typeof input.note === "string" && input.note.trim() !== ""
+    ? input.note.trim().slice(0, EVIDENCE_LINK_NOTE_MAX_CHARS)
+    : undefined;
+  const at = typeof input.at === "number" && Number.isFinite(input.at) ? input.at : Date.now();
+  const link: EvidenceLink = { from, to, type: input.type, at, ...(note !== undefined ? { note } : {}) };
+
+  const existing = (graph.links ?? []).find((l) => l.from === from && l.to === to && l.type === input.type);
+  if (existing !== undefined) return { ok: false, graph, link: existing, code: EVIDENCE_CODES.DUPLICATE };
+  if ((graph.links ?? []).length >= EVIDENCE_LINKS_MAX) {
+    return { ok: false, graph, code: EVIDENCE_CODES.INVALID_INPUT };
+  }
+  return { ok: true, graph: { ...graph, links: [...(graph.links ?? []), link] }, link };
+}
+
+/** 某节点的邻接边(出边+入边)。 */
+export function linksOf(graph: EvidenceGraph, id: string): { outgoing: EvidenceLink[]; incoming: EvidenceLink[] } {
+  const links = isGraph(graph) ? graph.links ?? [] : [];
+  const key = typeof id === "string" ? id.trim() : "";
+  const outgoing: EvidenceLink[] = [];
+  const incoming: EvidenceLink[] = [];
+  for (const link of links) {
+    if (link.from === key) outgoing.push(link);
+    if (link.to === key) incoming.push(link);
+  }
+  return { outgoing, incoming };
 }
 
 // ---------------------------------------------------------------- queryEvidence

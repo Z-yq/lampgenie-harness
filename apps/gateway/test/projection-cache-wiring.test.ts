@@ -17,8 +17,7 @@ import {
   filterFromFloor,
 } from "@lampgenie/runtime/session/projection";
 
-const SERVER_PATH = SERVER_SRC;
-const server = readFileSync(SERVER_PATH, "utf8");
+const server = SERVER_SRC;
 
 /** memo 声明块(从 `const sessionStatusMemo = new Map<string, {` 到收尾 `}>;`)。 */
 function memoTypeBlock(): string {

@@ -17,7 +17,8 @@ import { buildExecutorFromConfig, buildModelProviders, buildAudioChatFromConfig 
 import { createSessionModelStore, createSessionModelFace } from "./session-model.js";
 import { TaskSupervisor } from "./task-manager.js";
 import { ProjectRegistry } from "./projects.js";
-import { wireAgentLoop } from "./agent-wiring.js";
+import { setRuntimePromptProvider, wireAgentLoop } from "./agent-wiring.js";
+import { resolvePromptForSessionSync, resolvePromptOverrideSync } from "./prompt-runtime.js"; // #209:worker 进程内的提示词覆盖( v2 会话钉扎)
 import { createMemoryWiring } from "@lampgenie/memory";
 import type { SessionWorkerSpec, HostMessage } from "./session-worker-protocol.js";
 import { SESSION_WORKER_PROTOCOL_VERSION } from "./session-worker-protocol.js";
@@ -108,6 +109,16 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const root = spec.repoRoot;
+ // #209:worker 是独立进程、独立模块实例——主进程 createGatewayApp 注入的 provider
+ // 不会带过来;这里按 worker 的 root 再注入一次,任务开工才读得到提示词版本覆盖。
+ // v2 会话钉扎:同会话按 pins.json 的首钉版本解析(与主进程同一份数据面)。
+ // #209:worker 是独立进程、独立模块实例——主进程 createGatewayApp 注入的 provider
+ // 不会带过来;这里按 worker 的 root 再注入一次,任务开工才读得到提示词版本覆盖。
+ // v2 会话钉扎:同会话按 pins.json 的首钉版本解析(与主进程同一份数据面)。
+  setRuntimePromptProvider((key, sessionId) =>
+    sessionId ? resolvePromptForSessionSync(root, sessionId, key) : resolvePromptOverrideSync(root, key),
+  );
+
 
   const loaded = loadConfig({ repoRoot: root });
   const config = loaded.config;

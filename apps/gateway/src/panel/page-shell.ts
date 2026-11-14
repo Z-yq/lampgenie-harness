@@ -584,6 +584,7 @@ export const PANEL_SHELL = `</style></head><body>
  <div id="superIdeWrap">
  <div class="spide-act" id="superIdeAct">
  <button class="spide-actbtn on" data-spidezone="task" title="任务区:super 派发的任务列表(排队/运行/完成/失败)">任</button>
+ <button class="spide-actbtn" data-spidezone="inbox" id="superActInbox" title="待办区:Super 转接的提问、权限请求、中断/失败任务">办<span class="spide-badge" id="superInboxBadge"></span></button>
  <button class="spide-actbtn" data-spidezone="dream" title="做梦区:RSI 机制卡(开关/驱动/运行)+全量运行;开始/完成卡自动注入聊天流">梦</button>
  <button class="spide-actbtn" data-spidezone="health" title="健康区:12 机制体检一屏(健康度/三色计数/Top 发现;进指挥台默认页)">健</button>
  </div>
@@ -591,6 +592,12 @@ export const PANEL_SHELL = `</style></head><body>
  <div class="spide-side-zone" id="superSbTask">
  <div class="spide-side-h">派发任务 <span class="sup-cnt" id="superSbTaskCnt"></span></div>
  <div class="spide-list" id="superSbTaskList"></div>
+ </div>
+ <!-- 待办区:提问/权限/中断/失败(此前只在隐藏的看板四区里,三栏布局下没有入口) -->
+ <div class="spide-side-zone" id="superSbInbox">
+ <div class="spide-side-h">待你处理 <span class="sup-cnt" id="supInboxCnt"></span></div>
+ <div class="spide-empty" style="padding:2px 2px 6px">Super 转接的提问、权限请求、中断/失败任务;处理后回到任务/健康区。</div>
+ <div class="spide-list" id="supInbox"></div>
  </div>
  <div class="spide-side-zone" id="superSbDream">
  <div class="spide-side-h">做梦机制 <span class="sup-cnt" id="superSbDreamCnt"></span></div>
@@ -611,10 +618,14 @@ export const PANEL_SHELL = `</style></head><body>
  <!-- 健康一屏(默认 zone):总览卡 #superHealthTop + 12 机制体检卡网格 #superHealthGrid -->
  <div class="spide-doc" id="superMainHealth">
  <div id="superHealthTop"></div>
+ <!-- Coding Agent 结果流:聊天窗只留 Super 对话,任务/做梦结果统一在中间呈现 -->
+ <div id="superResultFeed" style="display:none"></div>
  <div id="superHealthGrid"></div>
  </div>
  <div class="spide-doc" id="superMainDream">
  <div id="rsiHead">RSI 机制 · 做梦</div>
+ <!-- 2026-11-13 RSI-SELF-DRIVE:自动周期条(开关/间隔/下一拍/预算/推一拍;数据=rsi.status.scheduler) -->
+ <div id="rsiSchedBar" class="rsi-sched" style="display:none"></div>
  <!-- 医生的话(rsiRender 后置填充;无数据时整个隐藏,不渲染空引言块) -->
  <div class="spide-brief" id="rsiBrief" style="display:none"><div class="spide-brief-h">医生的话</div><div class="spide-brief-body"></div></div>
  <div id="rsiCards"></div>
@@ -627,24 +638,52 @@ export const PANEL_SHELL = `</style></head><body>
  </div>
  </div>
  </div>
+ <!-- 左栏宽度拖拽手柄(拖动改 --superSb;localStorage 持久) -->
+ <div class="spide-grip" id="superSbGrip" title="拖动调整左栏宽度"></div>
  </div>
- <!-- 聊天窗(右栏,可折叠):superChatBody/superComposer/superInput/superSend 原 id 原样迁入,DOM 移动不重建 -->
+ <!-- 聊天窗(右栏,常驻不可折叠):superChatBody/superComposer/superInput/superSend 原 id 原样迁入,DOM 移动不重建 -->
  <div class="spide-chat" id="superIdeChat">
- <button class="spide-chat-fold" id="superIdeChatFold" title="折叠/展开对话窗">»</button>
+ <!-- 聊天窗宽度拖拽手柄(拖动改 --superChatW;localStorage 持久) -->
+ <div class="spide-chat-grip" id="superChatGrip" title="拖动调整聊天窗宽度"></div>
+ <!-- 聊天窗头部:身份 + 实时状态(空闲/思考中/等你回答/派发中)+ 回最新 -->
+ <div class="spide-chat-h" id="superChatHead">
+ <span class="sch-ava" aria-hidden="true">S</span>
+ <div class="sch-id">
+ <div class="sch-name">Super Agent<span class="sch-state" id="superChatState"></span></div>
+ <div class="sch-sub" id="superChatSub">指挥台 · 空闲 · 任务与结果在中栏</div>
+ </div>
+ <button class="sch-latest" id="superChatLatest" title="回到最新消息">↓ 最新</button>
+ </div>
+ <!-- 实时指挥状态条:研判/调度/委托 阶段 + 当前动作 + 秒表(仅 Super 轮次与在途委托时出现) -->
+ <div id="superRunBar" class="sup-runbar" style="display:none"></div>
  <div class="spide-chat-body" id="superChatCol">
  <div id="superChatBody"></div>
+ <!-- 与 coding agent 主聊天同款 composer:textarea + 工具栏 + 圆形发送键 + 快捷指令菜单 -->
  <div id="superComposer">
- <input id="superInput" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调)" autocomplete="off" spellcheck="false">
- <button class="vw-act" id="superSend" title="发送 (Enter)">发送</button>
+ <div class="composer" id="superComposerBox">
+ <textarea id="superInput" rows="1" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调)" autocomplete="off" spellcheck="false"></textarea>
+ <div class="composer-bar">
+ <div class="composer-plus" id="superQuickBtn" title="快捷指令(查活跃任务 / 今日体检 / 派任务)">+</div>
+ <span class="mode-pill" id="superScopePill" title="Super 只做调度:动手任务派给 Coding Agent">指挥 · 调度</span>
+ <span class="mode-pill" id="supCtxPill" title="Super 会话上下文用量(实测 inputTokens;点按刷新)">上下文</span>
+ <span style="flex:1"></span>
+ <button class="vw-act" id="supCompactBtn" title="手动压缩 Super 会话历史(与 coding /compact 同源;超阈也会自动压缩)" style="padding:2px 9px;font-size:11px">压缩</button>
+ <button class="send-btn" id="superSend" title="发送 (Enter)">发</button>
+ </div>
+ <div id="superQuickMenu" class="sup-quick-menu" style="display:none">
+ <button data-supquick="现在系统里有哪些活跃任务?">查活跃任务</button>
+ <button data-supquick="简单汇报一下最近 12 小时的机制体检结果">今日体检</button>
+ <button data-supquick="帮我派一个任务:">派任务</button>
+ <button data-supquick="体检一下系统:运行状态、任务分布、服务商与凭证在场、生效模型">系统体检</button>
+ <button data-supquick="列出全部服务商与模型目录,并说出生效模型是哪个">服务商清单</button>
+ </div>
+ </div>
+ <div class="hint" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 2px 0"><span>Enter 发送 · Shift+Enter 换行</span><span style="margin-left:auto">任务/结果在中栏</span></div>
  </div>
  </div>
  </div>
- <!-- 看板四区 P1 收编(迁移期原样保留 DOM 但隐藏,superViewLoad 绑定不断,避免连带回归) -->
+ <!-- 看板四区 P1 收编(待办区已迁到三栏侧栏 superSbInbox;其余区保留 DOM 但隐藏) -->
  <div class="spide-board" id="superBoardCol" style="display:none" aria-hidden="true">
- <div class="sup-sec" id="supSecInbox">
- <div class="sup-sec-h">待你处理 <span class="sup-cnt" id="supInboxCnt"></span></div>
- <div class="sup-list" id="supInbox"></div>
- </div>
  <div class="sup-sec">
  <div class="sup-sec-h">工作区 × 任务</div>
  <div class="sup-list" id="supProjects"></div>

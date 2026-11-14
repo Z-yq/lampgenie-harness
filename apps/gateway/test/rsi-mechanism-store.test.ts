@@ -335,6 +335,21 @@ describe("readRunResults 容错 + 全局 id 前缀", () => {
     expect(typeof items[0]?.at).toBe("number");
   });
 
+  it("质量四件套字段(evidence/impact/action)读回;旧条目缺字段保持 undefined", async () => {
+    const root = await freshRoot();
+    await writeRunResult(root, "tools", "run_q", {
+      items: [
+        { id: "a", title: "结论 A", summary: "摘要 A", evidence: "f.ts:12", impact: "影响 A", action: "建议 A" },
+        { id: "b", title: "旧条目", summary: "摘要 B" },
+      ],
+    });
+    const items = await readRunResults(root, "tools", "run_q");
+    expect(items[0]).toMatchObject({ evidence: "f.ts:12", impact: "影响 A", action: "建议 A" });
+    expect(items[1]?.evidence).toBeUndefined();
+    expect(items[1]?.impact).toBeUndefined();
+    expect(items[1]?.action).toBeUndefined();
+  });
+
   it("resultFilePath 指向 agent-runs/<mech>/<runId>.result.json", async () => {
     expect(resultFilePath("/r", "atlas", "run_1")).toBe("/r/.genie/rsi/agent-runs/atlas/run_1.result.json");
     expect(resultsPath("/r")).toBe("/r/.genie/rsi/results.jsonl");
@@ -408,5 +423,17 @@ describe("collectMechanismItems 基础层 + 覆盖层", () => {
   it("无 run 无覆盖层 → 空结果且无 run", async () => {
     const root = await freshRoot();
     expect(await collectMechanismItems(root, "changeRequests")).toEqual({ items: [], overlayApplied: 0 });
+  });
+});
+
+describe("experimentQuotaFactor 运行记录(2026-11-14)", () => {
+  it("<1 落记录并读回;>=1 不落(配额=1 等于没降频)", async () => {
+    const root = await freshRoot();
+    const a = await startRun(root, { mechanismId: "experiments", runId: "run-quota-a", experimentQuotaFactor: 0.5 });
+    expect(a.experimentQuotaFactor).toBe(0.5);
+    const back = await getRun(root, "experiments", "run-quota-a");
+    expect(back?.experimentQuotaFactor).toBe(0.5);
+    const b = await startRun(root, { mechanismId: "experiments", runId: "run-quota-b", experimentQuotaFactor: 1 });
+    expect(b.experimentQuotaFactor).toBeUndefined();
   });
 });

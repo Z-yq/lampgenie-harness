@@ -16,6 +16,11 @@ import type { NamedSystemBlock } from "./wiring-core.js";
 import { resolveSubagentCapability, buildSubagentExtraTools, makeSubagentPermissionAsker, buildSubagentToolPolicy, decidePermission, loadPermissionRules } from "./permission.js";
 import { renderTeamaiBlock, skillViewTool, experienceFoldTool, todoTool, askUserTool, boardUpsertTool, boardReadTool, planQualityOf, computeSkeletonAdoption } from "./tools.js";
 import { repoRoot } from "../repo-root.js";
+import { getAtlas } from "../direction-atlas-store.js"; // #217:开工方向简报(atlas 快照读)
+import { matchedDefectGenes, createDefectGeneEditHint, renderAtlasStartBrief } from "../atlas-harvest.js";
+// D:预防检查单进开工简报 —— 依赖单向 rework-chain → atlas-harvest,此处不反向 import。
+import { readReworkChains, renderPreventionLines } from "../rework-chain.js";
+
 import { systemPromptSha, recordSystemPromptSnapshot } from "../system-prompt-snapshot.js";
 import { buildVlmFromConfig } from "../factory.js";
 import { remoteLs, remoteReadWindow, remoteWrite, remoteEdit, remoteGlob, remoteExec, shQuote, remoteRun, remoteGit } from "../ssh-ops.js";
@@ -26,7 +31,7 @@ import { TimeTravelStore } from "../time-travel-store.js";
 import { makeLlmTraceSink } from "../llm-trace.js";
 import { mkdirSync as _mdSync } from "node:fs";
 import { execFileSync as _execFileSync } from "node:child_process";
-import { join as _join, dirname as _dir } from "node:path";
+import { join as _join, dirname as _dir, basename as _basename } from "node:path";
 import type { Journal } from "@lampgenie/core";
 import { bus } from "@lampgenie/core";
 import { readSecretValue } from "@lampgenie/core";
@@ -162,6 +167,7 @@ import { renderTemplate } from "@lampgenie/workflow/templates";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { rootScanVerdict } from "../sense-root-gate.js"; // 本文件 warmIndex 闸消费(2997)
+import { terminalLooksLikeWrite } from "../terminal-write-guard.js"; // :plan-gate 绕写检测(剥 /dev/null 误伤)
 
 
 // 开工 orient 注入链已整体删除:orientWithSense/symbolsInText/orient-cache 系列
@@ -341,6 +347,21 @@ export async function runWithAgent(
     const proj = projects?.list().find((x) => x.id === task.projectId);
     return proj ? parseRemoteProject(proj.path) : null;
   })();
+ // B/C:缺陷基因消费的懒实现 —— atlas 快照在开工简报段(约 2070 行)才装载,
+ // 所以传 getter;remote 与本地 edit_file 两条回执路径共用同一个「每任务每模块一次」集合。
+  let atlasSnapshotForGenes: unknown;
+  const geneEditHint = createDefectGeneEditHint(
+    () => atlasSnapshotForGenes,
+    (info) => {
+      try {
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: { type: "gene.edit.hint", path: info.path, modules: info.modules, classes: info.classes },
+        });
+      } catch { /* journal 写失败不阻塞编辑 */ }
+    },
+  );
   const remoteProjectTool = (() => {
     const remote = taskRemoteProject;
     if (!remote) return null;
@@ -418,7 +439,8 @@ export async function runWithAgent(
         if (!a.old_string || a.old_string === a.new_string) return "错误:old_string 为空或与 new_string 相同";
         const r = await remoteEdit(remote, String(a.path ?? ""), a.old_string!, a.new_string!, a.replace_all === true);
         if ("error" in r) return "错误:" + r.error;
-        return "已编辑 " + a.path + "(替换 " + r.replaced + " 处)";
+        const hint = geneEditHint(String(a.path ?? ""));
+        return "已编辑 " + a.path + "(替换 " + r.replaced + " 处)" + (hint ? "\n" + hint : "");
       },
     };
     const globTool: Tool = {
@@ -2054,10 +2076,45 @@ export async function runWithAgent(
       }
     }
   }
+ // #217 世界模型消费面:coding 任务开工注入「方向简报」(atlas 快照摘要,≤600 字稳定前缀;
+ // active 方向/最近转向/未决冲突 + derived 本周主题·热点模块·返工信号)。无快照/空内容=空串零变化。
+ // 与 禁掉的「每条消息匹配式 tips」不同:这是开工一次性的项目方向事实,不是按消息猜兴趣。
+  let atlasStartBrief = "";
+  if (taskClassState.value === "coding") {
+    try {
+      const snapshot = getAtlas(repoRoot(), _basename(taskRoot)).atlas;
+ // defectGenes 消费面:任务指令原文用于匹配「本模块历史缺陷基因」。
+      if (snapshot !== undefined) {
+        const taskText = String(task.instruction ?? "");
+        atlasSnapshotForGenes = snapshot; // B:edit_file 首次改动的懒提示读同一快照
+ // D:prevention 检查单(同根因 ≥2 的返工)与缺陷基因行并列注入。
+        let preventionLines: string[] = [];
+        try { preventionLines = renderPreventionLines(readReworkChains(repoRoot()).chains, taskText); } catch { /* 台账缺失=空 */ }
+        atlasStartBrief = renderAtlasStartBrief(snapshot, taskText, preventionLines);
+ // C:带基因行的任务留痕 —— nightly 用它对「带标记 vs 不带」的后续返工命中做对比。
+        const geneHits = matchedDefectGenes(snapshot, taskText);
+        if (geneHits.length > 0) {
+          journal.append({
+            kind: "custom",
+            sessionId: task.sessionId,
+            payload: {
+              type: "gene.brief.shown",
+              modules: [...new Set(geneHits.map((g) => g.module))],
+              classes: [...new Set(geneHits.map((g) => g.defectClass))],
+            },
+          });
+        }
+      }
+    } catch {
+ // 无快照/读失败:跳过(fail-soft,不阻塞开工)
+    }
+  }
   const composed = composeSystemPrompt({
-    base: systemForTaskClass(taskClassState.value, { lite: liteMode }) + "\n\n## 行为纪律(soul 继承,身份以上文为准)\n" + soulDisciplinesFor(soulText) + "\n\n" + formatAgentProfiles(agentProfiles) + projectMainline
+    base: systemForTaskClass(taskClassState.value, { lite: liteMode, sessionId: task.sessionId }) + "\n\n## 行为纪律(soul 继承,身份以上文为准)\n" + soulDisciplinesFor(soulText) + "\n\n" + formatAgentProfiles(agentProfiles) + projectMainline
  // 开工画像块进稳定前缀(coding 类且本会话未注入过才有内容;空串=零变化)。
-      + workStartBrief,
+      + workStartBrief
+ // #217:方向简报同位(coding 类且快照非空才有内容)。
+      + (atlasStartBrief === "" ? "" : "\n\n" + atlasStartBrief),
     agentsMd: discoverAgentsMd(taskRoot),
  // 父子 ask-answer:「子代理资源调度」节(spawn 告知义务+审批决策指引)。
     subagentDispatch: renderSubagentDispatchSection({ answerToolMounted: true }),
@@ -2612,7 +2669,8 @@ export async function runWithAgent(
           for (const c of ((args as { commands?: unknown } | null)?.commands ?? []) as unknown[]) {
             if (typeof c === "string") auditGitCommand(journal, task.sessionId, c);
           }
-          if (/>{1,2}\s*\S|sed\s+(-[^\s]*i|--in-place)|\btee\b\s|dd\s+[^;]*of=|\btruncate\b|\binstall\b\s+-m|\bpatch\b\s|\bcp\b\s+\S+\s+\S/.test(cmd)) {
+ // 剥掉 2>/dev/null、2>&1 与引号字面量后再判写形态(只读勘察不再误拦)。
+          if (terminalLooksLikeWrite(cmd)) {
             const blocked = await planGateBlock("terminal(写重定向)", `terminal 绕写(${cmd.slice(0, 60)})`);
             if (blocked) return blocked;
           }
@@ -2645,6 +2703,7 @@ export async function runWithAgent(
     ...createFileTools({
       root: taskRoot, journal, sessionId: task.sessionId,
       toolDumpDir: join(repoRoot(), ".genie", "tool-dumps"),
+      editHint: geneEditHint,
       ...(agentConfig?.coding?.lsp ? { lsp: agentConfig.coding.lsp } : {}),
       planGate: (tool) => planGateBlock(tool, `主 agent 直写(${tool})`),
  // 视觉能力:vision=false 走 coding.vlm 兜底;vlm 每任务懒建缓存(provider 带重试/准入)
@@ -2763,9 +2822,13 @@ export async function runWithAgent(
   journal.append({ kind: "task.progress", sessionId: task.sessionId, payload: { taskId: task.id, tools: surfacePlan.tools.map((t) => t.name), toolCount: surfacePlan.tools.length } });
  // 写前持久化屏障装配(config.agent.writeBarrier 透传;缺席/非法=undefined,loop 内部缺省 hard)。
   const writeBarrier = writeBarrierOf(agentConfig);
+ // RSI 机制隔离:固定会话 rsi 里连续跑 12 个独立审计任务,不能把前一个机制的
+ // 对话(工具结果/旧结论)重放进下一个;RSI 任务书有稳定首行标记,按它开 freshContext。
+  const rsiMechanismTask = typeof task.instruction === "string" && task.instruction.startsWith("# RSI 机制任务:");
   const loop = new AgentLoop({
     journal,
     sessionId: task.sessionId,
+    ...(rsiMechanismTask ? { freshContext: true } : {}),
     system: systemWithMemory,
  // system 的节视图( token 轮 04):让 loop 的 `[系统提示更新]` 只发变更节。
  // 不传=旧行为(整篇全文重发),故这一行本身就是「其它构造点零影响」的分界。

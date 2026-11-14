@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const SRC = AGENT_WIRING_SRC;
-const TEXT = readFileSync(SRC, "utf8");
+const TEXT = SRC;
 
 /** 截取 taskOutputTool 定义块(到下一个工具定义 taskPhaseTool 之前)。 */
 function taskOutputBlock(): string {

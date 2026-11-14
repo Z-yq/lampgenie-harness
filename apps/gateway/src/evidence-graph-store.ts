@@ -27,8 +27,10 @@ import type {
   DecayReport,
   EvidenceConflict,
   EvidenceGraph,
+  EvidenceLink,
   EvidenceNode,
   EvidenceQuery,
+  LinkEvidenceInput,
 } from "@lampgenie/runtime/agent/evidence-graph";
 
 /** store 稳定码:store 层自产的失败码(闸门码沿用 runtime 的 EVIDENCE_CODES)。 */
@@ -84,6 +86,11 @@ export interface EvidenceReport {
   archived: number;
   conflicts: number;
   byKind: Record<string, number>;
+ /** 证据间连线数(按 type 计数)。 */
+  links: number;
+  linksByType: Record<string, number>;
+ /** 悬空边:端点节点不存在的 link(写入时校验过,但投影后仍可能因坏 add 行缺节点)。 */
+  danglingLinks: number;
 }
 
 /** runtime evidence-graph 在本文件用到的模块面。 */
@@ -119,6 +126,10 @@ interface EvidenceRuntime {
     modelVersion: string,
     opts?: { at?: number },
   ): { ok: boolean; graph: EvidenceGraph; rescored: string[]; code?: string };
+  linkEvidence(
+    graph: EvidenceGraph,
+    input: LinkEvidenceInput): { ok: boolean; graph: EvidenceGraph; link?: EvidenceLink; code?: string };
+  linksOf(graph: EvidenceGraph, id: string): { outgoing: EvidenceLink[]; incoming: EvidenceLink[] };
 }
 
 /**
@@ -150,6 +161,7 @@ const LINE_TYPES: ReadonlySet<string> = new Set<string>([
   "authoritative",
   "decay",
   "rescore",
+  "link",
 ]);
 
 /** 节点必需字段校验:缺字段/类型不符 → false(由调用方计 parseErrors 并跳过)。 */
@@ -193,7 +205,8 @@ type EvidenceLine =
     }
   | { v: 1; type: "authoritative"; at: number; id: string; demoted: Array<{ id: string; authoritativeness: "latest" }> }
   | { v: 1; type: "decay"; at: number; policy: DecayPolicy; updates: DecayUpdate[]; report: DecayReport }
-  | { v: 1; type: "rescore"; at: number; modelVersion: string; ids: string[]; statuses: Record<string, string> };
+  | { v: 1; type: "rescore"; at: number; modelVersion: string; ids: string[]; statuses: Record<string, string> }
+  | { v: 1; type: "link"; at: number; link: EvidenceLink };
 
 /** 解析一行;坏行返回 undefined(不 throw)。 */
 function parseLine(raw: string): EvidenceLine | undefined {
@@ -233,10 +246,22 @@ function parseLine(raw: string): EvidenceLine | undefined {
       if (typeof value["modelVersion"] !== "string" || !Array.isArray(value["ids"])) return undefined;
       if (!isRecord(value["statuses"])) return undefined;
       return value as unknown as EvidenceLine;
+    case "link": {
+      const link = value["link"];
+      if (!isRecord(link)) return undefined;
+      if (typeof link["from"] !== "string" || link["from"].trim() === "") return undefined;
+      if (typeof link["to"] !== "string" || link["to"].trim() === "") return undefined;
+      if (typeof link["type"] !== "string" || !LINK_TYPE_SET.has(link["type"])) return undefined;
+      if (typeof link["at"] !== "number" || !Number.isFinite(link["at"])) return undefined;
+      return value as unknown as EvidenceLine;
+    }
     default:
       return undefined;
   }
 }
+
+/** link 行的合法 type(与 runtime LINK_TYPES 同源;这里做形状校验,语义在 runtime)。 */
+const LINK_TYPE_SET: ReadonlySet<string> = new Set<string>(["supports", "contradicts", "derives-from", "relates-to"]);
 
 /** 把一行套进图(latest wins);坏行已在 parseLine 拦截。 */
 function applyLine(graph: EvidenceGraph, line: EvidenceLine): void {
@@ -298,6 +323,15 @@ function applyLine(graph: EvidenceGraph, line: EvidenceLine): void {
         }
         node.updatedAt = line.at;
       }
+      return;
+    }
+    case "link": {
+ // upsert by (from,to,type):重放里同键后写的赢(备注/时间刷新)
+      const links = (graph.links ??= []);
+      const existing = links.find(
+        (l) => l.from === line.link.from && l.to === line.link.to && l.type === line.link.type);
+      if (existing === undefined) links.push(line.link);
+      else links[links.indexOf(existing)] = line.link;
       return;
     }
   }
@@ -425,6 +459,26 @@ export function markAuthoritative(root: string, id: string): EvidenceStoreResult
   return { ok: true, id };
 }
 
+/** 加一条证据间连线(supports/contradicts/derives-from/relates-to)。端点缺失/重复折叠成稳定码。 */
+export function linkEvidence(
+  root: string,
+  input: LinkEvidenceInput): { ok: boolean; code?: string; link?: EvidenceLink } {
+  const { graph } = loadEvidenceGraph(root);
+  const result = rt.linkEvidence(graph, input);
+  if (!result.ok || !result.link) {
+    return { ok: false, code: result.code ?? "EVIDENCE_STORE_ERROR", ...(result.link ? { link: result.link } : {}) };
+  }
+  const line: EvidenceLine = { v: 1, type: "link", at: result.link.at, link: result.link };
+  if (!appendEvidenceLine(root, line)) return { ok: false, code: "EVIDENCE_LEDGER_WRITE_VERIFY_FAILED" };
+  return { ok: true, link: result.link };
+}
+
+/** 某节点的邻接边(出边=它支撑/反驳别人;入边=别人支撑/反驳它)。 */
+export function linksOf(root: string, id: string): { outgoing: EvidenceLink[]; incoming: EvidenceLink[] } {
+  const { graph } = loadEvidenceGraph(root);
+  return rt.linksOf(graph, id);
+}
+
 /** 查询投影(默认 at 时有效且 active;includeHistory 放开)。 */
 export function queryEvidence(root: string, filter: EvidenceQuery = {}): EvidenceNode[] {
   const { graph } = loadEvidenceGraph(root);
@@ -524,6 +578,12 @@ export function reportEvidence(root: string): EvidenceReport {
     else if (node.status === "stale") stale += 1;
     else archived += 1;
   }
+  const linksByType: Record<string, number> = {};
+  let danglingLinks = 0;
+  for (const link of graph.links ?? []) {
+    linksByType[link.type] = (linksByType[link.type] ?? 0) + 1;
+    if (graph.nodes[link.from] === undefined || graph.nodes[link.to] === undefined) danglingLinks += 1;
+  }
   return {
     ok: true,
     totalLines,
@@ -534,5 +594,8 @@ export function reportEvidence(root: string): EvidenceReport {
     archived,
     conflicts: rt.conflictsOf(graph).length,
     byKind,
+    links: (graph.links ?? []).length,
+    linksByType,
+    danglingLinks,
   };
 }

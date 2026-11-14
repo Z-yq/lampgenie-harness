@@ -5,6 +5,8 @@
  * 有界:工具侧 Promise.race 兜底,离线(无面板)立即返回 null 由 agent 按最合理推断继续,
  * 绝不静默卡死任务。
  */
+import { normalizeAskOption } from "@lampgenie/runtime/agent/attention-budget";
+
 export interface AskUserPayload {
   question: string;
   options?: string[];
@@ -34,7 +36,9 @@ export class AskUserRouter {
     if (!this.online) return Promise.resolve(null);
     const requestId = `ask-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const question = String(payload.question || "").slice(0, 800);
-    const options = (payload.options || []).slice(0, 6).map((o) => String(o).slice(0, 200));
+ // 对象选项 {key,text} 归一化成文本(旧 String(o) 会产出 [object Object])。
+    const options = (Array.isArray(payload.options) ? payload.options : [])
+      .map(normalizeAskOption).filter((s) => s !== "").slice(0, 6).map((s) => s.slice(0, 200));
     return new Promise((resolve) => {
       const settle = (v: string | null) => {
         const p = this.waiting.get(requestId);

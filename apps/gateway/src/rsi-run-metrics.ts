@@ -69,15 +69,43 @@ export function taskWindowOf(events: readonly unknown[], taskId: string): RsiRun
       break;
     }
   }
+  if (start < 0) {
+ // 经验证:worker 侧未必写 `task.start`。`task.context` 才是真正的开始标记
+ // (它携带 taskId);优先用它,其次才退化为第一个带该 taskId 的事件。
+ // 注意:first-with-taskId 会命中排队期的 custom 元数据事件,随后遇到另一任务的元数据就,
+ // 窗口里一条 llm.trace 都没有 → 成本恒 0。task.context 起点可避开这类前置噪声。
+    for (let i = 0; i < events.length; i += 1) {
+      const ev = events[i]!;
+      if (kindOf(ev) !== "task.context") continue;
+      if (stringOf(payloadOf(ev)?.taskId) === id) {
+        start = i;
+        break;
+      }
+    }
+    if (start < 0) {
+      for (let i = 0; i < events.length; i += 1) {
+        if (stringOf(payloadOf(events[i])?.taskId) === id) {
+          start = i;
+          break;
+        }
+      }
+    }
+  }
   if (start < 0) return [];
   const out: RsiRunEvent[] = [];
   for (let i = start; i < events.length; i += 1) {
     const event = events[i]!;
     const kind = kindOf(event);
     const eventId = stringOf(payloadOf(event)?.id);
+    const payloadTaskId = stringOf(payloadOf(event)?.taskId);
     if (i > start) {
       if ((kind === "task.done" || kind === "task.fail") && eventId === id) break;
       if (kind === "task.start" && eventId !== undefined && eventId !== id) break;
+ // 只认「另一个任务的 task.context / task.start」为下一任务的开始标记;
+ // 不按任意 payload.taskId 差异——排队期 custom 元数据的事件会与执行期交错(RSS 会话经验证)。
+      if (kind === "task.context" && payloadTaskId !== undefined && payloadTaskId !== id) break;
+ // 本任务的终态投递义务 = 任务已收尾,窗口到此为止(其后的空转/轮询不计入本任务成本)。
+      if (kind === "delivery.obligation" && payloadTaskId === id && stringOf(payloadOf(event)?.terminalState) !== undefined) break;
     }
     out.push(event as RsiRunEvent);
   }

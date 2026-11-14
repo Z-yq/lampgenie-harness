@@ -1041,9 +1041,9 @@ function ideOfficeCollect(t) {
   for (const it of raw) {
     const key = String((it && it.key) || "");
     const text = String((it && it.text) || "");
-    let m = /^slide:(\d+):shape:(\d+)$/.exec(key);
+    let m = /^slide:(\\d+):shape:(\\d+)$/.exec(key);
     if (m) { out.push({ slideIndex: Number(m[1]), shapeIndex: Number(m[2]), text: text }); continue; }
-    m = /^block:(\d+)$/.exec(key);
+    m = /^block:(\\d+)$/.exec(key);
     if (m) { out.push({ blockIndex: Number(m[1]), text: text }); continue; }
   }
   return out;

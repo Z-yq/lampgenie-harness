@@ -158,6 +158,16 @@ describe(" super.turn 双客户端广播(真实 WS 网关,echo 执行器+假 LLM
 
 // ── ④ 面板/资产/服务端源码静态契约 ────────────────────────────────────────────────
 describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", () => {
+  it("聊天窗实底+上下文 pill+压缩按钮(经济面板契约)", async () => {
+    const html = await (await fetch(`http://127.0.0.1:${PORT}/`)).text();
+    expect(html).toContain('id="supCtxPill"');
+    expect(html).toContain('id="supCompactBtn"');
+    expect(html).toContain("supCtxPillRender");
+    expect(html).toContain("supCompactSend");
+ // 实底:--bg(不透明)打底,不再是裸 --surf-card 透明层
+    expect(html).toContain("background-color:var(--bg,#060403);background-image:linear-gradient(0deg,var(--surf-card");
+    expect(html).not.toContain(".spide-chat{position:absolute;top:0;right:0;bottom:0;width:var(--superChatW,360px);display:flex;flex-direction:column;border-left:1px solid var(--border-soft,rgba(201,143,69,.18));background:var(--surf-card");
+  });
   const PORT = 7962;
   const panel = servePanel(PORT, () => { /* 不需要 WS */ });
   let pageHtml = "";

@@ -5,6 +5,90 @@
 import { z } from "zod";
 import { Envelope } from "./core.js";
 // [CROSS-IMPORTS]
+// ---- RSI 自转调度( RSI-SELF-DRIVE)--------------------------------
+// 自动周期 = 到点 + 空闲 + 串行派机制 + 周期结账 + ROI 门;全部请求-响应,不主动推。
+export const RsiSchedulerConfigZ = z.object({
+  enabled: z.boolean(),
+  everyMinutes: z.number(),
+ /** 参与自动周期的机制 id(空数组=全部启用且 agent 驱动的机制)。 */
+  mechanisms: z.array(z.string()),
+  idleOnly: z.boolean(),
+  autoRetry: z.boolean(),
+  maxRetriesPerRun: z.number(),
+  tokenBudgetPerRun: z.number(),
+ /** 周期聚合预算(0=不设);旧网关不带=按 0 处理。 */
+  tokenBudgetPerCycle: z.number().optional(),
+  roiGate: z.boolean(),
+  updatedAt: z.number(),
+  by: z.string().optional(),
+});
+export const RsiSchedulerCycleZ = z.object({
+  id: z.string(),
+  index: z.number(),
+  startedAt: z.number(),
+  pending: z.array(z.string()),
+  runIds: z.record(z.string()),
+  settled: z.array(z.string()),
+  budgetExceeded: z.string().optional(),
+ /** :周期累计 token 超预算(本周期,余下下周期再排)。 */
+  cycleBudgetExceeded: z.boolean().optional(),
+ /** :ROI 降频因子(<1=机制集按比例裁剪)。 */
+  quotaFactor: z.number().optional(),
+});
+export const RsiSchedulerLastCycleZ = z.object({
+  id: z.string(),
+  at: z.number(),
+  runIds: z.array(z.string()),
+  costTokens: z.number(),
+  amountCny: z.number().nullable(),
+  budgetExceeded: z.boolean(),
+  quotaFactor: z.number().optional(),
+  roi: z.object({
+    action: z.string(),
+    negativeStreak: z.number(),
+    detail: z.string().optional(),
+  }).optional(),
+});
+export const RsiSchedulerRuntimeZ = z.object({
+  lastTickAt: z.number().optional(),
+  nextRunAt: z.number().optional(),
+  cycleCount: z.number().optional(),
+  cycle: RsiSchedulerCycleZ.optional(),
+  lastCycle: RsiSchedulerLastCycleZ.optional(),
+  breaker: z.object({ paused: z.boolean(), reason: z.string().optional(), at: z.number().optional() }).optional(),
+});
+export const RsiSchedulerStateZ = z.object({
+  config: RsiSchedulerConfigZ,
+  runtime: RsiSchedulerRuntimeZ,
+});
+export const RsiSchedulerGet = Envelope.extend({ type: z.literal("rsi.scheduler.get") });
+export const RsiSchedulerSet = Envelope.extend({
+  type: z.literal("rsi.scheduler.set"),
+  enabled: z.boolean().optional(),
+  everyMinutes: z.number().optional(),
+  mechanisms: z.array(z.string()).optional(),
+  idleOnly: z.boolean().optional(),
+  autoRetry: z.boolean().optional(),
+  maxRetriesPerRun: z.number().optional(),
+  tokenBudgetPerRun: z.number().optional(),
+  tokenBudgetPerCycle: z.number().optional(),
+  roiGate: z.boolean().optional(),
+ /** true=人工恢复熔断(breaker.resume),与配置保存同帧完成。 */
+  resumeBreaker: z.boolean().optional(),
+});
+export const RsiSchedulerRun = Envelope.extend({ type: z.literal("rsi.scheduler.run") });
+export const RsiSchedulerResult = Envelope.extend({
+  type: z.literal("rsi.scheduler.result"),
+  ok: z.boolean(),
+  reason: z.string().optional(),
+  state: RsiSchedulerStateZ.optional(),
+ /** run 动作的 tick 结论(started/running/busy/not-due/cycle-done/…)。 */
+  action: z.string().optional(),
+  mechanismId: z.string().optional(),
+  runId: z.string().optional(),
+  taskId: z.string().optional(),
+  breakerResumed: z.boolean().optional(),
+});
 // ---- RSI 状态只读快照(rsi.status; 面板「团队」页)----
 // 纯请求-响应,无连接级主动推送。结构由协议自持(不跨包引用 apps/gateway 的实现),
 // 字段与 apps/gateway/src/rsi-status.ts 的 RsiStatusSection 保持一致:
@@ -24,6 +108,10 @@ export const RsiResultItemZ = z.object({
   title: z.string(),
   summary: z.string(),
   detail: z.string().optional(),
+ /** 质量契约 v2:结论四件套(证据/影响/建议);旧条目无这些字段。 */
+  evidence: z.string().optional(),
+  impact: z.string().optional(),
+  action: z.string().optional(),
   status: z.enum(["ok", "warn", "bad", "info"]).optional(),
   source: z.enum(["agent", "code", "manual"]).optional(),
   at: z.number().optional(),
@@ -59,6 +147,23 @@ export const RsiRunAnalysisZ = z.object({
   })),
 });
 export type RsiRunAnalysis = z.infer<typeof RsiRunAnalysisZ>;
+/** 结果质量评估(质量契约 v2):四件套覆盖、浅层/重复/超上限计数 + 0~100 分 + 可读 issues。 */
+export const RsiRunQualityZ = z.object({
+  items: z.number(),
+  evidenced: z.number(),
+  impacted: z.number(),
+  actionable: z.number(),
+  shallow: z.number(),
+  duplicates: z.number(),
+  overLimit: z.boolean(),
+  score: z.number(),
+  issues: z.array(z.object({
+    code: z.string(),
+    itemId: z.string().optional(),
+    note: z.string(),
+  })),
+});
+export type RsiRunQuality = z.infer<typeof RsiRunQualityZ>;
 /** 机制最近一次运行的摘要(agent 任务)。 */
 export const RsiMechanismRunInfoZ = z.object({
   runId: z.string().optional(),
@@ -73,6 +178,15 @@ export const RsiMechanismRunInfoZ = z.object({
   cost: RsiRunCostZ.optional(),
  /** 本次运行分析了哪些会话(旧网关不带=面板不显示分析行)。 */
   analysis: RsiRunAnalysisZ.optional(),
+ /** RSI-SELF-DRIVE:自动周期/重试/预算/质量门(旧网关不带这些字段,面板按未知处理)。 */
+  cycleId: z.string().optional(),
+  retryOf: z.string().optional(),
+  retryCount: z.number().optional(),
+  budgetTokens: z.number().optional(),
+  budgetExceeded: z.boolean().optional(),
+  analysisMissing: z.boolean().optional(),
+ /** 质量契约 v2:本次运行结果质量评分(旧网关不带=面板不显示质量行)。 */
+  quality: RsiRunQualityZ.optional(),
 });
 export type RsiMechanismRunInfo = z.infer<typeof RsiMechanismRunInfoZ>;
 /** 单个 RSI 检查项(ok=false 时 code 给机器可读原因,warnings 给人读提示)。
@@ -104,6 +218,8 @@ export const RsiStatusResult = Envelope.extend({
  /** 汇总:ok=true 的项数 / warnings 总数(面板直接展示,不重算)。 */
   okCount: z.number(),
   warnCount: z.number(),
+ /** RSI-SELF-DRIVE:自动调度快照(与 12 区同一拍返回,面板不再多一次往返)。 */
+  scheduler: RsiSchedulerStateZ.optional(),
 });
 
 // ---- RSI 机制治理面( RSI-MECH):开关 / 驱动 / 运行 / 结果条目改删 ----
@@ -142,6 +258,9 @@ export const RsiItemUpdate = Envelope.extend({
   title: z.string().optional(),
   summary: z.string().optional(),
   detail: z.string().optional(),
+  evidence: z.string().optional(),
+  impact: z.string().optional(),
+  action: z.string().optional(),
   status: z.enum(["ok", "warn", "bad", "info"]).optional(),
 });
 export const RsiItemDelete = Envelope.extend({
@@ -159,3 +278,5 @@ export const RsiItemResult = Envelope.extend({
  /** 改删后的最新条目投影(面板直接替换,不必再拉一拍)。 */
   items: z.array(RsiResultItemZ).optional(),
 });
+
+

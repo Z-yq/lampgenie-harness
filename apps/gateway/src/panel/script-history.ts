@@ -1309,7 +1309,7 @@ function renderSubWorkspace(agentId) {
         parts.push(toolCallCard({ name: String(p.name || ""), arguments: a2 }, q, res2, toolTokensOfId(String(p.toolCallId || ""))));
       } else if (p.kind === "tool.call") {
         if (subMerged.has(String(p.toolCallId || ""))) continue; // fixH17:参数已被合并卡吃下
-        parts.push('<div class="ws-step">' + t + "<b>" + esc(String(p.name || "工具")) + "</b><span>调用 " + esc(String(p.arguments || "").replace(/\s+/g, " ").slice(0, 90)) + "</span></div>");
+        parts.push('<div class="ws-step">' + t + "<b>" + esc(String(p.name || "工具")) + "</b><span>调用 " + esc(String(p.arguments || "").replace(/\\s+/g, " ").slice(0, 90)) + "</span></div>");
       } else if (p.kind === "step.start" || p.kind === "step.end") {
         const label = p.kind === "step.start" ? "第 " + p.step + " 步开始(模型思考中)"
           : "第 " + p.step + " 步结束(" + String(p.reason || "") + (p.error ? " · " + String(p.error).slice(0, 120) : "") + ")";

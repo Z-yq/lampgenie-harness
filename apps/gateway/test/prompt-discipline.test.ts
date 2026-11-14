@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SYSTEM } from "../src/agent-wiring.js";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const AGENT_WIRING_SRC = join(HERE, "..", "src", "agent-wiring.ts");
+// 拆分后实现搬到 agent-wiring/*,负面断言挂聚合源(barrel 只 20 行会空转绿)
+import { AGENT_WIRING_SRC } from "./panel-source.js";
 
 describe("五条减步纪律在编码轨 system 提示词里且含关键约束词", () => {
   it("①实施序列 + 同一文件一次 read 到够用", () => {
@@ -51,7 +51,7 @@ describe("五条减步纪律在编码轨 system 提示词里且含关键约束�
 
 describe("negative:纪律不写成口号", () => {
   it("agent-wiring.ts 里没有「务必/尽量/努力/高度重视」", () => {
-    const src = readFileSync(AGENT_WIRING_SRC, "utf-8");
+    const src = AGENT_WIRING_SRC;
     const hits = src.match(/务必|尽量|努力|高度重视/g) ?? [];
     expect(hits).toEqual([]);
   });

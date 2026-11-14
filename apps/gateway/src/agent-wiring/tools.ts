@@ -154,6 +154,20 @@ import { rootScanVerdict } from "../sense-root-gate.js"; // 本文件 warmIndex 
 // 开工 orient 注入链已整体删除:orientWithSense/symbolsInText/orient-cache 系列
 // (scanFingerprint/orientCacheKey/readOrientCache/warmOrientCache)。每条 user message
 // 跟一条「全局代码+历史匹配」tips 多余且常错配——code_sense 内容必须是拉取式(call 工具才返回);
+/** :ask_user 答复归一化——路由正常回 string;若上游传对象(选项对象/结构化答复)取可读字段,绝不 [object Object]。 */
+function askAnswerText(answer: unknown): string {
+  if (typeof answer === "string") return answer;
+  if (answer && typeof answer === "object") {
+    const rec = answer as Record<string, unknown>;
+    for (const field of ["text", "label", "answer", "key"] as const) {
+      const v = rec[field];
+      if (typeof v === "string" && v.trim() !== "") return v.trim();
+    }
+    try { const json = JSON.stringify(rec); if (json !== "{}") return json; } catch { /* 循环对象退回空 */ }
+  }
+  return answer === null || answer === undefined ? "" : String(answer);
+}
+
 export function askUserTool(sessionId: string, askUser: { ask: (sid: string, p: { question: string; options?: string[]; context?: string }) => Promise<string | null> }): Tool {
   return {
     name: "ask_user",
@@ -183,7 +197,7 @@ export function askUserTool(sessionId: string, askUser: { ask: (sid: string, p: 
       try {
         const answer = await askUser.ask(sessionId, { question: gate.question, options: gate.options, context: gate.context });
         if (answer === null) return "(用户未答复——按你推断的最合理范围继续,并在汇报开头说明按哪个选项执行)";
-        return "用户答复:" + answer;
+        return "用户答复:" + askAnswerText(answer);
       } catch (err) {
         return "ask_user 失败(" + String(err).slice(0, 120) + ")——按你推断的最合理范围继续,汇报时说明。";
       }

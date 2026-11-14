@@ -290,17 +290,17 @@ function switchView(name) {
  // 双中心:双栏开启时切到 ide = 开/收右栏,不动视图身份(会话流仍是当前视图);
  // 双栏收起时点 IDE 走经典互斥全屏。ideOpen 仍直连此入口,无需单独改。
   if (name === "ide" && dualOpen) { dualToggle(); return; }
- // 指挥台=三栏 IDE(56+280+minmax(420,1fr)+360 叠层),画布安全区(经验证 1600 视口扣浮动托盘+
- // 小地图后仅 ~1070px)装不下——切指挥台一律退经典占满主内容区(与主聊天视图同规格)。superOpen 注释
- // 「画布态先退经典」自 起即此意,此前代码缺失导致卡留在视口外(x=5736)且 1fr 只剩 182px。
-  if ((name === "super" || name === "rsi" || name === "dream" || name === "task") && canvasActive() && window.CanvasShell && CanvasShell.setMode) {
-    try { CanvasShell.setMode("classic"); } catch (e) { console.warn("[super] 指挥台退经典布局失败", e); }
-  }
+ // super 族(指挥台/RSI/做梦/任务)画布态**不再退经典**——改为聚焦 super 卡并整卡缩放入画。
+ // 曾一律退经典(当时卡不聚焦会留在视口外 x=5736、1fr 只剩 182px);现在 focus({zoom:true})
+ // 走 fitInArea(下限 0.7,另有 LOD 出槛兜底),1400px 卡在 ~1070px 安全区也能整卡可读,且 // 「重点画布模式」要 Super 常驻画布。经典模式此分支天然跳过(行为不变)。
   switchViewActivate(name);
   if (!canvasActive()) return;
   const card = CARD_OF_VIEW[name] || name;
   if (!card) return;
-  try { window.CanvasShell.showCard(card); window.CanvasShell.focus(card, { keepView: true }); }
+  try {
+    window.CanvasShell.showCard(card);
+    window.CanvasShell.focus(card, { keepView: true, ...(card === "super" ? { zoom: true } : {}) });
+  }
   catch (e) { console.warn("[canvas] 卡片聚焦失败", card, e); }
 }
 /** 导航态同步(视图名/侧栏点亮/语音键显隐):switchViewActivate 与画布焦点同步共用,避免两处漂移。 */
@@ -444,7 +444,7 @@ function rsiRunOf(s) { var r = s && s.run; return r && typeof r === "object" ? r
 /* ── RSI-SESSION-COST:一次运行花了多少 + 分析了哪些会话 ─────────────────
  数据同源:金额/token 全来自服务端 run.cost / run.analysis(journal + 单价表算出);
  单价缺失(amountCny===null)只写「单价缺失」,**绝不显示 ¥0**。 */
-function rsiTok(n) { var v = Number(n); if (!isFinite(v) || v < 0) v = 0; return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)); }
+function rsiTok(n) { var v = Number(n); if (!isFinite(v) || v < 0) v = 0; return v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)); }
 function rsiMoney(a) { if (a === null || a === undefined) return "单价缺失"; var v = Number(a); if (!isFinite(v)) return "单价缺失"; return "¥" + (v >= 1 ? v.toFixed(2) : v.toFixed(4)); }
 /** 运行头第一行:金额 · 总 token(输入/缓存/输出);缺价时补一段「缺单价段」。 */
 function rsiCostHead(run) {
@@ -467,12 +467,30 @@ function rsiAnalysisHead(run) {
     if (counts[pid] === undefined) { counts[pid] = 0; order.push(pid); }
     counts[pid] += 1;
   }
-  var text = "分析 " + done.length + " 会话";
+  var text = "分析 " + done.length + " 会话" + (done.length === 0 && cands.length > 0 ? "(候选都还没认账)" : "");
   var per = [];
   for (i = 0; i < order.length; i++) per.push(order[i] + " " + counts[order[i]]);
   if (per.length > 0) text += " · " + per.join(" / ");
   text += " · 候选 " + cands.length;
   return '<span class="rsi-run-state" data-run-analysis="1">' + esc(text) + "</span>";
+}
+/* ── 质量契约 v2:一次运行的结果质量(四件套覆盖/浅层/重复/上限)──────
+ 数据同源:服务端 run.quality(assessResultQuality 确定性计算);缺字段=旧数据不显示。
+ 评分高不代表结论对,只代表「主张→证据→影响→建议」结构完整、没有流水账形态。 */
+function rsiQualityHead(run) {
+  var q = run && run.quality;
+  if (!q || typeof q !== "object") return "";
+  var n = Number(q.items) || 0, score = Number(q.score);
+  if (!isFinite(score)) score = 0;
+  var tone = score >= 85 ? "ok" : score >= 60 ? "warn" : "bad";
+  var bits = "质量 " + score + " · 证据 " + (Number(q.evidenced) || 0) + "/" + n +
+    " · 影响 " + (Number(q.impacted) || 0) + " · 建议 " + (Number(q.actionable) || 0);
+  if (Number(q.shallow) > 0) bits += " · 浅层 " + Number(q.shallow);
+  if (Number(q.duplicates) > 0) bits += " · 重复 " + Number(q.duplicates);
+  if (q.overLimit === true) bits += " · 超上限";
+  var issues = Array.isArray(q.issues) ? q.issues : [];
+  var tip = issues.map(function (x) { return String((x && x.note) || ""); }).filter(function (s) { return s !== ""; }).join("\\n");
+  return '<span class="rsi-q rsi-q-' + tone + '" data-run-quality="1"' + (tip ? ' title="' + esc(tip) + '"' : "") + ">" + esc(bits) + "</span>";
 }
 /** 卡片体小块:逐行候选/已分析 sessionId 与项目(全部 esc,无内联 onclick)。 */
 function rsiCostBody(run) {
@@ -498,7 +516,7 @@ function rsiCostBody(run) {
     rows.push('<div class="rsi-cost-row">' + esc(sid) + " " + pid + " · " + mark + "</div>");
   }
   if (rows.length === 0) return '<div class="rsi-items" id="rsiCostLine" data-run-cost="1"><div class="rsi-run-state">本次未涉及会话</div></div>';
-  return '<div class="rsi-items" id="rsiCostLine" data-run-cost="1">' + rows.join("") + "</div>";
+  return '<details class="rsi-cost" id="rsiCostLine" data-run-cost="1"><summary>候选/已分析会话 (' + rows.length + ')</summary><div class="rsi-items">' + rows.join("") + "</div></details>";
 }
 function rsiCut(t, n) { var s = String(t === undefined || t === null ? "" : t); return s.length > n ? s.slice(0, n) + "…" : s; }
 /** 服务端稳定 reason → 人话(未知原样显示,不隐藏错误)。 */
@@ -524,16 +542,34 @@ function rsiMechSend(id, enabled, driver) {
 /** 条目区:未启用=关闭说明;启用且空=引导运行;非空→逐条渲染(可改可删可展开)。 */
 function rsiItemsHtml(sec, mid, enabled) {
   var arr = sec && Array.isArray(sec.items) ? sec.items : [], out = [], i, o, iid, key;
-  if (!enabled) out.push('<div class="rsi-empty">机制已关闭,不再自动运行</div>');
-  if (!arr.length) {
-    if (enabled) out.push('<div class="rsi-empty">暂无结果条目(点「运行」让 agent 产出)</div>');
-    return '<div class="rsi-items">' + out.join("") + "</div>";
-  }
+  var latestRun = sec && sec.run && sec.run.runId ? String(sec.run.runId) : "";
+  var current = [], history = [];
   for (i = 0; i < arr.length; i++) {
     o = arr[i] || {};
+    var rid = o.runId !== undefined && o.runId !== null ? String(o.runId) : "";
+    if (latestRun !== "" && rid !== "" && rid !== latestRun) history.push(o);
+    else current.push(o);
+  }
+  if (!enabled) out.push('<div class="rsi-empty">机制已关闭,不再自动运行</div>');
+  if (!current.length) {
+    if (enabled) {
+      var runDone = sec && sec.run && String(sec.run.status) === "done";
+      out.push('<div class="rsi-empty">' + (runDone ? "最近一次运行完成,但数据源无数据(agent 未产出条目)" : "暂无结果条目(点「运行」让 agent 产出)") + "</div>");
+    }
+  }
+  for (i = 0; i < current.length; i++) {
+    o = current[i] || {};
     iid = o.id !== undefined && o.id !== null ? String(o.id) : "";
     key = mid + "|" + iid;
     out.push(rsiItemHtml(mid, iid, o, key));
+  }
+  if (history.length) {
+    var hrows = [];
+    for (i = 0; i < history.length; i++) {
+      o = history[i] || {};
+      hrows.push('<div class="rsi-item rsi-hist-item rsi-tone-' + rsiTextTone(o.status) + '"><span class="rsi-dot"></span><span class="rsi-item-t">' + esc(String(o.title !== undefined && o.title !== null ? o.title : "(无标题)")) + '</span><span class="rsi-item-sum">' + esc(String(o.summary !== undefined && o.summary !== null ? o.summary : "")) + '</span></div>');
+    }
+    out.push('<details class="rsi-hist"><summary>历史运行结果 (' + history.length + ')</summary><div class="rsi-hist-body">' + hrows.join("") + '</div></details>');
   }
   return '<div class="rsi-items">' + out.join("") + "</div>";
 }
@@ -542,6 +578,9 @@ function rsiItemHtml(mid, iid, o, key) {
   var title = o.title !== undefined && o.title !== null ? String(o.title) : "(无标题)";
   var summary = o.summary !== undefined && o.summary !== null ? String(o.summary) : "";
   var detail = o.detail !== undefined && o.detail !== null ? String(o.detail) : "";
+  var evidence = o.evidence !== undefined && o.evidence !== null ? String(o.evidence) : "";
+  var impact = o.impact !== undefined && o.impact !== null ? String(o.impact) : "";
+  var action = o.action !== undefined && o.action !== null ? String(o.action) : "";
   var tone = rsiTextTone(o.status);
   var src = o.source !== undefined && o.source !== null && o.source !== ""
     ? String(o.source) + (o.at !== undefined && o.at !== null ? " · " + rsiHms(o.at) : "") : "";
@@ -554,15 +593,21 @@ function rsiItemHtml(mid, iid, o, key) {
       '<div class="rsi-form-acts"><button class="rsi-item-act" data-act="save" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">保存</button>' +
       '<button class="rsi-item-act" data-act="cancel" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">取消</button></div></div></div>';
   }
-  var canExp = detail.length > 0, exp = !!(canExp && rsiOpen[key]), arm = rsiArmKey === key;
+  var canExp = detail.length > 0 || evidence.length > 0 || impact.length > 0 || action.length > 0;
+  var exp = !!(canExp && rsiOpen[key]), arm = rsiArmKey === key;
+  var qlines = "";
+  if (evidence.length > 0) qlines += '<div class="rsi-q-line"><b>证据</b><span>' + esc(evidence) + "</span></div>";
+  if (impact.length > 0) qlines += '<div class="rsi-q-line"><b>影响</b><span>' + esc(impact) + "</span></div>";
+  if (action.length > 0) qlines += '<div class="rsi-q-line"><b>建议</b><span>' + esc(action) + "</span></div>";
+  if (detail.length > 0) qlines += '<div class="rsi-q-detail">' + esc(detail) + "</div>";
   return '<div class="rsi-item rsi-tone-' + tone + (exp ? " exp" : "") + (arm ? " rsi-arm" : "") + '" data-item="' + esc(iid) + '" data-mech="' + esc(mid) + '">' +
     '<div class="rsi-item-row"><span class="rsi-dot"></span>' +
-    '<span class="rsi-item-t"' + (canExp ? ' data-act="exp" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '" title="点击' + (exp ? "收起" : "展开") + '详情"' : "") + ">" +
+    '<span class="rsi-item-t"' + (canExp ? ' data-act="exp" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '" title="点击' + (exp ? "收起" : "展开") + '证据/影响/建议"' : "") + ">" +
     esc(title) + (canExp ? '<i class="rsi-item-arrow">⌄</i>' : "") + "</span>" +
     '<span class="rsi-item-sum" title="' + esc(summary + (src ? " · " + src : "")) + '">' + esc(summary || src) + "</span>" +
     '<span class="rsi-item-acts"><button class="rsi-item-act" data-act="edit" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">改</button>' +
     '<button class="rsi-item-act" data-act="del" data-id="' + esc(mid) + '" data-item="' + esc(iid) + '">' + (arm ? "确认删" : "删") + "</button></span></div>" +
-    (canExp ? '<div class="rsi-item-detail">' + esc(detail) + (src ? ' <span class="rsi-code">' + esc(src) + "</span>" : "") + "</div>" : "") + "</div>";
+    (canExp ? '<div class="rsi-item-detail">' + qlines + (src ? ' <span class="rsi-code">' + esc(src) + "</span>" : "") + "</div>" : "") + "</div>";
 }
 /** 卡头右侧控件:开关(aria-pressed)/驱动 select/运行按钮(运行中=disabled + 「运行中…」)。 */
 function rsiCtrlHtml(sid, enabled, drv, running) {
@@ -656,10 +701,85 @@ function rsiOnChange(ev) {
   rsiOpt[mid] = { drv: drv, t: Date.now() }; // 同上:切驱动乐观态留档(rerender 播种时不被旧 payload 打回)
   rsiMechSend(mid, st.en !== false, drv); // 切驱动保留当前开/关
 }
+/* ── RSI-SELF-DRIVE:自动周期条(开关/间隔/下一拍/预算/推一拍)──────────────
+ 数据同源:rsi.status.scheduler(config + runtime + breaker);回包 rsi.scheduler.result
+ 只做 toast + 重拉(status 请求会带回最新 scheduler)。事件全部委托(零内联 onclick)。 */
+function rsiSchedAgo(ts) {
+  var t = Number(ts);
+  if (!isFinite(t) || t <= 0) return "";
+  var d = Date.now() - t, a = Math.abs(d);
+  var txt = a >= 864e5 ? Math.round(a / 864e5) + " 天" : a >= 36e5 ? Math.round(a / 36e5) + " 小时" : Math.round(a / 6e4) + " 分钟";
+  return d >= 0 ? txt + "前" : txt + "后";
+}
+function rsiSchedRender(st) {
+  var bar = $("rsiSchedBar");
+  if (!bar) return;
+  if (!st || typeof st !== "object") { bar.style.display = "none"; return; }
+  var cfg = st.config || {}, rt = st.runtime || {}, br = rt.breaker || {};
+  bar.style.display = "";
+  var on = cfg.enabled === true, paused = br.paused === true;
+  var opts = [[60, "每 1 小时"], [360, "每 6 小时"], [720, "每 12 小时"], [1440, "每 1 天"], [2880, "每 2 天"], [10080, "每 7 天"]];
+  var sel = "";
+  for (var i = 0; i < opts.length; i++) sel += '<option value="' + opts[i][0] + '"' + (Number(cfg.everyMinutes) === opts[i][0] ? " selected" : "") + ">" + opts[i][1] + "</option>";
+  var bits = [];
+  bits.push('<span class="ss-dot' + (on ? (paused ? " warn" : " ok") : "") + '"></span>');
+  bits.push("<b>自动周期</b>");
+  bits.push('<button class="vw-act ss-toggle" data-ssact="toggle" title="打开后按间隔自动串行运行已启用机制(只有空闲才开新周期)">' + (on ? "已开启 · 点关闭" : "已关闭 · 点开启") + "</button>");
+  bits.push('<select class="ss-int" data-ssint="1" title="周期间隔">' + sel + "</select>");
+  if (paused) bits.push('<span class="ss-badge warn" title="' + esc(String(br.reason || "熔断暂停")) + '">熔断暂停' + (br.reason ? " · " + esc(String(br.reason).slice(0, 40)) : "") + "</span>");
+  if (rt.cycle) {
+    var cyc = rt.cycle, done = (cyc.settled || []).length, total = done + (cyc.pending || []).length;
+    bits.push('<span class="ss-meta">周期 ' + esc(String(cyc.index || 1)) + " · " + done + "/" + total + " 机制</span>");
+  } else if (on) {
+    bits.push('<span class="ss-meta">下一拍 ' + (rt.nextRunAt ? esc(rsiSchedAgo(rt.nextRunAt)) : "尽快") + "</span>");
+  }
+  if (rt.lastCycle) {
+    var lc = rt.lastCycle, tok = Number(lc.costTokens) || 0;
+    bits.push('<span class="ss-meta">上轮 ' + (tok >= 1e6 ? (tok / 1e6).toFixed(2) + "M" : Math.round(tok / 1000) + "k") + " tok" +
+      (lc.amountCny === null || lc.amountCny === undefined ? "" : " · ¥" + Number(lc.amountCny).toFixed(4)) +
+      (lc.budgetExceeded ? " · 超预算" : "") +
+      (Number(lc.quotaFactor) > 0 && Number(lc.quotaFactor) < 1 ? " · 降频 x" + Number(lc.quotaFactor) : "") + "</span>");
+  }
+  bits.push('<span class="ss-meta">预算 ' + (Number(cfg.tokenBudgetPerRun) > 0 ? Math.round(Number(cfg.tokenBudgetPerRun) / 1000) + "k/次" : "不限") +
+    " · 周期 " + (Number(cfg.tokenBudgetPerCycle) > 0 ? (Number(cfg.tokenBudgetPerCycle) / 1e6).toFixed(0) + "M" : "不限") +
+    " · 重试 " + (cfg.autoRetry === true ? "开(" + esc(String(cfg.maxRetriesPerRun || 0)) + ")" : "关") +
+    " · ROI " + (cfg.roiGate === true ? "开" : "关") + "</span>");
+  bits.push('<button class="vw-act" data-ssact="run" title="立即推一拍自动周期状态机(到点/空闲/单跑判定照旧)">推一拍</button>');
+  bar.innerHTML = bits.join("");
+  if (!bar.__ssBound) {
+    bar.__ssBound = true;
+    bar.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var act = t.closest("[data-ssact]");
+      if (!act) return;
+      var a = String(act.getAttribute("data-ssact") || "");
+      if (a === "toggle") {
+        var cur = rsiLast && rsiLast.scheduler && rsiLast.scheduler.config ? rsiLast.scheduler.config.enabled === true : false;
+        act.disabled = true;
+ // 回包会让 rsiSchedRender 重建按钮;若回包在重载下迟到/丢失,8s 兜底解锁(不把按钮永久锁死)。
+        setTimeout(function () { try { act.disabled = false; } catch (e) {} }, 8000);
+        wsSafeSend(JSON.stringify({ v: 1, type: "rsi.scheduler.set", enabled: !cur }));
+      } else if (a === "run") {
+        act.disabled = true;
+        setTimeout(function () { try { act.disabled = false; } catch (e) {} }, 8000);
+        wsSafeSend(JSON.stringify({ v: 1, type: "rsi.scheduler.run" }));
+      }
+    });
+    bar.addEventListener("change", function (ev) {
+      var t = ev.target;
+      if (!t || !t.getAttribute || t.getAttribute("data-ssint") !== "1") return;
+      var v = Number(t.value);
+      if (isFinite(v) && v > 0) wsSafeSend(JSON.stringify({ v: 1, type: "rsi.scheduler.set", everyMinutes: v }));
+    });
+  }
+}
 function rsiRender(payload) {
   var head = $("rsiHead"), box = $("rsiCards");
   if (!head || !box) return; // 面板不在场:静默返回(不得抛错)
   rsiBind(box);
+ // 自动周期条:与 12 区同一拍回包(payload.scheduler);旧后端不带=隐藏,不影响既有渲染。
+  rsiSchedRender(payload && (payload.scheduler || (payload.data && payload.data.scheduler)));
  // 全量运行按钮态:任一机制运行中(rsiPending 乐观或 run.status=running)禁用防重入
   var allBtn = $("rsiRunAll");
   if (allBtn) {
@@ -681,25 +801,25 @@ function rsiRender(payload) {
     superHealthRender(); // 无数据同样刷新健康一屏(空态引导,不保留旧数据)
     return;
   }
-  var ok = 0, unavailable = 0, errors = 0, on = 0, kinds = [], merged = [], i, k;
+  var ok = 0, warn = 0, unavailable = 0, errors = 0, on = 0, kinds = [], merged = [], i, k;
   for (i = 0; i < secs.length; i++) {
-    k = rsiStateKind(secs[i]); kinds.push(k);
-    if (k === "ok") ok++; else if (k === "unavailable") unavailable++; else errors++;
+    k = rsiHealthKind(secs[i]); kinds.push(k); // 与健康一屏同一分类(机制自报的 warn/bad 也算关注/异常)
+    if (k === "ok") ok++; else if (k === "idle") unavailable++; else if (k === "warn") warn++; else errors++;
     merged.push(rsiOptMerge(rsiSecId(secs[i]), rsiSecEnabled(secs[i]), rsiSecDriver(secs[i]))); // 乐观态合并(15s TTL):点开关/切驱动后、回包未追上时以本地为准
     if (merged[i].en) on++; // 头部「已启用 x/N」与卡头开关同源(同一份合并结果)
   }
   var when = m.updatedAt !== undefined ? m.updatedAt : m.at;
-  head.innerHTML = "RSI 运行看板 · 更新于 <b>" + esc(rsiHms(when)) + "</b> · 正常 " + ok + " · 未启用 " + unavailable + " · 异常 " + errors + " · 已启用 " + on + "/" + secs.length;
+  head.innerHTML = "RSI 运行看板 · 更新于 <b>" + esc(rsiHms(when)) + "</b> · 正常 " + ok + " · 关注 " + warn + " · 未启用 " + unavailable + " · 异常 " + errors + " · 已启用 " + on + "/" + secs.length;
   var cards = [];
   for (i = 0; i < secs.length; i++) {
     var s = secs[i] || {};
-    var kind = kinds[i], tone = rsiKindTone(kind);
+    var kind = kinds[i], tone = kind === "idle" ? "idle" : kind;
     var sid = rsiSecId(s) || ("sec" + i);
     var enabled = merged[i].en, drv = merged[i].drv;
     rsiUi[sid] = { en: enabled, drv: drv }; // 交互真值播种(下一次回包覆盖)
     var title = s.title !== undefined ? s.title : (s.name !== undefined ? s.name : (s.key !== undefined ? s.key : (s.id !== undefined ? s.id : "分区")));
     var code = s.code !== undefined ? s.code : s.codeText;
-    var badge = kind === "ok" ? "正常" : (kind === "unavailable" ? "未启用" : "异常");
+    var badge = kind === "ok" ? "正常" : kind === "warn" ? "关注" : (kind === "idle" ? "未启用" : "异常");
     var run = rsiRunOf(s), runStatus = run && run.status ? String(run.status) : "";
     var running = runStatus === "running";
     var runQueued = running && run && run.taskState === "queued";
@@ -711,16 +831,20 @@ function rsiRender(payload) {
     if (running) runHead = '<span class="rsi-run-state">' + (runQueued ? "排队中(等空闲槽)" : "运行中") + (run && run.taskId !== undefined && run.taskId !== null ? "(任务 " + esc(String(run.taskId)) + ")" : "") + "</span>";
  // RSI-SESSION-COST:成本行 + 分析行(紧贴运行态,一眼看清这次花了多少、动了哪些会话)。
     runHead += rsiCostHead(run) + rsiAnalysisHead(run);
+ // RSI-SELF-DRIVE:预算超限 / 轨迹候选未认账两条质量门如实上屏(不藏)。
+    if (run && run.budgetExceeded === true) runHead += '<span class="rsi-run-state rsi-run-warn">超预算' + (run.budgetTokens ? "(" + Math.round(Number(run.budgetTokens) / 1000) + "k)" : "") + "</span>";
+    if (run && run.analysisMissing === true) runHead += '<span class="rsi-run-state rsi-run-warn">候选会话未认账</span>';
+    runHead += rsiQualityHead(run); // 质量契约 v2(旧数据无 quality=空串)
     if (runStatus === "done" || runStatus === "failed") {
       var at = run && run.finishedAt !== undefined && run.finishedAt !== null ? run.finishedAt : (run ? run.startedAt : undefined);
       runBody = '<div class="rsi-run-state">上次运行:' + (runStatus === "done" ? "完成" : "失败") + "(" + esc(rsiHms(at)) + ")</div>";
       if (runStatus === "failed" && run && run.error !== undefined && run.error !== null && String(run.error) !== "") runBody += '<div class="rsi-run-err">' + esc(rsiCut(run.error, 160)) + "</div>";
     }
     cards.push('<div class="rsi-card rsi-tone-' + tone + (enabled ? "" : " rsi-card-off") + '" data-mech="' + esc(sid) + '"><div class="rsi-card-h"><span class="rsi-dot"></span>' +
-      esc(title) + '<span class="rsi-badge rsi-badge-' + tone + '">' + badge + "</span>" + rsiCtrlHtml(sid, enabled, drv, running) + runHead + "</div>" +
+      '<span class="rsi-card-title" title="' + esc(String(title)) + '">' + esc(title) + '</span><span class="rsi-badge rsi-badge-' + tone + '">' + badge + "</span>" + rsiCtrlHtml(sid, enabled, drv, running) + runHead + "</div>" +
       (code ? '<div class="rsi-code">' + esc(code) + "</div>" : "") +
       rsiMetricsHtml(s) +
-      (kind === "unavailable" ? '<div class="rsi-hint">未产生数据（运行对应 RSI 任务后自动更新）</div>' : "") +
+      (kind === "idle" ? '<div class="rsi-hint">未产生数据（运行对应 RSI 任务后自动更新）</div>' : "") +
       rsiWarnHtml(s) + runBody + rsiCostBody(run) + rsiItemsHtml(s, sid, enabled) + "</div>");
   }
   box.innerHTML = cards.join("");
@@ -739,6 +863,7 @@ function rsiRender(payload) {
   }
   supIdeSideRender(); // 侧栏做梦机制列表与卡片同源同帧刷新
   superHealthRender(); // 健康一屏与机制卡同一份 payload 同帧刷新
+  supRenderResults(); // 结果流的机制行用它补「几条结果/待关注/最严重发现」
 }
 /* ── RSI-SESSION:固定会话窗(MECH-USER 口径)──────────────────────────────
  所有机制运行都追加到同一个会话 id "rsi";这里内嵌它的实时工作流:
@@ -824,6 +949,253 @@ function rsiChatNoteErr() { /* 会话Chat 退役,错误态由 superViewLoad 的 
  markdown)/toolCallCard(工具合并卡)/toolResultCard(孤儿结果卡)/userSlashHtml(用户气泡)。
  数据=supState.entries(super.history 回放 + super.turn.user/done 广播 + super.dream 做梦卡 +
  task.changed 派发卡)。派发卡=submittedBy:"super" 的任务(排队→运行→完成+摘要,点卡 openSession)。 */
+/* ── Coding Agent 结果流(中栏):任务/做梦/系统通知统一在这里,聊天窗只留人机对话 ─────────
+ 数据:supState.results[];task=task.changed(submittedBy=super)更新同 taskId;dream=super.dream
+ 按 runId 更新;notice=super.notice(历史回放重建)。行可点→任务详情/机制报告。 */
+function supResultMeta(r) {
+  var st = String((r && (r.state || r.phase)) || "").toLowerCase();
+  if (st === "failed") return { label: "失败", cls: "failed" };
+  if (st === "done" || st === "completed") return { label: "完成", cls: "done" };
+  if (st === "running" || st === "start") return { label: "运行中", cls: "running" };
+  if (st === "queued") return { label: "排队", cls: "queued" };
+  if (st === "cancelled" || st === "canceled") return { label: "取消", cls: "queued" };
+  return { label: "通知", cls: "queued" };
+}
+/** 通知文本 → {title,state,summary}:"[系统通知] 任务「X」已完成:正文" 拆成任务名/状态/正文。 */
+function supNoticeParse(text) {
+  var raw = String(text || "");
+  var t = raw.replace(/^\\[系统通知\\]\\s*/, "");
+  var m = t.match(/^任务「([^」]+)」已(完成|失败|取消)[:：]?\\s*([\\s\\S]*)$/);
+  if (m) {
+    return {
+      title: rsiPlainText(m[1], 70),
+      state: m[2] === "完成" ? "done" : m[2] === "失败" ? "failed" : "cancelled",
+      summary: supCleanText(m[3], 140),
+    };
+  }
+  return { title: "", state: "", summary: supCleanText(t, 140) };
+}
+/** 服务端文本 → 人话(去 markdown/表格/围栏 + 英文状态词),按整句截断。 */
+function supCleanText(s, max) { return rsiPlainText(rsiHumanText(String(s === undefined || s === null ? "" : s)), max); }
+/** 机制当前 section(结果摘要从 rsi.status 取,和机制详情同源)。 */
+function supRsiSection(mechId) {
+  var raw = rsiLast && rsiLast.sections !== undefined ? rsiLast.sections : (rsiLast && rsiLast.data ? rsiLast.data.sections : undefined);
+  var secs = Array.isArray(raw) ? raw : [];
+  for (var i = 0; i < secs.length; i++) if (rsiSecId(secs[i]) === String(mechId || "")) return secs[i];
+  return null;
+}
+/** 做梦行的可读结果:按本次 runId 取条目(不用其它轮次冒充),条数 + 待关注数 + 最严重发现。 */
+function supDreamResult(r) {
+  var failed = String(r && r.phase || "") === "failed";
+  var sec = r ? supRsiSection(r.mechanismId) : null;
+  var items = [], i, t;
+  if (sec) {
+    var all = Array.isArray(sec.items) ? sec.items : [];
+    var rid = r && r.runId ? String(r.runId) : "";
+    if (rid) {
+      for (i = 0; i < all.length; i++) {
+        var it0 = all[i] || {};
+        if (it0.runId === undefined || it0.runId === null || String(it0.runId) === rid) items.push(it0);
+      }
+    } else items = all;
+  }
+  var worst = rsiWorstItem(items), watch = 0;
+  for (i = 0; i < items.length; i++) { t = rsiItemTone(items[i]); if (t === "warn" || t === "bad") watch++; }
+  var lead = "";
+  if (failed) lead = "运行失败" + (r.summary ? ":" + supCleanText(r.summary, 90) : "");
+  else if (worst) lead = supCleanText(worst.title, 70) || supCleanText(worst.summary, 70);
+  else if (r && r.summary) lead = supCleanText(r.summary, 100);
+  else lead = "本次运行没有产出结果条目";
+  var sub = "";
+  if (failed) { if (items.length) sub = "中断前已产出 " + items.length + " 条结果,点开看详情"; }
+  else if (worst) { var ss = supCleanText(worst.summary, 110); if (ss && ss !== lead) sub = ss; }
+  return { lead: lead, sub: sub, count: items.length, watch: watch };
+}
+/** 结果时间:今天=HH:MM,更早=MM-DD HH:MM(避免把昨天的 14:04 看成今天)。 */
+function supWhen(ts) {
+  if (!ts) return "";
+  var d = new Date(ts), n = new Date();
+  var p = function (x) { return (x < 10 ? "0" : "") + x; };
+  if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()) return p(d.getHours()) + ":" + p(d.getMinutes());
+  return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function supDreamCardHtml(r) {
+  var meta = supResultMeta(r), info = supDreamResult(r);
+  var when = r.ts ? supWhen(r.ts) : "";
+  var cost = r.cost && typeof r.cost === "object"
+    ? " · " + (r.cost.amountCny === null || r.cost.amountCny === undefined ? "未计价" : "¥" + Number(r.cost.amountCny).toFixed(3)) + " · " + rsiTok(r.cost.totalTokens) + " tok"
+    : "";
+  var chip = info.count ? info.count + " 条结果" + (info.watch ? " · " + info.watch + " 条待关注" : "") : "";
+  var mid = String(r.mechanismId || "");
+  return '<div class="srf-card st-' + meta.cls + '"' + (mid ? ' data-idedetail="dream" data-id="' + supEsc(mid) + '"' : "") + ' title="' + supEsc((info.lead || "机制运行") + (info.sub ? " — " + info.sub : "")) + '">' +
+    '<div class="srf-card-h"><span class="sup-badge ' + meta.cls + '">' + meta.label + '</span>' +
+    '<span class="srf-ct">' + supEsc(supClip(String(r.title || mid || "机制"), 30)) + '</span>' +
+    '<span class="srf-meta">' + supEsc(when + cost) + '</span></div>' +
+    ((chip || info.lead) ? '<div class="srf-cs">' + (chip ? '<span class="srf-chip">' + supEsc(chip) + '</span>' : "") + (info.lead ? '<span class="srf-lead">' + supEsc(info.lead) + '</span>' : "") + '</div>' : "") +
+    (info.sub ? '<div class="srf-cd">' + supEsc(supClip(info.sub, 110)) + '</div>' : "") + '</div>';
+}
+/** 时长文案:毫秒 → 分钟(向下取整);不足 1 分钟或非法值一律「刚刚」(不显示「0 分钟」)。 */
+function supDurText(ms) {
+  var n = Number(ms);
+  if (!(n > 0)) return "刚刚";
+  var m = Math.floor(n / 60000);
+  if (m < 1) return "刚刚";
+  if (m < 60) return m + " 分钟";
+  var h = Math.floor(m / 60), rest = m % 60;
+  return h + " 小时" + (rest ? " " + rest + " 分钟" : "");
+}
+/** 派发任务时间文案:排队/运行=已运行(now-createdAt);终态=用时(updatedAt-createdAt)。
+ * 条目自带 createdAt/updatedAt 优先;历史回放条目缺字段时回退 supState.dispatch 同 taskId(本文件内同源)。 */
+function supTaskElapsedText(r) {
+  var src = (supState.dispatch || {})[String((r && r.taskId) || "")] || {};
+  var st = String((r && r.state) || src.state || "");
+  var created = Number((r && r.createdAt) || src.createdAt || 0);
+  if (!(created > 0)) return "";
+  var d;
+  if (st === "queued" || st === "running") {
+    d = supDurText(Date.now() - created);
+    return d === "刚刚" ? d : "已运行 " + d;
+  }
+  if (st === "done" || st === "failed" || st === "cancelled") {
+    var end = Number((r && r.updatedAt) || src.updatedAt || 0);
+    if (!(end > 0) || end < created) return "";
+    d = supDurText(end - created);
+    return d === "刚刚" ? d : "用时 " + d;
+  }
+  return "";
+}
+function supTaskCardHtml(r) {
+  var meta = supResultMeta(r);
+  var title = supCleanText(r.title, 60) || "任务";
+  var hasNotice = r.noticeText !== undefined && r.noticeText !== null && String(r.noticeText) !== "";
+  var np = hasNotice ? supNoticeParse(String(r.noticeText)) : null; // 通知正文去掉「[系统通知] 任务「…」已完成:」壳
+  var summary = supCleanText(np && np.summary ? np.summary : (hasNotice ? r.noticeText : r.summary), 150);
+  var terminal = r.state === "done" || r.state === "failed" || r.state === "cancelled";
+  var when = terminal && r.updatedAt ? supWhen(r.updatedAt) : (r.ts ? supWhen(r.ts) : ""); // 终态显示任务完成时间,不是重建时刻
+  var metaText = when + (r.projectId ? " · " + r.projectId : "");
+  var dur = supTaskElapsedText(r);
+  var durCls = dur.indexOf("已运行") === 0 ? "run" : "ok";
+  return '<div class="srf-card st-' + meta.cls + '"' + (r.taskId ? ' data-idedetail="task" data-id="' + supEsc(r.taskId) + '"' : "") + ' title="' + supEsc(summary) + '">' +
+    '<div class="srf-card-h"><span class="sup-badge ' + meta.cls + '">' + meta.label + '</span>' +
+    '<span class="srf-ct">' + supEsc(supClip(title, 32)) + '</span>' +
+    (dur ? '<span class="srf-dur ' + durCls + '">' + supEsc(dur) + '</span>' : "") +
+    '<span class="srf-meta">' + supEsc(metaText) + '</span></div>' +
+    '<div class="srf-cs"><span class="srf-chip rel">Super → Coding</span>' + (summary ? '<span class="srf-lead">' + supEsc(summary) + '</span>' : '<span class="srf-lead" style="color:var(--faint)">等待 Coding Agent 回执…</span>') + '</div></div>';
+}
+function supNoticeRowHtml(r) {
+  var p = supNoticeParse(r.summary);
+  var meta = supResultMeta({ state: p.state || r.state || "" });
+  var title = p.title || supCleanText(r.title, 40) || "系统通知";
+  var when = r.ts ? supWhen(r.ts) : "";
+  return '<div class="srf-row"' + (r.taskId ? ' data-idedetail="task" data-id="' + supEsc(r.taskId) + '"' : "") + ' title="' + supEsc(p.summary) + '">' +
+    '<span class="sup-badge ' + meta.cls + '">' + meta.label + '</span>' +
+    '<span class="srf-t">' + supEsc(supClip(title, 26)) + '</span>' +
+    '<span class="srf-s">' + supEsc(p.summary || "无结果摘要") + '</span>' +
+    '<span class="srf-m">' + supEsc(when) + '</span></div>';
+}
+function supRenderResults() {
+  var box = $("superResultFeed");
+  if (!box) return;
+  var all = supState.results || [];
+  if (!all.length) { box.style.display = "none"; box.innerHTML = ""; return; }
+  var dreams = [], tasks = [], others = [], i, r;
+  for (i = 0; i < all.length; i++) {
+    r = all[i] || {};
+    if (r.kind === "dream") dreams.push(r);
+    else if (r.kind === "task") tasks.push(r);
+    else others.push(r);
+  }
+  var byTs = function (a, b) { return (b.ts || 0) - (a.ts || 0); };
+  dreams.sort(byTs); tasks.sort(byTs); others.sort(byTs);
+  var html = ['<div class="srf-h"><span class="srf-ht">结果</span><span class="srf-sub">机制体检与派发任务的产出 · 点一项看详情</span></div>'];
+  if (tasks.length) { // 派发任务优先:用户最关心「Super 交给了 Coding Agent 什么、回执是什么」
+    html.push('<div class="srf-group"><div class="srf-gh">派发任务 <b>' + tasks.length + '</b><span>Super → Coding Agent 的执行与回执</span></div>');
+    for (i = 0; i < tasks.length && i < 8; i++) html.push(supTaskCardHtml(tasks[i]));
+    html.push('</div>');
+  }
+  if (dreams.length) {
+ // 每个机制只显示最近一次运行(历史运行在机制详情里);避免同一机制多轮结果把信息流刷爆
+    var seenMech = Object.create(null), dLatest = [];
+    for (i = 0; i < dreams.length; i++) {
+      var dmid = String(dreams[i].mechanismId || dreams[i].key || ("d" + i));
+      if (!seenMech[dmid]) { seenMech[dmid] = 1; dLatest.push(dreams[i]); }
+    }
+    html.push('<div class="srf-group"><div class="srf-gh">机制体检 <b>' + dLatest.length + '</b><span>每个机制最近一次运行产出了什么' + (dreams.length > dLatest.length ? "(共 " + dreams.length + " 次运行)" : "") + '</span></div>');
+    for (i = 0; i < dLatest.length; i++) html.push(supDreamCardHtml(dLatest[i]));
+    html.push('</div>');
+  }
+  if (others.length) {
+    var shown = Math.min(others.length, 10), rest = others.length - shown;
+    html.push('<details class="srf-other"><summary>其他任务动态 <b>' + others.length + '</b><span>系统里所有任务的完成通知(不影响体检结论)</span></summary>');
+    for (i = 0; i < shown; i++) html.push(supNoticeRowHtml(others[i]));
+    if (rest > 0) html.push('<div class="srf-more">还有 ' + rest + ' 条更早的动态未显示(只列最近 10 条)</div>');
+    html.push('</details>');
+  }
+  box.innerHTML = html.join("");
+  box.style.display = "";
+}
+function pushSuperResult(entry) {
+  if (!entry || !entry.kind) return;
+  var key = String(entry.key || (entry.kind + ":" + (entry.taskId || entry.runId || entry.ts || Date.now())));
+  entry.key = key;
+  entry.ts = entry.ts || Date.now();
+  var arr = supState.results || (supState.results = []);
+ // 任务行出现时吸收同 taskId 的通知行(通知先到也没关系,不产生两行)
+  if (entry.kind === "task" && entry.taskId) {
+    var tid = String(entry.taskId);
+    for (var n = 0; n < arr.length; n++) {
+      if (arr[n].kind === "notice" && String(arr[n].taskId || "") === tid) {
+        if (entry.noticeText === undefined) entry.noticeText = String(arr[n].summary || "");
+        if (entry.noticeAt === undefined) entry.noticeAt = arr[n].noticeAt || arr[n].ts || Date.now();
+        if (supState.dispatch && supState.dispatch[tid]) supState.dispatch[tid].noticeAt = entry.noticeAt;
+        arr.splice(n, 1);
+        break;
+      }
+    }
+  }
+  var idx = -1;
+  for (var i = 0; i < arr.length; i++) if (String(arr[i].key) === key) { idx = i; break; }
+  if (idx >= 0) arr[idx] = Object.assign({}, arr[idx], entry);
+  else arr.unshift(entry);
+  if (arr.length > 60) arr.length = 60;
+  supRenderResults();
+}
+function supSetResults(entries) {
+  var list = Array.isArray(entries) ? entries : [], map = Object.create(null), out = [], i, e;
+  for (i = 0; i < list.length; i++) {
+    e = list[i];
+    if (!e || !e.key) continue;
+    if (map[e.key] !== undefined) out[map[e.key]] = Object.assign({}, out[map[e.key]], e);
+    else { map[e.key] = out.length; out.push(e); }
+  }
+ // 通知→任务合并:同 taskId 的通知只保留正文挂到任务行;RSI 机制任务的通知由「机制体检」行代表(丢弃)。
+  var taskIdx = Object.create(null), noticeIdx = Object.create(null), keep = [];
+  for (i = 0; i < out.length; i++) if (out[i].kind === "task" && out[i].taskId) taskIdx[String(out[i].taskId)] = i;
+  for (i = 0; i < out.length; i++) {
+    e = out[i];
+    if (e.kind === "notice") {
+      var txt = String(e.summary || ""), tid = String(e.taskId || "");
+      if (/\\[RSI\\]/.test(txt)) continue; // 机制运行有 dream 行(含成本/摘要),通知是重复的
+      if (tid && taskIdx[tid] !== undefined) {
+        out[taskIdx[tid]].noticeText = txt;
+        out[taskIdx[tid]].noticeAt = e.ts || Date.now();
+        if (e.state) out[taskIdx[tid]].state = e.state;
+        if (supState.dispatch && supState.dispatch[tid]) supState.dispatch[tid].noticeAt = out[taskIdx[tid]].noticeAt;
+        continue;
+      }
+      if (tid) { // 同一任务的多条通知:后到(时间更新)覆盖先到
+        if (!supState.pendingNoticeAt) supState.pendingNoticeAt = {}; // 任务行还没重建→暂存,rehydrate merge 时补
+        if (!supState.pendingNoticeAt[tid]) supState.pendingNoticeAt[tid] = e.ts || Date.now();
+        if (noticeIdx[tid] !== undefined) { out[noticeIdx[tid]] = e; continue; }
+        noticeIdx[tid] = keep.length;
+      }
+    }
+    keep.push(e);
+  }
+  keep.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  supState.results = keep.slice(0, 60);
+  supRenderResults();
+}
 /** 派发卡:submittedBy=super 的任务(queued/running/终态;点卡跳目标 session)。 */
 function supDispatchCardHtml(t) {
   const st = String(t.state || "?");
@@ -837,22 +1209,6 @@ function supDispatchCardHtml(t) {
     '<div class="sup-dispatch-f">点击打开目标会话 ' + supEsc(t.sessionId || "") +
     (t.id ? ' · <button class="sup-btn" data-idedetail="task" data-id="' + supEsc(t.id) + '">详情→</button>' : "") + "</div></div>";
 }
-/** 做梦卡:super.dream 事件(phase=start 机制标题+runId/done 成本+摘要/failed)。 */
-function supDreamCardHtml(p) {
-  const ph = String(p.phase || "");
-  const cost = p.cost || null;
-  let costLine = "";
-  if (cost && ph !== "start") {
-    const yuan = cost.amountCny === null || cost.amountCny === undefined ? "缺价" : "¥" + Number(cost.amountCny).toFixed(3);
-    costLine = '<div class="sup-dream-cost">' + supEsc(yuan) + " · " + supEsc(String(cost.totalTokens || 0)) + " tokens(入 " + supEsc(String(cost.inputTokens || 0)) + " / 出 " + supEsc(String(cost.outputTokens || 0)) + ")" + (Array.isArray(cost.missing) && cost.missing.length ? " · 缺价段:" + supEsc(cost.missing.join("/")) : "") + "</div>";
-  }
-  const label = ph === "start" ? "做梦开始" : ph === "failed" ? "做梦失败" : "做梦完成";
-  return '<div class="sup-dream ph-' + supEsc(ph) + '"><div class="sup-dream-h">' + label + " · " + supEsc(String(p.title || p.mechanismId || "机制")) +
-    (p.runId ? ' <span class="sup-mono">' + supEsc(String(p.runId).slice(0, 12)) + "</span>" : "") + "</div>" +
-    costLine +
-    (p.summary ? '<div class="sup-sum">' + supEsc(supClip(String(p.summary), 240)) + "</div>" : "") +
-    (ph === "done" && (p.mechanismId || p.title) ? '<div class="sup-dispatch-f"><button class="sup-btn" data-idedetail="dream" data-id="' + supEsc(String(p.mechanismId || p.title || "")) + '">查看报告→</button></div>' : "") + "</div>";
-}
 /** 派发任务实时帧:task.changed/task.submitted 里 submittedBy=super 的任务 → 派发卡(去重按 taskId+state)。 */
 function supTrackDispatch(m) {
   const t = m && m.task;
@@ -861,43 +1217,197 @@ function supTrackDispatch(m) {
   if (!id) return;
   if (!supState.dispatch) supState.dispatch = {};
   const prev = supState.dispatch[id];
-  if (prev && String(prev.state) === String(t.state)) { supState.dispatch[id] = t; return; } // 同态只刷新
-  supState.dispatch[id] = t;
-  supState.entries.push({ kind: "dispatch", task: t, ts: Date.now() });
-  if (supState.entries.length > 400) supState.entries = supState.entries.slice(-400);
-  supRenderChat();
+  const stateNow = String(t.state || "?");
+ // task.changed 只带索引:必须 merge 不能整体替换,否则会把 noticeAt / instruction / result
+ // (super.notice / task.detail.result 先到)冲掉—— 真实协作测试注意。
+  const merged = Object.assign({}, prev || {}, t);
+  if (supState.pendingNoticeAt && supState.pendingNoticeAt[id]) { merged.noticeAt = supState.pendingNoticeAt[id]; delete supState.pendingNoticeAt[id]; }
+  supState.dispatch[id] = merged;
+  if (prev && String(prev.state) === stateNow) { // 同态只刷新(正文/noticeAt 已由 merge 保留)
+    if (superIdeSel.task === id) { const box = $("superMainTask"); if (box) box.innerHTML = superIdeTaskDocHtml(id); }
+    return;
+  }
+  supTaskHistPush(id, stateNow, merged.updatedAt); // 状态轨迹(任务详情时间线)
+ // 索引帧只带列表字段:首次现取正文;终态必须再取一次(运行中那次没有 result)
+  if (!supState.detailAsked) supState.detailAsked = {};
+  const terminalNow = stateNow === "done" || stateNow === "failed" || stateNow === "cancelled";
+  const asked = supState.detailAsked[id];
+  if (!asked || (terminalNow && asked !== stateNow)) {
+    supState.detailAsked[id] = terminalNow ? stateNow : 1;
+    wsSafeSend(JSON.stringify({ v: 1, type: "task.detail.get", taskId: id }));
+  }
+  pushSuperResult({ kind: "task", taskId: id, title: String(merged.title || merged.instruction || "(未命名)"), state: stateNow, summary: String(merged.result || merged.title || merged.instruction || ""), sessionId: String(merged.sessionId || ""), projectId: String(merged.projectId || ""), createdAt: merged.createdAt || 0, updatedAt: merged.updatedAt || 0, ts: Date.now(), key: "task:" + id });
   supIdeSideRender(); // 侧栏任务列表同帧刷新
+  supChatHeadSync(); // 聊天窗头部「派发中 N 个任务」同帧
+  supRunAfterTaskChange(); // 指挥状态条:已委托/已交付(非轮次内)
   if (superIdeSel.task === id) { const box = $("superMainTask"); if (box) box.innerHTML = superIdeTaskDocHtml(id); } // 中栏详情开着=同帧重渲
+}
+/** 消息头:身份+时间(用户右侧,Super 左侧;系统/转接有独立署名)。 */
+function supMsgHead(kind, ts) {
+  var when = ts ? supHhmm(ts) : "";
+  if (kind === "u") return '<div class="sup-msg-h"><span class="sup-who">你</span><span class="sup-time">' + supEsc(when) + "</span></div>";
+  if (kind === "sys") return '<div class="sup-msg-h"><span class="sup-who">系统</span><span class="sup-time">' + supEsc(when) + "</span></div>";
+  if (kind === "relay") return '<div class="sup-msg-h"><span class="sup-who">Coding Agent 提问 · 经 Super 转述</span><span class="sup-time">' + supEsc(when) + "</span></div>";
+  return '<div class="sup-msg-h"><span class="sup-ava">S</span><span class="sup-who">Super Agent</span><span class="sup-time">' + supEsc(when) + "</span></div>";
+}
+/** 任务 id 前缀(8 位)→ 完整 id(派发卡/结果流同源;找不到返回空,文案降级)。 */
+function supFindDispatchByPrefix(p) {
+  var d = supState.dispatch || {}, pre = String(p || "");
+  if (!pre) return "";
+  for (var k in d) if (String(k).indexOf(pre) === 0) return String(k);
+  return "";
+}
+/** 派发关系条:聊天里只报「Super → Coding Agent + 任务号」,结果仍在中栏。 */
+function supRelMarker(c, res) {
+  if (!c || String(c.name || "") !== "spawn_task") return "";
+  var txt = String(res && res.content || "");
+  var m = txt.match(/已派出任务\\s+([0-9a-f]{8})/i);
+  var pre = m ? m[1] : "";
+  var tid = supFindDispatchByPrefix(pre);
+  return '<div class="sup-rel"' + (tid ? ' data-idedetail="task" data-id="' + supEsc(tid) + '"' : "") + ">" +
+    '<span class="sup-rel-node">Super</span><span class="sup-rel-arrow">→</span><span class="sup-rel-node">Coding Agent</span>' +
+    (pre ? '<span class="sup-rel-id">任务 ' + supEsc(pre) + "</span>" : "") +
+    '<span class="sup-rel-note">' + (tid ? "点开看任务与结果 →" : "结果在中栏「派发任务」") + "</span></div>";
+}
+/** Super 轮次流式 live 气泡:与主聊天同款 task-reply/think-card,只更新 #supLiveStream,不整窗重渲。 */
+var supStreamTimer = 0;
+function supStreamSync() {
+  var body = document.getElementById("superChatBody");
+  if (!body) return;
+  var s = supState.stream;
+  var old = document.getElementById("supLiveStream");
+  if (!s || (!s.text && !s.reasoning && !s.tool)) { if (old) old.remove(); return; }
+  var html = "";
+  if (s.reasoning) html += '<details class="think-card" open><summary>思考中…</summary><div class="th-body">' + sketchifyHtml(hl(esc(String(s.reasoning).slice(0, 4000)), "")) + "</div></details>";
+  if (s.tool) html += '<div class="sys-line">调用 ' + esc(String(s.tool)) + " …</div>";
+  if (s.text) html += replyBlockHtml({ kind: "message.agent", sessionId: "super", payload: { text: s.text }, time: Date.now() }, "");
+  if (!html) { if (old) old.remove(); return; }
+  var el = old || document.createElement("div");
+  el.id = "supLiveStream"; el.className = "sup-live";
+  el.innerHTML = html;
+  if (!old) body.appendChild(el);
+  if (body.scrollHeight - body.scrollTop - body.clientHeight < 120) body.scrollTop = body.scrollHeight;
+}
+/** 流式帧(server: streamRelay.push("super", ev)):llm-begin/delta/end + tool-begin/end。 */
+function supOnStream(ev) {
+  var t = String(ev && ev.type || "");
+  if (t === "llm-begin") { supState.stream = { text: "", reasoning: "", tool: "", at: Date.now() }; supRunPhase("研判中", "正在理解指令"); }
+  else {
+    var s = supState.stream || (supState.stream = { text: "", reasoning: "", tool: "", at: Date.now() });
+    if (t === "llm-delta") { if (ev.text) s.text += String(ev.text); if (ev.reasoning) s.reasoning += String(ev.reasoning); }
+    else if (t === "tool-begin") {
+      s.tool = String(ev.name || "");
+      if (supState.run && supState.run.active) {
+        var steps = supState.run.steps || (supState.run.steps = []);
+        steps.push({ name: String(ev.name || ""), verb: supToolVerb(ev.name), done: false });
+        if (steps.length > 4) steps.shift();
+      }
+      supRunPhase(String(ev.name) === "spawn_task" ? "委托中" : "调度中", "正在" + supToolVerb(ev.name));
+    }
+    else if (t === "tool-end") {
+      if (!s.tool || s.tool === String(ev.name || "")) s.tool = "";
+      if (supState.run && Array.isArray(supState.run.steps)) {
+        for (var si = supState.run.steps.length - 1; si >= 0; si--) {
+          if (String(supState.run.steps[si].name || "") === String(ev.name || "") && !supState.run.steps[si].done) { supState.run.steps[si].done = true; break; }
+        }
+      }
+      supRunPhaseAfter(700, "研判中", "工具完成 · 继续研判");
+    }
+    else if (t === "llm-end") { if (ev.text) s.text = String(ev.text); supRunPhase("研判中", "正在撰写回复"); }
+  }
+  if (supStreamTimer) return;
+  supStreamTimer = setTimeout(function () { supStreamTimer = 0; supStreamSync(); }, 80);
+}
+/** 同名连续工具调用聚合卡(sys_provider×4 连通探测不再竖排刷屏)——
+ * 头部=动词 ×N + 各次耗时;展开体= 起逐次全部结果(第 k 次 details,最后一次默认展开)。 */
+function supToolAggCard(name, calls) {
+  const verb = supToolVerb(name).replace(/^调用 /, "");
+  const results = calls.map((c) => supToolResOf(c));
+  const done = results.filter(Boolean).length;
+  const anyErr = results.some((r) => r && toolResIsErr(name, r.content));
+  const durs = results.map((r) => Number((r || {}).durationMs || 0));
+  const total = durs.reduce((a, b) => a + b, 0);
+  const durTxt = total > 0 ? " · " + (total >= 6000 ? fmtDur(total) : total + "ms") : "";
+  const stCls = done < calls.length ? "tc-run" : anyErr ? "tc-err" : "tc-ok";
+  const stTxt = done < calls.length ? "进行中 " + done + "/" + calls.length : anyErr ? "部分失败" : "全部完成";
+  const detK = "tool-agg:" + name + ":" + calls.length;
+  let body = "";
+  for (let i = 0; i < calls.length; i++) {
+    const r = results[i];
+    const inner = r ? toolResultBody(name, calls[i].arguments, r.content, "", null, false) : '<div class="tr-empty">执行中,结果未返回…</div>';
+    body += '<details class="tr-more' + (i === calls.length - 1 ? " agg-last" : "") + '"' + (i === calls.length - 1 ? " open" : "") + '><summary>第 ' + (i + 1) + " 次 · " + durs[i] + "ms</summary>" + inner + "</details>";
+  }
+  if (!body) body = '<div class="tr-empty">执行中,结果未返回…</div>';
+  return '<details class="tool-card" data-det-key="' + supEsc(detK) + '"><summary>' +
+    '<span class="tc-verb" title="' + supEsc(name) + ' ×' + calls.length + '">» ' + supEsc(verb) + " ×" + calls.length + "</span>" +
+    '<span class="tc-args">' + supEsc(durs.join("/")) + "ms</span>" +
+    '<span class="tc-state ' + stCls + '">' + stTxt + durTxt + "</span></summary>" +
+    '<div class="tc-body">' + body + "</div></details>";
 }
 function supRenderChat() {
   const body = document.getElementById("superChatBody");
   if (!body) return;
   const html = [];
   let lastDay = "";
-  for (const t of supState.entries) {
+  const evs = supState.entries;
+  for (let i = 0; i < evs.length; i++) {
+    const t = evs[i];
     if (t.kind === "day") { if (t.text !== lastDay) { html.push('<div class="sup-day">' + supEsc(t.text) + "</div>"); lastDay = t.text; } continue; }
-    if (t.kind === "u") html.push('<div class="user-line"><span class="who">你</span><span class="txt">' + userSlashHtml(String(t.text || ""), "") + "</span></div>");
-    else if (t.kind === "a") {
-      if (t.reasoning && settings.thinking === "on" && settings.mode !== "office") { // 思考卡(主聊天同款,非 office)
-        html.push('<details class="think-card"><summary>思考 · ' + Math.max(1, Math.round(Number(t.llmMs || 0) / 1000)) + 's</summary><div class="th-body">' + sketchifyHtml(hl(esc(String(t.reasoning).slice(0, 4000)), "")) + "</div></details>");
-      }
-      if (t.text) html.push(replyBlockHtml({ kind: "message.agent", sessionId: "super", payload: t, time: t.ts }, "")); // assistant markdown(主聊天同款构造薄壳)
-      if (Array.isArray(t.toolCalls)) {
-        for (const c of t.toolCalls) {
-          const cres = supToolResOf(c);
-          html.push(toolCallCard(c, "", cres, null, null)); // 工具调用+结果合并卡(主聊天同款)
+    if (t.kind === "u") {
+ // 与 coding agent 主聊天同款:用户气泡(你 chip + 正文),无额外角色行
+      html.push('<div class="user-line"><span class="who">你</span><span class="txt">' + userSlashHtml(String(t.text || ""), "") + "</span></div>");
+    } else if (t.kind === "a") {
+ // 同一轮可能有多条 assistant 事件(工具轮 + 终稿):合成一个回合,但渲染与主聊天一致(无角色头)
+      const group = [t];
+      while (i + 1 < evs.length && evs[i + 1] && evs[i + 1].kind === "a") { group.push(evs[i + 1]); i++; }
+      for (const m of group) {
+        if (m.reasoning && settings.thinking === "on" && settings.mode !== "office") { // 思考卡(主聊天同款,非 office)
+          html.push('<details class="think-card"><summary>思考 · ' + Math.max(1, Math.round(Number(m.llmMs || 0) / 1000)) + 's</summary><div class="th-body">' + sketchifyHtml(hl(esc(String(m.reasoning).slice(0, 4000)), "")) + "</div></details>");
         }
+        if (Array.isArray(m.toolCalls) && m.toolCalls.length) {
+ // 同名连续调用聚合(≥2 张合并为一张 ×N 卡);spawn_task 不聚合(每次派发都是独立关系条)
+          const runs = [];
+          for (const c of m.toolCalls) {
+            const nm = String((c || {}).name || "");
+            const prev = runs[runs.length - 1];
+            if (prev && prev.name === nm && nm !== "spawn_task") prev.calls.push(c);
+            else runs.push({ name: nm, calls: [c] });
+          }
+          for (const run of runs) {
+            if (run.calls.length > 1) { html.push(supToolAggCard(run.name, run.calls)); continue; }
+            const c = run.calls[0];
+            const cres = supToolResOf(c);
+            html.push(toolCallCard(c, "", cres, null, null)); // 工具调用+结果合并卡(主聊天同款)
+            const rel = supRelMarker(c, cres); // spawn_task → Super→Coding Agent 关系条(不搬结果)
+            if (rel) html.push(rel);
+          }
+        }
+        if (m.text) html.push(replyBlockHtml({ kind: "message.agent", sessionId: "super", payload: m, time: m.ts }, "")); // assistant markdown(主聊天同款)
       }
-    } else if (t.kind === "sys") html.push('<div class="sys-line">' + sketchifyHtml(esc(String(t.text || ""))) + "</div>");
-    else if (t.kind === "relay") html.push('<div class="sup-bub sys">' + supEsc(supClip(String(t.text || ""), 400)) + '<div class="sup-mono" style="margin-top:3px">在右侧「待你处理」回答;口头答复也可以直接发给我</div></div>');
-    else if (t.kind === "dream") html.push(supDreamCardHtml(t.payload || {}));
-    else if (t.kind === "dispatch") html.push(supDispatchCardHtml(t.task || {}));
+    } else if (t.kind === "sys") {
+      const sysText = String(t.text || "");
+      const sysLong = sysText.length > 160; // 长系统通知默认折叠,避免刷屏挤掉真正的对话
+      html.push('<div class="sys-line' + (sysLong ? " sys-long" : "") + '"' + (sysLong ? ' title="点击展开/收起"' : "") + ">" + sketchifyHtml(esc(sysText)) + "</div>");
+    }
+    else if (t.kind === "relay") html.push('<div class="sup-bub sys">' + supEsc(supClip(String(t.text || ""), 400)) + '<div class="sup-mono" style="margin-top:3px">在下方直接回复,或点聊天头顶部「待你处理」;口头答复也可以直接发给我</div></div>');
   }
-  if (supState.waiting) html.push('<div class="sup-wait" id="supWait">思考中…(调度轮可能含多次工具调用)</div>');
-  if (!html.length) html.push('<div class="sup-empty">还没有对话。直接对我说:查任务状态、派任务、或安排一次跨项目联调。<br>示例:<b>现在系统里有哪些活跃任务?</b> · <b>帮我派一个任务去修 gateway 的构建</b> · <b>各项目最近运行情况汇总一下</b><br>会话持久保存(super 固定会话),刷新/重启不丢;派出的任务会以派发卡在流内跟踪。</div>');
+  if (supState.waiting) html.push('<div class="sup-wait" id="supWait">Super 正在思考…(调度轮可能含多次工具调用)</div>');
+  if (!html.length) html.push('<div class="sup-empty">还没有对话。直接对我说:查任务状态、派任务、或安排一次跨项目联调。<br>派出的任务会在中栏「派发任务」跟踪,完成/失败会回执到这里和结果流。示例:<div class="sup-quick"><button data-supquick="现在系统里有哪些活跃任务?">查活跃任务</button><button data-supquick="简单汇报一下最近 12 小时的机制体检结果">今日体检</button><button data-supquick="帮我派一个任务:">派任务</button></div></div>');
   const wasBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60; // 粘底跟随(主聊天同款 60px 容差)
   body.innerHTML = html.join("");
-  if (wasBottom) body.scrollTop = body.scrollHeight;
+  if (supState.revealReplyTop) {
+ // 终稿定位——回复比窗高时翻到**回复开头**(结论在头上;流式期仍钉底跟随),
+ // 画布卡/经典窗通用;比视口矮时维持钉底(全可见,不用跳)。
+    supState.revealReplyTop = false;
+    const r = body.querySelectorAll(".task-reply");
+    const last = r.length ? r[r.length - 1] : null;
+    if (last && last.offsetHeight > body.clientHeight - 40) body.scrollTop = last.offsetTop - 8;
+    else body.scrollTop = body.scrollHeight;
+  } else if (wasBottom) body.scrollTop = body.scrollHeight;
+  supStreamSync(); // 整窗重渲后保留/重建流式 live 气泡
+  supChatHeadSync(); // 头部状态:空闲/思考中/等你回答/派发中
+  var latest = document.getElementById("superChatLatest");
+  if (latest) latest.classList.toggle("on", !wasBottom && body.scrollHeight - body.clientHeight > 80);
 }
 /** 工具结果预扫(主聊天 fixH12 同语义):supHist 里找 toolCallId 对应结果,调用点即见结果。 */
 function supToolResOf(c) {
@@ -1003,7 +1513,7 @@ function tickWorkTimer() {
   el.style.display = "";
   el.textContent = "计时 " + fmtDur(Date.now() - mine.startedAt);
 }
-setInterval(() => { tickWorkTimer(); ctxPillRender(); }, 500);
+setInterval(() => { tickWorkTimer(); ctxPillRender(); try { supCtxPillRender(); } catch (e) {} }, 500); // super 上下文 pill 同心跳
 // ---- 权限模式/思考力度 pill(ZCode 输入区双下拉对齐;点击循环,cfg.set 热生效) ----
 const PERM_MODES = [
   { v: "ask", label: "询问每次" },

@@ -739,7 +739,7 @@ document.addEventListener("click", (e) => {
   let last = null;
   let lastActionText = "下载更新";
   function shortNotes(s) {
-    return String(s || "").replace(/\s+/g, " ").trim().slice(0, 90);
+    return String(s || "").replace(/\\s+/g, " ").trim().slice(0, 90);
   }
   function setVisible(t, visible) {
     if (t.floating) t.bar.classList.toggle("on", visible);

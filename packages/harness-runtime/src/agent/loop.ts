@@ -375,6 +375,10 @@ export interface SystemSectionRef {
 export interface AgentLoopOptions {
   journal: Journal;
   sessionId: string;
+ /** RSI 机制隔离:true=每轮从最后一条 user 消息(当前任务指令)起重建上下文,
+ * 不重放同会话里此前任务的对话。固定会话里连续跑多个独立审计任务时必须开启;
+ * 缺省/false=旧行为(整会话回放)逐字节不变。 */
+  freshContext?: boolean;
   system: string;
   llm: LlmProvider;
   tools?: Tool[];
@@ -840,8 +844,15 @@ function sessionTruncateRanges(journal: Journal, sessionId: string): TruncateRan
   return ranges;
 }
 
-/** 从 journal 重建消息列表(deriveMessages)。 */
-export function deriveMessages(journal: Journal, sessionId: string, opts?: { currentModel?: string }): Message[] {
+/** 从 journal 重建消息列表(deriveMessages)。
+ * `freshFromLastUser=true`( RSI 机制隔离):只从**最后一条 user 消息**开始重建。
+ * 固定会话 rsi 里连续跑 12 个机制时,每个机制任务都会重放前面 11 个机制的完整对话,
+ * 导致上下文膨胀(单任务 2-3M token)且旧结论污染新机制;RSI 审计任务需要每轮全新区间。 */
+export function deriveMessages(
+  journal: Journal,
+  sessionId: string,
+  opts?: { currentModel?: string; freshFromLastUser?: boolean },
+): Message[] {
   const out: Message[] = [];
  // 音频回放收敛:journal 全量落音频,但 derive 只保留**最新一条**带音频的 user 消息——
   // 历史轮的音频降级为其文本占位(语音轮的占位即「(语音输入)」),防多轮后全量回放请求被 b64 撑爆。
@@ -866,8 +877,27 @@ export function deriveMessages(journal: Journal, sessionId: string, opts?: { cur
   const truncateRanges = sessionTruncateRanges(journal, sessionId);
  //  冷恢复过滤:被 stream.attempt.discarded 作废的 attemptId 的 message.agent 不进上下文;
   // 已提交的 tool.result 原样保留;无作废标记时 filterDiscarded 原样返回(未作废会话逐字节不变)。
-  for (const e of filterDiscarded(journal.readAll())) {
+  const all = filterDiscarded(journal.readAll());
+ // RSI 机制隔离:定位本会话最后一条 user 消息在**数组里的位置**,后续只从它开始重建。
+ // 不用 seq 过滤:session-worker 的 ProxyJournal 本地 append 用「副本下标」当 seq,而种子事件
+ // 保留 gateway seq(两套 seq 不可比),按 seq 过滤会把旧消息全部放回来(经验证 619 条全量回放)。
+ // 取最后一条而不是第一条:当前任务指令由 executor 在起飞前 append,是最后一条 user;
+ // 任务中途的 [转向] 也是 user(语义上仍属同一任务,应保留)。
+  let fromIndex = 0;
+  if (opts?.freshFromLastUser === true) {
+    for (let i = all.length - 1; i >= 0; i -= 1) {
+      const ev = all[i]!;
+      if (ev.sessionId !== sessionId) continue;
+      if (ev.kind === "message.user") {
+        fromIndex = i;
+        break;
+      }
+    }
+  }
+  for (let idx = 0; idx < all.length; idx += 1) {
+    const e = all[idx]!;
     if (e.sessionId !== sessionId) continue;
+    if (fromIndex > 0 && idx < fromIndex) continue;
  // truncate 只作用于消息类事件:观测/审计事件(turn.start/step.start/custom…)照常进流,
  // 否则 currentTurn/currentStep 的推演会断裂,vision/压缩口径跟着变。
     if (truncateRanges.length > 0
@@ -1798,9 +1828,10 @@ export class AgentLoop {
         const llmModelVendor = this.opts.llm as { model?: string; modelName?: string };
         const modelForDerive = llmModelVendor.modelName ?? llmModelVendor.model;
  // provider 无模型名(=undefined)时不传:deriveMessages 走旧行为,逐字不变。
+        const freshFromLastUser = this.opts.freshContext === true;
         const derived = modelForDerive !== undefined
-          ? deriveMessages(journal, sessionId, { currentModel: modelForDerive })
-          : deriveMessages(journal, sessionId);
+          ? deriveMessages(journal, sessionId, { currentModel: modelForDerive, freshFromLastUser })
+          : deriveMessages(journal, sessionId, { freshFromLastUser });
  // 大结果闸门:chunk 相关性判断需要一个「当前任务目标」,与 model-scoring 同口径
         // (去掉纪律卡、跳过 [系统提醒]);每步刷新,execOne 里直接用。
         this.stepGoal = goalFromMessages(derived);
@@ -2400,7 +2431,7 @@ export class AgentLoop {
               }
  // 重取 deriveMessages(压缩可能已写 compact.done 边界)并用同一 step 重放一次;
  // system 头沿用本步已定案的 node0(重放请求必须与压缩前同一 request,不能丢系统提示)。
-              const replayDerived = deriveMessages(journal, sessionId, { currentModel: modelAtStart });
+              const replayDerived = deriveMessages(journal, sessionId, { currentModel: modelAtStart, freshFromLastUser: this.opts.freshContext === true });
               const replaySystem = messages[0]?.role === "system"
                 ? messages[0]
                 : { role: "system" as const, content: this.opts.system };

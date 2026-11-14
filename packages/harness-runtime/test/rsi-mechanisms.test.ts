@@ -138,9 +138,9 @@ describe("buildAgentBrief", () => {
   it("含 resultPath 与逐字 schema 关键字", () => {
     expect(brief).toContain("resultPath");
     expect(brief).toContain(`${ROOT}/.genie/rsi/agent-runs/negativeKb/run_1.result.json`);
-    expect(brief).toContain('{"items":[{"id":"kebab-id","title":"≤30字","summary":"≤200字","detail":"可选","status":"ok|warn|bad|info"}]}');
+    expect(brief).toContain('{"items":[{"id":"kebab-id","title":"≤30字主张","summary":"≤200字结论+为什么重要","evidence":"file:line 或 字段=值","impact":"不处理的后果","action":"最小可执行动作","status":"ok|warn|bad|info"}]}');
     expect(brief).toContain("schema");
-    expect(brief).toContain("1~20");
+    expect(brief).toContain("1~6");
     expect(brief).toContain('{"items":[]}');
   });
 
@@ -170,5 +170,69 @@ describe("buildAgentBrief", () => {
     expect(text).toContain("does-not-exist");
     expect(text).toContain("nightly");
     expect(text.split("\n").length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("2026-11-13 RSI-SELF-DRIVE:分析职责与预算小节", () => {
+  it("12 条 spec 都声明 analyzesSessions;轨迹类=true,台账类=false", () => {
+    for (const id of RSI_MECHANISM_IDS) {
+      expect(typeof RSI_MECHANISMS[id].analyzesSessions, id).toBe("boolean");
+    }
+    for (const id of ["nightly", "tools", "negativeKb", "pathology"] as const) {
+      expect(RSI_MECHANISMS[id].analyzesSessions, id).toBe(true);
+    }
+    for (const id of ["evidence", "experiments", "cost", "injection", "changeRequests", "cohort", "prompts", "atlas"] as const) {
+      expect(RSI_MECHANISMS[id].analyzesSessions, id).toBe(false);
+    }
+  });
+
+  it("传 budgetTokens 才插预算小节;不传/非法值旧行为逐字不变", () => {
+    const base = { id: "cost", root: ROOT, resultPath: "/tmp/x.json" };
+    const withBudget = buildAgentBrief({ ...base, budgetTokens: 250000 });
+    expect(withBudget).toContain("本次运行预算");
+    expect(withBudget).toContain("250000");
+    const without = buildAgentBrief(base);
+    expect(without).not.toContain("本次运行预算");
+    const bogus = buildAgentBrief({ ...base, budgetTokens: 0 });
+    expect(bogus).not.toContain("本次运行预算");
+  });
+
+  it("experimentQuotaFactor 只进 experiments 机制 brief(0<f<1 才插)", () => {
+    const base = { root: ROOT, resultPath: "/tmp/x.json" };
+    const brief = buildAgentBrief({ ...base, id: "experiments", experimentQuotaFactor: 0.5 });
+    expect(brief).toContain("实验配额(ROI 降频生效中)");
+    expect(brief).toContain("x0.5");
+    expect(brief).toContain("不许静默丢弃");
+ // 其它机制不插
+    const costBrief = buildAgentBrief({ ...base, id: "cost", experimentQuotaFactor: 0.5 });
+    expect(costBrief).not.toContain("实验配额");
+ // 因子 >=1 / 非法 → 不插(旧行为)
+    expect(buildAgentBrief({ ...base, id: "experiments", experimentQuotaFactor: 1 })).not.toContain("实验配额");
+    expect(buildAgentBrief({ ...base, id: "experiments" })).not.toContain("实验配额");
+  });
+
+  it("分析小节给出「每个读过的会话至少 1 条条目」硬规则", () => {
+    const brief = buildAgentBrief({
+      id: "nightly",
+      root: ROOT,
+      resultPath: "/tmp/x.json",
+      analysis: { windowDays: 3, candidates: [{ sessionId: "web-1", projectId: "__harness__" }] },
+    });
+    expect(brief).toContain("已分析会话:");
+    expect(brief).toContain("每个真正读过的候选会话至少贡献 1 条结果条目");
+    expect(brief).toContain("web-1");
+  });
+});
+
+describe("2026-11-13 质量契约 v2:brief 四件套与条数上限", () => {
+  it("brief 含 1~6 条上限、四件套字段与禁流水账规则", () => {
+    const brief = buildAgentBrief({ id: "nightly", root: ROOT, resultPath: "/tmp/q.json" });
+    expect(brief).toContain("1~6");
+    expect(brief).toContain("结果质量");
+    expect(brief).toContain("主张 → 证据 → 影响 → 建议");
+    expect(brief).toContain('"evidence"');
+    expect(brief).toContain('"impact"');
+    expect(brief).toContain('"action"');
+    expect(brief).toContain("禁止流水账");
   });
 });

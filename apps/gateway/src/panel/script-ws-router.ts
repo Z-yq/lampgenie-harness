@@ -88,6 +88,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // (增量路径 task.changed 不会让会话消失),且草稿态(currentSid=null)不触发。
     const sidGone = !!currentSid && !(m.tasks || []).some((t) => t.sessionId === currentSid);
     tasks.clear(); for (const [k, v] of next) tasks.set(k, v);
+ // 延到当前脚本初始化完成后再重建(supState/函数在 submit 分片,同步期可能未就位);每帧只跑一次
+    try { setTimeout(function () { try { supRehydrateDispatch(); } catch (e) { /* 派发区重建失败不影响主链 */ } }, 0); } catch (e) {}
     if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 看板重渲失败不影响主链 */ } } // 指挥台看板吃 task.list 全量
     if (sidGone) { newDraft(); return; }
     render(touched);
@@ -99,6 +101,7 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     if (m.task) {
       taskBodyIds.add(m.taskId);
       tasks.set(m.taskId, Object.assign({}, tasks.get(m.taskId) || {}, m.task));
+      try { supOnTaskDetail(m.taskId, m.task); } catch (e) { /* Super 面板不在场/异常不影响主链 */ }
       render();
       if (m.task.sessionId === currentSid) renderHistory();
     }
@@ -541,6 +544,7 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
       compactSetPending(false);
       if (m.phase === "failed") toast("上下文压缩失败:" + (m.reason || "未知"), true);
       else if (m.phase === "skipped") toast("上下文已是最新,无需压缩");
+      if (m.sessionId === "super") supCompactDone(); // Super 会话压缩终态(按钮解锁+实测刷新+历史重放)
       if (m.sessionId === currentSid) {
         refreshHist();
  // 完成=重发 trace.stats(与 result 分支同口径,刷新容量%/上下文条)
@@ -566,6 +570,7 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
         wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: currentSid }));
       }
     } else toast("未压缩:" + (m.reason || "未知"), true);
+    if (m.sessionId === "super") supCompactDone(); // Super 会话压缩回执
     return;
   }
   if (m.type === "team.status.result") { lastTeamOrgs = m.orgs || []; lastProjectTeam = m.projectTeam || null; lastProjectTeams = m.projectTeams || null; lastTeamaiRaw = m.teamai || null; renderTeam(lastTeamOrgs, lastProjectTeam, lastProjectTeams); return; }
@@ -730,6 +735,17 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   if (m.type === "rsi.item.result") {
     if (m.ok === false) toast("条目操作失败:" + (m.reason ? rsiReasonText(m.reason) : "未知原因"), true);
     else { rsiEditKey = ""; rsiArmKey = ""; clearTimeout(rsiArmTimer); }
+    rsiStatusPull();
+    return;
+  }
+ // ── RSI 自动周期回包( RSI-SELF-DRIVE):配置/推一拍的结论即时上条,再拉一拍 status ──
+  if (m.type === "rsi.scheduler.result") {
+    if (m.ok === false) toast("调度设置失败:" + (m.reason ? rsiReasonText(m.reason) : "未知原因"), true);
+    else if (m.action) {
+      var ssAct = { started: "已派发", retried: "已重试中断运行", running: "有运行中,等待", busy: "在线繁忙,让路", "not-due": "未到点", "cycle-done": "周期完成", "cycle-budget-stop": "超预算,本周期提前收口", "cycle-empty": "无可用机制", settling: "等待运行结账", disabled: "自动周期未开启", "breaker-paused": "熔断暂停中" };
+      toast("自动周期:" + (ssAct[m.action] || String(m.action)) + (m.mechanismId ? " · " + String(m.mechanismId) : ""));
+    } else toast(m.breakerResumed === true ? "已恢复熔断;自动周期配置已保存" : "自动周期配置已保存");
+    if (m.state) { try { rsiSchedRender(m.state); } catch (e) { /* 渲染失败等下一次轮询 */ } }
     rsiStatusPull();
     return;
   }

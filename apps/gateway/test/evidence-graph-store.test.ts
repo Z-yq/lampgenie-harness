@@ -14,6 +14,8 @@ import {
   correctEvidence,
   evidenceGraphPath,
   history,
+  linkEvidence,
+  linksOf,
   loadEvidenceGraph,
   markAuthoritative,
   queryEvidence,
@@ -299,5 +301,64 @@ describe("evidence-graph-store", () => {
     const applied = rescoreForModelVersion(root, "m2", { apply: true });
     expect(applied).toMatchObject({ ok: true, rescored: [], preview: false });
     expect(await lineCount(root)).toBe(before);
+  });
+
+  it("linkEvidence:边落行、投影回放、邻接查询、重复幂等", async () => {
+    const root = await tmpRoot();
+    const a = addEvidence(root, fact("结论 A")).id!;
+    const b = addEvidence(root, fact("结论 B")).id!;
+    const res = linkEvidence(root, { from: a, to: b, type: "supports", note: "同模块同因", at: T1 });
+    expect(res.ok).toBe(true);
+    expect(res.link).toMatchObject({ from: a, to: b, type: "supports", at: T1, note: "同模块同因" });
+
+    const raw = await readFile(evidenceGraphPath(root), "utf8");
+    const last = JSON.parse(raw.trim().split("\n").at(-1)!) as Record<string, unknown>;
+    expect(last).toMatchObject({ v: 1, type: "link", at: T1 });
+
+ // 重复同 (from,to,type) → DUPLICATE,不再落行
+    const before = await lineCount(root);
+    const dup = linkEvidence(root, { from: a, to: b, type: "supports" });
+    expect(dup.ok).toBe(false);
+    expect(dup.code).toBe("EVIDENCE_DUPLICATE");
+    expect(await lineCount(root)).toBe(before);
+
+ // 投影:graph.links 有边;邻接查询出边/入边各就位
+    const projection = loadEvidenceGraph(root);
+    expect(projection.graph.links?.length).toBe(1);
+    expect(linksOf(root, a).outgoing.map((l) => l.type)).toEqual(["supports"]);
+    expect(linksOf(root, b).incoming.map((l) => l.from)).toEqual([a]);
+    expect(linksOf(root, "ev-nonexistent")).toEqual({ outgoing: [], incoming: [] });
+  });
+
+  it("linkEvidence:端点缺失/自环/非法 type → 稳定码,不落行", async () => {
+    const root = await tmpRoot();
+    const a = addEvidence(root, fact("孤立结论")).id!;
+    expect(linkEvidence(root, { from: a, to: "ev-missing", type: "supports" })).toMatchObject({
+      ok: false,
+      code: "EVIDENCE_NOT_FOUND",
+    });
+    expect(linkEvidence(root, { from: a, to: a, type: "supports" })).toMatchObject({
+      ok: false,
+      code: "EVIDENCE_INVALID_INPUT",
+    });
+    expect(linkEvidence(root, { from: a, to: a, type: "no-such-type" as never })).toMatchObject({
+      ok: false,
+      code: "EVIDENCE_INVALID_INPUT",
+    });
+  });
+
+  it("link 行坏行容忍 + 悬空边入 report.danglingLinks", async () => {
+    const root = await tmpRoot();
+    const a = addEvidence(root, fact("有节点")).id!;
+ // 手工追加一条指向不存在节点的 link 行(绕过写入校验,模拟坏上游)
+    await writeFile(evidenceGraphPath(root), JSON.stringify({ v: 1, type: "link", at: T1, link: { from: a, to: "ev-gone", type: "supports", at: T1 } }) + "\n", { flag: "a", encoding: "utf8" });
+ // 坏 link 行(缺 type)
+    await writeFile(evidenceGraphPath(root), JSON.stringify({ v: 1, type: "link", at: T1, link: { from: a, to: a, at: T1 } }) + "\n", { flag: "a", encoding: "utf8" });
+    const projection = loadEvidenceGraph(root);
+    expect(projection.parseErrors).toBe(1); // 缺 type 的行被跳过;悬空但形状合法的行进投影
+    const report = reportEvidence(root);
+    expect(report.links).toBe(1);
+    expect(report.linksByType).toEqual({ supports: 1 });
+    expect(report.danglingLinks).toBe(1);
   });
 });

@@ -199,3 +199,77 @@ describe("接线薄包装(假 askUser)", () => {
     expect(guardRouteNote("批准:资源够用").blocked).toBeUndefined();
   });
 });
+
+describe("2026-11-13 ask_user 对象选项归一化", () => {
+  it("normalizeAskOption:字符串/对象(text/label/title/key)/JSON 兜底", async () => {
+    const { normalizeAskOption } = await import("../src/agent/attention-budget");
+    expect(normalizeAskOption(" A ")).toBe("A");
+    expect(normalizeAskOption({ key: "a", text: "方案 A" })).toBe("方案 A");
+    expect(normalizeAskOption({ key: "b", label: "方案 B" })).toBe("方案 B");
+    expect(normalizeAskOption({ key: "c", title: "方案 C" })).toBe("方案 C");
+    expect(normalizeAskOption({ key: "d" })).toBe("d");
+    expect(normalizeAskOption({ x: 1 })).toBe('{"x":1}');
+    expect(normalizeAskOption(null)).toBe("");
+    expect(normalizeAskOption(42)).toBe("42");
+  });
+
+  it("guardAskUserPayload:对象选项不再产生 [object Object]", async () => {
+    const { guardAskUserPayload } = await import("../src/agent/attention-budget");
+    const r = guardAskUserPayload({
+      question: "选哪个方案?",
+      options: [{ key: "a", text: "方案 A" }, { key: "b", text: "方案 B" }] as unknown as string[],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.options).toEqual(["方案 A", "方案 B"]);
+      expect(r.options?.join(" ")).not.toContain("[object Object]");
+    }
+  });
+
+  it("guardAskUserPayload:超长问题优雅降级(不拦任务,原文全文进 context)", async () => {
+    const { guardAskUserPayload, ASK_WORD_LIMIT } = await import("../src/agent/attention-budget");
+    const longBody = cjk(400); // 400 词问题(远超 120 词限)
+    const r = guardAskUserPayload({
+      question: longBody + "选哪个方案?",
+      options: ["按完整推断范围做", "只做字面举例"],
+      context: "原始背景一段",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.truncated).toBe(true);
+      expect(r.question.endsWith("(超长已截断,全文见背景)")).toBe(true);
+      expect(r.question.includes("选哪个方案")).toBe(false); // 截断在预算内,超出部分不进问题
+ // 完整原文进了 context(用户能看到全貌),并保留原 context
+      expect(r.context?.startsWith(longBody)).toBe(true);
+      expect(r.context?.includes("原始背景一段")).toBe(true);
+ // 降级后整体仍在词限内
+      const words = countWords([r.question, ...(r.options ?? [])].join("\n"));
+      expect(words).toBeLessThanOrEqual(ASK_WORD_LIMIT + 2);
+    }
+  });
+
+  it("guardAskUserPayload:超长 context 截到字符帽,不因长度拒收", async () => {
+    const { guardAskUserPayload, ASK_CONTEXT_CHAR_LIMIT } = await import("../src/agent/attention-budget");
+    const r = guardAskUserPayload({
+      question: "选哪个方案?",
+      options: ["方案 A", "方案 B"],
+      context: cjk(5000),
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.truncated).toBeUndefined(); // 问题没超限,不算截断降级
+      expect(r.context?.length).toBeLessThanOrEqual(ASK_CONTEXT_CHAR_LIMIT);
+      expect(r.context?.endsWith("…")).toBe(true);
+    }
+  });
+
+  it("guardAskUserPayload:options 自身超词限仍拒收(截选项会改语义)", async () => {
+    const { guardAskUserPayload } = await import("../src/agent/attention-budget");
+    const r = guardAskUserPayload({
+      question: "选哪个方案?",
+      options: [cjk(80), cjk(80)],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("OUTBOUND_TOO_LONG");
+  });
+});

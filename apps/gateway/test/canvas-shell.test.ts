@@ -48,6 +48,7 @@ function loadGeom() {
     normRect: (r: Record<string, number>) => { x: number; y: number; w: number; h: number };
     normSavedCard?: (sc: Record<string, unknown> | null | undefined, def?: { x: number; y: number; w: number; h: number }) => { x: number; y: number; w: number; h: number };
     seedMissing?: (savedNames: Record<string, unknown> | null, defLayout: Record<string, { x: number; y: number; w: number; h: number }>, chatG: { x: number; y: number; w: number; h: number } | null) => Array<{ n: string; x: number; y: number; w: number; h: number }> | null;
+    viewCenterIn?: (r: { x: number; y: number; w: number; h: number }, area: { x: number; y: number; w: number; h: number }, s: number) => { x: number; y: number; s: number };
     zoomAround: (v: { x: number; y: number; s: number }, px: number, py: number, f: number) => { x: number; y: number; s: number };
     boundsOf: (l: Array<{ x: number; y: number; w: number; h: number }>) => { x: number; y: number; w: number; h: number };
     fitView: (r: { x: number; y: number; w: number; h: number }, hw: number, hh: number, pad?: number) => { x: number; y: number; s: number };
@@ -177,6 +178,68 @@ describe("无限画布外壳", () => {
     // ③ 存档齐全 / 无 chat 几何 → null(不动任何卡)
     expect(sm({ chat: 1, board: 1, subchat: 1 }, defLayout, chatG)).toBeNull();
     expect(sm({ chat: 1, board: 1 }, defLayout, null)).toBeNull();
+  });
+
+  it("②几何:升级播种列高上限(2026-11-13「画布模式挂了」)——超 ~1800px 换新列,不再单列竖排成万 px 深柱", () => {
+    const g = loadGeom();
+    const sm = g.seedMissing!;
+ // 5 张 h=500 卡:每列 500+24=524 → 第 4 张后 y 超限(4×524=2096>1800)换列
+    const defLayout: Record<string, { x: number; y: number; w: number; h: number }> = {};
+    for (let i = 0; i < 5; i++) defLayout["c" + i] = { x: 0, y: 0, w: 700, h: 500 };
+    const chatG = { x: 100, y: 50, w: 900, h: 640 };
+    const r = sm({ chat: 1 }, defLayout, chatG)!;
+    expect(r.map((c) => c.n)).toEqual(["c0", "c1", "c2", "c3", "c4"]);
+ // 第一列:c0-c3 竖排(c3 后 4×524=2096>1800 触发换列)
+    expect(r[0].x).toBe(1028); expect(r[0].y).toBe(50);
+    expect(r[3].x).toBe(1028); expect(r[3].y).toBe(50 + 3 * 524);
+ // 第二列:c4 回到列顶,x 前进一列宽(700)+28
+    expect(r[4].x).toBe(1028 + 700 + 28); expect(r[4].y).toBe(50);
+ // 整个播种区的纵向跨度 ≤ 列高上限 + 单卡高(旧实现单列 = 5×524=2620,18 卡实况 1.2 万 px)
+    const ys = r.map((c) => c.y + c.h);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(50 + 1800 + 500);
+  });
+
+  it("②几何:全览/单卡可读下限(2026-11-13)——viewCenterIn 区域中心取景 + 缩放钳制", () => {
+    const g = loadGeom();
+    const vc = g.viewCenterIn!;
+    const area = { x: 0, y: 0, w: 1600, h: 900 };
+ // 包围盒中心落在区域中心
+    const v = vc({ x: 1000, y: 400, w: 12000, h: 2000 }, area, 0.56);
+    expect(v.s).toBeCloseTo(0.56, 5);
+    expect(v.x + (1000 + 6000) * 0.56).toBeCloseTo(800, 5);
+    expect(v.y + (400 + 1000) * 0.56).toBeCloseTo(450, 5);
+ // 超上限钳 Z_MAX、超下限钳 Z_MIN
+    expect(vc({ x: 0, y: 0, w: 10, h: 10 }, area, 9).s).toBe(2);
+    expect(vc({ x: 0, y: 0, w: 10, h: 10 }, area, 0.01).s).toBe(0.1);
+  });
+
+  it("③接线:全览/单卡取景可读下限在资产里(2026-11-13「画布模式挂了」守卫)", async () => {
+    const port = 7886;
+    const srv = servePanel(port, () => {});
+    try {
+      const asset = await (await fetch(`http://127.0.0.1:${port}/assets/canvas-shell.js`)).text();
+ // fitAll:全览低于 LOD 出槛 → 停在 LOD_OUT + toast 指路
+      expect(asset).toContain("if (v.s < LOD_OUT) {\n      v = viewCenterIn(b, a, LOD_OUT);");
+      expect(asset).toContain("保证可读 · 空白拖拽/小地图可看全部");
+ // focus:单卡取景同样不低于 LOD 出槛
+      expect(asset).toContain("if (o.zoom && v.s < LOD_OUT) v = centerInSafe(rect, LOD_OUT);");
+ // 播种列高上限在位
+      expect(asset).toContain("COL_H = 1800");
+ // toggle 脱同步守卫:setMode 必须先落权威 S.mode 再进退场
+ // (经典引导时 exitCanvas 因 !S.built 早退不写 S.mode → toggleMode 永远反向调 setMode("classic")
+ // 再次早退 = 「画布模式切不过去」零报错静默 no-op,用户用户反馈)
+      const sm = asset.indexOf("function setMode(");
+      expect(sm).toBeGreaterThan(0);
+      const smBody = asset.slice(sm, sm + 600);
+      const iAuth = smBody.indexOf("S.mode = m;");
+      const iExit = smBody.indexOf("exitCanvas()");
+      const iEnter = smBody.indexOf("enterCanvas()");
+      expect(iAuth).toBeGreaterThan(-1);
+      expect(iExit).toBeGreaterThan(iAuth);
+      expect(iEnter).toBeGreaterThan(iAuth);
+    } finally {
+      await srv.close();
+    }
   });
 
   it("③接线:面板页注入画布资产 + 桥接段覆盖 17 视图并暴露 init/focus", async () => {

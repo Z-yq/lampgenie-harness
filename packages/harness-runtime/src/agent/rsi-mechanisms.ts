@@ -55,6 +55,10 @@ export interface RsiMechanismSpec {
   defaultDriver: RsiMechanismDriver;
  /** 缺省开关。 */
   defaultEnabled: boolean;
+ /** 是否需要在运行前注入「待分析会话」候选池(轨迹类机制=是;台账类机制=否)。
+ * 此前 12 个机制不论职责都塞 12 个候选,agent 实际只读台账、`已分析会话` 恒 0,
+ * 预览成本却按 12 会话计入。按机制职责精确投放,才谈得上「分析的会话被认账」。 */
+  analyzesSessions: boolean;
 }
 
 /**
@@ -65,10 +69,11 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     id: "nightly",
     title: "夜间任务",
     goal: "复盘最近一昼夜的会话与夜间 run,判断夜间整合覆盖是否完整、候选是否被消化、有哪些该转成 follow-up 的欠账。",
-    dataSources: [".genie/rsi/nightly/", ".genie/journals/"],
+    dataSources: [".genie/rsi/nightly/", ".genie/journals/", ".genie/rsi/rework-chains.jsonl"],
     resultHint: "产出夜间整合复盘条目:覆盖了哪些会话、哪些步骤空转或失败、下一轮该补什么。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: true,
   },
   evidence: {
     id: "evidence",
@@ -78,6 +83,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出证据图体检条目:未支撑的主张、悬空节点、过期支撑各成一条。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   experiments: {
     id: "experiments",
@@ -87,6 +93,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出实验结论条目:每条形如「实验 X 应 adopt/reject/iterate/rollback,依据指标 …」。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   cost: {
     id: "cost",
@@ -96,6 +103,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出成本治理条目:预算燃烧速率、异常花费来源、熔断是否该触发或该恢复。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   injection: {
     id: "injection",
@@ -105,6 +113,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出注入防护条目:新出现的攻击面、误报规则、待人工批准或该长期采信的命中。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   tools: {
     id: "tools",
@@ -114,6 +123,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出工具治理条目:该退役的工具、该补的能力、注册与检索不一致项。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: true,
   },
   changeRequests: {
     id: "changeRequests",
@@ -123,6 +133,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出变更请求条目:卡住的请求、该推进的下一步、该关闭的原因。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   cohort: {
     id: "cohort",
@@ -132,6 +143,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出同批指标条目:不可比批次、异常批次、需要重算的口径。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   negativeKb: {
     id: "negativeKb",
@@ -141,6 +153,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出负面知识条目:该翻案的死路、该过期的死路、该进规划注入的建议。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: true,
   },
   prompts: {
     id: "prompts",
@@ -150,6 +163,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出提示词版本条目:版本优劣对比、该钉扎或该回退的版本与依据。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   atlas: {
     id: "atlas",
@@ -159,6 +173,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出方向图条目:该新增的方向、该合流或下线的方向,以及支撑它的证据。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: false,
   },
   pathology: {
     id: "pathology",
@@ -168,6 +183,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     resultHint: "产出病理目录条目:复发的病理模式、该升级为机制的条目、可标记已根治的条目。",
     defaultDriver: "agent",
     defaultEnabled: true,
+    analyzesSessions: true,
   },
 };
 
@@ -227,6 +243,39 @@ export interface AgentBriefOptions {
   resultPath: string;
  /** 待分析会话计划(缺省=不注入该小节,旧行为逐字不变)。 */
   analysis?: AgentBriefAnalysis;
+ /** 本次运行的 token 预算(缺省=不注入;0/非法=不注入)。软预算:先结论后证据,接近预算就收尾。 */
+  budgetTokens?: number;
+ /** 实验配额因子(ROI downshift 的消费面;仅 experiments 机制且 0<f<1 时注入)。 */
+  experimentQuotaFactor?: number;
+}
+
+/** 「预算」小节:软预算(不硬停,但要求在预算内先保证结果文件写全)。 */
+function budgetSection(budgetTokens: number | undefined): string[] {
+  const budget = typeof budgetTokens === "number" && Number.isFinite(budgetTokens) && budgetTokens > 0
+    ? Math.floor(budgetTokens)
+    : 0;
+  if (budget === 0) return [];
+  return [
+    "## 本次运行预算",
+    `- token 预算:${budget}(输入+输出)。先给结论、再补证据条目;接近预算时立即收尾,不要为凑条目继续逐文件细读。`,
+    "- 预算不是硬停:宁可少写 1~2 条,也不要把 resultPath 留空或写坏 JSON。",
+    "",
+  ];
+}
+
+/** 「实验配额」小节:ROI downshift 的 experimentQuotaFactor 消费面(只有 experiments 机制注入)。
+ * 口径:N=本轮 queue 里可用候选数,最多 ceil(N×factor) 条转入实验,其余显式 defer(不静默丢)。 */
+function experimentQuotaSection(id: string, factor: number | undefined): string[] {
+  if (id !== "experiments") return [];
+  const f = typeof factor === "number" && Number.isFinite(factor) && factor > 0 && factor < 1 ? factor : 0;
+  if (f === 0) return [];
+  return [
+    "## 实验配额(ROI 降频生效中)",
+    `- 本轮配额因子 x${f}:候选队列里最多把 ceil(N×${f})(N=本轮可用候选数,至少 1 条)转入实验。`,
+    "- 未转入的候选**不许静默丢弃**:逐条记录候选 id + defer 原因(「配额降频」),写进结果条目或 detail,下轮配额恢复时优先取。",
+    "- 判断「配额是否应该继续」也算发现:如果本轮候选 ROI 普遍低,如实写,不要为凑数硬转。",
+    "",
+  ];
 }
 
 /** 「待分析会话」小节:逐行列出候选 + 硬规则(只分析列出的会话 / 最终回复必须带记账行)。 */
@@ -255,10 +304,11 @@ function analysisSection(analysis: AgentBriefAnalysis | undefined): string[] {
     ...(rows.length > 0 ? rows : ["本窗口无未分析会话"]),
     "",
     "规则:",
-    "1. 只分析上面列出的会话(没列出的、以及 RSI 自身会话 rsi 一律不碰);列了但读不到就照实写「会话缺失」。",
-    "2. 每条结论都要能指到某个会话里的具体事件/工具调用,不许跨会话脑补。",
+    "1. 上面的候选会话是本机制的主数据:先逐个读关键片段(可 grep/head,不必整读),再产出条目;列了但读不到就照实写「会话缺失」。",
+    "2. 每条结论都要能指到某个会话里的具体事件/工具调用,不许跨会话脑补;detail 里写 sessionId 与 file:line 证据。",
     `3. 最终回复**必须含一行** \`已分析会话: <sid1>, <sid2>\`(一个都没分析就写 \`已分析会话: (无)\`);`,
     "   这一行是记账依据,逐字遵守(代码按它记「这些会话已分析过」,写错 id 就不算数)。",
+    "4. 每个真正读过的候选会话至少贡献 1 条结果条目(没有发现就写 status=info 的「无异常 + 依据」);一个条目都不产出的会话视为未分析。",
     "",
   ];
 }
@@ -297,7 +347,7 @@ export function buildAgentBrief(opts: AgentBriefOptions): string {
   const given = typeof opts.resultPath === "string" ? opts.resultPath.trim() : "";
   const resultPath = given === "" ? absolute(root, `.genie/rsi/agent-runs/${spec.id}/<runId>.result.json`) : given;
   const sources = spec.dataSources.map((source) => `- ${absolute(root, source)}(只读,${source})`);
-  const schema = `{"items":[{"id":"kebab-id","title":"≤30字","summary":"≤200字","detail":"可选","status":"ok|warn|bad|info"}]}`;
+  const schema = `{"items":[{"id":"kebab-id","title":"≤30字主张","summary":"≤200字结论+为什么重要","evidence":"file:line 或 字段=值","impact":"不处理的后果","action":"最小可执行动作","status":"ok|warn|bad|info"}]}`;
 
   return [
     `# RSI 机制任务:${spec.title}(id=${spec.id})`,
@@ -310,23 +360,42 @@ export function buildAgentBrief(opts: AgentBriefOptions): string {
     ...(sources.length > 0 ? sources : ["- (本机制无数据源)"]),
     "",
     ...analysisSection(opts.analysis),
+    ...budgetSection(opts.budgetTokens),
+    ...experimentQuotaSection(spec.id, opts.experimentQuotaFactor),
     "## 红线",
     "1. 只用上面数据源里的真实数据;文件缺失或为空就照实写「无数据」,不许推断或补全。",
     "2. 禁止编造数字、比例、日期、文件名与引用:每个数字都要能指到数据源里的具体行或字段。",
     "3. 不得修改任何源码、配置与既有台账;不得写数据源目录之外的路径;不 commit、不 push。",
     "",
+    "## 任务形态(只读审计,不走编码仪式)",
+    "- 这是**只读审计任务**:直接读数据源 → 写 resultPath → 最终回复列条目;不要落白板、不要 spawn_subagent、不要展开五阶段/task_phase 仪式。",
+    "- 若工具面强制 plan-gate:用一次 board_upsert(exemptReason=\"只读 RSI 审计,不改源码/配置/台账\")拿豁免即可,不要建板。",
+    "",
     "## 允许的采集方式",
     "- 可以运行仓内 scripts/*.mts 做只读统计(先读脚本确认是只读再用)。",
     "- 可以直接读上面列出的 .genie 台账 / JSONL:大文件用 grep / head 定位,不要整读。",
+    "- **不要对 .genie 全目录递归 grep/find**(324MB journal + 9p 慢盘会挂几分钟);只在上面列出的数据源路径内定向读,或 grep 指定文件。",
     "- 不跑构建、不跑全量测试、不跑任何写盘脚本。",
     "",
     "## 结果输出(resultPath + schema)",
     `- resultPath(结果文件):${resultPath}`,
     "- 写单个 UTF-8 JSON 文件,不要用 markdown 代码块包裹。",
+    "- **resultPath 的 runId 必须逐字照抄**(少一位/多一位=本轮零产出);写完立即用 ls 或 read_file 确认该文件存在。",
     `- schema(逐字照抄结构,只改值):${schema}`,
-    "- 条数 1~20;id 用 kebab-case 且在本机制内唯一;title ≤30 字;summary ≤200 字;detail 可选。",
+    "- 条数 **1~6**(结论级发现;超过 6 条只保留影响最大的 6 条,其余在最终回复一句话带过,不写 items)。",
+    "- id 用 kebab-case 且在本机制内唯一;title ≤30 字;summary ≤200 字。",
     `- status 只取 ${RSI_RESULT_STATUSES.join(" | ")} 之一。`,
     '- 一条结果都没有时写 {"items":[]}(空数组),不要编占位条目。',
+    "",
+    "## 结果质量(最高优先级:拒绝流水账)",
+    "每条必须是「主张 → 证据 → 影响 → 建议」四件套,缺一即质量不合格:",
+    "- **title**:一句可判定的主张/风险,不是观察记录;不要以「某字段缺失/某文件不存在」当标题。",
+    "- **summary**:结论 + 为什么重要(具体到哪个决策/哪类任务会受影响),≤200 字。",
+    "- **evidence**:file:line 或「字段名=具体数值」,必须能在数据源里逐字复核;禁止只写「台账里」这种泛指。",
+    "- **impact**:不处理会怎样(具体后果/风险,不是「影响可读性」这类套话)。",
+    "- **action**:最小可执行动作(改哪个文件/字段、谁来做、验收口径),不要「建议完善/加强监控」。",
+    "- **禁止流水账**:复述台账行数/字段名/文件存在性(除非它直接阻断一个结论)、同一个问题拆成多条、无证据推测、把「无数据」写成多条;没有值得报的发现就写 {\"items\":[]}。",
+    "- detail 可选(补充上下文);主要证据/影响/建议放对应字段,不要全塞 detail。",
     "",
     "## 本机制期望产出的结果条目",
     spec.resultHint,

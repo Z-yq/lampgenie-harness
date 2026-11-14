@@ -133,8 +133,8 @@ describe("panel.ts super 指挥台 IDE 三栏做梦区(布局归位)", () => {
     expect(PANEL_SRC).toContain("function rsiStateKind");
     expect(PANEL_SRC).toContain('=== "UNAVAILABLE" ? "unavailable" : "error"');
     expect(PANEL_SRC).toContain(".rsi-tone-idle .rsi-dot");
- // 头部三分计数文案
-    expect(body).toContain('· 正常 " + ok + " · 未启用 " + unavailable + " · 异常 " + errors');
+ // 头部计数文案(起与健康一屏同一分类,含「关注」)
+    expect(body).toContain('· 正常 " + ok + " · 关注 " + warn + " · 未启用 " + unavailable + " · 异常 " + errors');
     expect(PANEL_SRC).not.toContain('正常 " + ok + " / 降级 ');
  // 空态(sections=[]):如实说明,不报错
     expect(body).toContain("暂无 RSI 数据");

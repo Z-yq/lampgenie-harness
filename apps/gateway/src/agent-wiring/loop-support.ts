@@ -617,12 +617,40 @@ export const SYSTEM_LITE = `你是 lampgenie-harness 的 vibe coding 主 agent(�
 - 子代理/命令失败如实说失败,不编造成功。` + runtimeEnvBlock();
 
 /**
+ * 提示词版本运行时 provider( #209 运行面):装配方注入「按 key 取显式覆盖」的同步函数。
+ * 缺省未注入=永远用内置常量(旧行为逐字不变);provider 抛错也回退常量。
+ */
+export type RuntimePromptProvider = (
+  key: "system.coding" | "system.coding.lite",
+  sessionId?: string) => string | undefined;
+
+let runtimePromptProvider: RuntimePromptProvider | undefined;
+
+/** 装配方(app.ts)注入运行时提示词 provider;传 undefined 可恢复缺省(测试隔离用)。 */
+export function setRuntimePromptProvider(provider: RuntimePromptProvider | undefined): void {
+  runtimePromptProvider = provider;
+}
+
+/**
  * 按任务类别组系统纪律段(理解阶段定类,提示词按类出;类别可被
  * task_phase(taskClass=...) 更正,更正后下一轮次起按新类)。
  * coding=全文;qa=免阶段/白板/验收仪式,保留派发+code_sense 用法(调研查代码高频);
  * office=只留通用段。两条类别注记都带更正路径——初判错类时模型自己能纠正。
+ * 装配方注入 provider 时,coding 两档先尝试提示词版本覆盖(revision>1 才生效)。
  */
-export function systemForTaskClass(cls: TaskClass, opts: { lite?: boolean } = {}): string {
+export function systemForTaskClass(
+  cls: TaskClass,
+  opts: { lite?: boolean; sessionId?: string } = {},
+): string {
+  if (cls === "coding" && runtimePromptProvider !== undefined) {
+    const key = opts.lite ? "system.coding.lite" : "system.coding";
+    try {
+      const overridden = runtimePromptProvider(key, opts.sessionId);
+      if (typeof overridden === "string" && overridden.trim() !== "") return overridden;
+    } catch {
+ // provider 故障:回退内置常量,不碰任务主链
+    }
+  }
  // 精简档( token 轮 P2):coding 短任务书走 SYSTEM_LITE;qa/office 分支行为不变。
   if (cls === "coding" && opts.lite) return SYSTEM_LITE;
   if (cls === "qa") {

@@ -15,6 +15,7 @@ import { createVoiceDrafter } from "./voice-draft.js";
 import { collectRsiStatus } from "./rsi-status.js"; // RSI 状态面:rsi.status 只读快照(请求-响应)
 import { annotateRsiSections, startMechanismRun } from "./rsi-agent-runner.js"; // RSI-MECH:机制开关/结果/agent 运行
 import { collectMechanismItems, deleteResultItem, setMechanism, updateResultItem } from "./rsi-mechanism-store.js";
+import { collectSchedulerStatus, setSchedulerConfig, tickRsiScheduler } from "./rsi-scheduler.js"; // RSI-SELF-DRIVE:自动周期
 import type { EmbeddedTeamHandle } from "./team-embedded.js"; // 团队绑定实时种子(仅类型;运行面走 seedRegistryProjects)
 import { seedRegistryProjects } from "./team-embedded.js";
 import type { TeamaiDigest } from "@lampgenie/runtime/team/teamai-bridge"; // 门面(仅类型;运行面动态 import)
@@ -646,6 +647,38 @@ function rsiNoteInjector(
       journal.append({ kind: "super.dream", sessionId: "super", payload: { ...p, at: Date.now() } });
       broadcast?.({ v: PROTOCOL_VERSION, type: "super.dream", ...p });
     } catch { /* 注卡失败不影响运行链 */ }
+  };
+}
+
+/** RSI 调度器依赖( RSI-SELF-DRIVE):与手动 run 同源注入 submit/taskState/journal,
+ * 额外给「在线是否繁忙」探测。system 任务(rsi/auto-/sched-)不算繁忙;前台 user 任务算。 */
+function rsiSchedulerDepsOf(
+  opts: GatewayServerOptions,
+  tm: import("./task-manager.js").TaskSupervisor,
+  journal: import("@lampgenie/core").Journal): import("./rsi-scheduler.js").RsiSchedulerDeps {
+  const busy = (): boolean => {
+    try {
+      return tm.list().some((t) => {
+        if (t.state !== "running" && t.state !== "queued") return false;
+        if (t.sessionId === "rsi") return false;
+        if (t.sessionId.startsWith("auto-") || t.sessionId.startsWith("sched-")) return false;
+        if (t.instruction.startsWith("sys:")) return false;
+        return true;
+      });
+    } catch {
+      return true; // 探测失败按繁忙处理:宁可晚跑一轮,不抢在线资源
+    }
+  };
+  return {
+    root: repoRoot(),
+    submit: (kind, sessionId, instruction, extra) => tm.submit(kind, sessionId, instruction, extra),
+    taskState: (taskId) => tm.get(taskId)?.state,
+    isOnlineBusy: busy,
+    ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
+    projectOf: (sessionId) => sessionOwnerProjectId(tm, sessionId) ?? sessionBindProjectId(journal, sessionId),
+    readSession: (sessionId) => journal.readSession(sessionId),
+    config: rsiCostConfigOf(opts),
+    note: rsiNoteInjector(journal, opts.broadcast),
   };
 }
 
@@ -2384,7 +2417,9 @@ async function handleMessage(
  // 做梦卡:运行终态就地收尾时注入 super 会话完成卡(成本+摘要)。
           note: rsiNoteInjector(journal, opts.broadcast),
         });
-        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.status.result", ...r, sections: annotated.sections });
+ // RSI-SELF-DRIVE:调度快照与 12 区同一拍返回(面板一次拉全,不再多一次往返)。
+        const scheduler = await collectSchedulerStatus(root).catch(() => undefined);
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.status.result", ...r, sections: annotated.sections, ...(scheduler === undefined ? {} : { scheduler }) });
       } catch (e) {
         safeSend(ws, {
           v: PROTOCOL_VERSION,
@@ -2436,6 +2471,64 @@ async function handleMessage(
       }
       break;
     }
+    case "rsi.scheduler.get": {
+ // 自动周期快照(只读;含熔断暂停态与下一拍时间)。
+      try {
+        const state = await collectSchedulerStatus(repoRoot());
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.scheduler.result", ok: true, state });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.scheduler.result", ok: false, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
+    case "rsi.scheduler.set": {
+ // 自动周期配置(开关/间隔/机制子集/空闲让路/重试/预算/ROI;resumeBreaker=人工恢复熔断)。
+      try {
+        const r = await setSchedulerConfig(repoRoot(), {
+          ...(msg.enabled === undefined ? {} : { enabled: msg.enabled }),
+          ...(msg.everyMinutes === undefined ? {} : { everyMinutes: msg.everyMinutes }),
+          ...(msg.mechanisms === undefined ? {} : { mechanisms: msg.mechanisms }),
+          ...(msg.idleOnly === undefined ? {} : { idleOnly: msg.idleOnly }),
+          ...(msg.autoRetry === undefined ? {} : { autoRetry: msg.autoRetry }),
+          ...(msg.maxRetriesPerRun === undefined ? {} : { maxRetriesPerRun: msg.maxRetriesPerRun }),
+          ...(msg.tokenBudgetPerRun === undefined ? {} : { tokenBudgetPerRun: msg.tokenBudgetPerRun }),
+          ...(msg.tokenBudgetPerCycle === undefined ? {} : { tokenBudgetPerCycle: msg.tokenBudgetPerCycle }),
+          ...(msg.roiGate === undefined ? {} : { roiGate: msg.roiGate }),
+          ...(msg.resumeBreaker === undefined ? {} : { resumeBreaker: msg.resumeBreaker }),
+        }, "panel");
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "rsi.scheduler.result",
+          ok: r.ok,
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+          ...(r.state === undefined ? {} : { state: r.state }),
+          ...(r.breakerResumed === undefined ? {} : { breakerResumed: r.breakerResumed }),
+        });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.scheduler.result", ok: false, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
+    case "rsi.scheduler.run": {
+ // 手动推一拍自动周期(与 60s 定时器同一状态机;不等下一拍,便于验收/演示)。
+      try {
+        const r = await tickRsiScheduler(rsiSchedulerDepsOf(opts, tm, journal));
+        safeSend(ws, {
+          v: PROTOCOL_VERSION,
+          type: "rsi.scheduler.result",
+          ok: true,
+          action: r.action,
+          state: r.state,
+          ...(r.mechanismId === undefined ? {} : { mechanismId: r.mechanismId }),
+          ...(r.runId === undefined ? {} : { runId: r.runId }),
+          ...(r.taskId === undefined ? {} : { taskId: r.taskId }),
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+        });
+      } catch (e) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.scheduler.result", ok: false, reason: e instanceof Error ? e.message : String(e) });
+      }
+      break;
+    }
     case "rsi.item.update": {
  // 结果条目改(覆盖层 append,不改原生台账)。
       try {
@@ -2443,6 +2536,9 @@ async function handleMessage(
           ...(msg.title === undefined ? {} : { title: msg.title }),
           ...(msg.summary === undefined ? {} : { summary: msg.summary }),
           ...(msg.detail === undefined ? {} : { detail: msg.detail }),
+          ...(msg.evidence === undefined ? {} : { evidence: msg.evidence }),
+          ...(msg.impact === undefined ? {} : { impact: msg.impact }),
+          ...(msg.action === undefined ? {} : { action: msg.action }),
           ...(msg.status === undefined ? {} : { status: msg.status }),
         };
         const r = await updateResultItem(repoRoot(), msg.mechanismId, msg.itemId, patch, "panel");

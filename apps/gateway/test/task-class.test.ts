@@ -10,7 +10,7 @@ import { AGENT_WIRING_SRC } from "./panel-source.js";
 import { describe, it, expect, afterEach } from "vitest";
 import { createGatewayApp } from "../src/app.js";
 import { buildExecutorFromConfig } from "../src/factory.js";
-import { classifyTaskClass, systemForTaskClass, SYSTEM } from "../src/agent-wiring.js";
+import { classifyTaskClass, setRuntimePromptProvider, systemForTaskClass, SYSTEM, SYSTEM_LITE } from "../src/agent-wiring.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -296,4 +296,24 @@ describe("板规范固化(2026-10-25 变更契约图)", () => {
     expect(seen[2] ?? "").toContain("断链=幻影引用");
     expect(seen[2] ?? "").toContain("zzPhantomSymbolXyz");
   }, 45_000);
+});
+
+
+describe("systemForTaskClass × 提示词版本 provider(2026-11-13 #209 运行面)", () => {
+  afterEach(() => setRuntimePromptProvider(undefined));
+
+  it("provider 命中 → coding 两档用覆盖;qa/office 不受影响;空串回退内置", () => {
+    setRuntimePromptProvider((key) => (key === "system.coding" ? "CUSTOM-FULL" : "CUSTOM-LITE"));
+    expect(systemForTaskClass("coding")).toBe("CUSTOM-FULL");
+    expect(systemForTaskClass("coding", { lite: true })).toBe("CUSTOM-LITE");
+    expect(systemForTaskClass("qa")).toContain("任务类别(qa");
+    setRuntimePromptProvider(() => "");
+    expect(systemForTaskClass("coding")).toBe(SYSTEM);
+    expect(systemForTaskClass("coding", { lite: true })).toBe(SYSTEM_LITE);
+  });
+
+  it("provider 抛错 → 回退内置常量,不碰任务主链", () => {
+    setRuntimePromptProvider(() => { throw new Error("boom"); });
+    expect(systemForTaskClass("coding")).toBe(SYSTEM);
+  });
 });

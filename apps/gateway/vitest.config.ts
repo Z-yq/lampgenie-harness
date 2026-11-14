@@ -10,7 +10,7 @@ export default defineConfig({
     env: { GENIE_CHECKPOINT: "off" },
  // r2:test/ui/** 里现在有 vitest 化的 slash.spec.test.ts(需被收集),
     // 只排除「独立直跑的 chromium 探针 .spec.cjs」——它们自带 PASS/FAIL,vitest 收集恒红。
-    exclude: ["**/node_modules/**", "**/dist/**", "test/ui/**/*.spec.cjs"],
+    exclude: ["**/node_modules/**", "**/dist/**", "test/ui/**/*.spec.cjs", "test/ui/**/*.spec.mjs"], // .spec.mjs 同为独立直跑探针(:全量套假红×3 验证误收集;它们自带 skip/exit 0)
     maxWorkers: 2,
     minWorkers: 1,
   },

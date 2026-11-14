@@ -346,6 +346,9 @@ importers:
       '@lampgenie/executors':
         specifier: workspace:*
         version: link:../harness-executors
+      '@lampgenie/runtime':
+        specifier: workspace:*
+        version: link:../harness-runtime
       esbuild:
         specifier: ^0.24.0
         version: 0.24.2

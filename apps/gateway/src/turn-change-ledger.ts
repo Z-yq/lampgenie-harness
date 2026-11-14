@@ -171,13 +171,61 @@ async function statAll(statRoot: string, entries: readonly GitEntry[]): Promise<
 }
 
 /**
+ * K:基线缓存。生产经验证同任务内 3-5 次 captureBaseline,每次全量
+ * `git status` + 逐文件 stat 要 6-9s;同 root 且 git index 未变时 60s 内复用结果。
+ * 索引 mtime 变化(git add/reset 等)立刻失效;命中返回深拷贝,调用方改写不回污缓存。
+ */
+const BASELINE_CACHE_TTL_MS = 60_000;
+
+interface BaselineCacheEntry {
+  indexMtimeMs: number;
+  at: number;
+  baseline: ChangeBaseline;
+}
+
+const baselineCache = new Map<string, BaselineCacheEntry>();
+
+/** 测试用:清空缓存(生产路径不需要)。 */
+export function __resetBaselineCacheForTest(): void {
+  baselineCache.clear();
+}
+
+/** git index 的 mtime;非 git 根 / 尚无 index → 0。 */
+async function indexMtimeMs(root: string): Promise<number> {
+  try {
+    const st = await stat(join(root, ".git", "index"));
+    return st.isFile() ? st.mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function cloneBaseline(b: ChangeBaseline): ChangeBaseline {
+  const files: Record<string, BaselineFile> = {};
+  for (const [k, v] of Object.entries(b.files)) files[k] = { ...v };
+  return { mode: b.mode, statRoot: b.statRoot, files };
+}
+
+/**
  * 开工基线:异步 `git status --porcelain=v1 -z --untracked-files=all` + 每个 path 的 stat。
  * 非 git 根(git 缺失 / 非仓)→ mode=non-git,files 为空,不抛错。
+ * K:同 root+同 index mtime 的 60s 内命中缓存(见上)。
  */
 export async function captureBaseline(root: string): Promise<ChangeBaseline> {
+  const indexMs = await indexMtimeMs(root);
+  const now = Date.now();
+  const hit = baselineCache.get(root);
+  if (hit && hit.indexMtimeMs === indexMs && now - hit.at < BASELINE_CACHE_TTL_MS) {
+    return cloneBaseline(hit.baseline);
+  }
   const st = await gitStatusOf(root);
-  if (!st) return { mode: "non-git", statRoot: root, files: {} };
-  return { mode: "git", statRoot: st.statRoot, files: await statAll(st.statRoot, st.entries) };
+  const baseline: ChangeBaseline = st
+    ? { mode: "git", statRoot: st.statRoot, files: await statAll(st.statRoot, st.entries) }
+    : { mode: "non-git", statRoot: root, files: {} };
+ // 注意:`git status` 自己可能刷新 index 的 stat 缓存(mtime 变化),所以缓存里记的是**跑完之后**
+ // 的 index mtime,否则每次都要失效、缓存恒不命中(单测经验证踩到过)。
+  baselineCache.set(root, { indexMtimeMs: await indexMtimeMs(root), at: now, baseline });
+  return cloneBaseline(baseline);
 }
 
 function parseArgs(raw: unknown): Record<string, unknown> {

@@ -460,6 +460,8 @@ const app: GatewayApp = createGatewayApp({
  // 预设一键接入——Key 只写 .genie/secrets.json(0600),不进配置/日志/回包。
   onSecretSet: (name: string, value: string) => setSecretValue(root, name, value),
   listSecrets: () => listSecretKeys(root),
+ // Super 的 sys_restart 计划性重启(生产入口才启用;测试/嵌入不传=未接线)。
+  allowSelfRestart: true,
  // super agent 对话模型 = coding 主任务模型(companionLlm/companionTrack 已删除,
   // config.companion.track 被忽略并打日志);audio.chat 只服务 ASR(voice.transcribe)与 coding 未配置回退。
   // per-session 覆盖(session-models.json)按既有机制自然跟随主轨。

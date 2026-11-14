@@ -1322,6 +1322,9 @@ const CV_BRIDGE = {
  // chat。经典布局的身份唯一出口是 switchViewActivate,此处一律不同步。
     if (!canvasActive()) return;
     const view = CV_VIEW_OF_CARD[card];
+ // 画布焦点=当前使用面:Super 卡聚焦时立即拉 rsi.status 并起 15s 轮询(否则画布里健康屏
+ // 永远停在「正在加载」;经典布局的 rsiPollSync 只在 switchView 时触发,画布 focus 不走那里)。
+    try { rsiPollSync(view === "super" || view === "dream" || view === "rsi" || view === "task" ? "super" : "canvas-other"); } catch (e) { /* 轮询失败不影响焦点 */ }
     if (!view || view === mainView) return;
  // 子标签身份保护(「看板呢」注意):team 卡承载 team/dash/issues 三子标签,
  // 焦点落在 team 卡≠用户点了「成员」——切子标签后 showCard→focus 回调会把身份洗回 team,
@@ -1340,12 +1343,20 @@ const CV_BRIDGE = {
       if (!initial) toast("已切回经典单视图布局");
       return;
     }
-    if (!initial) toast("已切到无限画布布局");
+    if (!initial) toast("已切到无限画布布局 · 双击卡片打开,拖动标题移动");
  // 画布形态专属收尾:①连接状态下沉到定位栏(header 已隐藏,否则用户失去连没连上的信号)
  // ②卡片状态点按真实数据点亮 ③(仅手动切换时)回到上次焦点卡 + 触发一轮尺寸重算
     cvConn(!!(ws && ws.readyState === 1), ws && ws.readyState === 1 ? "已连接" : "连接中…");
     try { cvStatusRefresh(); } catch (e) { console.warn("[canvas] 状态点刷新失败", e); }
-    if (initial) return; // 启动恢复:取景交给画布首屏逻辑(恒落对话卡),这里再 focus 会把它顶掉
+    if (initial) { // 启动恢复:取景交给画布首屏逻辑(恒落对话卡),但首次进画布给一次操作提示
+      try {
+        if (!localStorage.getItem("zh:cv-hint")) {
+          localStorage.setItem("zh:cv-hint", "1");
+          setTimeout(function () { try { toast("画布模式:双击卡片打开,拖动标题移动,滚轮缩放"); } catch (e) { /* 忽略 */ } }, 900);
+        }
+      } catch (e) { /* 隐私模式:忽略 */ }
+      return;
+    }
     setTimeout(function () {
       try { CanvasShell.focus(mainView && CARD_OF_VIEW[mainView] ? CARD_OF_VIEW[mainView] : "chat", { keepView: true }); }
       catch (e) { console.warn("[canvas] 画布布局恢复焦点失败", e); }
