@@ -181,11 +181,10 @@ describe(" 本地估算 + 前缀缓存估算", () => {
   });
 
   it("⑤ 估算器口径:ASCII BPE 压缩比、中文逐字更高、工具面严格增大、空输入=0", () => {
-    // token 口径改为 cl100k 真分词,值随之更新:1000 个重复 ASCII 字符在 BPE 下 125 tok
-    // (旧系数 4 字符/token 会算成 250);role 也计入,故带 role 时 +1
-    expect(estimateInputTokens([{ content: ascii1000 }])).toBe(125);
-    expect(estimateInputTokens([{ role: "user", content: ascii1000 }])).toBe(126);
-    // 1000 汉字 → 2000 tok(cl100k 下汉字常见 2 tok/字);只断言区间,不锁死具体数字
+    // 自有估算口径:重复 ASCII 按 0.25/字(4 字符/token);role 也计入,故带 role 时 +1
+    expect(estimateInputTokens([{ content: ascii1000 }])).toBe(250);
+    expect(estimateInputTokens([{ role: "user", content: ascii1000 }])).toBe(251);
+    // 1000 汉字 → 1950 tok(汉字类 1.95/字);只断言区间,不锁死具体数字
     const han = estimateInputTokens([{ role: "user", content: han1000 }]);
     expect(han).toBeGreaterThanOrEqual(1000);
     expect(han).toBeLessThan(3000);

@@ -1,29 +1,28 @@
 /**
- * 唯一 token 估算 + 标定模块。
- * 组成：
- *  1) 真分词器（cl100k_base BPE，ranks 走外部资产 `assets/tokenizer/cl100k_base.json`，不内联进 bundle）
- *     懒加载单例；任何一步失败 → 永久 fallback（CJK 1.95/字、其它 0.25/字，ceil），只 warn 一次。
- *  2) 标定层：用 provider 上报 usage 学习「分词器原始计数 → 真实 token」的比例 ratio（输入 / 输出各一条）。
- * 约定：所有导出函数永不抛。
+ * 唯一 token 估算 + 标定模块(自有实现,无第三方分词器)。
+ * 组成:
+ *  1) 自有启发式计数:CJK 感知双系数(汉字类 1.95/字、其它 0.25/字,ceil)——
+ *     压缩门/微压缩/大结果门等消费方全部是带余量的近似门控,该口径与标定层配合足够;
+ *     纯函数、零依赖、零资产,任何环境可用。
+ *  2) 标定层:用 provider 上报 usage 学习「自有估算 → 真实 token」的比例 ratio
+ *     (输入 / 输出各一条,EWMA,落盘 .genie/token-calibration.json)。
+ * 约定:所有导出函数永不抛。计费口径不受本模块影响(始终用 provider 上报 usage)。
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { GptEncoding } from "gpt-tokenizer/GptEncoding";
 
-/** 分块编码的块大小（字符）。整段 encode 与分块累加经验证误差 < 0.1%。 */
-const CHUNK_CHARS = 4000;
-/** rawTokens 结果缓存上限，超出清掉一半（LRU-lite）。 */
+/** rawTokens 结果缓存上限,超出清掉一半(LRU-lite)。 */
 const RAW_CACHE_LIMIT = 4000;
-/** 进缓存的文本长度上限，避免长文档 e4 级内存。 */
+/** 进缓存的文本长度上限,避免长文档 e4 级内存。 */
 const RAW_CACHE_MAX_TEXT = 8192;
-/** 回退系数：CJK 每字 / 其它每字。 */
+/** 系数:汉字类(含假名/谚文/全角)每字。 */
 const CJK_TOKENS_PER_CHAR = 1.95;
+/** 系数:其它字符每字。 */
 const OTHER_TOKENS_PER_CHAR = 0.25;
-/** 粗算（无原文）时用：混合语料的经验 tokens/字符。 */
+/** 粗算(无原文)时用:混合语料的经验 tokens/字符。 */
 const APPROX_TOKENS_PER_CHAR = 0.35;
 
-/** 标定启用门槛：样本数 ≥ 此值才用 ratio，否则恒 1。 */
+/** 标定启用门槛:样本数 ≥ 此值才用 ratio,否则恒 1。 */
 const MIN_SAMPLES = 3;
 /** EWMA 系数。 */
 const EWMA_ALPHA = 0.2;
@@ -36,102 +35,14 @@ const RATIO_HISTORY = 32;
 const WRITE_THROTTLE_MS = 60_000;
 /** 默认标定文件名。 */
 const DEFAULT_CALIBRATION_FILE = join(".genie", "token-calibration.json");
-const ASSET_NAME = "cl100k_base.json";
-
-type Encoding = ReturnType<typeof GptEncoding.getEncodingApi>;
 
 // ---------------------------------------------------------------------------
-// 分词器：懒加载单例 + 永久 fallback
+// 自有估算器
 // ---------------------------------------------------------------------------
 
-let encoding: Encoding | null = null;
-let tokenizerLoaded = false;
-let fallbackMode = false;
-let fallbackWarned = false;
 const rawCache = new Map<string, number>();
 
-/** 资产候选路径（env 覆盖时独占，不再探测其它候选）。 */
-function assetCandidates(): string[] {
-  const out: string[] = [];
-  const envPath = process.env["GENIE_TOKENIZER_ASSET"];
-  if (envPath && envPath.trim().length > 0) return [envPath.trim()];
-  let here = "";
-  try {
-    here = dirname(fileURLToPath(import.meta.url));
-  } catch {
-    here = "";
-  }
-  if (here.length > 0) {
-    // src/agent 与 dist/agent 都命中 packages/harness-runtime/assets
-    out.push(join(here, "assets", "tokenizer", ASSET_NAME));
-    out.push(join(here, "..", "assets", "tokenizer", ASSET_NAME));
-    out.push(join(here, "..", "..", "assets", "tokenizer", ASSET_NAME));
-  }
-  // cwd 向上最多 8 层找 monorepo 里的资产
-  try {
-    let dir = process.cwd();
-    for (let i = 0; i < 8; i++) {
-      out.push(join(dir, "packages", "harness-runtime", "assets", "tokenizer", ASSET_NAME));
-      const parent = dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-  } catch {
-    /* cwd 不可用时忽略 */
-  }
-  return out;
-}
-
-function resolveAssetPath(): string | null {
-  for (const candidate of assetCandidates()) {
-    try {
-      if (existsSync(candidate) && statSync(candidate).isFile()) return resolve(candidate);
-    } catch {
-      /* 继续探测 */
-    }
-  }
-  return null;
-}
-
-function warnOnceFallback(reason: string): void {
-  if (fallbackWarned) return;
-  fallbackWarned = true;
-  try {
-    console.warn(`[token-estimate] tokenizer unavailable, using CJK fallback estimator: ${reason}`);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 同步懒加载分词器；失败即进入永久 fallback。 */
-function ensureTokenizer(): Encoding | null {
-  if (encoding) return encoding;
-  if (tokenizerLoaded) return null;
-  tokenizerLoaded = true;
-  try {
-    const assetPath = resolveAssetPath();
-    if (!assetPath) {
-      fallbackMode = true;
-      warnOnceFallback("asset not found (set GENIE_TOKENIZER_ASSET to override)");
-      return null;
-    }
-    const parsed: unknown = JSON.parse(readFileSync(assetPath, "utf8"));
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      fallbackMode = true;
-      warnOnceFallback("asset payload is not a non-empty array");
-      return null;
-    }
-    const ranks = parsed as never;
-    encoding = GptEncoding.getEncodingApi("cl100k_base", () => ranks);
-    return encoding;
-  } catch (err) {
-    fallbackMode = true;
-    warnOnceFallback(err instanceof Error ? err.message : String(err));
-    return null;
-  }
-}
-
-/** 代码点是否属于 CJK 类（含假名 / 谚文 / 全角标点）。 */
+/** 码点是否属于汉字类(含假名 / 谚文 / 全角标点)。 */
 function isCjkCodePoint(cp: number): boolean {
   return (
     (cp >= 0x3040 && cp <= 0x30ff) || // 平假名 / 片假名
@@ -144,8 +55,8 @@ function isCjkCodePoint(cp: number): boolean {
   );
 }
 
-/** 无分词器时的系数回退计数（ceil）。 */
-function fallbackCount(text: string): number {
+/** 自有启发式计数:按码点分类累计后取整(ceil)。 */
+function ownCount(text: string): number {
   let cjk = 0;
   let other = 0;
   for (const ch of text) {
@@ -154,23 +65,6 @@ function fallbackCount(text: string): number {
     else other += 1;
   }
   return Math.ceil(cjk * CJK_TOKENS_PER_CHAR + other * OTHER_TOKENS_PER_CHAR);
-}
-
-/** 分块编码，块边界避开代理对（surrogate pair）。 */
-function encodeCount(enc: Encoding, text: string): number {
-  if (text.length <= CHUNK_CHARS) return enc.encode(text).length;
-  let total = 0;
-  let i = 0;
-  while (i < text.length) {
-    let end = Math.min(i + CHUNK_CHARS, text.length);
-    if (end < text.length && end - 1 > i) {
-      const code = text.charCodeAt(end - 1);
-      if (code >= 0xd800 && code <= 0xdbff) end -= 1; // 别劈开高代理
-    }
-    total += enc.encode(text.slice(i, end)).length;
-    i = end;
-  }
-  return total;
 }
 
 function cachePut(text: string, tokens: number): void {
@@ -185,17 +79,13 @@ function cachePut(text: string, tokens: number): void {
   rawCache.set(text, tokens);
 }
 
-/**
- * 分词器原始计数（不乘任何系数）。
- * 分词器不可用 → CJK 系数回退；异常 / 空输入 → 0，永不抛。
- */
+/** 自有原始计数(不乘标定系数)。异常 / 空输入 → 0,永不抛。 */
 export function rawTokens(text: string): number {
   try {
     if (typeof text !== "string" || text.length === 0) return 0;
     const cached = rawCache.get(text);
     if (cached !== undefined) return cached;
-    const enc = ensureTokenizer();
-    const tokens = enc ? encodeCount(enc, text) : fallbackCount(text);
+    const tokens = ownCount(text);
     cachePut(text, tokens);
     return tokens;
   } catch {
@@ -203,13 +93,9 @@ export function rawTokens(text: string): number {
   }
 }
 
-/** 分词器状态："tokenizer" | "fallback"（会触发一次懒加载探测）。 */
-export function estimatorKind(): "tokenizer" | "fallback" {
-  try {
-    return ensureTokenizer() ? "tokenizer" : "fallback";
-  } catch {
-    return "fallback";
-  }
+/** 估算器状态:恒为自有启发式(保留导出供观测面/测试用)。 */
+export function estimatorKind(): "own-heuristic" {
+  return "own-heuristic";
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +193,7 @@ function loadPersisted(raw: unknown): Map<string, KeyState> {
   return out;
 }
 
-/** 首次用到标定时同步 lazy load 一次；损坏则回空态并 warn 一次。 */
+/** 首次用到标定时同步 lazy load 一次;损坏则回空态并 warn 一次。 */
 function ensureCalibrationLoaded(): void {
   if (calibLoaded) return;
   calibLoaded = true;
@@ -368,7 +254,7 @@ function feedSample(ratios: number[], samples: number, ratio: number, r: number)
   const nextSamples = samples + 1;
   let nextRatio = ratio;
   if (nextSamples === MIN_SAMPLES) {
-    // 首批样本均值做初值，避免从 1 缓慢漂移
+    // 首批样本均值做初值,避免从 1 缓慢漂移
     nextRatio = next.reduce((a, b) => a + b, 0) / next.length;
   } else if (nextSamples > MIN_SAMPLES) {
     nextRatio = (1 - EWMA_ALPHA) * ratio + EWMA_ALPHA * r;
@@ -442,7 +328,7 @@ function rawOfMessage(m: unknown): number {
   return total;
 }
 
-/** 单条消息的估算（role + content + toolCalls[].arguments），同样乘 ratio。 */
+/** 单条消息的估算(role + content + toolCalls[].arguments),同样乘 ratio。 */
 export function estimateMessageTokens(m: unknown, opts?: { providerKey?: string; model?: string }): number {
   try {
     const raw = rawOfMessage(m);
@@ -454,7 +340,7 @@ export function estimateMessageTokens(m: unknown, opts?: { providerKey?: string;
   }
 }
 
-/** 消息数组的估算（原汇总后乘一次 ratio）。 */
+/** 消息数组的估算(原汇总后乘一次 ratio)。 */
 export function estimateMessagesTokens(messages: readonly unknown[], opts?: { providerKey?: string; model?: string }): number {
   try {
     if (!Array.isArray(messages) || messages.length === 0) return 0;
@@ -468,7 +354,7 @@ export function estimateMessagesTokens(messages: readonly unknown[], opts?: { pr
   }
 }
 
-/** 字符量 → token 的粗算（无原文场合），CJK 感知，不乘 ratio。 */
+/** 字符量 → token 的粗算(无原文场合),CJK 感知,不乘 ratio。 */
 export function approxTokensOfChars(chars: number): number {
   try {
     if (!Number.isFinite(chars) || chars <= 0) return 0;
@@ -478,7 +364,7 @@ export function approxTokensOfChars(chars: number): number {
   }
 }
 
-/** 标定采样：用 provider 上报 usage 更新 ratio。返回本次是否计入样本。 */
+/** 标定采样:用 provider 上报 usage 更新 ratio。返回本次是否计入样本。 */
 export function calibrate(input: {
   providerKey: string;
   model: string;
@@ -528,7 +414,7 @@ export function calibrate(input: {
   }
 }
 
-/** 单条样本的 r；不可用时 null。 */
+/** 单条样本的 r;不可用时 null。 */
 function ratioOfSample(rawEst?: number, reported?: number): number | null {
   if (typeof rawEst !== "number" || typeof reported !== "number") return null;
   if (!Number.isFinite(rawEst) || !Number.isFinite(reported)) return null;
@@ -555,7 +441,7 @@ export function calibrationOf(providerKey?: string, model?: string): { ratio: nu
   }
 }
 
-/** 测试注入：设置标定文件路径。 */
+/** 测试注入:设置标定文件路径。 */
 export function setCalibrationFile(path: string): void {
   try {
     calibFileOverride = path;
@@ -565,7 +451,7 @@ export function setCalibrationFile(path: string): void {
   }
 }
 
-/** 立即落盘（忽略节流）。 */
+/** 立即落盘(忽略节流)。 */
 export function flushCalibration(): void {
   try {
     persist(true);
@@ -574,7 +460,7 @@ export function flushCalibration(): void {
   }
 }
 
-/** 测试/重启用：清空内存态（保留 setCalibrationFile 注入的路径）。 */
+/** 测试/重启用:清空内存态(保留 setCalibrationFile 注入的路径)。 */
 export function resetForTest(): void {
   try {
     states.clear();
@@ -582,17 +468,8 @@ export function resetForTest(): void {
     calibDirty = false;
     lastWriteAt = 0;
     calibWarned = false;
-    encoding = null;
-    tokenizerLoaded = false;
-    fallbackMode = false;
-    fallbackWarned = false;
     rawCache.clear();
   } catch {
     /* ignore */
   }
-}
-
-/** 当前是否处于系数回退模式（面板用；不触发加载）。 */
-export function isFallbackMode(): boolean {
-  return fallbackMode || encoding === null;
 }

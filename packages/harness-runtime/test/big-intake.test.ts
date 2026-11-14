@@ -55,18 +55,17 @@ describe("大结果闸门:单价闸(两个条件同时成立才触发)", () => {
   });
 
   it("单价闸:est > 预算但 < 4000 tok 也不触发(绝对下限保护)", () => {
-    // token 口径改为 cl100k 真分词,值随之更新:重复 "x" 在 BPE 下约 8 字符 1 token(旧系数 4 字符 1 token)。
-    const mid = "x".repeat(24_000); // 3000 tok
+    // 自有估算口径:重复 ASCII 按其它字符 0.25/字(4 字符 1 token)。
+    const mid = "x".repeat(12_000); // 3000 tok
     expect(estimateTokensOfText(mid)).toBe(3_000);
     expect(shouldIntake(mid, 100, cfg())).toBe(false);
   });
 
   it("单价闸边界:3999 不触发 / 4000 且超预算触发 / 4001 触发", () => {
- // token 口径改为 cl100k 真分词,值随之更新:长度按真分词器经验证取(编码按 4000 字符分块,
-    // 边界附近非严格线性,故不能用 chars/4 换算)。
-    const e3999 = "x".repeat(31_992); // 3999 tok
-    const e4000 = "x".repeat(31_996); // 4000 tok
-    const e4001 = "x".repeat(32_004); // 4001 tok
+ // 自有估算口径:tokens = ceil(chars × 0.25),纯 ASCII 重复字符严格线性(chars/4)。
+    const e3999 = "x".repeat(15_996); // 3999 tok
+    const e4000 = "x".repeat(16_000); // 4000 tok
+    const e4001 = "x".repeat(16_004); // 4001 tok
     expect(estimateTokensOfText(e3999)).toBe(3_999);
     expect(shouldIntake(e3999, 100, cfg())).toBe(false);
     expect(estimateTokensOfText(e4000)).toBe(4_000);

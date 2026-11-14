@@ -603,20 +603,18 @@ describe("Phase 0:增长突增主链路", () => {
 });
 
 describe("CJK 感知 token 估算(2026-11-04 档位落地)", () => {
-  it("estimateTokensOfText:改走 cl100k 真分词(测试注释见下:值随真值更新)", () => {
-    // token 口径改为 cl100k 真分词,值随之更新(旧断言绑定 CJK 1.95/ASCII 0.25 系数近似)。
+  it("estimateTokensOfText:自有启发式口径(CJK 1.95/其它 0.25,ceil)", () => {
     expect(estimateTokensOfText("")).toBe(0);
     expect(estimateTokensOfText("abcd")).toBe(1);
-    expect(estimateTokensOfText("中文中文")).toBe(4);
-    expect(estimateTokensOfText("中文abcd")).toBe(3);
-    // 真分词下中文仍显著高于 chars/4(8 字 8 tok),旧口径会算成 2 tok
-    expect(estimateTokensOfText("中文中文中文中文")).toBeGreaterThan(8 * 0.25 * 3);
+    expect(estimateTokensOfText("中文中文")).toBe(8);
+    expect(estimateTokensOfText("中文abcd")).toBe(5);
+    // 汉字类仍显著高于 chars/4(8 字 16 tok),纯 ASCII 口径会算成 2 tok
+    expect(estimateTokensOfText("中文中文中文中文")).toBe(16);
   });
 
-  it("negative:纯 ASCII 重复字符在 BPE 下约 8 字符 1 token(不再是 chars/4)", () => {
-    // token 口径改为 cl100k 真分词,值随之更新。
+  it("negative:纯 ASCII 重复字符按 0.25/字(4 字符 1 token)", () => {
     const ascii = "x".repeat(4_000);
-    expect(estimateTokensOfText(ascii)).toBe(500);
+    expect(estimateTokensOfText(ascii)).toBe(1_000);
   });
 
   it("中文 tool 结果在旧口径下被漏剪、新口径下能进入组清理(阈值触发率提升的机制锚)", () => {
@@ -657,7 +655,7 @@ describe("读侧历史裁剪(2026-11-03):arguments 计入估算 / 写入正文�
     ];
     const withArgs = estimateMessagesTokens(plain);
     const withoutArgs = estimateMessagesTokens(tiny);
- // token 口径改为 cl100k 真分词,值随之更新:10KB 重复字符 arguments 经验证差 ≈1257 tok
+ // 自有估算口径:10KB 重复字符 arguments ≈2500 tok(0.25/字)。
     // (旧系数按 4 字符 1 token 估 ≈2500)。
     expect(withArgs - withoutArgs).toBeGreaterThanOrEqual(1_000);
     // 旧口径(content-only)会把它算成 ~0
