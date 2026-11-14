@@ -3,12 +3,11 @@
  * 插件 = 命令/技能/子智能体/MCP 服务器的资产包;安装=把资产写进真实落点
  * (commands→.genie/commands/*.md;agents→.genie/agents/*.md;mcp→.genie/mcp.json;
  * skills→experience store plugin-* category),卸载=按安装台账精确回收。
- * 目录=内置精选 + 官方市场快照(ZCode 官方插件市场, 集成)+ .genie/plugins-catalog.json 用户扩展。
- * 官方市场源:src/assets/official-market/(marketplace.json + zips/<name>-<ver>.zip,
- * scripts/fetch-official-market.ts 生成刷新,sha256 校验)。官方包安装=校验+解压到
- * .genie/plugins/<name>/(包结构完整保留,skills/commands/agents/.mcp.json 分发到
- * 既有落点),台账含 pluginDir,卸载一并回收。超大包(≥2MB,多为 ui 组件)不随快照
- * 分发:清单可见,安装时提示先跑拉取脚本。
+ * 目录=内置精选 + .genie/plugins-catalog.json 用户扩展(用户自备 zip/url/sha256 清单)。
+ * 官方快照不再随包分发:officialMarketDir 指向的 assets/official-market 缺席时,
+ * loadOfficialCatalog 按设计退化为空目录,官方源条目自然消失;插件安装机制(校验+解压到
+ * .genie/plugins/<name>/,skills/commands/agents/.mcp.json 分发到既有落点,台账含 pluginDir,
+ * 卸载一并回收)完整保留,zip 来源由用户目录清单给出。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, cpSync, statSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -48,7 +47,7 @@ export interface PluginManifest {
   source?: "builtin" | "official" | "user";
   /** 官方市场条目的组件类型(skill/command/agent/mcp/hook/ui);ui 型面板无运行时,仅展示。 */
   componentTypes?: string[];
-  /** 市场卡片图标(本地资产相对路径,如 official-market/icons/<name>.png;缺省面板回退首字母徽标)。 */
+  /** 市场卡片图标(本地资产相对路径;缺省面板回退首字母徽标)。 */
   icon?: string;
   /** 目录 pin 字段(user catalog 可选):分发地址/压缩包/sha256;带 url|zip 必须有 sha256。 */
   url?: string;
@@ -538,7 +537,7 @@ export class PluginSystem {
     const zip = locateOfficialZip(this.root, m.id, m.version);
     if (!zip) {
       return {
-        error: `包体未随快照分发(${m.id} ${meta.version ?? m.version});先运行 scripts/fetch-official-market.ts 拉取后再安装`,
+        error: `包体不可用(${m.id} ${meta.version ?? m.version}):市场快照不再随包分发,请在用户目录清单(.genie/plugins-catalog.json)里提供 zip/url 与 sha256`,
       };
     }
     if (meta.sha256) {

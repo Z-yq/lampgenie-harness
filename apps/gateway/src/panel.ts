@@ -280,18 +280,6 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
     }
     const { readFile } = nodeFsPromises;
     const here = dirname(fileURLToPath(import.meta.url));
- // 官方市场插件图标(assets/official-market/icons/<name>.png;名字白名单防穿越)
-    if (req.url !== undefined && req.url.startsWith("/assets/official-market/icons/")) {
-      const iconFile = req.url.slice("/assets/official-market/icons/".length);
-      if (/^[a-z0-9][a-z0-9._-]*\.png$/.test(iconFile)) {
-        readFile(join(here, "assets", "official-market", "icons", iconFile))
-          .then((buf) => { res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=86400" }); res.end(buf); })
-          .catch(() => { res.writeHead(404); res.end(); });
-        return;
-      }
-      res.writeHead(404); res.end();
-      return;
-    }
     if (req.url === "/assets/mermaid.min.js") {
       readFile(join(here, "assets/mermaid.min.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript" }); res.end(buf); })
