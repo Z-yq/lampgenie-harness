@@ -5,14 +5,14 @@
 export const PANEL_JS_IDE_1 = `// ----  B/C:#view-ide 编辑器视图(树 + 多标签 + Monaco 编辑区 + 保存流) ----
 // 文件树复用 #sbFt 的懒展开(dirCache + fs.list,filesPending 防重发),根=活动项目工作区;
 // 文件点击发 file.read {path:相对路径, full:true} 开标签(binary/tooLarge/missing 守卫不建编辑模型)。
-// C 部分:首次打开文本文件才动态注入 vs/loader.js(AMD)挂 Monaco,一文件一 model(monaco.Uri.file);
+// C 部分:首次打开文本文件才动态注入自有编辑器(code-editor.js,Monaco 同形适配层),一文件一 model(Uri.file);
 // 加载失败回退 textarea 保底;保存=file.write 全文覆盖写(Ctrl+S/按钮,回包清脏/失败保脏)。
 let ideTabs = [];        // [{path,name,content,orig,dirty,saving,mode:"edit"|"ro"|"loading",roReason,model?,mdView?:"preview"|"source"(仅 md 标签,逐标签持有)}]
 let ideActive = -1;      // 激活标签下标
 let ideRoot = null;      // {pid,label,path} 活动项目根
 let ideExpanded = null;  // Set<absPath> 展开目录
 let ideMonaco = null;        // Monaco 就绪句柄 {editor,monaco};null=未就绪(加载中/失败回退 textarea)
-let ideMonacoPending = null; // loader.js 动态注入 Promise(并发去重)
+let ideMonacoPending = null; // 编辑器资产动态注入 Promise(并发去重)
 let ideMonacoFailed = false; // 加载失败标志(本会话不再重试;textarea 可用性保底)
 let ideProgSet = false;      // 程序化 setValue 守卫(标签切换同步/保存回显不误标脏)
 // IDE 图片预览扩展名白名单(与服务端 /ide/asset 路由同源口径;svg 经 <img> 展示不执行脚本)。
@@ -173,103 +173,88 @@ function ideLangOf(rel) {
     swift: "swift", kt: "kotlin", txt: "plaintext", log: "plaintext" };
   return M[ext] || "plaintext";
 }
-/** Monaco 动态加载(首开文本文件才注入;失败置 ideMonacoFailed 回退 textarea 保底,状态条提示)。 */
+/** 自有编辑器动态加载(首开文本文件才注入;失败置 ideMonacoFailed 回退 textarea 保底,状态条提示)。 */
 function ideMonacoLoad() {
   if (ideMonaco) return Promise.resolve(ideMonaco);
   if (ideMonacoPending) return ideMonacoPending;
   if (ideMonacoFailed) return Promise.resolve(null);
   ideMonacoPending = new Promise((resolve) => {
     const s = document.createElement("script");
-    s.src = "/assets/vendor/monaco/vs/loader.js";
+    s.src = "/assets/code-editor.js";
     s.onload = () => {
-      const req = window.require;
-      if (!req || !req.config) { ideMonacoFailed = true; ideMonacoPending = null; resolve(null); return; }
-      req.config({ paths: { vs: "/assets/vendor/monaco/vs" } });
-      window.MonacoEnvironment = { // 同源 worker:必须用 blob: URL(data: URL 是不透明源,importScripts 解析不到面板静态路径)
-        getWorkerUrl: function () {
- // MonacoEnvironment.baseUrl 需指到 vs 的父目录(worker 内部再拼 "vs/language/typescript/tsWorker.js")
-          const vsDir = location.origin + "/assets/vendor/monaco/vs/";
-          const base = location.origin + "/assets/vendor/monaco/";
-          const src = "self.MonacoEnvironment={baseUrl:" + JSON.stringify(base) + "};" +
-            "importScripts(" + JSON.stringify(vsDir + "base/worker/workerMain.js") + ");";
-          return URL.createObjectURL(new Blob([src], { type: "application/javascript" }));
+      const monaco = window.OwnCodeEditor; // 自有编辑器适配层(Monaco 同形命名空间,零第三方依赖)
+      if (!monaco || !monaco.editor) { ideMonacoFailed = true; ideMonacoPending = null; ideStatus("编辑器加载失败,已回退纯文本编辑"); resolve(null); return; }
+      monaco.editor.defineTheme("genie", { // 面板同源暗色(bronze 色系)主题;适配层按 CSS 调色板渲染,此处接受声明
+        base: "vs-dark", inherit: true,
+        rules: [
+          { token: "comment", foreground: "6b5c4a", fontStyle: "italic" },
+          { token: "keyword", foreground: "c98f45" },
+          { token: "string", foreground: "9dc48b" },
+          { token: "number", foreground: "d9a05b" },
+          { token: "type", foreground: "e0c089" },
+        ],
+        colors: {
+          "editor.background": "#0d0a07",
+          "editor.foreground": "#ece1d1",
+          "editorLineNumber.foreground": "#6b5c4a",
+          "editorLineNumber.activeForeground": "#c98f45",
+          "editor.lineHighlightBackground": "#181008",
+          "editorCursor.foreground": "#c98f45",
+          "editor.selectionBackground": "#3a2a15",
+          "editorIndentGuide.background1": "#241a10",
+          "editorGutter.background": "#0d0a07",
         },
-      };
-      req(["vs/editor/editor.main"], () => {
-        const monaco = window.monaco;
-        if (!monaco || !monaco.editor) { ideMonacoFailed = true; ideMonacoPending = null; resolve(null); return; }
-        monaco.editor.defineTheme("genie", { // 面板同源暗色(bronze 色系)主题;light 模式面板回 'vs'
-          base: "vs-dark", inherit: true,
-          rules: [
-            { token: "comment", foreground: "6b5c4a", fontStyle: "italic" },
-            { token: "keyword", foreground: "c98f45" },
-            { token: "string", foreground: "9dc48b" },
-            { token: "number", foreground: "d9a05b" },
-            { token: "type", foreground: "e0c089" },
-          ],
-          colors: {
-            "editor.background": "#0d0a07",
-            "editor.foreground": "#ece1d1",
-            "editorLineNumber.foreground": "#6b5c4a",
-            "editorLineNumber.activeForeground": "#c98f45",
-            "editor.lineHighlightBackground": "#181008",
-            "editorCursor.foreground": "#c98f45",
-            "editor.selectionBackground": "#3a2a15",
-            "editorIndentGuide.background1": "#241a10",
-            "editorGutter.background": "#0d0a07",
-          },
-        });
- // 挂到骨架里预先存在的 #ideMonacoHost(不存在则新建并纳入骨架;避免每次渲染重建 DOM 摘掉 monaco 节点)
-        ideBodySkeleton();
-        const host = $("ideMonacoHost") || document.createElement("div");
-        if (!host.id) { host.className = "ide-monaco"; host.id = "ideMonacoHost"; $("ideBody").appendChild(host); }
- // Monaco lineHeight 单位=px(不是倍数);20 ≈ 12.5 × --lh-code(1.6),与 .ide-edit 同比例
-        const ed = monaco.editor.create(host, {
-          value: "", language: "plaintext", theme: document.body.classList.contains("light") ? "vs" : "genie",
-          fontFamily: getComputedStyle(document.body).getPropertyValue("--mono") || "ui-monospace, monospace",
-          fontSize: 12.5, lineHeight: 20, letterSpacing: 0, tabSize: 4, readOnly: true, automaticLayout: true,
-          minimap: { enabled: ideMinimapOn }, scrollBeyondLastLine: false, renderWhitespace: "selection",
+      });
+ // 挂到骨架里预先存在的 #ideMonacoHost(不存在则新建并纳入骨架;避免每次渲染重建 DOM 摘掉编辑器节点)
+      ideBodySkeleton();
+      const host = $("ideMonacoHost") || document.createElement("div");
+      if (!host.id) { host.className = "ide-monaco"; host.id = "ideMonacoHost"; $("ideBody").appendChild(host); }
+ // lineHeight 单位=px(不是倍数);20 ≈ 12.5 × --lh-code(1.6),与 .ide-edit 同比例
+      const ed = monaco.editor.create(host, {
+        value: "", language: "plaintext", theme: document.body.classList.contains("light") ? "vs" : "genie",
+        fontFamily: getComputedStyle(document.body).getPropertyValue("--mono") || "ui-monospace, monospace",
+        fontSize: 12.5, lineHeight: 20, letterSpacing: 0, tabSize: 4, readOnly: true, automaticLayout: true,
+        minimap: { enabled: ideMinimapOn }, scrollBeyondLastLine: false, renderWhitespace: "selection",
  // 查找/替换:find widget 预填选区、多行选区范围内查找;wrap/minimap 受命令面板开关控制
-          wordWrap: ideWordWrap ? "on" : "off",
-          find: { seedSearchStringFromSelection: "always", autoFindInSelection: "multiline" },
-          suggestOnTriggerCharacters: true, multiCursorModifier: "alt", formatOnPaste: false, tabCompletion: "off",
-        });
- // 查找/替换快捷键:交给 Monaco 自己的 find widget(Ctrl+F 查找 / Ctrl+H 替换),
+        wordWrap: ideWordWrap ? "on" : "off",
+        find: { seedSearchStringFromSelection: "always", autoFindInSelection: "multiline" },
+        suggestOnTriggerCharacters: true, multiCursorModifier: "alt", formatOnPaste: false, tabCompletion: "off",
+      });
+ // 查找/替换快捷键:交给适配层 find widget(Ctrl+F 查找 / Ctrl+H 替换),
  // 面板 keydown 对本域不放行 Ctrl+F/Ctrl+H(见下方 IDE 域快捷键监听),避免旧 findBar 抢键。
-        ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => { const a = ed.getAction("actions.find"); if (a) a.run(); });
-        ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => { const a = ed.getAction("editor.action.startFindReplaceAction"); if (a) a.run(); });
+      ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => { const a = ed.getAction("actions.find"); if (a) a.run(); });
+      ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => { const a = ed.getAction("editor.action.startFindReplaceAction"); if (a) a.run(); });
  // 光标/选区 → 状态条 Ln/Col + 已选字符数
-        ed.onDidChangeCursorPosition((ev) => {
-          if (!ev || !ev.position) return;
-          ideCursor.line = ev.position.lineNumber;
-          ideCursor.col = ev.position.column;
-          const sel = ed.getSelection();
-          const mdl = ed.getModel();
-          ideCursor.sel = sel && mdl && !sel.isEmpty() ? mdl.getValueInRange(sel).length : 0;
-          ideStatusSet();
-        });
-        ed.onDidChangeCursorSelection(() => {
-          const sel = ed.getSelection();
-          const mdl = ed.getModel();
-          ideCursor.sel = sel && mdl && !sel.isEmpty() ? mdl.getValueInRange(sel).length : 0;
-          ideStatusSet();
-        });
-        ed.onDidChangeModelContent(() => {
-          if (ideProgSet) return; // 程序化换值(切标签同步/保存回显)不算编辑
-          const cur = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
-          if (!cur || cur !== ed.getModel().__ideTab) return;
-          cur.content = ed.getValue();
-          if (!cur.dirty) { cur.dirty = true; ideTabsRender(); }
-          ideSaveSync();
-          ideStatus(cur.path + " ● 未保存");
-        });
-        ideMonaco = { editor: ed, monaco: monaco };
-        try { window.__ideMonacoReady = true; window.__ideMonacoEditor = ed; } catch (e) { /* 测试钩子(仅 spec 用) */ }
-        ideMonacoPending = null;
-        resolve(ideMonaco);
-      }, () => { ideMonacoFailed = true; ideMonacoPending = null; ideStatus("Monaco 加载失败,已回退纯文本编辑"); resolve(null); });
+      ed.onDidChangeCursorPosition((ev) => {
+        if (!ev || !ev.position) return;
+        ideCursor.line = ev.position.lineNumber;
+        ideCursor.col = ev.position.column;
+        const sel = ed.getSelection();
+        const mdl = ed.getModel();
+        ideCursor.sel = sel && mdl && !sel.isEmpty() ? mdl.getValueInRange(sel).length : 0;
+        ideStatusSet();
+      });
+      ed.onDidChangeCursorSelection(() => {
+        const sel = ed.getSelection();
+        const mdl = ed.getModel();
+        ideCursor.sel = sel && mdl && !sel.isEmpty() ? mdl.getValueInRange(sel).length : 0;
+        ideStatusSet();
+      });
+      ed.onDidChangeModelContent(() => {
+        if (ideProgSet) return; // 程序化换值(切标签同步/保存回显)不算编辑
+        const cur = ideActive >= 0 && ideActive < ideTabs.length ? ideTabs[ideActive] : null;
+        if (!cur || cur !== ed.getModel().__ideTab) return;
+        cur.content = ed.getValue();
+        if (!cur.dirty) { cur.dirty = true; ideTabsRender(); }
+        ideSaveSync();
+        ideStatus(cur.path + " ● 未保存");
+      });
+      ideMonaco = { editor: ed, monaco: monaco };
+      try { window.__ideMonacoReady = true; window.__ideMonacoEditor = ed; } catch (e) { /* 测试钩子(仅 spec 用) */ }
+      ideMonacoPending = null;
+      resolve(ideMonaco);
     };
-    s.onerror = () => { ideMonacoFailed = true; ideMonacoPending = null; ideStatus("Monaco 加载失败(vs/loader.js 不可达),已回退纯文本编辑"); resolve(null); };
+    s.onerror = () => { ideMonacoFailed = true; ideMonacoPending = null; ideStatus("编辑器加载失败(code-editor.js 不可达),已回退纯文本编辑"); resolve(null); };
     document.head.appendChild(s);
   });
   return ideMonacoPending;

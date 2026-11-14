@@ -137,7 +137,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   // ③ 点击文件 → file.read {full:true} 相对路径 → 标签打开 + 编辑面全文(Monaco 挂载或 textarea 回退)
   await page.evaluate(() => { window.__ideMsgs = []; });
   await page.evaluate(() => { [...document.querySelectorAll("#ideTree .ft-row.file")].find((x) => x.textContent.includes("hello.txt")).click(); });
-  // 首开文本文件触发 vs/loader.js 动态注入(AMD chunk 数 MB,给足窗口);失败回退 textarea(B 语义保底)
+  // 首开文本文件触发自有编辑器动态注入(资产小,窗口给足);失败回退 textarea(B 语义保底)
   await page.waitForFunction(() => document.querySelector("#ideBody .view-lines") || document.getElementById("ideEdit"), null, { timeout: 15000 });
   await page.waitForTimeout(400);
   const open = await page.evaluate(() => ({

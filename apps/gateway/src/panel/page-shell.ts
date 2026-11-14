@@ -422,7 +422,7 @@ export const PANEL_SHELL = `</style></head><body>
       <div class="files-tree" id="filesTree"><div class="cc-empty">切换到项目后展示文件树;点击文件预览,右键更多操作</div></div>
     </div>
     <div class="view panel-wrap" id="view-ide">
-      <div class="vw-head"><span class="vw-title">编辑器 IDE</span><span class="vw-sub" id="ideSub">Monaco · Ctrl+S 保存</span>
+      <div class="vw-head"><span class="vw-title">编辑器 IDE</span><span class="vw-sub" id="ideSub">编辑器 · Ctrl+S 保存</span>
         <div class="seg" id="ideMdSeg" style="display:none;align-self:center" title="Markdown 显示方式"><button data-md="preview">预览</button><button data-md="source">源码</button></div>
         <div class="seg" id="idePvSeg" style="display:none;align-self:center" title="HTML 文件显示方式"><button data-pv="edit">编辑</button><button data-pv="preview">预览</button></div>
         <button class="vw-act" id="ideSave" disabled title="保存激活标签(Ctrl+S)">保存</button></div>

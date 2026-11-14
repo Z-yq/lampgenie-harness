@@ -364,28 +364,12 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/status-widget.js") {
-      readFile(join(here, "assets", "status-widget.js"))
+    if (req.url === "/assets/code-editor.js") { // 自有代码编辑器(Monaco 同形适配层;零第三方依赖,零 worker)
+      readFile(join(here, "assets/code-editor.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
- // C:Monaco vendored(vs/loader.js AMD + 按需 chunk + base/worker/workerMain.js,同源静态)。
-    // MIME 只放编辑器所需三型(js/css/ttf);路径含 ../ 或反斜杠直接拒(目录穿越兜底)。
-    if (req.url !== undefined && req.url.startsWith("/assets/vendor/monaco/vs/")) {
-      let rel = "";
-      try { rel = decodeURIComponent((req.url.split("?")[0] ?? "").slice("/assets/vendor/monaco/vs/".length)); }
-      catch (e) { res.writeHead(400); res.end(); return; }
-      if (!rel || rel.includes("..") || rel.includes("\\")) { res.writeHead(400); res.end(); return; }
-      const ext = (rel.split(".").pop() ?? "").toLowerCase();
-      const mime = ext === "css" ? "text/css" : ext === "ttf" ? "font/ttf" : ext === "js" ? "application/javascript" : "";
-      if (!mime) { res.writeHead(415); res.end(); return; }
-      readFile(join(here, "assets", "vendor", "monaco", "vs", rel))
-        .then((buf) => { res.writeHead(200, { "content-type": mime }); res.end(buf); })
-        .catch(() => { res.writeHead(404); res.end(); });
-      return;
-    }
- // 服务重启降级壳(视频 T1):SW 缓存面板壳,停机窗口刷新不再裸错误页
     if (req.url === "/assets/sw.js") {
       readFile(join(here, "assets", "sw.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
