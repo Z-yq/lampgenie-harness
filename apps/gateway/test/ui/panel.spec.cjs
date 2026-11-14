@@ -119,9 +119,9 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7700";
   check("模块清单渲染", detail2.includes("模块"), detail2.slice(0, 60));
 
   // 6. mermaid 渲染(plan 剖面无 LLM→mermaid 空;查 mermaid 库加载即可)
-  const mermaidLoaded = await page.evaluate(() => typeof window.mermaid !== "undefined");
+  const mermaidLoaded = await page.evaluate(() => typeof window.OwnDiagram !== "undefined");
   const mermaid404 = false; // 资产 200 已单独 curl 验过;此处只验 window 对象
-  check("mermaid vendored 库加载", mermaidLoaded);
+  check("自有图渲染器加载", mermaidLoaded);
 
   // 7. 断线降级(杀 WS 模拟:直接断 page websocket 不可行——跳过,验证重连脚本存在)
   check("控制台无错误", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));

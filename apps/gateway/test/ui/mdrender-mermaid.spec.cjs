@@ -47,16 +47,16 @@ const CHROME = "/usr/bin/google-chrome";
   ];
   const injected = await page.evaluate("(function(){ if(!window.__mature) return false; window.__mature.setHist(" + JSON.stringify(CONV) + "); window.__mature.renderHistory(); return true; })()");
   check("__mature 注入", injected, "");
-  // 懒加载:mermaid.min.js 动态注入(页面主 script 急加载路径已移除)→ run 出 svg;最多等 8s
+  // 出图:渲染器主壳已 eager <script src="/assets/diagram-renderer.js"> 就位 → run 出 svg;最多等 8s
   let svgCount = 0, badPre = "", timerShot = false, scriptInjected = false;
   for (let t = 0; t < 40 && svgCount === 0; t++) { await page.waitForTimeout(200); svgCount = await page.locator("#chatBody .md-mermaid svg").count(); }
   await page.waitForTimeout(1500); // 坏块 render/reject 降级落定
   svgCount = await page.locator("#chatBody .md-mermaid svg").count();
   badPre = await page.evaluate(() => { const els = document.querySelectorAll("#chatBody .md-mermaid pre"); return els.length ? els[0].textContent : ""; });
-  scriptInjected = await page.evaluate(() => !!document.querySelector('script[src="/assets/mermaid.min.js"]'));
+  scriptInjected = await page.evaluate(() => !!document.querySelector('script[src="/assets/diagram-renderer.js"]'));
   check("占位节点渲染成 svg", svgCount >= 1, "svg=" + svgCount);
   check("坏语法块降级 pre 保留源文本", /not \[valid mermaid/.test(badPre), "pre=" + badPre.slice(0, 40).replace(/\n/g, "\\n"));
-  check("mermaid 脚本懒注入(仅一次)", scriptInjected && (await page.evaluate(() => document.querySelectorAll('script[src="/assets/mermaid.min.js"]').length)) === 1, "");
+  check("渲染器脚本就位(eager 主壳标签,单实例)", scriptInjected && (await page.evaluate(() => document.querySelectorAll('script[src="/assets/diagram-renderer.js"]').length)) === 1, "");
 
   // 5. svg 不撑破卡片(max-width 生效)
   const maxw = await page.evaluate(() => { const s = document.querySelector("#chatBody .md-mermaid svg"); return s ? getComputedStyle(s).maxWidth : ""; });

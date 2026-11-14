@@ -2,7 +2,7 @@
  * 面板主脚本分片:script-core(逐字自 panel.ts PAGE 模板搬移, 拆分)。
  * 模板约束沿袭:不得出现反引号与 ${;行内换行不得写裸转义。
  */
-export const PANEL_JS_CORE = `if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: mmBaseTheme(), themeVariables: mmThemeVars() });
+export const PANEL_JS_CORE = `if (window.OwnDiagram) mmApplyTheme();
 // WS 韧性:socket 降为可换槽位(let)——断线后 connectWs 换新连接,wireWs 统一挂
 // 处理器;指数退避在 wsOnClose,成功重放在 wsOnOpen。此前 const 一次性连接,断开只能整页刷新。
 let ws = null; // 当前 socket(重连时整体换新;全部 ws.* 引用经 let 绑定读到最新)
@@ -263,8 +263,8 @@ function applySettings() {
     setTimeout(() => document.body.classList.remove("theme-fade"), 320);
   }
   __lastThemeSig = themeSig;
- // 任务B:主题(基座/主题类)真变 → mermaid 用同一份归一化变量重新 initialize;
- // 此前只有解析期一次写死 dark,浅主题下 mermaid 图恒为深色。库未到=空转(onload 用当前基座兜住)。
+ // 主题(基座/主题类)真变 → 自有图渲染器按当前基座重新 configure(明/暗调色板);
+ // 渲染器未到=空转(懒加载 onload 用当前基座兜住)。
   try {
     if (typeof mmThemeSigApplied !== "undefined" && mmThemeSigApplied !== themeSig && typeof mmApplyTheme === "function") {
       mmThemeSigApplied = themeSig;

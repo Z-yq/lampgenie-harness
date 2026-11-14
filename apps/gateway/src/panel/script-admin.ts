@@ -563,8 +563,8 @@ function ppRender(d) {
     : (d.progress || 0) + "% · " + (d.stage || "");
  // 架构图
   const g = $("ppGraph");
-  if (d.mermaid && window.mermaid) {
-    mermaid.render("ppgraph", d.mermaid).then((o) => {
+  if (d.mermaid && window.OwnDiagram) {
+    OwnDiagram.render("ppgraph", d.mermaid).then((o) => {
       g.innerHTML = '<div class="gv">' + (o && o.svg ? o.svg : o) + "</div>";
       bindZoomPan(g, g.querySelector(".gv"), g.querySelector("svg"));
  // 节点点选=选中模块(金色高亮+邻接淡化,右侧详情展开;再点恢复)——选中就是黄色高亮状态
@@ -984,7 +984,7 @@ function ppfDrawGraph(m, focusId) {
   if (trunkIds.length) tail += NL + "  class " + trunkIds.join(",") + " c2fTrunk";
   if (leafIds.length) tail += NL + "  class " + leafIds.join(",") + " c2fLeaf";
   if (trunkIds.length || leafIds.length) tail += NL + "  classDef c2fTrunk fill:#8a5a2a,stroke:#c98f45,color:#fff" + NL + "  classDef c2fLeaf fill:#3a5a3a,stroke:#7ec98f,color:#b8e0b8";
-  mermaid.render("ppfm" + Date.now() % 1e6, tail).then((o) => {
+  OwnDiagram.render("ppfm" + Date.now() % 1e6, tail).then((o) => {
     el.innerHTML = '<div class="gv">' + (o && o.svg ? o.svg : String(o)) + "</div>";
     bindZoomPan(el, el.querySelector(".gv"), el.querySelector("svg")); // 文件级小图同享缩放/平移
   }).catch(() => { el.innerHTML = "<pre style='font-size:9px;color:var(--faint)'>" + ppfEsc(tail) + "</pre>"; });

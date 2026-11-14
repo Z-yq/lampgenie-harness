@@ -3,9 +3,9 @@
  *  ① mdToHtml 对 ```mermaid 围栏产 .md-mermaid 占位节点且 data-src 完整保留源文本(HTML 转义形态);
  *  ② 普通 ```js 代码块路径零改动(is-code 板 + span.cl 行 + 复制钮);
  *  ③ 未闭合 ```mermaid 不炸(单遍状态机尾部 renderCodeBlock 路径);
- *  ④ 懒加载运行时三件套在页面脚本内接线:mmEnsureLib(单例注入 /assets/mermaid.min.js)、
+ *  ④ 懒加载运行时三件套在页面脚本内接线:mmEnsureLib(单例注入 /assets/diagram-renderer.js)、
  *    mmFallback(data-src 还原 <pre>)、mmRenderIn(三处消息渲染钩子调用);
- *  ⑤ /assets/mermaid.min.js 资产路由可达(servePanel 真实实例 fetch)。
+ *  ⑤ /assets/diagram-renderer.js 资产路由可达(servePanel 真实实例 fetch)。
  * 形态:panel-canvas-fixes.test.ts 的 extractFn(花括号配平)——不起浏览器,vitest 单文件可跑。
  */
 import { describe, it, expect } from "vitest";
@@ -103,8 +103,8 @@ describe("消息流 mermaid 懒加载渲染(2026-10-29)", () => {
       for (const fn of ["mmEnsureLib", "mmFallback", "mmRenderIn"]) {
         expect(html).toContain("function " + fn + "(");
       }
-      // 单例懒注入:/assets/mermaid.min.js 由 mmEnsureLib 动态创建(不再有 CODE_SRC Map)
-      expect(html).toContain('sc.src = "/assets/mermaid.min.js"');
+      // 单例懒注入:/assets/diagram-renderer.js 由 mmEnsureLib 动态创建(不再有 CODE_SRC Map)
+      expect(html).toContain('sc.src = "/assets/diagram-renderer.js"');
       expect(html).not.toMatch(/CODE_SRC\s*\./); // CODE_SRC 退役:无成员访问(页面其它 new Map 合法存在,不能一刀切)
       // 主历史/子代理工作区/Wiki/IDE md 预览四处钩子换用 mmRenderIn
       expect((html.match(/mmRenderIn\(/g) || []).length).toBeGreaterThanOrEqual(5); // 定义 1 + 调用 4
@@ -118,13 +118,14 @@ describe("消息流 mermaid 懒加载渲染(2026-10-29)", () => {
     });
   }, 30_000);
 
-  it("⑤ /assets/mermaid.min.js 资产路由可达(200 + JS 类型)", async () => {
+  it("⑤ /assets/diagram-renderer.js 资产路由可达(200 + JS 类型)", async () => {
     await withPanel(7898, async (_html) => {
-      const res = await fetch("http://127.0.0.1:7898/assets/mermaid.min.js");
+      const res = await fetch("http://127.0.0.1:7898/assets/diagram-renderer.js");
       expect(res.status).toBe(200);
       const body = await res.text();
-      expect(body.length).toBeGreaterThan(100_000); // vendored 完整 UMD(>2MB)
-      expect(body).toContain("mermaid");
+      expect(body.length).toBeGreaterThan(1_000); // 自有渲染器(UMD,零第三方依赖)
+      expect(body).toContain("OwnDiagram");
+      expect(body).not.toMatch(/^\s*(export|import)/m); // 经典脚本口径(页面 <script src> 直接跑)
     });
   }, 30_000);
 });

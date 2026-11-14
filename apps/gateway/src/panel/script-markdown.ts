@@ -163,65 +163,30 @@ function hl(mark, q) {
   return out + mark.slice(i);
 }
 // 代码块渲染:每行一个 span.cl,CSS 计数器出行为行号(body.lineno 开关);长行换行由 body.nowrapcode 控制。
-// mermaid 懒加载运行时(消息流 mermaid 块):占位节点 .md-mermaid[data-mermaid-lazy]
-// 自携带源文本(data-src);渲染完成后 mmRenderIn 扫描→按需注入 /assets/mermaid.min.js(单例幂等)
-// → mermaid.run({nodes}) 出图;脚本加载失败/超时(5s)/语法错一律降级 <pre> 代码文本,不白屏不抛错。
-let MM_LIB_LOAD = null; // mermaid.min.js 懒加载单例(重复渲染不重复注入)
-/** 任务B:mermaid 主题变量经 mermaid-theme-normalize 归一化后喂 mermaid——
- * oklab/color-mix 等现代 CSS 颜色在旧内核/导出路径会褪色或解析失败,归一化成 rgb 串;
- * 引擎缺席/归一化抛错一律静默回退原始值(渲染不能炸)。两个 initialize 调用点共用本函数。 */
-function mmThemeVars() {
- // 任务B:按当前主题基座取变量——旧实现写死深色底(#0b0806),浅主题(暖纸/砂陶…)下
- // mermaid 图仍是深底,与页面冲突。isLightBase 缺席(极老壳/单测沙箱)时退回深色,不炸。
-  const light = (function () { try { return typeof isLightBase === "function" ? isLightBase() : false; } catch (e) { return false; } })();
-  const vars = light
-    ? { background: "#faf6ee", primaryColor: "#efe6d6", primaryTextColor: "#3d3223", lineColor: "#b07830", fontSize: "13px",
-      mainBkg: "#efe6d6", nodeBorder: "#b07830", secondaryColor: "#e6dcc8", tertiaryColor: "#dccfb4",
-      edgeLabelBackground: "#faf6ee", clusterBkg: "#f4ece0", clusterBorder: "#c9b48c", titleColor: "#3d3223" }
-    : { background: "#0b0806", primaryColor: "#1a120a", primaryTextColor: "#ece1d1", lineColor: "#c98f45", fontSize: "13px",
-      mainBkg: "#1a120a", nodeBorder: "#c98f45", secondaryColor: "#241a10", tertiaryColor: "#2e2317",
-      edgeLabelBackground: "#0b0806", clusterBkg: "#141009", clusterBorder: "#4a3a26", titleColor: "#ece1d1" };
-  try {
-    const lib = window.MermaidThemeNormalize;
-    if (lib && typeof lib.normalizeMermaidThemeVars === "function") {
-      const sampler = (lib.createCanvasColorSampler && typeof lib.createCanvasColorSampler === "function")
-        ? lib.createCanvasColorSampler() : null;
-      const out = lib.normalizeMermaidThemeVars(vars, sampler ? { sampler } : undefined);
-      if (out && typeof out === "object") return out;
-    }
-  } catch (e) { /* 归一化失败:静默回退原值,不炸渲染 */ }
-  return vars;
-}
-/** 任务B(取证):mermaid 主题**基座名**。经验证本仓 mermaid 构建只有 theme:"base" 才吃
- * themeVariables("dark"/"default" 一律用自身默认色板:浅主题下节点仍是被写死的 #1f2020 深卡,
- * 归一化后的浅变量进不去图)。故浅基座用 "base"(变量直接生效)、深基座保持 "dark"(现状零回归)。 */
-function mmBaseTheme() {
-  try { return (typeof isLightBase === "function" && isLightBase()) ? "base" : "dark"; } catch (e) { return "dark"; }
-}
-/** 任务B:主题切换后按当前基座用归一化变量重新 initialize mermaid。
- * 旧实现只在解析期/懒加载 onload 各 initialize 一次且写死 theme:"dark",切浅主题后 mermaid 仍吃深色变量
- * (图底色仍是 #0b0806)。库还没加载时安全空转——懒加载 onload 用当时的 mmThemeVars 兜住。 */
-var mmThemeSigApplied = ""; // 上次 initialize 用的主题签名(基座+主题类),避免每次 applySettings 都重 init
+// mermaid 语法块的渲染运行时:自有图渲染器(diagram-renderer.js,纯 JS 资产,零第三方依赖)。
+// 占位节点 .md-mermaid[data-mermaid-lazy] 自携带源文本(data-src);渲染完成后 mmRenderIn 扫描
+// →按需注入 /assets/diagram-renderer.js(单例幂等)→ OwnDiagram.run({nodes}) 出图;
+// 脚本加载失败/超时(5s)/语法超子集一律降级 <pre> 代码文本,不白屏不抛错。
+let MM_LIB_LOAD = null; // diagram-renderer.js 懒加载单例(重复渲染不重复注入)
+/** 主题基座:浅主题→light 调色板,深主题→dark(渲染器内置明暗双板)。 */
 function mmApplyTheme() {
-  if (typeof window === "undefined" || !window.mermaid || typeof window.mermaid.initialize !== "function") return false;
+  if (typeof window === "undefined" || !window.OwnDiagram || typeof window.OwnDiagram.configure !== "function") return false;
   try {
-    window.mermaid.initialize({ startOnLoad: false, theme: mmBaseTheme(), suppressErrorReporting: true, themeVariables: mmThemeVars() });
+    const light = (typeof isLightBase === "function") ? !!isLightBase() : false;
+    window.OwnDiagram.configure({ theme: light ? "light" : "dark" });
     return true;
   } catch (e) { return false; }
 }
 function mmEnsureLib() {
-  if (window.mermaid) return Promise.resolve(true);
+  if (window.OwnDiagram) return Promise.resolve(true);
   if (MM_LIB_LOAD) return MM_LIB_LOAD;
   MM_LIB_LOAD = new Promise((res) => {
     const sc = document.createElement("script");
-    sc.src = "/assets/mermaid.min.js";
+    sc.src = "/assets/diagram-renderer.js";
     let done = false;
     const fin = (ok) => { if (!done) { done = true; res(ok); } };
     sc.onload = () => {
-      try {
-        if (window.mermaid) window.mermaid.initialize({ startOnLoad: false, theme: mmBaseTheme(), suppressErrorReporting: true, themeVariables: mmThemeVars() });
-        fin(!!window.mermaid);
-      } catch (e) { fin(false); }
+      try { fin(!!(window.OwnDiagram && typeof window.OwnDiagram.run === "function") && mmApplyTheme()); } catch (e) { fin(false); }
     };
     sc.onerror = () => fin(false);
     setTimeout(() => fin(false), 5000); // 加载超时:降级代码文本,不悬"渲染中…"
@@ -246,14 +211,11 @@ function mmRenderIn(root) { // 消息渲染完成钩子:扫描 root(缺省 docum
   mmEnsureLib().then((ok) => {
     for (const el of els) {
       if (!el.hasAttribute("data-mermaid-lazy")) continue; // 已渲染/已降级(重复渲染幂等)
-      if (!ok || !window.mermaid || typeof window.mermaid.run !== "function") { mmFallback(el); continue; }
-      const src = el.getAttribute("data-src") || "";
-      el.removeAttribute("data-mermaid-lazy");
-      el.textContent = src; // mermaid.run 读节点 textContent
-      Promise.resolve(window.mermaid.run({ nodes: [el] })).then(() => {
+      if (!ok || !window.OwnDiagram || typeof window.OwnDiagram.run !== "function") { mmFallback(el); continue; }
+      Promise.resolve(window.OwnDiagram.run({ nodes: [el] })).then(() => {
         const svg = el.querySelector("svg");
         if (svg) svg.style.maxWidth = "100%"; else mmFallback(el); // 无 svg=异常防御降级
-      }).catch(() => mmFallback(el)); // 语法错:单节点 reject,降级代码文本
+      }).catch(() => mmFallback(el)); // 语法超子集:单节点 reject,降级代码文本
     }
   });
 }

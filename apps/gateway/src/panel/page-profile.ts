@@ -127,7 +127,7 @@ export const PANEL_PROFILE_PAGE = `<!doctype html><html lang="zh"><head><meta ch
     <div id="chs" style="display:flex;flex-direction:column;gap:4px"></div>
   </div>
 </div>
-<script src="/assets/mermaid.min.js"></script>
+<script src="/assets/diagram-renderer.js"></script> <!-- 自有图渲染器(零第三方依赖) -->
 <script src="/assets/input-policy.js"></script> <!-- 独立档案页同样分区接管(图容器 #g) -->
 <script>
 var pid = new URLSearchParams(location.search).get("p") || "";
@@ -153,8 +153,8 @@ function render(d) {
   st.className = "st " + d.state;
   bar.style.width = (d.progress || 0) + "%";
   pct.textContent = d.state === "done" ? (d.stats ? d.stats.files + " 文件 · " + (d.modules || []).length + " 模块" : "") : (d.progress || 0) + "% · " + (d.stage || "");
-  if (d.mermaid && window.mermaid) {
-    mermaid.render("pg", d.mermaid).then(function (o) {
+  if (d.mermaid && window.OwnDiagram) {
+    OwnDiagram.render("pg", d.mermaid).then(function (o) {
       gv.innerHTML = (o && o.svg ? o.svg : o);
       bindGraph(gv, gv.querySelector("svg"), d);
     }).catch(function () { gv.innerHTML = "<div class=empty>图渲染失败</div>"; });

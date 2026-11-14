@@ -1185,7 +1185,7 @@ $("revInjMask").onclick = (e) => { if (e.target === $("revInjMask")) { $("revInj
 $("revStoreRefresh").onclick = () => revStoreLoad();
 $("sense-q").onkeydown = (e) => { if (e.key === "Enter") senseRun(); };
 // 关系图节点点击下钻( v4:点节点=以该节点为新 query 的 debug 剖面)——
-// mermaid securityLevel 保持 strict(archmap 的 LLM 产物不可放宽),经 g 元素 id 对照结果内 nodes 表
+// 渲染器严格 XML 转义(archmap 的 LLM 产物不可放宽),经 g 元素 id 对照结果内 nodes 表
 function bindSenseDrill(host, nodes) {
   const byId = {};
   for (const n of nodes) byId[n.id] = n.name;

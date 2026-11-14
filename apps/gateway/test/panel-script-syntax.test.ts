@@ -38,7 +38,7 @@ describe("面板脚本语法", () => {
       try {
         expect(() => new Function(code), "assets/" + f).not.toThrow();
       } catch (e) {
- // E1:diagram-viewport.js / mermaid-theme-normalize.js 是 ESM 资产(尾部 export,
+ // E1:diagram-viewport.js 等 ESM 尾导出资产(尾部 export,
         // 面板侧走动态 import 挂 window,见 panel.ts 的 mount())。new Function 是经典脚本口径,
         // 对它们必然 SyntaxError——改用真模块解析器(同浏览器口径)校验,坏文件照样拦。
         if (!/^\s*(export|import)\b/m.test(code)) throw e;

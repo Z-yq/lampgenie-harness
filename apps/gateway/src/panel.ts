@@ -80,8 +80,8 @@ ${PANEL_JS_IDE_1}${PANEL_JS_IDE_2}${PANEL_JS_ANNOTATE}
 </body></html>`;
 
 /** 在同一端口同时挂 WS 与 HTTP(静态面板)。 */
-// mermaid vendored 本地资产( §10:禁 CDN)——由调用方注入内容,防路径读取。
-/** 项目档案独立窗口页:只读视图,复用 /assets/mermaid 与 WS 档案消息。 */
+// 自有图渲染器本地资产(禁 CDN)——由调用方注入内容,防路径读取。
+/** 项目档案独立窗口页:只读视图,复用 /assets/diagram-renderer 与 WS 档案消息。 */
 const PROFILE_PAGE = PANEL_PROFILE_PAGE;
 
 // ---- 附件回看读盘(E 路由)服务端辅助:上限 / 视频后缀判定 / 后缀→content-type ----
@@ -280,8 +280,8 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
     }
     const { readFile } = nodeFsPromises;
     const here = dirname(fileURLToPath(import.meta.url));
-    if (req.url === "/assets/mermaid.min.js") {
-      readFile(join(here, "assets/mermaid.min.js"))
+    if (req.url === "/assets/diagram-renderer.js") { // 自有图渲染器(纯 JS 资产,零第三方依赖)
+      readFile(join(here, "assets/diagram-renderer.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;
@@ -346,14 +346,8 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
-    if (req.url === "/assets/diagram-viewport.js") { // 任务B:图视口引擎(锚点缩放/捏合/紧凑 fit)
+    if (req.url === "/assets/diagram-viewport.js") { // 图视口引擎(锚点缩放/捏合/紧凑 fit)
       readFile(join(here, "assets", "diagram-viewport.js"))
-        .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
-        .catch(() => { res.writeHead(404); res.end(); });
-      return;
-    }
-    if (req.url === "/assets/mermaid-theme-normalize.js") { // 任务B:mermaid 主题色归一化(oklab/color-mix→rgb)
-      readFile(join(here, "assets", "mermaid-theme-normalize.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
         .catch(() => { res.writeHead(404); res.end(); });
       return;

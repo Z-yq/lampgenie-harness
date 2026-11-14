@@ -288,62 +288,45 @@ describe("任务B ⑤ IDE 图片查看器接同一引擎(B2)", () => {
   });
 });
 
-describe("任务B ⑥ mermaid 主题归一化接线(B3)", () => {
-  it("两个 initialize 调用点都经 mmThemeVars()(归一化优先,失败静默回退)", async () => {
+describe("⑥ 图渲染主题接线(自有渲染器)", () => {
+  it("mmApplyTheme 按基座给 OwnDiagram.configure(light/dark),渲染器缺席安全空转", async () => {
     await withPanel(7898, (html) => {
-      const fn = extractFn(html, "mmThemeVars");
-      expect(fn).toContain("MermaidThemeNormalize");
-      expect(fn).toContain("normalizeMermaidThemeVars");
-      expect(fn).toContain("createCanvasColorSampler");
-      expect(fn).toContain("return vars"); // 引擎缺席/抛错:回退原始值,渲染不炸
-      // 两处 initialize 均喂 mmThemeVars()
-      expect((html.match(/themeVariables: mmThemeVars\(\)/g) || []).length).toBeGreaterThanOrEqual(3); // 解析期首次 + 懒加载 onload + 资产挂载补跑
+      const fn = extractFn(html, "mmApplyTheme");
+      expect(fn).toContain("window.OwnDiagram");
+      expect(fn).toContain("OwnDiagram.configure");
+      expect(fn).toContain('theme: light ? "light" : "dark"');
+      expect(fn).toContain("isLightBase()");
+      // 渲染器缺席时:配置调用安全返回 false,不抛
+      expect(fn).toContain("return false");
     });
   });
-  it("浅主题缺口:applySettings 主题签名变更后走 mmApplyTheme 重新 initialize(变量按基座归一化)", async () => {
+  it("浅主题缺口:applySettings 主题签名变更后走 mmApplyTheme 重新 configure(调色板按基座切换)", async () => {
     await withPanel(7902, (html) => {
-      // ① 接线:主题签名落定后必须触发 mermaid 重初始化(旧实现仅解析期一次且写死 theme:"dark")
+      // ① 接线:主题签名落定后必须触发渲染器重配置(旧实现仅解析期一次且写死 dark)
       const i = html.indexOf("__lastThemeSig = themeSig;");
       expect(i, "applySettings 未找到主题签名落点").toBeGreaterThan(0);
       const tail = html.slice(i, i + 800);
       expect(tail).toContain('typeof mmApplyTheme === "function"');
       expect(tail).toContain("mmApplyTheme();");
-      // ② 本体:initialize + themeVariables 走 mmThemeVars(归一化链路不被绕过)
+      // ② 本体:configure 走 OwnDiagram(主题链路不被绕过)
       const fn = extractFn(html, "mmApplyTheme");
-      expect(fn).toContain("window.mermaid.initialize");
-      expect(fn).toContain("themeVariables: mmThemeVars()");
- // ④ 基座名(取证经验证):本仓 mermaid 构建只有 theme:"base" 才吃 themeVariables,
-      //    "dark"/"default" 用自身默认色板 —— 浅主题下节点仍是被写死的 #1f2020 深卡。
-      //    故 initialize 的 theme 必须按基座取 mmBaseTheme()(浅="base"),不能继续写死 "dark"。
-      const baseFn = extractFn(html, "mmBaseTheme");
-      expect(baseFn).toContain("isLightBase()");
-      expect(baseFn).toContain('"base"');
-      expect(fn).toContain("theme: mmBaseTheme()");
-      expect(html).not.toContain('theme: "dark"'); // 四个 initialize 调用点全部改走基座函数
-      // ③ 变量按当前基座取:浅主题不再是深色底(#0b0806)
-      const vars = extractFn(html, "mmThemeVars");
-      expect(vars).toContain("isLightBase()");
-      expect(vars).toContain("#faf6ee");
+      expect(fn).toContain("window.OwnDiagram.configure");
+      expect(fn).toContain("isLightBase()");
+      // ③ 解析期首次初始化也走 mmApplyTheme
+      expect(html).toContain("if (window.OwnDiagram) mmApplyTheme();");
     });
-    // ④ 行为:同一个 mmThemeVars 在浅/深基座下产出不同底色(浅主题不再吃深色变量)
-    const src = extractFn(PANEL_SRC, "mmThemeVars");
-    const lightVars = evalFn<() => Record<string, string>>(src, { isLightBase: () => true, window: {} }, "mmThemeVars");
-    const darkVars = evalFn<() => Record<string, string>>(src, { isLightBase: () => false, window: {} }, "mmThemeVars");
-    expect(lightVars().background).toBe("#faf6ee");
-    expect(darkVars().background).toBe("#0b0806");
-    expect(lightVars().primaryTextColor).not.toBe(darkVars().primaryTextColor);
   });
-  it("资产挂载:diagram-viewport/mermaid-theme-normalize 动态 import 挂 window + 同源路由", async () => {
+  it("资产挂载:diagram-viewport 动态 import 挂 window + 渲染器同源路由", async () => {
     await withPanel(7899, async (html) => {
       expect(html).toContain('mount("/assets/diagram-viewport.js", "DiagramViewport")');
-      expect(html).toContain('mount("/assets/mermaid-theme-normalize.js", "MermaidThemeNormalize")');
+      expect(html).not.toContain("mermaid-theme-normalize"); // 归一化件已随自有渲染器退役
       // 路由可达(同源资产服务,panel.ts 先例照做)
       const srv2 = servePanel(7871, () => { /* 不需要 WS */ });
       try {
         const r1 = await fetch("http://127.0.0.1:7871/assets/diagram-viewport.js");
         expect(r1.status).toBe(200);
-        const r2 = await fetch("http://127.0.0.1:7871/assets/mermaid-theme-normalize.js");
-        expect(r2.status).toBe(200);
+        const r2 = await fetch("http://127.0.0.1:7871/assets/diagram-renderer.js");
+        expect(r2.status).toBe(200); // 自有渲染器路由(经典脚本口径)
       } finally { await srv2.close(); }
     });
   });
@@ -358,6 +341,6 @@ describe("任务B ⑦ transform 卫生(无 NaN/Infinity 路径 + viewBox 双写�
   it("grep viewBox:canvas-shell 仅图标模板一处(无旧 viewBox fit 双写)", () => {
     const code = readFileSync(SHELL, "utf8");
     const hits = code.split("\n").map((l, i) => (l.includes("viewBox") ? i + 1 : 0)).filter(Boolean);
-    expect(hits).toEqual([76]); // 唯一命中=ic 图标 path 的 viewBox 模板
+    expect(hits).toEqual([75]); // 唯一命中=ic 图标 path 的 viewBox 模板
   });
 });

@@ -1366,8 +1366,8 @@ function renderBoard() {
   if (boardCanvasMode) {
  // 六期:工作流画布为主模式(节点卡+贝塞尔边+平移缩放拖拽+档案跳转);mermaid 简图保留为切换项
     renderBoardCanvas(doc);
-  } else if (window.mermaid) {
-    mermaid.render("bdm" + Date.now() + Math.floor(Math.random() * 1e5), mer).then((o) => {
+  } else if (window.OwnDiagram) {
+    OwnDiagram.render("bdm" + Date.now() + Math.floor(Math.random() * 1e5), mer).then((o) => {
       g.innerHTML = (o && o.svg ? o.svg : String(o)) +
         '<div class="bd-meta">「' + esc(doc.title) + "」 " + (boardEditOn ? "编辑中(未保存)" : doc.status === "draft" ? "设计稿" : doc.status === "implementing" ? "实施中" : "已落实") + " · rev " + doc.rev + " · " + doc.nodes.length + " 节点/" + bdEdgeCountText(doc) + bdCountSeg(doc) + (doc.docKind === "page" ? ' · <span class="bd-tag lk-moved">页面结构板</span>' : doc.docKind === "workflow" ? ' · <span class="bd-tag lk-linked">工作流板</span>' : "") + recon + bdP0Tags(doc) + "</div>";
     }).catch(() => { g.textContent = mer; toast("简图渲染失败,已显示源码(边标签含非法字符,已修转义;此为兜底)"); }); // :静默回退改可感知(:用户面对源码墙不知所以)

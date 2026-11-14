@@ -1484,13 +1484,13 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // 图给人看( §9 分工):debug 调用关系图(圆心高亮/未解析虚线)> 架构图 > 页面流;
  // mermaid 缺席或渲染失败回落文字(不冒充图)
     const mer = (r.callchain && r.callchain.mermaid) || (r.architecture && r.architecture.mermaid) || (r.pageflow && r.pageflow.mermaid) || null;
-    if (mer && window.mermaid) {
-      mermaid.render("g1", mer).then((o) => {
+    if (mer && window.OwnDiagram) {
+      OwnDiagram.render("g1", mer).then((o) => {
         const host = $("sense-mermaid");
         host.innerHTML = (o && o.svg ? o.svg : o) + (r.callchain && r.callchain.mermaidTruncated ? '<div class="dim" style="padding-top:6px">图过大已按离圆心远近裁剪(34 节点上限),完整链见明细</div>' : "");
         if (r.callchain) bindSenseDrill(host, r.callchain.mermaidNodes || []);
         if (r.sequence && r.sequence.mermaid) {
-          mermaid.render("g2", r.sequence.mermaid).then((o2) => {
+          OwnDiagram.render("g2", r.sequence.mermaid).then((o2) => {
             const cap = document.createElement("div");
             cap.className = "dim"; cap.style.padding = "8px 0 2px";
             cap.textContent = "静态时序(语句序≠运行序,异步边界 " + r.sequence.asyncBoundaries + " 处)";

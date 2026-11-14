@@ -1433,7 +1433,7 @@ export const PANEL_SHELL = `</style></head><body>
  <div class="ide-cmd-foot"><span>↑↓ 选择</span><span>↵ 执行</span><span>Esc 关闭</span><span id="ideCmdMeta"></span></div>
  </div>
 </div>
-<script src="/assets/mermaid.min.js"></script>
+<script src="/assets/diagram-renderer.js"></script> <!-- 自有图渲染器(零第三方依赖;纯函数解析/分层布局/SVG 绘制) -->
 <script src="/assets/status-widget.js"></script>
 <script src="/assets/super-console.js"></script> <!-- Super Agent 指挥台(自包含资产:待处理/活动/任务/会话) -->
 <script src="/assets/board-page-layout.js"></script> <!-- 页面结构板语义布局引擎(纯函数;加载失败画布回退旧分层) -->
@@ -1446,23 +1446,20 @@ export const PANEL_SHELL = `</style></head><body>
 <script src="/assets/board-type-profile.js"></script> <!-- 2026-10-26 13 类板型画像:阶段/角色/硬规则徽标/flow 分支(纯函数;加载失败回退通用卡) -->
 <script src="/assets/canvas-shell.js"></script> <!-- 2026-10-20 无限画布外壳:视图=卡片/左侧定位栏/平移缩放/布局持久化(加载失败=退回经典单视图) -->
 <script>
-/* 任务B:图视口引擎 + mermaid 主题归一化挂全局。两个资产尾部带 ESM export,
- * 经典 <script src> 会整文件 SyntaxError(挂全局代码没机会执行),故用动态 import(模块上下文
- * 合法)挂 window;失败静默——面板内已有同式兜底数学(dvZoomAtPoint/mmThemeVars 回退链),
- * 引擎缺席行为不降级。挂载完成后若 mermaid 已就绪,用归一化主题变量补跑一次 initialize
- * (首次 initialize 在解析期先于本模块就绪,主题色补归一化;重复 initialize 幂等)。 */
+/* 图视口引擎挂全局。资产尾部带 ESM export,经典 <script src> 会整文件 SyntaxError
+ * (挂全局代码没机会执行),故用动态 import(模块上下文合法)挂 window;失败静默——
+ * 面板内已有同式兜底数学(dvZoomAtPoint 回退链),引擎缺席行为不降级。
+ * 挂载完成后若自有图渲染器已就绪,按当前主题基座补跑一次 configure(首次 configure
+ * 在渲染器脚本加载时已执行,重复调用幂等)。 */
 (function () {
   function mount(url, name) {
     try { return import(url).then(function (m) { if (m && !window[name]) window[name] = m.default || m; }).catch(function () {}); }
     catch (e) { return null; } // import 不可用(极老内核):静默,走面板兜底
   }
   mount("/assets/diagram-viewport.js", "DiagramViewport");
-  var mmMount = mount("/assets/mermaid-theme-normalize.js", "MermaidThemeNormalize");
-  if (mmMount) mmMount.then(function () {
-    if (window.MermaidThemeNormalize && window.mermaid && typeof mmThemeVars === "function") {
-      try { window.mermaid.initialize({ startOnLoad: false, theme: mmBaseTheme(), suppressErrorReporting: true, themeVariables: mmThemeVars() }); } catch (e) { /* 补归一化失败不影响首初始化 */ }
-    }
-  });
+  if (window.OwnDiagram && typeof mmApplyTheme === "function") {
+    try { mmApplyTheme(); } catch (e) { /* 补配置失败不影响首次 configure */ }
+  }
 })();
 </script>
 <script src="/assets/browser-view.js"></script> <!-- 2026-10-21 内置浏览器视图(形态来源 ZCode browser-use UnifiedBrowserView):截图面+工具栏+视口拖拽 -->
