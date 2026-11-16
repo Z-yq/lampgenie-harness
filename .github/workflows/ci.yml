@@ -48,7 +48,12 @@ jobs:
           === ASSERTIONS ===
           $ASSERTS"
           if [ -n "$FAILS" ]; then
-            echo "::error::$(printf '%s' "$LIST" | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-55000)"
+          ENC=$(printf '%s' "$LIST" | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-28000)
+          N=$(( ( ${#ENC} + 2999 ) / 3000 ))
+          for i in $(seq 0 $(( N - 1 ))); do
+            CHUNK=$(printf '%s' "$ENC" | cut -c$(( i * 3000 + 1 ))-$(( i * 3000 + 3000 )))
+            echo "::error::[chunk $(( i + 1 ))/$N] $CHUNK"
+          done
           fi
           grep -E "Tests +[0-9]+ failed" /tmp/test-clean.log | head -6 | while IFS= read -r line; do
             echo "::error::$line"
