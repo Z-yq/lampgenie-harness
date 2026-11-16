@@ -212,9 +212,11 @@ describe("skill_view 语义=查看(索引注入+授予才可见)", () => {
     const dir = mk();
     const store = new ExperienceStore(dir);
     let sawSystem = "";
+    let chatSeen = 0; // spawn Promise 不保证首个 LLM 请求已发出(终态即回),断言前显式等首轮 chat
     const make = (whitelist: string[] | undefined) => new LlmLoopBackend({
       llm: {
         async chat(messages: { role: string; content: string }[]) {
+          chatSeen += 1;
           if (!sawSystem) sawSystem = messages[0]?.content ?? "";
           return { content: "done" };
         },
@@ -223,11 +225,15 @@ describe("skill_view 语义=查看(索引注入+授予才可见)", () => {
       ...(whitelist ? { toolWhitelist: whitelist, extraTools: buildSubagentExtraTools(dir, [], store) } : {}),
       ...(whitelist && expandToolTokens(whitelist).includes("skill_view") ? { skillIndexText: renderSubagentSkillIndex(store) } : {}),
     });
+    const seenBefore = chatSeen;
     await make(["read", "code_sense", "skill_view"]).spawn({ taskId: "t1", instructions: "探针任务", workdir: dir, permissions: "sandbox" }, () => {});
+    for (let t = 0; t < 200 && chatSeen === seenBefore; t++) await new Promise((r) => setTimeout(r, 25)); // 等首轮 chat(≤5s)
     expect(sawSystem).toContain("skill_view");
     expect(sawSystem).toContain("builtin/"); // 内置技能索引在提示里(模型由此知道可读名字)
     sawSystem = "";
+    const seen2 = chatSeen;
     await make(["read", "code_sense"]).spawn({ taskId: "t2", instructions: "探针任务", workdir: dir, permissions: "sandbox" }, () => {});
+    for (let t = 0; t < 200 && chatSeen === seen2; t++) await new Promise((r) => setTimeout(r, 25));
     expect(sawSystem).not.toContain("skill_view");
   }, 20_000);
 });

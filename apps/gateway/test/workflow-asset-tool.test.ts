@@ -1,6 +1,6 @@
 import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
- * :run_workflow 接资产 / caps / 运行中 amend(生产工具面)。
+ * run_workflow 接资产 / caps / 运行中 amend(生产工具面)。
  * - 读源码断言接线在(asset-store 实例、runningWorkflows set/delete、action 参数面);
  * - 纯路径单测(资产目录 / project→global 查找 / caps 提取);
  * - 端到端:真 runWorkflowTool + MemoryJournal + 假 executor + 临时资产目录,

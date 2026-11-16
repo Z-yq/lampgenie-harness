@@ -148,7 +148,7 @@ describe("auto-compact 诚实性(n1/n2:空摘要假压缩 + tail 丢失)", () =>
     expect(r.compacted).toBe(true);
     const done = j.readAll().find((e) => e.kind === "compact.done")!;
     const tail = (done.payload as { tail: { role: string }[] }).tail;
- // :tail 以 assistant 为组边界整组保留——首条是 assistant(tool_use),其 tool 回执随组一起进 tail
+ // tail 以 assistant 为组边界整组保留——首条是 assistant(tool_use),其 tool 回执随组一起进 tail
     expect(tail[0]!.role).toBe("assistant");
     expect(tail.some((m) => m.role === "tool")).toBe(true);
     const out = deriveMessages(j, "s");

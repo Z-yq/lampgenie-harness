@@ -12,7 +12,7 @@ describe("normalizeRepoUrl(绑定键归一化)", () => {
     expect(normalizeRepoUrl("https://codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness/")).toBe(want);
     expect(normalizeRepoUrl("git@codeup.aliyun.com:636228d50cd435624679a77b/CMG-Live/lampgenie-harness.git")).toBe(want);
     expect(normalizeRepoUrl("ssh://git@codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness")).toBe(want);
-    expect(normalizeRepoUrl("HTTPS://Codeup.Aliyun.com/636228d50cd435624679a77b/cmg-live/Genie-Harness.GIT")).toBe(want);
+    expect(normalizeRepoUrl("HTTPS://Codeup.Aliyun.com/636228d50cd435624679a77b/cmg-live/LampGenie-Harness.GIT")).toBe(want);
     expect(normalizeRepoUrl("https://user:token@codeup.aliyun.com/636228d50cd435624679a77b/CMG-Live/lampgenie-harness.git")).toBe(want);
   });
 
@@ -36,7 +36,7 @@ describe("matchProjectId(绑定解析)", () => {
 
   it("无 remote 回退 label 匹配(大小写不敏感)", () => {
     expect(matchProjectId(registry, null, "lampgenie-harness")).toBe("lampgenie-harness");
-    expect(matchProjectId(registry, null, "Genie-Harness")).toBe("lampgenie-harness");
+    expect(matchProjectId(registry, null, "LampGenie-Harness")).toBe("lampgenie-harness");
   });
 
   it("绑不上返回 null(候选-only 信号)", () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * 轨迹收割 CLI(:读 journal → 抽取统一轨迹事件批次 → 脱敏落盘 + 账本幂等。
+ * 轨迹收割 CLI(读 journal → 抽取统一轨迹事件批次 → 脱敏落盘 + 账本幂等。
  * 用法:
  * npx tsx scripts/trace-harvest.mts --journal-dir .genie/journals --out /tmp/trace-harvest [options]
  * --journal-dir <dir> journal 根目录(必填;内含 global.jsonl / sessions/ / sessions-archive/)

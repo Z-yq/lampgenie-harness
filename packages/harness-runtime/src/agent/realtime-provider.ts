@@ -105,7 +105,7 @@ export function createRealtimeProvider(opts: RealtimeOptions): LlmProvider & { u
             session: {
               modalities: audioOut ? ["text", "audio"] : ["text"],
               turn_detection: null,
- // 音频格式仅在音频在场时声明(百炼传统字符串口径,实测验证:input pcm16/output pcm)
+ // 音频格式仅在音频在场时声明(百炼传统字符串口径,经验证验证:input pcm16/output pcm)
               ...((hasAudioIn || audioOut) ? { input_audio_format: "pcm16" } : {}),
               ...(audioOut ? { output_audio_format: "pcm" } : {}),
               ...(audioOut && cur.voice ? { voice: cur.voice } : {}),

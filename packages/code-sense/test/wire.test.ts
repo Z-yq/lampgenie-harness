@@ -30,7 +30,7 @@ describe("wire 协议表面(本仓真实文件)", () => {
     expect(t.unions.map((u) => u.name)).toContain("ClientMessage");
     expect(t.handlers.length).toBeGreaterThan(0);
     expect(t.handlers[0]!.file).toBe(WIRE_PATHS.server);
-    expect(t.sends.some((s) => s.file === WIRE_PATHS.panel)).toBe(true);
+    expect(t.sends.some((s) => s.file === WIRE_PATHS.panel || s.file.startsWith("apps/gateway/src/panel/"))).toBe(true); // 面板拆分后发送点可落在子模块
     expect(t.status).toBe("ok");
   });
 
@@ -55,10 +55,10 @@ describe("wire 协议表面(本仓真实文件)", () => {
   it("能报出真实孤儿(实测存在,不臆造)", () => {
     const neverSent = new Set(r.orphans.declaredNeverSent.map((x) => x.type));
     const recvUndeclared = new Set(r.orphans.receiveUndeclared.map((x) => x.type));
-    // file.write/workers.list:声明+handler 都在,但 panel/assets 从不发送;
-    // track.view.result 等:服务端已发、面板已收,但 ServerMessage union 未声明。
-    expect(neverSent.has("file.write") || neverSent.has("workers.list")).toBe(true);
-    expect(recvUndeclared.has("track.view.result") || recvUndeclared.has("usage.view.result")).toBe(true);
+    // workers.list/voice.tts 等:声明+handler 都在,但客户端从不发送;
+    // ssh.test.result/track.view.result 等:服务端已发、面板已收,但 ServerMessage union 未声明。
+    expect(neverSent.has("workers.list") || neverSent.has("voice.tts") || neverSent.has("project.list")).toBe(true);
+    expect(recvUndeclared.has("ssh.test.result") || recvUndeclared.has("remote.ls.result") || recvUndeclared.has("usage.view.result")).toBe(true);
   });
 
   it("人类可读面:按 union 分组 + 孤儿 + 已知边界", () => {

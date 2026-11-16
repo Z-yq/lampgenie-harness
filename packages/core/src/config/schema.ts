@@ -385,7 +385,7 @@ export const ConfigSchema = z.object({
      * 此前只在 agent-wiring 用 as cast 读,配置写了会被 schema 剥离 → 本字段补齐配置面。
      * env GENIE_CITATION_AUDIT 优先于本字段。 */
     citationAudit: z.enum(["off", "warn", "hard"]).optional(),
- /** 完成审计记分卡(,2026-11):收尾聚合 board P0 / 验证账本 / 交付物 / 变更审计 / 引用账本。
+ /** 完成审计记分卡(2026-11):收尾聚合 board P0 / 验证账本 / 交付物 / 变更审计 / 引用账本。
      * off=跳过;warn(缺省,代码内回退值)=有 fail/warn 时正文追加;hard=先补跑一轮,仍不满足 → failed。
      * env GENIE_COMPLETION_AUDIT 优先于本字段。 */
     completionAudit: z.enum(["off", "warn", "hard"]).optional(),
@@ -397,7 +397,7 @@ export const ConfigSchema = z.object({
      * gateway 事件循环,会话间进程隔离);false=进程内(旧路径,全部现有测试走的形态)。
      * env GENIE_SESSION_WORKER=off 强制关;测试环境(VITEST)自动回进程内。 */
     sessionWorker: z.boolean().optional(),
- /** 开工前置门:基线新鲜度校验(,2026-11)。开工第一轮前量「本地分支 vs 上游」:
+ /** 开工前置门:基线新鲜度校验(2026-11)。开工第一轮前量「本地分支 vs 上游」:
      * behind(上游独有提交)>0 且 blockOnBehind(缺省 true)→ 任务 failed 并给出 git pull --rebase
      * 修复命令(不在旧基线上开工);diverged/ahead 只注入提示不拦。
      * env:GENIE_FRESHNESS=off 全局关;GENIE_FRESHNESS_BLOCK=off 把 behind 降级为警告。 */

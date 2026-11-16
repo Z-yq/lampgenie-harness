@@ -1,6 +1,5 @@
 /**
  * code-editor.js — 自有代码编辑器(Monaco 兼容适配层;零第三方依赖,零 worker,零外联)。
- *
  * 架构:高亮 <pre> 镜像 + 透明 <textarea> 输入层(原生 IME/剪贴板/无障碍/按键语义),
  * 行号槽与诊断标记挂槽位;分语言词法高亮为自有实现(C-like/JSON/CSS/Python/Shell/
  * YAML/TOML/Markdown/HTML/XML 子集),未映射语言=纯文本。

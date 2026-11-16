@@ -39,7 +39,7 @@ pnpm run dist:full   # 全量包:先 stage ONNX 模型/Chromium/PortableGit 再�
 
 三个脚本都先串行 `pnpm -w --filter @lampgenie/gateway build` + 依赖 staging(`scripts/stage-gateway-deps.mjs`),避免打出空壳或缺依赖的残包。`dist:full` 额外跑 `scripts/stage-full-runtime.mjs`(幂等,组件齐全自动跳过;`--force` 重建)。三个脚本还会跑 `scripts/stage-electron-dist.mjs`(从缓存/GitHub 解出 Windows Electron 到 `.stage/electron-dist`,配合 `electronDist` 实现离线打包;@electron/get 在本机网络下会 ECONNRESET)。
 
-产物(全量包实测产出;括号内为轻量包体量):
+产物(全量包经验证产出;括号内为轻量包体量):
 - `dist/LampGenie Setup <ver>.exe` —— NSIS 安装包(**0.0.8 全量 666MB**;轻量 104MB)
 - `dist/LampGenie-<ver>-portable.exe` —— 便携单文件(**626MB**;轻量 103MB)
 - `dist/LampGenie Setup <ver>.exe.blockmap` —— 差分更新用

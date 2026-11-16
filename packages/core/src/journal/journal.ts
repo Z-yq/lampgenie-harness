@@ -136,7 +136,7 @@ export interface Journal {
   readSession(sessionId: string, sinceSeq?: number): JournalEvent[];
   /** 订阅新事件(只在同一进程内有效)。 */
   subscribe(listener: EventListener): () => void;
- /** 写前持久化屏障(,fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
+ /** 写前持久化屏障(fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
    *  可选——旧实现/测试假 journal 没有它,调用方按 no-op 处理(零回归);flush() 仍是 best-effort。 */
   flushStrict?(): void | Promise<void>;
   /** 当前水位(= 下一个 seq)。消费面把 length 当水位用(server.ts seqBefore、search.ts 增量判定),
@@ -792,7 +792,7 @@ export class FileJournal extends BaseJournal {
     this.wbFlushAllSync();
   }
 
- /** 写前持久化屏障(,fail-closed):逐 target 同步落盘。
+ /** 写前持久化屏障(fail-closed):逐 target 同步落盘。
    *  与 flush() 的差别只有两点:①失败**抛 JournalFlushError**(不吞、不 console.error);
    *  ②**成功才清队**——失败批原样留在队列里,下次 flushStrict/flush 还能把它写出去(不丢事件)。
    *  已落盘或非 write-behind(每 append 已同步写)时无队列,等价 no-op。 */
@@ -840,7 +840,7 @@ export class FileJournal extends BaseJournal {
       const fsp = await import("node:fs/promises");
       for (const [target, queue] of this.wbQueues) {
         if (queue.length === 0) continue;
- // :先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
+ // 先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
         // (旧实现先清队再写:失败即永久丢这一批,屏障的「队列保留」语义会被这里的抢占抹掉)。
         const n = queue.length;
         const batch = queue.join("");

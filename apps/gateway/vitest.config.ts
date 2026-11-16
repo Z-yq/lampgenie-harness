@@ -6,6 +6,7 @@ import { defineConfig } from "vitest/config";
 // ② maxWorkers=2(R2 审计:满并行资源饥饿造成 5-100s 假超时,单跑全绿;保留每文件隔离);
 // ③ 不关 fileParallelism(串行单 worker 下 permissionMode 等进程级全局态跨文件泄漏=新假红)。
 export default defineConfig({
+  root: import.meta.dirname,
   test: {
     env: { GENIE_CHECKPOINT: "off" },
  // r2:test/ui/** 里现在有 vitest 化的 slash.spec.test.ts(需被收集),

@@ -247,7 +247,7 @@ const THEMES = [
 ];
 const THEME_KEYS = THEMES.map((t) => t.key);
 function isLightBase() { const th = THEMES.find((t) => t.key === effectiveTheme()); return th ? th.base === "light" : false; }
-// :主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
+// 主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
 let __lastThemeSig = "";
 function applySettings() {
   document.body.classList.toggle("light", isLightBase());
@@ -255,7 +255,7 @@ function applySettings() {
   for (const t of THEME_KEYS) {
     if (t !== "dark" && t !== "light") document.body.classList.toggle("theme-" + t, settings.theme === t);
   }
- // :主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
+ // 主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
  // 初载(签名空)不挂=首屏即正确主题;reduced-motion 由 CSS 大降级自动兜底。
   const themeSig = settings.theme + "|" + (isLightBase() ? "l" : "d");
   if (__lastThemeSig && __lastThemeSig !== themeSig) {

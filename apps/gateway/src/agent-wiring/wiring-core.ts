@@ -791,7 +791,7 @@ export function maybeWakeIdleSession(
   }
 }
 
-// :子代理生命周期注册表(进程级单例;不取代 __bgAgents 镜像,只在其上补「状态机 + 后代关系」)。
+// 子代理生命周期注册表(进程级单例;不取代 __bgAgents 镜像,只在其上补「状态机 + 后代关系」)。
 // 同一 gateway 进程内每个 task 都会 wire 一次,这里用 globalThis 复用同一实例;首次创建时从
 // __bgAgents 镜像 restore(终态保留、已存在记录不覆盖)。registry 是纯逻辑零 IO 模块,可被单测直驱。
 export const subagentRegistry: SubagentRegistry = (() => {
@@ -883,7 +883,7 @@ export function runSubagentWatchdog(journal: Journal): void {
     en.status = "failed";
     en.lastEventAt = Date.now();
     delete en.cancel;
- // :watchdog 收割也是终态来源之一——registry 同步落 failed,否则 list_agents 永远显示 running。
+ // watchdog 收割也是终态来源之一——registry 同步落 failed,否则 list_agents 永远显示 running。
     subagentRegistry.update(act.agentId, { state: "failed", resultSummary: "[watchdog 收割] 超过时间盒+宽限仍无终态,已判死并强制收尾" });
     let trail = "";
     try {

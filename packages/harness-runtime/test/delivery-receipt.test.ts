@@ -1,5 +1,5 @@
 /**
- * :delivery-receipt 纯逻辑行为测试(不 mock 被测对象,不读时钟,时间全注入)。
+ * delivery-receipt 纯逻辑行为测试(不 mock 被测对象,不读时钟,时间全注入)。
  * 覆盖:码表/键派生/错误分类/退避与封顶/receipt 状态机/不可变与确定性/ready 判据/容量裁剪。
  */
 import { describe, it, expect } from 'vitest'

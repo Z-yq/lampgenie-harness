@@ -702,7 +702,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     }
   }
  // 文件索引预热(首次 @ 提及不再吃冷启动秒级延迟)。
- // :预热是同步重活(fileIndex 全仓 walk + sense 全图预生成),9p 慢盘上
+ // 预热是同步重活(fileIndex 全仓 walk + sense 全图预生成),9p 慢盘上
   // 分钟级,曾把连接关键路径(面板首屏/hello/task 流)整个卡死;且原实现每个连接都重触发。
   // 改为:延迟 3s+单次守卫+unref——连接先走完,重活在事件循环空闲后一次跑(fileIndex 自带
   // 时间预算,最坏同步阻塞≈单预算)。
@@ -825,7 +825,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     } catch (err) {
       console.error(`[gateway] 队列快照落账失败(重启可能丢该会话排队消息):${String(err).slice(0, 160)}`);
     }
- // :边界不成立时顺带把稳定码带给面板(旧客户端忽略未知字段;协议零改动)。
+ // 边界不成立时顺带把稳定码带给面板(旧客户端忽略未知字段;协议零改动)。
     const msg = {
       v: PROTOCOL_VERSION,
       type: "queue.update" as const,
@@ -874,7 +874,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
  // tool_result 之间,模型侧调用链断裂;等下一次终态事件再泵即可。
     if (!assertQueueBoundary(sessionLastEventKind(sessionId))) return;
     const head = q[0]!;
- // :消息步进边界唯一判定入口(injectionVerdict)——tool batch 未闭合 / turn 未开始 /
+ // 消息步进边界唯一判定入口(injectionVerdict)——tool batch 未闭合 / turn 未开始 /
  // 本 turn 准入已冻结时不提交(保持排队);不稳定码随 queue.update 下发(旧客户端忽略)。
     const verdict = injectionVerdict({
       events: opts.journal.readSession(sessionId),
@@ -904,7 +904,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     submitQueueItem(item);
     queueBroadcast(sessionId);
   };
- // :turn.start 落账即冻结本轮准入水位(turn.admission.frozen,自定义事件)。冻结点之后
+ // turn.start 落账即冻结本轮准入水位(turn.admission.frozen,自定义事件)。冻结点之后
  // 受理的输入(admittedSeq>cutoffSeq)本 turn 不再扩增,由 pump 排队到下一 turn。
  // 同 turn+cutoffSeq 重复触发不重复落账(补发/重放幂等);失败只告警,不阻断 turn.start 主链。
   opts.journal.subscribe((e) => {
@@ -1148,7 +1148,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
       console.error("[gateway] 终态投递义务失败(不阻塞主链):", String(err).slice(0, 200));
     }
   });
- // :Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
+ // Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
  // 做梦卡注入器:机制运行开始/完成事件注入 super 会话(journal kind=super.dream,
  // payload={phase,mechanismId,runId,taskId?,title,cost?,summary?})+ 广播同帧给面板聊天流。
  // 开始卡=机制标题+runId;完成卡=run.cost(¥/tokens)+摘要。注入失败不碰任务链(fail-soft)。
@@ -1260,7 +1260,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
         });
         return;
       }
- // :automation.update 的乐观并发字段 expectedRevision 不在协议 schema 内(zod 默认剥掉未知键),
+ // automation.update 的乐观并发字段 expectedRevision 不在协议 schema 内(zod 默认剥掉未知键),
  // 处理器拿不到;这里从原始 payload 补回(仅 automation.update 生效,其它通道零变化)。
       if (msg.type === "automation.update") {
         try {
@@ -1662,7 +1662,7 @@ async function handleMessage(
   }
   switch (msg.type) {
     case "client.mode": {
- // :连接级 clientMode 声明。只对本连接生效(允许任意设置:面板可降级,
+ // 连接级 clientMode 声明。只对本连接生效(允许任意设置:面板可降级,
       // readonly/agent 也可再改回——权限收放由 allowlist 决定,不由 mode 历史决定)。
       const raw = String((msg as { mode?: unknown }).mode ?? "");
       const prev = clientModeByWs.get(ws) ?? DEFAULT_CLIENT_MODE;
@@ -2114,7 +2114,7 @@ async function handleMessage(
     case "task.resume": {
       const task = tm.get(msg.taskId);
       if (!task) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.UnknownTask, message: "任务不存在(可能已删除)" }); break; }
- // :用户停止过的任务不自动/手动续跑(标记优先于状态机判定:本任务或本会话在任务创建后有停止记录)。
+ // 用户停止过的任务不自动/手动续跑(标记优先于状态机判定:本任务或本会话在任务创建后有停止记录)。
     if (hasUserStoppedSince(opts.journal, { taskId: task.id, sessionId: task.sessionId, since: task.createdAt })) {
       safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: USER_STOPPED_RESUME_CODE, message: USER_STOPPED_RESUME_MESSAGE });
       break;
@@ -2152,7 +2152,7 @@ async function handleMessage(
     // 未知/已删 id 回 task:null(不抛、不回全量列表),面板据此显示「不可用」。
     case "task.detail.get": {
       const t = tm.get(msg.taskId);
- // :任务侧能查到关联 issue 编号(仅内存 link 命中时附带;不改协议必需字段)。
+ // 任务侧能查到关联 issue 编号(仅内存 link 命中时附带;不改协议必需字段)。
       const link = t && opts.issueService ? opts.issueService.findIssueByTask(t.id) : null;
       const issue = link ? { projectId: link.projectId, number: link.number } : undefined;
       safeSend(ws, {
@@ -3022,7 +3022,7 @@ async function handleMessage(
  // 增量化(治 网关 OOM:11k 事件会话 × 3s 全量回拉 → 每次 1.4~9.2s/MB 级载荷):
       // 客户端带 sinceSeq(= 上次回包 status.seq)且与累积态水位相等时,只归约 seq>sinceSeq 的新事件并合并进累积态。
       // 不带 sinceSeq(老客户端/首拉)=现场全量投影,语义与改造前逐字一致。
- // :增量准入标志——缓存判定要求重建时整段回落全量(不拿旧 carry/wfAsks 硬拼)。
+ // 增量准入标志——缓存判定要求重建时整段回落全量(不拿旧 carry/wfAsks 硬拼)。
       let incrementalApplied = false;
       if (sinceSeq !== undefined && state && state.watermark === sinceSeq) {
         // sinceSeq+1:journal.readSession 的比较是 e.seq >= sinceSeq,不 +1 会把水位那条重复归约
@@ -3103,7 +3103,7 @@ async function handleMessage(
           state.projection = merged;
           state.watermark = deltaEvents[deltaEvents.length - 1]!.seq;
           state.wfKey = [...state.carry.wfSeen].sort().join(",");
- // :memo 三字段随写入更新(version 经 verdict 保证=当前版本;floor 未变;事件数累加)。
+ // memo 三字段随写入更新(version 经 verdict 保证=当前版本;floor 未变;事件数累加)。
           state.eventCount += deltaEvents.length;
           state.floor = nextFloor;
           projection = merged;
@@ -3111,9 +3111,9 @@ async function handleMessage(
       }
       if (!incrementalApplied) {
  // 全量路径(老客户端/首拉/水位对不上/缓存判定要求重建):读全部会话事件 → floor 截断 → 投影,
- // 写入累积态基线(:floor 之前的历史不再参与投影;版本/floor/收缩任一变化都丢弃旧 carry/wfAsks)。
+ // 写入累积态基线(floor 之前的历史不再参与投影;版本/floor/收缩任一变化都丢弃旧 carry/wfAsks)。
         const sessionEvents = journal.readSession(msg.sessionId);
- // :恢复 floor——restore 后只投影 floor 之后的事件;filterFromFloor 是纯函数(floor<=0 同引用)。
+ // 恢复 floor——restore 后只投影 floor 之后的事件;filterFromFloor 是纯函数(floor<=0 同引用)。
         const floor = projectionFloorOf(sessionEvents);
         const scoped = filterFromFloor(sessionEvents, floor);
         freshCount = scoped.length;
@@ -3126,7 +3126,7 @@ async function handleMessage(
         }
         const wfKey = [...wfIds].sort().join(",");
         const watermark = maxSeqOf(scoped);
- // :全量侧缓存判定——版本键/floor/日志收缩/水位回退任一变化 → 丢弃旧 carry/wfAsks 重建。
+ // 全量侧缓存判定——版本键/floor/日志收缩/水位回退任一变化 → 丢弃旧 carry/wfAsks 重建。
         const verdict = state
           ? projectionCacheVerdict({
               version: state.version,
@@ -3170,7 +3170,7 @@ async function handleMessage(
         sessionStatusMemo.set(msg.sessionId, {
           watermark,
           wfKey,
- // :缓存可信度三字段(版本键/投影事件数/恢复 floor),下次请求据此判可复用。
+ // 缓存可信度三字段(版本键/投影事件数/恢复 floor),下次请求据此判可复用。
           version: PROJECTION_STATE_VERSION,
           eventCount: scoped.length,
           floor,
@@ -4290,7 +4290,7 @@ async function handleMessage(
               : {}),
           });
       if ("error" in r) {
- // :CAS 冲突回稳定码 automation-conflict(不覆盖他人编辑);其余校验错沿用 AutomationInvalid。
+ // CAS 冲突回稳定码 automation-conflict(不覆盖他人编辑);其余校验错沿用 AutomationInvalid。
         if (r.error === "conflict") {
           const currentRev = (r as { revision?: number }).revision;
           safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: "automation-conflict", message: `版本冲突(当前 revision ${currentRev ?? "?"},请刷新后重试)` });
@@ -4892,7 +4892,7 @@ async function handleMessage(
       try { journal.append({ kind: "custom", sessionId: "system", payload: { type: "project.add", path: addPath, id: (r as { project?: { id?: string } }).project?.id ?? "", conn: (ws as { connSeq?: number }).connSeq } }); } catch { /* 观测落账失败不影响 */ }
       opts.broadcast?.(projectListMessage(opts.projects));
  // 项目添加即异步建档案(进度广播;不阻塞添加返回)。
- // :建档是重活(全仓 ts-morph;9p 慢盘分钟级),后置 5s 让添加回执/
+ // 建档是重活(全仓 ts-morph;9p 慢盘分钟级),后置 5s 让添加回执/
       // 项目清单广播/面板 UI 先走完;unref=进程退出不等它。
       // 远程项目(SSH/WSL)不建档案:档案管线是本地文件扫描(ts-morph/全仓),identity 不是本地目录
  // (远程项目的工程画像后续可由工作区服务提供)。
@@ -6374,7 +6374,7 @@ async function handleMessage(
       safeSend(ws, { v: PROTOCOL_VERSION, type: "pong", time: Date.now() });
       break;
     default: {
- // :allowlist 登记了但 switch 没有实现(对拍测试会先失败)——不静默逃生:
+ // allowlist 登记了但 switch 没有实现(对拍测试会先失败)——不静默逃生:
       // 回 permission-denied 并留 journal,与「表外 channel」同一出口。
       const ch = String((msg as { type?: unknown }).type ?? "unknown");
       denyChannel(ws, journal, clientModeByWs.get(ws) ?? DEFAULT_CLIENT_MODE, ch, msg as { sessionId?: unknown });

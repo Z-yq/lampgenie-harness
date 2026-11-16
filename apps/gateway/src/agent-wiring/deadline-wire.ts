@@ -321,7 +321,7 @@ export function wireAgentLoop(
   const startingLoops = new Set<string>();
   taskManager.onChange((task: Task) => {
     if (task.state === "cancelled") {
- // :先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
+ // 先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
  // 绝不让它改变取消结果(appendUserStoppedMarker 内部 try/catch + warn)。
  // 只在**真有活跃 loop 被中断**时落标记:resumeInterrupted 把原任务成 cancelled
  // (「已续跑→新任务」)不是用户停止,误标会连带堵死该会话里更早任务的续跑。

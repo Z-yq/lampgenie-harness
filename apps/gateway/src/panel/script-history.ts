@@ -688,7 +688,7 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
     for (const r of mfRoots) detBindIn(r); // 重建后按总账回填 open(用户点开的卡不会自己关上)
   }
   histLastParts = parts.slice();
- // :新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
+ // 新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
  // 全量重建(初开/回放)与替换区(流式改写)不加,防整列/连播闪烁;082 幂等早退在上,不受影响。
   if (mfAppendOnly) for (const el of mfRoots) el.classList.add("msg-in");
  // mermaid 围栏懒加载出图(改版):innerHTML 落位后 mmRenderIn 扫占位→按需注入脚本→run/降级

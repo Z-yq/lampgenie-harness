@@ -657,7 +657,7 @@ export class SessionSearchIndex {
   }
 
  /**
- * :按 sessionId 取该会话的**原始事件**(供 capsule 摘要使用),只读,不影响倒排索引。
+ * 按 sessionId 取该会话的**原始事件**(供 capsule 摘要使用),只读,不影响倒排索引。
  * 上限 5000 条:超长会话保留「头 1000 + 尾 4000」——头段给 objective(首条 user 文本),
  * 尾段给 nextStep(最后一条 agent 文本),中间中段被丢弃不影响五段语义。
  * 读 journal 失败一律返回空数组(胶囊空态可渲染,不 throw)。

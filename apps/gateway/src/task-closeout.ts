@@ -111,7 +111,7 @@ export interface TaskCloseoutInput {
   boardFacts?: CompletionFacts["board"];
  /**
  * 主 agent 已采集的全链路审计事实( change 行)。
- * :可选带 `residual`(收尾前重扫事实),缺席=旧任务零变化。
+ * 可选带 `residual`(收尾前重扫事实),缺席=旧任务零变化。
  */
   changeFacts?: NonNullable<CompletionFacts["change"]> & { residual?: ResidualFact };
  /** 主 agent 已采集的变更账本事实( change-ledger 行;sub/super 由  段自算)。 */
@@ -192,7 +192,7 @@ const DEFAULT_STEPS: Record<CloseoutMode, readonly CloseoutStep[]> = {
 /** 跑一次任务收尾聚合。不抛错(各段内部吞异常,收尾路径不被打断)。 */
 export async function runTaskCloseout(input: TaskCloseoutInput): Promise<TaskCloseoutResult> {
   const { journal, sessionId, taskId, root, taskStartSeq, state, mode } = input;
- // :changeAudit 开启(modes.change 非 off;旧调用方按 hardFlags 推导)时,main 步骤含 residual。
+ // changeAudit 开启(modes.change 非 off;旧调用方按 hardFlags 推导)时,main 步骤含 residual。
   const changeAuditMode = input.modes?.change ?? (input.hardFlags?.changeAudit ? "hard" : undefined);
   const baseSteps = input.steps ?? DEFAULT_STEPS[mode];
   const steps = mode === "main" && changeAuditMode !== undefined && changeAuditMode !== "off"

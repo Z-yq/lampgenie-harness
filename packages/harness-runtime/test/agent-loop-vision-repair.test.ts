@@ -170,6 +170,8 @@ describe("loop 400 自愈(重试与留痕)", () => {
     const loop = new AgentLoop({ journal, sessionId: "s1", system: "sys", llm, tools: [] });
     await expect(loop.runTurn("hi")).rejects.toThrow(/tool_calls must be followed/);
     expect((llm as LlmProvider & { requests: Message[][] }).requests).toHaveLength(1);
-    expect(journal.readAll().filter((e) => e.kind === "custom")).toHaveLength(0);
+    // telemetry.phase(回合遥测跨度)与本用例无关,豁免;其余 custom=自愈/重试副作用,须为零
+    const customs = journal.readAll().filter((e) => e.kind === "custom" && (e.payload as { what?: string })?.what !== "telemetry.phase");
+    expect(customs).toHaveLength(0);
   });
 });

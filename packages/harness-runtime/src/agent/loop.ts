@@ -224,7 +224,7 @@ function contextBreakdownEvery(): number {
  *  只在前缀确实命中时返回,不做「含错误字样」之类的模糊匹配(避免把正常结果误标失败)。 */
 function toolErrorOf(content: string, name: string): ToolExecError | undefined {
   const message = content.replace(/^错误:?/, "").slice(0, 600);
- // :用户停止与普通取消同归 aborted 类(文案本身已区分;查询侧可按 content 前缀分桶)。
+ // 用户停止与普通取消同归 aborted 类(文案本身已区分;查询侧可按 content 前缀分桶)。
   if (content === ABORTED_TOOL_TEXT || content === USER_STOPPED_TOOL_TEXT) return { origin: "aborted", message, name };
   if (content.startsWith(WRITE_BARRIER_TOOL_PREFIX)) return { origin: "write-barrier", message, name };
   if (GATE_DENY_RE.test(content)) return { origin: "denied", message, name };
@@ -302,7 +302,7 @@ export interface LlmResponse {
  /** 思考过程(OpenAI 兼容端点的 reasoning_content/reasoning 字段;缺省无)。
    * journal 进 message.agent.payload.reasoning,面板渲染「思考 · Xs」折叠卡。 */
   reasoning?: string;
- /** 结束原因(:provider 归一后的同类语义。
+ /** 结束原因(provider 归一后的同类语义。
    * "length"=输出被 max_tokens 截断 → loop 触发续写(见 OUTPUT_CONTINUATION_*);
    * 缺省=端点没报/适配器拿不到(不触发任何行为,与加本字段前逐字一致)。 */
   finishReason?: "stop" | "length" | "tool_calls" | "content_filter" | "other";
@@ -422,7 +422,7 @@ export interface AgentLoopOptions {
    * 单价是命中的 50 倍)。**可选**:不配置=行为逐字不变(既有构造点/测试零影响)。
    * dir=落盘根(装配方给 `<repo>/.genie/spill`);阈值缺省 8192/头 4096/尾 1024。 */
   spill?: { dir: string; thresholdChars?: number; headChars?: number; tailChars?: number };
- /** 图片 offload(,对齐 #58):配置后,LLM 调用抛「图片预算/尺寸」类错误
+ /** 图片 offload(对齐 #58):配置后,LLM 调用抛「图片预算/尺寸」类错误
    *  (isImageBudgetError)且本请求带图时,把 data URL 落盘到 `<root>/.genie/image-offload/…`
    *  并在正文追加 `[image offloaded: …]` 占位,再用新 messages **立即重试一次**(这次重试
    *  不占 provider 重试预算也不增加 visionRepairs 计数);仍失败则抛第二次错误并注明
@@ -1406,7 +1406,7 @@ export class AgentLoop {
     return this.opts.writeBarrier === "off" ? "off" : "hard";
   }
 
- /** 写前持久化屏障(,fail-closed):副作用(工具执行/LLM 请求)前先把已记录事件落盘。
+ /** 写前持久化屏障(fail-closed):副作用(工具执行/LLM 请求)前先把已记录事件落盘。
    *  - journal 无 flushStrict(旧 MemoryJournal/测试假 journal)→ no-op(零回归);
    *  - 同 step 内 journal.length 未变(上次 flush 后无新 append)→ 跳过;
    *  - flush 前后都查取消信号:已取消返回 cancelled(不执行副作用);
@@ -1436,7 +1436,7 @@ export class AgentLoop {
 
   cancel(reason = "user-cancel"): void {
     this.aborted = true;
- // :用户停止记账(与 signal.reason 双通道——工具没拿 signal 时靠这里判文案)。
+ // 用户停止记账(与 signal.reason 双通道——工具没拿 signal 时靠这里判文案)。
     if (isUserStopReason(reason)) this.userStopped = true;
     this.ac?.abort(new Error(`cancelled:${reason}`));
   }
@@ -2289,7 +2289,7 @@ export class AgentLoop {
             );
           }
         }
- // :本 step 的 llm 阶段(provider 重试/视觉自愈/锚点重开都算同一段,不拆 span)。
+ // 本 step 的 llm 阶段(provider 重试/视觉自愈/锚点重开都算同一段,不拆 span)。
         const phaseLlmToken: PhaseToken = phaseRecorder.begin("llm");
         for (;;) {
  // 写前持久化屏障:messages 组装完成、provider 调用前落盘;失败**不发起请求**。
@@ -2510,7 +2510,7 @@ export class AgentLoop {
               advertised,
               ac.signal,
               onChunk,
- // :续写是独立 chat 调用,派生独立 attemptId(不与主请求的已提交 id 撞车)。
+ // 续写是独立 chat 调用,派生独立 attemptId(不与主请求的已提交 id 撞车)。
               { attemptId: `${attemptId}:cont${attempts}` },
             );
             parts.push(next.content ?? "");
@@ -2536,7 +2536,7 @@ export class AgentLoop {
           // 第 4 次(原始 + 3 次续写)仍 length:停止并追加固定警告,不再请求。
           if (stillLength && attempts >= OUTPUT_CONTINUATION_MAX) res.content += `\n\n${OUTPUT_CONTINUATION_LIMIT_WARN}`;
         }
- // :本 step llm 阶段定稿(res 已合并续写);usage/ttft 累到 turn 级。
+ // 本 step llm 阶段定稿(res 已合并续写);usage/ttft 累到 turn 级。
         phaseRecorder.end(phaseLlmToken);
         if (res.usage) turnUsage = addUsage(turnUsage, res.usage);
         const llmMs = Date.now() - llmT0;
@@ -2772,7 +2772,7 @@ export class AgentLoop {
           isSafe: (c) => this.tools.get(c.name)?.isConcurrencySafe?.(this.parseArgs(c)) ?? false,
         });
 
- // :工具批次阶段(护栏拦截 + 并行段 + 串行屏障同段)。
+ // 工具批次阶段(护栏拦截 + 并行段 + 串行屏障同段)。
         const phaseToolsToken: PhaseToken = phaseRecorder.begin("tools");
         const executed: ToolExecOutcome[] = [];
         // 被护栏拦下的调用也落 tool.result(保 tool-pairing),error.origin=guard,模型据此换路。
@@ -2941,7 +2941,7 @@ export class AgentLoop {
         }
         // LLM/压缩钩子/工具执行异常:补 step+turn 边界(唯一出口,防重复)后上抛。
         journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "error", error: String(err).slice(0, 300) } });
- // :失败出口先未 end 的 span(标 interrupted),再落遥测(先于 turn.end)。
+ // 失败出口先未 end 的 span(标 interrupted),再落遥测(先于 turn.end)。
         phaseRecorder.closeAll("interrupted");
         this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
         this.flushToolLoopGuard();
@@ -2949,7 +2949,7 @@ export class AgentLoop {
         throw err;
       }
     }
- // :成功出口(turn 正常)。
+ // 成功出口(turn 正常)。
     this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
     this.flushToolLoopGuard();
     journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: turnReason } });
@@ -3190,7 +3190,7 @@ export class AgentLoop {
       return { call, content, durationMs: Date.now() - t0, ...(failure ? { error: failure } : {}) };
     } catch (err) {
       if (signal?.aborted) {
- // :用户停止→固定停止文案;其它取消仍 [aborted]。
+ // 用户停止→固定停止文案;其它取消仍 [aborted]。
         const text = this.cancelledToolText(signal);
         return { call, content: text, durationMs: Date.now() - t0, error: { origin: "aborted", message: text, name: call.name } };
       }

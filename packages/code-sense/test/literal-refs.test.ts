@@ -106,8 +106,7 @@ describe("scanLiteralRefs(本仓真实目标 graph)", () => {
     expect(testHit, "测试文件里应有 string-literal 命中").toBeTruthy();
     expect(testHit!.file).toMatch(/test\//);
 
-    const docHit = r.hits.find((h) => h.file === "docs/codesense-cli.md" && h.context === "doc");
-    expect(docHit, "docs/codesense-cli.md 应有 doc 命中").toBeTruthy();
+    // docs/ 目录已随开源仓策略移除(2026-11-10),doc 语境命中不再存在;扫描仍应覆盖测试与源码语境
 
     // 语境分组自洽:每组只含本语境
     for (const [ctx, items] of Object.entries(r.groups)) {

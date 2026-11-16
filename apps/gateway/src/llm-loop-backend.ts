@@ -965,7 +965,7 @@ export class LlmLoopBackend implements SubagentBackend {
  // 工具面契约统一:子代理与主 loop 同款——长描述摘要化 + 大 schema 工具延迟
     // 加载(用时 tool_view 激活)。此前子代理面保留原文长描述/全量 schema,两侧策略不一致
  // (经验证子代理 15 工具里 code_sense/terminal/browser/session_search 均超 240 字符)。
- // :子代理工具面与主面同款上下文投影(此前这里只有静态描述)。
+ // 子代理工具面与主面同款上下文投影(此前这里只有静态描述)。
  // - agentType=本子代理角色(planner/explore/worker…),只留痕不参与判定;
  // - permissionMode 取本进程权威源(与主面 agent-wiring 同源 permission-mode),plan/readonly 下
  // 写类工具描述带只读前缀;

@@ -4,7 +4,7 @@
  * (compact 后允许重注入一次,与 dispatch 同语义,由 buildLoopTips 的 fired 集合承担,不另造机制)。
  * 卡面=行式短句:一行一个动作、动词开头,每卡 ≤SOP_TIP_MAX_LINES 行(含标题行)。
  * 硬红线(勿破,均有验证出处):
- * - 不回到「每条消息匹配式 tips」做法(已删):SOP 卡只按 phase 首见与
+ * - 不回到「每条消息匹配式 tips」做法:SOP 卡只按 phase 首见与
  *   上一步工具带错兜底触发,不按消息内容匹配;
  * - 不做 verify 卡:验收四步已由 task_phase(phase="verify") 回执送达(agent-wiring.ts
  *   task_phase 回执 phaseGuide),再注一张=重复信息,违 N3 教训;

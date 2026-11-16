@@ -26,7 +26,7 @@ export function pcm16ToWav(pcm: Buffer, rate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-/** base64 PCM16 裸流 → data URL(omni HTTP input_audio.data 形态,实测验证口径)。 */
+/** base64 PCM16 裸流 → data URL(omni HTTP input_audio.data 形态,经验证验证口径)。 */
 export function pcm16B64ToWavDataUrl(b64: string, rate: number): string {
   return "data:audio/wav;base64," + pcm16ToWav(Buffer.from(b64, "base64"), rate).toString("base64");
 }

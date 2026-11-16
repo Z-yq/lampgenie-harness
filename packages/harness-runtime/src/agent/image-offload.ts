@@ -1,5 +1,5 @@
 /**
- * 图片 offload 持久位置(,对齐 docs/mechanisms.md #58)。
+ * 图片 offload 持久位置(对齐 docs/mechanisms.md #58)。
  * 要治的病:图片密集会话里 provider 直接回 `IMAGE_OFFLOAD_REQUIRED` / 图片尺寸预算类错误,
  * 整个 turn 立即失败(此前 10144px PNG 事故:坏 data URL 已进 journal,每轮重放都撞同一错),
  * 重试白烧 provider 重试预算;历史图片也回不来(derive 每轮重放同一批 data URL)。

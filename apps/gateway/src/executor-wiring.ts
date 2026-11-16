@@ -20,7 +20,7 @@ import { snapshotApprovalObject, verifyApprovalObject } from "./approval-object.
 import { decideNever } from "@lampgenie/runtime/agent/approval-audit";
 
 /**
- * :审批审计绑定。asked/decided 事件必须能按 requestId 配对;不同 backend 若在事件上额外
+ * 审批审计绑定。asked/decided 事件必须能按 requestId 配对;不同 backend 若在事件上额外
  * 带 turn/toolCallId 就透传到事件里,没有就不写(不伪造),审计侧只在 pairs.missingBindings 记缺。
  */
 function approvalBindingOf(e: SubagentEvent): { turn?: number; toolCallId?: string } {
@@ -171,7 +171,7 @@ async function runTask(
           payload: {
             tool: "subagent",
             effect: "asked",
- // :审计对靠 requestId 配对(缺了只能判 MISSING_BINDING)。
+ // 审计对靠 requestId 配对(缺了只能判 MISSING_BINDING)。
             requestId: e.requestId,
             by: e.summary.slice(0, 120),
             risk: e.risk,
@@ -210,7 +210,7 @@ async function runTask(
         if (process.env.GENIE_SUBAGENT_ASK === "allow-once") applyDecision("allow-once", "env-allow-once");
         else {
           // 规则咨询(F2 always-allow):确定性配置优先于交互;命中 allow/deny 即结算,未命中落面板。
- // :never=永久拒绝,命中即结算(by=rule-never),永不进面板——无人值守时规则才有意义。
+ // never=永久拒绝,命中即结算(by=rule-never),永不进面板——无人值守时规则才有意义。
           const rules = loadRulesHot(repoRoot());
           const never = decideNever("subagent", e.summary, rules);
           const rule = matchPermissionRule(rules, "subagent", e.summary);

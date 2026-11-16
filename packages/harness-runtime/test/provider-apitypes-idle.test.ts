@@ -112,7 +112,8 @@ describe("anthropic 适配器流空闲超时", () => {
         { at: 40_000, chunk: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "流" } } },
         { at: 60_000, chunk: { type: "message_delta", usage: { output_tokens: 2 } } },
       ],
-      { closeAfterMs: 60_010 }, // 全程无任何单次停顿超过 30s 窗));
+      { closeAfterMs: 60_010 }, // 全程无任何单次停顿超过 30s 窗
+    ));
     const p = createOpenAiCompatProvider({ baseUrl: "https://llm.test", apiKey: "k", model: "m1", apiType: "anthropic", timeoutMs: 30_000 });
     const deltas: { text?: string }[] = [];
     const pending = p.chat([{ role: "user", content: "hi" }], [], undefined, (d) => deltas.push(d));

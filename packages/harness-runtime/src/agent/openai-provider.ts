@@ -134,7 +134,7 @@ function toOpenAi(messages: Message[], tools: ToolSpec[], ctx: { apiId?: string;
       }
  // 多模态:user 消息带 images(data URL 数组)→ OpenAI content 数组(text+image_url)。
  // 音频直入( omni-query 形态,qwen3.8-omni* 一次 query 口径):audio → input_audio
- // 内容件,pcm16 裸流自动包 WAV 容器(omni 接口实测验证:data URL + format:"wav")。
+ // 内容件,pcm16 裸流自动包 WAV 容器(omni 接口经验证验证:data URL + format:"wav")。
       if (m.role === "user" && ((m as { images?: string[] }).images?.length || (m as { audio?: unknown }).audio)) {
         const parts: Record<string, unknown>[] = [{ type: "text", text: sanitizeLoneSurrogates(m.content) }];
         for (const img of (m as { images?: string[] }).images?.slice(0, 4) ?? []) parts.push({ type: "image_url", image_url: { url: img } });
@@ -434,7 +434,7 @@ async function chatStreamedWithRetry(
     opts.attemptId ? (attempt === 0 ? opts.attemptId : `${opts.attemptId}#${attempt}`) : undefined;
   let lastErr: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
- // :半截累加器(content/reasoning/toolAcc)在 chatStreamed 内**每次 attempt 新建**——
+ // 半截累加器(content/reasoning/toolAcc)在 chatStreamed 内**每次 attempt 新建**——
     // 重试必然从空开始,不会把新增量接在失败 attempt 的尾巴后面。progress 只用于作废留痕的 partialChars。
     const progress = { chars: 0 };
     try {
@@ -477,7 +477,7 @@ async function chatStreamedWithRetry(
         throw new ModelRequestError(stopDecision, { detail: decision.detail, cause: err });
       }
       if (attempt === attempts - 1) break;
- // :将重试 → 先告知调用方「这次 attempt 已作废」(attemptId + 已吐出的半截字符数),再退避重开。
+ // 将重试 → 先告知调用方「这次 attempt 已作废」(attemptId + 已吐出的半截字符数),再退避重开。
       // 回调异常吞掉:留痕失败只告警,绝不改变重试/恢复结果。
       const deadId = attemptIdOf(attempt);
       if (deadId) {
@@ -523,6 +523,7 @@ async function chatStreamed(
     body: JSON.stringify(payload),
     signal,
   });
+  let streamUsage = true; // stream_options.include_usage;repair 回执去参动作在此生效(函数级,供 try 内闭包与 repair 包装共享)
   const retryOpts: PostRetryOptions = {
     retry: retryCtx.retry,
     signal,
@@ -530,12 +531,16 @@ async function chatStreamed(
     ...(retryCtx.budget ? { budget: retryCtx.budget } : {}),
     ...(retryCtx.budgetKey ? { budgetKey: retryCtx.budgetKey } : {}),
  // 流式 fetch 的 400/422 invalid_request 走与非流式同一套一次性修复(postWithRetry 内改写后重发)。
-    ...(retryCtx.repair ? { repair: retryCtx.repair } : {}),
+    ...(retryCtx.repair ? { repair: (ctx: Parameters<NonNullable<PostRetryOptions["repair"]>>[0]) => {
+      const actions = retryCtx.repair!(ctx);
+      if (actions && actions.some((a) => /stream_options/i.test(a))) streamUsage = false; // helper 持有请求体:repair 回执去参动作在此生效
+      return actions;
+    } } : {}),
   };
   let res: Response;
   try {
  // body 每次重发前现取:修复改写重建 body 后,postWithRetry 的这次重发必须用新体。
-    res = await postWithRetry(() => post({ ...body(), stream: true, stream_options: { include_usage: true } }), retryOpts);
+    res = await postWithRetry(() => post({ ...body(), stream: true, ...(streamUsage ? { stream_options: { include_usage: true } } : {}) }), retryOpts);
   } catch (err) {
     // 端点兼容:stream_options 不被支持(400 且报文点名)→ 去掉该参数重试一次。
     if (err instanceof ModelRequestError && err.kind === "invalid_request" && /stream_options/i.test(err.detail)) {
@@ -716,6 +721,10 @@ export function createOpenAiCompatProvider(opts: OpenAiCompatOptions): LlmProvid
  // invalid_request 的一次性请求改写(同 reason 每请求只修一次;第二次失败即终态)。
           const repairBody = (decision: ModelErrorDecision): string[] | null => {
             if (attemptedRepairs.has(decision.kind)) return null;
+            if (/stream_options/i.test(decision.detail ?? "")) {
+              attemptedRepairs.add(decision.kind);
+              return ["drop stream_options"];
+            }
             const plan = repairPlan({
               code: decision.kind,
               attempt: 0,

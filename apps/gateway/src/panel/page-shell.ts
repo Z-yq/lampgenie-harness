@@ -1275,7 +1275,7 @@ export const PANEL_SHELL = `</style></head><body>
  <div class="aff-stats"><span id="c-running">0</span> 运行 · <span id="c-queued">0</span> 排队 · <span id="c-done">0</span> 完成 · <span id="c-failed">0</span> 失败</div>
  <!-- 状态 chips(清单/子代理/压缩/wf/失败/重试): 自会话流顶部迁来,单行不折,不推消息 -->
  <div id="chatStatusbar"></div>
- <!-- 轮次时间轴(2026-10-14):#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
+ <!-- 轮次时间轴:#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
  <div id="turnNav" title=""></div>
  </div>
  <!-- quick-row 快捷卡已按移除(2026-10-13 视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->

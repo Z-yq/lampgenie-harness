@@ -11,11 +11,11 @@ import {
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("D19 状态机:TRANSITIONS 金标准", () => {
-  it("六态+全部迁移边被抽出", () => {
+  it("七态+全部迁移边被抽出(interrupted 加入任务态机)", () => {
     const src = readFileSync(`${REPO}/packages/core/src/task/task.ts`, "utf-8");
     const sm = extractStateMachineFromTransitions(src);
     expect(sm).toBeTruthy();
-    expect(sm!.states.sort()).toEqual(["blocked", "cancelled", "done", "failed", "queued", "running"]);
+    expect(sm!.states.sort()).toEqual(["blocked", "cancelled", "done", "failed", "interrupted", "queued", "running"]);
     // 迁移边:queued 4 条(迁移表修复后)+running 4+blocked 2=≥10
     expect(sm!.transitions.length).toBeGreaterThanOrEqual(10);
     expect(sm!.mermaid).toContain("queued --> running");

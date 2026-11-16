@@ -142,7 +142,7 @@ export interface ResolvedModelScoringConfig {
 export function resolveModelScoringConfig(config?: ModelScoringConfig): ResolvedModelScoringConfig {
   const d = DEFAULT_MODEL_SCORING;
   const rawMode = config?.mode;
- // :缺省/非法值一律 off——不构造 client、不发请求、不落账;shadow/active 仅显式配置时启用。
+ // 缺省/非法值一律 off——不构造 client、不发请求、不落账;shadow/active 仅显式配置时启用。
   const mode: ModelScoringMode = rawMode === "off" || rawMode === "shadow" || rawMode === "active" ? rawMode : "off";
   const reason: ResolvedModelScoringConfig["reason"] =
     rawMode === undefined || mode !== rawMode ? "default-off" : mode === "off" ? "explicit-off" : undefined;

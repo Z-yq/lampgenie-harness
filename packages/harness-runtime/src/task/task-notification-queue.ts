@@ -23,7 +23,7 @@ export class TaskNoticeQueue {
     if (task.notificationStatus !== 'pending') return false
     if (sessionId !== undefined && !includeOtherSessions && task.sessionId !== String(sessionId)) return false
     if (requested && !requested.has(task.id)) return false
- // :带 branchGeneration 时只认领同代通知——换分支/重开后的迟到通知留在队列里由 dropStale 清理,
+ // 带 branchGeneration 时只认领同代通知——换分支/重开后的迟到通知留在队列里由 dropStale 清理,
  // 不投递给新上下文。不传 branchGeneration 完全跳过此过滤(旧调用点行为逐字不变)。
     if (branchGeneration !== undefined) {
       const taskGeneration = Number(task.notificationGeneration ?? 0)
@@ -96,7 +96,7 @@ export class TaskNoticeQueue {
   }
 
  /**
- * :把 generation 与 currentGeneration 不等的 pending 通知标成 none(不投递)。
+ * 把 generation 与 currentGeneration 不等的 pending 通知标成 none(不投递)。
  * 只动 pending;delivering/delivered 由 claim/reclaim 自己的代次过滤负责,避免把在途通知打回队列循环。
  */
   dropStale(currentGeneration, { persist = true } = {}) {

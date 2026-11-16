@@ -21,7 +21,7 @@ import { startGatewayServer, repairSessionProjectDrift } from "./server.js";
 import { repairTailBeforeResume } from "./journal-tail-repair.js";
 import { journalArchiveDirOf } from "./journal-maintenance.js";
 import { createEffectQueue, relayActivityHandler, type EffectQueue } from "./effect-queue.js";
-// :通知三面同源(结构化 payload + 人读文本 + GUI 投影);relay.activity 入队点用它生成结构化面。
+// 通知三面同源(结构化 payload + 人读文本 + GUI 投影);relay.activity 入队点用它生成结构化面。
 import { buildNotification } from "@lampgenie/runtime/notify/emit";
 // 终态投递义务:启动回放 seed + 启动 sweep 一次(不自动重投,等连接)。
 import { createDeliveryObligationStore, type DeliveryObligation } from "./delivery-obligation.js";
@@ -275,7 +275,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // agentTurns(会话累计 assistant 轮数)= interrupted 回执「中断前进度」数据源,提升到本层
   // 供下方自动恢复窗共用(两处消费,同一遍回放,不为回执再读一遍 journal)。
   const agentTurns = new Map<string, number>();
- // :用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
+ // 用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
   // restore / autoResume 都按它判,不额外扫 journal(journal 已 35MB 级)。
   const userStoppedAt = new Map<string, number>();
  // 会话最近活动时间索引。与下面的回放同一遍 readAll 累加(不为回执再读一遍 journal;
@@ -300,7 +300,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         if (ob && typeof ob.obligationId === "string") deliverySeeds.push(ob);
         continue;
       }
- // :用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
+ // 用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
       if (ev.kind === "custom") {
         const up = ev.payload as { type?: unknown; at?: unknown } | undefined;
         if (up && up.type === USER_STOPPED_EVENT) {
@@ -332,7 +332,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
  // 清算回执:原任务书 id + sessionId + 中断前进度(状态机恢复语义)。
         receipt: (t) =>
           `网关重启中断(原任务书 ${t.id} / 会话 ${t.sessionId} / 中断前约 ${agentTurns.get(t.sessionId) ?? 0} 轮;可续跑)`,
- // :任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
+ // 任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
         userStopped: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
       });
       for (const ct of collectedTasks) {
@@ -364,7 +364,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     // 同一 taskId 的连续状态变化折叠为最新 payload(替换而不重复上行)。
     if (task.state === "running" || task.state === "done" || task.state === "failed" || task.state === "cancelled") {
       const summary = String(task.instruction ?? task.id).slice(0, 120);
- // :一次生成结构化面(payload/text/gui 同源);旧四字段逐字保留,新增 structured/gui 只做增量。
+ // 一次生成结构化面(payload/text/gui 同源);旧四字段逐字保留,新增 structured/gui 只做增量。
       const legacySummary = `${task.state === "running" ? "开始" : task.state === "done" ? "完成" : "失败"}:${summary}`;
       const note = buildNotification("team.activity", {
         projectId: "",
@@ -793,7 +793,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         askAnswer: (requestId: string, answer: string) => askUserRouter.answer(requestId, answer),
  // task_resume 工具的续跑回调(与 WS task.resume 同源:幂等重提同 session 续跑)。
         resumeTask: (taskId: string) => {
- // :用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
+ // 用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
           const stoppedTask = taskManager.get(taskId);
           if (stoppedTask && hasUserStoppedSince(journal, { taskId: stoppedTask.id, sessionId: stoppedTask.sessionId, since: stoppedTask.createdAt })) {
             return { ok: false, reason: USER_STOPPED_RESUME_MESSAGE };
@@ -994,7 +994,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       projects, // P0:项目表快照注入(worker resolveWorkdir 与网关同源)
       // P0:goal 续跑网关统一发起(worker 内已禁本地 submit——网关不可见+退出截杀);
       // 与进程内同参(tm/journal/llm),提交后续跑任务走正常队列→新 worker fork。
- // :带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
+ // 带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
       onTaskDone: (task) => {
         const rev = goalRevisionAtTaskStart.get(task.id) ?? null;
         goalRevisionAtTaskStart.delete(task.id);
@@ -1015,7 +1015,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         workerHost.cancelTask(task.id);
       } else if (task.state === "running") {
         ranTasks.add(task.id);
- // :开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
+ // 开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
         if (!goalRevisionAtTaskStart.has(task.id)) {
           try {
             goalRevisionAtTaskStart.set(task.id, readGoalFromJournal(journal.readSession(task.sessionId), task.sessionId)?.revision ?? null);
@@ -1453,10 +1453,10 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     if (Number.isFinite(arMinutes) && arMinutes > 0) {
       const resumed = taskManager.autoResumeInterrupted({
         windowMs: arMinutes * 60_000,
- // :有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
+ // 有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
         // 覆盖「上次重启已收编 interrupted、之后才出现停止标记」的历史任务)。
         blocked: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
- // :修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
+ // 修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
         // 重复续跑不会重复扫尾(applyTailRepair 本身也幂等,二次全 0)。
         buildInstruction: (t) => {
           const repairNote = repairTailBeforeResume(journal, t.sessionId);

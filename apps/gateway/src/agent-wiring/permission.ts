@@ -73,7 +73,7 @@ import { takePendingComments, renderPendingCommentsBlock } from "../board-commen
 import { planTaskSurface, degradeFinalFor, GUI_ONLY_TOOLS } from "../surface-capabilities.js"; // 表面/通道能力包
 import { SOP_TIPS, sopTipText, renderStartProfileTip } from "../agent-wiring-sop-tips.js";
 import { probeWorkStart, renderWorkStartBrief, verifyCommandsFor } from "../work-start-profile.js";
-// 开工前置门(:基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
+// 开工前置门(基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
 import { readBaselineStatus, planFreshnessSkip, planFreshnessAction, renderFreshnessLine, loadWordingTable, scanRuleWording, renderWordingLines } from "../startup-freshness.js";
 import type { FreshnessConfig } from "../startup-freshness.js";
 import { buildDefaultMicrocompactThreshold, DEFAULT_GROWTH_SPURT_TOKENS } from "@lampgenie/runtime/agent/microcompact";
@@ -144,9 +144,9 @@ import {
   surfaceGateVerdict,
   type ChangeSurfaceJournal,
 } from "../change-surface-tool.js";
-// :分类可更正——gate 判据前读本会话最近一条更正(按水位缓存,不每步全扫)。
+// 分类可更正——gate 判据前读本会话最近一条更正(按水位缓存,不每步全扫)。
 import { readChangeScopeCorrection, type ChangeScopeCorrection } from "../change-scope-correction.js";
-// :收尾残留重扫——surface 任务在收尾前重扫概念词,残留事实进 changeFacts.residual。
+// 收尾残留重扫——surface 任务在收尾前重扫概念词,残留事实进 changeFacts.residual。
 import { scanSurface } from "@lampgenie/code-sense/surface";
 import type { ResidualFact } from "../closeout-residual.js";
 // 任务级验证账本 / 交付物声明账本:纯函数与工具各一模块,收尾钩子在本文件。
@@ -534,7 +534,7 @@ export function buildSubagentExtraTools(
         return permissionMode() === "workspace" ? fenceCommand(c, taskRoot) : null;
       },
     }), { journal: execCtx.journal, owner: execCtx.owner, sessionId: execCtx.sessionId, service: getTerminalService(execCtx.journal) }),
- // :后台命令 job(与 terminal 同 owner;通知路由回父会话)。
+ // 后台命令 job(与 terminal 同 owner;通知路由回父会话)。
     createJobTool({
       registry: getJobRegistry(execCtx.journal),
       owner: execCtx.owner,

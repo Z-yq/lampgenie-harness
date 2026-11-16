@@ -729,8 +729,8 @@ export const PANEL_CSS = `
   body[data-view="board"] .page{padding-right:28px}
   button{font-family:var(--sans);cursor:pointer}
  *{scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent}
- *:-webkit-scrollbar{width:5px}
- *:-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px}
+ *-webkit-scrollbar{width:5px}
+ *-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px}
 
  /* ===== 左侧栏(复刻 ZCode WorkspaceSidebar) ===== */
   #sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sbw);z-index:6;display:flex;flex-direction:column;

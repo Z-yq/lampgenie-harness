@@ -294,9 +294,20 @@ interface ProtocolScan {
 }
 
 function scanProtocol(root: string): ProtocolScan | null {
-  const text = readText(root, WIRE_PATHS.protocol);
-  if (text === null) return null;
+  const main = readText(root, WIRE_PATHS.protocol);
+  if (main === null) return null;
   const file = WIRE_PATHS.protocol;
+  // 协议拆分后 union/decl 散在 src/messages/*.ts:合并扫描(位置兜底仍指 index.ts)
+  const parts = [main];
+  try {
+    const msgsDir = join(root, WIRE_PATHS.protocol, "..", "messages");
+    for (const f of readdirSync(msgsDir).filter((x) => x.endsWith(".ts")).sort()) {
+      const rel = `${WIRE_PATHS.protocol.replace(/index\.ts$/, "")}messages/${f}`;
+      const txt = readText(root, rel);
+      if (txt !== null) parts.push(txt);
+    }
+  } catch { /* 目录缺席=未拆分旧布局,单文件足够 */ }
+  const text = parts.join("\n\n");
   const masked = maskStructure(text);
   const decls = new Map<string, ProtocolDecl>();
 
@@ -457,6 +468,17 @@ function scanHandlers(root: string): WireHandler[] {
 function clientFiles(root: string): string[] {
   const files: string[] = [];
   if (existsSync(join(root, WIRE_PATHS.panel))) files.push(WIRE_PATHS.panel);
+  // 面板拆分后 UI 脚本子模块在 src/panel/ 目录(与 panel.ts 同名不同形):同为客户端面
+  const panelDir = join(root, "apps/gateway/src/panel");
+  try {
+    for (const name of readdirSync(panelDir).sort()) {
+      if (!name.endsWith(".ts")) continue;
+      const rel = `apps/gateway/src/panel/${name}`;
+      if (!files.includes(rel)) files.push(rel);
+    }
+  } catch {
+    /* 目录不可读=如实缺席 */
+  }
   const assetsAbs = join(root, WIRE_PATHS.assetsDir);
   if (existsSync(assetsAbs)) {
     try {
@@ -558,7 +580,9 @@ function runGit(root: string, args: string[]): { ok: boolean; out: string; error
 
 function relevantRel(rel: string): boolean {
   const p = toPosix(rel);
-  return p === WIRE_PATHS.protocol || p === WIRE_PATHS.server || p === WIRE_PATHS.panel || p.startsWith(WIRE_PATHS.assetsDir + "/");
+  if (p === WIRE_PATHS.protocol || p === WIRE_PATHS.server) return true;
+  if (p === WIRE_PATHS.panel || p.startsWith("apps/gateway/src/panel/")) return true; // 面板拆分后子模块同属面板面
+  return p.startsWith(WIRE_PATHS.assetsDir + "/");
 }
 
 /** 只收 type 字面量三种形态(z.literal / type: / case),**不做大写标识符收集**。
@@ -633,7 +657,7 @@ function scanChanged(root: string, knownTypes: Set<string>): WireChangedInfo {
   // ② touched:两版都存在、且出现在 diff 增删行上的字面量(字段级改动若没动字面量所在行,
   //    不算 touched——已知边界里如实说明)。
   const touchedRaw = new Set<string>();
-  const diffPaths = [WIRE_PATHS.protocol, WIRE_PATHS.server, WIRE_PATHS.panel, WIRE_PATHS.assetsDir]
+  const diffPaths = [WIRE_PATHS.protocol, WIRE_PATHS.server, WIRE_PATHS.panel, "apps/gateway/src/panel/", WIRE_PATHS.assetsDir]
     .filter((p) => existsSync(join(root, p)));
   let diff = runGit(root, ["diff", "HEAD", "--no-color", "--unified=0", "--", ...diffPaths]);
   let diffNote: string | undefined;

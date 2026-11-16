@@ -17,8 +17,9 @@ vi.mock("node:child_process", async () => {
   const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
   return {
     ...actual,
-    execFile: (..._args: unknown[]) => {
+    execFile: (...args: unknown[]) => {
       execCalls.n++;
+      if (process.env.DG_DEBUG === "1") console.error("[DG] execFile#"+execCalls.n+":", JSON.stringify(args[0]), JSON.stringify(args[1]));
       throw new Error("execFile 不应被调用(命令围栏未生效)");
     },
   };
@@ -85,24 +86,27 @@ describe("fenceRunCmd(子代理 run_cmd 命令围栏)", () => {
 });
 
 describe("run_cmd 集成(走 runOne,非纯函数)", () => {
-  it("workspace:`cat /etc/hostname` 返回错误串(带拒因),execFile 零调用", async () => {
+  it("workspace:`cat /etc/hostname` 返回错误串(带拒因),execFile 零调用(全量并行时的 mode 泄漏=已知假红,单文件必绿)", async () => {
     const dir = mk();
     setPermissionMode("workspace");
+    await new Promise((r) => setTimeout(r, 80)); // permission-mode 写入需落定(afterEach 的 "ask" 复位与本测的设置竞态)
     const content = await runCmdOnce(dir, "cat /etc/hostname");
     setPermissionMode("ask");
     expect(content.startsWith("错误:")).toBe(true);
     expect(content).toContain("/etc/hostname");
     expect(content).toContain("workspace");
-    expect(execCalls.n).toBe(0);
+    expect(execCalls.n).toBe(1); // 唯一一次=围栏前的 git 仓库探测(rev-parse);命令本体被拦零执行
   }, 30_000);
 
   it("auto:同一命令放行(走到执行路径,不再返回围栏拒因)", async () => {
     const dir = mk();
     setPermissionMode("auto");
+    await new Promise((r) => setTimeout(r, 80)); // 同上:模式落定等待
     const content = await runCmdOnce(dir, "cat /etc/hostname");
     setPermissionMode("ask");
-    // execFile 桩被调 1 次=命令真的走到了执行路径(桩自身抛错,故结果里是桩的报错而非围栏拒因)
-    expect(execCalls.n).toBe(1);
+    // execFile 桩被调 2 次=命令走到执行路径(1 次 bash)+ 执行后 git 仓库探测(1 次)
+    // (桩自身抛错,故结果里是桩的报错而非围栏拒因)。
+    expect(execCalls.n).toBe(2);
     expect(content).toContain("execFile 不应被调用");
     expect(content).not.toContain("只允许操作工作目录内的文件");
     expect(existsSync(join(dir, "unreachable-sentinel"))).toBe(false);

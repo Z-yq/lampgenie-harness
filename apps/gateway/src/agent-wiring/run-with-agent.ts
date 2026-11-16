@@ -821,7 +821,7 @@ export async function runWithAgent(
  // 全链路变更门的独立计数:与「无板」同档逃生阀,但独立计数——两类拒绝同因不同,
  // 混计会让「缺盘点」把「缺板」的额度吃掉,症状变成闸门突然静默放行。
   let surfaceGateDenies = 0;
- // :本会话最新一条分类更正(`change.surface action=classify` 落 journal)。
+ // 本会话最新一条分类更正(`change.surface action=classify` 落 journal)。
  // 按 journal 水位缓存:水位没变就不重读会话事件(避免每次写操作前全扫);读到结构坏的事件由
  // readChangeScopeCorrection 自己跳过 → null,gate 回落到旧启发式(未更正=旧行为逐字不变)。
   let scopeCorrectionCache: { watermark: number; value: ChangeScopeCorrection | null } | null = null;
@@ -868,7 +868,7 @@ export async function runWithAgent(
       hasChain: surfaceManifest ? surfaceManifest.chain !== undefined : undefined,
       exempt: boardExemptThisTask || readChangeExempt(journal, task.sessionId, task.id) !== null,
       directRoute: taskRouteState.direct,
- // :显式更正优先于启发式(合法才覆盖;null=旧行为逐字不变)。
+ // 显式更正优先于启发式(合法才覆盖;null=旧行为逐字不变)。
       correction: currentScopeCorrection() ?? undefined,
     });
     if (surfaceVerdict.deny) {
@@ -1321,7 +1321,7 @@ export async function runWithAgent(
  // models.subagent 显式配置才存在(factory 未配=undefined),回退主 llm=同实例同模型同 effort,
  // 主模型热切换后新 spawn 天然用新模型(与 effectiveBackend 同判定源)。
       const subModelName = subagentModelNameOf(models?.subagent ?? llm);
- // :子代理生命周期注册(进程级 registry;bgAgents 镜像继续承担输出文件/cancel 句柄)。
+ // 子代理生命周期注册(进程级 registry;bgAgents 镜像继续承担输出文件/cancel 句柄)。
  // parentId=派发它的主 task id → list_agents/stop_agent 按后代递归天然隔离其它任务。
       const registerSubagentRecord = (): void => {
         subagentRegistry.register({
@@ -1602,7 +1602,7 @@ export async function runWithAgent(
           try { ap(outputFile, `[result ok=true] ${partial}\n`, "utf-8"); } catch { /* 输出文件写失败不阻塞收割 */ }
           const en = bgAgents.get(bgAgentId);
           if (en) { en.status = "completed"; en.lastEventAt = Date.now(); delete en.cancel; }
- // :deadline 收割=终态(部分交付),registry 落 done+摘要,避免 list_agents 显示 running。
+ // deadline 收割=终态(部分交付),registry 落 done+摘要,避免 list_agents 显示 running。
           subagentRegistry.update(bgAgentId, { state: "done", resultSummary: partial.slice(0, 200) });
           try {
             journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, event: { type: "result", ok: true, finalText: partial.slice(0, 300) }, reap: { reason: "deadline" } } });
@@ -1617,7 +1617,7 @@ export async function runWithAgent(
               pointerOnly: true,
             });
           } catch { /* 通知失败不影响收割 */ }
- // :后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
+ // 后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
           maybeWakeIdleSession(journal, task.sessionId, tm);
           finalText = partial;
           events.push("result"); // 前台竞态路径(若仍在等)立即收割
@@ -1648,7 +1648,7 @@ export async function runWithAgent(
                   const entryBg = bgAgents.get(bgAgentId);
  // 终态摘除 cancel 句柄:此后「终止」按钮经 server 诚实回 ok:false(已收尾)。
                   if (entryBg) { entryBg.status = e.result.ok ? "completed" : "failed"; delete entryBg.cancel; }
- // :后台终态同步落 registry(list_agents 的状态源;后台路径在此返回,不走末尾统一更新)。
+ // 后台终态同步落 registry(list_agents 的状态源;后台路径在此返回,不走末尾统一更新)。
                   subagentRegistry.update(bgAgentId, { state: e.result.ok ? "done" : "failed", resultSummary: String(e.result.finalText ?? e.result.error?.detail ?? "").slice(0, 200) });
  // worktree 交付回收(路径+改动文件)——异步补齐,不阻塞终态事件与通知。
                   if (worktree) void scratchOf().then((s) => {
@@ -1677,7 +1677,7 @@ export async function runWithAgent(
                       outputText: noticeOutput,
                     });
                   } catch { /* 通知失败不影响子代理收尾 */ }
- // :后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
+ // 后台单元终态 → 父会话空闲时合并通知起一次唤醒 turn(在跑则不打扰)。
                   maybeWakeIdleSession(journal, task.sessionId, tm);
                 }
               }
@@ -1701,7 +1701,7 @@ export async function runWithAgent(
  // subagent.cancel 句柄(G3 通路收尾):后台路径闭包读 bgHandleRef(spawn 未决时按下终止=诚实等待句柄就位后再取消);
  // 已收尾(settled)不挂——server 侧按「句柄缺席」回 ok:false。
         bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return bgHandleRef?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => bgHandle.steer(t, m) }), ...(subTitle ? { title: subTitle } : {}) });
- // :登记 registry(后台路径),并摘掉父取消监听——后台已 detach,父取消不再作用于它。
+ // 登记 registry(后台路径),并摘掉父取消监听——后台已 detach,父取消不再作用于它。
         registerSubagentRecord();
         registerOwnedSubagent(); // 所有权登记(cancel 句柄已就位,关会话时可真取消)
         signal?.removeEventListener("abort", markSubagentCancelled);
@@ -1750,7 +1750,7 @@ export async function runWithAgent(
         try { ap(outputFile, `[result ok=true] ${partial}\n`, "utf-8"); } catch { /* 输出文件写失败不阻塞收割 */ }
         const en = bgAgents.get(bgAgentId);
         if (en) { en.status = "completed"; en.lastEventAt = Date.now(); delete en.cancel; }
- // :前台路径的 deadline 收割同落 registry(部分结果交付,非失败)。
+ // 前台路径的 deadline 收割同落 registry(部分结果交付,非失败)。
         subagentRegistry.update(bgAgentId, { state: "done", resultSummary: partial.slice(0, 200) });
         try {
           journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: task.id, agentId: bgAgentId, event: { type: "result", ok: true, finalText: partial.slice(0, 300) }, reap: { reason: "deadline" } } });
@@ -1786,7 +1786,7 @@ export async function runWithAgent(
                 const entryBg = bgAgents.get(bgAgentId);
  // 终态摘除 cancel 句柄:此后「终止」按钮经 server 诚实回 ok:false(已收尾)。
                 if (entryBg) { entryBg.status = e.result.ok ? "completed" : "failed"; delete entryBg.cancel; }
- // :前台终态同步落 registry(与 bgAgents 镜像同一判定源)。
+ // 前台终态同步落 registry(与 bgAgents 镜像同一判定源)。
                 subagentRegistry.update(bgAgentId, { state: e.result.ok ? "done" : "failed", resultSummary: String(e.result.finalText ?? e.result.error?.detail ?? "").slice(0, 200) });
  // worktree 交付回收(路径+改动文件)——异步补齐,不阻塞终态事件。
                 if (worktree) void scratchOf().then((s) => {
@@ -1845,7 +1845,7 @@ export async function runWithAgent(
  // result 分支既有代码本就尝试更新该条目,此处补齐登记即可闭环。终态由 result 分支改写。
  // subagent.cancel 句柄(G3 通路收尾):前台路径闭包读 subHandle;已收尾不挂。
       bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return subHandle?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => subHandle?.steer(t, m) ?? Promise.resolve(false) }), ...(subTitle ? { title: subTitle } : {}) });
- // :前台路径同样登记 registry(运行期即可被 list_agents 看到)。
+ // 前台路径同样登记 registry(运行期即可被 list_agents 看到)。
       registerSubagentRecord();
       registerOwnedSubagent(); // 所有权登记(前台转后台/前台终态同一单元)
       ensureSubagentWatchdog(journal);
@@ -1877,7 +1877,7 @@ export async function runWithAgent(
         signal?.removeEventListener("abort", forwardAbort); // detach:父取消不再杀后台子代理
  // re-set 会整个替换条目对象:cancel 句柄随条目重挂(auto-bg 到达时必未收尾,防御式带 settled 守卫)。
         bgAgents.set(bgAgentId, { outputFile, status: settled ? (lastResultOk === false ? "failed" : "completed") : "running", sessionId: task.sessionId, model: subModelName, lastEventAt, spawnedAt: spawnStartAt, ...(deadlineMs > 0 ? { deadlineAt: spawnStartAt + deadlineMs } : {}), staleWarnMs, ...(settled ? {} : { cancel: () => { subagentRegistry.interrupt(bgAgentId); return subHandle?.cancel("graceful"); }, steer: (t: string, m: "hint" | "directive") => subHandle?.steer(t, m) ?? Promise.resolve(false) }), ...(subTitle ? { title: subTitle } : {}) });
- // :detach 后父取消不再作用,摘监听;registry 记录保持 running(转后台仍在跑)。
+ // detach 后父取消不再作用,摘监听;registry 记录保持 running(转后台仍在跑)。
         signal?.removeEventListener("abort", markSubagentCancelled);
       ensureSubagentWatchdog(journal);
         journal.append({ kind: "subagent.backgrounded", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, outputFile } });
@@ -1899,7 +1899,7 @@ export async function runWithAgent(
       if (!deadlineFired) {
         journal.append({ kind: "subagent.result", sessionId: task.sessionId, payload: { taskId: subTaskId, parentTaskId: task.id, agentId: bgAgentId, event: { type: "result", finalText: finalText.slice(0, 300) }, ...(worktree ? { worktree } : {}) } });
       }
- // :前台终态兜底落 registry(已 cancelled/interrupted 的不回退;仅 running 才改)。
+ // 前台终态兜底落 registry(已 cancelled/interrupted 的不回退;仅 running 才改)。
       settleOwnedSubagent(); // 终态 settle(前台路径走到终态返回:同单元只结算一次)
       const finalScratch = await scratchOf();
       if (subagentRegistry.get(bgAgentId)?.state === "running") {
@@ -2678,7 +2678,7 @@ export async function runWithAgent(
         };
         return t;
       })(), // 主 agent 直操作文件六件套(围栏根=taskRoot;写类 readonly/plan 拒 + file.write 类别闸)
- // :后台命令 job(start/list/read/wait/kill)——长任务/构建/测试的独立句柄,结算只通知一次。
+ // 后台命令 job(start/list/read/wait/kill)——长任务/构建/测试的独立句柄,结算只通知一次。
     (() => {
       const t = createJobTool({
         registry: getJobRegistry(journal),
@@ -3320,7 +3320,7 @@ export async function runWithAgent(
       const ledgerFacts = ledgerBefore
         ? { changed: ledgerBefore.changed.length, unknown: ledgerBefore.unknown.length, oversized: ledgerBefore.oversized.length }
         : undefined;
- // :surface 任务收尾前对变更概念重扫一次,残留事实进 changeFacts.residual。
+ // surface 任务收尾前对变更概念重扫一次,残留事实进 changeFacts.residual。
  // 非 surface / 无清单 = 零额外 IO;扫描失败显式标记 SCAN_UNAVAILABLE,不阻塞收尾。
       const residualFact = await (async (): Promise<ResidualFact | undefined> => {
         try {
@@ -3429,7 +3429,7 @@ export async function runWithAgent(
     }
  // goal 续跑循环(ZCode target-continuation-loop 移植):任务终态→完成校验器
  //(LLM JSON 裁决,fail-open)→未通过且预算未尽→自动派下一轮续跑任务。
- // :带任务开工时快照的目标修订号(无目标=不传),目标被 clear/replace → 拒续跑。
+ // 带任务开工时快照的目标修订号(无目标=不传),目标被 clear/replace → 拒续跑。
     void maybeContinueGoal(tm, journal, llm, task.sessionId, taskStartGoalRevision !== null ? { expectedRevision: taskStartGoalRevision } : {}).catch(() => {});
   } catch (err) {
     const cur = tm.get(task.id);
