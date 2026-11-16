@@ -44,6 +44,9 @@ jobs:
           grep -E "FAIL +test/" /tmp/test-clean.log | sed 's/.*FAIL */FAIL /' | sort -u | head -45 | while IFS= read -r line; do
             echo "::error::$line"
           done
+          grep -E "(→|AssertionError)" /tmp/test-clean.log | head -45 | while IFS= read -r line; do
+            echo "::error::${line:0:300}"
+          done
           grep -E "Tests +[0-9]+ failed" /tmp/test-clean.log | head -6 | while IFS= read -r line; do
             echo "::error::$line"
           done
