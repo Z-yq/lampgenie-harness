@@ -774,7 +774,8 @@ async function grepLines(
   let stdout = "";
   try {
     const args = ["-rn", "--no-messages", ...(opts?.fixed ? ["-F"] : ["-E"])];
-    for (const e of exts) args.push(`--include=*.${e}`);
+    // exts 是 rg 风格 glob(已带 *.):原样作 --include;裸扩展名才补 *.
+    for (const e of exts) args.push(e.includes("*") ? `--include=${e}` : `--include=*.${e}`);
     args.push("--", pattern, root);
     const r = await execFileP("grep", args, { maxBuffer: (opts?.maxBufferMb ?? 64) * 1024 * 1024 });
     stdout = r.stdout;
