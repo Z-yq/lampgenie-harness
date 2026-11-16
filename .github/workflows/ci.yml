@@ -26,6 +26,10 @@ jobs:
         run: pnpm gate:audit
       - name: 构建(依赖包先行:core/protocol → 全仓)
         run: pnpm -r run build
+      - name: git 身份(测试夹具仓需要 commit;runner 默认无身份,缺失会让夹具提交静默失败)
+        run: |
+          git config --global user.name "ci-fixture"
+          git config --global user.email "ci-fixture@example.com"
       - name: 测试
         id: test
         run: |
