@@ -167,7 +167,10 @@ export async function grepFilesIn(
         }
       } else {
         const { stdout } = await execFileP("grep", [
-          "-rl", "-E", `--include=*.{ts,tsx,js,jsx,mjs,cjs,py,go,java,rs,md,html,vue,c,h,cc,cpp,cxx,hh,hpp,hxx,cs,kt,kts,scala,swift}`, `--`, escaped, root,
+          "-rl", "-E",
+          // GNU grep 不做花括号展开(execFile 直传):必须逐扩展名给 --include
+          ...["ts","tsx","js","jsx","mjs","cjs","py","go","java","rs","md","html","vue","c","h","cc","cpp","cxx","hh","hpp","hxx","cs","kt","kts","scala","swift"].map((e) => `--include=*.${e}`),
+          `--`, escaped, root,
         ], { maxBuffer: 16 * 1024 * 1024 });
         for (const line of stdout.split("\n")) {
           if (!line) continue;
