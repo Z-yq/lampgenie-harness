@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     maxWorkers: 1,
     minWorkers: 1,
+ // 本仓真链用例(bridge/change-surface/literal-refs 对全仓建图)在 2 核 CI 上远超默认 5s
+    testTimeout: 180_000,
+    hookTimeout: 60_000,
  // 重型自引用套件(literal-refs/c2f 对本仓全量建图)需要 >2GB 堆:
  // NODE_OPTIONS 不进 fork worker(被 vitest 过滤),必须走 execArgv。
     poolOptions: { forks: { execArgv: ["--max-old-space-size=4096"] } },

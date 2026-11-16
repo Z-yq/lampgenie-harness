@@ -9,7 +9,7 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -41,7 +41,7 @@ jobs:
             tail -40 /tmp/test-output.log || true
           } >> "${GITHUB_STEP_SUMMARY}"
           sed 's/\x1b\[[0-9;]*m//g' /tmp/test-output.log > /tmp/test-clean.log || cp /tmp/test-output.log /tmp/test-clean.log
-          grep -E "FAIL +test/" /tmp/test-clean.log | sed 's/.*FAIL */FAIL /' | sort -u | head -12 | while IFS= read -r line; do
+          grep -E "FAIL +test/" /tmp/test-clean.log | sed 's/.*FAIL */FAIL /' | sort -u | head -45 | while IFS= read -r line; do
             echo "::error::$line"
           done
           grep -E "Tests +[0-9]+ failed" /tmp/test-clean.log | head -6 | while IFS= read -r line; do
