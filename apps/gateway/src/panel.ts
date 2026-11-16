@@ -800,6 +800,7 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") console.error("[gateway] 端口 " + port + " 已被占用——换端口:GENIE_GATEWAY_PORT=7701 或改 genie.config.json gateway.port");
     else console.error("[gateway] 面板监听失败(" + port + "):" + String(err?.message ?? err));
+    if (process.env.VITEST) throw err; // 测试并行下端口竞争只判当个用例失败,不杀整个 worker(级联假红)
     process.exit(1);
   });
   server.listen(port);
