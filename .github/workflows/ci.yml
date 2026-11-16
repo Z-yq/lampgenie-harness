@@ -27,6 +27,19 @@ jobs:
       - name: 构建(依赖包先行:core/protocol → 全仓)
         run: pnpm -r run build
       - name: 测试
-        run: pnpm -r run test
+        id: test
+        run: |
+          set -o pipefail
+          pnpm -r run test 2>&1 | tee /tmp/test-output.log
+      - name: 失败摘要(失败清单进 step summary,便于远端审计)
+        if: failure() && steps.test.outcome == 'failure'
+        run: |
+          {
+            echo "## 测试失败清单"
+            grep -E "^ FAIL |Tests  |Test Files " /tmp/test-output.log | head -120 || true
+            tail -40 /tmp/test-output.log >> /tmp/summary-tail.txt || true
+            echo "## 末段输出"
+            tail -40 /tmp/test-output.log || true
+          } >> "${GITHUB_STEP_SUMMARY}"
       - name: 类型检查
         run: pnpm -r run typecheck
