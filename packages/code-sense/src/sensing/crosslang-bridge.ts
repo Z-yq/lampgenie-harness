@@ -281,7 +281,6 @@ export async function collectFrontendLiterals(
   const filteredSamples: string[] = [];
   let filteredLiterals = 0;
   for (const line of stdout.split("\n")) {
-    if (!line) continue;
     const clean = line.endsWith("\r") ? line.slice(0, -1) : line;
     const m = /^(.*):(\d+):(.*)$/.exec(clean);
     if (!m) continue;
@@ -764,13 +763,44 @@ function emptyStats(endpoints: ApiEndpoint[]): BridgeStats {
 /** rg/grep 通用行扫描( A2-A6 共用):pattern 命中行带 file:line:content。
  * 仅 rg 通道(A2-A6 是新增形态,不为它们实现 grep 兜底——无 rg=显式降级,与 A1 的
  * grep 兜底存量语义无涉)。返回 null=rg 缺席(降级);[] =零命中。 */
+/** GNU grep 回退(rg 缺席的 runner 镜像,ubuntu-26 起不再预装 ripgrep):
+ * 与 rgLines 同输出形状;逐扩展名 --include(execFile 直传,花括号 glob 不会被 shell 展开)。 */
+async function grepLines(
+  root: string,
+  pattern: string,
+  exts: string[],
+  opts?: { fixed?: boolean; maxBufferMb?: number },
+): Promise<{ file: string; line: number; text: string }[] | null> {
+  let stdout = "";
+  try {
+    const args = ["-rn", "--no-messages", ...(opts?.fixed ? ["-F"] : ["-E"])];
+    for (const e of exts) args.push(`--include=*.${e}`);
+    args.push("--", pattern, root);
+    const r = await execFileP("grep", args, { maxBuffer: (opts?.maxBufferMb ?? 64) * 1024 * 1024 });
+    stdout = r.stdout;
+  } catch (e) {
+    if ((e as { code?: number }).code === 1) return [];
+    throw e;
+  }
+  const out: { file: string; line: number; text: string }[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line) continue;
+    const clean = line.endsWith("\r") ? line.slice(0, -1) : line;
+    const m = /^(.*):(\d+):(.*)$/.exec(clean);
+    if (!m) continue;
+    const file = m[1]!.startsWith(root) ? m[1]!.slice(root.length).replace(/^\//, "") : m[1]!;
+    out.push({ file, line: Number(m[2]), text: m[3]! });
+  }
+  return out;
+}
+
 async function rgLines(
   root: string,
   pattern: string,
   exts: string[],
   opts?: { fixed?: boolean; maxBufferMb?: number },
 ): Promise<{ file: string; line: number; text: string }[] | null> {
-  if (!(await haveRg())) return null;
+  if (!(await haveRg())) return grepLines(root, pattern, exts, opts);
   let stdout = "";
   try {
     const r = await execFileP("rg", [
