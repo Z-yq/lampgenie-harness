@@ -37,9 +37,14 @@ jobs:
           {
             echo "## 测试失败清单"
             grep -E "^ FAIL |Tests  |Test Files " /tmp/test-output.log | head -120 || true
-            tail -40 /tmp/test-output.log >> /tmp/summary-tail.txt || true
             echo "## 末段输出"
             tail -40 /tmp/test-output.log || true
           } >> "${GITHUB_STEP_SUMMARY}"
+          grep -E "^ FAIL " /tmp/test-output.log | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          grep -E "Tests  " /tmp/test-output.log | head -4 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
       - name: 类型检查
         run: pnpm -r run typecheck
