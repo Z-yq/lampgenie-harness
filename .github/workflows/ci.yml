@@ -41,12 +41,11 @@ jobs:
             tail -40 /tmp/test-output.log || true
           } >> "${GITHUB_STEP_SUMMARY}"
           sed 's/\x1b\[[0-9;]*m//g' /tmp/test-output.log > /tmp/test-clean.log || cp /tmp/test-output.log /tmp/test-clean.log
-          grep -E "FAIL +test/" /tmp/test-clean.log | sed 's/.*FAIL */FAIL /' | sort -u | head -45 | while IFS= read -r line; do
-            echo "::error::$line"
-          done
-          grep -E "(→|AssertionError)" /tmp/test-clean.log | head -45 | while IFS= read -r line; do
-            echo "::error::${line:0:300}"
-          done
+          # 完整失败清单打进单条注解(绕过注解条数上限;换行 %0A 编码)
+          LIST=$(grep -E "FAIL +test/|→ |AssertionError" /tmp/test-clean.log | head -160 | cut -c1-220)
+          if [ -n "$LIST" ]; then
+            echo "::error::$(printf '%s' "$LIST" | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-60000)"
+          fi
           grep -E "Tests +[0-9]+ failed" /tmp/test-clean.log | head -6 | while IFS= read -r line; do
             echo "::error::$line"
           done
