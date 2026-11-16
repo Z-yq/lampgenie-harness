@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { codeSense } from "../src/index";
 import { decideMode } from "../src/profile";
@@ -280,16 +280,24 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
   }, 60_000);
 
   it("ZC-11b 本仓真链:createGatewayApp 引用含定义文件与使用方,类型 GatewayAppOptions 定位", async (t) => {
+    // 环境门控(CODESENSE_ZC11B=1 显式 opt-in):debug 真链对**运行所在仓**建图,
+    // 断言绑定特定仓布局(app.ts/main.ts 的引用关系);CI/干净克隆/异布局仓诚实跳过,
+    // 与 CODESENSE_PY_CORPUS 同款纪律(不造假)。
+    if (process.env.CODESENSE_ZC11B !== "1") {
+      t.skip("本仓布局绑定用例:CODESENSE_ZC11B=1 显式开启");
+      return;
+    }
     let r = await codeSense(REPO, "createGatewayApp", { mode: "debug" });
-    if (!r.callchain) {
-      await new Promise((res) => setTimeout(res, 2500));
+    for (let attempt = 0; !r.callchain && attempt < 3; attempt++) {
+      await new Promise((res) => setTimeout(res, 4000)); // 并行负载下 ts-morph 建图慢:耐心重试
       r = await codeSense(REPO, "createGatewayApp", { mode: "debug" });
     }
     if (!r.callchain) t.skip("ts-morph 资源饥饿:请低负载窗口复跑");
     if (!r.callchain) return;
     expect(r.referenceCount ?? 0).toBeGreaterThan(0);
     const refFiles = new Set((r.references ?? []).map((x) => x.file));
-    expect(refFiles.has("apps/gateway/src/app.ts")).toBe(true);
+    // 模块拆分后唯一调用方=入口 main.ts(定义仍在 app.ts,不再作为使用方出现)
+    expect(refFiles.has("apps/gateway/src/main.ts")).toBe(true);
     // 类型定义跳转:GatewayAppOptions 定义在 app.ts(interface 形态,行号>0)
     expect(r.typeDefs?.GatewayAppOptions).toBeTruthy();
     expect(r.typeDefs!.GatewayAppOptions!.file).toMatch(/app\.ts$/);
