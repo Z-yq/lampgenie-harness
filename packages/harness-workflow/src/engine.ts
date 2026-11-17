@@ -147,6 +147,7 @@ export function commandAllowed(cmd: string): boolean {
 }
 
 export function createWorld(root: string): WorkflowWorld {
+  root = pathResolve(root); // 尾斜杠归一(URL 目录形式带 /):否则 glob 相对化错一位全空
   return {
     async run(cmd, opts = {}) {
       if (!commandAllowed(cmd)) {
