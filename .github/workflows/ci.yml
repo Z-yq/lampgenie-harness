@@ -49,7 +49,8 @@ jobs:
           sed 's/\x1b\[[0-9;]*m//g' /tmp/test-output.log > /tmp/test-clean.log || cp /tmp/test-output.log /tmp/test-clean.log
           # 完整失败清单打进单条注解(绕过注解条数上限;换行 %0A 编码)
           FAILS=$(grep -E "FAIL +test/" /tmp/test-clean.log | sed 's/.*FAIL +*/FAIL /' | sort -u | head -60 | cut -c1-180)
-          ASSERTS=$(grep -E "AssertionError: |Error: " /tmp/test-clean.log | grep -vE "node:internal|node_modules" | head -40 | cut -c1-200)
+          ASSERTS=$(grep -E "AssertionError" /tmp/test-clean.log | grep -vE "node:internal|node_modules" | head -60 | cut -c1-260)
+          HARN=$(grep -E "harness-workflow test:" /tmp/test-clean.log | grep -E "AssertionError|→ expected|×|FAIL " | head -30 | cut -c1-260)
           LIST="$FAILS
           === ASSERTIONS ===
           $ASSERTS"
