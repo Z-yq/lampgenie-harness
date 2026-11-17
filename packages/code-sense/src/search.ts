@@ -214,8 +214,16 @@ export async function grepMatchesAny(
     } else {
       const args = ["-rn", "-F", "-m", String(perFile)];
       for (const p of uniq) args.push("-e", p);
-      for (const ext of ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "java", "rs", "md", "html", "vue"]) {
-        args.push("--include=*." + ext);
+      // rg 花括号 glob(*.{ts,md,...})GNU grep 不展开:逐条拆成 --include=*.ext
+      for (const g of globs) {
+        if (g.includes("{")) {
+          const inner = g.slice(g.indexOf("{") + 1, g.lastIndexOf("}"));
+          const prefix = g.slice(0, g.indexOf("{"));
+          const suffix = g.slice(g.lastIndexOf("}") + 1);
+          for (const e of inner.split(",")) args.push(`--include=${prefix}${e}${suffix}`);
+        } else {
+          args.push(`--include=${g}`);
+        }
       }
       args.push(root);
       ({ stdout } = await execFileP("grep", args, { maxBuffer: 32 * 1024 * 1024 }));

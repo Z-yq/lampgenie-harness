@@ -774,8 +774,11 @@ async function grepLines(
   let stdout = "";
   try {
     const args = ["-rn", "--no-messages", ...(opts?.fixed ? ["-F"] : ["-E"])];
-    // exts 是 rg 风格 glob(已带 *.):原样作 --include;裸扩展名才补 *.
-    for (const e of exts) args.push(e.includes("*") ? `--include=${e}` : `--include=*.${e}`);
+    // exts 是 rg 风格 glob(已带 *.):原样作 --include;裸扩展名才补 *.;负 glob(!x)→ --exclude
+    for (const e of exts) {
+      if (e.startsWith("!")) args.push(`--exclude=${e.slice(1)}`);
+      else args.push(e.includes("*") ? `--include=${e}` : `--include=*.${e}`);
+    }
     args.push("--", pattern, root);
     const r = await execFileP("grep", args, { maxBuffer: (opts?.maxBufferMb ?? 64) * 1024 * 1024 });
     stdout = r.stdout;
@@ -851,7 +854,7 @@ function filterFrontendRows<T extends { file: string }>(
 
 /** rg --files 文件枚举(A6 proto/桩发现用;-g 形态过滤,gitignore 遵守 rg 缺省)。 */
 async function rgFiles(root: string, globs: string[]): Promise<string[] | null> {
-  if (!(await haveRg())) return null;
+  if (!(await haveRg())) return findFiles(root, globs);
   let stdout = "";
   try {
     const r = await execFileP("rg", ["--files", ...globs.flatMap((g) => ["-g", g]), "--", root], { maxBuffer: 16 * 1024 * 1024 });
@@ -859,6 +862,30 @@ async function rgFiles(root: string, globs: string[]): Promise<string[] | null> 
   } catch (e) {
     if ((e as { code?: number }).code === 1) return [];
     throw e;
+  }
+  return stdout.split("\n").filter(Boolean).map((f) => (f.startsWith(root) ? f.slice(root.length).replace(/^\//, "") : f));
+}
+
+/** find 回退(rg 缺席的 runner 镜像):正 glob 走 -name(-o 并),负 glob(!x)走 ! -name 排除。 */
+async function findFiles(root: string, globs: string[]): Promise<string[]> {
+  const pos = globs.filter((g) => !g.startsWith("!"));
+  const neg = globs.filter((g) => g.startsWith("!")).map((g) => g.slice(1));
+  if (pos.length === 0) return [];
+  const nameArgs: string[] = [];
+  pos.forEach((g, i) => {
+    if (i > 0) nameArgs.push("-o");
+    nameArgs.push("-name", g);
+  });
+  const exclArgs = neg.flatMap((g) => ["!", "-name", g]);
+  const { execFile: execFileSyncCb } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFileSyncCb);
+  let stdout = "";
+  try {
+    const r = await run("find", [root, "(", ...nameArgs, ")", ...exclArgs], { maxBuffer: 16 * 1024 * 1024 });
+    stdout = r.stdout;
+  } catch (e) {
+    return [];
   }
   return stdout.split("\n").filter(Boolean).map((f) => (f.startsWith(root) ? f.slice(root.length).replace(/^\//, "") : f));
 }
