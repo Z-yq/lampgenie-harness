@@ -30,6 +30,8 @@ jobs:
         run: |
           git config --global user.name "ci-fixture"
           git config --global user.email "ci-fixture@example.com"
+      - name: ripgrep(sensing 扫描器 rg-first;ubuntu-26 镜像不再预装)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
       - name: 测试
         id: test
         run: |
