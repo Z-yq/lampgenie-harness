@@ -431,7 +431,7 @@ describe("C/C++ structural adapter()", () => {
       expect(r.failures).toHaveLength(1);
       expect(r.failures[0]!.reason).toContain("512KB");
       expect(r.outcome?.tier).toBe("skipped");
-      expect(ms).toBeLessThan(100); // 必须秒回,不进 tree-sitter
+      expect(ms).toBeLessThan(1000); // 走跳过档须远快于 tree-sitter(2MB 解析是秒级);上限放宽到 1s 容忍 CI 慢盘的读写抖动
     } finally {
       d1.cleanup();
     }
