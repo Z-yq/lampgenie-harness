@@ -14,7 +14,7 @@ for (const [n, src] of segs) {
   if (!src) { console.log(n, "NO EXPORT"); fail++; continue; }
   try { new vm.Script(src); console.log(n, "OK", src.length); }
   catch (e) { console.log(n, "SYNTAX-FAIL", String(e).slice(0, 150)); fail++; }
- // 模板约束(与 vm-gate-1602 同口径):体内裸反引号/ ${ 会截断 PAGE 模板
+ // 模板约束(与 vm-gate 同口径):体内裸反引号/ ${ 会截断 PAGE 模板
   const body = src.slice(src.indexOf("`", 1) + 1, src.lastIndexOf("`"));
   const stripped = body.replace(/`{2,}/g, "");
   if (stripped.includes("`") || body.includes("${")) {

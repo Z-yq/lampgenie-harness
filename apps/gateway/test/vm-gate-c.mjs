@@ -1,20 +1,18 @@
-// vm.Script 语法门:本批改动分片(script-core 为主,views/submit 未动一并复核)逐段编译,不抛即过
+// vm.Script 语法门:改动分片逐段编译,不抛即过(口径同 vm-gate.mjs)
 import vm from "node:vm";
-import { PANEL_JS_CORE } from "../src/panel/script-core.ts";
-import { PANEL_JS_VIEWS } from "../src/panel/script-views.ts";
-import { PANEL_JS_SUBMIT } from "../src/panel/script-submit.ts";
+import { PANEL_JS_TOOL_RENDER } from "../src/panel/script-tool-render.ts";
+import { PANEL_JS_HISTORY } from "../src/panel/script-history.ts";
 
 const segs = [
-  ["script-core", PANEL_JS_CORE],
-  ["script-views", PANEL_JS_VIEWS],
-  ["script-submit", PANEL_JS_SUBMIT],
+  ["script-tool-render", PANEL_JS_TOOL_RENDER],
+  ["script-history", PANEL_JS_HISTORY],
 ];
 let fail = 0;
 for (const [n, src] of segs) {
   if (!src) { console.log(n, "NO EXPORT"); fail++; continue; }
   try { new vm.Script(src); console.log(n, "OK", src.length); }
   catch (e) { console.log(n, "SYNTAX-FAIL", String(e).slice(0, 150)); fail++; }
- // 模板约束(与 vm-gate-1603 同口径):体内裸反引号/ ${ 会截断 PAGE 模板
+ // 模板约束:体内不新增裸反引号/模板插值(与 1602 门同口径)
   const body = src.slice(src.indexOf("`", 1) + 1, src.lastIndexOf("`"));
   const stripped = body.replace(/`{2,}/g, "");
   if (stripped.includes("`") || body.includes("${")) {
