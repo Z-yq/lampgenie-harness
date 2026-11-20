@@ -195,12 +195,28 @@ export class ProxyJournal implements Journal {
 }
 
 // ---- 代理:权限/workflow ask/ask_user/MCP(全部 RPC 到 gateway)----
-interface ProxyBrokerShape { ask(input: { sessionId?: string; tool: string; summary: string; risk?: string }): Promise<{ decision: "allow-once" | "reject"; rule?: unknown }> }
+interface ProxyBrokerShape {
+  ask(input: {
+    sessionId?: string; tool: string; summary: string; risk?: string;
+ /** super 审批分级:完整命令 + 任务归属必须穿过 worker RPC(否则 host 侧
+ * 无法区分「日常命令走聊天窗权限」与「危险/重资源/重启才问 super」)。 */
+    command?: string; submittedBy?: string; taskId?: string; brief?: string;
+  }): Promise<{ decision: "allow-once" | "reject"; rule?: unknown }>;
+}
 export function makePermissionProxy(sessionId: string): ProxyBrokerShape {
   return {
     async ask(input) {
       try {
-        return await request("permission.ask", { sessionId: input.sessionId ?? sessionId, tool: input.tool, summary: input.summary, risk: input.risk });
+        return await request("permission.ask", {
+          sessionId: input.sessionId ?? sessionId,
+          tool: input.tool,
+          summary: input.summary,
+          risk: input.risk,
+          ...(input.command ? { command: input.command } : {}),
+          ...(input.submittedBy ? { submittedBy: input.submittedBy } : {}),
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(input.brief ? { brief: input.brief } : {}),
+        });
       } catch {
         return { decision: "reject" }; // 通道断=fail-closed(与 broker offline 同语义)
       }

@@ -26,17 +26,19 @@ const PANEL_PARTS = [
   "../src/panel/script-ws-router.ts",
   "../src/panel/script-submit.ts",
   "../src/panel/script-admin.ts",
+  "../src/panel/script-remote.ts",
   "../src/panel/script-board-render.ts",
   "../src/panel/script-canvas.ts",
   "../src/panel/script-canvas-ops.ts",
   "../src/panel/script-dialogs.ts",
   "../src/panel/script-model-menu.ts",
   "../src/panel/script-commands.ts",
-  "../src/panel/script-voice-cite.ts",
+  "../src/panel/script-chat-cite.ts",
   "../src/panel/script-ide-1.ts",
   "../src/panel/script-ide-2.ts",
   "../src/panel/script-annotate.ts",
   "../src/panel/page-profile.ts",
+  "../src/panel/page-mobile.ts",
 ];
 
 const PROTOCOL_PARTS = [

@@ -157,14 +157,14 @@ describe("rsi-weekly", () => {
     expect(approval?.ref).toBe("mod-rsi");
   });
 
-  it("5. 空 root → healthy、needsDecision 空、渲染含「本周无需要你处理的事项」", async () => {
+  it("5. 空 root → healthy、needsDecision 空、渲染含「本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)」", async () => {
     const root = await tmpRoot();
 
     const report = await aggregateWeekly(root);
     expect(report.healthy).toBe(true);
     expect(report.needsDecision).toEqual([]);
     expect(report.changed.adopted).toEqual([]);
-    expect(renderWeeklyReportText(report)).toContain("本周无需要你处理的事项");
+    expect(renderWeeklyReportText(report)).toContain("本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)");
   });
 
   it("6. attentionOnly=true 且无待决 → suppressedSections 含 changed", async () => {
@@ -241,7 +241,7 @@ describe("rsi-weekly", () => {
     expect(existsSync(path)).toBe(true);
     const text = await readFile(path, "utf8");
     expect(text).toContain("## 本周改了什么");
-    expect(text).toContain("## 需要你决定什么");
+    expect(text).toContain("## 自主决策清单(可否决)");
   });
 
   it("12. 空 root + 证据源不可读 → 不抛异常", async () => {

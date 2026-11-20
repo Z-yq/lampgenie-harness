@@ -16,6 +16,8 @@ import {
 import { computeCost } from "@lampgenie/core/config/model-cost";
 import { resolveModelPrice } from "@lampgenie/core/config/model-prices";
 import type { Config } from "@lampgenie/core";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { RsiStatusSection } from "./rsi-status.js";
 import { assessResultQuality } from "./rsi-quality.js"; // 质量契约 v2(纯逻辑,零 LLM)
 import type { ExperienceStore } from "@lampgenie/experience"; // W2(仅类型,零运行时依赖)
@@ -108,8 +110,44 @@ const TERMINAL_FAILED = new Set(["failed", "cancelled", "blocked", "interrupted"
  */
 export const ORPHAN_GRACE_MS = 10 * 60_000;
 
+/** 同 pid 查不到任务、且无 result 无 journal 产出的 run,连续判「无证据」次数上限
+ * (防永久悬置;超限 failed 带如实文案)。进程内计数,网关重启自然清零。 */
+const ORPHAN_UNSEEN_LIMIT = 3;
+const ORPHAN_UNSEEN = new Map<string, number>();
+
 /** 固定 RSI 会话 id:所有机制运行都追加到这一个会话窗。 */
 export const RSI_SESSION_ID = "rsi";
+
+/** 孤儿判据纯函数(唯一权威,runner 与 scheduler 共用):
+ * - "orphaned":run.gatewayPid 存在且 ≠ 当前 pid(网关真重启)且任务不在册 → 宽限后 failed;
+ * - "missing":同 pid 但查不到(session-worker 独立 TaskSupervisor 持有 / 墓碑已清)→
+ * 调用方按 journal 证据收尾,**不判孤儿**;
+ * - "pending":pid 变了但宽限未到;"alive":在册或非 running。
+ * 旧 run 记录无 gatewayPid → 视同当前 pid(网关未重启口径),修 1597「网关没重启却报
+ * orphaned: task not found after gateway restart」的误杀。 */
+export type OrphanVerdict =
+  | { kind: "alive" }
+  | { kind: "pending"; dueInMs: number }
+  | { kind: "missing" }
+  | { kind: "orphaned"; fromPid?: number; toPid: number };
+
+export function orphanVerdict(
+  run: { status?: string; taskId?: string; startedAt: number; gatewayPid?: number },
+  stateText: string | undefined,
+  currentPid: number,
+  nowMs: number,
+): OrphanVerdict {
+  if (run.status !== "running" || run.taskId === undefined) return { kind: "alive" };
+  if (stateText !== undefined) return { kind: "alive" };
+  const pidChanged = run.gatewayPid !== undefined && run.gatewayPid !== currentPid;
+  const age = nowMs - run.startedAt;
+  if (pidChanged) {
+    return age > ORPHAN_GRACE_MS
+      ? { kind: "orphaned", ...(run.gatewayPid === undefined ? {} : { fromPid: run.gatewayPid }), toPid: currentPid }
+      : { kind: "pending", dueInMs: ORPHAN_GRACE_MS - age };
+  }
+  return { kind: "missing" };
+}
 
 /** 成本核算里「整模型无单价」时列的缺价段(与 core CostBreakdown.missing 同名,面板文案一致)。 */
 const COST_SEGMENTS = ["cacheRead", "cacheWrite", "inputMiss", "output"] as const;
@@ -263,6 +301,7 @@ export async function startMechanismRun(
       runId,
       taskId: task.id,
       sessionId,
+      gatewayPid: process.pid,
       ...(plan === undefined
         ? {}
         : { analysis: { windowDays: plan.windowDays, candidates: plan.candidates, analyzed: [] } }),
@@ -320,6 +359,9 @@ export interface SettleRunOptions {
   experienceStore?: ExperienceStore;
  /** 判定时钟(孤儿收尾按 now-startedAt 与宽限比;缺省=Date.now)。 */
   now?: number;
+ /** 当前网关 pid(孤儿判据;缺省=process.pid)。e2e/外部结算方应传 run 记录上的
+ * gatewayPid,避免把别的进程派的 run 误判成「网关重启」。 */
+  gatewayPid?: number;
 }
 
 /**
@@ -374,14 +416,30 @@ export async function settleRunRecord(
       run = (await getRun(root, section.id, run.runId)) ?? run;
       finalized += 1;
       await noteDreamOnce(opts, section, run, failed ? "failed" : "done");
-    } else if (stateText === undefined && nowMs - run.startedAt > ORPHAN_GRACE_MS) {
- // ①b 孤儿收尾:网关重启后 taskManager 里查不到这个 taskId,run 自称 running
- // 却永远不会有人来结账(经验证 nightly 26 个 runId 里 22 个只有 start 卡)。
- // 超过宽限仍查不到 → 判 failed(orphaned),不再永久挂 running。
-      await finishRun(root, section.id, run.runId, "failed", "orphaned: task not found after gateway restart");
-      run = (await getRun(root, section.id, run.runId)) ?? run;
-      finalized += 1;
-      await noteDreamOnce(opts, section, run, "failed");
+    } else if (stateText === undefined) {
+ // ①b(重写):「查不到任务」≠「网关重启」。孤儿只认 pid 真变化;同 pid 查不到
+ // 多半是 session-worker 独立 TaskSupervisor 持有或墓碑已清——按 journal 证据收尾:
+ // result 已落盘→done(修 pathology「result 已写仍标 failed」序缺陷);任务终态事件→照实收;
+ // 窗口仍在产出→保留 running;连续 3 轮无证据→failed 带如实文案。不再误杀长跑任务。
+      const verdict = orphanVerdict(run, stateText, opts.gatewayPid ?? process.pid, nowMs);
+      if (verdict.kind === "orphaned") {
+        await finishRun(
+          root,
+          section.id,
+          run.runId,
+          "failed",
+          `orphaned: gateway restarted (pid ${verdict.fromPid ?? "?"}→${verdict.toPid}) and task not found`,
+        );
+        run = (await getRun(root, section.id, run.runId)) ?? run;
+        finalized += 1;
+        await noteDreamOnce(opts, section, run, "failed");
+      } else if (verdict.kind === "missing") {
+        const settled = await settleByJournalEvidence(opts, section, run, nowMs);
+        if (settled !== undefined) {
+          run = settled.run;
+          finalized += 1;
+        }
+      }
     }
   }
  // ② 终态补账( RSI-SESSION-COST + RSI-SELF-DRIVE)。
@@ -470,12 +528,26 @@ export async function settleRunRecord(
       if (!(run.status === "failed" && items.length === 0)) {
         let quality = assessResultQuality(items);
         if (!salvage.found && run.status === "done") {
- // 完成但完全没有结果文件:不是「诚实空产出」,而是交付缺失 → 0 分并点名。
-          quality = {
-            items: 0, evidenced: 0, impacted: 0, actionable: 0, shallow: 0, duplicates: 0, overLimit: false,
-            score: 0,
-            issues: [{ code: "RESULT_MISSING", note: "未找到结果文件(agent 可能没写或 runId 抄错);本轮视为零交付" }],
-          };
+ // 兜底:done 但无结果文件——先试 journal 终回代写(cohort/negativeKb 经验证有
+ // 实质回复但没写文件);代写成功按代写后条目打质量分并记 SALVAGED_FROM_REPLY;
+ // 代写不出才保留 0 分 RESULT_MISSING(诚实零交付)。
+          let salvaged = false;
+          try {
+            salvaged = await salvageResultFromFinalReply(opts, section, run);
+          } catch { /* 代写失败按 RESULT_MISSING 处理 */ }
+          if (salvaged) {
+            const salvagedItems = await readRunResults(root, section.id, run.runId);
+            quality = {
+              ...assessResultQuality(salvagedItems),
+              issues: [...assessResultQuality(salvagedItems).issues, { code: "SALVAGED_FROM_REPLY", note: "结果文件缺失,已从 journal 最终回复代写(salvage=journal-final-reply)" }],
+            };
+          } else {
+            quality = {
+              items: 0, evidenced: 0, impacted: 0, actionable: 0, shallow: 0, duplicates: 0, overLimit: false,
+              score: 0,
+              issues: [{ code: "RESULT_MISSING", note: "未找到结果文件(agent 可能没写或 runId 抄错);本轮视为零交付" }],
+            };
+          }
         } else if (salvage.movedFrom !== undefined) {
           quality = {
             ...quality,
@@ -518,6 +590,153 @@ export async function settleRunRecord(
     }
   }
   return { run, finalized, ...(taskStateText === undefined ? {} : { taskStateText }), warnings };
+}
+
+/**
+ * ①b:同 pid 查不到任务的 run,按 journal 证据收尾(不判孤儿)。
+ * 返回 undefined=本轮不收(仍 running / 证据未齐,连续未见计数防永久悬置)。
+ */
+async function settleByJournalEvidence(
+  opts: SettleRunOptions,
+  section: { id: string; title: string },
+  run: RsiRunRecord,
+  nowMs: number,
+): Promise<{ run: RsiRunRecord } | undefined> {
+  const { root } = opts;
+ // 证据1:result 已落盘(即使 agent 抄错过文件名,salvage 也能自愈)→ 按 done 结算,不标 failed。
+  try {
+    const salvage = await salvageResultFile(root, section.id, run.runId, run.startedAt);
+    if (salvage.found) {
+      await finishRun(root, section.id, run.runId, "done", undefined, { finishedAt: nowMs });
+      const next = (await getRun(root, section.id, run.runId)) ?? run;
+      await noteDreamOnce(opts, section, next, "done");
+      ORPHAN_UNSEEN.delete(`${section.id}/${run.runId}`);
+      return { run: next };
+    }
+  } catch { /* salvage 失败走下一条证据 */ }
+ // 证据2:journal 会话里该任务已到终态(task.done/task.fail 事件)→ 照实收尾。
+ // 注意 taskWindowOf 按「start 到 end(不含)」切窗,终态事件本身不在窗口里——判定扫全量事件。
+  if (run.sessionId !== undefined && opts.readSession !== undefined && run.taskId !== undefined) {
+    try {
+      const events = opts.readSession(run.sessionId);
+      const window = taskWindowOf(events, run.taskId);
+      const text = finalAgentText(window);
+      const kindOfEvent = (event: unknown): string => {
+        if (typeof event !== "object" || event === null) return "";
+        const kind = (event as { kind?: unknown }).kind;
+        return typeof kind === "string" ? kind : "";
+      };
+      const taskIdOf = (event: unknown): string => {
+        if (typeof event !== "object" || event === null) return "";
+        const payload = (event as { payload?: unknown }).payload;
+        const id = typeof payload === "object" && payload !== null ? (payload as { id?: unknown }).id : undefined;
+        return typeof id === "string" ? id : "";
+      };
+      const terminalFailed = events.some(
+        (event) => (kindOfEvent(event) === "task.fail" || kindOfEvent(event) === "task.interrupted") && taskIdOf(event) === run.taskId,
+      );
+      const terminalDone = events.some(
+        (event) => kindOfEvent(event) === "task.done" && taskIdOf(event) === run.taskId,
+      );
+      if (terminalDone || terminalFailed) {
+        await finishRun(root, section.id, run.runId, terminalDone ? "done" : "failed", terminalDone ? undefined : "task failed (journal)", { finishedAt: nowMs });
+        const next = (await getRun(root, section.id, run.runId)) ?? run;
+        await noteDreamOnce(opts, section, next, terminalDone ? "done" : "failed");
+        ORPHAN_UNSEEN.delete(`${section.id}/${run.runId}`);
+        return { run: next };
+      }
+ // 证据3:窗口仍有产出(终回非空)→ 任务真在跑,保留 running 本轮不收。
+      if (text.trim() !== "" || usageOfWindow(window).calls > 0) {
+        ORPHAN_UNSEEN.delete(`${section.id}/${run.runId}`);
+        return undefined;
+      }
+    } catch { /* 读会话失败走计数路径 */ }
+  }
+ // 无任何证据:连续计数,超限才 failed(带如实文案),否则保留 running 等下一轮。
+  const key = `${section.id}/${run.runId}`;
+  const unseen = (ORPHAN_UNSEEN.get(key) ?? 0) + 1;
+  ORPHAN_UNSEEN.set(key, unseen);
+  if (unseen >= ORPHAN_UNSEEN_LIMIT) {
+    await finishRun(root, section.id, run.runId, "failed", `no progress evidence after ${unseen} checks (same gateway pid, task not found, no result, empty window)`, { finishedAt: nowMs });
+    const next = (await getRun(root, section.id, run.runId)) ?? run;
+    await noteDreamOnce(opts, section, next, "failed");
+    ORPHAN_UNSEEN.delete(key);
+    return { run: next };
+  }
+  return undefined;
+}
+
+/**
+ * ③:RESULT_MISSING 兜底——done 但 agent 没写 result.json 时,从 journal 最终
+ * 回复解析结果条目**代写** result.json(来源标记 salvage:"journal-final-reply",如实)。
+ * brief 尾部已硬要求「最终回复里列出全部结果条目」,cohort/negativeKb 经验证有实质回复
+ * (1597 §5),代写把这些产出捞回来而不是判零交付。解析不出条目返回 false(保留
+ * RESULT_MISSING,禁编造)。
+ */
+async function salvageResultFromFinalReply(
+  opts: SettleRunOptions,
+  section: { id: string },
+  run: RsiRunRecord,
+): Promise<boolean> {
+  if (run.sessionId === undefined || run.taskId === undefined || opts.readSession === undefined) return false;
+  let text = "";
+  try {
+    text = finalAgentText(taskWindowOf(opts.readSession(run.sessionId), run.taskId));
+  } catch {
+    return false;
+  }
+  if (text.trim() === "") return false;
+  const items = parseResultItemsFromText(text);
+  if (items.length === 0) return false;
+  const file = resultFilePath(opts.root, section.id, run.runId);
+  const payload = { items, salvage: "journal-final-reply", salvagedAt: new Date().toISOString() };
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return true;
+}
+
+/** 从最终回复文本提取结果条目:认 JSON 数组或 ```json 块里的 {items:[…]} / […];
+ * 逐条规整(id/status/title/summary 必须字符串非空;非法 status 丢弃;detail/evidence 透传)。
+ * 绝不从散文文本猜条目——解析不出就 0 条(禁编造)。 */
+export function parseResultItemsFromText(text: string): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  const candidates: unknown[] = [];
+  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1] ?? "");
+  for (const block of [text, ...fenced]) {
+    for (const line of block.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) candidates.push(...parsed);
+        else if (typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { items?: unknown }).items)) {
+          candidates.push(...((parsed as { items: unknown[] }).items));
+        }
+      } catch { /* 非单行 JSON 跳过 */ }
+    }
+  }
+  for (const raw of candidates) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    if (title === "") continue;
+    const status = typeof item.status === "string" ? item.status.trim() : "";
+    if (!["ok", "info", "warn", "bad"].includes(status)) continue;
+    const key = JSON.stringify([title, status, item.summary ?? ""]);
+    if (seen.has(key)) continue; // 同一条在文本行与围栏块重复命中 → 去重
+    seen.add(key);
+    out.push({
+      id: typeof item.id === "string" && item.id.trim() !== "" ? item.id : title,
+      title,
+      ...(typeof item.summary === "string" && item.summary.trim() !== "" ? { summary: item.summary } : {}),
+      status,
+      source: "agent",
+      ...(item.detail !== undefined ? { detail: item.detail } : {}),
+      ...(item.evidence !== undefined ? { evidence: item.evidence } : {}),
+    });
+  }
+  return out;
 }
 
 /**

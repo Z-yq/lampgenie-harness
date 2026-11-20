@@ -239,3 +239,22 @@ describe("默认 journal 目录发现(2026-11-05 实测缺陷:", () => {
     }
   }, 90_000);
 });
+
+describe("§11.8 豁免率遥测", () => {
+  it("豁免率=board.exempt/(board.update+board.exempt);无事件时 n/a", () => {
+    const mk = (u: number, x: number) =>
+      aggregateBoardQuality(
+        [
+          ...Array.from({ length: u }, () => ev("board.update", { taskId: "t1" }, -HOUR)),
+          ...Array.from({ length: x }, () => ev("board.exempt", { taskId: "t1", reason: "纯问答" }, -HOUR)),
+        ],
+        NOW,
+        7,
+      );
+ // 8 update + 2 exempt → 0.2
+    expect(mk(8, 2)).toContain("| 豁免率(board.exempt/(update+exempt)) | 0.2 |");
+    expect(mk(8, 2)).toContain("| board.update / board.exempt 事件数 | 8 / 2 |");
+ // 窗口外无事件 → n/a
+    expect(mk(0, 0)).toContain("| 豁免率(board.exempt/(update+exempt)) | n/a |");
+  });
+});

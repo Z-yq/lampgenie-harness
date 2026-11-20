@@ -73,7 +73,8 @@ function loadPillFns(html: string, stats: Record<string, unknown>, events: unkno
   const body = "function esc(s){return String(s==null?'':s)"
     + ".replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');}" + NL
     + "function ic(){return '<svg></svg>';}" + NL
-    + "const el={textContent:''};function $(id){return id==='ctxPill'?el:null;}" + NL
+    + "const el={textContent:'',innerHTML:'',title:''};el.setAttribute=function(k,v){el[k]=v;};" + NL
+    + "function $(id){return id==='ctxPill'?el:null;}" + NL
     + "const currentSid='sess-1';const histEvents=" + JSON.stringify(events) + ";" + NL
     + "const traceStats=" + JSON.stringify(stats) + ";" + NL
     + srcs + NL
@@ -266,9 +267,14 @@ describe("面板 usage 双口径显示层", () => {
       expect(nOld.est).toBeNull();
       expect(nOld.rep).toBeNull();
       fnOld.ctxPillRender();
-      expect(fnOld.el.textContent).toBe("上下文 2 条 · 42.5k/200k tok · 21%");
-      expect(fnOld.ctxPillMenuHtml({ users: 1, agents: 1, tools: 0, chars: 400, est: 100, realIn: 42500, realOut: 228, cumIn: 42500, cumOut: 228 }))
-        .toContain("当前上下文(最近一次调用实测)");
+ // /无经验证主值 → 占位「上下文」(环形只在有经验证+容量时输出)
+      expect(fnOld.el.textContent).toBe("上下文");
+      const mOld = fnOld.ctxPillMenuHtml({ users: 1, agents: 1, tools: 0, chars: 400, est: 100, realIn: 42500, realOut: 228, cumIn: 42500, cumOut: 228 });
+ // 浮窗底部明细四行整块删除(明细头/当前上下文/累计消耗/字符粗估)
+      expect(mOld).not.toContain("明细(消息");
+      expect(mOld).not.toContain("累计消耗(");
+      expect(mOld).not.toContain("对话字符粗估");
+      expect(mOld).not.toContain("当前上下文(最近一次调用实测)");
       // 旧 llm.trace(仅 usage,无估算字段)→ 卡头保持现状
       const fn = loadCardFns(html);
       const legacyRow = fn.decorateTrajUsage([row()], [{ seq: 9, kind: "llm.trace", payload: { file: FILE_A, usage: { inputTokens: 42500, cachedTokens: 39680, outputTokens: 228 } } }])[0];
@@ -284,11 +290,20 @@ describe("面板 usage 双口径显示层", () => {
       expect(n.rep).toBe(150528);
       expect(n.est).toBe(188000);
       fnNew.ctxPillRender();
-      expect(fnNew.el.textContent).toBe("上下文 1 条 · 150.5k tok/200k · 75%,估算 188k(触发用)");
+ // /有经验证+容量 → SVG 环形(innerHTML)+中心百分比;75% 落 warn 档(70-84)
+      expect(fnNew.el.innerHTML).toContain("cx-ring");
+      expect(fnNew.el.innerHTML).toContain("75%");
+      expect(fnNew.el.innerHTML).toContain("warn");
+      expect(fnNew.el.innerHTML).not.toContain("tense");
+      expect(fnNew.el.title).toContain("150.5k");
+      expect(fnNew.el.title).toContain("明细");
+      expect(fnNew.el["aria-label"]).toBe(fnNew.el.title);
       expect(fnNew.el.textContent).not.toContain("(估)");
       const menu = fnNew.ctxPillMenuHtml({ users: 1, agents: 0, tools: 0, chars: 10, est: 2, realIn: 0, realOut: 0, cumIn: 0, cumOut: 0 });
-      expect(menu).toContain("当前上下文(最近一次调用实测):<b>150528</b> tok");
-      expect(menu).toContain("本地估算 188000 tok(触发用)");
+ // 经验证主值仍呈现于头部余量行(150528→15.1万);明细行文案已随块删除
+      expect(menu).toContain("15.1万");
+      expect(menu).not.toContain("当前上下文(最近一次调用实测)");
+      expect(menu).not.toContain("本地估算 188000 tok(触发用)");
       expect(emojiBad(fnNew.el.textContent)).toEqual([]);
       // 压缩后无 API 值(contextEstimated)→ 主值退回本地估算,不重复后缀
       const fnEst = loadPillFns(html, { "sess-1": { contextWindow: 200000, contextTokensEst: 188000, contextEstimated: true } }, [{ seq: 1, kind: "message.user", payload: { text: "hi" } }]);
@@ -297,13 +312,17 @@ describe("面板 usage 双口径显示层", () => {
       expect(nEst.est).toBe(188000);
       expect(nEst.estimated).toBe(true);
       fnEst.ctxPillRender();
-      expect(fnEst.el.textContent).toBe("上下文 1 条 · 188k tok/200k · 94%");
+ // 估算主值 188k/200k=94% → tense 档(≥85);tooltip 带估算口径
+      expect(fnEst.el.innerHTML).toContain("cx-ring");
+      expect(fnEst.el.innerHTML).toContain("94%");
+      expect(fnEst.el.innerHTML).toContain("tense");
+      expect(fnEst.el.title).toContain("188k");
       // 完全没有 trace.stats(旧会话)→ 同样不炸,渲染回旧形态
       const fnNone = loadPillFns(html, {}, [{ seq: 1, kind: "message.user", payload: { text: "hi" } }]);
       expect(fnNone.ctxUsageNorm("sess-1").est).toBeNull();
       expect(fnNone.ctxUsageNorm("sess-1").rep).toBeNull();
       fnNone.ctxPillRender();
-      expect(fnNone.el.textContent).toBe("上下文 1 条");
+      expect(fnNone.el.textContent).toBe("上下文");
       // 非法的估算值(null/字符串)→ 当缺失,不产 NaN
       const fn = loadCardFns(html);
       const bad = fn.decorateTrajUsage([row()], [{ seq: 9, kind: "llm.trace", payload: { file: FILE_A, estimatedInputTokens: "abc", estimatedCachedTokens: null } }])[0];

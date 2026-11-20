@@ -6,7 +6,7 @@
  * 本模块把拼法固化成三段「周报」:
  * - 本周改了什么(changed 按 decision 分组,组内按 decidedAt 降序,每条指标带 settled/deltaPct/improved)
  * - 净省了多少(savings 净值 + 按机制/项目分摊)
- * - 需要你决定什么(needsDecision 固定顺序:pending-approval → conflict → breaker-paused → negative-roi)
+ * - 自主决策清单(可否决;needsDecision 固定顺序:pending-approval → conflict → breaker-paused → negative-roi)
  * 三个纯函数:
  * - buildWeeklyReport:输入侧宽进(缺字段/类型不对 → 默认值 + warnings 码,永不 throw),输出侧结构稳定
  *   (byDecision 五键常在、changed 五组常在、warnings 去重且有序)。
@@ -818,7 +818,7 @@ function savingsLine(savings: CostSummary): string {
 /**
  * 渲染周报文本。
  * healthy:两行(无事项 + 净值)。
- * 非 healthy:三段,标题逐字 "## 本周改了什么" / "## 净省了多少" / "## 需要你决定什么"。
+ * 非 healthy:三段,标题逐字 "## 本周改了什么" / "## 净省了多少" / "## 自主决策清单(可否决)"(§14.0)。
  * attentionOnly:第一段只一行 "(已按注意力预算压制)",第二段只一行净值。
  */
 export function renderWeeklyReportText(report: WeeklyReport): string {
@@ -835,7 +835,7 @@ export function renderWeeklyReportText(report: WeeklyReport): string {
   const attentionOnly = rec.attentionOnly === true;
 
   if (decisions.length === 0) {
-    return ["本周无需要你处理的事项", netLine(savings)].join("\n");
+    return ["本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)", netLine(savings)].join("\n");
   }
 
   const lines: string[] = [];
@@ -857,10 +857,16 @@ export function renderWeeklyReportText(report: WeeklyReport): string {
   lines.push("## 净省了多少");
   lines.push(attentionOnly ? netLine(savings) : savingsLine(savings));
 
-  lines.push("## 需要你决定什么");
+ // §14.0:第三段口径从「需要你决定什么」改为「自主决策清单(可否决)」——
+ // 决策归机器闸(确定性规则),人不在环内,只保留审计与一键否决;不可逆项仍需审批(底线不变)。
+  lines.push("## 自主决策清单(可否决)");
+  const changedAdopted = Array.isArray(changedRec["adopted"]) ? (changedRec["adopted"] as unknown[]).length : 0;
+  const changedRolledBack = Array.isArray(changedRec["rolledBack"]) ? (changedRec["rolledBack"] as unknown[]).length : 0;
+  lines.push(`- 本周自主生效:adopt ${changedAdopted} / rollback ${changedRolledBack}(可逆动作,可一键否决)`);
   for (const decision of decisions) {
     lines.push(`- [${decision.kind}] ${decision.ref} — ${decision.summary} → ${decision.actionHint}`);
   }
+  lines.push("- 以上可逆项均为机器闸自动处置(确定性规则),人可审计并一键否决;不可逆项仍需审批。");
   return lines.join("\n");
 }
 

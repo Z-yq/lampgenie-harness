@@ -400,6 +400,11 @@ if (panelEnabled) {
         return proj?.path ?? projects.resolveWorkdir(id) ?? undefined;
       } catch (e) { return undefined; }
     },
+ // 移动端远程控制:GET /m?pair=<token> 的配对校验(app 未就绪=拒绝,不猜)。
+    verifyPair: (token) => {
+      if (!appReady) return false;
+      try { return appReady.remoteControl.verifyToken(token); } catch { return false; }
+    },
   });
   console.log(`[gateway] panel: http://127.0.0.1:${port}(端口先就绪,装配中)`);
 }

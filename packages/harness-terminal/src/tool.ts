@@ -28,8 +28,9 @@ export interface CreateTerminalToolOptions {
   owner: string;
   /** cwd 围栏根(生产=taskRoot)。 */
   root: string;
- /** 上下文卫生提醒:开=send/read 输出超过阈值时附 hygieneNote,
-   * 提醒调用方(主 coding agent)把大输出工作拆子任务派子代理。子代理装配不传=不打扰(它就是干活的)。 */
+ /** 上下文卫生提醒(2026-11 改为「默认自己干」):开=send/read 输出超过
+ * 阈值时附 hygieneNote,提醒调用方(主 coding agent)收窄查询/沉淀结论,只有真正并行的独立工作
+ * 才派子代理。子代理装配不传=不打扰(它就是干活的)。 */
   contextHygiene?: { thresholdBytes?: number };
   /** 命令围栏(workspace=工作区内):send 分支**下发前**调用,返回非 null=拒因 → 命令不下发,
    * 直接回 ok:false。未注入=行为逐字不变(ask/auto/readonly/plan 与旧版一致)。 */
@@ -39,7 +40,7 @@ export interface CreateTerminalToolOptions {
 /** 上下文卫生尾注(与 gateway file-tools 的 grep 尾注同语义):大输出进入调用方上下文的代价提醒。 */
 function hygieneNoteFor(bytes: number, threshold: number): string | undefined {
   if (bytes <= threshold) return undefined;
-  return `[上下文卫生] 本次输出 ${Math.round(bytes / 1024)}KB 已进入你的上下文——此类大输出勘察/实施建议拆成子任务派 spawn_subagent(子代理上下文独立,过程细节不污染主轨),你只收结论。`;
+  return `[上下文卫生] 本次输出 ${Math.round(bytes / 1024)}KB 已进入你的上下文——后续用更窄的查询/更大偏移量取片段,已读内容不整读第二遍;先把结论写进 todo/板,只有确有多段互不依赖的实施才并行派子代理(不要为省上下文把连续工作切碎外包)。`;
 }
 
 interface TerminalToolArgs {

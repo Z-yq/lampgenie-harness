@@ -246,15 +246,34 @@ export interface StartupPreset extends PermissionKnobs {
  * 启动期预设解析:`defaultPreset ?? preset ?? "workspace-write"`;未知即抛(调用方 fail-closed)。
  * `permissions.mode` 与预设 mode 不一致时 preset 优先,并把冲突写进 warnings(不可静默丢弃)。
  * custom 启动口径:沙箱/审批取 ask 口径,审批模式沿用配置里的 permissions.mode(缺省 ask)。
+ * 既无 preset 也无 defaultPreset 时,合法的 permissions.mode 即启动口径(不再被缺省
+ * workspace-write 的 mode 覆盖——「配了 auto 仍逐调用审批」的根因)。
  */
 export function resolveStartupPreset(perms?: { preset?: string; defaultPreset?: string; mode?: string }): StartupPreset {
-  const name = normalizeName(perms?.defaultPreset) || normalizeName(perms?.preset) || DEFAULT_STARTUP_PRESET;
+  const explicitPreset = normalizeName(perms?.defaultPreset) || normalizeName(perms?.preset);
+  const name = explicitPreset || DEFAULT_STARTUP_PRESET;
   const resolved = resolvePreset(name);
   const warnings: string[] = [];
   const configuredMode = normalizeName(perms?.mode);
   if (resolved.custom) {
     const mode = (configuredMode || "ask") as PermissionMode;
     return { preset: CUSTOM_PRESET, sandbox: "full", approval: "on-request", mode, warnings };
+  }
+ // 需求一:配置**既无 preset 也无 defaultPreset** 且 permissions.mode 是五个合法枚举之一
+ // (ask/auto/readonly/plan/workspace)时,以配置 mode 为准。mode=auto 时 approval=never、sandbox 沿用
+ // 解析行的 sandbox(缺省 workspace,不放大到 full);其余 mode 沿用该 mode 的既有语义(PRESETS 表
+ // 对应行同旋钮);preset 名经 foldProjection 反射(组合不在表内=custom)。
+ // 显式配了 preset/defaultPreset 的路径逐字不变(preset 优先语义保留);非法 mode 落回旧口径(preset 优先+告警)。
+  const modeKnobs: Record<PermissionMode, { sandbox: Sandbox; approval: Approval }> = {
+    ask: { sandbox: "full", approval: "on-request" },
+    auto: { sandbox: resolved.sandbox, approval: "never" },
+    readonly: { sandbox: "readonly", approval: "never" },
+    plan: { sandbox: "readonly", approval: "plan" },
+    workspace: { sandbox: "workspace", approval: "on-request" },
+  };
+  if (!explicitPreset && configuredMode && configuredMode in modeKnobs) {
+    const knobs = modeKnobs[configuredMode as PermissionMode]!;
+    return { preset: foldProjection(knobs), sandbox: knobs.sandbox, approval: knobs.approval, mode: configuredMode as PermissionMode, warnings };
   }
   if (configuredMode && configuredMode !== resolved.mode) {
     warnings.push(`permissions.mode=${configuredMode} 与 preset=${resolved.preset}(mode=${resolved.mode})冲突,preset 优先`);

@@ -9,7 +9,9 @@ import { join } from "node:path";
 import { getAtlas, atlasJsonPath } from "../src/direction-atlas-store.js";
 import {
   collectWorkSessions,
+  groupSessionsByProject,
   harvestAtlas,
+  loadProjectRegistry,
   loadProjectRoots,
   matchedDefectGenes,
   createDefectGeneEditHint,
@@ -449,7 +451,7 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
       join(journalDir, "projects.json"),
       JSON.stringify({
         projects: [
-          { id: "lampgenie-harness", path: projRoot, availability: "available" },
+          { id: "lampgenie-harness", path: projRoot, label: "harness", availability: "available" },
           { id: "remote-1", path: "remote:wsl:Ubuntu:/work/x", availability: "unavailable-remote-unverified" },
           { id: "no-path" },
         ],
@@ -459,6 +461,7 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
     );
     const rootsMap = loadProjectRoots(journalDir);
     expect(rootsMap).toEqual({ "lampgenie-harness": projRoot });
+    expect(loadProjectRegistry(journalDir)).toEqual([{ id: "lampgenie-harness", label: "harness", path: projRoot }]);
     const id = "s-ext-bound";
     session(
       journalDir,
@@ -473,5 +476,115 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
     expect(collected.sessions.map((s) => s.projectId)).toEqual(["lampgenie-harness"]);
  // 文件缺失 → 空映射(不 throw)
     expect(loadProjectRoots(join(root, "no-such-dir"))).toEqual({});
+  });
+});
+
+describe("项目级 RSI(2026-11-20):会话分组 + sessionsOverride", () => {
+  const s = (id: string, over: Record<string, unknown> = {}) => ({
+    sessionId: id,
+    title: `标题 ${id}`,
+    editedPaths: ["src/a.ts"],
+    mtimeMs: Date.now(),
+    ...over,
+  });
+  const projects = [
+    { key: "alpha", ids: ["uuid-alpha"], root: "/work/alpha" },
+    { key: "beta", ids: ["uuid-beta"], root: "/work/beta" },
+  ];
+
+  it("groupSessionsByProject:projectId 直配 > 编辑路径深根 > fallback", () => {
+    const groups = groupSessionsByProject(
+      [
+        s("direct", { projectId: "uuid-beta", editedPaths: ["src/x.ts"] }),
+        s("byPath", { editedPaths: ["/work/alpha/src/a.ts"] }),
+        s("none", { editedPaths: [] }),
+      ] as never,
+      projects,
+      "install",
+    );
+    expect(groups.get("beta")?.map((x) => x.sessionId)).toEqual(["direct"]);
+    expect(groups.get("alpha")?.map((x) => x.sessionId)).toEqual(["byPath"]);
+    expect(groups.get("install")?.map((x) => x.sessionId)).toEqual(["none"]);
+  });
+
+  it("深根优先:子项目根比父目录根更长时归子项目", () => {
+    const deep = [
+      { key: "parent", ids: ["u1"], root: "/work" },
+      { key: "child", ids: ["u2"], root: "/work/child" },
+    ];
+    const groups = groupSessionsByProject(
+      [s("x", { editedPaths: ["/work/child/src/a.ts"] })] as never,
+      deep,
+      "install",
+    );
+    expect(groups.get("child")?.length).toBe(1);
+    expect(groups.get("parent")).toBeUndefined();
+  });
+
+  it("相对路径不再一律认作根内:无 basename 前缀且盘上不存在 → fallback", () => {
+ // 生产注意:旧口径下相对路径对每个根都返回 true,最长根=示例记忆仓
+ // 吞掉了 109 个 harness 会话。这里必须落 fallback,而不是任何一个项目。
+    const groups = groupSessionsByProject(
+      [s("rel", { editedPaths: ["src/x.ts"] })] as never,
+      projects,
+      "install",
+    );
+    expect(groups.get("install")?.map((x) => x.sessionId)).toEqual(["rel"]);
+    expect(groups.get("alpha")).toBeUndefined();
+    expect(groups.get("beta")).toBeUndefined();
+  });
+
+  it("相对路径首段=项目 basename → 该项目(父目录存在也不误归父项目)", () => {
+    const groups = groupSessionsByProject(
+      [s("pref", { editedPaths: ["beta/src/x.ts"] })] as never,
+      [{ key: "parent", ids: ["u-parent"], root: "/work" }, ...projects],
+      "install",
+    );
+    expect(groups.get("beta")?.map((x) => x.sessionId)).toEqual(["pref"]);
+    expect(groups.get("parent")).toBeUndefined();
+  });
+
+  it("存在性锚点:相对路径只在某项目根下真实存在 → 该项目", () => {
+    const { root } = fixture();
+    const alpha = join(root, "alpha");
+    const beta = join(root, "beta");
+    mkdirSync(join(alpha, "src"), { recursive: true });
+    mkdirSync(join(beta, "src"), { recursive: true });
+    writeFileSync(join(alpha, "src", "only-alpha.ts"), "x");
+    const groups = groupSessionsByProject(
+      [s("exist", { editedPaths: ["src/only-alpha.ts"] })] as never,
+      [
+        { key: "alpha", ids: [], root: alpha },
+        { key: "beta", ids: [], root: beta },
+      ],
+      "install",
+    );
+    expect(groups.get("alpha")?.map((x) => x.sessionId)).toEqual(["exist"]);
+    expect(groups.get("beta")).toBeUndefined();
+  });
+
+  it("legacy label 直配:projectId=\"harness\" 经别名归到注册表项目", () => {
+    const groups = groupSessionsByProject(
+      [s("legacy", { projectId: "harness", editedPaths: [] })] as never,
+      [{ key: "lampgenie-harness", ids: ["__harness__", "harness"], root: "/work/lampgenie-harness" }],
+      "install",
+    );
+    expect(groups.get("lampgenie-harness")?.map((x) => x.sessionId)).toEqual(["legacy"]);
+  });
+
+  it("harvestAtlas 用 sessionsOverride:不解 journal,直接从注入会话出主题/热点", async () => {
+    const { harvestAtlas } = await import("../src/atlas-harvest.js");
+    const harvest = harvestAtlas("/nonexistent-journal", "alpha", {
+      now: Date.now(),
+      windowDays: 7,
+      sessionsOverride: [
+        s("s1", { title: "面板优化 A", editedPaths: ["src/panel.ts"] }),
+        s("s2", { title: "面板优化 B", editedPaths: ["src/panel.ts"] }),
+        s("s3", { title: "面板优化 C", editedPaths: ["src/panel.ts"] }),
+      ] as never,
+    });
+    expect(harvest.sessionsScanned).toBe(3);
+    expect(harvest.themes.some((t) => t.sessions >= 2)).toBe(true);
+    expect(harvest.moduleActivity.find((m) => m.path === "src/panel.ts")?.editSessions).toBe(3);
   });
 });

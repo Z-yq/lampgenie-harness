@@ -184,9 +184,9 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 - 可读不可写(2026-11-16 ):你有只读探索工具 read_file/glob/grep/list_dir——想看清代码/文件现状、判断该派什么、写准任务书时,自己直接看,不要为一个「看一眼」的问题开任务线。
 - 唯一边界:写/改文件、跑构建、执行命令一律 spawn_task 派给对应工作区的 coding agent。越权写在工具层就不可达:你的工具面只有只读探索件,没有 write_file/edit_file/bash(不是靠自觉)。
 ### 权限自决(super 派发的任务)
-- 你派出去的任务遇到权限/审批闸时,申请会以「[权限申请·requestId=...]」送到你(不再打扰主人):必须在当轮用 permission_decide 决断,不要只回文本、不要转述给主人等答复。
-- 判定口径:任务书范围与红线内的请求 -> allow(任务书要求跑构建/测试时,terminal 跑 build/test 属范围内);违反任务书红线(如任务书禁重启却请求重启、禁提交却请求 git push)-> deny,并在 reason 写明触犯哪条红线。
-- 仅当请求明显超出任务书授权、且涉及用户数据/全局配置/不可逆操作(删数据、改全局配置、重启网关、推远端)时才 escalate;默认不升级,日常读写与命令执行不要抛给主人。
+- 你派出去的任务只有**危险/重资源/重启/发布**类权限申请会送到你(日常读写与普通命令按聊天窗权限设置走规则/面板,不再打扰你):申请以「[权限申请·requestId=...]」送到后,必须在当轮用 permission_decide 决断,不要只回文本、不要转述给主人等答复。
+- 判定口径:任务书范围与红线内的**重操作** -> allow(任务书明确要求跑构建/测试时,terminal 跑 build/test 属范围内);危险/重启/发布类若违反任务书红线(如任务书禁重启却请求重启、禁提交却请求 git push)-> deny,并在 reason 写明触犯哪条红线。
+- 仅当请求明显超出任务书授权、且涉及用户数据/全局配置/不可逆操作(删数据、改全局配置、重启网关、推远端)时才 escalate;默认不升级。
 - 同一 requestId 只决一次;不调 permission_decide = 该申请按「super 未决」超时升级给主人(别靠沉默)。
 ### 系统管理面(全系统管理者)
 - 你是全系统管理者:sys_status 体检系统、sys_config 读写配置、sys_provider 管服务商与模型(连通探测/切换生效轨)、project_add/remove 管工作区、task_* 管任务全生命周期——除写代码外的系统操作你都有权直接执行,事后一句话说明。
@@ -1072,13 +1072,15 @@ export class SuperAgentChannel {
     const text = buildTaskNotice(task);
     this.deps.journal.append({ kind: "super.notice", sessionId: superSessionId(), payload: { taskId: task.id, state: task.state, text } });
     this.opts.broadcast({ v: 1, type: "super.notice", text, taskId: task.id, state: task.state });
+ // 消息体化:任务终态通知也广播结构化事件帧(旧 super.notice 之外加发,兼容回退)。
+    this.opts.broadcast({ v: 1, type: "super.event", kind: "notice", sessionId: superSessionId(), taskId: task.id, payload: { state: task.state, summary: text.slice(0, 400) } });
     if (SuperAgentChannel.INBOX_STATES.has(task.state)) this.opts.broadcast({ v: 1, type: "super.inbox.changed" });
     if (!terminal) return;
     const selfManaged = this.selfManaged.has(task.id);
     this.selfManaged.delete(task.id);
     const promised = this.dispatched.delete(task.id); // 亲自派出的任务终态必播(承诺优先于活跃窗)
     if (selfManaged || (!promised && !this.opts.activity.active())) return;
-    void this.serialize(() => this.announce(text));
+    void this.serialize(() => this.announce(text, { event: { kind: "notice", taskId: task.id } }));
   }
 
   relayAsk(p: { requestId: string; sessionId: string; question: string; options?: string[]; context?: string }): void {
@@ -1090,8 +1092,13 @@ export class SuperAgentChannel {
       ...(p.options?.length ? { options: p.options.slice(0, 6) } : {}),
       ...(p.context ? { context: String(p.context).slice(0, 1200) } : {}),
     });
+ // 消息体化:转接也广播结构化事件帧(旧 super.relay 之外加发,兼容回退)。
+    this.opts.broadcast({
+      v: 1, type: "super.event", kind: "relay", sessionId: p.sessionId, requestId: p.requestId,
+      payload: { question: String(p.question).slice(0, 800), ...(p.options?.length ? { options: p.options.slice(0, 6) } : {}), ...(p.context ? { context: String(p.context).slice(0, 1200) } : {}) },
+    });
     if (!this.opts.activity.active()) return;
-    void this.serialize(() => this.announce(text));
+    void this.serialize(() => this.announce(text, { event: { kind: "relay", requestId: p.requestId } }));
   }
 
  /** :super 派发任务的权限申请 -> 排队跑一轮自决(忙时排队不并发;
@@ -1112,7 +1119,15 @@ export class SuperAgentChannel {
         this.deps.journal.append({ kind: "super.notice", sessionId: superSessionId(), payload: { text: notice, ...(input.taskId ? { taskId: input.taskId } : {}), state: "permission" } });
       } catch { /* 留痕失败不碰主链 */ }
       this.opts.broadcast({ v: 1, type: "super.notice", text: notice, ...(input.taskId ? { taskId: input.taskId } : {}), state: "permission" });
-      await runSuperAgentTurn(this.deps, text, this.soulStore);
+ // 消息体化:结构化事件帧(旧 super.notice 之外加发,旧客户端按旧帧渲染=兼容回退)。
+      this.opts.broadcast({
+        v: 1, type: "super.event", kind: "permission-ask", sessionId: input.sessionId, requestId: input.requestId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        payload: { tool: input.tool, summary: String(input.summary ?? ""), risk: String(input.risk ?? ""), ...(input.brief ? { brief: String(input.brief).slice(0, 400) } : {}) },
+      });
+      await runSuperAgentTurn(this.deps, text, this.soulStore, {
+        event: { kind: "permission-ask", requestId: input.requestId, tool: input.tool, risk: input.risk ?? "" },
+      });
     });
   }
 
@@ -1129,9 +1144,9 @@ export class SuperAgentChannel {
     return run;
   }
 
-  private async announce(input: string): Promise<void> {
+  private async announce(input: string, opts: { event?: Record<string, unknown> } = {}): Promise<void> {
     try {
-      const r = await runSuperAgentTurn(this.deps, input, this.soulStore);
+      const r = await runSuperAgentTurn(this.deps, input, this.soulStore, opts.event ? { event: opts.event } : {});
       this.opts.broadcast({ v: 1, type: "super.turn.done", text: r.text, sessionId: superSessionId() });
     } catch (err) {
       this.opts.broadcast({ v: 1, type: "error", code: "super-announce-failed", message: String(err).slice(0, 200) });
@@ -1145,7 +1160,7 @@ export async function runSuperAgentTurn(
   deps: SuperAgentDeps,
   text: string,
   soulStore: MemoryStore,
-  opts: { attachments?: AttachmentLike[] } = {},
+  opts: { attachments?: AttachmentLike[]; event?: Record<string, unknown> } = {},
 ): Promise<{ text: string }> {
   const sid = superSessionId();
   const turnModel = deps.resolveTurnModel?.(sid);
@@ -1187,7 +1202,13 @@ export async function runSuperAgentTurn(
   const startSeq = deps.journal.length;
   // 基线采集与 runTurn 并发(git status 在大仓上秒级;不阻塞用户轮次)。
   const baselinePromise = captureBaseline(repoRoot()).catch(() => null);
-  const out = await loop.runTurn(instruction, visionImages.length ? visionImages : undefined);
+  const out = await loop.runTurn(
+    instruction,
+    visionImages.length ? visionImages : undefined,
+ // 消息体化:event 在场=系统来源输入(权限自决/转接/通知)→ loop 落 message.system
+ // (payload:{ text, event }),不再伪装用户消息;用户直发 turn 不传 event=照旧 message.user。
+    opts.event ? { event: opts.event } : undefined,
+  );
  // 落盘兜底:轮内事件(turn.start/message.user/message.agent)依赖 write-behind 的
   // microtask 批冲刷(正常毫秒级落盘)。11-09 取证口径修正:.genie/llm-trace/super:<date> 目录实为
  // companion.test.ts 的测试运行(假 LLM 固定回复文本与 trace 逐字同源),生产环境从未跑过真实 super 轮;

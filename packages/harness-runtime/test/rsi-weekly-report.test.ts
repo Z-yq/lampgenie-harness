@@ -439,13 +439,13 @@ describe("buildWeeklyReport:attentionOnly", () => {
 describe("renderWeeklyReportText", () => {
   it("healthy:两行文本", () => {
     const r = report(healthyInput({ cost: cost({ costTokens: 1000, savingTokens: 3000, netTokens: 2000, roi: 3 }) }));
-    expect(renderWeeklyReportText(r)).toBe("本周无需要你处理的事项\n净省 2000 tokens(ROI 3)");
+    expect(renderWeeklyReportText(r)).toBe("本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)\n净省 2000 tokens(ROI 3)");
   });
 
   it("healthy 且 roi=null:写 n/a", () => {
     const r = report(healthyInput({ cost: cost({ costTokens: 0, savingTokens: 0, netTokens: 0, roi: null }) }));
     const text = renderWeeklyReportText(r);
-    expect(text).toBe("本周无需要你处理的事项\n净省 0 tokens(ROI n/a)");
+    expect(text).toBe("本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)\n净省 0 tokens(ROI n/a)");
   });
 
   it("非 healthy:三段标题逐字", () => {
@@ -453,9 +453,9 @@ describe("renderWeeklyReportText", () => {
     const lines = renderWeeklyReportText(r).split("\n");
     expect(lines).toContain("## 本周改了什么");
     expect(lines).toContain("## 净省了多少");
-    expect(lines).toContain("## 需要你决定什么");
+    expect(lines).toContain("## 自主决策清单(可否决)");
     expect(lines.indexOf("## 本周改了什么")).toBeLessThan(lines.indexOf("## 净省了多少"));
-    expect(lines.indexOf("## 净省了多少")).toBeLessThan(lines.indexOf("## 需要你决定什么"));
+    expect(lines.indexOf("## 净省了多少")).toBeLessThan(lines.indexOf("## 自主决策清单(可否决)"));
   });
 
   it("第一段按五类各一行计数 + 指标行格式", () => {
@@ -531,12 +531,12 @@ describe("renderWeeklyReportText", () => {
     expect(lines[first + 1]).toBe("(已按注意力预算压制)");
     const net = lines.indexOf("## 净省了多少");
     expect(lines[net + 1]).toBe("净省 2000 tokens(ROI 3)");
-    expect(lines[net + 2]).toBe("## 需要你决定什么");
+    expect(lines[net + 2]).toBe("## 自主决策清单(可否决)");
   });
 
   it("空报告对象也不抛", () => {
     const text = renderWeeklyReportText({} as WeeklyReport);
-    expect(text).toBe("本周无需要你处理的事项\n净省 0 tokens(ROI n/a)");
+    expect(text).toBe("本周无自主决策待审计(无待批/冲突/熔断/负 ROI 事项)\n净省 0 tokens(ROI n/a)");
   });
 });
 

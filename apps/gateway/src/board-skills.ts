@@ -192,7 +192,10 @@ export const BOARD_TYPE_SKILLS: Record<BoardSkillType, BoardTypeSkill> = {
 - 影响面:每个变更节点至少一条非变更入边(上游 caller);每条变更链至少一条 verify 到 acceptance 或带 tests:path:line 的边。
 - 目标函数 flow 展开关键步骤与 if/else;rename/纯重构单独板。
 - 边只允许 call/data/verify;禁 nav/contains/同组次序;无孤儿。
-- P0 accept 用 command/browser/manual/negative,每条带 expect;至少 1 条 negative;多模块/迁移用 scale=L。面板会自动出 C4 图例(类型/技术/关系线型)。`,
+- P0 accept 用 command/browser/manual/negative,每条带 expect;至少 1 条 negative;多模块/迁移用 scale=L。面板会自动出 C4 图例(类型/技术/关系线型)。
+- **modify 四件套**:①before=现状一行(原行为/原代码锚);②为什么改=summary 一句目的(防什么/为了什么);③工况=改动后什么条件下走这段(输入/触发);④验收锚=verify 边或测试 expect。
+- modify 节点 summary 只写名词短语(<8 字)、不带「为什么/目的/改」语义词=不合格,回炉补目的与动哪段逻辑。
+- 改动点要读出辐射面:summary 点名 上游调用方/下游影响(或补一条指向它的 data/verify 边),否则读者不知道动了它牵连谁。`,
       audit: `${COMMON}
 # code · audit(交板前逐条)
 - **主题节点**:板首主题节点在不在(id 以 theme 开头或 group=主题,一句话讲清「这流程干什么用 + 本次改哪一环」)?缺=不合格。
@@ -211,6 +214,9 @@ export const BOARD_TYPE_SKILLS: Record<BoardSkillType, BoardTypeSkill> = {
 - 每个 modify/delete 有 before;每个变更节点有非变更入边;每条变更链到 acc-* verify 终点。
 - c01-c04 类目标函数有 flow,且 branch 有 cond/then/else、子项是 step 对象。
 - 关联测试文件已落边(label 含 tests:path:line 或 acceptance.targets);无 nav/布局边;无孤儿。
+- **modify 四件套逐节点核对**:before/为什么改/工况/验收锚,缺哪件点名补哪件(类型门会以 modify-summary-incomplete/radiation-missing 提示)。
+- summary 无「为什么/目的」语义词且无 before(读不出为什么改)→ 回炉补写,不是删检查。
+- 无 上游/调用方/下游/影响 辐射词且无指向它的 data/verify 边 → 补辐射面表达。
 - 跑 board_upsert action=audit format=json;contractIssues 与 typeIssues 必须为空。
 - 纯规划态 P0 0/N 正常;evidence 未回填不得把 status 置 done。`,
     },
@@ -236,12 +242,15 @@ export const BOARD_TYPE_SKILLS: Record<BoardSkillType, BoardTypeSkill> = {
 - decision 出边「是：…」「否：…」,每条有 label,两支都落 end/主流程,不落侧栏 note。
 - 影响面/回归锚放侧栏 group(「04 影响面」「05 回归锚」),回归锚带可执行命令;verify 边连被测段。
 - P0 accept 用 command(跑测试命令)+negative(失败路径),每条带 expect。
-- 反模式(出现即重画):把测试画成用例卡片清单/映射层;六段流程图(数据→执行→被测→判定→断言→回归两张皮);decision 无是/否;断言不写 expect;节点 16+。`,
+- 反模式(出现即重画):把测试画成用例卡片清单/映射层;六段流程图(数据→执行→被测→判定→断言→回归两张皮);decision 无是/否;断言不写 expect;节点 16+。
+- **测试七要素**:夹具(什么数据)/被测对象/触发操作/断言 expect 原文/失败定位/回归锚/目的(防什么),缺项读者就读不出「测了什么、为什么测」。
+- **走查实例**:断言外补一条带具体值的代入走查(输入 X→中间态→期望 Y),把主链代入一遍;纯抽象断言没有走查=不合格。`,
       audit: `${COMMON}
 # test · audit(交板前逐条)
 - 复用 code/audit 的 flow 可读性五条:主线前向链/步骤 ≥2 行代码级动作/group 方法化/decision 是否完整。
 - **被测链路展开度**:数一数主线覆盖了几个真实函数——每张卡应对应一个函数/handler;发现「一张卡 summary 里塞了 3+ 个函数名」= 没展开,拆卡。
 - 测试特有:①断言 decision 的 cond 是可判定 expect 文本,禁「验证正确」;②关键被测段至少一条步骤 flow 含 expect 原文;③至少一条 negative(异常/失败路径)在 accept 或失败分支;④回归锚在侧栏且带可执行命令;⑤**无用例卡层**(出现即合并回主线)。
+- **七要素+走查实例核对**:目的节点(防什么)/夹具/mock 语义标注(替代的真实数据与为什么造)/数字断言的推导来源(N 从哪来)/带具体值的走查实例,缺项按类型门提示补齐(test-purpose-missing/test-fixture-unexplained/test-expect-ungrounded/test-example-missing)。
 - 跑 board_upsert action=audit format=json;contractIssues 与 typeIssues 必须为空。`,
     },
   },

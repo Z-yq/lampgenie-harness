@@ -80,6 +80,32 @@ describe("protocol schema", () => {
       v: 1, type: "node.register", nodeId: "n1", capabilities: [], reachability: [],
     }))?.type).toBe("node.register");
   });
+
+ // ---- super 通道消息体化:super.event 结构化事件帧 ----
+  it("super.event 合法帧解析成功(kind/sessionId/payload passthrough)", () => {
+    const m = ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "super.event", kind: "permission-ask", sessionId: "ws-1",
+      requestId: "req-1", taskId: "task-abcdef12",
+      payload: { tool: "terminal", summary: "npm run build", risk: "high", extra: { nested: true } },
+    });
+    expect(m.success).toBe(true);
+    if (m.success) {
+      expect((m.data as { kind?: string }).kind).toBe("permission-ask");
+      expect((m.data as { payload?: { tool?: string } }).payload?.tool).toBe("terminal");
+      expect((m.data as { payload?: { extra?: { nested?: boolean } } }).payload?.extra?.nested).toBe(true); // passthrough 保留未知键
+    }
+  });
+  it("super.event 缺 kind 拒;缺 sessionId 拒;payload 非对象拒", () => {
+    expect(ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "super.event", sessionId: "ws-1", payload: {},
+    }).success).toBe(false);
+    expect(ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "super.event", kind: "notice", payload: {},
+    }).success).toBe(false);
+    expect(ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "super.event", kind: "notice", sessionId: "ws-1", payload: "text",
+    }).success).toBe(false);
+  });
 });
 
 describe("explainClientMessageError(P3:非法消息指路)", () => {
@@ -167,24 +193,6 @@ describe("ide.office.edit(Office 文本回写:服务端读文件重写)", () => 
   it("回包 ide.office.edit.result(ok/error 都在回包里,不走 error 帧)", () => {
     expect(ServerMessage.safeParse({ v: 1, type: "ide.office.edit.result", path: "a.pptx", ok: true, bytes: 999 }).success).toBe(true);
     expect(ServerMessage.safeParse({ v: 1, type: "ide.office.edit.result", path: "a.pptx", ok: false, error: "shapeIndex 越界" }).success).toBe(true);
-  });
-});
-
-describe("音色消息面(2026-10-20 音色选择+试听)", () => {
-  it("voice.list 解析成功", () => {
-    const m = parseClientMessage(JSON.stringify({ v: 1, type: "voice.list" }));
-    expect(m?.type).toBe("voice.list");
-  });
-  it("voice.tts 带可选 voice(试听单次覆盖)", () => {
-    const m = parseClientMessage(JSON.stringify({ v: 1, type: "voice.tts", text: "试听", level: "full", voice: "Cherry" }));
-    expect(m?.type).toBe("voice.tts");
-    expect((m as { voice?: string }).voice).toBe("Cherry");
-  });
-  it("voice.tts 不带 voice 仍合法(普通播报,不受影响)", () => {
-    expect(parseClientMessage(JSON.stringify({ v: 1, type: "voice.tts", text: "播报", level: "brief" }))?.type).toBe("voice.tts");
-  });
-  it("voice.tts voice 超长(>80)拒绝", () => {
-    expect(parseClientMessage(JSON.stringify({ v: 1, type: "voice.tts", text: "x", voice: "v".repeat(81) }))).toBeNull();
   });
 });
 

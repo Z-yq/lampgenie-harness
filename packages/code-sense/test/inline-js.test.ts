@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "ts-morph";
@@ -207,4 +207,118 @@ describe("senseB21/senseB23 索引贯通(C2fIndex + 查询面)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe("G-E 三修复(2026-11-20;审计实锚:canvas-ops 误路由/ws-router 箭头门拒/submit 紧凑单段全灭)", () => {
+  it("修复①:裸 JS 模板含 <script 字样不再被 form A 劫持(canvas-ops 形态)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "codesense-ge1-"));
+    try {
+ // canvas-ops 注意形态:110KB 裸 JS,其中一处字符串恰好含 <script>(如 innerHTML 片段)
+      const pad = "// " + "x".repeat(480) + "\n"; // 补足 TPL_JS_MIN_LEN(512)——真实 canvas-ops 是 110KB
+      const js = [
+        "// ---- 画布交互能力全集 ----",
+        pad,
+        "function dragStart(x) { return x; }",
+        "function dragEnd(y) { return y; }",
+        'const embed = "<script>legacy()</script>";',
+        "function dragMove(z) { return z; }",
+        "const fitAll = (m) => { dragMove(m); };", // 密度门(function×3+箭头×1 ≥ 4)
+        "const w = 1, h = 2;",
+        "dragStart(1); dragMove(2);",
+        "",
+      ].join("\n");
+      const f = join(dir, "panel.ts");
+      writeFileSync(f, "export const PANEL_JS_CANVAS_OPS = `" + js + "`;\n");
+      const proj = new Project({ useInMemoryFileSystem: true, compilerOptions: { allowJs: true } });
+      const sf = proj.createSourceFile("panel.ts", readFileSync(f, "utf8"));
+      const units = extractInlineJsUnits(sf, "panel.ts");
+      expect(units).toHaveLength(1);
+      expect(units[0]!.form).toBe("template-js"); // 不再被 <script 劫持成 script-block/零单元
+      expect(units[0]!.container.startsWith("PANEL_JS_CANVAS_OPS")).toBe(true);
+      const ast = await parseInlineJsAstTolerant(units[0]!.js);
+      expect(ast).toBeDefined();
+      expect(ast!.decls.map((d) => d.name)).toContain("dragStart");
+      expect(ast!.decls.map((d) => d.name)).toContain("dragMove");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("修复①反例:HTML 页模板(以 < 开头)仍走 form A script 块,不误当整段 JS", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "codesense-ge2-"));
+    try {
+      const html = [
+        "<!doctype html><html><body>",
+        "<div id=\"app\"></div>",
+        "<script>",
+        "function refreshPill() { renderIt(); }",
+        "function renderIt() { sink(1); }",
+        "function sink(n) { if (n) refreshPill(); }",
+        "</script>",
+        "</body></html>",
+        "",
+      ].join("\n");
+      const f = join(dir, "page.ts");
+      writeFileSync(f, "export const PAGE = `" + html + "`;\n");
+      const proj = new Project({ useInMemoryFileSystem: true, compilerOptions: { allowJs: true } });
+      const sf = proj.createSourceFile("page.ts", readFileSync(f, "utf8"));
+      const units = extractInlineJsUnits(sf, "page.ts");
+      expect(units).toHaveLength(1);
+      expect(units[0]!.form).toBe("script-block");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("修复②:箭头 const 风格模板过门(ws-router 实测确认形态:零 function 声明)", async () => {
+    const pad = "// " + "y".repeat(480) + "\n"; // 补足 TPL_JS_MIN_LEN(512)——真实 ws-router 是 91KB
+    const js = [
+      pad,
+      "const wsOnMessage = (e) => { const m = JSON.parse(e.data); route(m); };",
+      "const route = (m) => { if (m.type === \"x\") reply(m); };",
+      "const reply = (m) => { wsSend(JSON.stringify(m)); };",
+      "const wsSend = (s) => { sock.send(s); };",
+      "wsOnMessage(1);",
+      "",
+    ].join("\n");
+    expect(inlineJsTextCandidate("export const PANEL_JS_WS = `" + js + "`;\n")).toBe(true);
+    const dir = mkdtempSync(join(tmpdir(), "codesense-ge3-"));
+    try {
+      const f = join(dir, "panel.ts");
+      writeFileSync(f, "export const PANEL_JS_WS = `" + js + "`;\n");
+      const proj = new Project({ useInMemoryFileSystem: true, compilerOptions: { allowJs: true } });
+      const sf = proj.createSourceFile("panel.ts", readFileSync(f, "utf8"));
+      const units = extractInlineJsUnits(sf, "panel.ts");
+      expect(units).toHaveLength(1);
+      expect(units[0]!.form).toBe("template-js");
+      const ast = await parseInlineJsAstTolerant(units[0]!.js);
+      expect(ast).toBeDefined();
+      expect(ast!.decls.map((d) => d.name)).toContain("wsOnMessage");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("修复③:紧凑无空行 + 单点语法错,只丢坏段不全军覆没(submit 实测确认形态)", async () => {
+ // script-submit 注意:顶层函数之间无空行(老口径切不出段,102KB 单段全灭),
+ // 且第一段内有一个 tree-sitter 咬不动的片段(依据是 /\s/ 类正则歧义,此处用确定性坏串)
+    const js = [
+      "function submit(override) {",
+      "  const t = override ?? input.value;",
+      "  !!!@@@ $$$ ???", // 坏语法(整段解析必 ERROR)
+      "}",
+      "function chipSubmit() { submit(null); }",
+      "function attRender(list) { return list.length; }",
+      "chipSubmit();",
+      "",
+    ].join("\n");
+    const ast = await parseInlineJsAstTolerant(js);
+    expect(ast).toBeDefined();
+    expect(ast!.partial).toBe(true);
+    const names = ast!.decls.map((d) => d.name);
+ // 坏段(submit)丢了,好段(chipSubmit/attRender)照常登记
+    expect(names).toContain("chipSubmit");
+    expect(names).toContain("attRender");
+    expect(names).not.toContain("submit");
+  }, 30_000);
 });

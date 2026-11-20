@@ -8,7 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, writeFile, mkdir, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { annotateRsiSections, ORPHAN_GRACE_MS, settleRunRecord, startMechanismRun } from "../src/rsi-agent-runner.js";
 import {
   collectMechanismItems,
@@ -24,7 +25,9 @@ import { analyzedSessionsPath, loadAnalyzedIds } from "../src/rsi-sessions.js";
 import type { RsiStatusSection } from "../src/rsi-status.js";
 import { PANEL_SRC as src } from "./panel-source.js";
 
-const SRC = join(process.cwd(), "src");
+// 加固:按测试文件位置解析(原 process.cwd 假设在 apps/gateway 下跑,
+// 从仓根跑 vitest 时 cwd=仓根 → ENOENT;import.meta.url 任意 cwd 稳定)。
+const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 function section(id: string, title: string): RsiStatusSection {
   return { id, title, ok: true, metrics: [{ label: "候选", value: 1 }], warnings: [] };
@@ -209,11 +212,12 @@ describe("annotateRsiSections", () => {
     expect((await getRun(root, "atlas", r.runId!))?.dreamDoneAt).toEqual(expect.any(Number));
   });
 
-  it("孤儿 run(重启后 task 查不到且超宽限)→ failed 且 error 含 orphaned,注失败卡", async () => {
+  it("孤儿 run(网关 pid 变化 + 任务查不到 + 超宽限)→ failed 且 error 含 orphaned+pid,注失败卡", async () => {
     const r = await startMechanismRun({ root, submit: () => ({ id: "t-gone" }) }, "atlas");
     const file = runFilePath(root, "atlas", r.runId!);
     const rec = JSON.parse(await readFile(file, "utf8"));
     rec.startedAt = Date.now() - (ORPHAN_GRACE_MS + 60_000);
+    rec.gatewayPid = process.pid + 424_242; // 网关真重启过(派单 pid ≠ 当前 pid)
     await writeFile(file, JSON.stringify(rec), "utf8");
     const notes: { phase: string; summary?: string }[] = [];
     const res = await annotateRsiSections({
@@ -226,6 +230,7 @@ describe("annotateRsiSections", () => {
     const after = await getRun(root, "atlas", r.runId!);
     expect(after?.status).toBe("failed");
     expect(after?.error).toContain("orphaned");
+    expect(after?.error).toContain("pid");
     expect(notes.map((n) => n.phase)).toEqual(["failed"]);
     expect(notes[0]!.summary).toContain("orphaned");
  // 重入不重复注卡

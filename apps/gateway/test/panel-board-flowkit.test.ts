@@ -293,16 +293,22 @@ describe("白板 flowkit 单张 SVG 渲染", () => {
       expect(replay(8, "t1|7|svg")).toBe("wait"); // 新 rev 但 svg 还没到 → 发请求,先不动 DOM
       // 服务端回包回填缓存后,新 rev 才 inject
       expect(sb.cvSvgPatchPlan("t1|8|svg", "t1|7|svg", true)).toBe("inject");
-      // inject 分支:整块重注入 + 保视野(注释里锁住"绝不调 cvApplyTf/cvFitNow")
+ // inject 分支:整块重注入; 起注入后**仅首帧**(注入前 DOM 无任何一版 svg,domSig 空)
+ // 且用户未动过视野时自动 fit(svg 首帧从不适配曾是 G1:整图 scale(1) 挤 936px 画布右下 3/4 被裁);
+ // 非首帧(保存回执/agent 回写,DOM 已有旧图)依旧绝不 fit——既有 P0「保存回执抢走用户视野」不复活。
       const injIdx = html.indexOf('if (plan === "inject" && svgHostOld && host.querySelector(".bf-cv-world")) {');
       expect(injIdx).toBeGreaterThan(0);
       const injBody = html.slice(injIdx, html.indexOf("return;", injIdx) + 7);
       expect(injBody).toContain("svgHostOld.innerHTML = svgNow;");
-      // 只断言「代码里没有真的调用」:去掉注释行后再看(注释点名这两者是在说明为何不调,属设计意图)
+ // 首帧判据 + 双守卫(没动过视野/节点数)在场,fit 只走 setTimeout 软触发
+      expect(injBody).toContain("const cvSvgFirstArrive = !domSig;");
+      expect(injBody).toContain("if (cvSvgFirstArrive && !cvViewTouched && doc.nodes.length >= 4)");
+ // 只断言「代码里没有裸调用」:去掉注释行后再看(注释点名这两者是在说明为何不调,属设计意图);
+ // 首帧 fit 是 setTimeout 软触发(不算「注入路径里直接重置视野」),keep 分支语义不变。
       const injCode = injBody.split(NL).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join(NL);
       expect(injCode).not.toContain("cvApplyTf(");
-      expect(injCode).not.toContain("cvFitNow(");
-      expect(injCode).not.toContain("cvPan");
+      expect(injCode).not.toMatch(/^\s*cvFitNow\(\)/m); // 禁裸调用;setTimeout 包裹的首帧 fit 除外
+      expect(injCode).not.toMatch(/[^.]cvPan\.[a-z]+ =/); // 禁直接写 cvPan(注入路径不重置视野)
       // 签名只由 rev + 模式(+板 id)组成:节点内容变化但 rev 不变时不触发 svg 重注入(服务端权威出图)
       expect(sb.cvSvgSig({ taskId: "t1", rev: 7, nodes: [{ id: "a" }] })).toBe("t1|7|svg");
       expect(sb.cvSvgSig({ taskId: "t1", rev: 7, nodes: [{ id: "b" }] })).toBe(sb.cvSvgSig({ taskId: "t1", rev: 7, nodes: [{ id: "a" }] }));

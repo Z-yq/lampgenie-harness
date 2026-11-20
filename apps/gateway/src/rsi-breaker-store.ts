@@ -134,6 +134,11 @@ interface RsiRuntime {
     opts?: { affectedExperiments?: string[] },
   ): RollbackPlan;
   verifyRollback(current: BaselineSnapshot, target: BaselineSnapshot): { ok: boolean; codes: string[] };
+ /** §14.2③ 观察窗自动试探重启(确定性:连续正收益窗才放行;agent 不能伪造窗口,窗口由 store 从账本算)。 */
+  evaluateObservationRestart(
+    windows: Array<{ startAt: number; endAt: number; netSaving: number }>,
+    policy?: { minPositiveWindows?: number },
+  ): { restart: boolean; positiveWindows: number };
 }
 
 /** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
@@ -680,4 +685,105 @@ export async function outcomesFromExperiments(root: string): Promise<ExperimentO
     } as ExperimentOutcome);
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * §14.2③ 观察窗自动试探重启(消费面接线)
+ * 设计原文:「停改进、不停观察」——熔断停摆后观察类动作继续,连续 2 个观察窗 ROI 转正
+ * (netSaving>0,严格为正) → 自动重启,频率 ×0.25。两条恢复路径先到先得:人类 resume
+ * (rt.resume,不变) 或本函数(确定性窗口闸,不经 rt.resume——runtime 注释明确指路)。
+ * ------------------------------------------------------------------ */
+
+/** 观察窗数据源:cost/saving 账本按固定 7 天桶聚合(确定性、可重放;空账 → 无窗口=不放行)。 */
+export function observationWindowsFromCostLedgers(
+  root: string,
+  opts: { now?: number; windowDays?: number; windowCount?: number } = {},
+): Array<{ startAt: number; endAt: number; netSaving: number }> {
+  const now = Number.isFinite(opts.now) ? Number(opts.now) : Date.now();
+  const days = Number.isFinite(opts.windowDays) && Number(opts.windowDays) > 0 ? Number(opts.windowDays) : 7;
+  const count = Number.isFinite(opts.windowCount) && Number(opts.windowCount) > 0 ? Math.floor(Number(opts.windowCount)) : 3;
+  const windowMs = days * 24 * 60 * 60 * 1000;
+  const currentBucket = Math.floor(now / windowMs);
+  const cost = new Map<number, number>();
+  const saving = new Map<number, number>();
+  const add = (file: string, fn: (bucket: number, row: UnknownRecord) => void) => {
+    let text = "";
+    try { text = readFileSync(join(root, ".genie", "rsi", file), "utf8"); } catch { return; }
+    for (const line of text.split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        const row = JSON.parse(line) as UnknownRecord;
+        if (!isRecord(row)) continue;
+        const at = nonEmpty(row["at"]);
+        const ts = at === undefined ? NaN : Date.parse(at);
+        if (!Number.isFinite(ts)) continue;
+        fn(Math.floor(ts / windowMs), row);
+      } catch { /* 坏行跳过 */ }
+    }
+  };
+  add("cost.jsonl", (bucket, row) => {
+    if (row["type"] !== "cost") return;
+    const tokens = isRecord(row["tokens"]) ? row["tokens"] : undefined;
+    const total = tokens !== undefined && typeof tokens["total"] === "number" && Number.isFinite(tokens["total"]) ? tokens["total"] : 0;
+    cost.set(bucket, (cost.get(bucket) ?? 0) + total);
+  });
+  add("cost.jsonl", (bucket, row) => {
+    if (row["type"] !== "saving") return;
+    const saved = typeof row["tokensSaved"] === "number" && Number.isFinite(row["tokensSaved"]) ? row["tokensSaved"] : 0;
+    saving.set(bucket, (saving.get(bucket) ?? 0) + saved);
+  });
+  const windows: Array<{ startAt: number; endAt: number; netSaving: number }> = [];
+  for (let i = 0; i < count; i += 1) {
+    const bucket = currentBucket - i;
+    const startAt = bucket * windowMs;
+ // 最新桶的 endAt 用 now(窗未走完,不制造未来时间)。
+    const endAt = i === 0 ? now : startAt + windowMs;
+    windows.push({ startAt, endAt, netSaving: (saving.get(bucket) ?? 0) - (cost.get(bucket) ?? 0) });
+  }
+  return windows;
+}
+
+/**
+ * 观察窗自动试探重启(确定性闸,不经 rt.resume)。
+ * - 未暂停 → RSI_BREAKER_NOT_PAUSED(预览语义,不写盘);
+ * - evaluateObservationRestart 不放行(窗口不足/非连续正)→ RSI_OBSERVATION_NOT_POSITIVE,不写盘;
+ * - 放行 → 追加 resume 行(kind=observation,by=rsi-scheduler),折出 paused=false;
+ * 返回 restartFactor(缺省 0.25,调度器据此把 everyMinutes ×4)。
+ */
+export async function autoResumeFromObservation(
+  root: string,
+  opts: { windows: Array<{ startAt: number; endAt: number; netSaving: number }>; policy?: { minPositiveWindows?: number; restartFactor?: number }; by?: string; at?: string },
+): Promise<{ ok: boolean; codes: string[]; positiveWindows: number; restartFactor?: number; state: BreakerState }> {
+  const base = assertRoot("autoResumeFromObservation", root);
+  const current = loadBreakerProjection(base).state;
+  if (current.paused !== true) {
+    return { ok: false, codes: ["RSI_BREAKER_NOT_PAUSED"], positiveWindows: 0, state: current };
+  }
+  let evaluation: { restart: boolean; positiveWindows: number };
+  try {
+    evaluation = rt.evaluateObservationRestart(opts.windows, { minPositiveWindows: opts.policy?.minPositiveWindows });
+  } catch {
+    return { ok: false, codes: ["RSI_STORE_ERROR"], positiveWindows: 0, state: current };
+  }
+  if (evaluation.restart !== true) {
+    return { ok: false, codes: ["RSI_OBSERVATION_NOT_POSITIVE"], positiveWindows: evaluation.positiveWindows, state: current };
+  }
+  const at = atOf(opts.at);
+  const by = nonEmpty(opts.by) ?? "rsi-scheduler";
+  const line: UnknownRecord = {
+    v: SCHEMA_VERSION,
+    type: "resume",
+    at,
+    by,
+    kind: "observation",
+    reason: `观察窗自动试探重启:连续 ${evaluation.positiveWindows} 个正收益窗(netSaving>0)`,
+  };
+  if (!appendLine(base, line)) {
+    return { ok: false, codes: writeFailed(), positiveWindows: evaluation.positiveWindows, state: current };
+  }
+  const state = loadBreakerProjection(base).state;
+  const factor = typeof opts.policy?.restartFactor === "number" && opts.policy.restartFactor > 0 && opts.policy.restartFactor <= 1
+    ? opts.policy.restartFactor
+    : 0.25;
+  return { ok: true, codes: [], positiveWindows: evaluation.positiveWindows, restartFactor: factor, state };
 }

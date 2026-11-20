@@ -48,8 +48,9 @@ const CSS_SRC = fs.readFileSync(path.join(__dirname, "..", "..", "src", "panel",
   if (want("P1-1")) {
     await page.evaluate(() => {
  // 造一条真项目 + 一条最近活动 40s 前的任务(bhHcInfo/bhHcProjAct 走真实数据通路)
+ // B2:字段改 projectId(任务对象真字段;旧 fixture 写 pid 迎合了 bhHcInfo 的错读)
       projects = [{ id: "p-hc", label: "demo", path: "/home/demo/projects/demo-repo", availability: "available" }];
-      tasks.set("s-hc", { sessionId: "s-hc", pid: "p-hc", state: "idle", updatedAt: Date.now() - 40000 });
+      tasks.set("s-hc", { sessionId: "s-hc", projectId: "p-hc", title: "whiteboard 域对齐设计稿", state: "idle", updatedAt: Date.now() - 40000 });
       const row = document.createElement("div");
       row.className = "proj-row";
       row.dataset.pid = "p-hc";
@@ -112,6 +113,48 @@ const CSS_SRC = fs.readFileSync(path.join(__dirname, "..", "..", "src", "panel",
       return r ? r.getAttribute("title") : "";
     });
     check("P1-1 原生 title 兜底保留", titleKept === "/home/demo/projects/demo-repo", titleKept);
+
+ // ============ B1/B2:t-row 会话卡语义 + 去原生 title ============
+    await page.evaluate(() => {
+      const old = document.querySelector("body > .proj-row");
+      if (old) old.remove();
+      const el = document.getElementById("bhHoverCard");
+      if (el) el.remove(); // 单例重建,防上一段残留内容串进断言
+      renderSidebar(); // 真渲染通路产出 .t-row(fixture 任务在 tasks 里)
+    });
+    await page.waitForTimeout(120);
+    const tRow = await page.evaluate(() => {
+      const r = document.querySelector("#taskList .t-row");
+      return r ? { title: r.getAttribute("title"), sid: r.dataset.sid } : null;
+    });
+    check("1588-B1 t-row 无原生 title(白底浏览器 tooltip 消失)", !!tRow && tRow.title === null, JSON.stringify(tRow));
+    const tbody = await page.locator("#taskList .t-row").first().boundingBox();
+    await page.mouse.move(tbody.x + tbody.width / 2, tbody.y + tbody.height / 2);
+    await page.waitForTimeout(320);
+    const scard = await page.evaluate(() => {
+      const el = document.getElementById("bhHoverCard");
+      if (!el || el.style.display === "none") return { exists: false };
+      const q = (s) => el.querySelector(s);
+      return {
+        exists: true,
+        name: (q(".bh-hc-name") || {}).textContent || "",
+        p: (q(".bh-hc-path") || {}).textContent || "",
+        act: (q(".bh-hc-act") || {}).textContent || "",
+      };
+    });
+    check("1588-B2 t-row 悬停卡标题=会话名(非「临时任务」)", scard.exists && scard.name === "whiteboard 域对齐设计稿", JSON.stringify(scard));
+    check("1588-B2 副行=归属项目(名 · 路径)", scard.exists && scard.p === "genie · /home/demo/projects/demo-repo", scard.p);
+    check("1588-B2 最近活动非空", /最近活动 (刚刚|分钟前)/.test(scard.act || ""), scard.act);
+ // 真·未归属会话仍诚实回落(语义保留,只是不该命中具名会话)
+    const orphan = await page.evaluate(() => {
+      tasks.set("s-orphan", { sessionId: "s-orphan", state: "idle", updatedAt: Date.now() - 90000 });
+      renderSidebar();
+      const row = [...document.querySelectorAll("#taskList .t-row")].find((r) => r.dataset.sid === "s-orphan");
+      if (!row) return { found: false };
+      const info = bhHcInfo(row);
+      return { found: true, name: info && info.name, path: info && info.path };
+    });
+    check("1588-B2 未归属会话诚实回落「临时任务/未归属项目(临时会话)」", orphan.found && orphan.path === "未归属项目(临时会话)", JSON.stringify(orphan));
   }
 
  // ============ P1-2 正文字距/行距/段落密度 ============

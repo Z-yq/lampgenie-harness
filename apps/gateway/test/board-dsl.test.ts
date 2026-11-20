@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { BoardNodeZ } from "@lampgenie/protocol";
-import { parseBoardDsl, mergeDslWithNodes } from "../src/board-dsl.js";
+import { parseBoardDsl, mergeDslWithNodes, serializeBoardDsl } from "../src/board-dsl.js";
 
 /** 紧凑白板 DSL 解析器。用例 2 的 DSL 常量是真实板
  * .genie/boards/web-1793201081634/e8359219-73b3-4220-a21e-cce658f6cfe1-p90b1.json
@@ -507,6 +507,166 @@ describe("parseBoardDsl", () => {
         expect("note" in acc, "旧板 accept 不该有 note:" + node.id).toBe(false);
       }
     }
+    expect(r.diags).toEqual([]);
+  });
+});
+
+describe("accept 锚点(G5②)", () => {
+  const base = [
+    "%% board v1",
+    'node p01 module modify P0 "基座" | 说明',
+    '  accept: pnpm --filter gw test -t "P0-1" => 全绿',
+    'node p02 module modify P0 "复用" | 说明',
+  ].join("\n");
+
+  it("@p01 整条复用:cmd 展开为基座首条 accept 的完整 cmd,板内存储完整值", () => {
+    const r = parseBoardDsl([base, '  accept: @p01 => 全绿'].join("\n"));
+    expect(r.diags).toEqual([]);
+    const p02 = r.nodes.find((n) => n.id === "p02")!;
+    expect(p02.accept![0]!.cmd).toBe('pnpm --filter gw test -t "P0-1"');
+  });
+
+  it('@p01.cmd~"P0-4" 前缀复用+替换差异后缀:引号内旧文本换成新文本', () => {
+    const r = parseBoardDsl([base, '  accept: @p01.cmd~"P0-4" => 全绿'].join("\n"));
+    expect(r.diags).toEqual([]);
+    const p02 = r.nodes.find((n) => n.id === "p02")!;
+    expect(p02.accept![0]!.cmd).toBe('pnpm --filter gw test -t "P0-4"');
+  });
+
+  it("引用悬空(节点不存在/无 accept)→ E_ANCHOR_MISSING error,不静默空 cmd", () => {
+    const r1 = parseBoardDsl([base, '  accept: @p99 => 全绿'].join("\n"));
+    const e1 = r1.diags.find((d) => d.code === "E_ANCHOR_MISSING")!;
+    expect(e1.severity).toBe("error");
+    expect(e1.line).toBe(5);
+    expect(r1.nodes.find((n) => n.id === "p02")!.accept).toBeUndefined();
+    const r2 = parseBoardDsl([
+      "%% board v1",
+      'node q1 module keep "无accept" | 说明',
+      'node q2 module keep "引用" | 说明',
+      '  accept: @q1 => 全绿',
+    ].join("\n"));
+    expect(r2.diags.some((d) => d.code === "E_ANCHOR_MISSING" && d.severity === "error")).toBe(true);
+  });
+
+  it("锚点语法错误与自引用 → error(E_ANCHOR_SYNTAX / E_ANCHOR_SELF,深度≤1)", () => {
+    const bad = parseBoardDsl([
+      "%% board v1",
+      'node b1 module keep "B" | 说明',
+      '  accept: @就这 => ok',
+    ].join("\n"));
+    expect(bad.diags.some((d) => d.code === "E_ANCHOR_SYNTAX" && d.severity === "error")).toBe(true);
+
+    const self = parseBoardDsl([
+      "%% board v1",
+      'node s1 module keep "S" | 说明',
+      '  accept: @s1 => ok',
+    ].join("\n"));
+    expect(self.diags.some((d) => d.code === "E_ANCHOR_SELF" && d.severity === "error")).toBe(true);
+
+    const chain = parseBoardDsl([
+      "%% board v1",
+      'node c1 module keep "C" | 说明',
+      'node c2 module keep "C2" | 说明',
+      '  accept: @c1 => ok',
+      'node c3 module keep "C3" | 说明',
+      '  accept: @c2 => ok',
+    ].join("\n"));
+ // c1 无 accept → @c1 悬空被删,c2 的 accept 删空;c3 引用 c2(accept 已删空)→ 也悬空 error。
+    const miss = chain.diags.filter((d) => d.code === "E_ANCHOR_MISSING");
+    expect(miss.length).toBe(2);
+    expect(miss.every((d) => d.severity === "error")).toBe(true);
+  });
+
+  it("前向引用合法;替换目标无引号段 → E_ANCHOR_NO_QUOTE", () => {
+    const fwd = parseBoardDsl([
+      "%% board v1",
+      'node x1 module keep "X1" | 说明',
+      '  accept: @x2 => ok',
+      'node x2 module keep "X2" | 说明',
+      '  accept: pnpm build => 零错误',
+    ].join("\n"));
+    expect(fwd.diags).toEqual([]);
+    expect(fwd.nodes.find((n) => n.id === "x1")!.accept![0]!.cmd).toBe("pnpm build");
+
+    const noq = parseBoardDsl([
+      "%% board v1",
+      'node y1 module keep "Y1" | 说明',
+      '  accept: pnpm build => 零错误',
+      'node y2 module keep "Y2" | 说明',
+      '  accept: @y1.cmd~"Z" => ok',
+    ].join("\n"));
+    expect(noq.diags.some((d) => d.code === "E_ANCHOR_NO_QUOTE" && d.severity === "error")).toBe(true);
+  });
+});
+
+describe("serializeBoardDsl(G5③)", () => {
+  const doc = {
+    version: 2,
+    taskId: "t1",
+    sessionId: "s1",
+    title: "全角标题:逗号,括号(测试)",
+    boardType: "code",
+    scale: "M",
+    docKind: "design",
+    rev: 3,
+    status: "implementing",
+    humanEdits: { ids: ["n1"], rev: 2 },
+    nodes: [
+      {
+        id: "n1", kind: "module", label: "全角、逗号|与引号\"混排", summary: "说明(全角括号)",
+        change: "modify", phase: "P0", group: "01 现状", before: "旧形态",
+        done: true, comments: ["用户评论(全角)"], pos: { x: 10, y: 20 },
+        accept: [{ cmd: 'pnpm -t "P0-1" test', expect: "全绿", type: "command", note: "注(全角)" }],
+        targets: ["a.ts, b.ts"], symbolRef: { name: "foo", file: "a.ts", line: 3 },
+        flow: [{ type: "step", text: "读文件(全角)" }],
+      },
+      { id: "n2", kind: "function", label: "N2", summary: "s", change: "add" },
+    ],
+    edges: [
+      { from: "n1", to: "n2", kind: "data", label: "关系(全角)" },
+      { from: "n1", to: "n2", kind: "call", virtual: true },
+    ],
+  } as unknown as Parameters<typeof serializeBoardDsl>[0];
+
+  it("主干可回读:serialize → parseBoardDsl 零 error,全角字符逐字保留(D1)", () => {
+    const text = serializeBoardDsl(doc);
+    const r = parseBoardDsl(text);
+    expect(r.diags.filter((d) => d.severity === "error")).toEqual([]);
+    expect(r.meta.title).toBe("全角标题:逗号,括号(测试)");
+    const n1 = r.nodes.find((n) => n.id === "n1")!;
+    expect(n1.label).toBe('全角、逗号|与引号"混排');
+    expect(n1.summary).toBe("说明(全角括号)");
+    expect(n1.before).toBe("旧形态");
+    expect(n1.accept![0]!.cmd).toBe('pnpm -t "P0-1" test');
+    expect(n1.accept![0]!.note).toBe("注(全角)");
+    expect(n1.targets).toEqual(["a.ts", "b.ts"]); // 文法:targets 按逗号切分,含全角逗号的项名不裂
+    expect(r.edges).toHaveLength(1); // virtual 边主干不重复,走 json-extra
+    expect(r.edges[0]!.label).toBe("关系(全角)");
+  });
+
+  it("%% json-extra 段:comments/pos/done/humanEdits/virtual 边白名单原样 JSON 不丢", () => {
+    const text = serializeBoardDsl(doc);
+    const extraLine = text.split("\n").find((l) => l.startsWith("{"));
+    expect(extraLine).toBeTruthy();
+    const extra = JSON.parse(extraLine!);
+ // parseBoardDsl 也把该段原样收进 r.extra(读侧 merge 入口)
+    const rExtra = parseBoardDsl(text).extra as Record<string, unknown>;
+    expect(rExtra).toEqual(extra);
+    expect(extra.humanEdits).toEqual({ ids: ["n1"], rev: 2 });
+    expect(extra.rev).toBe(3);
+    expect(extra.status).toBe("implementing");
+    expect(extra.nodes.n1.comments).toEqual(["用户评论(全角)"]);
+    expect(extra.nodes.n1.pos).toEqual({ x: 10, y: 20 });
+    expect(extra.nodes.n1.done).toBe(true);
+    expect(extra.virtualEdges).toHaveLength(1);
+    expect(extra.virtualEdges[0]).toEqual({ from: "n1", to: "n2", kind: "call" });
+  });
+
+  it("无 extra 字段的板不输出 json-extra 段(纯主干)", () => {
+    const text = serializeBoardDsl({ nodes: [{ id: "a", label: "A", summary: "s" }], edges: [] });
+    expect(text).not.toContain("json-extra");
+    const r = parseBoardDsl(text);
+    expect(r.ok).toBe(true);
     expect(r.diags).toEqual([]);
   });
 });

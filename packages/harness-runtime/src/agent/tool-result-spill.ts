@@ -66,6 +66,9 @@ export interface SpillConfig {
   /** 落盘根目录(装配方给 `<repo>/.genie/spill`)。 */
   dir: string;
   thresholdChars?: number;
+ /** 调用方硬上限(增量 1.5%):逐工具阈值(如 read_file 32000)也不得高于它。
+ * 未传=旧行为(逐工具阈值优先)。 */
+  maxThresholdChars?: number;
   headChars?: number;
   tailChars?: number;
 }
@@ -87,14 +90,19 @@ function positiveInt(value: unknown, fallback: number): number {
 export function shouldSpill(
   toolName: string,
   content: unknown,
-  opts?: { thresholdChars?: number },
+  opts?: { thresholdChars?: number; maxThresholdChars?: number },
 ): boolean {
   if (typeof content !== "string" || content.length === 0) return false;
   if (SPILL_EXCLUDED_TOOLS.has(toolName)) return false;
   // 逐工具阈值优先于调用方阈值:read_file 的 32000 是安全下限,不该被全局 8192 冲掉
   // (否则 spill 立刻退化成旧行为,read-spill 循环风险又回来了)。
+ // 增量预算:调用方显式给 maxThresholdChars 时,逐工具阈值也只能向下收敛
+ // (read_file 也要受 1.5% 步预算约束;回读走原文件 offset/limit,不会丢信息)。
   const toolThreshold = TOOL_SPILL_THRESHOLDS[toolName];
-  const threshold = toolThreshold ?? positiveInt(opts?.thresholdChars, SPILL_THRESHOLD_CHARS);
+  const max = positiveInt(opts?.maxThresholdChars, 0);
+  const threshold = toolThreshold
+    ? (max > 0 ? Math.min(toolThreshold, max) : toolThreshold)
+    : (max > 0 ? Math.min(positiveInt(opts?.thresholdChars, SPILL_THRESHOLD_CHARS), max) : positiveInt(opts?.thresholdChars, SPILL_THRESHOLD_CHARS));
   return content.length > threshold;
 }
 
@@ -176,7 +184,7 @@ export const SPILL_MIDBLOCK_MAX_TOKENS = 1_200;
 export async function spillToolResult(opts: SpillToolResultOptions): Promise<string> {
   const content = typeof opts.content === "string" ? opts.content : String(opts?.content ?? "");
   try {
-    if (!shouldSpill(opts.toolName, content, { thresholdChars: opts.thresholdChars })) return content;
+    if (!shouldSpill(opts.toolName, content, { thresholdChars: opts.thresholdChars, maxThresholdChars: opts.maxThresholdChars })) return content;
     if (!opts.dir) return content; // 没配置落盘根=无从定形,退回原文(不抛)
     const path = spillFilePath(opts);
     mkdirSync(dirname(path), { recursive: true });

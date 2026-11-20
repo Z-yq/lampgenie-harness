@@ -1,5 +1,5 @@
 /**
- * board→pptx 第三版:按 ZCode pptx skill 规范重做渲染层。
+ * board→pptx 第三版:按 pptx 呈现规范重做渲染层。
  * 回归锚(用户三次否定的具体事由,任一条退回即交付不合格):
  * - 每页必须有视觉版式(图/表格/对比/大数字/引言),纯文字页拒导;
  * - 版式互斥,要点只能配图(≤3)或引言(≤2);
@@ -21,11 +21,11 @@ const MD = readFileSync(new URL("./fixtures/deck.md", import.meta.url), "utf8");
 describe("parseDeckMd", () => {
   const d = parseDeckMd(MD) as any;
   it("章/页/元数据", () => {
-    expect(d.title).toBe("记忆服务方案评审");
+    expect(d.title).toBe("memory-service 方案评审");
     expect(d.verdict).toBe("有条件通过");
     expect(d.chapters.map((c: any) => [c.no, c.title])).toEqual([["01", "定位与目标"], ["02", "核心流程"], ["03", "术语表（附录）"]]);
     expect(d.chapters[0].pages.map((p: any) => p.title)).toEqual(["这是什么系统", "系统边界"]);
-    expect(d.chapters[1].pages.map((p: any) => p.title)).toEqual(["写入链", "判定与建议", "死代码验证"]);
+    expect(d.chapters[1].pages.map((p: any) => p.title)).toEqual(["写入链", "判定与建议", "死代码实证"]);
     expect(d.chapters[2].pages.map((p: any) => p.title)).toEqual(["自造词速查"]);
   });
   it("stats/compare/flow/quote/术语表(附录) 五类块都解析", () => {
@@ -122,7 +122,7 @@ describe("planDeck(不再有章节页)", () => {
 
 describe("boardToDeckTemplate", () => {
   const doc = {
-    title: "记忆服务方案评审 PPT 骨架(逐章扩页终版)",
+    title: "memory-service 方案评审 PPT 骨架(逐章扩页终版)",
     nodes: [
       { id: "agg", kind: "aggregate", label: "【总评】有条件通过", summary: "回答维度①:分层清晰" },
       { id: "s1", kind: "section", label: "01 定位与目标" },
@@ -132,7 +132,7 @@ describe("boardToDeckTemplate", () => {
   };
   const md = boardToDeckTemplate(doc);
   it("标题清洗 + 结构照板 + 视觉版式提示", () => {
-    expect(md.split("\n")[0]).toBe("# 记忆服务方案评审");
+    expect(md.split("\n")[0]).toBe("# memory-service 方案评审");
     expect(md).toContain("## 01 定位与目标");
     expect(md).toContain("### 这是什么系统");
     expect(md).toContain("layers");
@@ -289,7 +289,7 @@ describe("board_export_pptx × composition 板(端到端)", () => {
   }, 60_000);
 });
 
-describe("v4 设计/文案门(2026-11-15)", () => {
+describe("v4 设计/文案门", () => {
   it("theme/kicker 元数据:缺省 editorial/REPORT;composition 缺省 BRIEFING;未知 theme 拒导", () => {
     const d = parseDeckMd(MD) as any;
     expect(d.theme).toBe("");
@@ -327,7 +327,7 @@ describe("v4 设计/文案门(2026-11-15)", () => {
   });
 });
 
-describe("v5 叙事门(2026-11-15 「每页不知道想表达什么」)", () => {
+describe("v5 叙事门", () => {
   it("缺 spine/claim/结论行都点名", () => {
     const noSpine = MD.replace("spine: memory-service 能不能独立部署并守住记忆质量\n", "");
     let msgs = validateDeck(parseDeckMd(noSpine)).map((i) => i.msg).join("\n");
@@ -366,7 +366,7 @@ describe("v5 叙事门(2026-11-15 「每页不知道想表达什么」)", () => 
     expect(validateDeck(parseDeckMd(badSource)).map((i) => i.msg).join("\n")).toMatch(/大数字来源超 20 字/);
   });
   it("流程图回边:缺标签/同义反复标签都拒,条件语义放行", () => {
- // 给 fixture 的写入链加一条回边:seg -> recv
+    // 给 fixture 的写入链加一条回边:seg -> recv
     const noLabel = MD.replace("seg -> memcell", "seg -> memcell\nseg -> recv");
     let msgs = validateDeck(parseDeckMd(noLabel)).map((i) => i.msg).join("\n");
     expect(msgs).toMatch(/回边 seg→recv 缺标签/);
@@ -380,7 +380,7 @@ describe("v5 叙事门(2026-11-15 「每页不知道想表达什么」)", () => 
   });
 });
 
-describe("v7 就地拆解契约(2026-11-16 「解释要跟内容放在一起,开局术语表=文档地图;点名不拆解」)", () => {
+describe("v7 就地拆解契约", () => {
   it("开局放术语表=地图风格拒;收尾附录放行(fixture 即附录)", () => {
     const front = MD.replace("## 01 定位与目标", "## 00 术语与概念\nclaim: 先看词表\n\n### 词表\n| 术语 | 是什么 |\n|---|---|\n| 甲词 | 一句说清它是什么的样例定义,长度要够十个字 |\n\n## 01 定位与目标");
     expect(validateDeck(parseDeckMd(front)).map((i) => i.msg).join("\n")).toMatch(/术语表是附录不是开场/);
@@ -404,7 +404,7 @@ describe("v7 就地拆解契约(2026-11-16 「解释要跟内容放在一起,开
     expect(validateDeck(parseDeckMd(ok)).map((i) => i.msg).join("\n")).not.toMatch(/点名即枚举/);
     const bad = MD.replace("### 写入链", "### 写入链:七个环节逐个过");
     expect(validateDeck(parseDeckMd(bad)).map((i) => i.msg).join("\n")).toMatch(/承诺「七个」但主体只摆了 5 项/);
- // 数字带小数不算枚举承诺(46.6 步不该要求 46 项)
+    // 数字带小数不算枚举承诺(46.6 步不该要求 46 项)
     const decimal = MD.replace("> 结论: 写入链的失败被圈在单条,批级吞吐靠并发闸兜住", "> 结论: 平均要走 46.6 步才轮到落账,别小看这一圈");
     expect(validateDeck(parseDeckMd(decimal)).map((i) => i.msg).join("\n")).not.toMatch(/点名即枚举/);
   });
@@ -422,7 +422,7 @@ describe("v7 就地拆解契约(2026-11-16 「解释要跟内容放在一起,开
   });
 });
 
-describe("v9 构建思路/内容质量/UI 设计门(2026-11-17)", () => {
+describe("v9 构建思路/内容质量/UI 设计门", () => {
   it("成稿(≥8 页)缺 notCovering 拒;带了放行", () => {
     const big = MD.replace("## 01 定位与目标", "notCovering: 各家 UI、模型选型、评测排名\n\n## 01 定位与目标") + "\n" + MD.slice(MD.indexOf("## 02 核心流程")).replace("## 02 核心流程", "## 04 核心流程复本");
     const bigNo = MD + "\n" + MD.slice(MD.indexOf("## 02 核心流程")).replace("## 02 核心流程", "## 04 核心流程复本");
@@ -482,6 +482,7 @@ function v10Page(i: number, kind: string, title: string, layout?: string): strin
     `> 证据: 0${(i % 5) + 1}-harness-doc.md §${(i % 7) + 1};09-harness-basics.md §9.${(i % 9) + 1}`,
     `> 结论: 第 ${i} 页的独立结论,长度合规`,
     ...(layout ? [`> 版式: ${layout}`] : []),
+    ...(i % 3 !== 0 ? [`> 承上: 上一页把第 ${i - 1} 个问题答完,这一页接着答第 ${i} 个问题`] : []),
     "",
   ].join("\n");
 }
@@ -541,7 +542,7 @@ function v10Deck(opts: { conceptTitle?: string; noBridge?: boolean; deepAllCards
   ].join("\n");
 }
 
-describe("v10 叙事弧门(2026-11-17 「先讲通用,再讲实现,再详细拆解;深拆配 flow」)", () => {
+describe("v10 叙事弧门", () => {
   it("合规 20+ 页稿零问题", () => {
     const deck = parseDeckMd(v10Deck());
     expect(deck.chapters.reduce((n: number, c: any) => n + c.pages.length, 0)).toBeGreaterThanOrEqual(20);
@@ -561,7 +562,7 @@ describe("v10 叙事弧门(2026-11-17 「先讲通用,再讲实现,再详细拆�
   });
 });
 
-describe("v11 人类阅读门(2026-11-18 「要符合人类阅读习惯,不是 agent coding 思维/平铺证据;看不出 zcode 循环有哪些步骤、每步干什么」)", () => {
+describe("v11 人类阅读门", () => {
   const TEN = ["Idle 空闲 | 没有活干,等用户来", "处理输入 | 把用户输入接进来,判不收就直接退", "等模型 | 请求已发出,等模型开口说话", "流式接收 | 边收边攒,模型想调的工具记成清单", "排计划 | 定这批工具谁先谁后、谁能并行", "执行工具 | 真正动手干活的一步", "等审批 | 要人点头的工具先挂起", "聚合结果 | 把这批工具的收成汇总", "收口 | 写结论与账目,这轮结束", "出错终态 | 哪步炸了都落到这里"];
   const v11Deck = (opts: any = {}) => {
     const stepsBlock = opts.tenRows === false
@@ -696,7 +697,7 @@ ${(opts.badExec ? ["执行工具 | ExecutingTools 置 running 并盖 startedAt,�
   });
 });
 
-describe("v12 版式引擎(2026-11-18 「每页从上往下一个模子;要左右布局、大框凸显」,借鉴 ref/ZCode pptx SKILL §3)", () => {
+describe("v12 版式引擎", () => {
   it("`> 版式:` 行解析进 pageLayout 并透传 planDeck", () => {
     const md = `# 版式解析验证稿
 spine: 版式怎么声明怎么渲染
@@ -726,7 +727,7 @@ a -> b
     expect(validateDeck(parseDeckMd(bad1)).map((i) => i.msg).join("\n")).toMatch(/版式「三栏」不合法/);
     const focus = v10Deck().replace("> 版式: 大字结论", "").replace(`> 版式: 左图右文`, `> 版式: 大字结论`);
     const focusDeck = parseDeckMd(focus) as any;
- // v10Page 每页 2 条要点,大字结论合法;把其中一页加到 3 条要点 → 拒
+    // v10Page 每页 2 条要点,大字结论合法;把其中一页加到 3 条要点 → 拒
     const pg = focusDeck.chapters[0].pages[1];
     pg.blocks.find((b: any) => b.kind === "bullets").items.push({ lead: "第三条", text: "焦点页不许铺第三条解读说明文字长度合规" });
     const msgs = validateDeck(focusDeck).map((i) => i.msg).join("\n");
@@ -734,12 +735,12 @@ a -> b
     const focusShort = parseDeckMd(v10Deck().replace(/> 版式: 大字结论/, "").replace("> 版式: 左图右文", "> 版式: 大字结论")) as any;
     focusShort.chapters[0].pages[1].takeaway = "太短";
     expect(validateDeck(focusShort).map((i) => i.msg).join("\n")).toMatch(/大字结论页的结论 <14 字/);
- // 左右页无主体(纯要点)
+    // 左右页无主体(纯要点)
     const noMain = parseDeckMd(v10Deck().replace(/```flow[\s\S]*?```/, "").replace("> 版式: 右图左文", "")) as any;
     noMain.chapters[0].pages[1].pageLayout = "左图右文";
     noMain.chapters[0].pages[1].blocks = [{ kind: "bullets", items: [{ lead: "甲", text: "说明一写够长度保证过门" }, { lead: "乙", text: "说明二写够长度保证过门" }] }];
     expect(validateDeck(noMain).map((i) => i.msg).join("\n")).toMatch(/没有图\/表\/码主版式块/);
- // stats 页标左右
+    // stats 页标左右
     const statsSplit = parseDeckMd(v10Deck()) as any;
     statsSplit.chapters[0].pages[0].pageLayout = "左图右文";
     statsSplit.chapters[0].pages[0].blocks = [{ kind: "stats", data: { stats: [{ value: "3", label: "个数字", source: "口径" }, { value: "4", label: "条说明", source: "口径" }] } }, { kind: "bullets", items: [{ lead: "甲", text: "说明一写够长度保证过门" }, { lead: "乙", text: "说明二写够长度保证过门" }] }];
@@ -750,7 +751,7 @@ a -> b
     const msgs = validateDeck(parseDeckMd(allWide)).map((i) => i.msg).join("\n");
     expect(msgs).toMatch(/版式单调/);
     const runDeck = parseDeckMd(v10Deck()) as any;
- // 把全部版式行改成通栏之外的一种(全部 大字结论) → 连续 run>4
+    // 把全部版式行改成通栏之外的一种(全部 大字结论) → 连续 run>4
     for (const c of runDeck.chapters) for (const pg of c.pages) pg.pageLayout = "大字结论";
     const msgs2 = validateDeck(runDeck).map((i) => i.msg).join("\n");
     expect(msgs2).toMatch(/连续 \d+ 页同一结构版式/);
@@ -810,7 +811,7 @@ claim: 占位章保证两章结构,不参与渲染验证
   });
 });
 
-describe("v13 轨迹分析门(2026-11-18 session 轨迹实测确认:重生成照抄旧稿 41/42 页只换版式、内容文档 20 份只读 2 份、11/42 页密度 <100)", () => {
+describe("v13 轨迹分析门", () => {
   it("regenSimilarity:自比全雷同;每页换文案后雷同归零(版式行不算文字)", () => {
     const deck = parseDeckMd(v10Deck()) as any;
     const self = regenSimilarity(deck, v10Deck());
@@ -835,7 +836,7 @@ describe("v13 轨迹分析门(2026-11-18 session 轨迹实测确认:重生成照
     expect(r1).toContain("本次未产出文件");
     const r2 = String(await tool.execute({ mode: "export", source: src, regenOf: join(dir, "nope.md") } as never));
     expect(r2).toMatch(/读不到/);
- // 内容重写后(regenOf 指向原稿)放行
+    // 内容重写后(regenOf 指向原稿)放行
     const src2 = join(dir, "b.deck.md");
     writeFileSync(src2, FILLED_COMP
       .replace("价格敏感", "续费涨价是主因")
@@ -866,9 +867,9 @@ describe("v13 轨迹分析门(2026-11-18 session 轨迹实测确认:重生成照
   });
 });
 
-describe("v14 内容质量门(2026-11-18 文本对比实测确认:wb 625字/页+126 个带单位数字 vs v11 370字/页+6 个;源文档单份 162 个数字,写作端零挖掘)", () => {
+describe("v14 内容质量门", () => {
   it("具体性:≥20 页稿带单位数字的页 <40% 拒;达标放行(v10Deck 即达标)", () => {
- // 负向:把 v10Deck 全部数字子句与 XREF 尾都换成无数字表述后,需触发具体性门
+    // 负向:把 v10Deck 全部数字子句与 XREF 尾都换成无数字表述后,需触发具体性门
     const noNum = v10Deck()
       .replace(/实测开销约[^,;]*[,;]?/g, ";")
       .replace(/机制怎么转、谁受影响、边界在哪;/g, "机制怎么转、谁受影响、边界在哪,说明写够一百字符上下保证密度门通过并且不与其余页重复,");
@@ -892,7 +893,7 @@ describe("v14 内容质量门(2026-11-18 文本对比实测确认:wb 625字/页+
   it("页构成节奏:连续 ≥3 页 block 构成完全相同拒(模板感)", () => {
     const deck = parseDeckMd(v10Deck()) as any;
     const ch = deck.chapters[deck.chapters.length - 1];
- // 把收尾章做成 3 页完全同构成(bullets+table)
+    // 把收尾章做成 3 页完全同构成(bullets+table)
     ch.pages = [1, 2, 3].map((k) => ({
       title: `同构页${k}`,
       blocks: [

@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer, type Socket } from "node:net";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AddressInfo } from "node:net";
@@ -219,7 +219,7 @@ describe("safe-restart-gateway 纯函数", () => {
     try {
       const port = (srv.address() as AddressInfo).port;
       const hasSs = !spawnSync("ss", ["-tln"], { encoding: "utf8" }).error;
-      if (!hasSs) return; // 无 ss 的机器走 pid 文件/pgrep 分支,本断言不适用
+      if (!hasSs) return; // 无 ss 的机器走 pid 文件分支,本断言不适用
       const found = safe.findGatewayPid({ port, root: join(tmpdir(), "no-such-root"), defaultPort: 7700 });
       expect(found.pid).toBeUndefined();
       expect(found.source).toBe("ss-unverified");
@@ -227,6 +227,22 @@ describe("safe-restart-gateway 纯函数", () => {
     } finally {
       await new Promise<void>((resolve) => srv.close(() => resolve()));
     }
+  });
+
+  it("findGatewayPid:无端口属主时只认 pid 文件,不按 pgrep 文本误选 build shell", async () => {
+    const srv = createServer((req, res) => res.end("ok"));
+    await new Promise<void>((resolve, reject) => { srv.once("error", reject); srv.listen(0, "127.0.0.1", () => resolve()); });
+    const port = (srv.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    const dir = mkdtempSync(join(tmpdir(), "safe-restart-pid-"));
+    try {
+      mkdirSync(join(dir, ".genie"), { recursive: true });
+ // pid 文件指向「活着的非网关进程」(当前 vitest):必须被 cmdline 佐证拒绝。
+      writeFileSync(join(dir, ".genie", "gateway.pid"), String(process.pid), "utf8");
+      const found = safe.findGatewayPid({ port, root: dir, defaultPort: 7700 });
+      expect(found.pid).toBeUndefined();
+      expect(found.source).toBe("none");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("gatewaySpawnArgs:OOM 堆取证参数齐全且 entry 在最后(不被当 node 开关)", () => {

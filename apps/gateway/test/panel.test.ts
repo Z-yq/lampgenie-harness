@@ -38,7 +38,12 @@ describe("桌面 Web 面板", () => {
     expect(html).toContain("diffbar");
     expect(html).toContain("task.diffstat");
     expect(html).toContain("workTimer");
-    expect(html).toContain("permPill");
+ // (②/返工轮):permPill 胶囊删除维持;ctxPill 返工还原后必须在场;attBtn 图标化仍在
+    expect(html).not.toContain('id="permPill"');
+    expect(html).toContain('id="ctxPill"');
+    expect(html).not.toContain('id="trajBoardBtn"');
+    expect(html).not.toContain('id="cvToggleBtn"');
+    expect(html).toContain("attBtn");
     expect(html).toContain("effortPill");
     expect(html).toContain("reasoningEffort");
     expect(html).toContain("tabbar");
@@ -492,7 +497,7 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
     await withPanel(7933, (html) => {
       const sStart = html.indexOf("function supSend");
       expect(sStart).toBeGreaterThan(0);
-      const sBody = html.slice(sStart, sStart + 1200);
+      const sBody = html.slice(sStart, sStart + 3200); // supSend 含附件收集+草稿清+G4 禁用态辅助,1200/2000 均切不到发送行
       expect(sBody).toContain('type: "super.turn", text, sessionId: "super"'); // 显式固定会话
       expect(sBody).toContain('toast("连接未就绪", true)'); // WS 未就绪守卫
  // superViewLoad:supDayLabel=固定会话 "super"(旧按天日卷退役)
@@ -500,11 +505,11 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(html.slice(dStart, dStart + 200)).toContain('return "super"');
     });
   });
-  it("② 渲染复用=主聊天同款卡片构造(薄壳):supRenderChat 调 replyBlockHtml/toolCallCard/userSlashHtml", async () => {
+  it("② 渲染复用=主聊天同款卡片构造(薄壳):supRenderChatNow 调 replyBlockHtml/toolCallCard/userSlashHtml;入口=100ms 合并+哈希跳过+尾部追加(打字卡顿修复)", async () => {
     await withPanel(7934, (html) => {
-      const start = html.indexOf("function supRenderChat");
+      const start = html.indexOf("function supRenderChatNow");
       expect(start).toBeGreaterThan(0);
-      const body = html.slice(start, start + 6000);
+      const body = html.slice(start, start + 12000); // :函数加长(引擎三件在头部),6000 切不到空态/粘底段
       expect(body).toContain("replyBlockHtml("); // assistant 正文 markdown(主聊天同款构造)
       expect(body).toContain("toolCallCard("); // 工具调用+结果合并卡(主聊天同款)
       expect(body).toContain('class="user-line"'); // 用户气泡类名同款
@@ -515,6 +520,11 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
       expect(body).toContain("示例:");
  // 粘底跟随(主聊天同款 60px 容差)
       expect(body).toContain("wasBottom");
+ // 引擎对齐(打字卡顿修复):入口合并 + 内容哈希跳过 + 尾部追加快路径
+      expect(html).toContain("function supRenderChat()");
+      expect(html).toContain("supChatTimer = setTimeout(function () { supChatTimer = 0; supRenderChatNow(); }, 100)");
+      expect(html).toContain("if (joined === supChatLastHtml) { supStreamSync(); supChatHeadSync(); return; }");
+      expect(html).toContain('live.insertAdjacentHTML("beforebegin", delta)');
  // 指挥状态条:工具动词人话 + 委托/调度阶段
       expect(html).toContain('id="superRunBar"');
       expect(html).toContain("function supToolVerb");
@@ -603,15 +613,12 @@ describe(" 聊天窗主线(super 固定会话+主聊天卡片薄壳+派发卡/�
   });
   it("⑤ 做梦卡:super.dream 广播进结果流;结果卡=条数/待关注+成本", async () => {
     await withPanel(7937, (html) => {
- // superOnMsg 挂 super.dream 分支
-      const mStart = html.indexOf("function superOnMsg");
-      expect(mStart).toBeGreaterThan(0);
-      const mBody = html.slice(mStart, mStart + 3500);
-      expect(mBody).toContain('m.type === "super.dream"');
-      expect(mBody).toContain('kind: "dream"');
+ // super 帧处理挂 super.dream 分支(并行重构后分支移到 super 帧 apply 段,整页锚定不再按函数切片)
+      expect(html).toContain('m.type === "super.dream"');
+      expect(html).toContain('kind: "dream"');
  // turn.done 实时帧不带 toolCalls:回拉一次 history,让工具卡/派发关系条立即出现
-      expect(mBody).toContain('m.type === "super.turn.done"');
-      expect(mBody).toContain('type: "super.history", sinceSeq: 0');
+      expect(html).toContain('m.type === "super.turn.done"');
+      expect(html).toContain('type: "super.history", sinceSeq: 0');
  // 结果卡:点卡进机制报告 + 「几条结果/几条待关注」+ 成本(缺价如实标注)
       const dStart = html.indexOf("function supDreamCardHtml");
       const dBody = html.slice(dStart, dStart + 2500);
@@ -899,6 +906,18 @@ describe(" 三入口迁左侧栏(新建任务/指挥台/RSI 看板)", () => {
       expect(actsScope).not.toContain('id="act-rsi"');
  // ④ 窄屏塌折:侧栏三入口随 860px 图标条规则收成纯图标(不额外做悬浮)
       expect(html).toContain(".sb-nav .sb-act{justify-content:center;gap:0;font-size:0;padding:9px 6px}");
+    });
+  });
+});
+
+// 十三轮:super 派发任务的白板串台防护(boardListSid 归属清台 + 空窗重拉 3→5)
+describe(" 白板会话匹配加固", () => {
+  it("boardListSid 归属记录/切换清台/空窗重拉 5 次均在", async () => {
+    await withPanel(7937, (html) => {
+      expect(html).toContain("let boardListSid");
+      expect(html).toContain("if (boardListSid && boardListSid !== bs)");
+      expect(html).toContain('boardListSid = String(m.sessionId || "");');
+      expect(html).toContain("(boardListRetry || 0) < 5");
     });
   });
 });

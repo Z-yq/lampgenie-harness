@@ -46,6 +46,7 @@ export const PLANNER_BOARD_SPEC = [
   "- **板型索引**:" + boardSkillIndex(),
   "- 板工具机制:落板前 tool_view(board_upsert) 看参数;板型画法不在工具描述里,按上面 board skill 加载;P0 节点必须带 accept;收尾 board_upsert action=audit 核对;P0 覆盖<100% 不宣称完成。",
   "- **code/test 板=现状控制流程图,不是模块清单、也不是计划步骤树**:主线 start(触发:用户动作/入口函数)→编号步骤(function)→decision(出边「是：…」「否：…」)/loop→end(结果出口);节点=现有代码里真实存在的步骤,每个步骤 flow 写 2~4 行**现有代码**动作(真实函数名+参数+条件+写入/广播),不是「我要做什么」。只有 function 卡 + call 边、无 start/decision 的模块清单式板判不合格,必须重画。骨架 ≤9 节点但必须含 start+end+≥1 decision,规模 M/L 主线 8~12 节点(最多 14);有真实遍历/重试用 loop;decision 出边不得指向会被面板剥离到侧栏的 note/aggregate/io 节点。禁把「写测试/跑验证/更新文档/实现 X/修复 Y」这类仓库里不存在的待办写成节点——它们留在 step.md。",
+  "- **可读性(§12.6,类型门提示不拒)**:code 板 modify 节点读出四件套——before(现状一行)/为什么改(目的语义词)/工况/验收锚,且要有辐射面表达(上游调用方/下游影响词或指向它的 data/verify 边);test 板读出测试目的(防什么)/夹具语义标注(替代的真实数据)/数字断言的推导来源/一条带具体值的走查实例——这些缺项类型门会点名提示,补齐再交板。",
   "- **板首必须有主题节点(code 板强制校验;其它板型强烈建议)**:板的第一个节点讲清「这个大流程在系统里是干什么用的」+「本次开发内容改的是其中哪一环」——id 用 theme 开头或 group=主题,渲染时置顶横贯;只有一串步骤卡、读者看完不知道这流程干什么用的板判不合格。主题节点是现状描述(change=keep),不受 keep 节点「必须带结构化锚」约束(它不指向具体代码段)。",
   "- **change=节点上的改动徽标,不是节点**:步骤节点 targets 写「仓库相对路径#符号名」(如 packages/gateway/src/x.ts#createServer;或 targets 路径 + symbolRef{file,name});change 必填——keep=纯读不动(**绝大多数节点**,默认值)/modify=现有这段要改(必填 before 写现状一行)/add=这里现在没有、要新增/delete=要删。改动不是独立的节点,是画在对应现状节点上的标记;summary 要读出「这在仓库里是哪一段现有逻辑」,不写抽象动词。全 keep 板(纯读逻辑)是合格交付。accept 只对 modify/add/delete 节点要求,keep 节点免 accept;P0 语义=本轮会动的节点。",
   "- **其它板型**(docs/ui/data/contract/deploy/research…):同样以**现状**为主——只画被本次任务牵动的现有链路/区块/章节,不另画一层「计划步骤」;要改的地方用 change 徽标标在对应现状节点上,每个带徽标的节点回答四件事:①改哪里(targets+symbolRef)②在哪个流程(上游→本节点→下游)③改什么(change;modify/delete 必填 before 写现状)④内部怎么走(flow,分支写 cond+then/else)。有先后依赖的现有步骤 label 带序号(01 采集→02 处理)。",
@@ -58,19 +59,21 @@ export const PLANNER_BOARD_SPEC = [
   "- 降级诚实:你超时/失败/板为空时,主 agent 会内联规划(板照画、accept 照挂)并显式标注「planner 降级」——不许在结果里假装完整规划过。",
   "- 交板自检:按 <boardType>/audit 逐条;board_upsert/audit 的 contractIssues 与 typeIssues 必须清零;P0 规划态 0/N 正常,evidence 未回填不得 done;换 id 重画先用 action=prune 清旧节点,禁止两版并板。",
   "- 现状层自动预填:board_upsert 传 action=\"skeleton\"+symbols=[code_sense 查到的符号名]——工具从索引快照生成 keep 节点(锚已三态核验 linked)+真实 call 边;你只在回执底版上补变更层(add/modify 节点带 targets/before),不要手抄 file:line",
+  "- **节点级视觉锚(§11.2.1,最小落地)**:视觉属性节点(间距/配色/字距/圆角/徽标/动效,或 accept=browser 走查项)可选挂 visual{before:改前实拍引用, after:改后实拍引用, note}——给人看的对照,不是证据(P0 覆盖率不认 visual);逻辑节点不挂;改前实拍有时序前提(开工先拍改前面,实现开始后 before 补不回来)。",
+  "- **读板 DSL(§11.6③)**:board_read 传 format=\"dsl\" 拿到与写侧同文法的 DSL(含 %% json-extra 兜底段,字段不丢)——读板→改→写板全程可走 DSL 不触 JSON;文法单一真源=board-dsl.ts 头部注释(版本随语法演进 bump)。",
 ].join("\n");
 
 export const SUBAGENT_CODE_SENSE_PLAYBOOK = [
   "code_sense 调用手册(代码认知优先于 grep/整读文件——静态索引毫秒级且已含调用关系;先查再读,零命中/索引缺席时才降级 grep 复核):",
   "- 认识项目:action=project(技术栈/框架指纹/入口/目录拓扑)→ mode=plan(架构主线+模块导读);入口清单 action=entrypoints(开工上下文通常已注入,复查才用)。",
-  "- 符号关系:action=symbol,target=符号名(定义+调用者+被调者一次拿全);要调用链时序/更深闭包再上 mode=debug(query=符号名)。",
+  "- 符号关系:action=symbol,target=符号名(定义+调用者+被调者一次拿全);要调用链时序/更深闭包再上 mode=debug(query=符号名)。未命中时回执自动带 [inline-js]——模板字符串常量里的前端函数定义位置(宿主常量+行号),按它定位,不算查不到。",
   "- 牵连/影响:action=impact,target=符号名(双向调用闭包+受影响文件+关联测试——回答「改这里会动哪里」的唯一入口)。",
-  "- 字符串标识/配置键/消息 type:action=refs,target=字面量(按语境列 case/eq/object-key/宏/文档全部引用点,命中带所在分支标注——删字符串标识时 symbol/impact 全空,必须走这里)。",
+  "- 字符串标识/配置键/消息 type/CSS 类/DOM id/中文文案:action=refs,target=字面量(按语境列 case/eq/object-key/宏/文档全部引用点,命中带所在分支标注——删字符串标识时 symbol/impact 全空,必须走这里;扫描面=代码+测试+文档+tasks 文本,**含模板字符串内的 UI 串**);**多个候选名一次查:target=\"a|b|c\" 按候选分组返回,零命中候选显式标出——这类「几个名字在不在/在哪」的探查不要用 grep alternation**。",
   "- 条件/循环关系:action=branches,target=文件相对路径(if/elif/else 条件文本+while/for/switch 循环+三元,每个分支带直接调用的函数与所属函数——回答「这个调用在什么条件下发生」)。",
   "- 文件与变量:action=file(文件符号表);action=vars(变量类型分组清单)。",
   "- 领域画像:mode=api(HTTP 接口表面)/mode=state(状态机)/mode=algo(算法模块);本系统 WS 消息协议用 action=wire(union↔收发点/孤儿对账)。",
   "- 陌生仓/命名不确定:mode=explore(query 给具体关键词,标识符/术语,中英各试一次)。",
-  "纪律:mode=debug 的 query 必须是代码符号名(禁目录/文件名/自然语言,传错=零命中);action 在场时 mode 忽略;索引可能过期(输出带过期提示时,关键结论用 grep 复核);报告引用一律带 file:line(工具输出已带,直接回链不要改写)。",
+  "纪律:mode=debug 的 query 必须是代码符号名(禁目录/文件名/自然语言,传错=零命中);action 在场时 mode 忽略;索引可能过期(输出带过期提示时,关键结论用 grep 复核);grep 只用于正则形态的模糊匹配(前缀/通配),候选名/字面量/文案的查索走 refs;报告引用一律带 file:line(工具输出已带,直接回链不要改写)。",
 ].join("\n");
 
 /**
@@ -326,6 +329,11 @@ export interface LlmLoopBackendOptions {
    * 超时/拒绝=按拒绝(fail-closed,由 broker 侧裁决);缺席=无重操作闸(行为同旧版)。 */
   parentAsk?: (input: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) =>
     Promise<{ approved: boolean; reason?: string; by: string }>;
+ /** 任务书预授权白名单(spawn_subagent.heavyApprove 透传):命令前缀命中→重操作直接
+ * 按批准处理并留痕 brief-scoped-auto(journal 沿 subagent.heavy-ask/-answer 事件形状);
+ * 未命中仍走既有 parentAsk 父审批链。缺省/空数组=行为与现状逐字一致。deny 红线(git 写/破坏)
+ * 在 run_cmd 执行层硬拦,不因白名单放宽。 */
+  heavyApprove?: string[];
  /** 读传递( D3 跨 agent 读重叠治理):父会话已读清单键。提供时子 read_file ①登记改
    * 相对 roots[0] 路径并双写父键(父与兄弟子代理共享已读事实);②读前查父清单行段交叠,命中→
    * 结果尾注「勿再整读」。缺席=旧行为(绝对路径单写子键)。 */
@@ -705,6 +713,62 @@ export function fenceRunCmd(cmd: string, workdir: string): string | null {
   return fenceCommand(cmd, workdir);
 }
 
+/** 任务书预授权白名单匹配:command.trim.startsWith(prefix)(大小写敏感,不做 shell 解析)。
+ * prefixes 空/缺省=false(行为与现状逐字一致);空前缀条目不参与匹配(空串 startsWith 恒真=误放行)。
+ * 子侧 heavyOp 闸(spawn 内 onHeavyAsk)与父侧 broker(run-with-agent parentAsk 路由)共用本判定,
+ * 防两处启发式分叉。 */
+export function heavyApproveMatch(command: string, prefixes?: readonly string[]): boolean {
+  const cmd = String(command ?? "").trim();
+  if (!cmd || !prefixes || prefixes.length === 0) return false;
+  for (const raw of prefixes) {
+    const p = String(raw ?? "").trim();
+    if (p && cmd.startsWith(p)) return true;
+  }
+  return false;
+}
+
+/** 白名单命中留痕:沿用 ParentAskBroker 的 subagent.heavy-ask/-answer 事件形状自问自答
+ * (answer approved=true,note/approvedBy=brief-scoped-auto)。审计失败不影响放行决策。 */
+export function journalBriefScopedHeavyAutoApproval(
+  journal: { append: (e: never) => unknown } | null | undefined,
+  sessionId: string,
+  q: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch },
+): void {
+  if (!journal) return;
+  const requestId = "heavy-auto-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const question = {
+    requestId, taskId: q.taskId, role: q.role, tool: q.tool,
+    command: q.command, match: q.match, askedAt: Date.now(), timeoutMs: 0,
+  };
+  try {
+    journal.append({ kind: "custom", sessionId, payload: { topic: "subagent.heavy-ask", ...question } } as never);
+    journal.append({
+      kind: "custom", sessionId,
+      payload: { topic: "subagent.heavy-answer", requestId, approved: true, note: "brief-scoped-auto", approvedBy: "brief-scoped-auto", by: "brief-scoped-auto", reason: "任务书预授权白名单命中(spawn_subagent.heavyApprove)", question },
+    } as never);
+  } catch { /* 审计失败不影响放行 */ }
+}
+
+/** 父侧 broker 路由(外部后端/ACP 共用;进程内后端在 onHeavyAsk 子侧短路,不经此):
+ * deny 红线优先——git-guard 写/破坏判定命中的命令即使白名单命中也不自动放行(回落既有父审批链
+ * 人工裁决);白名单命中→直接批准并留痕 brief-scoped-auto;未命中/缺省/空数组→ask 逐字委托。 */
+export function makeBriefScopedHeavyAskRouter(deps: {
+  journal: { append: (e: never) => unknown } | null | undefined;
+  sessionId: string;
+  prefixes?: readonly string[];
+  ask: (q: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) => Promise<{ approved: boolean; reason?: string; by: string }>;
+}): (input: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) => Promise<{ approved: boolean; reason?: string; by: string }> {
+  return async (input) => {
+    const gitVerdict = guardGitCommand(input.command);
+    const denyHit = !!(gitVerdict && (gitVerdict.destructive || gitVerdict.write));
+    if (!denyHit && heavyApproveMatch(input.command, deps.prefixes)) {
+      journalBriefScopedHeavyAutoApproval(deps.journal, deps.sessionId, input);
+      return { approved: true, reason: "任务书预授权白名单命中", by: "brief-scoped-auto" };
+    }
+    return deps.ask(input);
+  };
+}
+
 /** worker/general 的写与执行工具(ZCode general-purpose 全工具语义):write_file/edit_file/run_cmd。
  * 编辑保鲜( ZCode ReadFileState 语义):覆写/编辑已存在文件前必须先 read_file 且读后未被外部改动——防盲写覆盖。
  * edit_file(补齐):精确字面替换,与主 agent edit_file 同语义(old 唯一命中/replace_all)。 */
@@ -999,6 +1063,13 @@ export class LlmLoopBackend implements SubagentBackend {
                   onHeavyAsk: async (call: { name: string; arguments: string }, match: import("@lampgenie/core").HeavyOpMatch) => {
                     let command = "";
                     try { command = String((JSON.parse(call.arguments ?? "{}") as { command?: string }).command ?? ""); } catch { /* 解析失败按空命令走拒绝 */ }
+ // 任务书预授权:白名单前缀命中→直接按批准处理并留痕 brief-scoped-auto
+ // (不咨询父代理);未命中/缺省/空数组→既有 parentAsk 父审批链逐字不变。deny 红线
+ // 不在本层(git-guard 在 run_cmd 执行层硬拦,白名单放行不绕过它)。
+                    if (this.opts.heavyApprove?.length && heavyApproveMatch(command, this.opts.heavyApprove)) {
+                      journalBriefScopedHeavyAutoApproval(subJournal, "subagent-" + spec.taskId, { taskId: spec.taskId, role, tool: call.name, command, match });
+                      return true;
+                    }
                     return (await this.opts.parentAsk!({ taskId: spec.taskId, role, tool: call.name, command, match })).approved;
                   },
                 },

@@ -533,12 +533,27 @@ async function chatStreamed(
  // 流式 fetch 的 400/422 invalid_request 走与非流式同一套一次性修复(postWithRetry 内改写后重发)。
     ...(retryCtx.repair ? { repair: retryCtx.repair } : {}),
   };
+ // 端点兼容:stream_options 不被支持(400 且报文点名)→ 去掉该参数重发。
+ // 必须走在 postWithRetry 的 repair 通道里:通用修复(clamp-max-tokens 等无条件动作)会先于
+ // 外层 catch 触发重发,而 post lambda 每次都重新内联 stream_options——不走这条通道的话
+ // 修复重发会原样带着 stream_options,去参兜底永远轮不到。
+  let dropStreamOptions = false;
+  const streamRepair = (input: { decision: ModelErrorDecision; status?: number; attempt: number }): string[] | null => {
+    if (/stream_options/i.test(input.decision.detail ?? "")) {
+      dropStreamOptions = true;
+      return ["drop-stream-options"];
+    }
+    return retryOpts.repair ? retryOpts.repair(input) : null;
+  };
   let res: Response;
   try {
  // body 每次重发前现取:修复改写重建 body 后,postWithRetry 的这次重发必须用新体。
-    res = await postWithRetry(() => post({ ...body(), stream: true, stream_options: { include_usage: true } }), retryOpts);
+    res = await postWithRetry(
+      () => post({ ...body(), stream: true, ...(dropStreamOptions ? {} : { stream_options: { include_usage: true } }) }),
+      { ...retryOpts, repair: streamRepair },
+    );
   } catch (err) {
-    // 端点兼容:stream_options 不被支持(400 且报文点名)→ 去掉该参数重试一次。
+    // 兜底:repair 通道未覆盖(如 repair 缺席)时,此处按点名去参重试一次。
     if (err instanceof ModelRequestError && err.kind === "invalid_request" && /stream_options/i.test(err.detail)) {
       res = await postWithRetry(() => post({ ...body(), stream: true }), retryOpts);
     } else throw err;

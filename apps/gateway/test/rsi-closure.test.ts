@@ -15,7 +15,7 @@ import { isAllStopwords } from "../src/atlas-harvest.js";
 import { addGoal, getAtlas } from "../src/direction-atlas-store.js";
 
 function tmpRoot(): string {
-  return mkdtempSync(join(tmpdir(), "step1592-"));
+  return mkdtempSync(join(tmpdir(), "rsi-closure-"));
 }
 
 describe("S1: rsiCanaryTipFor(guardInjection 生产接线)", () => {

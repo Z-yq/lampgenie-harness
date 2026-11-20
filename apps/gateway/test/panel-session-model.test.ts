@@ -115,10 +115,10 @@ describe("per-session 主模型 pill", () => {
     expect(sliceTopFn(html, "function renderModelPill(cfgView_) {")).toContain("MODEL_STAGED_TTL");
   });
 
-  it("n8 模型菜单含「跟随全局(清除会话覆盖)」→ 发 session.model.set {model: null}", async () => {
+  it("n8 模型菜单含「跟随全局」(厂商页配置项)→ 发 session.model.set {model: null}", async () => {
     const html = await fetchHtml(7916);
-    // 菜单项在位(pm-follow 行,文案与 title 写明清除会话覆盖)
-    expect(html).toContain("跟随全局(清除会话覆盖)");
+ // 菜单项在位(厂商页 pm-follow 行,文案与 title 写明清除会话覆盖)
+    expect(html).toContain("跟随全局");
     expect(html).toContain("pm-follow");
     expect(html).toContain("清除本会话的模型覆盖,回到全局主模型");
     // 点击/键盘都走 pillPickModel(null) → 发 model: null
@@ -126,8 +126,9 @@ describe("per-session 主模型 pill", () => {
     expect(bind).toContain('act === "follow"');
     expect(bind).toContain("pillPickModel(null");
     // pillPickModel 的 null 分支:发 set{model:null}(协议已支持 null=清除覆盖;键=targetSid)
-    const pick = sliceTopFn(html, "function pillPickModel(v, providerId) {");
+    const pick = sliceTopFn(html, "function pillPickModel(v, providerId, sid) {");
     expect(pick).toContain("sessionId: targetSid, model: v");
+    expect(pick).toContain("const targetSid = targetSidFixed || (currentSid || draftSidOf());");
     // 成功后 modelOverride=null 落缓存 → renderModelPill 回退全局 coding.llm.model
     const pill = sliceTopFn(html, "function renderModelPill(cfgView_) {");
     expect(pill).toContain("ov && ov.model");
@@ -237,7 +238,7 @@ describe("per-session 主模型 pill", () => {
 
   it("m9 pillPickModel staged 有效期内直接 return(防连点撞 revision-mismatch);过期才放行", async () => {
     const html = await fetchHtml(7924);
-    const pick = sliceTopFn(html, "function pillPickModel(v, providerId) {");
+    const pick = sliceTopFn(html, "function pillPickModel(v, providerId, sid) {");
     const atGuard = pick.indexOf("const prev = sessionModelStaged.get(m9Sid);");
     expect(atGuard).toBeGreaterThan(0);
     const guard = pick.slice(atGuard, pick.indexOf('type: "session.model.set"'));
@@ -258,7 +259,7 @@ describe("per-session 主模型 pill", () => {
     // 取值源=composer 思考力度(effortV),""=关→null(可选字段,不带也不影响后端旧语义)
     const ef = sliceTopFn(html, "function sessionModelEffort() {");
     expect(ef).toContain("return effortV ? String(effortV) : null;");
-    const pick = sliceTopFn(html, "function pillPickModel(v, providerId) {");
+    const pick = sliceTopFn(html, "function pillPickModel(v, providerId, sid) {");
     expect(pick).toContain("const eff = sessionModelEffort();");
     expect(pick).toContain("effort: eff,"); // 与会话 set 一起透传(会话态与草稿态同一通道)
  // 草稿态同一 set 带 effort;不再有「草稿 draftModelPick 补发」的第二条 set

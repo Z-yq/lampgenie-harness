@@ -3,7 +3,7 @@
  * process.send 打桩(vitest 无 IPC 通道)——seed 走 request→host 回包注入。
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { ProxyJournal, handleHostResponse, setIpcTransport } from "../src/session-worker-lib.js";
+import { ProxyJournal, handleHostResponse, makePermissionProxy, setIpcTransport } from "../src/session-worker-lib.js";
 import type { JournalEvent } from "@lampgenie/core";
 
 describe("ProxyJournal(本地副本读源)", () => {
@@ -77,5 +77,25 @@ describe("ProxyJournal(本地副本读源)", () => {
     const again = j.append({ kind: "task.start", sessionId: "s1", payload: {}, idempotencyKey: "task.x.start" });
     expect(again.seq).toBe(0); // 命中种子事件
     expect(j.readSession("s1")).toHaveLength(1);
+  });
+
+  it("permission 代理透传命令与任务归属(super 审批分级穿过 worker RPC)", async () => {
+    let payload: Record<string, unknown> | undefined;
+    setIpcTransport((msg) => {
+      const m = msg as { t: string; id?: number; kind?: string; payload?: Record<string, unknown> };
+      if (m.t === "req" && m.kind === "permission.ask") {
+        payload = m.payload;
+        setTimeout(() => handleHostResponse({ id: m.id!, ok: true, value: { decision: "allow-once", by: "super" } }), 0);
+      }
+    });
+    const out = await makePermissionProxy("ws-1").ask({
+      tool: "terminal", summary: "terminal {\"command\":\"pnpm build\"}", risk: "high",
+      command: "pnpm build", submittedBy: "super", taskId: "task-1", brief: "跑构建",
+    });
+    expect(out.decision).toBe("allow-once");
+    expect(payload).toMatchObject({
+      sessionId: "ws-1", tool: "terminal", command: "pnpm build",
+      submittedBy: "super", taskId: "task-1", brief: "跑构建",
+    });
   });
 });

@@ -78,6 +78,15 @@ describe("spillToolResult 写时定形", () => {
     expect(shouldSpill("terminal", big(8_193))).toBe(true);
   });
 
+  it("maxThresholdChars:增量预算可向下收敛逐工具阈值(read_file 也受 1.5% 约束)", async () => {
+ // 默认 read_file 32000 才 spill;给了 max=6000 后 6001 字符就必须定形(否则单步增量超预算)
+    expect(shouldSpill("read_file", big(10_000))).toBe(false);
+    expect(shouldSpill("read_file", big(10_000), { maxThresholdChars: 6_000 })).toBe(true);
+    expect(shouldSpill("read_file", big(6_000), { maxThresholdChars: 6_000 })).toBe(false);
+ // 显式 threshold 同样受 max 夹取,不会被逐工具阈值反向放宽
+    expect(shouldSpill("terminal", big(10_000), { thresholdChars: 2_000, maxThresholdChars: 6_000 })).toBe(true);
+  });
+
   it("read-file-small-untouched: 低于 32K 的 read_file 结果原文逐字节不变(无标记/无截断)", async () => {
     const dir = tmp();
     const small = big(20_000);

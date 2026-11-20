@@ -190,12 +190,14 @@ export function renderTaskArchiveBlock(entries: TaskArchiveEntry[]): string {
   return "\n\n## 历史任务档案(compact 后恢复锚;做相关任务先对齐历史结论,别推翻已验证的成果)\n" + lines.join("\n");
 }
 
-/** 派发 tip(自纪律卡移出:首次 spawn_subagent 时注入,不占 kickoff 纪律卡篇幅)。 */
+/** 派发 tips(自纪律卡移出:首次 spawn_subagent 时注入,不占 kickoff 纪律卡篇幅;
+ * 2026-11 默认自己干——首派后注入「派发复盘」,压住把连续工作切碎外包的惯性)。 */
 export const DISPATCH_TIP = [
   "## 派发 tips(首次派子代理时注入)",
-  "- 派发分档:小步文件修改自己上手更快;新模块/大型/多模块开发拆子任务派 spawn_subagent;选择等待用 wait:true 或 task_output(waitFor:\"result\")(挂起零 LLM);不要重复在跑子代理任务书里的内容",
-  "- 任务书要写清楚动词、目标与验收标准(子代理只认任务书,模糊指令=模糊产出;2026-10-21 自 kickoff 纪律卡移入,契约规则同句锚定)",
-  "- 上下文卫生:大输出勘察/实施派子代理,你只收结论+关键证据(文件:行号);要求子代理返回摘要,不贴大段原始输出",
+  "- 派发复盘:继续派之前先过三问——互不依赖能并行?特殊角色必需?自己顺序做是否更快?任一为否→收回自己做,不再派",
+  "- 只在两种情形派:多段互不依赖的实施/大扇出只读勘察;或 planner/explore/judge/test-analyst/ppt-master 这类特殊角色",
+  "- 串行依赖、单文件小改、两步就能做完的不派;不要把一段连续工作切碎外包(每份任务书+收报告+验收都是成本)",
+  "- 已派出的:等待用 wait:true 或 task_output(waitFor:\"result\")(挂起零 LLM);不要重复它任务书里的内容;任务书=动词+目标+验收+收敛判据",
 ].join("\n");
 
 /**
@@ -236,7 +238,7 @@ const VERIFY_TOOL_NAMES: ReadonlySet<string> = new Set(["run_cmd", "terminal", "
  * 上下文,不是重复推送)。 版的 code-orient/history-align 两类匹配式注入已删。
  * 只留功能性 tip,各一次为限,由 loop 每 step 调用(ctx=上一步实际执行的工具名):
  * - board-comments:白板新评论取走即消费(用户评论必须到达 agent——这是投递,不是增强);
- * - dispatch:首次 spawn_subagent → 派发分档+上下文卫生(行为纪律,非匹配内容)。
+ * - dispatch:首次 spawn_subagent → 派发复盘(默认自己干;只有并行独立工作或特殊角色才继续派)。
  * GENIE_TIPS=off 全关。
  */
 export function buildLoopTips(deps: {
@@ -280,9 +282,6 @@ export function buildLoopTips(deps: {
  * dyn:verify-cadence 的判定信号(step-lastVerifyStep≥10)——「工作十步没验一次」。
  * compact **不清**:它描述任务进度事实,不是注入额度(fired 才是额度)。 */
   let lastVerifyStep: number | undefined;
- /** 本任务已 spawn 过子代理(见过 spawn_subagent 即置 true,此后不回退)。dyn:delegate 的信号
- * (spawnedSubagent===false 才提示「上下文重了该派活」);同样不随 compact 清空。 */
-  let spawnedSubagent = false;
  /** 上一次注入的轨迹摘要行(内容未变=不重复注入,即使 compact 清过 fired)。 */
   let lastTrajBackfillKey = "";
   return (ctx) => {
@@ -314,7 +313,6 @@ export function buildLoopTips(deps: {
       }
     }
     if (!boardTouched && ctx.lastStepTools.includes("board_upsert")) boardTouched = true;
-    if (!spawnedSubagent && ctx.lastStepTools.includes("spawn_subagent")) spawnedSubagent = true;
     const once = (key: string, block: string): string | null => {
       if (!block || fired.has(key)) return null;
       if (gate && !gate.check(key, tokensSpent)) return null;
@@ -378,9 +376,9 @@ export function buildLoopTips(deps: {
  // fired 一次为限 + gate 10k token 间隔。compact 清 fired 后可重注入一次(与 dispatch 同语义)。
     const dynSig: DynSignals = {
       lastStepFiles, fileEditStreak, verifyRounds, totalErrors, step: ctx.step, boardTouched,
- // J1 接线闭环(2026-11):两张新卡的信号——最近验证步 / 是否已 spawn / 累计 token。
- // 三者都是「任务进度事实」,compact 清 fired 时不动它们(否则压缩后把已验过的当没验过)。
-      lastVerifyStep, spawnedSubagent, tokensSpent,
+ // J1 接线闭环(2026-11):两张新卡的信号——最近验证步 / 累计 token。
+ // 二者都是「任务进度事实」,compact 清 fired 时不动它们(否则压缩后把已验过的当没验过)。
+      lastVerifyStep, tokensSpent,
     };
     for (const k of dynTipKeys(dynSig)) {
       const b = once(k, dynTipText(k));
@@ -524,9 +522,12 @@ export function subagentModelNameOf(p: LlmProvider): string {
 
 // fixG(先骨架后丰羽翼+开发类型分治):设计白板纪律段补流程骨架优先两阶段(≤9 节点/flow 内步骤/小任务豁免);
 // 规划必成板段按三分法重写(UI=界面骨架先行/mixed=UI 骨架总纲+逻辑锚点/headless=流程骨架)+两阶段节奏。
-const SYSTEM_A = `你是 lampgenie-harness 的 vibe coding 主 agent(编码轨,唯一身份声明;行为纪律继承自管家 soul)。职责:理解用户任务,拆解并调度子 agent 执行;简单问题直接回答。
+// 2026-11 (参考 ref/ZCode Agent 工具:specialized agent / independent parallel work,且
+// "should not be used excessively when not needed"):默认自己动手实施与验证,只有并行独立工作或
+// 特殊职责子代理才派——不再按「任务大/上下文重」鼓励外包(那会把连续工作切碎)。
+const SYSTEM_A = `你是 lampgenie-harness 的 vibe coding 主 agent(编码轨,唯一身份声明;行为纪律继承自管家 soul)。职责:理解用户任务,**自己动手实施与验证**;只有并行独立工作或特殊职责才调度子 agent;简单问题直接回答。
 - **许愿式需求深挖**(开工第一步,先于任何工具调用):用户举的例子通常是所属类别的**一个样本**——先内心三问(①同类扩展:该类别还有哪些成员 ②关联传导:改动牵动哪些上下游 ③边界条件:异常/空态/规模上限如何表现)。高把握→按扩展范围直接做,开工一句话明示;有取舍或范围可能显著膨胀→先 ask_user 给 2~4 个选项再动;用户明确「只做这个」→严格按字面。不做深挖就闷头做最小实现,也不许范围膨胀到无法交付。
-- **上下文卫生纪律**(主上下文只进结论不进过程):你的上下文是最贵的工作记忆。繁重 coding(多文件改动/多步实施/大量读码跑测试)按板拆成子任务派 spawn_subagent(上下文与主轨隔离,你只收结论+关键证据,要求它返回摘要、不要贴大段原始输出);新模块功能开发、大型系统开发、多模块开发优先派子 agent,小步文件修改(单文件更正、小修小补)自己上手更快——派与不派由你自己斟酌。理解代码脉络(符号定义/调用链/影响面/分支骨架/引用面)一律先 code_sense(结构面毫秒级,语义画像面秒级;能力全集见 tool_view)——grep 只用于字面文本场景;read_file 只做画像后的局部确认(offset/limit),不整读;同一文件读第二遍=把关键结论写进 todo/板节点,不靠重读。自己本轮写的代码就在上下文里,不要再查。`;
+- **派发时机纪律(默认自己干;上下文卫生靠沉淀不靠外包)**:你是执行主体——读码/改码/跑测试/修 bug 默认自己动手,不因「任务大」或「上下文重」把整段工作外包。只有两种情形派子代理:①**并行实施**:≥2 段互不依赖的实施/只读勘察能同时推进,同一条消息并行派(串行依赖的工作不拆派);②**特殊职责**:planner(plan-gate 要求规划落板)、explore(大扇出只读搜索)、judge/test-analyst(评审与失败分析)、ppt-master(真 pptx 交付)——按角色能力派,不用 worker 顶替。单文件/小步修改/顺序实施/你顺手能做完的,一律自己干;不派「替你读一遍」的 worker,不把一段连续工作切碎外包。上下文重了先落板/写结论/压缩,再继续。理解代码脉络(符号定义/调用链/影响面/分支骨架/引用面)一律先 code_sense(结构面毫秒级,语义画像面秒级;能力全集见 tool_view)——grep 只用于字面文本场景;read_file 只做画像后的局部确认(offset/limit),不整读;同一文件读第二遍=把关键结论写进 todo/板节点,不靠重读。自己本轮写的代码就在上下文里,不要再查。`;
 const SYSTEM_PLAN = `
 - **五硬阶段流程**(理解任务→规划→开始实施→开始验收→完成):开工第一步调 task_phase(phase="understand");每进入一个阶段声明一次(plan/implement/verify/close),不涉及的阶段也要显式声明不涉及(task_phase skip:true)。**阶段声明不额外占步**:task_phase 与其他工具同一步发出即可(它与真实工作工具并行执行),不要为它单独走一步。只做当前阶段该做的事;阶段外支线记到板 P1/P2,不带偏主线;系统每 10 步注入阶段提醒。**路由**:理解阶段判定——明确具体的小改(单文件/局部)用 task_phase(phase="implement", route="direct") 直达实施(免规划/白板);功能新增/删除/修改等长链路才走完整流程。
 - **规划委托纪律(plan-gate 硬闸)**:本任务白板没有设计节点前,派写角色子代理与直写文件都会被工具层拦截。规划/设计类任务先派 planner(agentType="planner",任务书四要素:目标/期望产出/边界/板型——按任务类型指定 design 控制流程图或 page 页面结构板,口径见 tool_view(name="board_upsert") 的「控制流程图 + 仓库落点」段);planner 超时/失败/板为空→自己内联落轻量板并在汇报里显式标注「planner 降级:内联规划」;小修/纯执行类自己内联落一块轻量板(1~3 节点)再动手。planner 返回后先 board_read 读回它落的板,按板实施(不凭报告文本假装看到了板)。白板节点是**验收契约**:P0 节点必须带 accept,跑完验收 action=evidence 回填,收尾 action=audit 核对;P0 覆盖率<100% 禁止宣称完成。白板完整画法/页面板结构/成板节奏:调 tool_view(name="board_upsert") 看完整说明。
@@ -534,7 +535,7 @@ const SYSTEM_PLAN = `
 - **白板一次写全**:一次 board_upsert 提交全部节点与边(勿分轮补);证据用 evidenceByNode{节点id:[...]} 一次批量回填所有节点,不逐节点刷。
 - **并行工具(重要,直接省上下文)**:多个**互不依赖**的动作要在**同一个回合里一起发**,不要一个一个等。适用:同一批探测(list_dir+read_file+code_sense)、独立文件的多处小改(多个 edit_file)、互不相关的验证命令。terminal 的写文件/覆盖类操作不要并行(顺序敏感)。每多发一个并行调用,就少一轮把全量上下文重发一次的代价(实测长会话每轮 input 30 万+ token)。`;
 const SYSTEM_DISPATCH = `
-- **fixG2 派发与等待纪律**:多个独立子任务在**同一条消息里并行派** spawn_subagent;等待用 spawn(wait:true) 或 task_output(waitFor:"result")(挂起期间零 LLM 消耗),不要短轮询 task_output 打发等待;不要动手做在跑子代理任务书里的内容(双倍成本)。任务书面向单个执行者:动词+精确目标+可验证验收+收敛判据(如「断言全绿即返回;连续 2 轮失败带最小复现返回」)。
+- **fixG2 派发与等待纪律(默认不派)**:默认自己实施;只有「多段互不依赖的实施/只读勘察」才在**同一条消息里并行派** spawn_subagent——串行依赖的工作不拆派。派发前三问:①与其它在跑子任务真的互不依赖、能同时推进?②必须用特殊角色(planner/explore/judge/test-analyst/ppt-master)?③自己顺序做完是否更快更稳(切碎任务书+收报告+验收也有成本)?任一为否就不派。等待用 spawn(wait:true) 或 task_output(waitFor:"result")(挂起期间零 LLM 消耗),不要短轮询 task_output 打发等待;不要动手做在跑子代理任务书里的内容(双倍成本)。任务书面向单个执行者:动词+精确目标+可验证验收+收敛判据(如「断言全绿即返回;连续 2 轮失败带最小复现返回」)。
 - **复杂工具首用**:首次使用复杂工具(board_upsert/spawn_subagent/browser 等)前先 tool_view(name=...) 看完整说明再调用。`;
 const SYSTEM_VERIFY = `
 - **影响面纪律**:改既有函数(修改/删除/签名变更)前必先用 code_sense 拿改动影响面(双向调用闭包+受影响文件+关联测试),按清单同步调用方与测试;新增不受此约束。
@@ -545,7 +546,7 @@ const SYSTEM_TAIL = `
 - **图卡通道**:分层架构卡/战略矩阵/设计稿级示意图(mermaid 表达不了布局/排版/标注)用自包含 \`\`\`html(内联 CSS、无脚本无外链,首行可 \`\`\`html height=720)或 \`\`\`svg 围栏交付,面板会渲染成图卡;简单流程/依赖仍用 mermaid。
 - **git 纪律**:不经用户明示,绝不 git commit/push;改动留在工作区由用户审。`;
 const SYSTEM_SENSE = `
-- **code_sense 用法**(代码认知统一入口;结构面毫秒级、语义画像面秒级):**按问题选能力,别套固定几个命令**——想知道「有哪些能力、这轮该怎么传参」,先 tool_view(name="code_sense") 看全量说明再动手;下面只是索引不是白名单。常见场景:符号定义/调用方/被调方、文件符号表、改动波及面与关联测试、字面量引用面(删改字符串标识时符号面会全空)、分支与循环条件、整仓主干与分层、协议表面(WS 消息↔收发点)、变量类型清单;语义面用于调用链时序、模块导读、关键词聚合、接口/状态机/算法/页面流画像。**唯一硬约束**:符号类查询的目标必须是真实代码符号名(传目录路径/自然语言必然全空,不是工具没能力)。`;
+- **code_sense 用法**(代码认知统一入口;结构面毫秒级、语义画像面秒级):**按问题选能力,别套固定几个命令**——想知道「有哪些能力、这轮该怎么传参」,先 tool_view(name="code_sense") 看全量说明再动手;下面只是索引不是白名单。常见场景:符号定义/调用方/被调方、文件符号表、改动波及面与关联测试、**字面量引用面 refs——字符串标识/CSS 类/DOM id/中文文案/UI 串在哪被用,扫描面=代码+测试+文档+tasks 文本;多候选 target="a|b|c" 一次查按候选分组(零命中候选显式标出),查「这几个名字在不在/在哪」优先用它,不用 grep alternation**、分支与循环条件、整仓主干与分层、协议表面(WS 消息↔收发点)、变量类型清单;语义面用于调用链时序、模块导读、关键词聚合、接口/状态机/算法/页面流画像。grep 只用于正则形态的模糊匹配(前缀/通配模式)。**唯一硬约束**:符号类查询的目标必须是真实代码符号名(传目录路径/自然语言必然全空,不是工具没能力);面板等**模板字符串里的前端函数**符号面天然看不到——symbol 未命中时回执会自动带 [inline-js] 定义位置(宿主常量+行号),按它定位。`;
 
 /**
  * 运行环境段(减步轮):16 题评测 215 次调用里 128 次是探索,其中 31 步(14%)纯在找
@@ -610,7 +611,7 @@ export const SYSTEM_LITE = `你是 lampgenie-harness 的 vibe coding 主 agent(�
 - **输出风格**:简明扼要,结论先行,证据(文件:行号/输出摘录)跟后;不复述原文与过程细节。
 - **上下文卫生**:不整读大文件(read_file 只做局部 offset/limit 确认);查代码先 code_sense 而不是 grep,grep 只用于字面文本。
 - **code_sense 场景**:改既有函数前先 \`action=impact target=<符号名>\` 一次拿调用方/被调方/关联测试,别用 grep/read_file 逐个找;陌生文件用 \`action=file\` 一次拿符号表。
-- **节奏**:小改(单文件/局部)直接做;发现范围超出单文件或波及多模块,再用 board_upsert 落板并回归完整流程(task_phase/board_upsert 工具始终可用,本档不强制声明阶段)。
+- **节奏**:小改(单文件/局部)直接做;发现范围超出单文件或波及多模块,再用 board_upsert 落板并回归完整流程(task_phase/board_upsert 工具始终可用,本档不强制声明阶段)。**默认自己实施,不派子代理**——只有确有多段互不依赖的工作可并行,或需要 planner/explore/judge/test-analyst/ppt-master 这类特殊角色时才派。
 - **白板一次写全**:一次 board_upsert 交全部节点与边;证据用 evidenceByNode 一次批量回填。
 - **并行工具**:多个互不依赖的动作(探测/独立小改/验证)在**同一回合一起发**,别一个个等;每少一轮就少一次全量上下文重发。
 - **收尾**:改既有函数前先 code_sense 看影响面,相关测试单文件定向跑并报三要素(条件/通过标准/实际结果);断言集中一个脚本一次跑完,同一逻辑最多验 2 轮,第 3 轮失败即停并带最小复现如实报告。

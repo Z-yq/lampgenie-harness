@@ -1,16 +1,19 @@
 /**
- * RSI 自转调度器( RSI-SELF-DRIVE;mechanisms.md #190/#192/#198/#200 的运行链)。
+ * RSI 自转调度器(2026-11-13 RSI-SELF-DRIVE;mechanisms.md #190/#192/#198/#200 的运行链)。
+ *
  * 要解决的问题:12 个机制此前只能人点「运行」,夜间整合没有定时触发,失败只能人工重派,
  * 成本没有自动记账,ROI 门/熔断器从不参与运行决策——所以「RSI」只是 12 个手动按钮,
  * 不是一个会自转的闭环。
+ *
  * 本模块把调度做成**可测的确定性状态机**(与 automations.ts 同哲学:判断纯函数化,IO 只做落盘):
- * - 到点 + 项目空闲 + 无在跑 run → 开一个 cycle,按机制目录顺序**串行**派 agent 任务;
- * - 每个 tick 顺带收尾已到终态的 run(成本/会话认账/预算超限,与 annotate 同一 settleRunRecord);
- * - 失败 run(error=task interrupted)在窗口内自动重派一次(retryCount 上限),不重试用户取消;
- * - 单次运行 token 软预算写进任务书;经验证超限 → 追加 warn 条目并**提前结束本周期**;
- * - 周期结束按真实 usage 记 `cost.jsonl`(mining 阶段),再跑 ROI 门:
- * 连续负收益达阈值 → downshift/pause,熔断暂停后调度器停转(保留观测,恢复需人工);
- * - 熔断暂停等 breaker 状态、欠账信息都落在 `.genie/rsi/scheduler.json`,重启可续。
+ *  - 到点 + 项目空闲 + 无在跑 run → 开一个 cycle,按机制目录顺序**串行**派 agent 任务;
+ *  - 每个 tick 顺带收尾已到终态的 run(成本/会话认账/预算超限,与 annotate 同一 settleRunRecord);
+ *  - 失败 run(error=task interrupted)在窗口内自动重派一次(retryCount 上限),不重试用户取消;
+ *  - 单次运行 token 软预算写进任务书;实测超限 → 追加 warn 条目并**提前结束本周期**;
+ *  - 周期结束按真实 usage 记 `cost.jsonl`(mining 阶段),再跑 ROI 门:
+ *    连续负收益达阈值 → downshift/pause,熔断暂停后调度器停转(保留观测,恢复需人工);
+ *  - 熔断暂停等 breaker 状态、欠账信息都落在 `.genie/rsi/scheduler.json`,重启可续。
+ *
  * 红线:
  * - 只写 `<root>/.genie/rsi/scheduler.json`;成本/结果/运行记录全走既有 store 的 API。
  * - 除参数错误(root 形状)外不 throw:IO/解析失败折叠成稳定 action/warnings。
@@ -27,13 +30,14 @@ import {
   mechanismSpec,
   type RsiMechanismId,
 } from "@lampgenie/runtime/agent/rsi-mechanisms";
-import { getState as getBreakerState, pause as pauseBreaker, resume as resumeBreaker } from "./rsi-breaker-store.js";
+import { autoResumeFromObservation, getState as getBreakerState, observationWindowsFromCostLedgers, pause as pauseBreaker, resume as resumeBreaker } from "./rsi-breaker-store.js";
 import { evaluateRoiGate, recordCost, reportCost } from "./rsi-cost-store.js";
-import { drainCandidateQueue, settleExperiments } from "./experiment-settler.js"; // #192 周期实验自动结算+候选消费
-import { nightlyLockHeld, reclaimNightly, runNightly, startNightly } from "./nightly-store.js"; // P1:code 驱动夜间管线; 加锁互斥+陈旧 run 回收
-import { seedTaxonomy } from "./gap-taxonomy-store.js"; // P2:#211 预防件分类账落地
-import { fileCycleFindingsToChangeRequests } from "./rsi-findings-bridge.js"; // P1-④:机制发现→提案
-import { aggregateWeekly, appendWeeklyEvent, readWeeklyEvents, writeReportFile } from "./rsi-weekly.js"; // 周报进调度器(设计稿§11 P1#1;7 天门防重复)
+import { drainCandidateQueue, settleExperiments } from "./experiment-settler.js"; // #192 周期收口实验自动结算+候选消费(2026-11-17)
+import { runSecondHalfFlush } from "./rsi-second-half.js"; //  后半句零水流修复(2026-11-19)
+import { nightlyLockHeld, reclaimNightly, runNightly, startNightly } from "./nightly-store.js"; // P1:code 驱动夜间管线(2026-11-17); 加锁互斥+陈旧 run 回收
+import { seedTaxonomy } from "./gap-taxonomy-store.js"; // P2:#211 预防件分类账落地(2026-11-17)
+import { fileCycleFindingsToChangeRequests } from "./rsi-findings-bridge.js"; // P1-④:机制发现→提案(2026-11-17)
+import { aggregateWeekly, appendWeeklyEvent, readWeeklyEvents, writeReportFile } from "./rsi-weekly.js"; // :周报进调度器(设计稿§11 P1#1;7 天门防重复)
 import {
   getRun,
   listRuns,
@@ -44,6 +48,7 @@ import {
 import {
   costUnmeasured,
   ORPHAN_GRACE_MS,
+  orphanVerdict,
   settleRunRecord,
   startMechanismRun,
   type SettleRunOptions,
@@ -54,13 +59,13 @@ import {
 /** 调度器状态文件(root 相对)。 */
 export const RSI_SCHEDULER_REL = ".genie/rsi/scheduler.json";
 
-/** 缺省周期:每天一次。 */
+/** 缺省周期:每天一次(产品口径要求「每日固定窗口」)。 */
 export const RSI_SCHEDULER_DEFAULT_EVERY_MINUTES = 24 * 60;
 
-/** 缺省单次运行 token 软预算(经验证单机制 0.6M~3M;800k 覆盖多数机制,超限即停本周期)。 */
+/** 缺省单次运行 token 软预算(2026-11-12 实测单机制 0.6M~3M;800k 覆盖多数机制,超限即停本周期)。 */
 export const RSI_SCHEDULER_DEFAULT_BUDGET = 800_000;
 
-/** 缺省单周期 token 预算(经验证 12 机制周期 12.7M~22.9M;12M 在成本失控前)。 */
+/** 缺省单周期 token 预算(2026-11-13 实测 12 机制周期 12.7M~22.9M;12M 在成本失控前收口)。 */
 export const RSI_SCHEDULER_DEFAULT_CYCLE_BUDGET = 12_000_000;
 
 /** 重试窗口:只重试最近 24h 内被中断的 run(更老的中断不自动烧 token 重跑)。 */
@@ -74,22 +79,22 @@ const TERMINAL_TASK_STATES: ReadonlySet<string> = new Set(["done", "failed", "ca
 /** 调度配置(用户可改;0 值语义见各字段注释)。 */
 export interface RsiSchedulerConfig {
   enabled: boolean;
- /** 周期间隔(分钟,1~525600)。 */
+  /** 周期间隔(分钟,1~525600)。 */
   everyMinutes: number;
- /** 参与自动周期的机制(空数组=全部「启用且 agent 驱动」的机制)。 */
+  /** 参与自动周期的机制(空数组=全部「启用且 agent 驱动」的机制)。 */
   mechanisms: RsiMechanismId[];
- /** 只在没有前台任务时启动新周期(已开始的周期不中断)。 */
+  /** 只在没有前台任务时启动新周期(已开始的周期不中断)。 */
   idleOnly: boolean;
- /** 自动重试被中断的 run。 */
+  /** 自动重试被中断的 run。 */
   autoRetry: boolean;
- /** 单个旧 run 最多自动重试几次。 */
+  /** 单个旧 run 最多自动重试几次。 */
   maxRetriesPerRun: number;
- /** 单次运行 token 软预算(0=不设)。 */
+  /** 单次运行 token 软预算(0=不设)。 */
   tokenBudgetPerRun: number;
- /** 单周期 token 预算(0=不设)。 质量轮经验证:单 run 预算 5M 从未触线,
- * 但 12 个 run 组成的周期可到 12.7~22.9M——预算门必须在**周期聚合层**也有一道。 */
+  /** 单周期 token 预算(0=不设)。2026-11-13 质量轮实测:单 run 预算 5M 从未触线,
+   *  但 12 个 run 组成的周期可到 12.7~22.9M——预算门必须在**周期聚合层**也有一道。 */
   tokenBudgetPerCycle: number;
- /** 周期结束是否跑 ROI 门(连负降频/停摆)。 */
+  /** 周期结束是否跑 ROI 门(连负降频/停摆)。 */
   roiGate: boolean;
   updatedAt: number;
   by?: string;
@@ -100,31 +105,31 @@ export interface RsiSchedulerCycle {
   id: string;
   index: number;
   startedAt: number;
- /** 还没尝试的机制(按目录顺序)。 */
+  /** 还没尝试的机制(按目录顺序)。 */
   pending: RsiMechanismId[];
- /** 已成功派出的机制→runId。 */
+  /** 已成功派出的机制→runId。 */
   runIds: Partial<Record<RsiMechanismId, string>>;
- /** 已尝试过的机制(含被跳过/派发失败)。 */
+  /** 已尝试过的机制(含被跳过/派发失败)。 */
   settled: RsiMechanismId[];
- /** 本周期因单次运行预算超限被提前结束的机制(有值=不再派余下机制)。 */
+  /** 本周期因单次运行预算超限被提前结束的机制(有值=不再派余下机制)。 */
   budgetExceeded?: RsiMechanismId;
- /** 本周期累计 token 超周期预算(true=本周期,余下机制下周期再排)。 */
+  /** 本周期累计 token 超周期预算(2026-11-13;true=收口本周期,余下机制下周期再排)。 */
   cycleBudgetExceeded?: boolean;
- /** 本周期采用的 ROI 降频因子(<1=机制集按比例裁剪,轮转覆盖)。 */
+  /** 本周期采用的 ROI 降频因子(2026-11-13;<1=机制集按比例裁剪,轮转覆盖)。 */
   quotaFactor?: number;
 }
 
 export interface RsiSchedulerRuntime {
   lastTickAt?: number;
- /** 下一次允许开新周期的时间(running 中=undefined)。 */
+  /** 下一次允许开新周期的时间(running 中=undefined)。 */
   nextRunAt?: number;
- /** 已开过多少周期(单调递增;cycle.index 与它同源)。 */
+  /** 已开过多少周期(单调递增;cycle.index 与它同源)。 */
   cycleCount?: number;
- /** P1(机制税分层):机制→上次 agent 派发时刻;intervalDays 频次门的判据。 */
+  /** P1(2026-11-17 机制税分层):机制→上次 agent 派发时刻;intervalDays 频次门的判据。 */
   mechanismLastRunAt?: Record<string, number>;
- /** P1:本周期 code 驱动夜间管线的执行摘要(notes 进周报排查;失败不挡周期)。 */
+  /** P1:本周期 code 驱动夜间管线的执行摘要(notes 进周报排查;失败不挡周期)。 */
   nightlyPipeline?: { at: number; ok: boolean; runId?: string; note?: string };
- /** ROI 降频时机制集的轮转起点(保证被裁掉的机制下个周期先跑)。 */
+  /** ROI 降频时机制集的轮转起点(保证被裁掉的机制下个周期先跑)。 */
   mechanismOffset?: number;
   cycle?: RsiSchedulerCycle;
   lastCycle?: {
@@ -134,11 +139,11 @@ export interface RsiSchedulerRuntime {
     costTokens: number;
     amountCny: number | null;
     budgetExceeded: boolean;
- /** :本周期采用的 ROI 降频因子(<1=机制集按比例裁剪)。 */
+    /** 2026-11-13:本周期采用的 ROI 降频因子(<1=机制集按比例裁剪)。 */
     quotaFactor?: number;
     roi?: { action: string; negativeStreak: number; detail?: string };
   };
-  breaker?: { paused: boolean; reason?: string; at?: number; /** P0-①:pause 落盘失败标记——tick ① 重试而非清旗。 */
+  breaker?: { paused: boolean; reason?: string; at?: number; /** P0-①(2026-11-17):pause 落盘失败标记——tick ① 重试而非清旗。 */
     writeFailed?: boolean };
 }
 
@@ -227,7 +232,7 @@ function normalizeRuntime(raw: unknown): RsiSchedulerRuntime {
   if (cycleCount !== undefined) out.cycleCount = cycleCount;
   const mechanismOffset = asNumber(raw.mechanismOffset);
   if (mechanismOffset !== undefined) out.mechanismOffset = mechanismOffset;
- // P1:机制频次判据 + code 驱动管线摘要(旧 state 无此字段=空,首周期全量放行)。
+  // P1(2026-11-17):机制频次判据 + code 驱动管线摘要(旧 state 无此字段=空,首周期全量放行)。
   if (isRecord(raw.mechanismLastRunAt)) {
     const lastRunAt: Record<string, number> = {};
     for (const [k, v] of Object.entries(raw.mechanismLastRunAt)) {
@@ -369,7 +374,7 @@ export interface RsiSchedulerPatch {
   tokenBudgetPerRun?: number;
   tokenBudgetPerCycle?: number;
   roiGate?: boolean;
- /** true=人工恢复熔断(breaker.resume),并清掉调度器里的暂停快照。 */
+  /** true=人工恢复熔断(breaker.resume),并清掉调度器里的暂停快照。 */
   resumeBreaker?: boolean;
 }
 
@@ -445,7 +450,7 @@ export async function setSchedulerConfig(
   const byText = asString(by);
   if (byText !== undefined) cfg.by = byText;
   state = { config: cfg, runtime: state.runtime };
- // 新打开 / 改周期:重置下一次到点时间(开机即跑第一周期;用户不必等一天)。
+  // 新打开 / 改周期:重置下一次到点时间(开机即跑第一周期;用户不必等一天)。
   if ((cfg.enabled && !wasEnabled) || patch.everyMinutes !== undefined) {
     state.runtime.nextRunAt = now;
   }
@@ -468,6 +473,7 @@ export async function setSchedulerConfig(
 export type RsiSchedulerAction =
   | "disabled"
   | "breaker-paused"
+  | "breaker-auto-resumed"
   | "running"
   | "busy"
   | "busy-tick"
@@ -487,37 +493,37 @@ export interface RsiSchedulerTickResult {
   runId?: string;
   taskId?: string;
   reason?: string;
- /** 本次 tick 收尾的 run 数(诊断用)。 */
+  /** 本次 tick 收尾的 run 数(诊断用)。 */
   finalized?: number;
   state: RsiSchedulerState;
 }
 
 /** 调度器依赖:复用 startMechanismRun 的依赖 + 在线繁忙探测 + 可注入的时钟/breaker/start(单测)。 */
 export interface RsiSchedulerDeps extends StartRunDeps {
- /** 有前台任务在跑/排队(缺省=不判断,视作空闲)。 */
+  /** 有前台任务在跑/排队(缺省=不判断,视作空闲)。 */
   isOnlineBusy?: () => boolean;
   now?: number;
- /** 测试注入:缺省=真 startMechanismRun。 */
+  /** 测试注入:缺省=真 startMechanismRun。 */
   start?: (deps: StartRunDeps, mechanismId: RsiMechanismId) => Promise<StartRunResult>;
- /** 测试注入:缺省=真 rsi-breaker-store.getState。 */
+  /** 测试注入:缺省=真 rsi-breaker-store.getState。 */
   breakerState?: (root: string) => Promise<{ paused?: boolean; reason?: string; trigger?: string }>;
- /** P1:code 驱动夜间管线(确定性六步,零 LLM);测试注入观察调用。 */
+  /** P1(2026-11-17):code 驱动夜间管线(确定性六步,零 LLM);测试注入观察调用。 */
   runNightlyPipeline?: (root: string, now: number) => Promise<{ ok: boolean; runId?: string; note?: string }>;
- /** LLM 语义归因:finishCycle 时对 uncategorized 链做 LLM 分类;测试注入。 */
+  /** LLM 语义归因(2026-11-17):finishCycle 时对 uncategorized 链做 LLM 分类;测试注入。 */
   semanticAttributionFn?: (root: string) => Promise<{ enriched: number; errors: number }>;
 }
 
-/** P4:管线缺省实现改为**出进程执行**——此前直跑在 tick 里(重同步 IO)曾阻塞
- * 网关事件循环 ~5min(WS 全超时/面板假死),且第一拍状态未落盘引发第二拍重建周期的竞态。
- * bundle 态 spawn dist/nightly-worker.mjs(事件循环零阻塞,15min 超时看护);src/tsx 态无
- * worker 产物时内联回退(开发/测试语义不变)。 */
+/** P4(2026-11-17):管线缺省实现改为**出进程执行**——此前直跑在 tick 里(重同步 IO)曾阻塞
+ *  网关事件循环 ~5min(WS 全超时/面板假死),且第一拍状态未落盘引发第二拍重建周期的竞态。
+ *  bundle 态 spawn dist/nightly-worker.mjs(事件循环零阻塞,15min 超时看护);src/tsx 态无
+ *  worker 产物时内联回退(开发/测试语义不变)。 */
 async function defaultNightlyPipeline(root: string, now: number): Promise<{ ok: boolean; runId?: string; note?: string }> {
   const d = new Date(now);
   const pad = (n: number) => String(n).padStart(2, "0");
   const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const projectId = basenameOfRoot(root);
   const journalDir = join(root, ".genie", "journals");
- // 一个 project 同时只允许一个夜间 worker(活锁让路,陈旧锁由 worker 接管)。
+  // :一个 project 同时只允许一个夜间 worker(活锁让路,陈旧锁由 worker 接管)。
   const lock = nightlyLockHeld(root, projectId, { now });
   if (lock.held) {
     return { ok: true, note: `夜间 worker 已在跑(pid=${lock.lock?.pid ?? "?"})` };
@@ -546,8 +552,8 @@ async function defaultNightlyPipeline(root: string, now: number): Promise<{ ok: 
       );
     });
   }
- // 内联回退(src/tsx 态:worker 产物不存在;语义与旧实现逐字一致)。
- // 先回收陈旧 run(残留 running 步骤退回 pending 续跑,续不动就落 failed),再考虑起新程。
+  // 内联回退(src/tsx 态:worker 产物不存在;语义与旧实现逐字一致)。
+  // :先回收陈旧 run(残留 running 步骤退回 pending 续跑,续不动就落 failed),再考虑起新程。
   try {
     const reclaimed = await reclaimNightly(root, { projectId, date, journalDir, now });
     if (reclaimed.status === "live") {
@@ -609,10 +615,14 @@ function runIsLive(
   if (run.status !== "running") return false;
   if (run.taskId === undefined || taskState === undefined) return true;
   const stateText = taskState(run.taskId);
- // 孤儿:网关重启后 taskManager 查不到 taskId(undefined)。这种 run 永远不会自己收尾,
- // 超过宽限仍查不到 → 不算在跑(否则把整个调度周期永久堵在「有在跑 run」)。
-  if (stateText === undefined) return now - run.startedAt <= ORPHAN_GRACE_MS;
-  return !TERMINAL_TASK_STATES.has(stateText);
+  // :孤儿判据收口到 orphanVerdict(runner 与 scheduler 同一权威)——
+  // 只有「网关 pid 真变化 且 任务不在册」过了宽限才不算在跑;同 pid 查不到(session-worker
+  // 独立 supervisor 持有等)不算孤儿,交给 settleRunRecord 按 journal 证据收尾。
+  const verdict = orphanVerdict(run, stateText, process.pid, now);
+  if (verdict.kind === "orphaned") return false;
+  if (verdict.kind === "missing") return true;
+  if (verdict.kind === "pending") return true;
+  return !TERMINAL_TASK_STATES.has(stateText!);
 }
 
 /** 在最近窗口内找一个「被中断且还没重试过」的 run。只认 task interrupted,不重试用户取消/失败。 */
@@ -663,8 +673,8 @@ async function finishCycle(
       continue;
     }
     if (run === undefined) continue;
- // 终态但还没结账(成本/预算/认账):周期前再补一次(面板没轮询也要算钱)。
- // 经验证 :任务 done 当刻 journal 写后读可能还看不到窗口,这里补一次通常已可见。
+    // 终态但还没结账(成本/预算/认账):周期收口前再补一次(面板没轮询也要算钱)。
+    // 实测 2026-11-13:任务 done 当刻 journal 写后读可能还看不到窗口,这里补一次通常已可见。
     if (
       run.status !== "running" &&
       (run.cost === undefined
@@ -681,11 +691,11 @@ async function finishCycle(
     if (run.budgetExceeded === true) anyBudget = true;
     const cost = run.cost;
     if (cost === undefined || costUnmeasured(cost)) {
- // 刚结束(<120s)的 run 允许等下一次 tick 补账;等不到就按「未计价」,不写假 0 元。
+      // 刚结束(<120s)的 run 允许等下一次 tick 补账;等不到就按「未计价」收口,不写假 0 元。
       if (now - (run.finishedAt ?? run.startedAt) < 120_000) unsettledRecent = true;
       continue;
     }
- // 0 token 且无单价=没测到用量,不记假账(与 ROI 门「0 token 不能当零成本」同口径)。
+    // 0 token 且无单价=没测到用量,不记假账(与 ROI 门「0 token 不能当零成本」同口径)。
     if (cost.totalTokens > 0 || cost.amountCny !== null) {
       try {
         recordCost(root, {
@@ -698,15 +708,15 @@ async function finishCycle(
           tokens: { input: cost.inputTokens, output: cost.outputTokens, total: cost.totalTokens },
           wallMs: Math.max(0, (run.finishedAt ?? now) - run.startedAt),
         });
-      } catch { /* 记账失败不挡周期 */ }
+      } catch { /* 记账失败不挡周期收口 */ }
       costTokens += cost.totalTokens;
       measured = true;
       if (cost.amountCny !== null) amountCny = (amountCny ?? 0) + cost.amountCny;
     }
   }
   if (unsettledRecent && !anyBudget) {
- // 有刚结束但账未落的 run:本 tick 不,下一 tick 再试(避免把 0 成本写进 lastCycle)。
- // 预算超限是硬:即使成本未结清也先停本周期(余下机制不派)。
+    // 有刚结束但账未落的 run:本 tick 不收口,下一 tick 再试(避免把 0 成本写进 lastCycle)。
+    // 预算超限是硬收口:即使成本未结清也先停本周期(余下机制不派)。
     state.runtime.lastTickAt = now;
     try {
       await saveSchedulerState(root, state);
@@ -724,8 +734,8 @@ async function finishCycle(
         negativeStreak: Number((gate as { negativeStreak?: unknown }).negativeStreak ?? 0) || 0,
         ...(typeof (gate as { detail?: unknown }).detail === "string" ? { detail: (gate as { detail: string }).detail } : {}),
       };
- // ROI 门触发 pause:本周期结束即停转(下一 tick 会读到 breaker.paused 并停在 breaker-paused)。
- // P0-①:breaker 落盘失败要标 writeFailed——tick ① 据此重试 pause 而不是清旗(防写失败=熔断失效)。
+      // ROI 门触发 pause:本周期结束即停转(下一 tick 会读到 breaker.paused 并停在 breaker-paused)。
+      // P0-①:breaker 落盘失败要标 writeFailed——tick ① 据此重试 pause 而不是清旗(防写失败=熔断失效)。
       if (roi.action === "pause") {
         state.runtime.breaker = {
           paused: true,
@@ -734,38 +744,43 @@ async function finishCycle(
           ...(gate.breaker?.ok === false ? { writeFailed: true } : {}),
         };
       }
-    } catch { /* ROI 评测失败不挡周期 */ }
+    } catch { /* ROI 评测失败不挡周期收口 */ }
   }
- // #192 实验自动结算:周期时对满样本 tip 实验写回 result 指标+建议决策
- // (不自动 adopt——自我修改安全门;决策/建议进台账,周报与 rsi.status 实验区照常呈现)。
+  // #192 实验自动结算(2026-11-17):周期收口时对满样本 tip 实验写回 result 指标+建议决策
+  // (不自动 adopt——自我修改安全门;决策/建议进台账,周报与 rsi.status 实验区照常呈现)。
   try {
     await settleExperiments(root, { now });
-  } catch { /* 结算失败不挡周期 */ }
- // P0-2:消费 nightly 候选队列——可确定性翻译的候选登记进实验账本并标记,
- // 打断「同批候选每轮重排无人消费」;翻译不了的留队给 agent 机制。
+  } catch { /* 结算失败不挡周期收口 */ }
+  // P0-2(2026-11-17):消费 nightly 候选队列——可确定性翻译的候选登记进实验账本并标记,
+  // 打断「同批候选每轮重排无人消费」;翻译不了的留队给 agent 机制。
   try {
     drainCandidateQueue(root, { now });
-  } catch { /* 消费失败不挡周期 */ }
- // LLM 语义归因:对 uncategorized 返工链做 LLM 分类(P2-⑥ 验证 60% 需此层)。
- // 零链时零 LLM 调用;预算由模块内 enrichMax 控制(缺省 10 链/轮)。
+  } catch { /* 消费失败不挡周期收口 */ }
+  // (2026-11-19):后半句零水流修复——周期收口集中器。证据边配对/foundry 孵化链/
+  // 决策质量记账/prompt v2 种子/ROI 节省入账,全确定性零 LLM、分项 fail-soft,失败不挡周期。
+  try {
+    await runSecondHalfFlush(root, { now });
+  } catch { /* 收口器失败不挡周期收口 */ }
+  // LLM 语义归因(2026-11-17):对 uncategorized 返工链做 LLM 分类(P2-⑥ 实证 60% 需此层)。
+  // 零链时零 LLM 调用;预算由模块内 enrichMax 控制(缺省 10 链/轮)。
   if (deps.semanticAttributionFn !== undefined) {
     try {
       const attributed = await deps.semanticAttributionFn(root);
       void attributed; // 结果入 enrichment 台账,无需再处理
-    } catch { /* 归因失败不挡周期 */ }
+    } catch { /* 归因失败不挡周期收口 */ }
   }
- // P2:gap-taxonomy 内置分类账落地(幂等 seed;GAP_SEED_DUPLICATE=已在册)——
- // #211 预防件消费面(applyAt 注入)的前提;后续 rework 链的佐证 bump 也读这份台账。
+  // P2(2026-11-17):gap-taxonomy 内置分类账落地(幂等 seed;GAP_SEED_DUPLICATE=已在册)——
+  // #211 预防件消费面(applyAt 注入)的前提;后续 rework 链的佐证 bump 也读这份台账。
   try {
     seedTaxonomy(root, { now });
-  } catch { /* seed 失败不挡周期(下周期再试) */ }
- // P1-④:机制发现→提案——本轮 bad 级发现自动进 change-requests 开发队列
- // (64 条发现靠人抄的闭环断点;dedupeKey 幂等,重复=merge)。
+  } catch { /* seed 失败不挡周期收口(下周期再试) */ }
+  // P1-④(2026-11-17):机制发现→提案——本轮 bad 级发现自动进 change-requests 开发队列
+  // (64 条发现靠人抄的闭环断点;dedupeKey 幂等,重复=merge)。
   try {
     fileCycleFindingsToChangeRequests(root, { ...(cycle.runIds as Record<string, string>) }, { at: now });
-  } catch { /* 转换失败不挡周期 */ }
- // (设计稿§11 P1#1):周报进调度器——链每周一报(距上一条 generated ≥7 天才跑,
- // 不增每周期开销);聚合失败不挡。产物落 .genie/rsi/weekly/report-<date>.md 供面板/人随时翻。
+  } catch { /* 转换失败不挡周期收口 */ }
+  // (设计稿§11 P1#1):周报进调度器——收口链每周一报(距上一条 generated ≥7 天才跑,
+  // 不增每周期开销);聚合失败不挡收口。产物落 .genie/rsi/weekly/report-<date>.md 供面板/人随时翻。
   try {
     const lastGeneratedAt = readWeeklyEvents(root).reduce((acc, e) => {
       if (e.kind !== "generated") return acc;
@@ -781,7 +796,7 @@ async function finishCycle(
         report: { from: report.window.from, to: report.window.to, warnings: report.warnings },
       });
     }
-  } catch { /* 周报生成失败不挡周期(下周期再试) */ }
+  } catch { /* 周报生成失败不挡周期收口(下周期再试) */ }
   state.runtime.lastCycle = {
     id: cycle.id,
     at: now,
@@ -805,10 +820,10 @@ async function finishCycle(
 
 /**
  * 调度 tick(网关 60s 一次;也可由 CLI/测试直接调用):
- * 收尾终态 run → 等待在跑 run → 自动重试中断 run → 到点/空闲检查 → 串行派一个机制 → 周期。
+ * 收尾终态 run → 等待在跑 run → 自动重试中断 run → 到点/空闲检查 → 串行派一个机制 → 周期收口。
  * 任何 IO 失败都折叠成 action=error(下一 tick 重试),不 throw。
- * P4:进程内互斥——app.ts 的 60s 定时器是 fire-and-forget,管线耗时期间下一拍
- * 可能重入(经验证:第一拍状态未落盘,第二拍重建周期)。互斥后重入拍返回 busy-tick 零副作用。
+ * P4(2026-11-17):进程内互斥——app.ts 的 60s 定时器是 fire-and-forget,管线耗时期间下一拍
+ * 可能重入(实测:第一拍状态未落盘,第二拍重建周期)。互斥后重入拍返回 busy-tick 零副作用。
  */
 let tickInFlight = false;
 
@@ -835,7 +850,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
   const now = deps.now ?? Date.now();
   if (!state.config.enabled) return { action: "disabled", state };
 
- // ① 熔断暂停:停夜间整合/停实验/停注入,保留观测。
+  // ① 熔断暂停:停夜间整合/停实验/停注入,保留观测。
   let breaker: { paused?: boolean; reason?: string } = {};
   try {
     breaker = deps.breakerState !== undefined ? await deps.breakerState(root) : await getBreakerState(root);
@@ -843,6 +858,23 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     breaker = {};
   }
   if (breaker.paused === true) {
+    // §14.2③ 观察窗自动试探重启(2026-11-20 消费面接线):停改进、不停观察——账本聚合出
+    // 连续正收益窗(netSaving>0,严格为正)→ 自动恢复,频率 ×0.25(everyMinutes×4,封顶 7 天)。
+    // 窗口闸是确定性纯函数(stroe 从 cost/saving 账本算,agent 无法伪造);人类 resume 路径不变;
+    // 判定失败一律保持暂停(fail-closed)。
+    try {
+      const windows = observationWindowsFromCostLedgers(root, { now });
+      const auto = await autoResumeFromObservation(root, { windows, at: new Date(now).toISOString() });
+      if (auto.ok === true) {
+        delete state.runtime.breaker;
+        const factor = auto.restartFactor !== undefined && auto.restartFactor > 0 ? auto.restartFactor : 0.25;
+        const base = Number(state.config.everyMinutes) > 0 ? Number(state.config.everyMinutes) : 1440;
+        state.config.everyMinutes = Math.min(Math.max(Math.round(base / factor), base + 60), 7 * 24 * 60);
+        state.runtime.lastTickAt = now;
+        try { await saveSchedulerState(root, state); } catch { /* 观测失败容忍 */ }
+        return { action: "breaker-auto-resumed", state };
+      }
+    } catch { /* 窗口判定失败:保持暂停 */ }
     state.runtime.breaker = { paused: true, reason: breaker.reason ?? "breaker paused", at: now };
     state.runtime.lastTickAt = now;
     try {
@@ -850,10 +882,10 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     } catch { /* 观测落盘失败不挡返回 */ }
     return { action: "breaker-paused", state };
   }
- // P0-①(熔断脱钩修复):runtime 说 paused 但台账说没 paused——两种情况:
- // ①正常路径:人工 resume 清了台账 → 同步清 runtime 快照(旧行为);
- // ②writeFailed:pause 当次落盘失败(cost 旧变量 import 注意)→ **重试 pause**而不是清旗,
- // 否则一次写失败=熔断永久失效(经验证 7 周期 91.8M 失守)。
+  // P0-①(2026-11-17 熔断脱钩修复):runtime 说 paused 但台账说没 paused——两种情况:
+  // ①正常路径:人工 resume 清了台账 → 同步清 runtime 快照(旧行为);
+  // ②writeFailed:pause 当次落盘失败(cost 旧变量 import 实测确认)→ **重试 pause**而不是清旗,
+  //   否则一次写失败=熔断永久失效(实测 7 周期 91.8M 失守)。
   if (state.runtime.breaker?.paused === true) {
     if (state.runtime.breaker.writeFailed === true) {
       try {
@@ -869,7 +901,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
           try { await saveSchedulerState(root, state); } catch { /* 观测失败容忍 */ }
           return { action: "breaker-paused", state };
         }
- // 重试仍失败:保持 paused 快照(本 tick 不开周期,下一拍再试)。
+        // 重试仍失败:保持 paused 快照(本 tick 不开周期,下一拍再试)。
         state.runtime.lastTickAt = now;
         try { await saveSchedulerState(root, state); } catch { /* 观测失败容忍 */ }
         return { action: "breaker-paused", state };
@@ -881,7 +913,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     state.runtime.breaker = { paused: false };
   }
 
- // ② 收尾已到终态的 run(不依赖面板轮询:没有 rsi.status 请求时账本也会结账)。
+  // ② 收尾已到终态的 run(不依赖面板轮询:没有 rsi.status 请求时账本也会结账)。
   let finalized = 0;
   let runs: RsiRunRecord[] = [];
   try {
@@ -900,23 +932,28 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
   for (const run of runs) {
     if (run.runId === undefined) continue;
     const stateText = run.taskId !== undefined && deps.taskState !== undefined ? deps.taskState(run.taskId) : undefined;
- // 任务到终态(run 已是 done/failed,或 run 自称 running 但任务状态已终态)才收尾。
- // 孤儿:running + taskId 查不到 + 超宽限 → 也算可收尾(交给 settleRunRecord 判 failed)。
+    // 任务到终态(run 已是 done/failed,或 run 自称 running 但任务状态已终态)才收尾。
+    // :孤儿判定收口 orphanVerdict——只有 pid 真变化才走孤儿收尾;同 pid 查不到的
+    // running run 也交给 settleRunRecord(按 journal 证据/result 落盘收尾,不再按宽限误杀)。
     const orphan = run.status === "running" && run.taskId !== undefined && deps.taskState !== undefined
-      && stateText === undefined && now - run.startedAt > ORPHAN_GRACE_MS;
-    const terminalNow = run.status !== "running" || orphan
+      && orphanVerdict(run, stateText, process.pid, now).kind === "orphaned";
+    const missing = run.status === "running" && run.taskId !== undefined && deps.taskState !== undefined
+      && stateText === undefined && orphanVerdict(run, stateText, process.pid, now).kind === "missing";
+    const terminalNow = run.status !== "running" || orphan || missing
       || (stateText !== undefined && TERMINAL_TASK_STATES.has(stateText));
     if (!terminalNow) continue;
- // 空成本账(0 token/null 金额)按「待重算」处理,不要让早结算把费用永久钉成 0。
+    // 空成本账(0 token/null 金额)按「待重算」处理,不要让早结算把费用永久钉成 0。
     const emptyCost = costUnmeasured(run.cost);
     const needs = run.cost === undefined
       || emptyCost
       || (run.budgetTokens !== undefined && run.budgetTokens > 0 && (run.budgetExceeded === undefined || emptyCost))
       || (run.analysis !== undefined && (run.analysisMissing === undefined || emptyCost));
-    if (!needs) continue;
- // 只扫最近 10 分钟的**已终态**记录:更老的历史/已结账记录不在调度器里反复读 journal。
- // 例外:run 仍自称 running 但任务已终态——这是「无人结账」的活记录,多老都要收
- // (经验证:nightly 跑完 10 分钟后 age 闸把它跳过,面板不轮询就永远 running)。
+    // :「missing」类(同 pid 查不到)终态判据是「无人结账」,needs 闸不适用——
+    // 不补成本也会推进到质量评估/代写兜底;orphan/普通终态仍走 needs(避免反复重算)。
+    if (!missing && !needs) continue;
+    // 只扫最近 10 分钟的**已终态**记录:更老的历史/已结账记录不在调度器里反复读 journal。
+    // 例外:run 仍自称 running 但任务已终态——这是「无人结账」的活记录,多老都要收
+    // (2026-11-13 实测:nightly 跑完 10 分钟后 age 闸把它跳过,面板不轮询就永远 running)。
     if (run.status !== "running" && now - (run.finishedAt ?? run.startedAt) > 10 * 60_000) continue;
     try {
       const spec = mechanismSpec(run.mechanismId);
@@ -929,8 +966,8 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     } catch { /* 下一 tick 再试 */ }
   }
 
- // ②b 周期内已有 run 标记预算超限(可能上一步才收尾,也可能由面板轮询结账):
- // 置 cycle.budgetExceeded,下面会提前本周期,不再派余下机制。
+  // ②b 周期内已有 run 标记预算超限(可能上一步才收尾,也可能由面板轮询结账):
+  //     置 cycle.budgetExceeded,下面会提前收口本周期,不再派余下机制。
   if (state.runtime.cycle !== undefined) {
     const cycleRunIds = new Set(Object.values(state.runtime.cycle.runIds));
     let cycleTokens = 0;
@@ -939,14 +976,14 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       if (run.budgetExceeded === true) state.runtime.cycle.budgetExceeded = run.mechanismId as RsiMechanismId;
       cycleTokens += run.cost?.totalTokens ?? 0;
     }
- // 质量轮经验证补口:单 run 预算从未触线,但 12 机制周期合计可达 12.7~22.9M。
- // 周期聚合层超预算 → 本周期(余下机制下周期再排),不再线性烧钱。
+    // 2026-11-13 质量轮实测补口:单 run 预算从未触线,但 12 机制周期合计可达 12.7~22.9M。
+    // 周期聚合层超预算 → 收口本周期(余下机制下周期再排),不再线性烧钱。
     if (state.config.tokenBudgetPerCycle > 0 && cycleTokens > state.config.tokenBudgetPerCycle) {
       state.runtime.cycle.cycleBudgetExceeded = true;
     }
   }
 
- // ③ 有在跑 run:等待(全局单跑;避免 RUNNING_ALREADY 空转)。
+  // ③ 有在跑 run:等待(全局单跑;避免 RUNNING_ALREADY 空转)。
   if (runs.some((run) => runIsLive(run, deps.taskState, now))) {
     state.runtime.lastTickAt = now;
     try {
@@ -955,7 +992,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     return { action: "running", finalized, state };
   }
 
- // ④ 自动重试被中断的 run(每 tick 最多一次;重派即返回,让下一个 tick 等它跑完)。
+  // ④ 自动重试被中断的 run(每 tick 最多一次;重派即返回,让下一个 tick 等它跑完)。
   if (state.config.autoRetry) {
     const candidate = pickRetryCandidate(runs, now, state.config.maxRetriesPerRun);
     if (candidate !== undefined) {
@@ -987,12 +1024,12 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
             state,
           };
         }
- // 派不出去(已关闭/code 驱动/仍在跑)不重试,也不消耗重试次数。
+        // 派不出去(已关闭/code 驱动/仍在跑)不重试,也不消耗重试次数。
       }
     }
   }
 
- // ⑤ 周期推进。
+  // ⑤ 周期推进。
   if (state.runtime.cycle === undefined) {
     if (state.runtime.nextRunAt !== undefined && now < state.runtime.nextRunAt) {
       state.runtime.lastTickAt = now;
@@ -1017,8 +1054,8 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       } catch { /* 观测失败容忍 */ }
       return { action: "cycle-empty", finalized, state };
     }
- // 补齐 ROI 降频运行面:cost 机制注意「downshift 已落盘但周期仍跑满 12 机制」。
- // 降频因子 <1 时按比例裁剪本周期机制集,并用 mechanismOffset 轮转,保证被裁掉的机制下轮先跑。
+    // 2026-11-13 补齐 ROI 降频运行面:cost 机制实测确认「downshift 已落盘但周期仍跑满 12 机制」。
+    // 降频因子 <1 时按比例裁剪本周期机制集,并用 mechanismOffset 轮转,保证被裁掉的机制下轮先跑。
     let pending = all;
     let quotaFactor: number | undefined;
     try {
@@ -1045,13 +1082,13 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       ...(quotaFactor === undefined ? {} : { quotaFactor }),
     };
     state.runtime.nextRunAt = undefined;
- // P4:周期对象**先落盘**再跑管线——此前管线(阻塞 5min)期间状态未持久,
- // 下一拍按「无在途周期」重建周期(竞态注意);先存后跑,崩溃也能从半途周期恢复。
+    // P4(2026-11-17):周期对象**先落盘**再跑管线——此前管线(阻塞 5min)期间状态未持久,
+    // 下一拍按「无在途周期」重建周期(竞态实测确认);先存后跑,崩溃也能从半途周期恢复。
     try {
       await saveSchedulerState(root, state);
     } catch { /* 保存失败继续(下一拍有互斥兜底) */ }
- // P1机制税分层:新周期第一拍先跑 code 驱动夜间管线(确定性七步,零 LLM)——
- // 采集先行,本周期 agent 机制审计的才是新鲜数据;失败折叠进 runtime.nightlyPipeline 不挡周期。
+    // P1(2026-11-17)机制税分层:新周期第一拍先跑 code 驱动夜间管线(确定性七步,零 LLM)——
+    // 采集先行,本周期 agent 机制审计的才是新鲜数据;失败折叠进 runtime.nightlyPipeline 不挡周期。
     try {
       const pipeline = deps.runNightlyPipeline ?? defaultNightlyPipeline;
       const piped = await pipeline(root, now);
@@ -1067,12 +1104,12 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
   }
 
   const cycle = state.runtime.cycle;
- // 预算超限:提前本周期(余下机制下周期再来)。
+  // 预算超限:提前收口本周期(余下机制下周期再来)。
   if (cycle.budgetExceeded !== undefined || cycle.cycleBudgetExceeded === true) {
     return finishCycle(root, state, now, deps);
   }
 
- // 串行派下一个;关闭/code 驱动的机制直接跳过(不消耗派发)。
+  // 串行派下一个;关闭/code 驱动的机制直接跳过(不消耗派发)。
   const states = await loadMechanisms(root).catch(() => ({} as Record<string, { enabled: boolean; driver: "code" | "agent" }>));
   while (cycle.pending.length > 0) {
     const mech = cycle.pending.shift()!;
@@ -1085,10 +1122,10 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       cycle.settled.push(mech);
       continue;
     }
- // P1机制税分层:intervalDays 频次门——距上次 agent 派发不足间隔的机制本轮
- // 跳过(不消耗派发)。**从未派发过的机制恒到期**(lastRunAt=0 不设槛,首周期全量放行)。
- // 确定性数据流(nightly 管线/结算/队列消费)不受此门,每日照跑;agent 只做语义审计,
- // 按信息产出速率分层(台账静态审计 7 天,轨迹语义 3 天,prompts 30 天)。
+    // P1(2026-11-17)机制税分层:intervalDays 频次门——距上次 agent 派发不足间隔的机制本轮
+    // 跳过(不消耗派发)。**从未派发过的机制恒到期**(lastRunAt=0 不设槛,首周期全量放行)。
+    // 确定性数据流(nightly 管线/结算/队列消费)不受此门,每日照跑;agent 只做语义审计,
+    // 按信息产出速率分层(台账静态审计 7 天,轨迹语义 3 天,prompts 30 天)。
     const intervalMs = Math.max(1, Math.floor(spec.intervalDays ?? 1)) * 86_400_000;
     const lastAgentRunAt = state.runtime.mechanismLastRunAt?.[mech] ?? 0;
     if (lastAgentRunAt > 0 && now - lastAgentRunAt < intervalMs) {
@@ -1096,8 +1133,8 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       continue;
     }
     const start = deps.start ?? startMechanismRun;
- // experimentQuotaFactor 首个消费方——experiments 机制降频时把配额因子写进任务书
- // (限「最多转入多少条候选」)与 run 记录;读不到成本台账/未降频 = 不设限,旧行为不变。
+    // 2026-11-14:experimentQuotaFactor 首个消费方——experiments 机制降频时把配额因子写进任务书
+    // (限「最多转入多少条候选」)与 run 记录;读不到成本台账/未降频 = 不设限,旧行为不变。
     let experimentQuotaFactor: number | undefined;
     if (mech === "experiments") {
       try {
@@ -1120,7 +1157,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     if (result.ok === true && result.runId !== undefined) {
       cycle.runIds[mech] = result.runId;
       cycle.settled.push(mech);
- // P1:频次门判据——成功派发即记时刻(失败的派发不占频次,下 tick 可重试)。
+      // P1:频次门判据——成功派发即记时刻(失败的派发不占频次,下 tick 可重试)。
       state.runtime.mechanismLastRunAt = { ...(state.runtime.mechanismLastRunAt ?? {}), [mech]: now };
       state.runtime.lastTickAt = now;
       try {
@@ -1136,7 +1173,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       };
     }
     if (result.reason === "RUNNING_ALREADY") {
- // 有别的 run 正在跑(手动触发):放回队首,等下一 tick。
+      // 有别的 run 正在跑(手动触发):放回队首,等下一 tick。
       cycle.pending.unshift(mech);
       state.runtime.lastTickAt = now;
       try {
@@ -1144,7 +1181,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
       } catch { /* 观测失败容忍 */ }
       return { action: "running", mechanismId: mech, reason: result.reason, finalized, state };
     }
- // 其余 reason(关闭/code/派发失败):记 settled,继续试下一个机制。
+    // 其余 reason(关闭/code/派发失败):记 settled,继续试下一个机制。
     cycle.settled.push(mech);
     state.runtime.lastTickAt = now;
     try {
@@ -1153,7 +1190,7 @@ async function tickRsiSchedulerInner(deps: RsiSchedulerDeps, state: RsiScheduler
     return { action: "skipped-mechanism", mechanismId: mech, reason: result.reason, finalized, state };
   }
 
- // 队列空 → 周期。
+  // 队列空 → 周期收口。
   return finishCycle(root, state, now, deps);
 }
 
@@ -1167,7 +1204,7 @@ export async function collectSchedulerStatus(root: string, now = Date.now()): Pr
       ...(typeof breaker.reason === "string" ? { reason: breaker.reason } : {}),
     };
   } catch {
- // 熔断台账不可读:保留文件里的旧快照
+    // 熔断台账不可读:保留文件里的旧快照
   }
   return state;
 }

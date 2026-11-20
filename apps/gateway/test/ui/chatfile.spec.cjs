@@ -2,7 +2,7 @@
  * 跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/chatfile.spec.cjs
  * 断言面:①裸相对路径 ②绝对路径 ③带行号 ④markdown 相对链接 ⑤代码块内路径 ⑥子代理工作区路径 ⑦跨项目切根,
  * 逐一点击 → IDE 视图打开 + 正确项目 + 正确文件 + 行号定位;旧 #fileViewer 不再弹出;缺失路径只 toast 不改 IDE;
- * 面板消息里 0 pageerror。截图留存 /tmp/step1025-*.png。 */
+ * 面板消息里 0 pageerror。截图留存 /tmp/attach-shots-*.png。 */
 const { chromium } = require("playwright-core");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";
 const CHROME = "/usr/bin/google-chrome";
@@ -83,7 +83,7 @@ const path = require("node:path");
   check("①IDE 视图打开", st.view === "ide", "view=" + st.view);
   check("①正确项目(harness)与正确文件", st.root === "__harness__" && st.tabs.some((t) => t.path === "apps/gateway/src/panel.ts"), JSON.stringify({ root: st.root, tabs: st.tabs.map((t) => t.path) }));
   check("①旧浮层不弹", await page.evaluate(() => !document.getElementById("fileViewer").classList.contains("on")));
-  await page.screenshot({ path: "/tmp/step1025-1-relative.png" });
+  await page.screenshot({ path: "/tmp/attach-shots-1-relative.png" });
 
   // ② 绝对路径
   check("点击②绝对路径", await clickByPath(ABS, 0));
@@ -100,7 +100,7 @@ const path = require("node:path");
   const reqOk = rlog.some((r) => r.path === "apps/gateway/src/panel.ts" && r.line === 120);
   check("③行号定位:解析出 line=120,且 ideRevealLine 收到该行请求",
     !!(last && last.line === 120 && tab3 && reqOk), JSON.stringify({ last: last, rlog: rlog, tab3: tab3 }));
-  await page.screenshot({ path: "/tmp/step1025-2-line.png" });
+  await page.screenshot({ path: "/tmp/attach-shots-2-line.png" });
 
   // ④ markdown 相对链接(按 harness 根解析)
   check("点击④markdown 相对链接", await clickByPath("docs/code-flow/README.md", 0));
@@ -121,7 +121,7 @@ const path = require("node:path");
   check("点击⑥子代理工作区路径", await clickByPath("packages/protocol/src/relay.ts", 0));
   st = await waitTab("packages/protocol/src/relay.ts");
   check("⑥打开 relay.ts", st.tabs.some((t) => t.path === "packages/protocol/src/relay.ts"), JSON.stringify(st.tabs.map((t) => t.path)));
-  await page.screenshot({ path: "/tmp/step1025-3-subws.png" });
+  await page.screenshot({ path: "/tmp/attach-shots-3-subws.png" });
 
   // 回主会话:工作区直写共享容器会污染主历史缓存,直接刷新页面(journal 重放还原主历史,顺带验证持久态)
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
@@ -149,7 +149,7 @@ const path = require("node:path");
     st = await waitTab("src/note.md");
     check("⑦切到目标项目根(harness → 另一项目)", st.root === altPid && before.root === "__harness__", JSON.stringify({ before: before.root, after: st.root, altPid: altPid }));
     check("⑦文件在目标项目下打开", st.tabs.some((t) => t.path === "src/note.md"), JSON.stringify(st.tabs.map((t) => t.path)));
-    await page.screenshot({ path: "/tmp/step1025-4-crossproj.png" });
+    await page.screenshot({ path: "/tmp/attach-shots-4-crossproj.png" });
   } else {
     check("⑦切到目标项目根(而非旧根)", false, "第二项目注册失败");
     check("⑦文件在目标项目下打开", false, "");

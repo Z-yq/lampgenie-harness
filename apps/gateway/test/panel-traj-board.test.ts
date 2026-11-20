@@ -84,7 +84,8 @@ describe("轨迹看板①骨架锚点", () => {
     await withPanel(7893, (html) => {
       expect(html).toContain('id="view-traj"');           // 载体:独立视图
       expect(html).toContain('id="trajBoard"');           // 视图内保留容器 id(三 host 的锚点)
-      expect(html).toContain('id="trajBoardBtn"');       // 入口 1:composer pill
+ // 返工:composer「轨迹」pill 已删(用户要求);入口 2=轨迹卡 summary,断言随之
+      expect(html).not.toContain('id="trajBoardBtn"');
       expect(html).toContain("data-traj-open");           // 入口 2:轨迹卡 summary
       expect(html).toContain('id="trajSearch"');
       expect(html).toContain('id="trajCopyPath"');

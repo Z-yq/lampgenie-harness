@@ -13,7 +13,7 @@
  * 依赖纪律:node:fs/node:path + direction-atlas-store(同仓 IO);不引 agent loop、不碰时钟
  * (now 可注入);坏行/坏文件 fail-soft 跳过并计数。
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { DirectionAtlas } from "@lampgenie/runtime/agent/direction-atlas";
 import { atlasJsonPath, build, writeAtlasFile } from "./direction-atlas-store.js";
@@ -193,6 +193,13 @@ function slugOf(keywords: string[]): string {
 }
 
 
+/** 工程噪声路径:`.genie/` 下的探针/临时脚本/工具产物不是「被开发模块」,
+ * 不计入热点模块/返工信号/重复探索(否则 .genie/tmp/panel-probe.cjs 会霸榜)。 */
+function isNoiseModulePath(path: string): boolean {
+  const p = String(path ?? "").replace(/\\/g, "/");
+  return p === ".genie" || p.startsWith(".genie/") || p.includes("/.genie/");
+}
+
 /** 单会话单遍解析:首条用户消息/编辑路径/projectId/token/终态;坏行计数返回。 */
 function parseSessionFile(file: string, sessionId: string): { parsed?: HarvestWorkSession; badLines: number } {
   let text: string;
@@ -326,6 +333,12 @@ export interface HarvestOptions {
  * id→path 映射;不传 = 不做路径族兜底(行为与旧版逐字一致)。
  */
   projectRoots?: Record<string, string>;
+ /** 项目级 RSI:调用方已解析好的会话集(跳过 journal 重读;per-project harvest 用)。 */
+  sessionsOverride?: HarvestWorkSession[];
+ /** :收集时不做项目过滤(供「一次解析、按项目分组」的总账收集)。 */
+  returnAll?: boolean;
+ /** :结构层 enrich 用的项目根(缺省=快照根;per-project 快照传该项目路径)。 */
+  enrichRoot?: string;
 }
 
 /**
@@ -337,41 +350,65 @@ export interface HarvestOptions {
  * `remote:` 远程 identity 不是本地路径,不进映射(避免拿远端串当后缀比较)。
  * 生产调用方一行即可接上:`collectWorkSessions(dir, { projectRoots: loadProjectRoots(dir) })`。
  */
-export function loadProjectRoots(journalDir: string): Record<string, string> {
-  const out: Record<string, string> = {};
+export interface RegisteredProject {
+  id: string;
+  label: string;
+  path: string;
+}
+
+/** 项目注册表全量视图(id/label/path;远程项目剔除)。纯读,fail-soft。 */
+export function loadProjectRegistry(journalDir: string): RegisteredProject[] {
   let raw: string;
   try {
     raw = readFileSync(join(journalDir, "projects.json"), "utf8");
   } catch {
-    return out;
+    return [];
   }
   try {
-    const parsed = JSON.parse(raw) as { projects?: Array<{ id?: unknown; path?: unknown }> };
+    const parsed = JSON.parse(raw) as { projects?: Array<{ id?: unknown; path?: unknown; label?: unknown }> };
+    const out: RegisteredProject[] = [];
     for (const entry of parsed.projects ?? []) {
       const id = typeof entry?.id === "string" ? entry.id : "";
       const path = typeof entry?.path === "string" ? entry.path : "";
+      const label = typeof entry?.label === "string" ? entry.label : "";
       if (id === "" || path === "" || path.startsWith("remote:")) continue;
-      out[id] = path;
+      out.push({ id, label, path });
     }
+    return out;
   } catch {
-    return {};
+    return [];
   }
+}
+
+export function loadProjectRoots(journalDir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const project of loadProjectRegistry(journalDir)) out[project.id] = project.path;
   return out;
 }
 
 /**
- * 路径是否落在某根目录下(项目归因兜底)。
+ * 路径是否落在某根目录下(项目归因兜底; 修相对路径口径)。
  * 口径:绝对路径按「根 + 分隔符」前缀严格判定(不吃 `/a/bc` 被 `/a/b` 吞的假命中);
- * 相对路径视为以会话 workdir 为锚点 —— 会话已在册项目里,相对编辑路径天然在该根内。
+ * **相对路径不再一律认作根内**——跨项目分组时那样会让所有根同时命中,最长根吞掉全部
+ * 无 projectId 会话(生产注意:109 个本产品会话被归到示例记忆仓)。改用两个确定性锚点:
+ * ① 首段等于项目根 basename → 路径按「父目录相对」书写(`lampgenie-harness/apps/...`);
+ * ② `<root>/<相对路径>` 在盘上真实存在 → 会话 workdir 就是该根。
  * 分隔符 Windows/Posix 统一成 `/`,根尾斜杠先剥掉。
  */
-function pathUnderRoot(path: string, root: string): boolean {
+function pathUnderRoot(path: string, root: string, projectKey?: string): boolean {
   const p = path.trim().replace(/\\/g, "/");
   const r = root.trim().replace(/\\/g, "/").replace(/\/+$/, "");
   if (p === "" || r === "") return false;
   const isAbsolute = p.startsWith("/") || /^[A-Za-z]:\//.test(p);
-  if (!isAbsolute) return true; // 相对路径:锚在会话 workdir,无法更细分辨 → 认作根内
-  return p === r || p.startsWith(`${r}/`);
+  if (isAbsolute) return p === r || p.startsWith(`${r}/`);
+  const norm = p.replace(/^\.\//, "");
+  const key = (projectKey ?? r.split("/").pop() ?? "").trim();
+  if (key !== "" && (norm === key || norm.startsWith(`${key}/`))) return true;
+  try {
+    return existsSync(join(r, norm));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -433,16 +470,55 @@ export function collectWorkSessions(journalDir: string, opts: HarvestOptions = {
     if (parsed === undefined) continue;
     parsed.mtimeMs = mtimeMs;
     const attributed = parsed.projectId;
-    if (attributed !== undefined && !include.has(attributed)) {
+    if (opts.returnAll !== true && attributed !== undefined && !include.has(attributed)) {
  // (J 兜底):绑到别项目的会话,若编辑路径全落在本项目根下 → 按路径族归给本项目。
       const fallback = attributeByEditedPaths(parsed.editedPaths, include, opts.projectRoots);
       if (fallback === undefined) continue; // 跨项目会话:不计入本项目
       parsed.projectId = fallback;
     }
-    if (parsed.projectId === undefined) out.unattributedIncluded++;
+    if (opts.returnAll !== true && parsed.projectId === undefined) out.unattributedIncluded++;
     out.sessions.push(parsed);
   }
   out.sessions.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  return out;
+}
+
+/**
+ * 会话按项目分组(项目级 RSI):先按 journal 里的 projectId(uuid)匹配注册表,
+ * 再按「编辑路径全部落在该项目根下」深根优先归因;两边都无法归属 → 归到 fallbackKey(安装根)。
+ * 纯函数,不读盘;返回 Map<projectKey, sessions>。
+ */
+export function groupSessionsByProject(
+  sessions: HarvestWorkSession[],
+  projects: Array<{ key: string; ids: string[]; root: string }>,
+  fallbackKey: string,
+): Map<string, HarvestWorkSession[]> {
+  const out = new Map<string, HarvestWorkSession[]>();
+  const byId = new Map<string, { key: string; root: string }>();
+  for (const p of projects) for (const id of p.ids) byId.set(id, { key: p.key, root: p.root });
+  const push = (key: string, session: HarvestWorkSession): void => {
+    const list = out.get(key) ?? [];
+    list.push(session);
+    out.set(key, list);
+  };
+  for (const session of sessions) {
+    const direct = session.projectId !== undefined ? byId.get(session.projectId) : undefined;
+    if (direct !== undefined) {
+      push(direct.key, session);
+      continue;
+    }
+ // 路径族兜底:编辑路径全部落在某项目根下 → 取最深根(子项目优先于父目录)。
+    let best: { key: string; depth: number } | undefined;
+    if (session.editedPaths.length > 0) {
+      for (const p of projects) {
+        if (p.root === "") continue;
+        if (!session.editedPaths.every((path) => pathUnderRoot(path, p.root))) continue;
+        const depth = p.root.replace(/\\/g, "/").replace(/\/+$/, "").length;
+        if (best === undefined || depth > best.depth) best = { key: p.key, depth };
+      }
+    }
+    push(best?.key ?? fallbackKey, session);
+  }
   return out;
 }
 
@@ -454,7 +530,9 @@ export function harvestAtlas(journalDir: string, projectKey: string, opts: Harve
   const windowDays = typeof opts.windowDays === "number" && opts.windowDays > 0 ? Math.floor(opts.windowDays) : 7;
   const now = typeof opts.now === "number" && Number.isFinite(opts.now) ? opts.now : Date.now();
   const minThemeSessions = typeof opts.minThemeSessions === "number" && opts.minThemeSessions > 0 ? opts.minThemeSessions : 2;
-  const collected = collectWorkSessions(journalDir, opts);
+  const collected = opts.sessionsOverride !== undefined
+    ? { sessions: opts.sessionsOverride, sessionsScanned: opts.sessionsOverride.length, noiseSessions: 0, unattributedIncluded: 0 }
+    : collectWorkSessions(journalDir, opts);
   const sessions = collected.sessions;
 
   const base: AtlasHarvest = {
@@ -502,6 +580,7 @@ export function harvestAtlas(journalDir: string, projectKey: string, opts: Harve
   const moduleMap = new Map<string, HarvestWorkSession[]>();
   for (const session of sessions) {
     for (const path of session.editedPaths) {
+      if (isNoiseModulePath(path)) continue;
       const list = moduleMap.get(path) ?? [];
       list.push(session);
       moduleMap.set(path, list);
@@ -527,6 +606,7 @@ export function harvestAtlas(journalDir: string, projectKey: string, opts: Harve
   const logicalMap = new Map<string, { display: string; sessions: HarvestWorkSession[] }>();
   for (const session of sessions) {
     for (const path of session.editedPaths) {
+      if (isNoiseModulePath(path)) continue;
       const key = logicalPathKey(path);
       const entry = logicalMap.get(key) ?? { display: path, sessions: [] };
       entry.sessions.push(session);
@@ -589,7 +669,7 @@ export function refreshAtlasSnapshot(
 ): RefreshAtlasResult {
   const harvest = harvestAtlas(opts.journalDir, projectKey, opts);
  // code_sense 结构层集成:为热点模块补充依赖上下文(fail-soft,索引缺→context 不赋值)
-  try { enrichModuleContext(harvest.moduleActivity, root); } catch { /* 索引不可读 */ }
+  try { enrichModuleContext(harvest.moduleActivity, opts.enrichRoot ?? root); } catch { /* 索引不可读 */ }
   const built = build(root, projectKey);
   if (!built.ok || built.atlas === undefined) return { ok: false, code: built.code ?? "ATLAS_STORE_ERROR", harvest };
  // 返工因果链摘要由调用方(nightly)从台账读出传入(依赖单向:rework-chain → atlas-harvest)。
@@ -598,6 +678,13 @@ export function refreshAtlasSnapshot(
     derived: { ...harvest, ...(opts.reworkSummary !== undefined ? { reworkChains: opts.reworkSummary } : {}) },
   };
   const path = atlasJsonPath(root, projectKey);
+ // 「新增 vs 已有」需要上一版可比对象——写前把旧快照留成 <key>.prev.json。
+ // 纯旁路,复制失败不影响主快照(fail-soft);rsi-status 读取时跳过 *.prev.json。
+  try {
+    if (existsSync(path)) copyFileSync(path, path.replace(/\.json$/, ".prev.json"));
+  } catch {
+ // 对比基线缺失时面板回落「按 since/firstSeen 判新」,不阻塞刷新
+  }
   if (!writeAtlasFile(path, atlas)) return { ok: false, code: "ATLAS_STORE_ERROR", harvest };
   return { ok: true, harvest, path };
 }

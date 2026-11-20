@@ -202,7 +202,8 @@ describe("nightly-store", () => {
       eventsRead: 22,
       eventsSkipped: 1,
     });
-    expect(result.run.budget.tokens).toBeGreaterThan(20); // P0-②:events 22(probe 选择期出局)
+    expect(result.run.budget.workUnits).toBeGreaterThan(20); // 事件计数走 workUnits 轨(events 22)
+    expect(result.run.budget.tokens).toBe(0); // 分账:pull-traces 零 LLM,token 轨不受事件量牵连
   });
 
   it("session-stats.json 与 evidence-pending.json 落盘且可 JSON.parse", async () => {
@@ -273,7 +274,7 @@ describe("nightly-store", () => {
     expect(selection.sessions.map((entry) => entry.sessionId)).toEqual(["sess-b"]);
   });
 
-  it("预算暂停:maxTokens=1 → paused + BUDGET_EXCEEDED,resumeNightly 后完成", async () => {
+  it("预算暂停:workUnits 超 → paused + BUDGET_EXCEEDED(budget-work-units),resumeNightly 后完成且不重读", async () => {
     const { root, journalDir } = makeFixture();
     seedStandard(journalDir);
     const started = await startNightly(root, {
@@ -281,14 +282,20 @@ describe("nightly-store", () => {
       projectId: PROJECT,
       journalDir,
       now: NOW,
-      config: { maxTokens: 1 },
+      config: { maxWorkUnits: 1 },
     });
     const paused = await runNightly(root, { runId: started.run!.runId, journalDir, now: NOW + 1 });
     expect(paused.run.status).toBe("paused");
-    expect(paused.run.pauseReason).toBe("budget");
+    expect(paused.run.pauseReason).toBe("budget-work-units");
     expect(paused.codes).toContain(NIGHTLY_CODES.NIGHTLY_BUDGET_EXCEEDED);
     expect(paused.run.steps[0]?.status).toBe("done");
     expect(paused.run.steps[1]?.status).toBe("pending");
+ // 水位:pull-traces done 后 cursor 已前移——暂停不丢增量边界。
+    const cursorMid = JSON.parse(
+      readFileSync(nightlyPaths(root, PROJECT, "2026-03-05").cursorFile, "utf8"),
+    ) as Record<string, { lastMtimeMs?: number }>;
+    expect(typeof cursorMid[PROJECT]?.lastMtimeMs).toBe("number");
+    const eventsAfterPause = paused.run.coverage.eventsRead;
 
     const resumed = await resumeNightly(root, {
       projectId: PROJECT,
@@ -299,6 +306,8 @@ describe("nightly-store", () => {
     expect(resumed.codes).toContain(NIGHTLY_CODES.NIGHTLY_RESUMED);
     expect(resumed.run.status).toBe("done");
     expect(resumed.run.steps.every((step) => step.status === "done")).toBe(true);
+ // 不重读:续跑从 pending 步接续,pull-traces 不再执行,eventsRead 不翻倍。
+    expect(resumed.run.coverage.eventsRead).toBe(eventsAfterPause);
   });
 
   it("queue.jsonl 逐条 append:行数 = 候选数,行内字段齐全且只入队不 adopt", async () => {

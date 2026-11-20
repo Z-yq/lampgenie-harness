@@ -390,11 +390,22 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         printNotes(io, c, ctx);
         const repo = flagStr(p, "repo");
  // E②:symbol --graph = graph <符号名>(mermaid 邻域图;graph 子命令保留为别名)
-        const r = cmd === "symbol" && flagBool(p, "graph")
+        let r = cmd === "symbol" && flagBool(p, "graph")
           ? queryGraphCmd(ctx, name, repo, json, d)
           : cmd === "symbol"
             ? querySymbolCmd(ctx, name, repo, json, d)
             : queryEdgeCmd(ctx, name, cmd as "callers" | "callees", repo, json, d);
+ // G-E(设计稿 06-code-sense §15.4):symbol miss 时兜底探测模板串内联 JS——
+ // 面板前端整体在 PANEL_JS_* 模板常量里,tree-sitter 只见宿主字符串常量,symbol 必 miss。
+        if (r.miss && r.text.startsWith("未找到符号")) {
+          try {
+            const { findInlineJsDefs, renderInlineJsDefs } = await import("@lampgenie/code-sense/retrieval/inline-js");
+            const block = renderInlineJsDefs(await findInlineJsDefs(ctx.repos[0]?.root ?? ctx.root, name));
+            if (block) r = { ...r, text: r.text + "\n" + block };
+          } catch {
+ /* inline-js 探测失败不影响原 miss 回执 */
+          }
+        }
         return emit(io, r, json);
       }
 
@@ -543,9 +554,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         // symbol/impact 全空、review --scan 0 条、explore 不命中,只能 grep。本命令按语境
         // 列出全部引用点(产品源码+测试+文档/提示词文本),所属符号读现成索引(缺席留空)。
         // 纯行扫描,不触发索引构建;默认排除 node_modules/dist/.genie/vendor。
+ // G-D:字面量支持 a|b|c 多候选(一次扫描按候选分组,接住 grep 的 alternation 习惯)。
         const literal = p._[1];
         if (!literal) {
-          io.err("用法: codesense refs <字面量> [--root dir] [--json] [--no-tests] [--no-docs]");
+          io.err("用法: codesense refs <字面量|多候选 a|b|c> [--root dir] [--json] [--no-tests] [--no-docs]");
           return 2;
         }
         const root = rootArg() ?? resolveProjectRoot(process.cwd())?.root ?? process.cwd();

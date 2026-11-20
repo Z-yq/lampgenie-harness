@@ -22,6 +22,7 @@
 import { createHash } from "node:crypto";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定;本文件不再自带字符系数近似)。
 import { rawTokens, estimateMessagesTokens, estimateMessageTokens, approxTokensOfChars } from "./token-estimate";
+import { MODEL_PRICES } from "@lampgenie/core";
 import type { Message, ToolCall } from "./loop";
 // 统一保护窗(缺口#27):keepRecent 缺省从 PROTECTION_WINDOWS 引用,值不变、防漂移。
 import { PROTECTION_WINDOWS } from "./protection-windows";
@@ -144,7 +145,7 @@ export const DEFAULT_GROWTH_SPURT_TOKENS = 12_000;
 
 /**
  * 本地 token 估算系数(经验证标定,替换旧的 chars/4)。
- * ⚠️ token 口径:**仅作回退系数**,真值走 `agent/token-estimate.ts`(自有估算器 +
+ * ⚠️ 2026-11 token 轮:**仅作回退系数**,真值走 `agent/token-estimate.ts`(cl100k 真分词器 +
  * 标定 ratio)。下面两个常量只为「其它模块仍 import 系数」与「分词器不可用时的回退口径」保留,
  * 本文件不再用它们做任何估算。
  * 历史标定(仍作回退档位的依据):近 5 天 `.genie/journals/sessions` 6,975 个「会话内累计字符量 vs
@@ -169,6 +170,8 @@ export function estimateTokensOfText(text: string): number {
 const HUGE_PLACEHOLDER_PREFIX = "[工具结果已精炼:";
 /** 路径②占位内容前缀(已清除/可重读标记)。 */
 const CLEARED_PLACEHOLDER_PREFIX = "[工具结果已清除(上下文压力):";
+/** 段批语义摘要前缀(设计 §3.6.3 温区第一手段;与占位同为可回读的温区产物)。 */
+const SEGMENT_SUMMARY_PREFIX = "[段批摘要:";
 /** 确定性折叠前缀。 */
 const DEDUP_PLACEHOLDER_PREFIX = "[工具结果已去重:";
 const SUPERSEDED_PLACEHOLDER_PREFIX = "[工具结果已被后续同类调用取代:";
@@ -273,12 +276,16 @@ export interface MicrocompactConfig {
   breakEvenGate?: boolean;
   /** 净收益门的保守系数(缺省 3):省 1 token 至少要抵 3 token 的重算代价才值得裁。 */
   breakEvenFactor?: number;
- /** 缺口#25:经济判据 v2(N > r·B/W)开关,缺省 false = 旧行为(factor=3)逐字不变。
- * true 时净收益门改按「N×W×P_cached > B×P_uncached」裁决(价格加权 + 剩余步数维度)。
- * 生产接线:由 loop.ts 构造 config 时显式置 true(本文件不缺省开启,保既有测试绿)。 */
+ /** 缺口#25(切终版公式):经济判据 v2 开关,缺省 false = 旧行为(factor=3)逐字不变。
+ * true 时净收益门按 拍板公式「N×W > (W′+tail)×r ⟺ W/W′ > r/N」裁决
+ * (§4.1.1:一次性代价 = 压缩产物 W′ + 改写点之后保留字节 tail;**不是作废前缀 B**——
+ * 「作废 ≠ 重付」,旧 B 口径即缺口#37 的方向取反)。生产接线: 起 loop.ts 构造时显式置 true。 */
   breakEvenGateV2?: boolean;
- /** v2 价差比 r = P_uncached/P_cached(缺省 50;env GENIE_PRICE_RATIO 可覆盖)。 */
+ /** v2 价差比 r = P_uncached/P_cached 覆写;缺省由 priceRatioOf(modelName) 逐模型现算
+ * (deepseek 系按价表,其余家统一 10;缺口#36)。 */
   priceRatio?: number;
+ /** 价表模型名(priceRatioOf 逐模型现算用;loop 传 modelForDerive,空=统一缺省)。 */
+  modelName?: string;
  /** v2 剩余步数估计 N(缺省回退 assumedRemainingCalls,现 10)。 */
   remainingStepsEstimate?: number;
  /** cache-aware 前缀稳定策略 v2:传了 `policyState` 才生效(loop 默认传)。
@@ -305,6 +312,13 @@ export interface MicrocompactConfig {
   /** 内部用:渲染已冻结前缀时清空**该切片内所有**候选组(不回退 keepRecent 窗口)。
    *  冻结边界已在重置决策时定下,渲染阶段再按 keepRecent 留一组就会「算了省 9 组、实际只清 7 组」。 */
   clearAllGroups?: boolean;
+ /** 段化真裁计划(§4.1.3 攒批):turn 末/滞后一步 settle 批准的 toolCallId 集。
+ * 经济判据已在 degradation-queue settle 处按拍板公式裁决,此处只守前缀稳定门
+ * (minContext/冷却/同 turn 上限);只清 plan 命中项,开放段与 user 段锚不受影响。 */
+  segmentClearPlan?: ReadonlySet<string>;
+ /** 段批语义摘要(设计 §3.6.3 温区第一手段):toolCallId → 小模型摘要文本。
+ * 有则用它替换原结果(可回读);缺条目/空 Map 回落 `CLEARED_PLACEHOLDER` 确定性兜底。 */
+  segmentSummaryPlan?: ReadonlyMap<string, string>;
 }
 
 /** 净收益门默认系数:省 1 token 必须抵得上 3 token 的前缀重算,才认为裁剪划算。 */
@@ -319,6 +333,36 @@ function resolvePriceRatio(explicit?: number): number {
   const env = Number(process.env["GENIE_PRICE_RATIO"]);
   if (Number.isFinite(env) && env > 0) return env;
   return DEFAULT_PRICE_RATIO;
+}
+
+/** 拍板口径的其余家统一价差比(deepseek 系以外;§4.1.1 r 逐模型表:claude/qwen/kimi/glm 均 10)。 */
+export const FALLBACK_PRICE_RATIO = 10;
+
+/**
+ * 价差比 r 逐模型现算(§4.1.1 拍板; 缺口#36):
+ * 优先级 = 显式参数 > env GENIE_PRICE_RATIO > 价表按模型名现算 > 统一缺省 10。
+ * 价表口径:deepseek 系按 MODEL_PRICES 现算(inputMiss/cacheRead,flash=50/v4-pro=30);
+ * 其余家拍板统一 10(qwen 全系 cacheRead=null,按阿里云「缓存命中一折」口径=10);
+ * 单一常数 DEFAULT_PRICE_RATIO=50 只是 deepseek-flash 一家价差,只能兜底不能定档。
+ */
+export function priceRatioOf(modelName?: string, explicit?: number): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit) && explicit > 0) return explicit; // 显式参数最优先
+  const env = Number(process.env["GENIE_PRICE_RATIO"]);
+  if (Number.isFinite(env) && env > 0) return env; // env 次之
+  const name = (modelName ?? "").trim().toLowerCase();
+  if (name) {
+    let best: { prefix: string; cacheRead: number | null; inputMiss: number } | undefined;
+    for (const row of MODEL_PRICES) {
+      if (!name.startsWith(row.prefix.toLowerCase())) continue;
+      if (!best || row.prefix.length > best.prefix.length) best = row;
+    }
+    if (best && best.cacheRead !== null && best.cacheRead > 0 && best.inputMiss > 0) {
+      const r = best.inputMiss / best.cacheRead;
+      if (Number.isFinite(r) && r > 0) return Math.round(r);
+    }
+    return FALLBACK_PRICE_RATIO; // 价表无 cacheRead(qwen 系)或未匹配 → 拍板统一 10
+  }
+  return FALLBACK_PRICE_RATIO; // 无模型名(库调用/测试)→ 拍板统一 10(不再是 50)
 }
 // token 口径统一见 agent/token-estimate.ts:没有原文、只有字符量的场合用统一模块的
 // approxTokensOfChars,本文件不再自带 chars→tokens 系数。
@@ -341,6 +385,30 @@ function estimateCharsBeforeFirstRewrite(
   }
   if (firstIndex <= 0) return 0;
   return messages.slice(0, firstIndex).reduce((s, m) => s + messageChars(m), 0);
+}
+
+/**
+ * 拍板公式的 tail 项(§4.1.1):**最早改写点之后**仍保留在请求里的字符量——
+ * 真正按未命中价重付的是「之后」(§3.3:公共前缀在第一个改动位置截断,之前仍命中);
+ * 旧 estimateCharsBeforeFirstRewrite 取「之前」当重付代价,方向取反(缺口#37),仅 v1 档沿用。
+ */
+function tailCharsAfterFirstRewrite(
+  messages: Message[],
+  items: MicrocompactPrunedItem[],
+  idx: Map<string, { name: string; where: string }>,
+): number {
+  void idx;
+  const touched = new Set<string>();
+  for (const it of items) if (it.toolCallId) touched.add(it.toolCallId);
+  if (touched.size === 0) return 0;
+  let firstIndex = -1;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.role === "tool" && m.toolCallId && touched.has(m.toolCallId)) { firstIndex = i; break; }
+    if (m.role === "assistant" && m.toolCalls?.length && m.toolCalls.some((c) => touched.has(c.id))) { firstIndex = i; break; }
+  }
+  if (firstIndex < 0 || firstIndex >= messages.length - 1) return 0;
+  return messages.slice(firstIndex + 1).reduce((s, m) => s + messageChars(m), 0);
 }
 
 export interface MicrocompactResult {
@@ -453,6 +521,13 @@ function isProtectedResult(name: string, content: string, config?: MicrocompactC
   return config?.protectErrors !== false && looksLikeErrorResult(content);
 }
 
+/** 段批候选的唯一准入口径:可占位工具 + 有寻址(由 tracker 另行要求)+ 非硬保护/错误结果。
+ * tracker 定价、queue 入队、microcompact 实际 clear 必须同一集合,否则 gate 会把清不掉的
+ * 结果算进 W(回放 web 会话已注意:code_sense/board 被定价但 executor 永远不清)。 */
+export function isSegmentCompactableResult(name: string, content: string): boolean {
+  return COMPACTABLE_TOOLS.has(name) && !isProtectedResult(name, content);
+}
+
 function capForTool(name: string, config?: MicrocompactConfig): number {
   const raw = config?.toolCaps?.[name];
   const value = typeof raw === "number" && Number.isFinite(raw) ? raw : HUGE_RESULT_CHARS;
@@ -507,12 +582,13 @@ interface ClearCandidate {
 }
 
 /** 已是占位/已精炼的内容——不再算候选(幂等,二次处理省不出 token)。 */
-function isPlaceholderContent(content: unknown): boolean {
+export function isPlaceholderContent(content: unknown): boolean {
   if (typeof content !== "string") return false;
   return content.includes(HUGE_PLACEHOLDER_PREFIX)
     || content.includes(ARGS_SUMMARY_PREFIX)
     || content.startsWith("[超大工具结果已外置:")
     || content.startsWith(CLEARED_PLACEHOLDER_PREFIX)
+    || content.startsWith(SEGMENT_SUMMARY_PREFIX)
     || content.startsWith(DEDUP_PLACEHOLDER_PREFIX)
     || content.startsWith(SUPERSEDED_PLACEHOLDER_PREFIX)
     || content.startsWith(MODEL_DROP_PLACEHOLDER_PREFIX);
@@ -868,11 +944,13 @@ function legacyMicrocompact(
  // N=remainingStepsEstimate ?? assumedRemainingCalls(缺省 10);r=priceRatio ?? env ?? 50。
  // 与 v1 的差别:收益侧乘上「还会走多少步」、两侧按价差加权(v1 把 r×N 当成 3,偏宽两个数量级)。
         const n = config.remainingStepsEstimate ?? config.assumedRemainingCalls ?? PRUNE_ASSUMED_REMAINING_CALLS;
-        const r = resolvePriceRatio(config.priceRatio);
+        const r = priceRatioOf(config.modelName, config.priceRatio);
         const savedSoFarV2 = savingItems.reduce((s, it) => s + Math.max(0, it.originalChars - it.newChars), 0);
         const w = approxTokensOfChars(savedSoFarV2);
-        if (breakCostTokens > 0 && !(n * w > breakCostTokens * r)) {
-          notWorth = `净收益不足(v2):N ${n} × W ${w} tok ≤ B ${breakCostTokens} tok × r ${r}(N>r·B/W 不成立);已跳过纯省 token 的裁剪以保住缓存`;
+        const wPrime = approxTokensOfChars(savingItems.reduce((s, it) => s + it.newChars, 0));
+        const tailTokens = approxTokensOfChars(tailCharsAfterFirstRewrite(messages, savingItems, idx));
+        if (!(n * w > (wPrime + tailTokens) * r)) {
+          notWorth = `净收益不足(v2):N ${n} × W ${w} tok ≤ (W′ ${wPrime} + tail ${tailTokens}) tok × r ${r}(W/W′ > r/N 不成立);已跳过纯省 token 的裁剪以保住缓存`;
         }
       } else {
         const factor = config?.breakEvenFactor ?? BREAK_EVEN_FACTOR;
@@ -972,7 +1050,10 @@ function legacyMicrocompact(
     const meta = idx.get(message.toolCallId);
     if (!meta || !meta.where || !COMPACTABLE_TOOLS.has(meta.name)) return; // 无寻址=不可回读
     if (config?.modelKeep?.has(message.toolCallId)) return; // 模型 keep:不参与组清理
-    if (isPlaceholderContent(message.content)) return;
+ // 段批档:plan 命中项即使已被 head_tail 精炼成占位仍要清(settle 已裁决;否则段批漏执行)。
+ // 但已经是「段批摘要」的条目不再二次处理(幂等;否则摘要会被降级回占位)。
+    if (typeof message.content === "string" && message.content.startsWith(SEGMENT_SUMMARY_PREFIX)) return;
+    if (isPlaceholderContent(message.content) && !config?.segmentClearPlan?.has(message.toolCallId)) return;
     if (isProtectedResult(meta.name, message.content, config)) return;
     const candidate = { index, meta };
     if (!current) { groups.push([candidate]); return; }
@@ -980,22 +1061,32 @@ function legacyMicrocompact(
   });
   if (current && current.length > 0) groups.push(current);
 
-  const keep = config?.clearAllGroups === true
-    ? 0
-    : Math.max(1, Math.floor(config?.keepRecent ?? DEFAULT_KEEP_RECENT_GROUPS));
+  const keep = config?.segmentClearPlan
+    ? 0 // 段批档:plan 命中项无视 keepRecent 窗口(settle 已裁决;§4.1.3 只裁已闭合段)
+    : config?.clearAllGroups === true
+      ? 0
+      : Math.max(1, Math.floor(config?.keepRecent ?? DEFAULT_KEEP_RECENT_GROUPS));
+  const planIds = config?.segmentClearPlan;
   const clearGroupCount = Math.max(0, groups.length - keep);
-  if (clearGroupCount === 0) return resultOf(pass1, items, "nothing-to-clear");
+  if (clearGroupCount === 0 && !planIds) return resultOf(pass1, items, "nothing-to-clear");
 
   const out = [...pass1];
   const clearedItems: MicrocompactPrunedItem[] = [];
-  for (let groupIndex = 0; groupIndex < clearGroupCount; groupIndex++) {
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
     const group = groups[groupIndex];
     if (!group) continue;
+    if (groupIndex >= clearGroupCount && !planIds) continue; // keep 窗口内(非段批)不裁
     for (const candidate of group) {
       const message = out[candidate.index];
       if (!message || message.role !== "tool") continue;
+ // 段批档:只清 plan 命中项(开放段/未裁决条目逐字不动;§4.1.3)。
+      if (planIds && (!message.toolCallId || !planIds.has(message.toolCallId))) continue;
       const original = String(message.content ?? "");
-      const placeholder = `${CLEARED_PLACEHOLDER_PREFIX}${candidate.meta.name} ${candidate.meta.where} 原共 ${original.length} 字符——需要时按上述寻址参数重读(path/command/offset/limit)]`;
+ // 设计 §3.6.3:温区第一手段=小模型摘要(W′ 新增冷区上下文);无摘要/摘要失败回落确定性占位。
+      const summary = config?.segmentSummaryPlan?.get(message.toolCallId ?? "");
+      const placeholder = summary
+        ? `${SEGMENT_SUMMARY_PREFIX}${candidate.meta.name} ${candidate.meta.where} 原共 ${original.length} 字符;全文可按寻址重读]\n${summary}`
+        : `${CLEARED_PLACEHOLDER_PREFIX}${candidate.meta.name} ${candidate.meta.where} 原共 ${original.length} 字符——需要时按上述寻址参数重读(path/command/offset/limit)]`;
       out[candidate.index] = { ...message, content: placeholder };
       clearedItems.push({
         toolCallId: message.toolCallId,
@@ -1132,9 +1223,56 @@ function decideReset(
 
   const minContext = config.minContextTokens
     ?? Math.min(MIN_PRUNE_CONTEXT_TOKENS, Math.floor(threshold * 0.9));
-  if (est < minContext) {
+ // 段批档已由 settle 的经济门裁决(段闭合驱动,§4.1.2/§4.1.3),minContext 是普通阈值清理的
+ // 兜底安全阀,不应把已批准的段批挡在 110k 门外——否则「段闭合驱动」在中小上下文永远不生效。
+  const hasSegmentPlan = !!(config.segmentClearPlan && config.segmentClearPlan.size > 0);
+  if (est < minContext && !hasSegmentPlan) {
     return skip("low-context-skip", `上下文 ${est} tok < 门槛 ${minContext} tok:小上下文压缩省得少、却打碎整段前缀`);
   }
+ // 段批档(§4.1.3 攒批真裁):settle 批准的已闭合段 toolCallId 整批清占位。
+ // 经济门已在 settle 处按拍板公式裁决,此处不重复算账、免旧 benefit 门(其「est 全量重算」
+ // 假设与拍板公式口径不符);只守前缀稳定门:冷却/同 turn 上限照走。
+  if (hasSegmentPlan) {
+    const plan = config.segmentClearPlan!;
+    if (!state.turnStart && state.lastResetClock !== undefined) {
+      const stepsSinceSeg = (state.clock ?? 0) - state.lastResetClock;
+      const growthSeg = est - (state.lastResetTokens ?? 0);
+      if (stepsSinceSeg < (config.resetCooldownSteps ?? RESET_COOLDOWN_STEPS)
+        && growthSeg < (config.resetCooldownTokens ?? RESET_COOLDOWN_TOKENS)) {
+        return skip("cooldown-skip", `段批距上次重置 ${stepsSinceSeg} 步、仅增 ${growthSeg} tok:冷却期内不动前缀(计划保留待下步)`);
+      }
+    }
+    const maxPerTurnSeg = config.maxResetsPerTurn ?? MAX_RESETS_PER_TURN;
+    if ((state.resetsThisTurn ?? 0) >= maxPerTurnSeg) {
+      return skip("turn-cap-skip", `段批:本 turn 已重置 ${state.resetsThisTurn} 次(上限 ${maxPerTurnSeg})`);
+    }
+    const hitGroups = groups.filter((g) => g.some((c) => {
+      const m = messages[c.index] as { toolCallId?: string } | undefined;
+      return m?.toolCallId !== undefined && plan.has(m.toolCallId);
+    }));
+    if (hitGroups.length === 0) {
+ // 命中为空(候选已被折叠/重放变化):计划作废(loop 侧见 segment-empty 即清,不无限重试)。
+      return { policy: "append-only", frozenCount, reason: "segment-empty", skipped: "段批计划命中的候选不在当前历史:计划作废", clearedItems: 0 };
+    }
+ // 段批档不再做二次「削幅 20% / 最小批量」:settleBatch 已用
+ // N×ΣW > (ΣW′ + tail_actual)×r
+ // 对**整批**做过经济裁决;这里再截一部分会让「gate 批的是 A、执行只清 B」,
+ // 实际省下的 W 与 tail 对不上(回放经验证 T3 gate 用 27 条、执行只清 5 条)。
+ // 前缀稳定门仍保留:冷却 / 同 turn 上限。
+    const chosenSeg = [...hitGroups];
+    const savedSeg = chosenSeg.reduce((s, g) => s + estimateGroupSavings(g, messages, config), 0);
+    if (chosenSeg.length === 0 || savedSeg <= 0) {
+      return skip("deferred", `段批命中可省 ${savedSeg} tok(≤0):计划保留待攒批`);
+    }
+    return {
+      policy: "reset",
+      frozenCount: lastIndexAfter(chosenSeg) + 1,
+      reason: "segment-applied",
+      clearedItems: chosenSeg.reduce((s, g) => s + g.length, 0),
+      cutTokens: savedSeg,
+    };
+  }
+
   // 未到触发阈值:纯追加(前缀稳定是第一约束,不提前压)。
   if (est < threshold) return keepAppendOnly("below-threshold");
 
@@ -1170,14 +1308,17 @@ function decideReset(
   }
 
   // 从冻结区之后按组累积,直到累计节省 ≥ cutTarget(只清窗口外的组;最近 keep 组留原文)。
+ // 排序口径(核):「离尾最近优先」在**段批档**(上方 orderedSeg)与 degradation-queue
+ // 排序里成立;本阈值兜底档被两个结构约束钉死为「最老前缀累积」——①连续性:冻结切片以
+ // clearAllGroups 全清,选择必须是组前缀(离尾排序会产生洞→渲染清掉未选组);②88% 基线:
+ // 削减量上限=cutTarget(再大就破 88% 下限),到达 cutTarget 的最小 k 唯一,排序不改变结果。
   const candidates = groups.slice(0, Math.max(0, groups.length - keep));
   const chosen: typeof candidates = [];
   let saved = 0;
   for (const group of candidates) {
     if (lastIndexAfter([group]) + 1 <= frozenCount) continue; // 已在冻结区内的组不重复计入
-    const gain = estimateGroupSavings(group, messages);
+    const gain = estimateGroupSavings(group, messages, config);
  // 上限硬约束(禁 250k→160k 大跳):再加这一组就超 est×20% 且已有可清组,就停手。
- // 不夹住的话,「凑够 cutTarget 的最后一组」会把削减量顶到 cap 之外(经验证 1368 > 1038)。
     if (chosen.length > 0 && saved + gain > cap) break;
     chosen.push(group);
     saved += gain;
@@ -1215,6 +1356,8 @@ function renderFrozenAndTail(
   if (frozenSlice.length > 0) {
     // 冻结区:thresholdTokens=1 强制清空生效(清哪些在重置时已定,这里只是重放);
     // breakEvenGate 关闭(重置本身已经算过账),minSavings=0(不做二次回滚——回滚会改前缀)。
+ // 段批档:clearAllGroups 关闭——切片内**只清 segmentClearPlan 命中项**
+ // (legacy 路径② 的 planIds 过滤),开放段组即使在冻结切片内也逐字保留(§4.1.3)。
     const frozenRendered = legacyMicrocompact(frozenSlice, {
       ...config,
       policyState: undefined,
@@ -1223,7 +1366,7 @@ function renderFrozenAndTail(
       breakEvenGate: false,
       // 冻结边界已在 decideReset 定死:渲染阶段必须把切片内候选组**全清**,
       // 否则「算了省 9 组、实际只清 7 组」,下次 decideReset 又要多压一批 → 变成多次小重置。
-      clearAllGroups: true,
+      clearAllGroups: config.segmentClearPlan ? false : true,
     });
     out.push(...frozenRendered.messages);
     items.push(...(frozenRendered.pruned ?? []));
@@ -1307,7 +1450,10 @@ function collectClearGroups(messages: Message[], config?: MicrocompactConfig): C
     const meta = idx.get(message.toolCallId);
     if (!meta || !meta.where || !COMPACTABLE_TOOLS.has(meta.name)) return;
     if (config?.modelKeep?.has(message.toolCallId)) return;
-    if (isPlaceholderContent(message.content)) return;
+ // 段批档:plan 命中项即使已被 head_tail 精炼成占位仍要清(settle 已裁决;否则段批漏执行)。
+ // 已是段批摘要的条目不再二次处理(否则会降级回占位)。
+    if (typeof message.content === "string" && message.content.startsWith(SEGMENT_SUMMARY_PREFIX)) return;
+    if (isPlaceholderContent(message.content) && !config?.segmentClearPlan?.has(message.toolCallId)) return;
     if (isProtectedResult(meta.name, message.content, config)) return;
     const candidate = { index, meta };
     if (!current) { groups.push([candidate]); return; }
@@ -1318,23 +1464,83 @@ function collectClearGroups(messages: Message[], config?: MicrocompactConfig): C
 }
 
 /** 估算「清掉这些组」能省多少 tokens(占位长度按常数估)。 */
-function estimateGroupSavings(group: ClearCandidate[] | undefined, messages: Message[]): number {
+/** 段批执行计划:把「settle 批准的 id 集合」映射成 executor 实际会清的整批。
+ * 以 candidate ids 命中的组定边界,边界内的**全部可清组**(含未在 plan 里的邻组,
+ * 冻结区重放会一并清掉)都算进 ids/W/W′ —— gate 与执行必须同一批,否则 ΣW 对不上。 */
+export interface SegmentBatchPlan {
+  ids: string[];
+  frozenCount: number;
+  w: number;
+  wPrime: number;
+  firstIndex: number;
+}
+
+export function planSegmentBatch(
+  messages: Message[],
+  candidateIds: ReadonlySet<string>,
+  opts?: {
+    config?: MicrocompactConfig;
+ /** W′ 逐 id 覆盖(loop 用 queue 的 summary/placeholder 估价;缺省按占位/摘要文本估)。 */
+    productTokensOf?: (id: string) => number | undefined;
+  },
+): SegmentBatchPlan | undefined {
+  if (!candidateIds || candidateIds.size === 0) return undefined;
+  const config = { ...(opts?.config ?? {}), segmentClearPlan: candidateIds } as MicrocompactConfig;
+  const groups = collectClearGroups(messages, config);
+  const hitGroups = groups.filter((g) => g.some((c) => {
+    const m = messages[c.index] as { toolCallId?: string } | undefined;
+    return m?.toolCallId !== undefined && candidateIds.has(m.toolCallId);
+  }));
+  if (hitGroups.length === 0) return undefined;
+  const boundary = lastIndexAfter(hitGroups) + 1;
+  const ids: string[] = [];
+  let w = 0;
+  let wPrime = 0;
+  let firstIndex = Number.POSITIVE_INFINITY;
+  for (const group of groups) {
+    if (lastIndexAfter([group]) >= boundary) continue;
+    for (const c of group) {
+      const m = messages[c.index] as { toolCallId?: string } | undefined;
+      if (!m?.toolCallId) continue;
+      ids.push(m.toolCallId);
+      firstIndex = Math.min(firstIndex, c.index);
+      w += estimateGroupSavings([c], messages, config);
+      const override = opts?.productTokensOf?.(m.toolCallId);
+      if (override !== undefined && Number.isFinite(override)) {
+        wPrime += Math.max(0, Math.floor(override));
+      } else {
+        const summary = config.segmentSummaryPlan?.get(m.toolCallId);
+        wPrime += summary
+          ? Math.ceil(summary.length / 4)
+          : Math.ceil((CLEARED_PLACEHOLDER_EST_CHARS + c.meta.name.length + c.meta.where.length) / 4);
+      }
+    }
+  }
+  if (ids.length === 0) return undefined;
+  return { ids, frozenCount: boundary, w: Math.ceil(w), wPrime: Math.ceil(wPrime), firstIndex };
+}
+
+function estimateGroupSavings(group: ClearCandidate[] | undefined, messages: Message[], config?: MicrocompactConfig): number {
   if (!group || group.length === 0) return 0;
   let sum = 0;
   for (const candidate of group) {
     const message = messages[candidate.index];
     const original = typeof message?.content === "string" ? message.content : "";
     if (!original) continue;
-    const placeholderEst = Math.min(
-      original.length,
-      CLEARED_PLACEHOLDER_EST_CHARS + candidate.meta.name.length + candidate.meta.where.length,
-    );
-    sum += Math.max(0, estimateTokensOfText(original) - placeholderEst * ASCII_TOKENS_PER_CHAR);
+ // 段批摘要的产物比确定性占位大:W′ 必须按实际摘要长度估,否则经济门/削幅账目会高估收益。
+    const toolCallId = message && "toolCallId" in message ? (message as { toolCallId?: string }).toolCallId : undefined;
+    const summary = config?.segmentSummaryPlan?.get(toolCallId ?? "");
+ // 用与执行处**逐字一致**的产物文本估 W′,而不是估算常数:占位/摘要的中文 token 密度
+ // 与 ASCII 系数不同,旧口径会系统性高估节省(回放 T3 因此把不划算的批放行)。
+    const productText = summary
+      ? `${SEGMENT_SUMMARY_PREFIX}${candidate.meta.name} ${candidate.meta.where} 原共 ${original.length} 字符;全文可按寻址重读]\n${summary}`
+      : `${CLEARED_PLACEHOLDER_PREFIX}${candidate.meta.name} ${candidate.meta.where} 原共 ${original.length} 字符——需要时按上述寻址参数重读(path/command/offset/limit)]`;
+    sum += Math.max(0, estimateTokensOfText(original) - estimateTokensOfText(productText));
   }
   return Math.ceil(sum);
 }
 
 function estimateAfterClear(messages: Message[], groups: ClearCandidate[][], config?: MicrocompactConfig): number {
-  return estimateTokensLocal(messages) - groups.reduce((s, g) => s + estimateGroupSavings(g, messages), 0);
+  return estimateTokensLocal(messages) - groups.reduce((s, g) => s + estimateGroupSavings(g, messages, config), 0);
 }
 

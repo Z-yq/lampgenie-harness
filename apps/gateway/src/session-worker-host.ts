@@ -108,6 +108,13 @@ export interface PermissionAskPayload {
   summary: string;
   risk?: string;
   args?: unknown;
+ /** 完整命令(super 审批分级用;worker 侧从工具参数提取)。 */
+  command?: string;
+ /** 任务归属:submittedBy=super 的任务只有危险/重资源/重启类申请转 super,
+ * 其余走聊天窗权限设置——归属必须穿过 worker RPC 才能分流。 */
+  submittedBy?: string;
+  taskId?: string;
+  brief?: string;
 }
 
 /**
@@ -143,6 +150,10 @@ export async function askPermissionWithApprovalObject(
     tool: payload.tool,
     summary: payload.summary,
     ...(payload.risk ? { risk: payload.risk } : {}),
+    ...(payload.command ? { command: payload.command } : {}),
+    ...(payload.submittedBy ? { submittedBy: payload.submittedBy } : {}),
+    ...(payload.taskId ? { taskId: payload.taskId } : {}),
+    ...(payload.brief ? { brief: payload.brief } : {}),
   });
   if (outcome.decision === "allow-once") {
     const verdict = verifyApprovalObject(snap.frozen, approvalObject());

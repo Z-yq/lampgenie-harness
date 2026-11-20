@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MAX_CANDIDATES,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_MAX_WORK_UNITS,
   NIGHTLY_CODES,
   NIGHTLY_STEPS,
   NIGHTLY_VERSION,
@@ -154,9 +155,10 @@ describe("runKey / startRun", () => {
     expect(run.window).toEqual({ from: "2026-03-06T22:00:00.000", to: "2026-03-07T06:00:00.000" });
   });
 
-  it("缺省 maxTokens 与自定义 maxTokens", () => {
-    expect(makeRun().budget).toEqual({ tokens: 0, maxTokens: DEFAULT_MAX_TOKENS });
+  it("缺省 maxTokens 与自定义 maxTokens(含 workUnits 双轨缺省)", () => {
+    expect(makeRun().budget).toEqual({ tokens: 0, maxTokens: DEFAULT_MAX_TOKENS, workUnits: 0, maxWorkUnits: DEFAULT_MAX_WORK_UNITS });
     expect(makeRun("demo", { maxTokens: 1000 }).budget.maxTokens).toBe(1000);
+    expect(makeRun("demo", { maxWorkUnits: 7 }).budget.maxWorkUnits).toBe(7);
   });
 
   it("非法 maxTokens 回落到缺省", () => {
@@ -349,16 +351,43 @@ describe("markStep", () => {
     expect(twice.run.budget.tokens).toBe(25);
   });
 
-  it("超预算:run paused + pauseReason=budget,本步仍 done,码含 STEP_DONE 与 BUDGET_EXCEEDED", () => {
+  it("超预算:run paused + pauseReason=budget-tokens,本步仍 done,码含 STEP_DONE 与 BUDGET_EXCEEDED", () => {
     const run = makeRun("demo", { maxTokens: 100 });
     const result = markStep(run, { name: "pull-traces", status: "done", tokens: 150, at: T1 });
     expect(result.run.status).toBe("paused");
-    expect(result.run.pauseReason).toBe("budget");
+    expect(result.run.pauseReason).toBe("budget-tokens");
     expect(result.run.steps[0]?.status).toBe("done");
     expect(result.codes).toEqual([
       NIGHTLY_CODES.NIGHTLY_STEP_DONE,
       NIGHTLY_CODES.NIGHTLY_BUDGET_EXCEEDED,
     ]);
+  });
+
+  it(" 分账:workUnits 超限走独立轨(budget-work-units),tokens 不受牵连", () => {
+    const run = makeRun("demo", { maxWorkUnits: 100 });
+    const result = markStep(run, { name: "pull-traces", status: "done", tokens: 0, workUnits: 150, at: T1 });
+    expect(result.run.status).toBe("paused");
+    expect(result.run.pauseReason).toBe("budget-work-units");
+    expect(result.run.budget.workUnits).toBe(150);
+    expect(result.run.budget.tokens).toBe(0);
+    expect(result.codes).toContain(NIGHTLY_CODES.NIGHTLY_BUDGET_EXCEEDED);
+  });
+
+  it(" 分账:大事件量(219120)不再顶穿 token 轨——事件只计 workUnits", () => {
+    const run = makeRun(); // 缺省 maxTokens=200_000 / maxWorkUnits=500_000
+    const result = markStep(run, { name: "pull-traces", status: "done", tokens: 0, workUnits: 219_120, at: T1 });
+    expect(result.run.status).toBe("running"); // 不暂停:两条轨都在限内
+    expect(result.run.budget.workUnits).toBe(219_120);
+    expect(result.run.budget.tokens).toBe(0);
+  });
+
+  it(" 分账:旧 run 记录缺 workUnits 字段时兜 0 并补 maxWorkUnits 缺省", () => {
+    const legacy = makeRun();
+    const run = { ...legacy, budget: { tokens: 5, maxTokens: 100 } } as unknown as typeof legacy;
+    const result = markStep(run, { name: "mine", status: "done", tokens: 10, workUnits: 3, at: T1 });
+    expect(result.run.budget.workUnits).toBe(3);
+    expect(result.run.budget.maxWorkUnits).toBe(DEFAULT_MAX_WORK_UNITS);
+    expect(result.run.budget.tokens).toBe(15);
   });
 
   it("恰好等于上限不暂停", () => {

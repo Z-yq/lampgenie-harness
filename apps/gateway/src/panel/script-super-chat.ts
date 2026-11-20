@@ -200,53 +200,15 @@ function supModelDotRender(eff) {
     : st === "warn" ? "模型可用性未知:配置目录里没有该模型(检查 设置 → 模型端点)"
     : "模型不可用:尚未配置任何模型端点(设置 → 模型)";
 }
-/** 打开模型菜单:复用通用 pill 菜单(与任务聊天窗模型菜单同一组件/同一配置真源)。 */
+/** 打开模型菜单:与任务聊天窗同源同形态(modelMenuOpen 两级导航+渐变滑块+zoom clamp);
+ * sid="super" 固定会话(staged/effort/跟随全局全走既有通道),supPillFit 兜底缩放重夹紧。 */
 function supModelMenuOpen() {
   var anchor = document.getElementById("supModelPill");
   if (!anchor) return;
-  var cfg = cfgView && cfgView.config ? cfgView.config : null;
-  var groups = [];
-  var seen = {};
-  var provOf = {};
-  for (var pi = 0; pi < ((cfg && cfg.providers) || []).length; pi++) {
-    var p = cfg.providers[pi];
-    var items = [];
-    for (var mi = 0; mi < ((p && p.models) || []).length; mi++) {
-      var mm = p.models[mi];
-      var nm = typeof mm === "string" ? mm : String((mm && mm.name) || "");
-      if (!nm || seen[nm]) continue;
-      seen[nm] = 1;
-      provOf[nm] = String((p && p.id) || "");
-      items.push({ value: nm, sub: "" });
-    }
-    if (items.length) groups.push({ title: String((p && (p.name || p.id)) || "provider"), items: items });
-  }
-  var g = supModelGlobal();
-  if (g && !seen[g]) {
-    groups.unshift({ title: "全局默认", items: [{ value: g, sub: "跟随全局" }] });
-  }
-  if (!groups.length) { toast("尚未配置任何模型端点(设置 → 模型页配置)", true); return; }
-  var eff = supModelEffective();
-  pillMenuOpen(anchor, groups, eff.model, function (picked) {
-    if (!picked) return;
-    if (picked === eff.model && eff.override) return;
-    var rev = sessionModelRev.get("super");
-    var pid = provOf[picked] || "";
-    var eff2 = typeof sessionModelEffort === "function" ? sessionModelEffort() : null;
-    var ok = wsSafeSend(JSON.stringify({ v: 1, type: "session.model.set", sessionId: "super", model: picked, ...(pid ? { providerId: pid } : {}), effort: eff2, ...(rev !== undefined ? { expectedRevision: rev } : {}) }));
-    if (!ok) { toast("连接未就绪", true); return; }
-    anchor.textContent = "模型 " + picked + " ·切换中";
-    anchor.classList.add("staged");
-    toast("指挥台会话模型 → " + picked + "(已提交,等待服务端确认…)");
-  }, "跟随全局默认", function () {
-    var rev2 = sessionModelRev.get("super");
-    wsSafeSend(JSON.stringify({ v: 1, type: "session.model.set", sessionId: "super", model: null, ...(rev2 !== undefined ? { expectedRevision: rev2 } : {}) }));
-    anchor.textContent = "模型 切换中…";
-    toast("已请求指挥台会话回到全局默认模型(等待确认…)");
-  });
- // 界面缩放(settings.zoom)下 left/bottom 会被 body zoom 二次缩放 → 重算夹紧,避免右缘裁切
+  try { modelMenuOpen(undefined, { anchorId: "supModelPill", sid: "super" }); } catch (e) { toast("模型菜单打开失败:" + String((e && e.message) || e).slice(0, 80), true); }
   try { supPillFit(anchor); window.__supMenuAnchorId = "supModelPill"; } catch (e) { /* 忽略 */ }
 }
+/* 旧实现下半段(pillMenuOpen 调用块)同批移除;新实现见上方 supModelMenuOpen */
 /** 入口接线(幂等:__supChatWired 守卫;由本分片末尾与 supCtxWire 各调一次)。 */
 function supChatWire() {
   var btn = document.getElementById("supAttBtn");
@@ -301,7 +263,7 @@ function supChatWire() {
 setTimeout(function () { try { supChatWire(); } catch (e) { /* 面板未就绪:supCtxWire 处会再试一次 */ } try { newTaskTopbarWire(); } catch (e) { /* 同上:DOM 未就绪时下一拍再连 */ } }, 0);
 /** P2-1 顶栏「新建任务」入口(web 面板):按钮 #tbNewTask 点击走**既有** newDraft(与侧栏 #act-new
  * onclick、命令中心 newtask /new、WS menu-command "new-task" 同一链路,不新写业务)。
- * 快捷键 Ctrl+N / Cmd+N 已在既有 keymap 里(script-voice-cite.ts hitKey "new-task" → preventDefault → newDraft;
+ * 快捷键 Ctrl+N / Cmd+N 已在既有 keymap 里(script-chat-cite.ts hitKey "new-task" → preventDefault → newDraft;
  * descOf 把 meta 归一成 ctrl,故 meta/ctrl 均可),本处不重复绑定——重复会连打两次 newDraft。
  * desktop 壳已有独立入口(应用菜单 文件→新建任务),按任务书不重复添加:桌面壳内隐藏本按钮。 */
 function newTaskTopbarWire() {

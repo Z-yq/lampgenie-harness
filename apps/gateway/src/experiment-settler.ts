@@ -65,8 +65,19 @@ const CANDIDATE_METRICS: Record<string, {
   name: string;
   threshold: number;
   surface: "tip" | "tool";
+ /** 队列候选 kind 与映射 surface 不必逐字相等(gate 类候选的干预面也是 tip 注入)。 */
+  kinds?: readonly string[];
 }> = {
   "repeated-reads": { statsKey: "repeatedReads", name: "repeated-read-groups", threshold: 1, surface: "tip" },
+ // 补 unresolved-asks 映射——1604A 注意队列 4 条候选全留队是因为映射表
+ // 只认 repeated-reads;unresolvedAsks 在 session-stats 有确定性采集,基线可诚实计算,故开放映射。
+  "unresolved-asks": {
+    statsKey: "unresolvedAsks",
+    name: "unresolved-asks-rate",
+    threshold: 1,
+    surface: "tip",
+    kinds: ["tip", "gate"],
+  },
  // failed-steps 已移除(修5):threshold=2 过低→基线 94.63%(63x 虚高),且无注入位;
  // 待造出 journal_query/编辑回执影响面工具后再重新设计指标口径。
 };
@@ -125,9 +136,10 @@ export function drainCandidateQueue(root: string, opts: { now?: number } = {}): 
   const allStats = [...stats.values()];
   for (const [id, entry] of pending) {
     const spec = CANDIDATE_METRICS[entry.ref];
+    const kindAllowed = spec !== undefined && (spec.kinds !== undefined ? spec.kinds.includes(entry.kind) : entry.kind === spec.surface);
  // 已有同 ref 实验 → 标消费不再重排(登记是唯一真相,后续走结算器)。
     const dupRef = experiments.some((e) => e.intervention?.ref === entry.ref);
-    if (spec === undefined || entry.kind !== spec.surface) {
+    if (spec === undefined || !kindAllowed) {
       if (dupRef) {
         markQueueConsumed(root, [id], "rsi-queue-drain:duplicate-ref", now);
         out.markedConsumed.push(id);
@@ -275,7 +287,10 @@ export function loadSessionStats(root: string): { bySession: Map<string, Session
     }
   }
   const clean = new Map<string, SessionStat>();
-  for (const [k, v] of bySession) clean.set(k, { sessionId: v.sessionId, repeatedReads: v.repeatedReads, failedSteps: v.failedSteps });
+ // unresolvedAsks 透传(此前被剥掉,导致该指标映射永远拿不到数据)。
+  for (const [k, v] of bySession) {
+    clean.set(k, { sessionId: v.sessionId, repeatedReads: v.repeatedReads, unresolvedAsks: v.unresolvedAsks, failedSteps: v.failedSteps });
+  }
   return { bySession: clean, files };
 }
 
@@ -322,9 +337,14 @@ export async function settleExperiments(root: string, opts: { now?: number; jour
       }
     }
     const nT = treatment.length;
+ // 指标名感知——按 success metric 名反查映射表拿 statsKey(code_review nit 修复:
+ // 单一真相在 CANDIDATE_METRICS,不内联三元;查不到=非登记指标,如实跳过不静默错算)。
+    const statsKey: "repeatedReads" | "unresolvedAsks" | undefined = Object.values(CANDIDATE_METRICS)
+      .find((spec) => spec.name === successMetric.name)?.statsKey;
+    if (statsKey === undefined) continue;
     const rate = (list: SessionStat[]): number => {
       if (list.length === 0) return Number.NaN;
-      const hit = list.filter((s) => Number(s.repeatedReads ?? 0) >= 1).length;
+      const hit = list.filter((s) => Number(s[statsKey] ?? 0) >= 1).length;
       return hit / list.length;
     };
     const treatmentRate = rate(treatment);

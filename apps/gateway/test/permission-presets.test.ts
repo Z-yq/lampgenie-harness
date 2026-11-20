@@ -212,6 +212,35 @@ describe("childPermission / resolveStartupPreset", () => {
     // 不冲突时无告警
     expect(resolveStartupPreset({ preset: "read-only", mode: "readonly" }).warnings).toEqual([]);
   });
+
+ // 需求一:既无 preset 也无 defaultPreset 时,合法 permissions.mode 即启动口径
+ //(「配了 auto 仍逐调用审批」的根因=被缺省 workspace-write 的 mode 覆盖)。
+  it("无 preset/defaultPreset + mode=auto → mode=auto/approval=never/sandbox 沿缺省行", () => {
+    const r = resolveStartupPreset({ mode: "auto" });
+    expect(r.mode).toBe("auto");
+    expect(r.approval).toBe("never");
+    expect(r.sandbox).toBe("workspace"); // 解析行 workspace-write 的 sandbox,不放大到 full
+    expect(r.warnings).toEqual([]); // 不再产出 mode 冲突告警(本路径 mode 就是口径)
+  });
+
+  it("无 preset/defaultPreset + mode=ask → mode=ask(ask 表行语义)", () => {
+    const r = resolveStartupPreset({ mode: "ask" });
+    expect(r.mode).toBe("ask");
+    expect(r.approval).toBe("on-request");
+    expect(r.sandbox).toBe("full");
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("显式 preset 不受新路径影响(preset 优先语义保留)", () => {
+    const r = resolveStartupPreset({ preset: "workspace-write" });
+    expect(r.mode).toBe("workspace"); // 显式 preset 的 mode=workspace 逐字不变
+    expect(r.approval).toBe("on-request");
+    expect(r.preset).toBe("workspace-write");
+ // 显式 preset + 冲突 mode 仍旧 preset 优先 + 告警
+    const c = resolveStartupPreset({ preset: "workspace-write", mode: "auto" });
+    expect(c.mode).toBe("workspace");
+    expect(c.warnings.length).toBe(1);
+  });
 });
 
 describe("cfg.set 纯函数语义:先校验后落地,失败不改任何 state", () => {

@@ -38,6 +38,26 @@ export interface SessionModelOverride {
   effort?: string;
 }
 
+/**
+ * RSI 机制模型槽位回退:
+ * `coding.models.rsi`(与 compact/review/subagent 同族 roleRef)→ SessionModelOverride。
+ * 只对 rsi 会话生效;空 model/非字符串 = 未配置(undefined,零行为变化)。
+ * reasoningEffort 映射为会话覆盖的 effort(与 per-session 覆盖同义)。
+ */
+export function rsiModelOverrideOf(config: unknown): SessionModelOverride | undefined {
+  const rsi = (config as {
+    coding?: { models?: { rsi?: { providerId?: unknown; model?: unknown; reasoningEffort?: unknown } } };
+  } | undefined)?.coding?.models?.rsi;
+  const model = typeof rsi?.model === "string" ? rsi.model.trim() : "";
+  if (model === "") return undefined;
+  const providerId = typeof rsi?.providerId === "string" ? rsi.providerId.trim() : "";
+  return {
+    model,
+    ...(providerId !== "" ? { providerId } : {}),
+    ...(typeof rsi?.reasoningEffort === "string" ? { effort: rsi.reasoningEffort } : {}),
+  };
+}
+
 /** 落盘条目:覆盖选择 + 该会话的写入版本(revision 单调递增,用于 CAS/回包对账)+ 写入时刻(prune 排序)。 */
 export interface SessionModelEntry extends SessionModelOverride {
   revision: number;
@@ -473,7 +493,8 @@ export function createSessionModelFace(config: Config, root: string, store: Sess
     return hit;
   };
   return {
-    resolve: (sessionId) => store.get(sessionId),
+ // 优先级:会话级覆盖(session-models.json)> rsi 会话的 config.agent.rsiModel > 无覆盖(全局模型)。
+    resolve: (sessionId) => store.get(sessionId) ?? (sessionId === "rsi" ? rsiModelOverrideOf(config) : undefined),
     derive: (sessionId, override) => {
       const key = `${override.providerId ?? ""}::${override.model}::${override.effort ?? "-"}`;
       const hit = cache.get(sessionId);

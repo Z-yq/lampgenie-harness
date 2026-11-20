@@ -60,6 +60,8 @@ export interface LiteralRefHit {
   text: string;
   /** 所属符号(静态索引中该文件内最近的前置声明);拿不到=缺省。 */
   symbol?: string;
+ /** 多候选(a|b|c)模式下命中的候选字面量;单候选缺省(结果与旧口径逐字兼容)。 */
+  candidate?: string;
  /** 最内层决策点(if/elif/else/while/for/switch/case——条件键落在哪个分支体。 */
   decision?: { kind: string; condition?: string; line: number };
   /** ±2 行源码预览(仅结构位点且代码命中 ≤40 时;行格式 `>N | text`)。 */
@@ -81,6 +83,10 @@ export interface LiteralRefsResult {
   query: "refs";
   root: string;
   literal: string;
+ /** 多候选模式(a|b|c)下的候选清单(单候选=长度 1; G-D)。 */
+  candidates: string[];
+ /** 每候选的命中计数(多候选分组视图;键=候选字面量)。 */
+  byCandidate: Record<string, { hits: number; files: number; code: number; test: number; doc: number; build: number }>;
   groups: Record<LiteralRefContext, LiteralRefHit[]>;
   /** 全量命中(按语境序 + file/line 排序;与 groups 同一份对象)。 */
   hits: LiteralRefHit[];
@@ -142,6 +148,23 @@ const DOC_EXTS = new Set([".md", ".mdx", ".markdown", ".rst", ".adoc", ".asciido
 
 function toPosix(p: string): string {
   return p.split(sep).join("/");
+}
+
+/** 多候选拆分( G-D):refs 接受 `a|b|c`(grep 工具的 alternation 习惯)——
+ * 一次 rg 多 -e 扫描、按候选分组返回,替代 agent 的「N 个候选分 N 次查」。
+ * 拆分规则:按 `|` 切、trim、去空、去重,上限 8 个候选(防超长交替炸预算);全空=原样单候选。
+ * 字面量真含 `|` 的场景(如查正则串本身)罕见,口径在 knownLimits 里声明。 */
+export const REF_CANDIDATE_CAP = 8;
+
+export function splitRefCandidates(literal: string): string[] {
+  if (!literal.includes("|")) return [literal];
+  const parts = literal
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const uniq = [...new Set(parts)];
+  if (uniq.length === 0) return [literal];
+  return uniq.slice(0, REF_CANDIDATE_CAP);
 }
 
 /** 压缩产物(vendored minified bundle)不是可编辑源码:命中只会淹没真引用。 */
@@ -361,8 +384,9 @@ interface EngineResult {
   scannedFiles?: number;
 }
 
-async function grepMatches(root: string, literal: string, maxHits: number, perFile: number): Promise<EngineResult> {
-  const raw = await grepMatchesAny(root, [literal], { glob: REFS_GLOBS, max: maxHits + 1, perFile });
+async function grepMatches(root: string, candidates: string[], maxHits: number, perFile: number): Promise<EngineResult> {
+ // 多候选一次扫描:grepMatchesAny 内部就是 `rg -F -e a -e b ...`( G-D)。
+  const raw = await grepMatchesAny(root, candidates, { glob: REFS_GLOBS, max: maxHits + 1, perFile });
   const truncated = raw.length > maxHits;
   return {
     matches: raw.slice(0, maxHits).map((m) => ({ file: toPosix(m.file), line: m.line, text: m.text })),
@@ -371,9 +395,10 @@ async function grepMatches(root: string, literal: string, maxHits: number, perFi
 }
 
 /** 自实现文件遍历(无外部命令依赖;grep 通道不可用时的确定性回退)。 */
-function walkMatches(root: string, literal: string, opts: {
+function walkMatches(root: string, candidates: string[], opts: {
   maxHits: number; maxPerFile: number; maxFiles: number; maxFileBytes: number;
 }): EngineResult {
+  const matchesAny = (s: string): boolean => candidates.some((c) => s.includes(c));
   const matches: RawMatch[] = [];
   let truncated = false;
   let scannedFiles = 0;
@@ -413,11 +438,11 @@ function walkMatches(root: string, literal: string, opts: {
         const head = buf.subarray(0, Math.min(8192, buf.length));
         if (head.includes(0)) continue; // 二进制
         const text = buf.toString("utf8");
-        if (!text.includes(literal)) continue;
+        if (!matchesAny(text)) continue;
         const lines = text.split("\n");
         let taken = 0;
         for (let i = 0; i < lines.length; i++) {
-          if (!lines[i]!.includes(literal)) continue;
+          if (!matchesAny(lines[i]!)) continue;
           matches.push({
             file: rel,
             line: i + 1,
@@ -462,10 +487,15 @@ export async function scanLiteralRefs(
   const emptyGroups = (): Record<LiteralRefContext, LiteralRefHit[]> => ({
     "case-literal": [], "eq-literal": [], "z-literal": [], "object-key": [], "cpp-macro": [], "string-literal": [], "build-file": [], doc: [],
   });
+ // 多候选(G-D):`a|b|c` 拆候选一次扫描、按候选分组——agent 的 alternation 习惯直接接住。
+  const candidates = splitRefCandidates(literal);
+  if (candidates.length > 1) {
+    knownLimits.unshift(`多候选模式:${candidates.length} 个候选(${candidates.join(" | ")})一次扫描按候选分组;字面量真含 | 时请拆成单候选分次查。`);
+  }
   if (!literal) {
     knownLimits.unshift("需要非空字面量(不含引号,如 refs graph)。");
     return {
-      query: "refs", root, literal: "", groups: emptyGroups(), hits: [],
+      query: "refs", root, literal: "", candidates, byCandidate: {}, groups: emptyGroups(), hits: [],
       totals: { hits: 0, files: 0, code: 0, test: 0, doc: 0, build: 0, byContext: Object.fromEntries(LITERAL_REF_CONTEXTS.map((c) => [c, 0])) as Record<LiteralRefContext, number> },
       filtered: { excludedDirs: 0, tests: 0, docs: 0 },
       nextSteps: [], indexAvailable: loadOwnerIndex(root) !== null, engine: "grep", truncated: false, knownLimits,
@@ -476,14 +506,14 @@ export async function scanLiteralRefs(
   let used: "grep" | "walk" = engine;
   let result: EngineResult;
   if (engine === "walk") {
-    result = walkMatches(root, literal, { maxHits, maxPerFile, maxFiles: opts.maxFiles ?? 20000, maxFileBytes: opts.maxFileBytes ?? 1_500_000 });
+    result = walkMatches(root, candidates, { maxHits, maxPerFile, maxFiles: opts.maxFiles ?? 20000, maxFileBytes: opts.maxFileBytes ?? 1_500_000 });
   } else {
     try {
-      result = await grepMatches(root, literal, maxHits, maxPerFile);
+      result = await grepMatches(root, candidates, maxHits, maxPerFile);
     } catch (err) {
       used = "walk";
       knownLimits.unshift(`grep 通道不可用(${String(err instanceof Error ? err.message : err).slice(0, 160)}),已回退自实现文件遍历。`);
-      result = walkMatches(root, literal, { maxHits, maxPerFile, maxFiles: opts.maxFiles ?? 20000, maxFileBytes: opts.maxFileBytes ?? 1_500_000 });
+      result = walkMatches(root, candidates, { maxHits, maxPerFile, maxFiles: opts.maxFiles ?? 20000, maxFileBytes: opts.maxFileBytes ?? 1_500_000 });
     }
   }
 
@@ -532,26 +562,34 @@ export async function scanLiteralRefs(
     const fileLines = linesOf(file);
     const lineText = fileLines?.[m.line - 1] ?? m.text;
     const prevText = fileLines ? (m.line > 1 ? fileLines[m.line - 2] ?? "" : "") : m.prevText ?? "";
-    const contexts: LiteralRefContext[] = build
-      ? ["build-file"]
-      : doc
-        ? ["doc"]
-        : classifyLiteralOccurrences(lineText, literal, prevText);
+    const symbol = ownerAt(ownerIndex, file, m.line);
+    const summary = lineText.trim().slice(0, 180);
+    const multi = candidates.length > 1;
+    for (const cand of candidates) {
+ // doc/build 命中语境是整行「出现过该文本」——多候选下必须按候选实际在场过滤,
+ // 否则一行文档会给每个候选都记一条 doc 命中( G-D,测试注意)。
+ // 判据用子串(与引擎收集口径一致),不用词边界——构建文件的 -DUSE_FIXED 前缀 D
+ // 是词字符,词边界会误杀;doc 的既有口径本就是「行内出现该文本」。
+      if ((build || doc) && !lineText.includes(cand)) continue;
+      const contexts: LiteralRefContext[] = build
+        ? ["build-file"]
+        : doc
+          ? ["doc"]
+          : classifyLiteralOccurrences(lineText, cand, prevText);
 
  // 概念足迹(surface)要的是「概念出现在哪」,不是「是不是字面量」。
     // 旧口径只保留 classifyLiteralOccurrences 认得的引号语境行,未加引号的标识符出现
     // (类型名/函数名/import/使用点)contexts=[] → 整行被丢弃,symbol 面对「替换一个符号」
     // 是瞎的、链路图的 call 边也永远触发不了。includeBare 缺省 false,refs 工具行为逐字不变。
-    if (opts.includeBare === true && contexts.length === 0 && !build && !doc && containsLiteralText(lineText, literal)) {
-      contexts.push("string-literal");
-    }
-    const symbol = ownerAt(ownerIndex, file, m.line);
-    const summary = lineText.trim().slice(0, 180);
-    for (const context of contexts) {
-      const key = `${file}:${m.line}:${context}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      hits.push({ file, line: m.line, context, kind, text: summary, ...(symbol ? { symbol } : {}) });
+      if (opts.includeBare === true && contexts.length === 0 && !build && !doc && containsLiteralText(lineText, cand)) {
+        contexts.push("string-literal");
+      }
+      for (const context of contexts) {
+        const key = `${file}:${m.line}:${context}:${cand}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hits.push({ file, line: m.line, context, kind, text: summary, ...(symbol ? { symbol } : {}), ...(multi ? { candidate: cand } : {}) });
+      }
     }
   }
 
@@ -576,6 +614,19 @@ export async function scanLiteralRefs(
     build: hits.filter((h) => h.kind === "build").length,
     byContext,
   };
+ // 每候选计数(单候选也填,消费方不用判空;键=候选字面量,零命中候选在此可见)。
+  const byCandidate: LiteralRefsResult["byCandidate"] = {};
+  for (const cand of candidates) {
+    const ch = hits.filter((h) => (h.candidate ?? candidates[0]) === cand);
+    byCandidate[cand] = {
+      hits: ch.length,
+      files: new Set(ch.map((h) => h.file)).size,
+      code: ch.filter((h) => h.kind === "code").length,
+      test: ch.filter((h) => h.kind === "test").length,
+      doc: ch.filter((h) => h.kind === "doc").length,
+      build: ch.filter((h) => h.kind === "build").length,
+    };
+  }
 
  // 决策点标注(ASR 考题盲区修复):代码命中挂「最内层决策点」——
   // 条件键落在哪个 if/while/for 分支体直接可见,分支语义不用再回源码;
@@ -656,14 +707,16 @@ export async function scanLiteralRefs(
   const nextSteps: string[] = topSymbols.slice(0, 3).map((s) => `codesense impact ${s}`);
   if (hits.length === 0) {
     nextSteps.push(`codesense explore "${literal}"`);
-  } else if (isIdentifier(literal)) {
-    nextSteps.push(`codesense symbol ${literal}`);
+  } else if (candidates.length === 1 && isIdentifier(candidates[0]!)) {
+    nextSteps.push(`codesense symbol ${candidates[0]}`);
   }
 
   return {
     query: "refs",
     root,
     literal,
+    candidates,
+    byCandidate,
     groups,
     hits,
     totals,
@@ -681,7 +734,7 @@ export async function scanLiteralRefs(
 
 export function renderLiteralRefs(r: LiteralRefsResult): string {
   const lines: string[] = [];
-  lines.push(`codesense refs "${r.literal}" — 字面量引用面`);
+  lines.push(`codesense refs "${r.literal}" — 字面量引用面${r.candidates.length > 1 ? `(${r.candidates.length} 候选,一次扫描按候选分组)` : ""}`);
   lines.push(`  root: ${r.root}`);
   const ctxCounts = LITERAL_REF_CONTEXTS.map((c) => `${c.replace("-literal", "")} ${r.totals.byContext[c] ?? 0}`).join(" / ");
   lines.push(
@@ -690,6 +743,17 @@ export function renderLiteralRefs(r: LiteralRefsResult): string {
     (r.engine === "walk" ? "(walk 遍历)" : ""),
   );
   lines.push(`  语境: ${ctxCounts}`);
+ // 多候选分组视图( G-D):每候选一行计数,零命中候选显式可见——
+ // agent 的「一次 alternation 探 3-6 个候选名」在这里一眼看出哪个存在哪个不存在。
+  if (r.candidates.length > 1) {
+    const candLine = r.candidates
+      .map((c) => {
+        const s = r.byCandidate[c] ?? { hits: 0, files: 0, code: 0, test: 0, doc: 0, build: 0 };
+        return `${c}=${s.hits} 行/${s.files} 文件${s.hits === 0 ? "(零命中)" : `(码${s.code}/试${s.test}/文${s.doc})`}`;
+      })
+      .join(" | ");
+    lines.push(`  候选: ${candLine}`);
+  }
   if (r.totals.hits === 0) {
     lines.push("");
     lines.push("(零命中——字面量可能未出现,或被默认排除目录/--no-tests/--no-docs 过滤;见已知边界)");
@@ -702,7 +766,8 @@ export function renderLiteralRefs(r: LiteralRefsResult): string {
     const cap = 40;
     for (const h of items.slice(0, cap)) {
       const sym = h.symbol ? `  [${h.symbol}]` : "";
-      lines.push(`  ${h.file}:${h.line}${sym}`);
+      const cand = h.candidate ? `(${h.candidate}) ` : "";
+      lines.push(`  ${cand}${h.file}:${h.line}${sym}`);
       lines.push(`    ${h.text || "(空行)"}`);
       if (h.decision) {
         lines.push(`    ⟂ ${h.decision.kind}${h.decision.condition ? ` ${h.decision.condition}` : ""} (@${h.decision.line})`);

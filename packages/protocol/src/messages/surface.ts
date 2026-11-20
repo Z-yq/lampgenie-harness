@@ -1,5 +1,5 @@
 /**
- * 管理/杂项面消息:节点/wiki/评审/语音/经验/配置/团队/伙伴/追踪/权限/自动化/插件/档案/浏览器视图/表面能力。
+ * 管理/杂项面消息:节点/wiki/评审/语音转写/经验/配置/团队/伙伴/追踪/权限/自动化/插件/档案/浏览器视图/表面能力。
  * 自 index.ts(2941 行)按域拆分,逐字搬移。
  */
 import { z } from "zod";
@@ -87,15 +87,6 @@ export const ReviewInject = Envelope.extend({
  /** 来源面(chat-findings=会话内评论卡/review-store=回写店),journal 记账用。 */
   source: z.string().max(40).optional(),
 });
-/** 语音输入( qwen-audio-realtime 即语音模型,主 agent 语音通道)。
- * 浏览器采集 PCM16(base64)→服务端转 dashscope realtime→回复文本;凭证不出服务端。
- * @deprecated voice.speak(音频直入大脑链路)已删除——server 不再受理,已从 ClientMessage
- * 联合移除;保留 export 只为旧引用编译不破。语音入口改走 voice.transcribe(ASR→文本→super.turn)。 */
-export const VoiceSpeak = Envelope.extend({
-  type: z.literal("voice.speak"),
- /** 16kHz PCM16 单声道,base64 编码。 */
-  audioB64: z.string().min(1),
-});
 /** 语音输入:浏览器 PCM16(base64)→服务端 ASR→文本;不产生人格设定与语音回播。 */
 export const VoiceTranscribe = Envelope.extend({
   type: z.literal("voice.transcribe"),
@@ -130,17 +121,6 @@ export const TeamaiRemove = Envelope.extend({ type: z.literal("teamai.remove"), 
 export const PermissionPending = Envelope.extend({ type: z.literal("permission.pending") });
 /** 关卡 Gate 历史面:拉最近决议(broker 内存 ring;重启即失,持久化登记后续)。 */
 export const PermissionHistory = Envelope.extend({ type: z.literal("permission.history"), limit: z.number().int().positive().max(100).optional() });
-// TTS 播报(二期:文本→服务端 qwen-tts→音频 base64 回放;
-// 凭证不出服务端;brief 级经播报改写器口语化限长。
-export const VoiceTts = Envelope.extend({
-  type: z.literal("voice.tts"),
-  text: z.string().min(1),
-  level: z.enum(["full", "brief"]).default("full"),
- /** 音色试听:单次覆盖 config audio.tts.voice,不落配置;服务端回包 voice.tts.result.voice 回显。 */
-  voice: z.string().min(1).max(80).optional(),
-});
-/** 音色清单:按当前 audio.tts.model 返回内置官方音色表;未知模型=空表(前端走自定义 voice id 兜底)。 */
-export const VoiceList = Envelope.extend({ type: z.literal("voice.list") });
 export const ExpList = Envelope.extend({ type: z.literal("exp.list") });
 export const ExpDisable = Envelope.extend({
   type: z.literal("exp.disable"),
@@ -320,6 +300,81 @@ export const WizardGen = Envelope.extend({
   port: z.number().int().min(1).max(65535).default(22),
   nodeId: z.string().default(""),
 });
+
+// ---- 移动端远程控制 + Bot Channels(原「节点 Fleet」视图改造) ----
+/** 启动/刷新一次性配对会话(幂等:未过期返回原二维码)。 */
+export const RemoteControlStart = Envelope.extend({ type: z.literal("remote.control.start") });
+/** 拉当前配对状态(面板 2s 轮询 + 广播 changed 后立即重拉)。 */
+export const RemoteControlStatusQuery = Envelope.extend({ type: z.literal("remote.control.status") });
+/** 停止配对(清 token;已连手机下一次重连即被拒)。 */
+export const RemoteControlStop = Envelope.extend({ type: z.literal("remote.control.stop") });
+
+export const BotProviderZ = z.enum(["weixin", "feishu", "lark", "telegram"]);
+export type BotProviderId = z.infer<typeof BotProviderZ>;
+/** Bot 渠道能力摘要(远程控制右栏卡片与机器人管理弹窗共用同一份)。 */
+export const BotChannelStatusZ = z.object({
+  id: BotProviderZ,
+  title: z.string(),
+  region: z.string().optional(),
+ /** 该渠道已建的机器人数量/其中启用数。 */
+  bots: z.number().int().nonnegative(),
+  enabled: z.number().int().nonnegative(),
+ /** 至少一个启用机器人具备必需凭证(可收发)。 */
+  configured: z.boolean(),
+ /** 不可用原因(缺 token/缺 appSecret 等;不含密钥值)。 */
+  detail: z.string().optional(),
+});
+export type BotChannelStatus = z.infer<typeof BotChannelStatusZ>;
+export const BotSecretStateZ = z.object({
+  token: z.boolean(),
+  appSecret: z.boolean(),
+  verification: z.boolean(),
+  encrypt: z.boolean(),
+});
+export type BotSecretState = z.infer<typeof BotSecretStateZ>;
+export const BotPublicZ = z.object({
+  id: z.string(),
+  provider: BotProviderZ,
+  name: z.string(),
+  enabled: z.boolean(),
+  projectId: z.string().optional(),
+  allowUserIds: z.array(z.string()).optional(),
+  appId: z.string().optional(),
+  botOpenId: z.string().optional(),
+  apiBase: z.string().optional(),
+  lastError: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+ /** 只暴露「有没有」,永不回显密钥值。 */
+  secrets: BotSecretStateZ,
+ /** 飞书/Lark:平台事件订阅要填的回调地址(其它渠道无)。 */
+  webhookUrl: z.string().optional(),
+});
+export type BotPublic = z.infer<typeof BotPublicZ>;
+
+export const BotsList = Envelope.extend({ type: z.literal("bots.list") });
+/** 新建/更新机器人。secret 字段留空/缺省=不修改已有值(不回显、不需要重填)。 */
+export const BotsUpsert = Envelope.extend({
+  type: z.literal("bots.upsert"),
+  id: z.string().optional(),
+  provider: BotProviderZ,
+  name: z.string().min(1).max(60),
+  enabled: z.boolean().optional(),
+  projectId: z.string().optional(),
+  allowUserIds: z.array(z.string()).optional(),
+  appId: z.string().optional(),
+  botOpenId: z.string().optional(),
+  apiBase: z.string().optional(),
+  token: z.string().optional(),
+  appSecret: z.string().optional(),
+  verificationToken: z.string().optional(),
+  encryptKey: z.string().optional(),
+});
+export const BotsRemove = Envelope.extend({ type: z.literal("bots.remove"), id: z.string().min(1) });
+export const BotsTest = Envelope.extend({ type: z.literal("bots.test"), id: z.string().min(1) });
+/** 微信 iLink 扫码接入:begin 出二维码,poll 轮询扫描状态;成功由服务端落库。 */
+export const BotsWeixinBegin = Envelope.extend({ type: z.literal("bots.weixin.begin") });
+export const BotsWeixinPoll = Envelope.extend({ type: z.literal("bots.weixin.poll"), qrCode: z.string().min(1) });
 
 export const AutomationList = Envelope.extend({ type: z.literal("automation.list") });
 export const AutomationCreate = Envelope.extend({

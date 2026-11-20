@@ -46,8 +46,8 @@ export const LOOP_INJECTION_BLOCK_MAX_BYTES = 1536;
 export interface LoopInjectionResult {
   blocks: LoopInjectionBlock[];
   totalBytes: number;
- /** 被跳过的 listener id 与原因(超预算/抛错)——审计面用,不静默。 */
-  skipped: Array<{ id: string; reason: "error" | "over-budget"; bytes?: number; error?: string }>;
+ /** 被跳过的 listener id 与原因(超预算/抛错/重复文本)——审计面用,不静默。 */
+  skipped: Array<{ id: string; reason: "error" | "over-budget" | "duplicate"; bytes?: number; error?: string; duplicateOf?: string }>;
 }
 
 export interface LoopInjectionHub {
@@ -69,6 +69,10 @@ export function createLoopInjectionHub(opts: { totalMaxBytes?: number } = {}): L
     },
     async collect(input) {
       const result: LoopInjectionResult = { blocks: [], totalBytes: 0, skipped: [] };
+ // 冲突消解 v1(§11 tips 冲突消解):同一文本(空白归一后)只注入一次——
+ // 两个 listener 撞同一段(如 negkb 与 gap 命中同一教训)时保留注册序靠前者,后者记
+ // reason=duplicate 留痕。只做确定性去重,不做语义压缩(那是后续语义层的事)。
+      const seenTexts = new Map<string, string>();
       for (const listener of listeners.values()) {
         let text = "";
         try {
@@ -80,12 +84,20 @@ export function createLoopInjectionHub(opts: { totalMaxBytes?: number } = {}): L
           continue;
         }
         if (text === "") continue;
+        const normalized = text.replace(/\s+/g, " ").trim();
+        if (normalized === "") continue;
+        const duplicateOf = seenTexts.get(normalized);
+        if (duplicateOf !== undefined) {
+          result.skipped.push({ id: listener.id, reason: "duplicate", duplicateOf, bytes: Buffer.byteLength(text, "utf8") });
+          continue;
+        }
         const maxBytes = typeof listener.maxBytes === "number" && listener.maxBytes > 0 ? listener.maxBytes : LOOP_INJECTION_BLOCK_MAX_BYTES;
         const bytes = Buffer.byteLength(text, "utf8");
         if (bytes > maxBytes || result.totalBytes + bytes > totalMaxBytes) {
           result.skipped.push({ id: listener.id, reason: "over-budget", bytes });
           continue;
         }
+        seenTexts.set(normalized, listener.id);
         result.blocks.push({ source: listener.id, text, bytes });
         result.totalBytes += bytes;
       }

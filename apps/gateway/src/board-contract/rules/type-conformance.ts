@@ -464,11 +464,57 @@ export function validateBoardTypeConformance(
       if (!hasThemeNode(nodes)) {
         missing.push("code 板缺板首主题节点:读者看完整板不知道「这个大流程在系统里是干什么用的、本次开发改的是其中哪一环」——加一个 id 以 theme 开头(或 group=主题)的节点横贯板首,summary 一句话讲清用途与本次改动在流程中的位置");
       }
+ // §12.6 可读性提示(提示不拒,与 typeIssues 同档;宽松词法、强信号才报):
+ // modify 卡要读出「为什么改/改什么」,改动点要读出「动了它牵连谁(上游/下游)」。
+      {
+        const hints: string[] = [];
+        const whyRe = /(为什么|为何|目的|动机|为了|原因)/;
+        const whatRe = /(改|修|换|调|增|删|移|重命名|迁移|接入|去掉|拆|合并)/;
+        const radRe = /(上游|调用方|下游|影响|波及)/;
+        const modifySteps = steps.filter((n) => String(n.change ?? "") === "modify");
+ // 防误报:有 before(现状已交代)或带目的/改动语义词的 summary 都不算;两者皆无且过短=强信号。
+        const dull = modifySteps.filter((n) => {
+          const s = `${String(n.label ?? "")} ${String(n.summary ?? "")}`;
+          if (String(n.before ?? "").trim()) return false;
+          if (whyRe.test(s) || whatRe.test(s)) return false;
+          return String(n.summary ?? "").trim().length < 8;
+        });
+        if (dull.length) {
+          hints.push(`modify-summary-incomplete[提示]:modify 节点 ${dull.slice(0, 4).map((n) => `${n.id}「${String(n.label ?? n.id)}」`).join(",")} summary 读不出「为什么改/改什么」——补一句目的+动哪段逻辑,或 before 写现状一行`);
+        }
+ // 防误报:辐射词命中,或 data/verify 边指向它(上游可见),或它自带 verify 出边
+ // (改动点挂了验证锚=影响面已表达)都算辐射面已表达;词法无表达且一条关联边都没有=强信号。
+        const isolated = modifySteps.filter((n) => !radRe.test(`${String(n.group ?? "")} ${String(n.label ?? "")} ${String(n.summary ?? "")}`)
+          && !es.some((e) => (String(e.to) === String(n.id) && ["data", "verify"].includes(String(e.kind ?? "")))
+            || (String(e.from) === String(n.id) && String(e.kind ?? "") === "verify")));
+        if (isolated.length) {
+          hints.push(`radiation-missing[提示]:modify 节点 ${isolated.slice(0, 4).map((n) => `${n.id}「${String(n.label ?? n.id)}」`).join(",")} 无辐射面表达——summary 点名上游调用方/下游影响,或补一条指向它的 data/verify 边`);
+        }
+        if (hints.length) out.push(issue(hints));
+      }
       if (missing.length) out.push(issue(missing));
       break;
     }
     case "test": {
       const missing: string[] = [];
+ // §12.6 可读性提示(提示不拒;宽松词法、强信号才报):test 板要读出
+ // 「为什么测/夹具什么语义/断言从哪来/代入一遍长什么样」。
+      {
+        const hints: string[] = [];
+        if (!nodes.some((n) => String(n.kind ?? "") === "note" && /(目的|防)/.test(`${String(n.label ?? "")} ${String(n.summary ?? "")}`))) {
+          hints.push("test-purpose-missing[提示]:test 板缺目的节点——加一个 note(summary 写「目的:防…/为了…」),读出这组测试在防什么");
+        }
+        if (/(mock|vi\.mock|注入|stub)/i.test(text) && !/(语义|契约|为什么|替代)/.test(text)) {
+          hints.push("test-fixture-unexplained[提示]:mock/注入数据缺语义标注——夹具卡写清它替代的真实数据/契约与为什么造这份");
+        }
+        if (/expect\([^)]*\)\.to(Be|Equal|HaveLength)\(\s*\d/i.test(text) && !/(推导|来源|契约|计算|口径)/.test(text)) {
+          hints.push("test-expect-ungrounded[提示]:数字断言缺推导来源——expect(...).toBe(N) 旁写 N 从哪来(计算式/契约/口径)");
+        }
+        if (!/(走查|反例|实例)/.test(text)) {
+          hints.push("test-example-missing[提示]:test 板缺走查实例——补一条带具体值的代入走查(输入 X→中间态→期望 Y)");
+        }
+        if (hints.length) out.push(issue(hints));
+      }
  // 测试类型接入 code flow:带 start/end 的测试板与 code flow 同规则
       // (主线=测试执行流,被测链路逐函数展开),另加测试特有要求;六段契约仅适用于无 start/end 的旧板。
       const testIsFlow = nodes.some((n) => String(n.kind ?? "") === "start") || nodes.some((n) => String(n.kind ?? "") === "end");

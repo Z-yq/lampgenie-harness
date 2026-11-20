@@ -163,11 +163,11 @@ function hl(mark, q) {
   return out + mark.slice(i);
 }
 // 代码块渲染:每行一个 span.cl,CSS 计数器出行为行号(body.lineno 开关);长行换行由 body.nowrapcode 控制。
-// mermaid 语法块的渲染运行时:自有图渲染器(diagram-renderer.js,纯 JS 资产,零第三方依赖)。
-// 占位节点 .md-mermaid[data-mermaid-lazy] 自携带源文本(data-src);渲染完成后 mmRenderIn 扫描
-// →按需注入 /assets/diagram-renderer.js(单例幂等)→ OwnDiagram.run({nodes}) 出图;
-// 脚本加载失败/超时(5s)/语法超子集一律降级 <pre> 代码文本,不白屏不抛错。
-let MM_LIB_LOAD = null; // diagram-renderer.js 懒加载单例(重复渲染不重复注入)
+// mermaid 懒加载运行时(消息流 mermaid 块):占位节点 .md-mermaid[data-mermaid-lazy]
+// 自携带源文本(data-src);渲染完成后 mmRenderIn 扫描→按需注入 /assets/diagram-renderer.js(单例幂等)
+// → OwnDiagram.run({nodes}) 出图;脚本加载失败/超时(5s)/语法错一律降级 <pre> 代码文本,不白屏不抛错。
+let MM_LIB_LOAD = null; // 图渲染器资产懒加载单例(重复渲染不重复注入)
+var mmThemeSigApplied = ""; // 上次主题签名(基座+主题类),避免每次 applySettings 都重 configure
 /** 主题基座:浅主题→light 调色板,深主题→dark(渲染器内置明暗双板)。 */
 function mmApplyTheme() {
   if (typeof window === "undefined" || !window.OwnDiagram || typeof window.OwnDiagram.configure !== "function") return false;
@@ -212,10 +212,13 @@ function mmRenderIn(root) { // 消息渲染完成钩子:扫描 root(缺省 docum
     for (const el of els) {
       if (!el.hasAttribute("data-mermaid-lazy")) continue; // 已渲染/已降级(重复渲染幂等)
       if (!ok || !window.OwnDiagram || typeof window.OwnDiagram.run !== "function") { mmFallback(el); continue; }
+      const src = el.getAttribute("data-src") || "";
+      el.removeAttribute("data-mermaid-lazy");
+      el.textContent = src; // mermaid.run 读节点 textContent
       Promise.resolve(window.OwnDiagram.run({ nodes: [el] })).then(() => {
         const svg = el.querySelector("svg");
         if (svg) svg.style.maxWidth = "100%"; else mmFallback(el); // 无 svg=异常防御降级
-      }).catch(() => mmFallback(el)); // 语法超子集:单节点 reject,降级代码文本
+      }).catch(() => mmFallback(el)); // 语法错:单节点 reject,降级代码文本
     }
   });
 }

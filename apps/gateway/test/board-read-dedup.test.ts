@@ -51,7 +51,24 @@ describe("① 首次调用返回全量", () => {
     expect(txt).toContain("白板「板t1」");
     for (const id of ["n1", "n2", "n3"]) expect(txt).toContain(`节点${id}`);
   });
+
+  it("§11.6③() format=dsl 返回与写侧同文法的 DSL(%% board v1 + node 行);format=json 返回原始 JSON", async () => {
+    const r = tmp();
+    seed(r);
+    const tool = boardReadTool(new MemoryJournal(), "s1", r, { boardId: "t1" });
+    const dsl = String(await tool.execute({ format: "dsl" }));
+    expect(dsl).toContain("%% board v1");
+    expect(dsl).toMatch(/^node n1 module add/m);
+    expect(dsl).toContain("这是节点 n1");
+ // 缺省仍是 compact 摘要(不含 DSL 版本行)
+    const compact = String(await boardReadTool(new MemoryJournal(), "s1", r, { boardId: "t1" }).execute({}));
+    expect(compact).not.toContain("%% board v1");
+ // json=原始 JSON
+    const json = String(await boardReadTool(new MemoryJournal(), "s1", r, { boardId: "t1" }).execute({ format: "json" }));
+    expect(json).toContain('"taskId":"t1"');
+  });
 });
+
 
 describe("② 同参重读:短提示→带标记短提示→第 4 次=逃逸全文(2026-10-30 修死代码)", () => {
   it("第 2 次短提示;第 3 次(n=2)带激活标记;第 4 次(n=3)给全文+换路指路;之后回短提示", async () => {

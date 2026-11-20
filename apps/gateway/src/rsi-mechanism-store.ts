@@ -181,6 +181,8 @@ export interface RsiRunRecord {
   dreamStartAt?: number;
  /** 做梦完成/失败卡已注入时刻(同上;phase 成 done/failed 两种共用一个标记)。 */
   dreamDoneAt?: number;
+ /** 派单时的网关 pid(孤儿判据:pid 变化且任务不在册才判 orphaned;旧记录无此字段=网关未重启口径)。 */
+  gatewayPid?: number;
 }
 
 /** 重放出来的条目:多一个 `synthetic`(由 update/delete 在缺失基础上造出的占位,不并入基础层)。 */
@@ -608,6 +610,8 @@ export async function startRun(
     budgetTokens?: number;
  /** 实验配额因子(experiments 机制的降频入参;缺省=不设限)。 */
     experimentQuotaFactor?: number;
+ /** 派单时的网关 pid(孤儿判据用;缺省=不写,读取侧视同当前进程)。 */
+    gatewayPid?: number;
   },
 ): Promise<RsiRunRecord> {
   const base = assertRoot(root);
@@ -641,6 +645,10 @@ export async function startRun(
     && input.experimentQuotaFactor > 0 && input.experimentQuotaFactor < 1
   ) {
     record.experimentQuotaFactor = input.experimentQuotaFactor;
+  }
+ // 网关 pid(孤儿判据)。数字且>0 才写(缺省=不写,读取侧视同当前进程)。
+  if (typeof input.gatewayPid === "number" && Number.isFinite(input.gatewayPid) && input.gatewayPid > 0) {
+    record.gatewayPid = Math.trunc(input.gatewayPid);
   }
   await writeJsonAtomic(runFilePath(base, mechanismId, record.runId), record);
   return record;
@@ -885,6 +893,8 @@ function parseRunRecord(mechanismId: string, raw: unknown): RsiRunRecord | undef
   if (dreamStartAt !== undefined) record.dreamStartAt = dreamStartAt;
   const dreamDoneAt = asNumber(raw.dreamDoneAt);
   if (dreamDoneAt !== undefined) record.dreamDoneAt = dreamDoneAt;
+  const gatewayPid = asNumber(raw.gatewayPid);
+  if (gatewayPid !== undefined) record.gatewayPid = gatewayPid;
   return record;
 }
 

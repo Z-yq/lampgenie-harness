@@ -190,65 +190,6 @@ export function buildVlmFromConfig(config: Config, repoRoot: string): LlmProvide
   return providerFromRef(config, repoRoot, "coding", { ...merged, ...route });
 }
 
-/** TTS 客户端:audio.tts 轨→音频 bytes。凭证各轨各解析;未配置=undefined(调用方诚实降级为无播报)。
- * 路径/形态按 dashscope SDK 1.27 http_tts 验证收敛——POST {base}/api/v1/services/audio/tts/SpeechSynthesizer,
- * body {model, input:{text, voice, format}}(旧 /services/audio/tts 无后缀路径在 MAAS workspace 返回 url error,
- * 且 config.voice 此前从未被传入请求体=音色恒默认,一并修复);返回假 RIFF 头就地修复(声明长度=真实数据长度)。 */
-export interface TtsClient {
-  /** 文本→音频(base64);失败抛错(调用方 fail-soft)。opts.voice=单次音色覆盖(试听,不落配置)。 */
-  speak(text: string, opts?: { voice?: string }): Promise<{ mime: string; base64: string }>;
-}
-
-/** 就地修复假 RIFF 头(qwen TTS OSS wav 的 nframes 恒为垃圾值,前端 <audio> 时长/进度条失真)。 */
-function repairRiff(buf: Buffer): Buffer {
-  if (buf.length < 44 || buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") return buf;
-  const out = Buffer.from(buf);
-  out.writeUInt32LE(out.length - 8, 4); // RIFF 块总长
-  for (let off = 12; off + 8 <= out.length;) {
-    const id = out.toString("ascii", off, off + 4);
-    const size = out.readUInt32LE(off + 4);
-    if (id === "data") { out.writeUInt32LE(out.length - off - 8, off + 4); break; }
-    off += 8 + size + (size % 2);
-  }
-  return out;
-}
-
-export function buildTtsFromConfig(config: Config, repoRoot: string): TtsClient | undefined {
-  const tts = config.audio.tts;
-  if (!tts.model && !tts.baseUrl && !tts.providerId) return undefined;
-  const { baseUrl, apiKeyEnv } = resolveTrackEndpoint(config, "audio.tts", tts);
-  if (!tts.model || !baseUrl) return undefined;
-  const apiKey = resolveTrackApiKey("audio.tts", apiKeyEnv, { repoRoot });
-  if (!apiKey) throw new Error(`audio.tts 端点/模型已配置但凭证不可解析(env ${apiKeyEnv} 或 .genie/secrets.json)`);
-  const apiBase = baseUrl.replace(/\/$/, "").replace(/\/api\/v1$/, "");
-  const input: Record<string, string> = { text: "", format: "wav", ...(tts.voice ? { voice: tts.voice } : {}) };
-  return {
-    async speak(text: string, o?: { voice?: string }) {
-      input.text = text;
-      const res = await fetch(`${apiBase}/api/v1/services/audio/tts/SpeechSynthesizer`, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: tts.model, input: { ...input, ...(o?.voice ? { voice: o.voice } : {}) } }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!res.ok) throw new Error(`tts ${res.status}: ${(await res.text()).slice(0, 160)}`);
-      const data = (await res.json()) as { output?: { audio?: { url?: string; data?: string; mime?: string } } };
-      const url = data.output?.audio?.url;
-      if (typeof url === "string" && url) {
-        const audio = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-        if (!audio.ok) throw new Error(`tts audio ${audio.status}`);
-        const buf = repairRiff(Buffer.from(await audio.arrayBuffer()));
-        return { mime: audio.headers.get("content-type")?.split(";")[0] ?? "audio/wav", base64: buf.toString("base64") };
-      }
-      // 端点直返内联数据(OpenAI 兼容语音面)。
-      const inline = data.output?.audio?.data;
-      if (typeof inline === "string" && inline) {
-        return { mime: data.output?.audio?.mime ?? "audio/wav", base64: inline };
-      }
-      throw new Error("tts 响应无音频(url/data 皆缺)");
-    },
-  };
-}
 
 /** audio.chat 语音链路形态(两接口口径,协议参考 qwen-audio-agent,致谢):
  * - omni-query:一次 query 调用(qwen3.8-omni* 口径)——音/视频作为输入内容直接进一次

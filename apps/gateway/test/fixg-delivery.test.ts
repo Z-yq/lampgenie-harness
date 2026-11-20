@@ -163,24 +163,33 @@ describe("fixG4 重启收编文案与面板渲染", () => {
   });
 });
 
-describe("上下文卫生纪律(2026-10-20 繁重 coding 拆子任务,主上下文只进结论)", () => {
+describe("派发时机纪律(2026-11 默认自己干,仅并行独立工作或特殊职责才派)", () => {
   const aw = AGENT_WIRING_SRC;
-  it("系统提示含拆派纪律与子代理返回要求", () => {
-    expect(aw).toContain("上下文卫生纪律");
-    expect(aw).toContain("主上下文只进结论不进过程");
-    expect(aw).toContain("按板拆成子任务派 spawn_subagent");
-    expect(aw).toContain("不要贴大段原始输出");
+  it("系统提示含默认自己干与两种例外情形", () => {
+    expect(aw).toContain("派发时机纪律");
+    expect(aw).toContain("默认自己干");
+    expect(aw).toContain("上下文卫生靠沉淀不靠外包");
+    expect(aw).toContain("并行实施");
+    expect(aw).toContain("特殊职责");
+    expect(aw).toContain("planner(plan-gate 要求规划落板)");
+    expect(aw).toContain("不把一段连续工作切碎外包");
+ // 工具描述层同源:spawn_subagent 首句声明默认自己干 + 派发前三问(模型每轮都看得到)
+    expect(aw).toContain("默认自己干(2026-11 )");
+    expect(aw).toContain("派发前三问");
+    expect(aw).toContain("也不要用 worker 代替你干活");
   });
-  it("grep 大输出尾注在场(file-tools 源码级锚)", () => {
+  it("grep 大输出尾注在场(file-tools 源码级锚;口径=收窄查询+沉淀结论,不劝外包)", () => {
     const ft = readFileSync(resolve(__dirname, "../src/file-tools.ts"), "utf-8");
     expect(ft).toContain("CONTEXT_HYGIENE_BYTES");
     expect(ft).toContain("[上下文卫生]");
+    expect(ft).toContain("不要为省上下文把连续工作切碎外包");
   });
-  it("核心纪律卡随每条用户消息注入(2026-10-20 口径;2026-10-21 瘦身=只留系统纪律,派发类移入 dispatch tip)", () => {
+  it("核心纪律卡随每条用户消息注入(含派发时机一行)", () => {
     expect(aw).toContain("核心纪律卡");
     expect(aw).toContain("系统纪律;直接执行,不要复述此段");
     expect(aw).toContain("DISPATCH_TIP");
     expect(aw).toContain("buildLoopTips");
+    expect(aw).toContain("- 派发时机:默认自己干");
   });
   it("五硬阶段流程与简明扼要 instruct 在场(2026-10-20)", () => {
     expect(aw).toContain("五硬阶段流程");
@@ -189,10 +198,9 @@ describe("上下文卫生纪律(2026-10-20 繁重 coding 拆子任务,主上下�
     expect(aw).toContain("不涉及的阶段也要显式声明不涉及");
     expect(aw).toContain("输出风格:简明扼要");
     expect(aw).toContain("不要长篇大论");
-    // 分档回调:小改直做 + 大开发派子 agent + 自己斟酌
-    expect(aw).toContain("小步文件修改(单文件更正、小修小补)自己上手");
-    expect(aw).toContain("新模块功能开发、大型系统开发、多模块开发");
-    expect(aw).toContain("自己斟酌");
+ // 派发口径:单文件/小步/顺序工作自己干;特殊角色才派
+    expect(aw).toContain("单文件/小步修改/顺序实施");
+    expect(aw).toContain("planner/explore/judge/test-analyst/ppt-master");
   });
   it("terminal hygieneNote 开关在场(共享包默认关,主 agent 装配开)", () => {
     const tt = readFileSync(resolve(__dirname, "../../../packages/harness-terminal/src/tool.ts"), "utf-8");

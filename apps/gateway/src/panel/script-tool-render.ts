@@ -1258,26 +1258,55 @@ function detPathOf(d) {
   return parts.join(">");
 }
 function detKeyOf(d) { return d.getAttribute("data-det-key") || detPathOf(d); }
+// data-det-default 安全判定(桩 DOM/极端节点缺 hasAttribute 时按无标记处理)
+function detHasDefault(d) {
+  try { return !!(d && typeof d.hasAttribute === "function" && d.hasAttribute("data-det-default")); } catch (e) { return false; }
+}
 function detOnToggle(ev) {
   const d = ev && (ev.currentTarget || ev.target);
   if (!d || d.tagName !== "DETAILS") return;
+ // 渲染默认态的 toggle(非用户交互)不入总账——否则 live 默认 open 以 key 锁死,
+ // 终态帧的新节点(已无默认标记)被总账回填成 open,「终态自动收起」失效。
+  if (!d.__roundUser && detHasDefault(d)) return;
   detOpen.set(detKeyOf(d), d.open);
+ // 仅真实用户交互(summary click 前导标记)才摘默认豁免标记,此后节点回归总账语义。
+  if (d.__roundUser && detHasDefault(d) && typeof d.removeAttribute === "function") d.removeAttribute("data-det-default");
 }
-/** 新插入的子树:绑 toggle 采集(一次)+ 按总账回填 open。 */
+/** 新插入的子树:绑 toggle 采集(一次)+ 按总账回填 open。
+ * data-det-default=本帧渲染默认开合(live 组/尾 K 步),非用户意图——总账不覆写;
+ * 用户 toggle 即摘标记(detOnToggle),接管后回归总账语义。 */
 function detBindIn(root) {
   if (!root || root.nodeType !== 1) return;
   const list = root.tagName === "DETAILS" ? [root] : [];
   if (root.querySelectorAll) for (const d of root.querySelectorAll("details")) list.push(d);
   for (const d of list) {
-    if (!d.__detBound) { d.__detBound = true; d.addEventListener("toggle", detOnToggle); }
+    if (!d.__detBound) {
+      d.__detBound = true;
+      d.addEventListener("toggle", detOnToggle);
+ // summary click=真实用户交互前导标记(先于 toggle fire);程序性 open 变化无此标记。
+ // querySelector 能力守卫:非完整 DOM 桩/极端节点跳过 arm,不影响总账主链。
+      if (typeof d.querySelector === "function") {
+        const s0 = d.querySelector(":scope > summary");
+        if (s0 && !s0.__clickArmed) { s0.__clickArmed = true; s0.addEventListener("click", () => { d.__roundUser = true; }); }
+      } else if (d.firstElementChild && String(d.firstElementChild.tagName || "").toLowerCase() === "summary" && !d.firstElementChild.__clickArmed) {
+        d.firstElementChild.__clickArmed = true;
+        d.firstElementChild.addEventListener("click", () => { d.__roundUser = true; });
+      }
+    }
+    if (detHasDefault(d)) continue; // 渲染默认态:总账旁路
     const k = detKeyOf(d);
     if (detOpen.has(k) && d.open !== !!detOpen.get(k)) d.open = !!detOpen.get(k);
   }
 }
-/** 重建前把现存节点的开合态收进总账(整列重建/增量 patch 都靠它兜住用户意图)。 */
+/** 重建前把现存节点的开合态收进总账(整列重建/增量 patch 都靠它兜住用户意图)。
+ * 带 data-det-default 的节点是渲染默认态,不入账(防默认 open 被锁成"用户想开",
+ * 终态帧弹不回;也防旧默认 false 把 live 帧的默认 open 关回)。 */
 function detCaptureIn(root) {
   if (!root || !root.querySelectorAll) return;
-  for (const d of root.querySelectorAll("details")) detOpen.set(detKeyOf(d), d.open);
+  for (const d of root.querySelectorAll("details")) {
+    if (detHasDefault(d)) continue;
+    detOpen.set(detKeyOf(d), d.open);
+  }
 }
 function detWatch() {
   if (typeof MutationObserver !== "function" || !document.body) return;
@@ -1524,8 +1553,9 @@ function replyKeyOf(ev, text) {
   if (seq !== undefined && seq !== null) return "s" + String(seq);
   const s = String(text); return s.length + ":" + s.slice(0, 40) + "|" + s.slice(-40);
 }
-/** agent 正文块:超长(>1200 字符 或 >28 行)给折叠壳 + 「展开全文」按钮;短文本原样(零变化)。 */
-function replyBlockHtml(ev, q) {
+/** agent 正文块:超长(>1200 字符 或 >28 行)给折叠壳 + 「展开全文」按钮;短文本原样(零变化)。
+ * final=true(本轮终稿,seq===lastAgentSeq)=不套折叠壳、不截断,包 .reply-final 主角层全量渲染。 */
+function replyBlockHtml(ev, q, final) {
   const p = ev.payload || {}; // review nit:统一守卫(payload 缺席时下方 llmMs/text 取值不再互不一致)
   const text = String(scrubProtocolLines(p.text) || "");
  // 元信息(fixT6 P2):时间戳/LLM 耗时以 title 承载——聊天流不该被元信息刷屏,但详情要可查(经验证此前两者全不可见)
@@ -1533,6 +1563,7 @@ function replyBlockHtml(ev, q) {
   const ms = Number(p.llmMs || 0);
   const title = (t0 ? "回复时间 " + t0 : "") + (ms > 0 ? (t0 ? " · " : "") + "LLM " + Math.round(ms / 1000) + "s" : "");
   const body = '<div class="task-reply"' + (title ? ' title="' + esc(title) + '"' : "") + ">" + mdToHtml(text, q) + "</div>";
+  if (final) return '<div class="reply-final">' + body + "</div>";
   const long = text.length > 1200 || text.split(String.fromCharCode(10)).length > 28;
   if (!long) return body;
   const k = replyKeyOf(ev, text);
@@ -1581,18 +1612,21 @@ function roundOpenAll() {
   } catch (e) { roundOpenMap = {}; }
   return roundOpenMap;
 }
-function roundUserOpen(key) { return !!roundOpenAll()[String(key || "")]; }
+function roundUserOpen(key) { return roundOpenAll()[String(key || "")] === 1; }
 function roundRemember(key, open) {
   const k = String(key || "");
   if (!k) return;
   const m = roundOpenAll();
-  if (open) m[k] = 1; else delete m[k];
+ // 收起显式记 0(不再 delete)——活跃组运行中默认展开,用户收起过就不弹回;1=显式展开永不自动收起。
+  if (open) m[k] = 1; else m[k] = 0;
   try { localStorage.setItem(ROUND_LS, JSON.stringify(m)); } catch (e) { /* 存储不可用=仅内存 */ }
 }
-// 默认收起;终态(该轮已出结论/任务非活跃)保持收起;用户显式展开过的永不自动收起
-function roundShouldOpen(key, terminal) {
+// 默认收起;终态(该轮已出结论/任务非活跃)保持收起;用户显式展开过的永不自动收起;
+// 活跃(turn 进行中)默认展开——运行中要看得见在动;用户显式收起(=0)优先于活跃默认。
+function roundShouldOpen(key, terminal, active) {
   if (roundUserOpen(key)) return true;
-  if (terminal) return false;
+  if (roundOpenAll()[String(key || "")] === 0) return false;
+  if (active && !terminal) return true;
   return false;
 }
 // 三态动词词表(P0-5;轮级组子步骤行与运行态行共用):已完成/运行中/等待超时/失败
@@ -1654,10 +1688,15 @@ function roundIsProc(h) {
   return false;
 }
 function roundCountToolCards(s) {
+ // 聚合工具组(tool-group)内的调用也是命令——tg-item 与散装 tool-call 一并计数,
+ // 免得真实聚合轮的组头显示「已执行 0 命令」。
   let n = 0, i = 0;
-  const needle = 'data-det-key="tool-call:';
-  const str = String(s || "");
-  for (;;) { const j = str.indexOf(needle, i); if (j < 0) break; n++; i = j + needle.length; }
+  const needles = ['data-det-key="tool-call:', 'class="tg-item'];
+  for (const needle of needles) {
+    const str = String(s || "");
+    let j = 0;
+    for (;;) { const k = str.indexOf(needle, j); if (k < 0) break; n++; j = k + needle.length; }
+  }
   return n;
 }
 // 去一段叶子 span(mark=该 span 的起始片段,如 <span class="tc-state);无匹配原样返回
@@ -1718,26 +1757,134 @@ function roundStepLabel(h) {
   if (!isTool && v.c !== "v-fail") return cut;
   return v.t + " " + cut;
 }
-function roundGroupHtml(seg, key, terminal) {
+// ===== 运行中过程可见常量(集中配置) =====
+// ROUND_LIVE_STEPS:活跃组内最近 K 步默认展开(看得见在动);LIVE_OUT_LINES/LIVE_OUT_CHARS:每步
+// 结果输出可见摘要的上限(前 N 行×每行 M 字,长输出点开步骤看完整卡片——既有 cmd-fold/工具卡口径不变)。
+const ROUND_LIVE_STEPS = 3;
+const LIVE_OUT_LINES = 3;
+const LIVE_OUT_CHARS = 120;
+// 步骤结果输出可见摘要:从子步骤 HTML 剥详情体(.tc-body/.tk-body/.th-body)文本,块级标签边界转 LF,
+// 取前 LIVE_OUT_LINES 个非空行、每行截 LIVE_OUT_CHARS 字。无 body 回落整段去标签文本;空=不渲染 .rs-out。
+// 实现零反斜杠(页面模板层纪律):标签剥离走 indexOf/charAt。
+function rgOutPreview(h) {
+  const s = String(h || "");
+  const LF = String.fromCharCode(10);
+  const marks = ['<div class="tc-body', '<div class="tk-body', '<div class="th-body'];
+  let body = "";
+  for (const mk of marks) {
+    const i = s.indexOf(mk);
+    if (i < 0) continue;
+ // review 修:body 内常嵌 code-wrap/code-bar 等子 div,indexOf 首个 </div> 会截在
+ // 语言标签上——做 div 深度配平取真闭合,嵌套结构里摘要才截得到实际输出。
+    let depth = 1, j = i + mk.length;
+    while (j < s.length && depth > 0) {
+      const open = s.indexOf("<div", j);
+      const close = s.indexOf("</div>", j);
+      if (close < 0) { j = s.length; break; }
+      if (open >= 0 && open < close) { depth++; j = open + 4; continue; }
+      depth--; j = close + 6;
+    }
+    body += LF + s.slice(i, Math.min(j, s.length));
+  }
+  if (!body) body = LF + s;
+  let txt = "";
+  let i = 0;
+  while (i < body.length) {
+    const c = body.charAt(i);
+    if (c === "<") {
+      const j = body.indexOf(">", i);
+      if (j < 0) break;
+      const tag = body.slice(i, j + 1);
+      txt += (tag.slice(0, 5) === "</div" || tag.slice(0, 4) === "<br") ? LF : " ";
+      i = j + 1;
+      continue;
+    }
+    txt += c; i++;
+  }
+  const rows = [];
+  for (const seg of txt.split(LF)) {
+    const t = seg.trim();
+    if (!t) continue;
+    rows.push(t.length > LIVE_OUT_CHARS ? t.slice(0, LIVE_OUT_CHARS) + "…" : t);
+    if (rows.length >= LIVE_OUT_LINES) break;
+  }
+  return rows.join(LF);
+}
+function roundGroupHtml(seg, key, terminal, active, activeAt) {
   const inner = seg.join("");
-  const v = verbOf("done");
+  const live = !!active && !terminal; // 活跃组(运行中)=组头运行动词+live 态+尾 K 步展开
+  const v = live ? verbOf("run") : verbOf("done");
   const n = roundCountToolCards(inner);
-  const open = roundShouldOpen(key, terminal);
+  const open = roundShouldOpen(key, terminal, live);
   runLineVerb = roundStepLabel(seg[seg.length - 1]); // P0-5 运行态行取最近一步摘要
-  const rows = seg.map((h, i) => '<details class="round-step" data-det-key="' +
-    esc("round-step:" + key + ":" + i) + '"><summary class="rs-sum">' +
-    '<span class="rs-lab ' + esc(roundStepState(h)) + '">' + esc(roundStepLabel(h)) + '</span><span class="rs-arrow">›</span></summary>' +
-    '<div class="rs-body">' + h + "</div></details>").join("");
-  return '<details class="round-group" data-det-key="' + esc(key) + '"' + (open ? " open" : "") + ">" +
+  const from = live ? seg.length - ROUND_LIVE_STEPS : seg.length; // 活跃:最近 K 步默认展开,更早折叠
+  const rows = seg.map((h, i) => {
+    const st = roundStepState(h);
+    const stepOpen = live && i >= from;
+    const pv = live ? rgOutPreview(h) : "";
+    return '<details class="round-step' + (stepOpen && pv ? " rs-live" : "") + '" data-det-key="' +
+      esc("round-step:" + key + ":" + i) + '"' + (stepOpen ? ' open data-det-default="1"' : "") + '><summary class="rs-sum">' +
+      '<span class="rs-lab ' + esc(st) + '">' + esc(roundStepLabel(h)) + '</span>' +
+      (pv ? '<span class="rs-out">' + esc(pv) + "</span>" : "") +
+      '<span class="rs-arrow">›</span></summary>' +
+      '<div class="rs-body">' + h + "</div></details>";
+  }).join("");
+  return '<details class="round-group' + (live ? " live" : "") + '" data-det-key="' + esc(key) + '"' + (open ? ' open data-det-default="1"' : "") + ">" +
     '<summary class="rg-sum">' + verbSvg(v) + '<span class="rg-txt">' + esc(v.t + " " + n + " 命令") + '</span>' +
+    (live
+      ? (activeAt > 0
+        ? '<span class="rg-clock" data-round-clock="1" data-round-at="' + activeAt + '">' + esc(runFmtClock(Date.now() - activeAt)) + "</span>"
+        : '<span class="rg-clock" data-round-clock="1"></span>')
+      : "") +
     '<span class="rg-n">' + seg.length + " 步</span></summary>" +
     '<div class="rg-body">' + rows + "</div></details>";
 }
 // 轮级折叠落位(script-history 遍历结束后调用一次):只把「连续过程段」收进组,
 // 过程段之后的结论/表格留在组外 = P0-3「完成后只留结论」的视觉前提。
-function roundPartsWrap(parts, ranges, isTerminal) {
-  if (!parts || !parts.length || !ranges || !ranges.length) { if (ranges) ranges.length = 0; return; }
+function roundPartsWrap(parts, ranges, isTerminal, activeKey, activeAt) {
+  if (!parts || !parts.length) return;
+ // F1:历史分页/窗口起点落在轮中间时,页首到首个 range 之间有一批「无轮边界」的孤儿
+ // 过程段(真实富会话经验证:15 工具卡+19 trace-group 全在此区,roundGroup=0 的根因)。合成一个
+ // 「更早」组收进:terminal=true(历史已完结,默认收起,不占首屏);哨兵段(win-sent/hist-more)
+ // roundIsProc=false 自然留在组外。流尾(末个 range 之后)的孤儿段不动=流式收尾/活跃态照旧直出。
+  if (ranges && ranges.length) {
+    const firstR = Number(ranges[0] && ranges[0].i) || 0;
+    let hs = 0, he = firstR;
+    while (hs < he && !roundIsProc(parts[hs])) hs++;
+    while (he > hs && !roundIsProc(parts[he - 1])) he--;
+    if (he - hs >= 2) {
+      const seg = parts.slice(hs, he);
+      parts.splice(hs, he - hs, roundGroupHtml(seg, "round:head", true));
+      for (let ri = 0; ri < ranges.length; ri++) ranges[ri].i = (Number(ranges[ri].i) || 0) - (he - hs - 1);
+    }
+  } else {
+ // 整页无任何 range(会话从事件中间回放,连末轮用户行都在页外):全部过程段合为一个更早组。
+    let hs = 0, he = parts.length;
+    while (hs < he && !roundIsProc(parts[hs])) hs++;
+    while (he > hs && !roundIsProc(parts[he - 1])) he--;
+    if (he - hs >= 2) {
+      const seg = parts.slice(hs, he);
+      parts.splice(hs, he - hs, roundGroupHtml(seg, "round:head", true));
+    }
+    if (ranges) ranges.length = 0;
+    return;
+  }
   let shift = 0;
+ // F2:活跃轮兜底——末轮刚发消息尚无过程段(单步不成组)时,活跃态回落到最近一个真有
+ // 过程段的轮:上一轮工作仍在途,活流先落在旧轮区间;live 落空=「看不见在动」在真实链路复发。
+  let effKey = String(activeKey || "");
+  let effAt = Number(activeAt || 0);
+  if (effKey && ranges.length) {
+    for (let ri = ranges.length - 1; ri >= 0; ri--) {
+      const i0 = Math.max(0, Number(ranges[ri].i) || 0);
+      const j0 = Math.min(parts.length, ri + 1 < ranges.length ? Number(ranges[ri + 1].i) || 0 : parts.length);
+      let s0 = i0, e0 = j0;
+      while (s0 < e0 && !roundIsProc(parts[s0])) s0++;
+      while (e0 > s0 && !roundIsProc(parts[e0 - 1])) e0--;
+      if (e0 - s0 >= 2) { effKey = String(ranges[ri].k || ""); effAt = Number(ranges[ri].at || 0) || effAt; break; }
+      if (ri === 0) { effKey = ""; } // 全程无成组过程段:不标 live
+    }
+  }
   for (let ri = 0; ri < ranges.length; ri++) {
     const r = ranges[ri] || {};
     let i = (Number(r.i) || 0) + shift;
@@ -1751,7 +1898,8 @@ function roundPartsWrap(parts, ranges, isTerminal) {
     const seg = parts.slice(s, e);
     const key = String(r.k || ("round:" + ri));
     const term = typeof isTerminal === "function" ? !!isTerminal(r.t) : false;
-    parts.splice(s, e - s, roundGroupHtml(seg, key, term));
+ // effKey=活跃轮组(含 F2 兜底;script-history 依 cur 任务传入)——运行中组走 live 形态
+    parts.splice(s, e - s, roundGroupHtml(seg, key, term, key === effKey, key === effKey ? effAt : 0));
     shift -= (e - s - 1);
   }
   ranges.length = 0;
@@ -1765,11 +1913,13 @@ function roundBindIn(root) {
     if (roundUserOpen(k) && !d.open) d.open = true;
     if (d.__roundBound) continue;
     d.__roundBound = true;
-    d.addEventListener("toggle", () => { roundRemember(d.getAttribute("data-det-key") || "", d.open); });
+ // toggle 回调挂 __roundUser 门槛(summary click 前导)——渲染默认 open/程序回写
+ // 不再误记 localStorage;真实用户开合照旧持久化(含收起=0 语义)。
+    d.addEventListener("toggle", () => { if (d.__roundUser) roundRemember(d.getAttribute("data-det-key") || "", d.open); });
   }
 }
 // ---- P0-5 运行态行:常驻流尾,1s 粒度只改本行 textContent(不整块重渲染、不新增轮询) ----
-let runLineAt = 0, runLineVerb = "", runLineTimer = null;
+let runLineAt = 0, runLineVerb = "", runLineTimer = null, runLineFallbackAt = 0;
 function runFmtClock(ms) {
   let s = Math.max(0, Math.floor(Number(ms || 0) / 1000));
   const h = Math.floor(s / 3600); s -= h * 3600;
@@ -1778,8 +1928,16 @@ function runFmtClock(ms) {
 }
 function runStatusText() {
   const v = verbOf("run");
-  const el = runLineAt ? " · 工作中 " + runFmtClock(Date.now() - runLineAt) : "";
-  return v.t + " " + (runLineVerb || "任务") + el;
+ // F2:动词去叠字(「正在执行 已执行 xxx」→「正在执行 xxx」);verb 缺省回「任务」。
+  let lab = String(runLineVerb || "");
+  const vt = String(v && v.t || "");
+  if (vt && lab.indexOf(vt) === 0) lab = lab.slice(vt.length).trim();
+  if (!lab && vt) lab = "";
+  if (lab.length > 60) lab = lab.slice(0, 60) + "…"; // 超长摘要截断,免挤掉「工作中」计时段
+ // startedAt 无效(0/NaN)时 clock 兜底用最后已知事件时刻(renderHistory 侧维护),防「工作中 undefined」。
+  const base = runLineAt > 0 ? runLineAt : (runLineFallbackAt || 0);
+  const el = base > 0 ? " · 工作中 " + runFmtClock(Date.now() - base) : "";
+  return (vt || "正在执行") + (lab ? " " + lab : " 任务") + el;
 }
 function runStatusHtml(startedAt, verb) {
   runLineAt = Number(startedAt || 0);
@@ -1790,6 +1948,11 @@ function runStatusHtml(startedAt, verb) {
     '<span class="run-txt">' + esc(runStatusText()) + "</span></div>";
 }
 function runStatusTick() {
+ // 活跃组头累计计时同 1s 粒度 tick(只改 textContent,不重渲染)
+  for (const c of document.querySelectorAll("[data-round-clock]")) {
+    const at = Number(c.getAttribute("data-round-at") || 0);
+    if (at > 0) c.textContent = runFmtClock(Date.now() - at);
+  }
   const el = document.querySelector('[data-run-line="1"] .run-txt');
   if (!el) { if (runLineTimer !== null) { clearInterval(runLineTimer); runLineTimer = null; } return; }
   el.textContent = runStatusText(); // 只改这一行文本,不重渲染

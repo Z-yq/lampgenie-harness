@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { BUILTIN_SKILLS, mergeSkillIndex, builtinSkillBody } from "../src/builtin-skills.js";
 
 describe("builtin-skills", () => {
-  it("12 个内置技能(7 通用 + 4 办公产出 + 1 演示生产环境),每条有出处注记", () => {
-    expect(BUILTIN_SKILLS.length).toBe(12);
+  it("13 个内置技能(7 通用 + 5 办公产出/叙事 + 1 演示生产环境),每条有出处注记", () => {
+    expect(BUILTIN_SKILLS.length).toBe(13);
     expect(BUILTIN_SKILLS.every((s) => s.body.includes("出处:"))).toBe(true);
   });
   it("ppt-master 演示生产环境技能:判型/两道门/版式容量表/能力边界/反模式齐备,且不照搬上游脚本", () => {
@@ -25,9 +25,10 @@ describe("builtin-skills", () => {
     expect(b).not.toContain("svg_to_pptx.py");
     expect(b).not.toContain("12027");
   });
-  it("办公技能族:五条齐全,三痛点各有硬规则", () => {
+  it("办公技能族:六条齐全(含 office-deck 叙事法),三痛点各有硬规则", () => {
     const office = BUILTIN_SKILLS.filter((s) => s.name.startsWith("office-"));
     expect(office.map((s) => s.name).sort()).toEqual([
+      "office-deck",
       "office-docx",
       "office-pptx",
       "office-report",

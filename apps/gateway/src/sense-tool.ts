@@ -54,7 +54,7 @@ export type SenseDispatch =
 function usage(): string {
   return [
     "code_sense 用法(二选一):",
-    "主命令三角(优先记这三个):函数关联关系用 action=impact(上下游调用闭包+关联测试);一个数值/字面量在哪里被用(含 UI 显示位置/文案/配置)用 action=refs——UI 渲染点不走 impact 走 refs;命名形态未知的找路用 mode=explore(自由文本分词召回)。孤儿逻辑自查用 action=orphans(验收前:孤独导出/仅测试接线/孤儿事件/双胞胎,确定性毫秒级)。",
+    "主命令三角(优先记这三个):函数关联关系用 action=impact(上下游调用闭包+关联测试);一个数值/字面量在哪里被用(含 UI 显示位置/文案/配置/文档与 tasks 文本)用 action=refs——UI 渲染点不走 impact 走 refs,target 支持多候选一次查(a|b|c 按候选分组,查多个候选名/多个 CSS 类/多个中文文案时用它,别用 grep);命名形态未知的找路用 mode=explore(自由文本分词召回)。孤儿逻辑自查用 action=orphans(验收前:孤独导出/仅测试接线/孤儿事件/双胞胎,确定性毫秒级)。",
     "① 结构面 action=symbol|file|impact|entrypoints|project|wire|refs|surface|vars|branches|orphans|flow|radiation|world,target=符号名/文件相对路径/字面量/概念词/flow 的 scope;radiation=改动辐射面四分面清单(上游/下游/契约/副作用);orphans=孤儿逻辑自查(target 可选=模块/路径前缀,缺省全仓);",
     "② 语义面 mode=auto|debug|plan|explore|ui|api|state|algo + query(符号名/关键词)。",
     "③ 概念足迹 action=surface,target=概念词(多个用逗号分隔,如 SuperAgent,dh-video):替换/迁移一个概念时 11 类(protocol/db/journal/config/symbol/ui/assets/deploy/i18n/tests/docs)表面一次列全。",
@@ -168,9 +168,10 @@ export function stripRedundantTargetPrefix(repoRoot: string, effRoot: string, ta
 /** 结构面执行(action 分派)。 */
 async function runStructural(root: string, action: SenseAction, target: string, opts?: SenseStructOpts): Promise<string> {
   if (action === "refs") {
-    if (!target) return "action=refs 需要 target=字面量(不含引号,如 graph / track.view)";
+    if (!target) return "action=refs 需要 target=字面量(不含引号,如 graph / track.view;多候选 a|b|c 一次查)";
     // 字面量引用面:删除/修改一个字符串标识时 symbol/impact 全空——这里给按语境的确定性引用清单,
     // 覆盖产品源码+测试+文档/提示词文本(默认排除 node_modules/dist/.genie/vendor)。
+ // G-D:target 支持 a|b|c 多候选(一次扫描按候选分组,接住 grep 的 alternation 习惯)。
     const { scanLiteralRefs, renderLiteralRefs } = await import("@lampgenie/code-sense/retrieval/literal-refs");
     const r = await scanLiteralRefs(root, target);
     return renderLiteralRefs(r).slice(0, 14_000);
@@ -263,7 +264,21 @@ async function runStructural(root: string, action: SenseAction, target: string, 
   if (action === "radiation") {
     return await radiationChecklist(root, target, codeIndexQuery);
   }
-  return (await codeIndexQuery(root, action, target)).slice(0, 14_000);
+  const out = await codeIndexQuery(root, action, target);
+ // G-E(设计稿 06-code-sense §15.4):symbol miss 时兜底探测模板串内联 JS 定义——
+ // 面板前端整体在 PANEL_JS_* 模板常量里,tree-sitter 只见宿主字符串常量;不接这条,
+ // 面板地形任务的 symbol 查询必 miss 并诱发「弃用 code_sense 转 grep」(§15.3 ①地形力)。
+ // 契约不变:回执仍以「未找到符号」开头(扇出过滤按 startsWith 判定,miss 前缀不可破坏)。
+  if (action === "symbol" && out.startsWith("未找到符号")) {
+    try {
+      const { findInlineJsDefs, renderInlineJsDefs } = await import("@lampgenie/code-sense/retrieval/inline-js");
+      const block = renderInlineJsDefs(await findInlineJsDefs(root, target));
+      if (block) return (out + "\n" + block).slice(0, 14_000);
+    } catch {
+ /* inline-js 探测失败不影响原 miss 回执 */
+    }
+  }
+  return out.slice(0, 14_000);
 }
 
 /**

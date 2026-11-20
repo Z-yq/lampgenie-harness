@@ -251,7 +251,7 @@ export const BUILTIN_AGENT_PROFILES: AgentProfile[] = [
   },
   {
     name: "ppt-master",
-    description: "PPT 制作:判型→立项→结构→页级正文→质量门导出可编辑 pptx(方法论文本见内置技能 builtin/ppt-master)",
+    description: "PPT 制作:五阶段流水(事实表→主线设计→分章写作→过门→读者走查)导出可编辑 pptx(流程见提示词,叙事方法论见 builtin/office-deck,版式生产环境见 builtin/ppt-master)",
     systemPrompt: PPT_MASTER_PROMPT,
     // 产出面:读素材 + 写源稿 + 跑转换命令 + 导出工具(board_export_pptx 由 agent-wiring 按角色挂载)。
     // 不派子代理、不建会话。
@@ -370,9 +370,12 @@ export function loadAgentProfiles(repoRoot: string): AgentProfile[] {
   return [...byName.values()];
 }
 
-/** 主 agent 系统提示注入格式(ZCode formatAgentProfilesForPrompt)。 */
+/** 主 agent 系统提示注入格式(ZCode formatAgentProfilesForPrompt)。
+ * 2026-11 默认自己干——清单前先声明子智能体是例外手段,只有并行独立工作或特殊职责才派。 */
 export function formatAgentProfiles(profiles: AgentProfile[]): string {
-  return "可用子智能体类型(spawn_subagent 的 agentType):\n" +
+  return "子智能体是例外手段:默认由你本人实施;**只有①多段互不依赖的工作可并行 ②需要下列特殊职责** 时才派;"
+    + "单文件/小步/顺序工作自己做完,不要用 worker 代替你干活,也不要把一段连续工作切碎外包。\n"
+    + "可用子智能体类型(spawn_subagent 的 agentType):\n" +
     profiles.map((p) => `- ${p.name}: ${p.description}${p.tools?.length ? `(工具: ${p.tools.join("/")})` : ""}`).join("\n");
 }
 

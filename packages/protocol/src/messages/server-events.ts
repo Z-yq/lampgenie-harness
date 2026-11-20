@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { Envelope } from "./core.js";
 // [CROSS-IMPORTS]
-import { AgentsList, AutomationCreate, AutomationDelete, AutomationList, AutomationRun, AutomationUpdate, BrowserViewClose, BrowserViewCommand, BrowserViewOpen, CfgGet, CfgSecretSet, CfgSecretStatus, CfgSet, ClientCapabilitiesDeclare, ClientModeDeclare, ClientSurface, CommandsCatalog, CommandsList, CommandsRemove, CommandsUpsert, CompanionHistory, CompanionTurn, ExpDisable, ExpDistill, ExpList, ExpRemove, ExpView, HooksList, HooksRemove, HooksUpdate, HooksUpsert, IssueComment, IssueConfirmDispatch, IssueCreate, IssueList, IssueSync, IssueUpdate, McpList, McpRemove, McpTest, McpUpdate, McpUpsert, MemoryView, ModelsList, ModelsProbe, NodeExec, NodeHeartbeat, NodeRegister, NodeTaskResult, NodesList, PermissionHistory, PermissionPending, PermissionRespond, Ping, PluginsInstall, PluginsList, PluginsToggle, PluginsUninstall, ProfileFile, ProfileGet, ProfilePlanApply, ProfilePlanRemove, ProfilePlanUpsert, ProfileRebuild, ProfileSenseGet, ReviewInject, ReviewStoreGet, SenseQuery, SkillsDisableBuiltin, SkillsList, StoredCommentZ, SubagentsList, SuperHistory, SuperInbox, SuperTurn, SurfaceCapsZ, SysMeta, TeamInvite, TeamP2pSend, TeamP2pStatus, TeamStatus, TeamaiContribute, TeamaiInspect, TeamaiPull, TeamaiPush, TeamaiRemove, TermCancel, TermExec, TraceQuery, TraceStats, TrackView, UsageView, VoiceList, VoiceTranscribe, VoiceTts, WikiGet, WikiList, WikiRebuild, WizardGen, WorkersList } from "./surface.js";
+import { AgentsList, AutomationCreate, AutomationDelete, AutomationList, AutomationRun, AutomationUpdate, BotChannelStatusZ, BotProviderZ, BotPublicZ, BotsList, BotsRemove, BotsTest, BotsUpsert, BotsWeixinBegin, BotsWeixinPoll, BrowserViewClose, BrowserViewCommand, BrowserViewOpen, CfgGet, CfgSecretSet, CfgSecretStatus, CfgSet, ClientCapabilitiesDeclare, ClientModeDeclare, ClientSurface, CommandsCatalog, CommandsList, CommandsRemove, CommandsUpsert, CompanionHistory, CompanionTurn, ExpDisable, ExpDistill, ExpList, ExpRemove, ExpView, HooksList, HooksRemove, HooksUpdate, HooksUpsert, IssueComment, IssueConfirmDispatch, IssueCreate, IssueList, IssueSync, IssueUpdate, McpList, McpRemove, McpTest, McpUpdate, McpUpsert, MemoryView, ModelsList, ModelsProbe, NodeExec, NodeHeartbeat, NodeRegister, NodeTaskResult, NodesList, PermissionHistory, PermissionPending, PermissionRespond, Ping, PluginsInstall, PluginsList, PluginsToggle, PluginsUninstall, ProfileFile, ProfileGet, ProfilePlanApply, ProfilePlanRemove, ProfilePlanUpsert, ProfileRebuild, ProfileSenseGet, RemoteControlStart, RemoteControlStatusQuery, RemoteControlStop, ReviewInject, ReviewStoreGet, SenseQuery, SkillsDisableBuiltin, SkillsList, StoredCommentZ, SubagentsList, SuperHistory, SuperInbox, SuperTurn, SurfaceCapsZ, SysMeta, TeamInvite, TeamP2pSend, TeamP2pStatus, TeamStatus, TeamaiContribute, TeamaiInspect, TeamaiPull, TeamaiPush, TeamaiRemove, TermCancel, TermExec, TraceQuery, TraceStats, TrackView, UsageView, VoiceTranscribe, WikiGet, WikiList, WikiRebuild, WizardGen, WorkersList } from "./surface.js";
 import { RsiItemDelete, RsiItemResult, RsiItemUpdate, RsiMechanismRun, RsiMechanismRunResult, RsiMechanismSet, RsiMechanismSetResult, RsiSchedulerGet, RsiSchedulerResult, RsiSchedulerRun, RsiSchedulerSet, RsiStatusQuery, RsiStatusResult } from "./rsi.js";
 import { ArchiveClear, AskUserAnswer, CheckpointList, CheckpointPreview, CheckpointRestore, CheckpointRewind, GoalGet, GoalSet, MeetingImport, MeetingSchedule, PlanApprove, QueueDispatchNow, QueueItem, QueueRemove, StatsSummary, Task, TaskArchive, TaskCancel, TaskDelete, TaskDeleteSession, TaskDetailGet, TaskDiffstat, TaskFileDiff, TaskGroup, TaskIndex, TaskList, TaskOutputQuery, TaskPin, TaskRename, TaskResume, TaskSchedule, TaskScheduleCancel, TaskSubmit } from "./task.js";
 import { FileRead, FileWrite, FilesSearch, FsGrep, FsList, FsMkdir, FsOpen, FsRemove, FsRename, GitBranches, GitCheckout, GitCommit, GitCommitMsg, GitDiff, GitLog, GitPull, GitPush, GitShow, GitStatus, IdeOfficeEdit, LspDiagnostics, RemoteDeploy, RemoteLs, RemoteRead, SshBrowse, SshConfigList, SshKeyImport, SshTest, TermSessionClose, TermSessionOpen, TermSessionRead, TermSessionSend, WorkflowAnswer, WslBrowse, WslList, WslTest } from "./ide-fs.js";
@@ -20,7 +20,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   RsiMechanismSet, RsiMechanismRun, RsiItemUpdate, RsiItemDelete,
   RsiSchedulerGet, RsiSchedulerSet, RsiSchedulerRun,
   BrowserViewOpen, BrowserViewClose, BrowserViewCommand,
-  TaskSubmit, TaskCancel, TaskSchedule, TaskScheduleCancel, TaskResume, QueueDispatchNow, QueueRemove, AskUserAnswer, TaskRename, TaskPin, TaskArchive, TaskDelete, TaskDeleteSession, ArchiveClear, TaskDetailGet, FilesSearch, SessionSearch, FileRead, FileWrite, IdeOfficeEdit, WorkflowAnswer, GitLog, GitCommitMsg, ExpDisable, CheckpointPreview, CheckpointRewind, TaskDiffstat, StatsSummary, TaskFileDiff, ModelsProbe, AgentsList, SkillsList, SkillsDisableBuiltin, CommandsList, CommandsUpsert, CommandsRemove, CommandsCatalog, HooksList, HooksUpsert, HooksUpdate, HooksRemove, McpList, McpUpsert, McpUpdate, McpRemove, McpTest, MemoryView, TermExec, TermCancel, PluginsList, PluginsInstall, PluginsUninstall, PluginsToggle, NodesList, NodeExec, WizardGen, ProfileGet, ProfileRebuild, ProfilePlanUpsert, ProfilePlanRemove, ProfilePlanApply, ProfileSenseGet, AutomationList, AutomationCreate, AutomationUpdate, AutomationDelete, AutomationRun, TaskList, SessionHistory, NodeRegister, NodeHeartbeat, NodeTaskResult, PermissionRespond, ProjectAdd, ProjectRemove, ProjectActivate, ProjectList, ProjectRename, SshKeyImport, SshConfigList, SshTest, WslList, WslTest, WslBrowse, SshBrowse, RemoteLs, RemoteRead, RemoteDeploy, FsList, FsOpen, FsMkdir, FsRemove, FsRename, FsGrep, LspDiagnostics, TermSessionOpen, TermSessionSend, TermSessionRead, TermSessionClose, GitShow, GitStatus, GitDiff, GitBranches, GitCheckout, GitCommit, GitPush, GitPull, SenseQuery, WikiList, WikiGet, WikiRebuild, ReviewStoreGet, ExpList, ExpView, ExpRemove, SysMeta, CfgGet, CfgSet, CfgSecretStatus, CfgSecretSet, ModelsList, SessionStatus, TraceStats, CompanionTurn, SuperTurn, SuperHistory, SuperInbox, VoiceTranscribe, CompanionHistory, ProfileFile, Ping, MeetingImport, MeetingSchedule, SessionExport, VoiceTts, VoiceList, TeamStatus, TeamInvite, PermissionPending, TaskGroup, ExpDistill, CheckpointList, CheckpointRestore, GoalSet, GoalGet, SessionCompact, PlanApprove, TaskOutputQuery, BoardGet, BoardList, BoardDiagramRequest, BoardSave, BoardContinue, BoardOverlaySave, BoardOverlayGet, BoardComment, BoardFromCode, BoardFromSense, BoardArchiveList, BoardWorkflowCompile, BoardWorkflowRun, TeamaiPull, TeamaiPush, TeamaiInspect, TeamaiContribute, TeamaiRemove, SessionFork, DashboardSessions, DashboardTrends, SubagentCancel, ReviewInject, IssueList, IssueCreate, IssueUpdate, IssueComment, IssueSync, IssueConfirmDispatch, TeamP2pStatus, TeamP2pSend, SubagentsList, WorkersList, TrackView, UsageView, SessionModelSet, SessionModelGet, SessionOwnerGet, AnnotateSubmit, AnnotateRecord, TraceQuery, VoiceDraft, PermissionHistory, RsiStatusQuery,
+  TaskSubmit, TaskCancel, TaskSchedule, TaskScheduleCancel, TaskResume, QueueDispatchNow, QueueRemove, AskUserAnswer, TaskRename, TaskPin, TaskArchive, TaskDelete, TaskDeleteSession, ArchiveClear, TaskDetailGet, FilesSearch, SessionSearch, FileRead, FileWrite, IdeOfficeEdit, WorkflowAnswer, GitLog, GitCommitMsg, ExpDisable, CheckpointPreview, CheckpointRewind, TaskDiffstat, StatsSummary, TaskFileDiff, ModelsProbe, AgentsList, SkillsList, SkillsDisableBuiltin, CommandsList, CommandsUpsert, CommandsRemove, CommandsCatalog, HooksList, HooksUpsert, HooksUpdate, HooksRemove, McpList, McpUpsert, McpUpdate, McpRemove, McpTest, MemoryView, TermExec, TermCancel, PluginsList, PluginsInstall, PluginsUninstall, PluginsToggle, NodesList, NodeExec, WizardGen, RemoteControlStart, RemoteControlStatusQuery, RemoteControlStop, BotsList, BotsUpsert, BotsRemove, BotsTest, BotsWeixinBegin, BotsWeixinPoll, ProfileGet, ProfileRebuild, ProfilePlanUpsert, ProfilePlanRemove, ProfilePlanApply, ProfileSenseGet, AutomationList, AutomationCreate, AutomationUpdate, AutomationDelete, AutomationRun, TaskList, SessionHistory, NodeRegister, NodeHeartbeat, NodeTaskResult, PermissionRespond, ProjectAdd, ProjectRemove, ProjectActivate, ProjectList, ProjectRename, SshKeyImport, SshConfigList, SshTest, WslList, WslTest, WslBrowse, SshBrowse, RemoteLs, RemoteRead, RemoteDeploy, FsList, FsOpen, FsMkdir, FsRemove, FsRename, FsGrep, LspDiagnostics, TermSessionOpen, TermSessionSend, TermSessionRead, TermSessionClose, GitShow, GitStatus, GitDiff, GitBranches, GitCheckout, GitCommit, GitPush, GitPull, SenseQuery, WikiList, WikiGet, WikiRebuild, ReviewStoreGet, ExpList, ExpView, ExpRemove, SysMeta, CfgGet, CfgSet, CfgSecretStatus, CfgSecretSet, ModelsList, SessionStatus, TraceStats, CompanionTurn, SuperTurn, SuperHistory, SuperInbox, VoiceTranscribe, CompanionHistory, ProfileFile, Ping, MeetingImport, MeetingSchedule, SessionExport, TeamStatus, TeamInvite, PermissionPending, TaskGroup, ExpDistill, CheckpointList, CheckpointRestore, GoalSet, GoalGet, SessionCompact, PlanApprove, TaskOutputQuery, BoardGet, BoardList, BoardDiagramRequest, BoardSave, BoardContinue, BoardOverlaySave, BoardOverlayGet, BoardComment, BoardFromCode, BoardFromSense, BoardArchiveList, BoardWorkflowCompile, BoardWorkflowRun, TeamaiPull, TeamaiPush, TeamaiInspect, TeamaiContribute, TeamaiRemove, SessionFork, DashboardSessions, DashboardTrends, SubagentCancel, ReviewInject, IssueList, IssueCreate, IssueUpdate, IssueComment, IssueSync, IssueConfirmDispatch, TeamP2pStatus, TeamP2pSend, SubagentsList, WorkersList, TrackView, UsageView, SessionModelSet, SessionModelGet, SessionOwnerGet, AnnotateSubmit, AnnotateRecord, TraceQuery, VoiceDraft, PermissionHistory, RsiStatusQuery,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -181,21 +181,6 @@ export const ServerMessage = z.discriminatedUnion("type", [  SurfaceResult,
   Envelope.extend({ type: z.literal("meeting.extraction"), extraction: z.record(z.unknown()), draftPath: z.string() }),
   Envelope.extend({ type: z.literal("meeting.scheduled"), tasks: z.array(z.object({ id: z.string(), content: z.string() })) }),
   Envelope.extend({ type: z.literal("session.export.result"), sessionId: z.string(), file: z.string(), events: z.number().int() }),
-  Envelope.extend({ type: z.literal("voice.tts.result"), audioB64: z.string(), mime: z.string(), text: z.string(), voice: z.string().optional() }),
- // 音色清单:model=过滤依据回显;voices 空=无内置清单(自定义 id 兜底)。
-  Envelope.extend({
-    type: z.literal("voice.list.result"),
-    model: z.string(),
-    voices: z.array(z.object({
- /** voice 参数(请求体 input.voice 的值,区分大小写)。 */
-      id: z.string(),
-      name: z.string(),
-      gender: z.string().optional(),
-      traits: z.string().optional(),
- /** 分组名(如 3.1·精品中文)。 */
-      group: z.string(),
-    })),
-  }),
   Envelope.extend({ type: z.literal("team.status.result"), orgs: z.array(z.record(z.unknown())), projectTeam: z.record(z.unknown()).nullable().optional(), projectTeams: z.array(z.record(z.unknown())).nullable().optional(), teamai: z.record(z.unknown()).nullable().optional() }),
   Envelope.extend({ type: z.literal("teamai.push.result"), ok: z.boolean(), branch: z.string().optional(), reason: z.string().optional() }),
  // 门面回包:inspect(清单+diff+体检)/contribute(learnings 分支)/remove(main 上删除)。
@@ -328,6 +313,17 @@ export const ServerMessage = z.discriminatedUnion("type", [  SurfaceResult,
   }),
  // 廉价触发:inbox 有变化(任务进 interrupted/blocked/failed 等),面板据此重拉 super.inbox。
   Envelope.extend({ type: z.literal("super.inbox.changed") }),
+ // super 通道消息体化:系统来源的 super 轮次输入(权限自决/转接/通知)以结构化事件帧
+ // 广播(在既有 super.notice/super.relay 之外加发,旧客户端按旧帧渲染=兼容回退);kind∈
+ // permission-ask|relay|notice;payload 为 passthrough 结构化字段(tool/summary/risk/question 等)。
+  Envelope.extend({
+    type: z.literal("super.event"),
+    kind: z.string(),
+    sessionId: z.string(),
+    requestId: z.string().optional(),
+    taskId: z.string().optional(),
+    payload: z.record(z.string(), z.unknown()),
+  }).passthrough(),
  // 语音输入转写结果(voice.transcribe → 文本;不含人格设定与语音回播)。
   Envelope.extend({ type: z.literal("voice.transcribe.result"), text: z.string() }),
  // ── legacy 只读:以下 companion.* 服务端消息保留在联合里(旧回放/旧客户端解析不破),
@@ -347,7 +343,7 @@ export const ServerMessage = z.discriminatedUnion("type", [  SurfaceResult,
     context: z.string().optional(),
   }),
  // fixC6(任务终态播报):done/failed/cancelled 注入 companion 会话并广播;管家窗活跃时
- // 服务端主动出一轮管家轮次,一句话播报经 companion.turn.done 推送(TTS 走既有 voice.tts 链)。
+ // 服务端主动出一轮管家轮次,一句话播报经 companion.turn.done 推送。
   Envelope.extend({
     type: z.literal("companion.notice"),
     text: z.string(),
@@ -960,6 +956,50 @@ export const ServerMessage = z.discriminatedUnion("type", [  SurfaceResult,
     })),
     identity: z.object({ fingerprint: z.string().optional(), mode: z.string() }).optional(),
   }),
+ // 移动端远程控制:面板「节点 Fleet」入口改造后的唯一状态回包。
+ // botChannels=Bot 渠道摘要(与 bots.list.result 同源);离屏轮询/首拉共用同一形状。
+  Envelope.extend({
+    type: z.literal("remote.control.status.result"),
+    state: z.enum(["idle", "waiting", "connected"]),
+    connectUrl: z.string().optional(),
+    qrSvg: z.string().optional(),
+    createdAt: z.number().optional(),
+    expiresAt: z.number().optional(),
+    clients: z.number().int().nonnegative(),
+    host: z.string().optional(),
+    warning: z.string().optional(),
+    expired: z.boolean().optional(),
+    botChannels: z.array(BotChannelStatusZ).optional(),
+  }),
+ // 物理状态变化(手机连上/断开、start/stop)的廉价广播:面板收即重拉 status(QR 不进广播帧)。
+  Envelope.extend({ type: z.literal("remote.control.changed") }),
+  Envelope.extend({
+    type: z.literal("bots.list.result"),
+    bots: z.array(BotPublicZ),
+    channels: z.array(BotChannelStatusZ),
+    webhookPort: z.number().int().nonnegative(),
+  }),
+  Envelope.extend({ type: z.literal("bots.upsert.result"), ok: z.boolean(), bot: BotPublicZ.optional(), error: z.string().optional() }),
+  Envelope.extend({ type: z.literal("bots.remove.result"), ok: z.boolean(), error: z.string().optional() }),
+  Envelope.extend({ type: z.literal("bots.test.result"), ok: z.boolean(), message: z.string(), username: z.string().optional() }),
+  Envelope.extend({
+    type: z.literal("bots.weixin.begin.result"),
+    ok: z.boolean(),
+    qrCode: z.string().optional(),
+    qrSvg: z.string().optional(),
+    qrImageUrl: z.string().optional(),
+    expiresAt: z.number().optional(),
+    interval: z.number().optional(),
+    error: z.string().optional(),
+  }),
+  Envelope.extend({
+    type: z.literal("bots.weixin.poll.result"),
+    status: z.enum(["pending", "scanned", "success", "expired", "error"]),
+    bot: BotPublicZ.optional(),
+    error: z.string().optional(),
+  }),
+ // 机器人配置/运行态变化(增删改/测试失败/扫码成功)广播;面板收即重拉 bots.list。
+  Envelope.extend({ type: z.literal("bots.changed") }),
  // 节点 Fleet:注册/掉线/心跳在线态翻转的廉价广播(面板收即重拉 nodes.list;负载细节仍在回包)。
   Envelope.extend({ type: z.literal("nodes.changed") }),
  // 节点 Fleet「电脑控制」真路由回执:remote=NodeDispatch.delegate 结果;local 照旧走 task 链无此帧。

@@ -59,7 +59,7 @@ type TipMetricEntry = Omit<TipMetricSpec, "key" | "metric"> & { metric: Exclude<
 export const TIP_METRICS: Readonly<Record<string, TipMetricEntry>> = {
   dispatch: {
     trigger: "首次出现 spawn_subagent 工具调用(同任务一次为限,compact 后允许再注一次)",
-    expected: "任务书带动词/目标/验收,大勘察派给子代理,主轨只收结论",
+    expected: "派发前三问;只有并行独立工作或特殊角色才继续派,串行/小步工作收回自己做",
     metric: "steps-tokens",
   },
   "board-comments": {
@@ -122,9 +122,15 @@ export const TIP_METRICS: Readonly<Record<string, TipMetricEntry>> = {
     expected: "插入一次验证再继续改",
     metric: "verification",
   },
+  "dyn:context-trim": {
+    trigger: "步数 ≥25 且本任务累计 tokens ≥120k(上下文已重)",
+    expected: "把结论沉淀到板/待办,避免整读;只有真正并行的独立工作才派子代理",
+    metric: "steps-tokens",
+  },
+ /** 历史键(2026-11 前):旧 journal 的 tip.injected 仍带 dyn:delegate,保留口径供跨期对比。 */
   "dyn:delegate": {
-    trigger: "步数 ≥25 且从未 spawn_subagent 且本任务累计 tokens ≥120k",
-    expected: "把独立调研派给子代理,隔离上下文",
+    trigger: "历史口径:步数 ≥25 且从未 spawn_subagent 且 tokens ≥120k(已由 dyn:context-trim 取代)",
+    expected: "历史口径:把独立调研派给子代理、隔离上下文(现改为默认自己干+沉淀)",
     metric: "steps-tokens",
   },
 };

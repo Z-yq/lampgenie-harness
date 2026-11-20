@@ -9,7 +9,11 @@
  * ⑥ 预算:周期内有 run budgetExceeded → 下一 tick 提前结束周期(余下机制不派);
  * ⑦ 熔断暂停:breaker.paused 时停转;resumeBreaker 人工恢复后继续可调度。
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// mock 器——生产接线真的会跑 runSecondHalfFlush,但其 prompt 分支动态 import
+// agent-wiring 大图,在 vitest transform 下首次 ~19s,拖垮每个周期用例的 5s 默认超时。
+// 器自身行为由 test/rsi-second-half.test.ts 直测,本文件只钉调度器逻辑。
+vi.mock("../src/rsi-second-half.js", () => ({ runSecondHalfFlush: vi.fn(async () => ({ at: 0, links: { added: 0, skipped: 0 }, foundry: { observed: 0, candidates: 0, registered: [], dataTools: [], upgrades: [] }, decisions: { recorded: 0, patterns: 0 }, promptBook: { initialized: false, revisions: [] }, savings: { entries: 0, tokensSaved: 0, method: "mock" }, pins: 0, codes: [] })) }));
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,7 +30,7 @@ import {
 import { finishRun, getRun, runFilePath, startRun } from "../src/rsi-mechanism-store.js";
 import type { StartRunDeps } from "../src/rsi-agent-runner.js";
 import { setMechanism } from "../src/rsi-mechanism-store.js";
-import { pause as pauseBreaker } from "../src/rsi-breaker-store.js";
+import { getState as getBreakerState, pause as pauseBreaker } from "../src/rsi-breaker-store.js";
 import type { StartRunDeps } from "../src/rsi-agent-runner.js";
 
 const NOW = 1_000_000;
@@ -275,12 +279,13 @@ describe("tickRsiScheduler", () => {
     expect(settled?.cost?.totalTokens).toBe(1200);
   });
 
-  it("孤儿 run(重启后查不到 task)超宽限:本 tick 收成 failed(orphaned),不挡派发", async () => {
+  it("孤儿 run(网关 pid 变化+查不到 task)超宽限:本 tick 收成 failed(orphaned),不挡派发", async () => {
     await enable(root, { mechanisms: ["cost"], autoRetry: false, roiGate: false });
     await startRun(root, { mechanismId: "cost", runId: "r-orphan", taskId: "t-lost", sessionId: "rsi" });
     const file = runFilePath(root, "cost", "r-orphan");
     const rec = JSON.parse(await readFile(file, "utf8"));
     rec.startedAt = NOW - 11 * 60_000;
+    rec.gatewayPid = process.pid + 424_242; // 网关真重启过才判孤儿
     await writeFile(file, JSON.stringify(rec, null, 2), "utf8");
     const start = async (_d: StartRunDeps, mech: string) => ({ ok: true, id: mech, runId: "run-next" });
     const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, taskState: () => undefined, start }));
@@ -461,6 +466,39 @@ describe("tickRsiScheduler", () => {
     const start = async (_d: StartRunDeps, mech: string) => ({ ok: true, id: mech, runId: `run-${mech}` });
     const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, start }));
     expect(r.action).toBe("started");
+  });
+
+  it("熔断观察窗自动试探重启:连续 2 个正收益窗 → breaker-auto-resumed,频率 ×4(§14.2③)", async () => {
+    await enable(root);
+    await pauseBreaker(root, { by: "test", reason: "ROI 熔断", scope: "all", trigger: "auto-negative-streak" });
+ // 账本:最近两个 7 天桶各 +1000 saving、无 cost → netSaving>0 连续
+    await mkdir(join(root, ".genie", "rsi"), { recursive: true });
+    const DAY = 24 * 60 * 60 * 1000;
+ // NOW=1e6ms(epoch 后 16 分钟)→ 当前桶=0,「4 天前」落桶 -1:正好连续两窗。
+    const rows = [NOW, NOW - 4 * DAY].map((t) =>
+      JSON.stringify({ v: 1, type: "saving", at: new Date(t).toISOString(), tokensSaved: 1000 }),
+    );
+    await writeFile(join(root, ".genie", "rsi", "cost.jsonl"), rows.join("\n") + "\n");
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false }));
+    expect(r.action).toBe("breaker-auto-resumed");
+    expect(r.state.config.everyMinutes).toBe(1440 * 4); // 频率 ×0.25
+    expect(await getBreakerState(root).then((s) => s.paused)).toBe(false);
+    const text = await readFile(join(root, ".genie", "rsi", "breaker.jsonl"), "utf8");
+    expect(text).toContain('"kind":"observation"');
+  });
+
+  it("熔断观察窗:仅 1 个正收益窗(不足 2 窗)→ 保持暂停(严格正、连续才放行)", async () => {
+    await enable(root);
+    await pauseBreaker(root, { by: "test", reason: "ROI 熔断", scope: "all", trigger: "auto-negative-streak" });
+    await mkdir(join(root, ".genie", "rsi"), { recursive: true });
+    const DAY = 24 * 60 * 60 * 1000;
+    await writeFile(
+      join(root, ".genie", "rsi", "cost.jsonl"),
+      JSON.stringify({ v: 1, type: "saving", at: new Date(NOW - DAY).toISOString(), tokensSaved: 1000 }) + "\n",
+    );
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false }));
+    expect(r.action).toBe("breaker-paused");
+    expect(await getBreakerState(root).then((s) => s.paused)).toBe(true);
   });
 
   it("collectSchedulerStatus:只读快照带熔断态;文件缺失给缺省(不写盘)", async () => {

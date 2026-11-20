@@ -202,14 +202,14 @@ describe("探针纯路径(与 capabilities.test.ts 同源,这里锁 gateway 侧�
     expect(checkDispatch({ type: "rsi.status", negotiated: LEGACY_NEGOTIATION }).allow).toBe(true);
   });
 
-  it("未编目但已在  白名单的既有通道不被误杀(voice.tts 在 PANEL_CHANNELS 里)", () => {
-    expect(PANEL_CHANNELS).toContain("voice.tts");
- // 补齐轮后 voice 已编目:legacy 连接照旧放行(不因编目而收紧旧客户端),
+  it("已在  白名单的既有通道不被误杀(voice.transcribe 在 PANEL_CHANNELS 里)", () => {
+    expect(PANEL_CHANNELS).toContain("voice.transcribe");
+ // voice 命名空间已编目:legacy 连接照旧放行(不因编目而收紧旧客户端),
  // 而 negotiated 连接未声明 voice 时必须被 fail-closed 拦下。
-    expect(checkDispatch({ type: "voice.tts", negotiated: LEGACY_NEGOTIATION }).code).toBe("OK");
-    expect(checkDispatch({ type: "voice.tts", negotiated: LEGACY_NEGOTIATION }).allow).toBe(true);
+    expect(checkDispatch({ type: "voice.transcribe", negotiated: LEGACY_NEGOTIATION }).code).toBe("OK");
+    expect(checkDispatch({ type: "voice.transcribe", negotiated: LEGACY_NEGOTIATION }).allow).toBe(true);
     const declaredTaskOnly = negotiateClientCapabilities({ supportedOps: ["task"] }, opts);
-    expect(checkDispatch({ type: "voice.tts", negotiated: declaredTaskOnly }).code).toBe("UNSUPPORTED_OP");
+    expect(checkDispatch({ type: "voice.transcribe", negotiated: declaredTaskOnly }).code).toBe("UNSUPPORTED_OP");
     expect(checkDispatch({ type: "sys.health", negotiated: declaredTaskOnly }).code).toBe("UNSUPPORTED_OP");
  // 未编目通道仍走 UNKNOWN_METHOD(目录是封闭清单,不是前缀通配)
     expect(checkDispatch({ type: "foo.bar", negotiated: LEGACY_NEGOTIATION }).code).toBe("UNKNOWN_METHOD");

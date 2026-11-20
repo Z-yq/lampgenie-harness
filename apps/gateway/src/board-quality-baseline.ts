@@ -86,6 +86,9 @@ export function aggregateBoardQuality(
   const skeletonTasks = new Set<string>();
   let skeletonOkEvents = 0;
   let skeletonRejected = 0;
+ // §11.8 豁免率遥测:豁免率=board.exempt/(board.update+board.exempt)。
+  let boardUpdateEvents = 0;
+  let boardExemptEvents = 0;
   let elidedSum = 0;
   const settledTasks = new Set<string>();
   // taskId -> 窗口内最新一条 task.quality(adoptionRate 无 skeleton 时为 null)
@@ -148,6 +151,12 @@ export function aggregateBoardQuality(
         skeletonOkEvents += 1;
         elidedSum += asNum(payload.elidedRate);
       }
+    } else if (kind === "board.update") {
+ // §11.8 豁免率遥测分母:本应有板的写任务(有板落盘事件)。
+      boardUpdateEvents += 1;
+    } else if (kind === "board.exempt") {
+ // §11.8 豁免率遥测分子:显式豁免留痕事件(plan-gate 据此放行)。
+      boardExemptEvents += 1;
     } else if (kind === "custom" && payload.type === "task.quality") {
       const tid = typeof payload.taskId === "string" ? payload.taskId : "";
       if (!tid) continue;
@@ -219,6 +228,9 @@ export function aggregateBoardQuality(
   out.push(`| 骨架任务数 | ${skeletonTasks.size} |`);
   out.push(`| rejected 次数 | ${skeletonRejected} |`);
   out.push(`| 结算任务数 | ${settledTasks.size} |`);
+  const exemptDenom = boardUpdateEvents + boardExemptEvents;
+  out.push(`| 豁免率(board.exempt/(update+exempt)) | ${exemptDenom > 0 ? rate3(boardExemptEvents / exemptDenom) : "n/a"} |`);
+  out.push(`| board.update / board.exempt 事件数 | ${boardUpdateEvents} / ${boardExemptEvents} |`);
   out.push("");
   return out.join("\n");
 }

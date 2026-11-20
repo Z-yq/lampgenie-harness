@@ -77,7 +77,7 @@ export type WorkerRequest =
   | { t: "req"; id: number; kind: "session.search"; payload: { op: "discover" | "scroll" | "read"; args: unknown; currentSessionId?: string } }
   | { t: "req"; id: number; kind: "mcp.tools"; payload: Record<string, never> }
   | { t: "req"; id: number; kind: "mcp.call"; payload: { serverId: string; tool: string; args: unknown } }
-  | { t: "req"; id: number; kind: "permission.ask"; payload: { sessionId?: string; tool: string; summary: string; risk?: string; args?: unknown } }
+  | { t: "req"; id: number; kind: "permission.ask"; payload: { sessionId?: string; tool: string; summary: string; risk?: string; args?: unknown; command?: string; submittedBy?: string; taskId?: string; brief?: string } }
   | { t: "req"; id: number; kind: "wfAsk"; payload: { wfId: string; cacheKey: string; instructions: string } }
   | { t: "req"; id: number; kind: "askUser"; payload: { sessionId: string; payload: unknown } }
   | { t: "req"; id: number; kind: "subagent.cancel"; payload: { agentId: string } };

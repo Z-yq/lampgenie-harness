@@ -94,7 +94,7 @@ describe("板型一致性门:13 类合格样例", () => {
       N({ id: "d3", kind: "io", label: "异常缺状态", change: "keep", group: "01 测试数据" }),
       N({ id: "dec", kind: "decision", label: "分支覆盖", change: "keep" }),
       N({ id: "logic", kind: "function", label: "被测逻辑", change: "keep", symbolRef: { name: "validate" } }),
-      N({ id: "as1", kind: "note", label: "断言:整板点名", summary: "期望 issues", change: "keep" }),
+      N({ id: "as1", kind: "note", label: "断言:整板点名", summary: "目的:防漏点名;走查实例:输入空数组→issues 数 0", change: "keep" }),
     ];
     expect(check(nodes, [E("d1", "logic", "verify", "输入→被测"), E("dec", "as1", "verify", "分支→断言")], "test")).toEqual([]);
   });
@@ -108,7 +108,7 @@ describe("板型一致性门:13 类合格样例", () => {
       N({ id: "d", kind: "decision", group: "03 断言", label: "断言:候选含 hi?", change: "keep", targets: ["a.spec.ts"], flow: [{ type: "branch", cond: "expect(menu).toContain('hi')", then: [{ type: "step", text: "绿" }], else: [{ type: "step", text: "红灯" }] }] }),
       N({ id: "e", kind: "end", group: "03 断言", label: "通过:候选可见", change: "keep", targets: ["a.spec.ts"] }),
       N({ id: "x", kind: "end", group: "04 失败定位", label: "红灯→三步定位", change: "keep", targets: ["a.spec.ts"] }),
-      N({ id: "r", kind: "note", group: "05 回归锚", label: "回归:fullstack 复跑", change: "keep", targets: ["fullstack.spec.cjs"] }),
+      N({ id: "r", kind: "note", group: "05 回归锚", label: "回归:fullstack 复跑", summary: "目的:防面板回归;走查实例:装 hi 插件→候选含 hi", change: "keep", targets: ["fullstack.spec.cjs"] }),
     ];
     const edges = [
       E("s", "f", "data", "启动"), E("f", "c1", "data", "plugins.install [WS]"), E("c1", "c2", "data", "commands.list.result"),
@@ -517,7 +517,7 @@ describe("2026-10-26 通用硬规则(scale 显式的新板)", () => {
     const nodes = [
       N({ id: "theme-1", kind: "note", group: "主题", label: "主题:面板启动读配置流程", change: "keep", targets: ["apps/gateway/src/panel.ts"] }),
       N({ id: "s", kind: "start", group: "01 现状", label: "现有入口", change: "keep", targets: ["apps/gateway/src/panel.ts"] }),
-      N({ id: "cur", kind: "function", group: "01 现状", label: "读配置", change: "modify", targets: ["apps/gateway/src/panel.ts#boot"],
+      N({ id: "cur", kind: "function", group: "01 现状", label: "读配置", change: "modify", summary: "目的:统一启动配置读取", targets: ["apps/gateway/src/panel.ts#boot"],
         flow: [{ type: "step", text: "const c = boot()" }] }),
       N({ id: "d", kind: "decision", group: "02 变更", label: "有配置?", change: "keep", targets: ["apps/gateway/src/panel.ts"],
         flow: [{ type: "branch", cond: "c", then: [{ type: "step", text: "复用" }], else: [{ type: "step", text: "新建" }] }] }),
@@ -923,5 +923,91 @@ describe("isCompositionStructure 结构判据(board-content-predicate 单一真�
     // isContentNode 行为不变(零回归锚):section 无 targets → false,note 带 targets → true
     expect(isContentNode({})).toBe(false);
     expect(isContentNode({ targets: ["a.ts"] })).toBe(true);
+  });
+});
+
+describe("§12.6 可读性提示门:六判据(提示不拒,与 typeIssues 同档)", () => {
+  const F = "apps/gateway/src/x.ts";
+ /** 合格 code flow 板:modify 带 before+目的+上游词,且有 data 边指向它。 */
+  const codeOk = (over: { summary?: string; before?: string; firstEdgeKind?: string } = {}) => {
+    const nodes = [
+      N({ id: "theme-1", kind: "note", group: "主题", label: "主题:超时配置流程", change: "keep", targets: [F] }),
+      N({ id: "s", kind: "start", group: "01 触发", label: "改超时入口", change: "keep", targets: [F] }),
+      N({ id: "m", kind: "function", group: "01 触发", label: "写回 timeout", change: "modify",
+        before: over.before ?? "timeout=3000",
+        summary: over.summary ?? "目的:防面板长等;上游:tool loop 调用", targets: [`${F}#writeTimeout`],
+        flow: [{ type: "step", text: "cfg.timeout = 30_000" }] }),
+      N({ id: "d", kind: "decision", group: "02 判定", label: "写回成功?", change: "keep", targets: [F],
+        flow: [{ type: "branch", cond: "ok", then: [{ type: "step", text: "继续" }], else: [{ type: "step", text: "回滚" }] }] }),
+      N({ id: "e", kind: "end", group: "02 判定", label: "面板 30s", change: "keep", targets: [F] }),
+      N({ id: "e2", kind: "end", group: "02 判定", label: "保持 3s", change: "keep", targets: [F] }),
+    ];
+    const edges = [
+      E("theme-1", "s", "data", "板首主题"),
+      E("s", "m", over.firstEdgeKind ?? "data", "触发"),
+      E("m", "d", "data", "写回"),
+      E("d", "e", "data", "是：成功"), E("d", "e2", "data", "否：失败"),
+    ];
+    return { nodes, edges };
+  };
+ /** 合格 test 板(旧式):数据三态+decision+断言+verify;as1 同时满足目的+走查实例。 */
+  const testOk = (extra: unknown[] = [], overAs1: Record<string, unknown> = {}) => {
+    const nodes = [
+      N({ id: "d1", kind: "io", label: "正常输入", change: "keep", group: "01 测试数据" }),
+      N({ id: "d2", kind: "io", label: "边界空板", change: "keep", group: "01 测试数据" }),
+      N({ id: "d3", kind: "io", label: "异常缺状态", change: "keep", group: "01 测试数据" }),
+      N({ id: "dec", kind: "decision", label: "分支覆盖", change: "keep" }),
+      N({ id: "logic", kind: "function", label: "被测逻辑", change: "keep", symbolRef: { name: "validate" } }),
+      N({ id: "as1", kind: "note", label: "断言:整板点名", summary: "目的:防漏点名;走查实例:输入空数组→issues 数 0", change: "keep", ...overAs1 }),
+      ...extra,
+    ];
+    return { nodes, edges: [E("d1", "logic", "verify", "输入→被测"), E("dec", "as1", "verify", "分支→断言")] };
+  };
+
+  it("modify-summary-incomplete:正例(目的+before)零 issue;反例(纯名词短 summary)点名且仅提示", () => {
+    const ok = codeOk();
+    expect(check(ok.nodes, ok.edges, "code")).toEqual([]);
+    const bad = codeOk({ summary: "配置", before: "" });
+    const issues = check(bad.nodes, bad.edges, "code");
+    expect(P(issues)).toContain("modify-summary-incomplete[提示]");
+ // 提示不拒:反例板上没有任何非提示级新增问题
+    expect(issues.every((i) => i.problems.every((p) => p.includes("[提示]")))).toBe(true);
+  });
+
+  it("radiation-missing:反例(无辐射词且无 data/verify 入边)点名;data 入边兜住则不报", () => {
+    const bad = codeOk({ summary: "目的:防面板长等", firstEdgeKind: "call" });
+    const txt = P(check(bad.nodes, bad.edges, "code"));
+    expect(txt).toContain("radiation-missing[提示]");
+    expect(txt).not.toContain("modify-summary-incomplete");
+    const ok = codeOk({ summary: "目的:防面板长等" });
+    expect(P(check(ok.nodes, ok.edges, "code"))).not.toContain("radiation-missing");
+  });
+
+  it("test-purpose-missing:无目的 note 点名;正例整板通过", () => {
+    const bad = testOk([], { summary: "走查实例:输入空数组→issues 数 0" });
+    expect(P(check(bad.nodes, bad.edges, "test"))).toContain("test-purpose-missing[提示]");
+    const ok = testOk();
+    expect(check(ok.nodes, ok.edges, "test")).toEqual([]);
+  });
+
+  it("test-fixture-unexplained:mock/注入无语义标注点名;带契约词不报", () => {
+    const bad = testOk([N({ id: "m1", kind: "io", label: "mock 数据", summary: "vi.mock 注入", change: "keep", group: "01 测试数据" })]);
+    expect(P(check(bad.nodes, bad.edges, "test"))).toContain("test-fixture-unexplained[提示]");
+    const ok = testOk([N({ id: "m1", kind: "io", label: "mock 数据", summary: "语义:替代真实插件注册契约", change: "keep", group: "01 测试数据" })]);
+    expect(P(check(ok.nodes, ok.edges, "test"))).not.toContain("test-fixture-unexplained");
+  });
+
+  it("test-expect-ungrounded:数字断言无来源点名;带推导不报", () => {
+    const bad = testOk([N({ id: "x1", kind: "note", label: "数量断言", summary: "expect(menu).toBe(12)", change: "keep" })]);
+    expect(P(check(bad.nodes, bad.edges, "test"))).toContain("test-expect-ungrounded[提示]");
+    const ok = testOk([N({ id: "x1", kind: "note", label: "数量断言", summary: "expect(menu).toBe(12);推导:12=1 内置+11 装后", change: "keep" })]);
+    expect(P(check(ok.nodes, ok.edges, "test"))).not.toContain("test-expect-ungrounded");
+  });
+
+  it("test-example-missing:无走查实例点名;正例不报", () => {
+    const bad = testOk([], { summary: "目的:防漏点名" });
+    expect(P(check(bad.nodes, bad.edges, "test"))).toContain("test-example-missing[提示]");
+    const ok = testOk();
+    expect(P(check(ok.nodes, ok.edges, "test"))).not.toContain("test-example-missing");
   });
 });

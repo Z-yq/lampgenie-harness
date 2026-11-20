@@ -193,11 +193,19 @@ describe(" 面板静态契约(Fleet/Gate 区块+WS 泵+统一应答口)+源码�
       expect(pageHtml).toContain(s);
     }
   });
-  it("Fleet 视图:概要/节点卡/命令下发/输出回显/远程项目/接入指引", () => {
-    for (const s of ["data-nodeexec", "data-nodecmd", "data-nodeout", "data-remotedeploy", "nodesOpenRemote", "接入新节点", "远程项目", "nodeOutHtml", "nodes.changed"]) {
+  it("远程控制视图(2026-11-20 替换原 Fleet):扫码/Bot Channel/机器人管理/WS 泵", () => {
+    for (const s of [
+      "远程控制 Remote", "rcStateLabel", "rcQrBox", "rcCopy", "rcBotsMask",
+      "data-rcbot", "rcBotsManage", "rcHandleMessage", "remote.control.status.result",
+      "bots.weixin.begin", "bots.upsert", "机器人管理",
+    ]) {
       expect(pageHtml).toContain(s);
     }
-    expect(pageHtml).toContain('m.type === "node.exec.result"'); // WS 泵新分支
+ // 旧 Fleet UI 必须彻底下线(节点注册表后端仍保留:nodes.list/node.exec 分支断言在下方)
+    for (const old of ["data-nodeexec", "data-nodecmd", "data-nodeout", "data-remotedeploy", "nodesOpenRemote", "nodeOutHtml", "nodesViewRender"]) {
+      expect(pageHtml, "旧 Fleet UI 残留: " + old).not.toContain(old);
+    }
+    expect(pageHtml).toContain('m.type === "node.exec.result"'); // 设置-远程连接回执 toast
     expect(pageHtml).toContain('m.type === "permission.resolved"');
     expect(pageHtml).toContain('m.type === "nodes.changed"');
     expect(pageHtml).toContain('m.type === "permission.history.result"');

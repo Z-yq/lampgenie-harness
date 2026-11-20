@@ -1,7 +1,7 @@
 /**
  * 接线闭环回归锚(J1 2026-11 token 轮,子任务 B + C)。
- * 缺口形态:agent-wiring-dynamic-tips.ts 已备好 `dyn:verify-cadence` / `dyn:delegate` 两张卡的
- * 判定(纯函数 + 常量),但 buildLoopTips 没把 `lastVerifyStep` / `spawnedSubagent` / `tokensSpent`
+ * 缺口形态:agent-wiring-dynamic-tips.ts 已备好 `dyn:verify-cadence` / `dyn:context-trim` 两张卡的
+ * 判定(纯函数 + 常量),但 buildLoopTips 没把 `lastVerifyStep` / `tokensSpent`
  * 填进 DynSignals → 生产路径上两张卡永不触发(死代码)。本文件按真实 ctx 序列驱动 buildLoopTips
  * (闭包状态的归属处)来验信号累积,顺带锁 C 的两个进度折算纯函数。
  * 零反斜杠纪律:断言全用 includes 字面串。
@@ -11,8 +11,8 @@ import { buildLoopTips } from "../src/agent-wiring.js";
 import {
   DYN_VERIFY_CADENCE_STEP,
   DYN_VERIFY_CADENCE_GAP,
-  DYN_DELEGATE_STEP,
-  DYN_DELEGATE_TOKENS,
+  DYN_CONTEXT_TRIM_STEP,
+  DYN_CONTEXT_TRIM_TOKENS,
 } from "../src/agent-wiring-dynamic-tips.js";
 
 afterEach(() => { delete process.env.GENIE_TIPS; });
@@ -76,54 +76,44 @@ describe("B) dyn:verify-cadence 信号接线", () => {
   });
 });
 
-/* ───────────── B) dyn:delegate:spawnedSubagent + tokensSpent 信号 ───────────── */
+/* ───────────── B) dyn:context-trim:tokensSpent 信号 ───────────── */
 
-describe("B) dyn:delegate 信号接线", () => {
-  const light = { ...ro(1), tokensSpent: 0 };
-
-  it("③ step≥25 + 上下文够重 + 从未 spawn → 注入;spawn 过后永不再触发", () => {
-    const tips = buildLoopTips({ sessionId: "w-del-1" });
-    // 步数/上下文都够,但一次都没 spawn → 卡该出
-    const hit = tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS });
-    expect(hit, "step25 + 120k + 未 spawn 必须注入(信号未接线时这里是 null)").not.toBeNull();
-    expect(hit!.keys).toContain("dyn:delegate");
-    expect(hit!.text).toContain("动态·上下文委派");
+describe("B) dyn:context-trim 信号接线", () => {
+  it("③ step≥25 + 上下文够重 → 注入;派过子代理也照样提醒(不再以未派发为前提)", () => {
+    const tips = buildLoopTips({ sessionId: "w-ct-1" });
+    const hit = tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS });
+    expect(hit, "step25 + 120k 必须注入(信号未接线时这里是 null)").not.toBeNull();
+    expect(hit!.keys).toContain("dyn:context-trim");
+    expect(hit!.text).toContain("动态·上下文整理");
     // once:同信号下一步不重放
-    expect(tips({ step: DYN_DELEGATE_STEP + 1, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS })?.keys ?? []).not.toContain("dyn:delegate");
+    expect(tips({ step: DYN_CONTEXT_TRIM_STEP + 1, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS })?.keys ?? []).not.toContain("dyn:context-trim");
   });
 
-  it("③b spawn 过后(即使 compact 清 fired)delegate 不再触发", () => {
-    const tips = buildLoopTips({ sessionId: "w-del-2" });
-    const heavy = { lastStepFiles: [] as string[], tokensSpent: DYN_DELEGATE_TOKENS };
-    // 先 spawn 一次(step1)→ spawnedSubagent=true,此后不回退
+  it("③b 已派过子代理(step1 spawn)后到点仍触发——上下文整理与派发与否无关", () => {
+    const tips = buildLoopTips({ sessionId: "w-ct-2" });
+    const heavy = { lastStepFiles: [] as string[], tokensSpent: DYN_CONTEXT_TRIM_TOKENS };
     tips({ step: 1, lastStepTools: ["spawn_subagent"], ...heavy });
-    // 到点也不该出(delegate 的判定是 spawnedSubagent===false)
-    expect(tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], ...heavy })?.keys ?? []).not.toContain("dyn:delegate");
-    // compact 后额度清空,但步态事实不清 → 仍不触发
-    expect(
-      tips({ step: DYN_DELEGATE_STEP + 5, lastStepTools: ["code_sense"], ...heavy, compacts: 1 })?.keys ?? [],
-    ).not.toContain("dyn:delegate");
+    expect(tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], ...heavy })!.keys).toContain("dyn:context-trim");
   });
 
   it("④ tokens 不足 120k 不触发(步数够也一样)", () => {
-    const tips = buildLoopTips({ sessionId: "w-del-3" });
-    const r = tips({ step: DYN_DELEGATE_STEP + 10, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS - 1 });
-    expect(r?.keys ?? []).not.toContain("dyn:delegate");
+    const tips = buildLoopTips({ sessionId: "w-ct-3" });
+    const r = tips({ step: DYN_CONTEXT_TRIM_STEP + 10, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS - 1 });
+    expect(r?.keys ?? []).not.toContain("dyn:context-trim");
   });
 
   it("④b 步数不足 25 不触发(上下文够重也一样)", () => {
-    const tips = buildLoopTips({ sessionId: "w-del-4" });
-    const r = tips({ step: DYN_DELEGATE_STEP - 1, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS * 3 });
-    expect(r?.keys ?? []).not.toContain("dyn:delegate");
+    const tips = buildLoopTips({ sessionId: "w-ct-4" });
+    const r = tips({ step: DYN_CONTEXT_TRIM_STEP - 1, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS * 3 });
+    expect(r?.keys ?? []).not.toContain("dyn:context-trim");
     // 同序列下一步(到点)就出——证明上一步只是被步数条件挡住
-    expect(tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS * 3 })!.keys).toContain("dyn:delegate");
+    expect(tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS * 3 })!.keys).toContain("dyn:context-trim");
   });
 
   it("④c ctx.tokensSpent 缺省(旧 ctx 形态)→ 视作 0,不触发", () => {
-    const tips = buildLoopTips({ sessionId: "w-del-5" });
-    const r = tips({ step: DYN_DELEGATE_STEP + 2, lastStepTools: ["code_sense"], lastStepFiles: [] });
-    expect(r?.keys ?? []).not.toContain("dyn:delegate");
-    void light;
+    const tips = buildLoopTips({ sessionId: "w-ct-5" });
+    const r = tips({ step: DYN_CONTEXT_TRIM_STEP + 2, lastStepTools: ["code_sense"], lastStepFiles: [] });
+    expect(r?.keys ?? []).not.toContain("dyn:context-trim");
   });
 });
 
@@ -150,26 +140,26 @@ describe("B) 兼容:旧 ctx 行为不变 + key 顺序 + gate", () => {
     expect(keys).not.toContain("dyn:verify-cadence"); // 本步刚验过(间隔 0)
   });
 
-  it("⑤b 两张新卡在 dyn 块内末尾顺序排列(verify-cadence 先于 delegate)", () => {
+  it("⑤b 两张新卡在 dyn 块内末尾顺序排列(verify-cadence 先于 context-trim)", () => {
     const tips = buildLoopTips({ sessionId: "w-ord-2" });
     tips({ step: 2, lastStepTools: ["run_cmd"], lastStepFiles: [] });
     for (let s = 3; s < DYN_VERIFY_CADENCE_STEP; s++) tips(ro(s));
-    const r = tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS });
+    const r = tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS });
     const keys = r!.keys;
     expect(keys).toContain("dyn:verify-cadence");
-    expect(keys).toContain("dyn:delegate");
-    expect(keys.indexOf("dyn:verify-cadence")).toBeLessThan(keys.indexOf("dyn:delegate"));
+    expect(keys).toContain("dyn:context-trim");
+    expect(keys.indexOf("dyn:verify-cadence")).toBeLessThan(keys.indexOf("dyn:context-trim"));
   });
 
   it("⑤c gate 10k 间隔与 once 语义不变:同卡 fired 后即使水位够了也不重放", () => {
     const tips = buildLoopTips({ sessionId: "w-ord-3" });
     const gate = { check: () => true, lastTokens: () => undefined, reset: () => {} };
-    const sig = { lastStepFiles: [] as string[], tokensSpent: DYN_DELEGATE_TOKENS, gate };
-    expect(tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], ...sig })!.keys).toContain("dyn:delegate");
+    const sig = { lastStepFiles: [] as string[], tokensSpent: DYN_CONTEXT_TRIM_TOKENS, gate };
+    expect(tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], ...sig })!.keys).toContain("dyn:context-trim");
     // 水位全放行也不重放(once)
     expect(
-      tips({ step: DYN_DELEGATE_STEP + 1, lastStepTools: ["code_sense"], ...sig, tokensSpent: DYN_DELEGATE_TOKENS * 5 })?.keys ?? [],
-    ).not.toContain("dyn:delegate");
+      tips({ step: DYN_CONTEXT_TRIM_STEP + 1, lastStepTools: ["code_sense"], ...sig, tokensSpent: DYN_CONTEXT_TRIM_TOKENS * 5 })?.keys ?? [],
+    ).not.toContain("dyn:context-trim");
   });
 
   it("⑥ 旧 ctx(不带 tokensSpent/gate/phase 等新字段)行为与改动前一致:纯只读不注入", () => {
@@ -190,6 +180,6 @@ describe("B) 兼容:旧 ctx 行为不变 + key 顺序 + gate", () => {
     const tips = buildLoopTips({ sessionId: "w-off" });
     tips({ step: 2, lastStepTools: ["run_cmd"], lastStepFiles: [] });
     for (let s = 3; s < DYN_VERIFY_CADENCE_STEP; s++) tips(ro(s));
-    expect(tips({ step: DYN_DELEGATE_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_DELEGATE_TOKENS })).toBeNull();
+    expect(tips({ step: DYN_CONTEXT_TRIM_STEP, lastStepTools: ["code_sense"], lastStepFiles: [], tokensSpent: DYN_CONTEXT_TRIM_TOKENS })).toBeNull();
   });
 });

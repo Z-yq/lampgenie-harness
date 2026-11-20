@@ -638,16 +638,14 @@ function cvSvgTryPatch(host, doc, pos, sig) {
 /** 画布世界内容拼串(纯函数,便于契约测试直接跑):cards=老「泳道+边+卡片」三块逐字不动;svg=单张 SVG 主机。 */
 function cvWorldBodyHtml(mode, p) {
   if (mode === "cards") return p.laneHtml + p.edgeSvg + p.popupMask + p.cards + p.anchors + p.fold;
- // data-sig 只承诺「DOM 里真装着的那一版 svg」:空壳帧(回包未到,svg 为空串)一律不写,
- // 否则回包后 cvSvgPatchPlan(now, domSig, true) 读到 domSig===now 恒判 keep → 注入分支永不可达
- // (经验证 bug:回包 2496 字节 svg 到了,DOM 里 #cvSvgHost 恒 100 字节空壳、#cvWorld svg=0)。
+ // G7 修复:anchors/fold 是 cards 坐标系(BoardFlowLayout 的世界坐标)的浮层,
+ // svg 模式的世界由服务端 SVG 尺寸决定——两套坐标系不同,叠在 svg 上只会错位叠影
+ // (经验证 flow 板 +N 计数块压在 svg 图上部)。svg 分支不再输出这两层;popupMask 为 UI
+ // 交互地图遮罩(仅 cvUiInfo 在场时有内容),保留。
   const sigAttr = p.svg ? ' data-sig="' + esc(p.sig) + '"' : "";
- // A1:上一版 svg 在等新图期间继续挂着(data-stale="1" 降透明度),不再把画布清空;
- // data-sig 写的仍是**DOM 里真装着的那一版**(旧 sig),回包后 cvSvgPatchPlan 照样判 inject。
   const staleAttr = p.stale ? ' data-stale="1"' : "";
- // 修复(5):svg 还没回来的空壳不再是一片空白——先画「正在出图…」,超时文案由 cvSvgWaitPaint 就地替换。
   const waitHtml = p.svg ? "" : '<div class="cv-svg-wait">正在出图…</div>';
-  return p.popupMask + '<div class="cv-svg-host" id="cvSvgHost" title="点节点看详情,空白拖拽平移,滚轮缩放"' + sigAttr + staleAttr + ">" + p.svg + waitHtml + "</div>" + p.anchors + p.fold;
+  return p.popupMask + '<div class="cv-svg-host" id="cvSvgHost" title="点节点看详情,空白拖拽平移,滚轮缩放"' + sigAttr + staleAttr + ">" + p.svg + waitHtml + "</div>";
 }
 /** 请服务端 flowkit 出图(同签名在途不重复发)。过滤态(写者子集/折叠分组)随请求带给服务端。
  * 修复(5):空白画布不再静默——发请求即画「正在出图…」,6s 未回包 → 可见超时文案 + 自动重发
@@ -2096,10 +2094,18 @@ function renderBoardCanvas(doc, opts) {
     if (plan === "inject" && svgHostOld && host.querySelector(".bf-cv-world")) {
  // 内容变了:只整块重注入 #cvSvgHost,视野(cvPan/cvPan.k)原样保留——
  // 绝不调 cvApplyTf/cvFitNow(既有 P0「保存回执抢走用户视野」不能再复活)。
+      const cvSvgFirstArrive = !domSig; // 注入前 DOM 里没有任何一版 svg = 首帧(空壳"正在出图"→真图)
       svgHostOld.innerHTML = svgNow;
       try { svgHostOld.setAttribute("data-sig", cvSvgSigNow); } catch (e) { /* 忽略 */ }
       try { if (svgHostOld.removeAttribute) svgHostOld.removeAttribute("data-stale"); } catch (e) { /* 忽略 */ } // 新图到位:抹掉「等图」标记
       host.__cvSig = cvSvgSigNow;
+ // 修复(svg 首帧从不适配,G1):此前 inject 后无条件 return,而末尾的自动 fit 行
+ // 在 svg 模式永远不可达(keep/inject 都提前 return)——首帧 2275px 宽图以 scale(1) 挤在
+ // 936px 画布,zpct 谎报 100%、右下 3/4 图被裁。只在「首帧且用户没动过视野」时 fit:
+ // 保存回执/agent 回写(DOM 里已有旧一版 svg,domSig 非空)依旧保视野,既有 P0 语义不破。
+      if (cvSvgFirstArrive && !cvViewTouched && doc.nodes.length >= 4) {
+        setTimeout(() => { try { cvFitNow(); } catch (e3) { /* fit 失败不影响注入 */ } }, 40);
+      }
       if (typeof cvDrawMini === "function") { try { cvDrawMini(host, doc, pos); } catch (e2) { /* 小地图失败不影响视图 */ } }
       return;
     }

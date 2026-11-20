@@ -170,6 +170,10 @@ describe("loop 400 自愈(重试与留痕)", () => {
     const loop = new AgentLoop({ journal, sessionId: "s1", system: "sys", llm, tools: [] });
     await expect(loop.runTurn("hi")).rejects.toThrow(/tool_calls must be followed/);
     expect((llm as LlmProvider & { requests: Message[][] }).requests).toHaveLength(1);
-    expect(journal.readAll().filter((e) => e.kind === "custom")).toHaveLength(0);
+    // 非图片类 400 不得走视觉自愈留痕(stream.attempt.discarded 是流式尝试遥测,与本语义无关)
+    const repairMarks = journal.readAll().filter(
+      (e) => e.kind === "custom" && (e.payload as { what?: string } | undefined)?.what === "vision.repair",
+    );
+    expect(repairMarks).toHaveLength(0);
   });
 });

@@ -85,6 +85,8 @@ import { permissionMode } from "./permission-mode.js";
 import { join as joinPath } from "node:path";
 import { repoRoot } from "./repo-root.js";
 import { sampleLoad } from "./load-sample.js"; // 节点 Fleet 真实负载(旧硬编码恒零)
+import { RemoteControlManager } from "./remote-control.js"; // 移动端远程控制(原节点 Fleet 视图)
+import { BotService } from "./bots/service.js"; // Bot Channels(微信/飞书/Lark/Telegram)
 import { PROTOCOL_VERSION } from "@lampgenie/protocol";
 import { TEMPLATES } from "@lampgenie/workflow";
 import type { SubagentBackend } from "@lampgenie/executors";
@@ -95,6 +97,10 @@ export interface GatewayApp {
   nodes: NodeRegistry;
  /** 项目注册表。 */
   projects: ProjectRegistry;
+ /** 移动端远程控制配对会话(main.ts 的 /m 路由校验 token 用)。 */
+  remoteControl: RemoteControlManager;
+ /** Bot Channels(面板远程控制右栏 + 机器人管理;观察/测试面)。 */
+  bots: BotService;
   /** workflow ask 面板应答路由(F6;观察/测试面)。 */
   workflowAskRouter: WorkflowAskRouter;
  /** ask_user 问答路由(指挥台待答卡数据源;观察/测试面)。 */
@@ -179,6 +185,7 @@ export interface GatewayAppOptions {
   configSources?: Record<string, string>;
   /** 语音任务书 fetch 注入(voice.draft 测试用);缺省=全局 fetch。 */
   voiceDraftFetch?: typeof fetch;
+
   configProjectPath?: string;
   /** cfg.set 落盘与合并钩子(生产由 main 提供);缺省=只热应用不落盘。
    * envOccupied=被进程 env 层压住的键(重启也不生效,面板徽标据此说实话;甄别见 cfg-env-occupancy.ts)。 */
@@ -1473,6 +1480,22 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   type GatewayServer = ReturnType<typeof startGatewayServer>;
   let wss: GatewayServer | undefined;
   let externalServer: Server | undefined;
+ // 移动端远程控制(原「节点 Fleet」视图):配对 token + 手机 /m 控制台。
+ // getPort 走 externalServer.address(panel 同端口形态 listen 后才有值),退 opts.port。
+  const remoteControl = new RemoteControlManager({
+    getPort: () => {
+      const addr = externalServer?.address();
+      return addr && typeof addr === "object" && typeof addr.port === "number" ? addr.port : opts.port;
+    },
+  });
+ // Bot Channels(微信/飞书/Lark/Telegram):配置/凭证/长轮询/webhook 全在本服务内。
+  const bots = new BotService({
+    root: repoRoot(),
+    journal,
+    taskManager,
+    projects,
+    log: (line) => console.error(line),
+  });
 
  // super-agent Router( P1):面板 task.submit 与飞书 im-inbound 两主径 Trigger 入 router。
   // observe 模式 inferred 候选恒不派发(只落 disposition);订阅直通=threadKey 自动关联,活 Ticket
@@ -1507,7 +1530,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
 
   const ensureServer = (server?: Server): GatewayServer => {
     if (!wss) {
-      wss = startGatewayServer({ port: opts.port, taskManager, journal, nodes, nodeConnections, nodeDispatch, projects, permissionBroker, routerApi, scheduledTaskService,
+      wss = startGatewayServer({ port: opts.port, taskManager, journal, nodes, nodeConnections, nodeDispatch, projects, permissionBroker, remoteControl, bots, routerApi, scheduledTaskService,
  // RSI-SESSION-COST:RSI 会话候选池按 journal 目录的会话文件 mtime 选(缺省=不带候选)。
         ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
  // 会话工作所有权:会话关闸(task.cancel closeSession:true / 无 taskId)由 server 级联取消。
@@ -1575,10 +1598,12 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       workflowAskRouter, askUser: askUserRouter, automations, automationScheduler, server,
       // fixD4:issue 双通道 + P2P 通道装配(issue.*/team.p2p.* 面板消息数据源)。
       issueService, teamP2p,
-      // config 下传(voice.speak/语音路径读 audio.chat 轨;缺传=opts.config 恒 undefined,语音面必报未配置)
+ // config 下传(配置/统计路径读;缺传=opts.config 恒 undefined)
       ...(opts.config ? { config: opts.config } : {}),
       // 语音任务书 fetch 注入(voice.draft 测试面;缺省=全局 fetch)
       ...(opts.voiceDraftFetch ? { voiceDraftFetch: opts.voiceDraftFetch } : {}) });
+ // Bot Channels:网关就绪后启动启用机器人的长轮询/webhook(fail-soft,失败只落 lastError)。
+      try { bots.start(); } catch (err) { console.error("[gateway] bot channels 启动失败:", String((err as Error)?.message || err).slice(0, 300)); }
       permissionBroker.attach((msg) => (wss as { broadcast?: (m: import("@lampgenie/protocol").ServerMessage) => void }).broadcast?.(msg as import("@lampgenie/protocol").ServerMessage));
  // 关卡 Gate:决议广播——多端(Gate 视图/modal/指挥台 inbox/第二标签页)一致清理挂起行,
       // 漏掉 permission.ask 帧的客户端也能收敛;同时廉价触发指挥台 inbox 重拉(perm 项消失)。
@@ -1653,6 +1678,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     taskManager,
     nodes,
     projects,
+    remoteControl,
+    bots,
     workflowAskRouter,
     askUser: askUserRouter,
     automations,
@@ -1680,6 +1707,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     },
 async close() {
       clearInterval(localHeartbeat);
+      try { bots.stop(); } catch { /* bot 停失败不影响关停 */ }
  // 停止取新 + await 在飞;pending(nextAt 未到也算)留在 journal 里,重启由 fold 恢复。
       try { await effectQueue.drain(); } catch { /* 关停 fail-soft */ }
       closeSessionSearch(journal); // 会话检索缓存 flush(只关已创建的索引)

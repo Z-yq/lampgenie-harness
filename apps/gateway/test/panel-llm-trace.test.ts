@@ -11,7 +11,7 @@ import { repoRoot } from "../src/repo-root.js";
 const PORT = 7902;
 const BASE = "http://127.0.0.1:" + PORT;
 const ROOT = join(repoRoot(), ".genie", "llm-trace");
-const SID = "test-step1026-route";
+const SID = "test-route-trace";
 const DIR = join(ROOT, SID);
 const GOOD = join(DIR, "call-0001-t1s0-1.json");
 const TXT = join(DIR, "note.txt");

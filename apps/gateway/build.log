@@ -1,0 +1,42 @@
+
+> @genie-harness/gateway@0.0.1 build
+> tsc -p tsconfig.json && esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/gateway.mjs --external:ts-morph --external:playwright-core --banner:js="import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);" && esbuild ../../apps/node-agent/src/cli.ts --bundle --platform=node --format=esm --outfile=dist/downloads/node-agent.mjs && esbuild ../../apps/node-agent/src/agent-stdio.ts --bundle --platform=node --format=esm --outfile=dist/downloads/agent-stdio.mjs && esbuild ../../apps/node-agent/src/agent-stdio.ts --bundle --platform=node --format=cjs --target=node8 --outfile=dist/downloads/agent-stdio.cjs && rm -rf dist/assets && cp -r src/assets dist/assets && cp ../../packages/harness-executors/src/echo-child.mjs dist/echo-child.mjs && cp src/board-pptx.mjs dist/board-pptx.mjs && cp -L ../../packages/code-sense/node_modules/web-tree-sitter/tree-sitter.wasm dist/tree-sitter.wasm 2>/dev/null || true && esbuild src/sense-index-worker.ts --bundle --platform=node --format=esm --outfile=dist/sense-index-worker.mjs --external:ts-morph && esbuild src/session-worker.ts --bundle --platform=node --format=esm --outfile=dist/session-worker.mjs --external:ts-morph --external:playwright-core --banner:js="import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);" && esbuild src/code-index-mcp.mjs --bundle --platform=node --format=esm --outfile=dist/code-index-mcp.mjs --external:ts-morph && esbuild src/remote-sense-probe.ts --bundle --platform=node --format=esm --outfile=dist/remote-sense-probe.mjs --external:playwright-core --external:chromium-bidi --external:ts-morph --banner:js="import{createRequire as __genieCR}from'module';const require=__genieCR(import.meta.url);" && esbuild src/nightly-worker.ts --bundle --platform=node --format=esm --outfile=dist/nightly-worker.mjs --external:ts-morph && ( mkdir -p dist/assets/tokenizer && cp ../../packages/harness-runtime/assets/tokenizer/cl100k_base.json dist/assets/tokenizer/ && cp ../../packages/harness-runtime/assets/tokenizer/LICENSE-gpt-tokenizer.txt dist/assets/tokenizer/ ) || echo '[build] 警告: tokenizer 词表缺失,运行时将回退 CJK 字符估算(token-estimate.ts 的 fail-soft 路径)'
+
+
+  dist/gateway.mjs  10.8mb ⚠️
+
+⚡ Done in 5130ms
+
+  dist/downloads/node-agent.mjs  142.0kb
+
+⚡ Done in 204ms
+
+  dist/downloads/agent-stdio.mjs  8.3kb
+
+⚡ Done in 79ms
+
+  dist/downloads/agent-stdio.cjs  11.7kb
+
+⚡ Done in 79ms
+
+  dist/sense-index-worker.mjs  800.6kb
+
+⚡ Done in 494ms
+
+  dist/session-worker.mjs  5.6mb ⚠️
+
+⚡ Done in 4154ms
+
+  dist/code-index-mcp.mjs  1.1mb ⚠️
+
+⚡ Done in 719ms
+
+  dist/remote-sense-probe.mjs  198.9kb
+
+⚡ Done in 1189ms
+
+  dist/nightly-worker.mjs  202.1kb
+
+⚡ Done in 211ms
+cp: cannot stat '../../packages/harness-runtime/assets/tokenizer/cl100k_base.json': No such file or directory
+[build] 警告: tokenizer 词表缺失,运行时将回退 CJK 字符估算(token-estimate.ts 的 fail-soft 路径)

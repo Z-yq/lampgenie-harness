@@ -125,9 +125,60 @@ function slugOf(signature: string): string {
   return (base.length > 0 ? base : "sig").slice(0, 37);
 }
 
-/** 签名 → 候选名:`tf_` + slug + 6 位确定性哈希。 */
+/**
+ * 签名 → 简洁工具名(工具名是给 harness 模型看的,必须像内置工具一样短:
+ * `run_vitest` / `run_tsc` / `run_tsx`,而不是 `tf_cd_path_timeout_n_npx_vitest_run_0ea099`)。
+ * 已知命令走语义映射;未知命令退化为 `run_<program>`(冲突由注册侧/签名区分,仍保证 ≤48 字符)。
+ */
+const COMMAND_NAME_HINTS: Array<{ re: RegExp; name: (m: RegExpMatchArray) => string }> = [
+  { re: /\bvitest\b/, name: () => "run_vitest" },
+  { re: /\btsc\b/, name: () => "run_tsc_check" },
+  { re: /\btsx\b/, name: () => "run_tsx" },
+  { re: /\bjest\b/, name: () => "run_jest" },
+  { re: /\bpytest\b/, name: () => "run_pytest" },
+  { re: /\bgo\s+test\b/, name: () => "run_go_test" },
+  { re: /\bcargo\s+test\b/, name: () => "run_cargo_test" },
+  { re: /\bmake\b/, name: () => "run_make" },
+  { re: /--experimental-strip-types/, name: () => "run_node_ts" },
+  { re: /\s-e\s|\s-e['"]/, name: () => "run_node_eval" },
+  { re: /\bnode\b/, name: () => "run_node" },
+  { re: /\b(?:npm|pnpm|yarn)\s+(?:run\s+)?([a-z0-9_-]+)/, name: (m) => `run_${toNameToken(m[1] ?? "script")}` },
+  { re: /\b(?:npm|pnpm|yarn)\s+(?:install|i)\b/, name: () => "install_deps" },
+  { re: /\b(?:python|python3)\s+(?:[^\s]*\/)?([a-z0-9_.-]+\.py)/, name: (m) => `run_${toNameToken((m[1] ?? "script").replace(/\.py$/, ""))}` },
+];
+
+function toNameToken(raw: string): string {
+  const token = String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 24);
+  return token !== "" ? token : "cmd";
+}
+
+/** 未知命令:从可执行名派生 `run_<program>`(跳过 cd/timeout/env 前缀)。 */
+function fallbackProgramName(signature: string): string {
+  const parts = signature.toLowerCase().split(/&&|\|\||;|\s+/).map((s) => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (part === "cd" || part === "timeout" || /^[a-z_][a-z0-9_]*=/.test(part)) continue;
+    if (/^\d+$/.test(part)) continue;
+    const base = part.replace(/^.*\//, "").replace(/[^a-z0-9._-]/g, "");
+    if (base !== "") return `run_${toNameToken(base.replace(/\.[a-z0-9]+$/, ""))}`;
+  }
+  return "run_cmd";
+}
+
 function candidateNameOf(signature: string): string {
-  return `tf_${slugOf(signature)}_${hashHex(signature).slice(0, 6)}`;
+  const lower = signature.toLowerCase();
+  for (const hint of COMMAND_NAME_HINTS) {
+    const m = lower.match(hint.re);
+    if (m) {
+      const name = hint.name(m);
+      if (CANDIDATE_NAME_RE.test(name)) return name;
+    }
+  }
+  const fallback = fallbackProgramName(signature);
+  return CANDIDATE_NAME_RE.test(fallback) ? fallback : "run_cmd";
 }
 
 /** 观测 id 的确定性派生(同一 session/签名/时间/步骤 → 同一 id)。 */
@@ -249,6 +300,14 @@ export function mineCandidates(observations: unknown, opts: MineOptions = {}): M
   }
 
   const candidates: ToolCandidate[] = [];
+ // 简洁名去重:不同签名语义相近时会得到同名(如两个 node 路径占位签名都叫 run_path),
+ // 同名注册会互相覆盖——按出现序追加 _2/_3(仍 ≤48 字符,模型侧仍简洁)。
+  const usedNames = new Map<string, number>();
+  const uniqueNameOf = (base: string): string => {
+    const seen = usedNames.get(base) ?? 0;
+    usedNames.set(base, seen + 1);
+    return seen === 0 ? base : `${base}_${seen + 1}`;
+  };
   for (const [signature, group] of groups) {
     const frequency = group.length;
     const sessions = new Set(group.map((entry) => entry.sessionId)).size;
@@ -283,7 +342,7 @@ export function mineCandidates(observations: unknown, opts: MineOptions = {}): M
 
     candidates.push({
       id: `cand_${hashHex(signature)}`,
-      name: candidateNameOf(signature),
+      name: uniqueNameOf(candidateNameOf(signature)),
       description: `从 ${frequency} 次观测自动挖掘的工具候选(签名 ${signature})`,
       sourceSignature: signature,
       kind: first.kind,

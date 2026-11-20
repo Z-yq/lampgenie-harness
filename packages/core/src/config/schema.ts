@@ -105,6 +105,11 @@ export const ConfigSchema = z.object({
  /** 语音任务书模型:聊天窗麦克风录音→整理成任务书;需支持音频输入的
        * 多模态模型(如 qwen3.8-omni-flash)。未配置=该功能不可用(面板按钮明确指路,不静默降级)。 */
       voice: roleRef.optional(),
+ /** RSI 机制模型:
+ * RSI 机制 agent 运行(**rsi 会话**)专用主模型;未配置=跟随全局主模型。
+ * 语义与其它角色槽一致(coding.models.*,面板「各角色模型」可配,保存即生效);
+ * 读点=createSessionModelFace.resolve("rsi") 的配置回退。 */
+      rsi: roleRef.optional(),
  /** 路由表:按任务 kind 覆盖 providerId/model(等端点字段),缺省 undefined=旧行为
  * (全部 kind 走上面各角色槽位/主 llm 的解析结果)。fallbackChain 只一层引用,不嵌套。 */
       routing: z.record(

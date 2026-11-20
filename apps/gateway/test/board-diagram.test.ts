@@ -57,6 +57,37 @@ function sampleDoc(): BoardDoc {
 }
 
 describe("renderBoardSvg", () => {
+  it("D1():全角标点板导出 SVG 逐字保留,无 ? 替换、tspan 开闭配对", async () => {
+    const doc = mkDoc([
+      mkNode("n-f", "全角：冒号；分号", "function", { summary: "含「」——……、。全角标点序列化检查" }),
+    ]);
+    const r = await renderBoardSvg(doc);
+    expect(r.ok).toBe(true);
+    expect(r.svg).toContain("全角：冒号；分号");
+ // ? (0x3F) 只允许出现在 XML 属性/声明里,正文不得作为全角标点的替换物出现
+    expect(r.svg).not.toMatch(/[\u4e00-\u9fff]\?{2,}/);
+    const open = (r.svg.match(/<tspan/g) ?? []).length;
+    const close = (r.svg.match(/<\/tspan>/g) ?? []).length;
+    expect(open).toBe(close);
+    expect(open).toBeGreaterThan(0);
+  });
+
+  it("D2():长文 note 高度自适应,截断文本带省略号(不再固定 100px 裁切)", async () => {
+    const long = "这是一段很长的 note 文本。" + "内容持续追加。".repeat(20) + "结尾";
+    const doc = mkDoc([
+      mkNode("n-long", "长文note", "note", { summary: long }),
+      mkNode("n-short", "短note", "note", { summary: "短文本" }),
+    ]);
+    const r = await renderBoardSvg(doc);
+    expect(r.ok).toBe(true);
+ // 全文 ≤300 字预算内逐字保留(结尾可见)
+    expect(r.svg).toContain("结尾");
+    const heights = [...r.svg.matchAll(/height="([\d.]+)"/g)].map((m) => +m[1]).filter((h) => h > 20);
+    const noteLike = heights.filter((h) => h >= 100 && h <= 700);
+    expect(noteLike.length).toBeGreaterThan(0);
+    expect(Math.max(...noteLike)).toBeGreaterThan(140); // 长文 note 撑开 >140px(默认 100)
+  });
+
   it("出 SVG:以 <svg 开头 + 含节点 label + 无 W101 + 耗时 <3000ms", async () => {
     const r = await renderBoardSvg(sampleDoc());
     expect(r.diagnostics.filter((d) => d.severity === "error")).toEqual([]);

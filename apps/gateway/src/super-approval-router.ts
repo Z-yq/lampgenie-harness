@@ -2,7 +2,9 @@
  * super 派发任务的权限审批自决路由:
  * 「由 super agent 发送的任务,coding agent 会时不时请求我来授权...这个请求应该发给 super agent,
  * 由 super agent 全权调度」。
- * 语义(分支点在 PermissionBroker.ask:只有 submittedBy=super 的任务进本路由):
+ * 语义(分支点在 PermissionBroker.ask:只有 submittedBy=super **且命中 super 审批分级**的任务
+ * 进本路由——危险/重资源/重启/发布/宽影响;日常读写与普通命令走聊天窗权限设置,
+ * 分级见 super-approval-policy.ts):
  * - 申请排队送 super(SuperAgentChannel 串行队列,忙时排队不并发),super 用 permission_decide 工具自决;
  * - allow -> coding agent 继续执行;deny -> 拒绝理由回灌任务会话(message.system)+ 指挥台留痕;
  * - 兜底绝不静默:单请求最大等待(缺省 120s,env GENIE_SUPER_APPROVAL_TIMEOUT_MS 可调)或

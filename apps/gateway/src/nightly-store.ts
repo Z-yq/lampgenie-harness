@@ -18,7 +18,8 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { addEvidence, applyDecay } from "./evidence-graph-store.js";
-import { collectWorkSessions, isAllStopwords, loadProjectRoots, logicalPathKey, refreshAtlasSnapshot, type AtlasReworkSummary } from "./atlas-harvest.js";
+import { basename } from "node:path";
+import { collectWorkSessions, groupSessionsByProject, isAllStopwords, loadProjectRegistry, loadProjectRoots, logicalPathKey, refreshAtlasSnapshot, type AtlasReworkSummary } from "./atlas-harvest.js";
 import { findDeliveryIdByTaskId, recordDelivery, recordFix } from "./cohort-metrics-store.js"; // F:cohort 同批采集器;P1-③ 回链取数
 import { detect } from "./pathology-store.js";
 import { runGeneReplay, renderReplayNote } from "./gene-replay.js"; // 回放验证(设想的「挡废话门」)
@@ -86,6 +87,7 @@ import {
   runKey,
   shouldSkipCompleted,
   startRun,
+  DEFAULT_MAX_WORK_UNITS,
 } from "@lampgenie/runtime/agent/nightly-run";
 import type {
   MineSessionStats,
@@ -165,6 +167,10 @@ export interface NightlySessionStats {
   fanoutEdges: number;
  /** 本会话文件里是否含 gene.brief.shown 标记(解析时顺带识别,不再二次全读 global.jsonl)。 */
   geneBriefShown?: boolean;
+ /** 对照臂:本会话含 gene.brief.held(gene 命中但被灰度扣住,未注入)。 */
+  geneBriefHeld?: boolean;
+ /** 本会话 LLM 输入 tokens 合计(llm.trace usage.inputTokens 求和;A/B 节省口径)。 */
+  inputTokens?: number;
 }
 
 /** `<date>.session-stats.json` 的文件形状。 */
@@ -425,6 +431,8 @@ export function parseSessionFile(filePath: string, sessionId: string): NightlySe
   let fanoutEdges = 0;
   let directFailures = 0;
   let geneBriefShown = false;
+  let geneBriefHeld = false;
+  let inputTokens = 0;
 
   let raw = "";
   try {
@@ -485,6 +493,15 @@ export function parseSessionFile(filePath: string, sessionId: string): NightlySe
  // 基因行 A/B 度量:gene.brief.shown 正常路由到 global.jsonl,但会话文件里
  // 出现过也算标记(与旧口径「会话文件有标记 → marked」一致)。逐行遍历时顺带识别,零额外 IO。
     if (!geneBriefShown && asString(payload.type) === "gene.brief.shown") geneBriefShown = true;
+    if (!geneBriefHeld && asString(payload.type) === "gene.brief.held") geneBriefHeld = true;
+ // A/B 节省口径:本会话 LLM 输入 tokens 合计(llm.trace usage.inputTokens)。
+    if (kind === "llm.trace") {
+      const usage = asRecord(payload["usage"]);
+      const inTok = usage !== null && typeof usage["inputTokens"] === "number" && Number.isFinite(usage["inputTokens"])
+        ? usage["inputTokens"]
+        : 0;
+      if (inTok > 0) inputTokens += inTok;
+    }
     const kindFailure = lowerKind.includes("error") || lowerKind.includes("fail");
     const okFlag = payload.ok;
     const errorFlag = payload.error;
@@ -528,6 +545,8 @@ export function parseSessionFile(filePath: string, sessionId: string): NightlySe
     filesEdited,
     fanoutEdges,
     geneBriefShown,
+    geneBriefHeld,
+    inputTokens,
   };
 }
 
@@ -598,6 +617,8 @@ interface StepOutcome {
   run: NightlyRun;
   codes: NightlyCode[];
   tokens: number;
+ /** 本步工作单元数(分账;pull-traces=事件数,LLM 步=0)。 */
+  workUnits?: number;
   artifactRef?: string;
   note?: string;
 }
@@ -621,18 +642,26 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
     let markedHit = 0;
     let unmarked = 0;
     let unmarkedHit = 0;
-    const markedSessions = readGeneBriefSessions(journalDir);
+    let heldCount = 0;
+    let heldHit = 0;
+    const geneMarks = readGeneBriefSessions(journalDir);
     for (const entry of selection.sessions) {
-      const localShown = statsById.get(entry.sessionId)?.geneBriefShown === true;
-      if (localShown || markedSessions.has(entry.sessionId)) {
+      const local = statsById.get(entry.sessionId);
+      const localShown = local?.geneBriefShown === true;
+      const localHeld = local?.geneBriefHeld === true;
+      if (localShown || geneMarks.shown.has(entry.sessionId)) {
         marked += 1;
         if (preventableBuilds.has(entry.sessionId)) markedHit += 1;
+      } else if (localHeld || geneMarks.held.has(entry.sessionId)) {
+ // 对照臂:gene 命中但被灰度扣住——与 marked 同签名可比,hits 越低越证明注入有效。
+        heldCount += 1;
+        if (preventableBuilds.has(entry.sessionId)) heldHit += 1;
       } else {
         unmarked += 1;
         if (preventableBuilds.has(entry.sessionId)) unmarkedHit += 1;
       }
     }
-    geneNote = `geneBrief: marked=${marked}(hit=${markedHit}) vs unmarked=${unmarked}(hit=${unmarkedHit})`;
+    geneNote = `geneBrief: marked=${marked}(hit=${markedHit}) vs unmarked=${unmarked}(hit=${unmarkedHit}) vs held=${heldCount}(hit=${heldHit})`;
   } catch {
     geneNote = "geneBrief=error(不阻塞本步)";
   }
@@ -660,11 +689,12 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
   return {
     run: next,
     codes: [],
- // pull-traces 是纯确定性统计,不烧 LLM;这里的 tokens 是**工作预算**口径
- // (1 事件=1 工作单元,用于 maxTokens 限流),不是 LLM 计费 token——成本看 cost.jsonl。
-    tokens: eventsRead,
-    artifactRef: artifactRef(run.projectId, run.date, ".session-stats.json"),
-    note: `sessions=${sessions.length} events=${eventsRead} badLines=${eventsSkipped} dedupRows=${dedupRows}(tokens=work-units,非LLM计费) ${geneNote}`,
+ // 分账:pull-traces 是纯确定性统计,零 LLM——事件数报 workUnits 轨,
+ // tokens 报 0(旧实现把 eventsRead 计入 tokens,219120 事件顶穿 200k 混用上限→1597 paused 1/7)。
+  tokens: 0,
+  workUnits: eventsRead,
+  artifactRef: artifactRef(run.projectId, run.date, ".session-stats.json"),
+  note: `sessions=${sessions.length} events=${eventsRead} badLines=${eventsSkipped} dedupRows=${dedupRows}(workUnits=事件数,非LLM计费;token=0) ${geneNote}`,
   };
 }
 
@@ -676,20 +706,26 @@ function stepPullTraces(ctx: StepContext): StepOutcome {
  * (9p 盘 5-10s × 200 会话)。改为 global.jsonl **只读一遍**,一次提取 sessionId 集合;
  * 会话文件里的标记由 parseSessionFile 顺带识别(geneBriefShown),两者取或即旧口径。
  */
-function readGeneBriefSessions(journalDir: string): Set<string> {
-  const out = new Set<string>();
+function readGeneBriefSessions(journalDir: string): { shown: Set<string>; held: Set<string> } {
+  const shown = new Set<string>();
+  const held = new Set<string>();
   try {
     const text = readFileSync(join(journalDir, "global.jsonl"), "utf8");
     for (const line of text.split(/\r?\n/)) {
-      if (!line.includes("gene.brief.shown")) continue;
+ // 一遍扫两类标记(shown=处理臂 / held=对照臂;不含任一即跳过。
+      const isShown = line.includes("gene.brief.shown");
+      const isHeld = !isShown && line.includes("gene.brief.held");
+      if (!isShown && !isHeld) continue;
       const event = asRecord(readJsonLine(line));
       const payload = asRecord(event?.payload);
-      if (asString(payload?.type) !== "gene.brief.shown") continue;
+      const type = asString(payload?.type);
+      if (type !== "gene.brief.shown" && type !== "gene.brief.held") continue;
       const sessionId = asString(event?.sessionId) !== "" ? asString(event?.sessionId) : asString(payload?.sessionId);
-      if (sessionId !== "") out.add(sessionId);
+      if (sessionId === "") continue;
+      (type === "gene.brief.shown" ? shown : held).add(sessionId);
     }
   } catch { /* global.jsonl 不可读:按无标记处理 */ }
-  return out;
+  return { shown, held };
 }
 
 function stepDenoise(ctx: StepContext): StepOutcome {
@@ -741,7 +777,42 @@ function stepDenoise(ctx: StepContext): StepOutcome {
 function stepMine(ctx: StepContext): StepOutcome {
   const stats = readStatsFile(ctx.paths.statsFile);
   const candidates = mineCandidates({ sessions: toMineSessions(stats?.sessions ?? []) });
-  return { run: ctx.run, codes: [], tokens: 1, note: `candidates=${candidates.length}` };
+  return { run: ctx.run, codes: [], tokens: 0, workUnits: 1, note: `candidates=${candidates.length}` };
+}
+
+/**
+ * 形态检出 → 候选队列(§11 P1#8 干预路由消费面 v1):
+ * pathology 的 matched 此前只落台账/notes,零消费者——检出后不路由=「看见了但不行动」。
+ * 本函数把每个形态映射成夜间候选(tip 许可→tip;协调族→gate;其余→tool),交给既有
+ * 队列消费器(experiment-settler 能翻译的翻译成实验,翻译不了的留队给 agent 机制)。
+ * id 按 formId 稳定:14 天已消费闸天然防重复入队。
+ */
+export function pathologyRouteCandidates(
+  matched: Array<{ formId?: unknown; family?: unknown; carriers?: unknown; tipAllowed?: unknown }>,
+  at: number,
+): NightlyCandidate[] {
+  const out: NightlyCandidate[] = [];
+  const seen = new Set<string>();
+  const isoAt = new Date(at).toISOString();
+  for (const item of matched) {
+    const formId = typeof item?.formId === "string" ? item.formId.trim() : "";
+    if (formId === "" || seen.has(formId)) continue; // 同表单条(队列按 formId 稳定 id)
+    seen.add(formId);
+    const family = typeof item?.family === "string" ? item.family.trim() : "unknown";
+    const carriers = Array.isArray(item?.carriers)
+      ? item.carriers.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim())
+      : [];
+    const tipAllowed = item?.tipAllowed === true;
+    const kind: NightlyCandidate["kind"] = tipAllowed ? "tip" : family === "coordination" ? "gate" : "tool";
+    out.push({
+      id: `cand-pathology-${formId}`,
+      kind,
+      ref: formId,
+      reason: `形态检出 ${formId}(${family}):协议载体 ${carriers.join("/") || "未列"};注入许可=${tipAllowed ? "是" : "否"}`,
+      evidenceRefs: [`pathology:${isoAt}`, `form:${formId}`, ...carriers.map((c) => `carrier:${c}`)],
+    });
+  }
+  return out;
 }
 
 function stepUpdateGraph(ctx: StepContext): StepOutcome {
@@ -857,6 +928,49 @@ function stepUpdateGraph(ctx: StepContext): StepOutcome {
     harvestedThemes = refreshed.harvest?.themes ?? [];
   } catch {
     atlasNote = "atlas=error(不阻塞本步)";
+  }
+ // 项目级世界模型:同一批会话按项目归因后,为注册表里的其它项目各写一份 atlas 快照
+ // (夜间管线原本只产出安装根一份)。会话只解析一次(returnAll),按 uuid/编辑路径分组;
+ // 每个项目快照带自己的主题/热点/返工信号/重复探索,面板「世界模型」抽屉按项目展示。
+  let projectsNote = "projects=skipped";
+  try {
+    const registry = loadProjectRegistry(ctx.journalDir);
+    const byKey = new Map<string, { key: string; ids: string[]; root: string }>();
+    for (const entry of registry) {
+      const key = basename(entry.path.replace(/\\/g, "/").replace(/\/+$/, ""));
+      if (key === "") continue;
+      const item = byKey.get(key) ?? { key, ids: [], root: entry.path };
+      item.ids.push(entry.id);
+ // legacy 会话绑定的是 label(生产注意:26 个会话 projectId="harness",注册表 id 是
+ // __harness__)——label 也进别名,否则这批会话只能靠路径兜底。
+      if (entry.label !== "" && entry.label !== entry.id && !item.ids.includes(entry.label)) item.ids.push(entry.label);
+      byKey.set(key, item);
+    }
+    const allProjects = [...byKey.values()];
+    const others = allProjects.filter((p) => p.key !== run.projectId);
+    if (allProjects.length > 0) {
+      const all = collectWorkSessions(ctx.journalDir, { windowDays: 7, now: ctx.at, returnAll: true, projectRoots: loadProjectRoots(ctx.journalDir) });
+ // 分组要拿全量项目(含安装根):相对路径 `lampgenie-harness/apps/...` 既要能按 basename
+ // 命中子项目,也要避免落入父目录的存在性锚点(深根优先由 groupSessionsByProject 保证)。
+      const grouped = groupSessionsByProject(all.sessions, allProjects, run.projectId);
+      const written: string[] = [];
+      for (const project of others) {
+        const scoped = grouped.get(project.key) ?? [];
+        if (scoped.length === 0) continue; // 无该项目的会话:不造假快照(面板显示暂无)
+        const refreshed = refreshAtlasSnapshot(ctx.root, project.key, {
+          journalDir: ctx.journalDir,
+          windowDays: 7,
+          sessionsOverride: scoped,
+          enrichRoot: project.root,
+        });
+        if (refreshed.ok) written.push(`${project.key}(${scoped.length})`);
+      }
+      projectsNote = `projects=${written.length > 0 ? written.join(",") : "0"}`;
+    } else {
+      projectsNote = "projects=0";
+    }
+  } catch {
+    projectsNote = "projects=error(不阻塞本步)";
   }
  // E:curated 目标层生产者 → proposed-goals.json + 自动晋升(≥5 会话)
   try {
@@ -1029,16 +1143,25 @@ function stepUpdateGraph(ctx: StepContext): StepOutcome {
       },
       { at: ctx.at },
     );
-    pathologyNote = `pathology: matched=${detected.matched.length} candidates=${detected.candidates.length} re-entry=${detected.primitives["re-entry"]?.count ?? 0}`;
+ // 干预路由消费面:形态 → 候选队列;id 按 formId 稳定,14 天已消费闸防重。
+    const routed = pathologyRouteCandidates(detected.matched, ctx.at);
+    if (routed.length > 0) {
+      const merged = addCandidates(ctx.run, routed);
+      ctx.run = merged.run;
+      appendQueue(paths.queueFile, ctx.run, ctx.at);
+    }
+    pathologyNote = `pathology: matched=${detected.matched.length} candidates=${detected.candidates.length} re-entry=${detected.primitives["re-entry"]?.count ?? 0} routed=${routed.length}`;
   } catch {
     pathologyNote = "pathology=error(不阻塞本步)";
   }
   return {
     run: ctx.run,
     codes: [],
-    tokens: 1,
+ // 分账:七步全为确定性步(设计 13-trigger-and-flow §1.1「零 LLM」),
+ // 事件/处理量计 workUnits,token 轨恒 0——LLM 成本只看 cost.jsonl 与机制 agent run。
+    tokens: 0,
     artifactRef: artifactRef(run.projectId, run.date, ".evidence-pending.json"),
-    note: `pendingReview=${candidates.length} ${decayNote} ${atlasNote} ${goalsNote} ${cohortNote} ${pathologyNote} ${reworkNote}`,
+    note: `pendingReview=${candidates.length} ${decayNote} ${atlasNote} ${projectsNote} ${goalsNote} ${cohortNote} ${pathologyNote} ${reworkNote}`,
   };
 }
 
@@ -1426,6 +1549,7 @@ export async function runNightly(root: string, options: RunNightlyOptions): Prom
       name: step.name,
       status: "done",
       tokens: outcome.tokens,
+      ...(outcome.workUnits === undefined ? {} : { workUnits: outcome.workUnits }),
       artifactRef: outcome.artifactRef,
       note: outcome.note,
       at,
@@ -1433,6 +1557,12 @@ export async function runNightly(root: string, options: RunNightlyOptions): Prom
     run = marked.run;
     writeJsonAtomic(paths.runFile, run);
     codes.push(...marked.codes);
+ // 水位:pull-traces 步 done 即把 cursor 前移到已拉取水位——预算暂停的 run
+ // 下一次增量从已读之后开始(旧实现只在七步全 done 后 advanceCursor,paused 1/7 重跑
+ // =22 万事件全量重读);selection 快照仍在,本 run 续跑走步状态机不重拉。
+    if (step.name === "pull-traces" && marked.run.status !== "failed") {
+      advanceCursor(paths.cursorFile, run.projectId, selection);
+    }
     if (run.status === "paused" || run.status === "failed") break;
   }
 
@@ -1785,11 +1915,21 @@ export async function retryNightly(root: string, options: ResumeNightlyOptions):
   return { run: next.run, codes: [NIGHTLY_CODES.NIGHTLY_RETRIED, ...next.codes] };
 }
 
-/** 越支的 run 续跑前需要抬高上限(理由见 resumeNightly 注释)。 */
+/** 越支的 run 续跑前需要抬高上限(理由见 resumeNightly 注释)。双轨各自抬高。 */
 function withBudgetHeadroom(run: NightlyRun): NightlyRun {
   const { tokens, maxTokens } = run.budget;
-  if (tokens <= maxTokens) return run;
-  return { ...run, budget: { tokens, maxTokens: Math.max(tokens * 2, tokens + 1) } };
+  const workUnits = typeof run.budget.workUnits === "number" ? run.budget.workUnits : 0;
+  const maxWorkUnits = run.budget.maxWorkUnits ?? DEFAULT_MAX_WORK_UNITS;
+  if (tokens <= maxTokens && workUnits <= maxWorkUnits) return run;
+  return {
+    ...run,
+    budget: {
+      tokens,
+      maxTokens: tokens > maxTokens ? Math.max(tokens * 2, tokens + 1) : maxTokens,
+      workUnits,
+      maxWorkUnits: workUnits > maxWorkUnits ? Math.max(workUnits * 2, workUnits + 1) : maxWorkUnits,
+    },
+  };
 }
 
 /** 手工收尾(七步都 done/skipped 才允许)。 */

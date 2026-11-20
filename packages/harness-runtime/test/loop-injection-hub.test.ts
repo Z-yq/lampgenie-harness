@@ -62,3 +62,15 @@ describe("createLoopInjectionHub", () => {
     expect(r.blocks[0]?.text).toBe("new");
   });
 });
+
+describe("冲突消解 v1:重复文本去重(2026-11-20)", () => {
+  it("同文本(空白归一)只注入注册序靠前者;后者记 duplicate 留痕", async () => {
+    const hub = createLoopInjectionHub();
+    hub.register({ id: "a", collect: () => "同一段教训  内容" });
+    hub.register({ id: "b", collect: () => "同一段教训 内容\n" });
+    const r = await hub.collect({ point: "kickoff", sessionId: "s1", taskText: "t" });
+    expect(r.blocks.map((b) => b.source)).toEqual(["a"]);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0]).toMatchObject({ id: "b", reason: "duplicate", duplicateOf: "a" });
+  });
+});

@@ -89,12 +89,15 @@ export function deriveFocusSegments(events: readonly FocusEvent[]): FocusSegment
   return out;
 }
 
-/** subagent 终态判定:事件 payload 带 phase/status 终态字样(宽容匹配,缺省非终态)。 */
-function isSubagentTerminal(p: Record<string, unknown>): boolean {
+/** subagent 终态判定:事件 payload 带 phase/status/kind 终态字样(宽容匹配,缺省非终态)。
+ * session-worker 镜像的子事件把子事件 kind 放在 payload.kind(经验证 `turn.end` 最多),
+ * 以及 `subagent.result` 的 ok/error;都算子代理动作完成。 */
+export function isSubagentTerminal(p: Record<string, unknown>): boolean {
   const phase = typeof p.phase === "string" ? p.phase : "";
   const status = typeof p.status === "string" ? p.status : "";
-  return ["done", "complete", "completed", "finished", "exit", "exited", "failed", "error"].some(
-    (t) => phase === t || status === t,
+  const kind = typeof p.kind === "string" ? p.kind : "";
+  return ["done", "complete", "completed", "finished", "exit", "exited", "failed", "error", "turn.end", "result", "cancelled", "stopped"].some(
+    (t) => phase === t || status === t || kind === t,
   );
 }
 

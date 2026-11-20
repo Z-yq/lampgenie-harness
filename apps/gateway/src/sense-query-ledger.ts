@@ -14,6 +14,8 @@ export interface SenseQuery {
 export interface SenseQueryLedger {
   record(action: string, target: string): void;
   coversFile(rel: string, fileContent: string): boolean;
+ /** 只看指定动作面(如 ["radiation","impact"])的覆盖判定(高影响模块硬门用)。 */
+  coversFileWith(rel: string, fileContent: string, actions: readonly string[]): boolean;
   queries(): readonly SenseQuery[];
 }
 
@@ -24,6 +26,23 @@ const norm = (s: string): string => String(s ?? "").replace(/\\/g, "/").replace(
 
 export function createSenseQueryLedger(): SenseQueryLedger {
   const qs: SenseQuery[] = [];
+  const coversWith = (rel: string, fileContent: string, actions: readonly string[]): boolean => {
+    const r = norm(rel);
+    if (!r) return false;
+    const allowed = new Set(actions);
+    const content = String(fileContent ?? "");
+    for (const q of qs) {
+      if (!allowed.has(q.action)) continue;
+      if (FILE_ACTIONS.has(q.action)) {
+        if (q.target === r || r.endsWith("/" + q.target) || q.target.endsWith("/" + r)) return true;
+      } else if (SYMBOL_ACTIONS.has(q.action) && q.target) {
+        const esc = q.target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`(?<![A-Za-z0-9_$])${esc}(?![A-Za-z0-9_$])`);
+        if (re.test(content)) return true;
+      }
+    }
+    return false;
+  };
   return {
     record(action: string, target: string): void {
       const a = String(action ?? "").trim();
@@ -31,19 +50,10 @@ export function createSenseQueryLedger(): SenseQueryLedger {
       if (a && t) qs.push({ action: a, target: t });
     },
     coversFile(rel: string, fileContent: string): boolean {
-      const r = norm(rel);
-      if (!r) return false;
-      const content = String(fileContent ?? "");
-      for (const q of qs) {
-        if (FILE_ACTIONS.has(q.action)) {
-          if (q.target === r || r.endsWith("/" + q.target) || q.target.endsWith("/" + r)) return true;
-        } else if (SYMBOL_ACTIONS.has(q.action) && q.target) {
-          const esc = q.target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const re = new RegExp(`(?<![A-Za-z0-9_$])${esc}(?![A-Za-z0-9_$])`);
-          if (re.test(content)) return true;
-        }
-      }
-      return false;
+      return coversWith(rel, fileContent, [...FILE_ACTIONS, ...SYMBOL_ACTIONS]);
+    },
+    coversFileWith(rel: string, fileContent: string, actions: readonly string[]): boolean {
+      return coversWith(rel, fileContent, actions);
     },
     queries(): readonly SenseQuery[] {
       return qs;

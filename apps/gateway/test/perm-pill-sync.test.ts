@@ -12,20 +12,18 @@ import { PANEL_SRC } from "./panel-source.js";
 
 const src = PANEL_SRC;
 
-describe("permPill 首同步诚实化(源结构锁)", () => {
-  it("① 同步中态:.mode-pill.sync 半透明样式+pillRender 按 permSynced 摘挂", () => {
-    expect(src).toContain(".mode-pill.sync{opacity:.5");
-    expect(src).toContain('classList.toggle("sync", !permSynced)');
-    expect(src).toContain("let permSynced = false;");
+describe("permPill 首同步诚实化(源结构锁;(②):pill 已删,权限模式不再在输入条展示;返工轮维持)", () => {
+  it("① permPill UI 已删除:输入条不再出现该胶囊(删除锁,不得复活)", () => {
+    expect(src).not.toContain('id="permPill"');
+    expect(src).not.toContain('$("permPill")');
   });
 
-  it("② 首同步分叉 toast:服务端真值≠本机种子时明说(不再无声翻转)", () => {
+  it("② 首同步分叉 toast:服务端真值≠本机种子时明说(不再无声翻转;ws-router 通道保留)", () => {
     expect(src).toContain("权限模式按服务端真实值同步为「");
     expect(src).toContain("与你本机上次选择不同");
   });
 
-  it("③ 首包到达转确认态:permSynced=true+pillRender;title 带同步中提示", () => {
+  it("③ 首包到达转确认态:permSynced=true 通道仍在(判定链不随 UI 删除而断)", () => {
     expect(src).toContain("if (!permSynced) { permSynced = true; pillRender(); }");
-    expect(src).toContain("同步服务端真实值中");
   });
 });

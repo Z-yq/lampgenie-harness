@@ -1272,7 +1272,7 @@ function trajViewFocusLatest() {
   if (host && trajBoardState.pane === "decisions") host.scrollTop = host.scrollHeight;
 }
 // ---- 入口 1:composer「轨迹」pill(改走视图路由,不再开浮层)----
-$("trajBoardBtn").onclick = () => { switchView("traj"); trajViewFocusLatest(); };
+// 返工:#trajBoardBtn 按钮已从 composer 删除(用户要求);轨迹入口=轨迹卡 summary(data-traj-open)
 // ---- 入口 2:轨迹卡 summary 的「看板」(capture 阶段拦下:不能触发 details 展开)----
 document.addEventListener("click", function (e) {
   const t = e.target;

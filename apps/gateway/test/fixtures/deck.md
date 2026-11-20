@@ -1,9 +1,9 @@
-# 记忆服务方案评审
+# memory-service 方案评审
 subtitle: 面向技术负责人的架构与风险评审
 spine: memory-service 能不能独立部署并守住记忆质量
 verdict: 有条件通过
 verdict_note: 分层清晰;凭据与口径先整改
-meta: memory-service@abc123 · 
+meta: memory-service@abc123 · 2026-10-27
 
 ## 01 定位与目标
 claim: 它是记忆服务,不是对话服务
@@ -60,7 +60,7 @@ start_service.sh:9-10
 > 证据: start_service.sh:9-10
 > 结论: 凭据先止血、口径再统一,两项清零后才进独立部署
 
-### 死代码验证
+### 死代码实证
 ```code
 service/recall_engine.py:20-25
 try:

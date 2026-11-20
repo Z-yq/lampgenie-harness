@@ -1,7 +1,7 @@
 /**
  * Gateway Client Protocol(定稿)的 zod schema。
  * 模式参照 qwen-audio-agent shared/protocol(Apache-2.0,能力协商/信封纪律),
- * 内容自研——该仓协议以 voice 事件为主体,不适用 coding harness。
+ * 内容自研——参照仓的消息面只覆盖其自身场景,本仓按任务/会话/面板/标注/Rsi 等域自建。
  * 拆分:按域分片到 ./messages/*(core/task/session/surface/ide-fs/board/annotate/rsi/server-events),
  * 本文件保留公共出口;消费方全部走根导入,零改动。
  */

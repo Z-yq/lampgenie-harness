@@ -238,7 +238,7 @@ describe("PermissionBroker 按任务归属分叉(非 super 任务零变化)", ()
     };
   };
 
-  it("submittedBy=super -> 走 super 路由,不广播 permission.ask(用户零打扰)", async () => {
+  it("submittedBy=super + 重资源(build) -> 走 super 路由,不广播 permission.ask(用户零打扰)", async () => {
     const sent: unknown[] = [];
     const b = new PermissionBroker(50);
     b.attach((m) => sent.push(m));
@@ -248,7 +248,39 @@ describe("PermissionBroker 按任务归属分叉(非 super 任务零变化)", ()
     const out = await b.ask(askInput() as never);
     expect(out).toEqual({ decision: "allow-once", by: "super" });
     expect(f.calls).toHaveLength(1);
+    expect((f.calls[0] as { summary?: string }).summary).toContain("[heavy]");
     expect(sent).toHaveLength(0);
+  });
+
+  it("submittedBy=super 但普通命令(ls/git status)-> 按聊天窗权限走面板,不问 super", async () => {
+    const sent: unknown[] = [];
+    const b = new PermissionBroker(5_000);
+    b.attach((m) => sent.push(m));
+    b.online = true;
+    const f = fakeRouter();
+    b.superRouter = f.router;
+    const p = b.ask({ ...askInput(), requestId: "basic-1", tool: "terminal", summary: "terminal {\"command\":\"ls -la\"}" } as never);
+    await wait(10);
+    expect(f.calls).toHaveLength(0); // 不打扰 super
+    expect(sent).toHaveLength(1); // 走面板(聊天窗权限设置)
+    expect((sent[0] as Record<string, unknown>).type).toBe("permission.ask");
+    b.respond("basic-1", "allow-once");
+    expect(await p).toEqual({ decision: "allow-once", by: "panel" });
+  });
+
+  it("submittedBy=super + 危险/重启 -> 仍走 super(分级摘要前缀可读)", async () => {
+    for (const [summary, tag] of [
+      ["terminal {\"command\":\"rm -rf /\"}", "[dangerous]"],
+      ["terminal {\"command\":\"node scripts/safe-restart-gateway.cjs --port 7700\"}", "[restart]"],
+      ["terminal {\"command\":\"git push origin master\"}", "[publish]"],
+    ] as const) {
+      const b = new PermissionBroker(50);
+      const f = fakeRouter();
+      b.superRouter = f.router;
+      await b.ask({ ...askInput(), requestId: `r-${tag}`, summary } as never);
+      expect(f.calls, summary).toHaveLength(1);
+      expect((f.calls[0] as { summary?: string }).summary).toContain(tag);
+    }
   });
 
   it("非 super 任务(用户直发/系统) -> 原面板路径逐字不变", async () => {

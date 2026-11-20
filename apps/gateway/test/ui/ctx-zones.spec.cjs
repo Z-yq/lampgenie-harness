@@ -1,14 +1,15 @@
 /** UI 经验证: 上下文浮窗温度三区(classic ctxPill + Super supCtx 同源同形态)。
- * 断言:①两浮窗各 3 条三区行(冷·冻结/温·可精简/热·保护窗) ②三区条数合计=totalMessages(与浮窗头同帧同源)
- * ③占比条渲染(width>0) ④pill 主值与浮窗头数值同源 ⑤生命周期四态(外点即关/toggle 不叠/Esc)不回归
- * ⑥1280×800 不溢出 ⑦浅/dark 主题截图 4 张。
+ * 断言:①两浮窗各 3 条三区行 ②三区条数合计=totalMessages(与浮窗头同帧同源)
+ * ③冷+温+热 tok 严格=浮窗头总量(全量划分,不做误差容忍) ④占比和=100%、占比条宽度和≈100%
+ * ⑤浮窗内不存在「对账/差额」字样(1603 对账展示已删) ⑥热区=未闭合链 12 条(1603 口径保持)
+ * ⑦生命周期四态(外点即关/toggle 不叠/Esc)不回归 ⑧1280×800 不溢出 ⑨浅/dark 主题截图 4 张。
  * 跑法:cd apps/gateway && npx tsx test/ui/_ui_selfhost.cjs test/ui/ctx-zones.spec.cjs
  * (selfhost 真实例:journal 注入 → 服务端 computeTraceStats→deriveContextZones 真算;Super 视图复用 classic 真算结果)。 */
 const { chromium } = require("playwright-core");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const SHOTS = path.resolve(__dirname, "../../../../tasks/-ctx-popover-zones/shots");
+const SHOTS = path.resolve(__dirname, "../../../../tasks/-ctx-zones-sum-equal/shots");
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
@@ -23,10 +24,15 @@ const check = (name, ok, detail = "") => {
   const msgs = [];
   for (let i = 1; i <= 5; i++) msgs.push({ kind: "message.user", sessionId: Z1, payload: { text: "用户第" + i + "条:".padEnd(40 + i * 3, "甲") } });
   for (let i = 1; i <= 5; i++) msgs.push({ kind: "message.agent", sessionId: Z1, payload: { text: "助手第" + i + "条:".padEnd(60 + i * 7, "乙") } });
+ // 12 条未闭合链(prune 闭合后 agent 起手连续 tool 链——auto-compact 中途继续干活的真实形态;
+ // 6 agent(带 toolCalls)+6 result 平衡,无「缺失结果」即不触发派生侧占位合成,显示恰为 12)
+  const open = [];
+  for (let i = 1; i <= 6; i++) open.push({ kind: "message.agent", sessionId: Z1, payload: { text: "链上助手" + i + ":".padEnd(30, "丁"), toolCalls: [{ id: "tc" + i, name: "grep" }], ...(i === 1 ? { llmMs: 1200, usage: { inputTokens: 8000, outputTokens: 90, totalTokens: 8090 } } : {}) } });
+  for (let i = 1; i <= 6; i++) open.push({ kind: "tool.result", sessionId: Z1, payload: { toolCallId: "tc" + i, content: "结果" + i + ":".padEnd(50, "戊") } });
   app.journal.appendMany([
     ...msgs,
-    { kind: "context.prune", sessionId: Z1, payload: { reason: "spec", compacted: 0, savedTokens: 0, items: [], frozenCount: 3 } },
-    { kind: "message.agent", sessionId: Z1, payload: { text: "助手实测条", llmMs: 1200, usage: { inputTokens: 8000, outputTokens: 90, totalTokens: 8090 } } },
+    { kind: "context.prune", sessionId: Z1, payload: { reason: "spec", compacted: 1, savedTokens: 0, policy: "reset", items: [], frozenCount: 3 } },
+    ...open,
   ]);
   const BASE = process.env.PANEL_BASE;
   const browser = await chromium.launch({
@@ -55,16 +61,53 @@ const check = (name, ok, detail = "") => {
     Z1, { timeout: 12000 },
   ).then(() => true).catch(() => false);
   check("前置:trace.stats 回包含 contextZones(服务端真算)", gotZones, gotZones ? "" : "12s 内未见 contextZones");
+ // 环形断言前置:确保 contextWindow 在场(服务端缺省回 null 时客户端注入兜底,仅影响本 spec 断言)
+  await page.evaluate((sid) => {
+    const s = traceStats[sid] || (traceStats[sid] = {});
+    if (!Number(s.contextWindow)) s.contextWindow = 200000;
+  }, Z1);
 
   const zone = await page.evaluate((sid) => {
     const z = (traceStats[sid] || {}).contextZones || null;
     if (!z) return null;
-    return { total: z.totalMessages, cold: z.zones.cold.messages, warm: z.zones.warm.messages, hot: z.zones.hot.messages, src: z.hotTailSource, frozenFrom: z.frozenFrom, frozenCount: z.frozenCount };
+    return { total: z.totalMessages, cold: z.zones.cold.messages, warm: z.zones.warm.messages, hot: z.zones.hot.messages, basis: z.zoneBasis, chains: z.openChains, ats: z.afterTraceStart, frozenFrom: z.frozenFrom, frozenCount: z.frozenCount };
   }, Z1);
   check("三区条数合计=totalMessages(服务端口径自洽)", !!zone && zone.cold + zone.warm + zone.hot === zone.total, JSON.stringify(zone));
+  check("服务端:热区=未闭合链 12 条(非 6;任务书验收口径)", !!zone && zone.hot === 12 && zone.basis === "open-chains", JSON.stringify(zone));
 
- // ── classic 浮窗:打开+断言 ──
+ // ── classic 浮窗:打开+断言(全量划分,冷+温+热=总量严格相等) ──
+  await page.evaluate(() => { try { ctxPillRender(); } catch (e) {} }); // 不等 500ms 心跳,立即按最新 traceStats 重绘环形
   const pillTxt = (await page.locator("#ctxPill").textContent().catch(() => "")) || "";
+  const ringSpec = await page.evaluate(() => {
+    const el = document.getElementById("ctxPill");
+    const svg = el ? el.querySelector("svg.cx-ring") : null;
+    const fg = svg ? svg.querySelector("circle.cx-ring-fg") : null;
+    const pct = el ? el.querySelector(".cx-ring-pct") : null;
+    if (!svg || !fg || !pct) return null;
+    return {
+      r: fg.getAttribute("r"),
+      dasharray: fg.getAttribute("stroke-dasharray"),
+      dashoffset: fg.getAttribute("stroke-dashoffset"),
+      fgClass: fg.getAttribute("class") || "",
+      pctText: pct.textContent,
+      pctClass: pct.getAttribute("class") || "",
+      pillTitle: el.getAttribute("title") || "",
+      pillAria: el.getAttribute("aria-label") || "",
+      size: (svg.getBoundingClientRect().width || 0) + "x" + (svg.getBoundingClientRect().height || 0),
+    };
+  });
+ // 环形弧比例=占用率:fixture 主值 8000/窗口 200000=4% → dashoffset=c*(1-0.04)
+  if (ringSpec) {
+    const c = 2 * Math.PI * 15.5;
+    const wantOff = c * (1 - 4 / 100);
+    check("pill:环形存在+尺寸 16x16(与输入条图标协调)", ringSpec.size === "16x16", ringSpec.size);
+    check("pill:弧比例=占用率(dashoffset 与 4% 一致,容差 1.5)", Math.abs(Number(ringSpec.dashoffset) - wantOff) <= 1.5, "off=" + ringSpec.dashoffset + " want=" + wantOff.toFixed(1));
+    check("pill:中心百分比文本=4%", (ringSpec.pctText || "").indexOf("4") >= 0, ringSpec.pctText);
+    check("pill:4%<70 → safe 档(无 warn/tense class)", ringSpec.fgClass.indexOf("warn") < 0 && ringSpec.fgClass.indexOf("tense") < 0, ringSpec.fgClass);
+    check("pill:tooltip/aria-label 含「明细」", ringSpec.pillTitle.indexOf("明细") >= 0 && ringSpec.pillAria.indexOf("明细") >= 0, ringSpec.pillTitle.slice(0, 60));
+  } else {
+    check("pill:环形存在(前置)", false, "ctxPill 内未找到 svg.cx-ring——检查 trace.stats 是否带回 contextWindow");
+  }
   await page.click("#ctxPill");
   await page.waitForTimeout(300);
   const menu = page.locator(".pill-menu.cx-menu");
@@ -77,15 +120,31 @@ const check = (name, ok, detail = "") => {
       n: rows.length,
       names: rows.map((r) => (r.querySelector(".cx-k") || {}).textContent || "").map((t) => t.trim().split(/\s+/)[0]),
       msgs: rows.map((r) => Number((r.textContent.match(/(\d+)\s*条/) || [0, 0])[1])),
+      toks: rows.map((r) => Number((r.textContent.match(/(\d+)\s*tok/) || [0, 0])[1])),
+      pcts: rows.map((r) => Number((r.textContent.match(/([\d.]+)\s*%/) || [0, 0])[1])),
       barW: bars.map((b) => parseFloat(b.style.width) || 0),
       head: head ? head.textContent : "",
+      text: rows.map((r) => r.textContent || ""),
+      zoneGrp: (document.querySelector(".pill-menu.cx-menu") || {}).textContent || "",
     };
   });
   check("classic:三区行 3 条", cz.n === 3, JSON.stringify(cz.names));
-  check("classic:区名=冷区·冻结/温区·可精简/热区·保护窗", ["冷区·冻结", "温区·可精简", "热区·保护窗"].every((k, i) => (cz.names[i] || "").indexOf(k) >= 0), JSON.stringify(cz.names));
+  check("classic:区名=冷区·冻结/温区·可精简/热区·未闭合链(口径)", ["冷区·冻结", "温区·可精简", "热区·未闭合链"].every((k, i) => (cz.names[i] || "").indexOf(k) >= 0), JSON.stringify(cz.names));
+  check("classic:热区行=未闭合链口径(N 条 · M tok · 未闭合)", cz.n === 3 && /未闭合/.test(cz.text[2] || "") && /\d+\s*条/.test(cz.text[2] || ""), cz.text[2]);
   check("classic:三区条数合计=totalMessages", cz.n === 3 && cz.msgs.reduce((a, b) => a + b, 0) === (zone ? zone.total : -1), "rows=" + JSON.stringify(cz.msgs) + " total=" + (zone && zone.total));
   check("classic:占比条 3 根且宽>0", cz.barW.length === 3 && cz.barW.every((w) => w > 0), JSON.stringify(cz.barW));
-  check("classic:浮窗头主值与 pill 同源(同一实测 8000 tok,pill 格式化为 8k)", cz.head.indexOf("8000") >= 0 && /(^|\s)(8k|8000)(\s|·|$)/.test(pillTxt), "head=" + cz.head + " pill=" + pillTxt.trim());
+  check("classic:浮窗头主值与 pill 同源(同一实测 8000 tok,pill 格式化为 8k 或环内 4%)", cz.head.indexOf("8000") >= 0 && (/(^|\s)(8k|8000)(\s|·|$)/.test(pillTxt) || ringSpec && (ringSpec.pctText || "").indexOf("4") >= 0), "head=" + cz.head + " pill=" + pillTxt.trim());
+ // jev-150m 评分保护窗=单列小注(不占热区行)
+  check("classic:jev-150m 保护窗以小注呈现(评分器窗口,非热区边界)", cz.zoneGrp.indexOf("评分保护窗") >= 0 && cz.zoneGrp.indexOf("非热区边界") >= 0, "小注检索=" + cz.zoneGrp.indexOf("评分保护窗"));
+ // 全量划分:冷+温+热 严格=浮窗头总量(fixture 主值 8000);占比和=100%;无对账/差额行
+  const headTok = Number((cz.head.match(/^([\d.]+)\s*\//) || [0, 0])[1]);
+  const sumT = cz.toks.reduce((a, b) => a + b, 0);
+  check("classic:冷+温+热 == 总量(严格相等,fixture=8000)", headTok === 8000 && sumT === headTok, "head=" + headTok + " rows=" + JSON.stringify(cz.toks) + " sum=" + sumT);
+  const pctSum = Math.round(cz.pcts.reduce((a, b) => a + b, 0) * 10) / 10;
+  check("classic:三区占比和=100%(±0.1)", Math.abs(pctSum - 100) <= 0.1, "pcts=" + JSON.stringify(cz.pcts) + " sum=" + pctSum);
+  const barSum = Math.round(cz.barW.reduce((a, b) => a + b, 0));
+  check("classic:占比条宽度和≈100%(±2)", Math.abs(barSum - 100) <= 2, "barSum=" + barSum);
+  check("classic:无对账行/差额行(1603 对账展示已删)", cz.zoneGrp.indexOf("对账") < 0 && cz.zoneGrp.indexOf("差额") < 0, "对账@" + cz.zoneGrp.indexOf("对账") + " 差额@" + cz.zoneGrp.indexOf("差额"));
   await page.screenshot({ path: path.join(SHOTS, "classic-dark-1400.png") });
 
  // 生命周期:Esc 关 → toggle 二点不叠 → 外点即关
@@ -119,12 +178,13 @@ const check = (name, ok, detail = "") => {
       const rows = [...document.querySelectorAll(".pill-menu.cx-menu .cx-row.cx-zone")];
       const head = document.querySelector(".pill-menu.cx-menu .cx-head .cx-nums");
       const bars = [...document.querySelectorAll(".pill-menu.cx-menu .cx-row.cx-zone .cx-zbar i")];
-      return { n: rows.length, msgs: rows.map((r) => Number((r.textContent.match(/(\d+)\s*条/) || [0, 0])[1])), barW: bars.map((b) => parseFloat(b.style.width) || 0), head: head ? head.textContent : "" };
+      return { n: rows.length, msgs: rows.map((r) => Number((r.textContent.match(/(\d+)\s*条/) || [0, 0])[1])), toks: rows.map((r) => Number((r.textContent.match(/(\d+)\s*tok/) || [0, 0])[1])), barW: bars.map((b) => parseFloat(b.style.width) || 0), head: head ? head.textContent : "" };
     });
     check("Super:三区行 3 条(与 classic 同 helper 同形态)", sz.n === 3, "");
     check("Super:三区条数合计=totalMessages(同源)", sz.n === 3 && sz.msgs.reduce((a, b) => a + b, 0) === (zone ? zone.total : -1), JSON.stringify(sz.msgs));
     check("Super:占比条 3 根且宽>0", sz.barW.length === 3 && sz.barW.every((w) => w > 0), JSON.stringify(sz.barW));
     check("Super:浮窗头主值 1.2万 与注入同源", sz.head.indexOf("1.2万") >= 0, "head=" + sz.head);
+    check("Super:冷+温+热 == 注入主值 12345(严格相等,同一 helper 归一)", sz.toks.reduce((a, b) => a + b, 0) === 12345, "rows=" + JSON.stringify(sz.toks) + " sum=" + sz.toks.reduce((a, b) => a + b, 0));
     await page.screenshot({ path: path.join(SHOTS, "super-dark-1400.png") });
     await page.evaluate(() => { const el = document.activeElement; if (el && el.blur) el.blur(); });
     await page.mouse.click(60, 420);

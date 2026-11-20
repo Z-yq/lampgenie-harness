@@ -1753,7 +1753,19 @@
  */
   function migrateSavedLayout(raw) {
     var c = raw && raw.cards;
-    if (!c || !c.subchat || !c.track || !c.usage) return raw;
+    if (!c) return raw;
+ // 远程控制(原节点 Fleet):两栏扫码/Bot Channel 内容需要 820×700;
+ // 旧档 640×420 会把二维码与第四家渠道裁掉。只长大不缩小;下方 Gate/市场仍在旧默认位才顺延。
+    if (c.nodes) {
+      var n = c.nodes;
+      if (Number(n.w) < 820 || Number(n.h) < 700) {
+        n.w = Math.max(Number(n.w) || 0, 820);
+        n.h = Math.max(Number(n.h) || 0, 700);
+        if (c.approvals && Number(c.approvals.y) === 1120) c.approvals.y = 1400;
+        if (c.market && Number(c.market.y) === 1540) c.market.y = 1820;
+      }
+    }
+    if (!c.subchat || !c.track || !c.usage) return raw;
     var s = c.subchat, t = c.track, u = c.usage;
     var legacy = Number(s.x) === 4520 && Number(s.y) === 0
       && Number(t.x) === 4520 && Number(t.y) === 520

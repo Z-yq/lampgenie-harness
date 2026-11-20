@@ -29,6 +29,16 @@ const getTime: Tool = {
   async execute() { return "2026-10-10 20:00"; },
 };
 
+/** 大结果工具:段闭合定价只收 ≥2000 字符的结果(与组清理口径一致)。 */
+const bigRead: Tool = {
+ // 必须是 microcompact 可清工具 + 有 path 寻址,才会进入段批候选(与线上准入一致)。
+  name: "read_file",
+  description: "返回大段内容",
+  parameters: { type: "object", properties: { path: { type: "string" } } },
+  isConcurrencySafe: () => true,
+  async execute() { return "R".repeat(4_000); },
+};
+
 describe("AgentLoop", () => {
   it("工具调用全链路:user→assistant(toolCall)→tool.result→assistant(最终)", async () => {
     const journal = new MemoryJournal();
@@ -50,6 +60,46 @@ describe("AgentLoop", () => {
     // deriveMessages 重建出完整序列
     const msgs = deriveMessages(journal, "s1");
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
+  });
+
+  it("观察期:turn 末新闭合不立即 settle,下一 turn 首步到期后才 settle", async () => {
+ // §4.1.3②:闭合当步仍在观察期;turn.end 先落账保证闭合可见,但至少过 1 步才取得可裁资格。
+    const journal = new MemoryJournal();
+    let round = 0;
+    const llm: LlmProvider = {
+      async chat() {
+        round += 1;
+        if (round === 1) {
+          return { content: "", toolCalls: [{ id: "big-1", name: "read_file", arguments: JSON.stringify({ path: "src/big.ts" }) }] };
+        }
+        return { content: round === 2 ? "完成" : "继续完成" };
+      },
+    };
+    const loop = new AgentLoop({
+      journal, sessionId: "s-seg-settle", system: "", llm, tools: [bigRead], maxSteps: 3,
+    });
+    await loop.runTurn("读一大段");
+    const afterFirst = journal.readAll();
+    const firstEnd = afterFirst.findIndex((e) => e.kind === "turn.end");
+    expect(firstEnd).toBeGreaterThanOrEqual(0);
+    const settleAfterFirst = afterFirst.findIndex(
+      (e) => e.kind === "custom" && (e.payload as { what?: string } | undefined)?.what === "context.segment.settle",
+    );
+    expect(settleAfterFirst).toBe(-1); // 观察期未到期,不当场结算
+
+    await loop.runTurn("继续");
+    const events = journal.readAll();
+    const secondStart = events.findIndex((e, i) => i > firstEnd && e.kind === "turn.start");
+    const settleAt = events.findIndex(
+      (e, i) => i > secondStart && e.kind === "custom"
+        && (e.payload as { what?: string } | undefined)?.what === "context.segment.settle",
+    );
+    expect(secondStart).toBeGreaterThan(firstEnd);
+    expect(settleAt).toBeGreaterThan(secondStart);
+    const settle = events[settleAt]!.payload as { approvedCount: number; priceRatio: number };
+ // 4000 字符 → W=1000;W′=40、tail≈段锚+最终回答、r=10、N=上一 turn 2 步 → 经济门批准。
+    expect(settle.approvedCount).toBeGreaterThanOrEqual(1);
+    expect(settle.priceRatio).toBe(10);
   });
 
   it("未知工具返回错误消息而不崩", async () => {

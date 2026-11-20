@@ -121,22 +121,27 @@ const ITEM = process.env.ITEM || "ALL";
       tasks.set("p2t", { sessionId: "p2s", state: "running", title: "跑着的任务", createdAt: Date.now(), startedAt: Date.now() });
       document.getElementById("instruction").value = "";
       renderSendBtn();
-      const b = document.getElementById("go");
-      const running = { cls: b.className, txt: b.textContent.trim(), title: b.getAttribute("title") };
+      const read = () => {
+        const b = document.getElementById("go");
+        return { cls: b.className, aria: b.getAttribute("aria-label"), html: b.innerHTML, title: b.getAttribute("title") };
+      };
+      const running = read();
  // 有输入时不抢停(排队态):确保 stop 只在「忙碌且空输入」出现
       document.getElementById("instruction").value = "再说一句";
       renderSendBtn();
-      const queued = { cls: b.className, txt: b.textContent.trim() };
+      const queued = read();
       tasks.delete("p2t");
       currentSid = null;
       document.getElementById("instruction").value = "";
       renderSendBtn();
-      const idle = { cls: b.className, txt: b.textContent.trim() };
+      const idle = read();
       return { running, queued, idle };
     });
-    check("P2-2 任务活跃且空输入 → #go.stop", /\bstop\b/.test(go.running.cls) && go.running.txt === "停", JSON.stringify(go.running));
-    check("P2-2 有输入时不进 stop(改排队)", !/\bstop\b/.test(go.queued.cls) && go.queued.txt === "排", JSON.stringify(go.queued));
-    check("P2-2 空闲态回「发」且无 stop", !/\bstop\b/.test(go.idle.cls) && go.idle.txt === "发", JSON.stringify(go.idle));
+ //  三态已改 SVG(纸飞机=发/方点=停/时钟+纸飞机=排),
+ // 断言改图标语义(send-ic-stop / send-ic-clockface / send-ic-plane)+ class+aria,不再断言文字。
+    check("P2-2 任务活跃且空输入 → #go.stop(方点图标)", /\bstop\b/.test(go.running.cls) && /send-ic-stop/.test(go.running.html) && go.running.aria === "停止", JSON.stringify({ cls: go.running.cls, aria: go.running.aria }));
+    check("P2-2 有输入时不进 stop(改排队,时钟图标)", !/\bstop\b/.test(go.queued.cls) && /queue-mode/.test(go.queued.cls) && /send-ic-clockface/.test(go.queued.html) && go.queued.aria === "排队发送", JSON.stringify({ cls: go.queued.cls, aria: go.queued.aria }));
+    check("P2-2 空闲态回发送(纸飞机)且无 stop", !/\bstop\b/.test(go.idle.cls) && /send-ic-plane/.test(go.idle.html) && go.idle.aria === "发送", JSON.stringify({ cls: go.idle.cls, aria: go.idle.aria }));
   }
 
   check("控制台无错误", errors.length === 0, errors.slice(0, 3).join(" | "));

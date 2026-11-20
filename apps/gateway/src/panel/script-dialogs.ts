@@ -340,7 +340,17 @@ document.addEventListener("mousedown", (e) => {
   if (t.closest && t.closest(".mode-pill,.model-trigger,.thought-btn")) return; // 锚点自身 click 走 toggle
   pillMenuClose();
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") pillMenuClose(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+ // 分层语义:焦点在模型菜单内=菜单自身 onkeydown 已按层处理(冒泡到此不再重复);
+ // 焦点在菜单外(input/body)=这里兜底:厂商子页→退回主面板(modelMenuEsc 判定),主面板/其它浮窗→关闭整层。
+  if (pillMenuEl && document.activeElement && pillMenuEl.contains(document.activeElement)) return;
+  if (pillMenuEl && pillMenuEl.classList.contains("model-menu") && typeof modelMenuEsc === "function") {
+    e.preventDefault();
+    try { modelMenuEsc(); return; } catch (err) { /* 异常兜底走关闭 */ }
+  }
+  pillMenuClose();
+});
 // ---- popover 生命周期治理 ----
 // 四态语义:①doc pointerdown 外点即关 ②触发器重复点击=toggle ③同族单实例(开新收旧) ④Esc 关。
 // pillMenu 族(model/perm/effort/supCtx/supModel)已由上方 mousedown/Esc 兜住,不进本表;

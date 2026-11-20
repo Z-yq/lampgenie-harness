@@ -56,57 +56,99 @@ function modelItemHtml(it, current) {
     (sel ? '<span class="pm-ck">' + ic("check") + "</span>" : "") +
     "</div>";
 }
-/** 一级/二级菜单 HTML(同一容器内原位切换:subKey 空=一级,非空=该 provider 的二级面板)。
- * u5 分区(上→下,对齐 ZCode DropdownMenuContent):① 前置项组「跟随全局」+ 分隔线;
- * ② modelGroups.map(family/账号组内联直列 + 其他组子菜单触发行);③ sticky 页脚「» 管理模型」。 */
-function modelMenuHtml(groups, current, subKey) {
-  const sub = subKey ? groups.find((g) => g.key === subKey) : null;
-  const foot = '<div class="pm-foot sticky"><div class="pm-item" data-act="foot"><span class="pm-flip">»</span><span class="pm-name">管理模型</span></div></div>';
-  if (sub) {
-    return '<div class="pm-grp pm-lv2" data-g="' + esc(sub.key) + '">' +
-      '<div class="pm-item pm-back" data-act="back" tabindex="0"><span class="pm-ck">' + ic("chev-right", "pm-flip") + '</span><span class="pm-name">‹ 返回</span>' +
-      '<span class="pm-sub">' + esc(sub.label + (sub.labelBadge ? " · " + sub.labelBadge : "")) + "</span></div>" +
-      sub.items.map((it) => modelItemHtml(it, current)).join("") + "</div>" + foot;
+/** ZCode 复刻两级导航。subKey 状态机:""=主面板(聚焦厂商默认=当前模型所在厂商)/
+ * "@providers"=厂商子页/其它=聚焦该厂商的主面板。「跟随全局」是厂商页末尾的会话配置项,不混进模型列表。 */
+function modelMenuHeadHtml(g) {
+  const name = g ? String(g.label || "") : "";
+  const av = esc(String(name.charAt(0) || "M").toUpperCase());
+  const badge = g && g.labelBadge ? '<span class="pm-badge ' + esc(g.labelBadgeCls || "") + '">' + esc(g.labelBadge) + "</span>" : "";
+  return '<div class="mm-head pm-item" data-act="head" tabindex="0" title="查看厂商列表(切换聚焦厂商)">' +
+    '<span class="mm-avat">' + av + "</span>" +
+    '<span class="pm-name mm-hname">' + esc(name || "模型") + "</span>" + badge +
+    '<span class="pm-chev">' + ic("chev-right") + "</span></div>";
+}
+/** 厂商子页:‹ 返回 + 厂商行(首字母圆章+名称+凭据徽标+模型数,当前厂商 ✓)+「跟随全局」配置项。
+ * 无 cfgView 上下文(纯函数级单测)→ 空串。 */
+function modelMenuProvidersPageHtml(groups) {
+  if (typeof cfgView === "undefined" || !cfgView || !cfgView.config) return "";
+  const ps = (cfgView.config.providers || []).filter((p) => p && (p.name || p.id));
+  let hasOv = false;
+  if (typeof modelMenuSidOverride !== "undefined" && modelMenuSidOverride === "super") {
+    const ov = (typeof sessionModelOverride !== "undefined") ? sessionModelOverride.get("super") : null;
+    hasOv = !!(ov && ov.model);
+  } else hasOv = typeof sessionModelHasOverride === "function" && sessionModelHasOverride();
+  const followCk = hasOv ? "" : ic("check");
+  let html = '<div class="pm-item mm-back" data-act="back" tabindex="0"><span class="pm-ck">' + ic("chev-right", "pm-flip") + '</span><span class="pm-name">‹ 返回</span></div>' +
+    '<div class="mm-sec-head">厂商</div>';
+  for (const p of ps) {
+    const g = groups.find((x) => String(x.key) === String(p.id || p.name || ""));
+    const badge = (typeof modelProviderBadge === "function") ? modelProviderBadge(p) : { label: "", cls: "" };
+    const ck = g && g.containsCurrent ? '<span class="pm-ck">' + ic("check") + "</span>" : "";
+    const name = String(p.name || p.id || "");
+    const av = esc(String(name.charAt(0) || "?").toUpperCase());
+    html += '<div class="pm-item mm-prov' + (g ? "" : " locked") + '"' + (g ? ' data-act="group" data-g="' + esc(String(p.id || p.name || "")) + '" tabindex="0"' : ' title="该厂商目录里暂无可用模型(或全被禁用)"') + '>' +
+      '<span class="mm-avat">' + av + "</span>" +
+      '<span class="pm-main"><span class="pm-name">' + esc(name) + "</span>" +
+      (badge.label ? '<span class="pm-badge ' + esc(badge.cls || "") + '">' + esc(badge.label) + "</span>" : "") +
+      (g ? '<span class="pm-badge">' + g.items.length + "</span>" : "") + "</span>" + ck + "</div>";
   }
+  html += '<hr class="mm-sep"><div class="pm-item pm-follow' + (followCk ? " cur" : "") + '" data-act="follow" tabindex="0" title="清除本会话的模型覆盖,回到全局主模型">' +
+    '<span class="pm-main"><span class="pm-name">跟随全局</span><span class="pm-sub">会话模型配置项</span></span>' +
+    (followCk ? '<span class="pm-ck">' + followCk + "</span>" : "") + "</div>";
+  return html;
+}
+/** 思考强度渐变滑块段(低→最高五档吸附,绿→蓝渐变轨道+白圆钮;档位清单=EFFORTS,当前档=effortV)。
+ * typeof 守卫:纯函数级单测无面板上下文 → 空串。 */
+function modelMenuSlideSecHtml() {
+  if (typeof EFFORTS === "undefined" || !EFFORTS || !EFFORTS.length) return "";
+  const curV = (typeof effortV !== "undefined" ? effortV : "") || "";
+  const n = EFFORTS.length;
+  const idx = Math.max(0, EFFORTS.findIndex((x) => x.v === curV));
+  const pct = n > 1 ? Math.round((idx / (n - 1)) * 100) : 100;
+  const cur = EFFORTS[idx];
+  let html = '<div class="mm-sec mm-sec-effort"><div class="mm-sec-head" title="思考强度随会话热生效(Ctrl+T 快捷循环)">思考强度<span class="mm-eff-cur">' + esc(cur ? cur.menu : "") + '</span><span class="mm-kbd">Ctrl+T</span></div>' +
+    '<div class="mm-slider" data-slider="effort" role="slider" aria-label="思考强度" aria-valuemin="0" aria-valuemax="' + (n - 1) + '" aria-valuenow="' + idx + '" tabindex="-1">';
+  for (let i = 0; i < n; i++) html += '<span class="mm-seg" data-effort="' + esc(EFFORTS[i].v) + '" title="' + esc("思考力度:" + EFFORTS[i].menu + "(点击或拖动滑块)") + '"></span>';
+  html += '<span class="mm-thumb" style="left:' + pct + '%"></span></div></div>';
+  return html;
+}
+/** 一级/二级菜单 HTML(同一容器内原位切换)。主面板=头部厂商行 + 「模型」节(聚焦厂商条目平铺)
+ * + 思考强度滑块;厂商页(subKey="@providers")=厂商列表 + 跟随全局 + 管理模型页脚。 */
+function modelMenuHtml(groups, current, subKey) {
+  const foot = '<div class="pm-foot sticky"><div class="pm-item" data-act="foot"><span class="pm-flip">»</span><span class="pm-name">管理模型</span></div></div>';
+  if (subKey === "@providers") return '<div class="mm-page">' + modelMenuProvidersPageHtml(groups) + "</div>" + foot;
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   let html = total > 12 ? '<input class="pm-q" placeholder="筛选模型…">' : "";
   if (!total && !groups.length) return html + '<div class="pm-empty">无可用模型</div>' + foot;
- // n8「跟随全局(清除会话覆盖)」=前置项组(leadingItems 语义)+ 分隔线;发 session.model.set{model:null}。
- // 勾选判定走 typeof 守卫:本函数会被纯函数级单测独立抽取执行(无面板上下文),不裸读 currentSid。
-  const followCk = typeof sessionModelHasOverride === "function" && sessionModelHasOverride() ? "" : ic("check");
-  html += '<div class="pm-grp direct pm-lead"><div class="pm-item pm-follow' + (followCk ? " cur" : "") + '" data-act="follow" tabindex="-1" title="清除本会话的模型覆盖,回到全局主模型">' +
-    '<span class="pm-main"><span class="pm-name">跟随全局(清除会话覆盖)</span><span class="pm-badge">全局</span></span>' +
-    (followCk ? '<span class="pm-ck">' + followCk + "</span>" : "") + "</div></div>" +
-    '<hr class="pm-sep">';
-  html += groups.map((g) => {
-    const badge = '<span class="pm-badge ' + esc(g.labelBadgeCls || "") + '">' + esc(g.labelBadge || "") + "</span>";
-    if (g.directItems) {
-      return '<div class="pm-grp direct" data-g="' + esc(g.key) + '">' +
-        '<div class="pm-head pm-ghead">' + esc(g.label) + " " + badge + "</div>" +
-        g.items.map((it) => modelItemHtml(it, current)).join("") + "</div>";
-    }
-    return '<div class="pm-grp folded" data-g="' + esc(g.key) + '">' +
-      '<div class="pm-item pm-ghead" data-act="group" data-g="' + esc(g.key) + '" tabindex="0">' +
-      '<span class="pm-ck" title="' + esc(g.selectedHint || "") + '">' + (g.selectedHint ? ic("check") : "") + "</span>" +
-      '<span class="pm-name">' + esc(g.label) + "</span>" + badge +
-      '<span class="pm-badge">' + g.items.length + "</span>" +
-      '<span class="pm-chev">' + ic("chev-right") + "</span></div></div>";
-  }).join("");
+  const focus = groups.find((g) => g.key === subKey) || groups.find((g) => g.containsCurrent) || groups[0];
+  html += '<div class="mm-page">' + modelMenuHeadHtml(focus) +
+    '<div class="mm-sec mm-sec-model"><div class="mm-sec-head">模型</div>' +
+    focus.items.map((it) => modelItemHtml(it, current)).join("") +
+    '<div class="mm-sub-hint">' + (groups.length > 1 ? "共 " + total + " 个模型 · 点头部厂商行切换" : "该厂商共 " + total + " 个模型") + "</div></div>" +
+    modelMenuSlideSecHtml() + "</div>";
   return html + foot;
 }
+/* 旧「思考强度五格」段已由 modelMenuSlideSecHtml 渐变滑块替代 */
+/* 旧「厂商与端点」段已由 modelMenuProvidersPageHtml(厂商子页)替代 */
 /** u5 定位(ZCode DropdownMenuContent:side=top / align=start / sideOffset=2 / avoidCollisions):
- * 默认向上展开、左缘对齐触发器;上方空间不足则翻到下方;左右越界则 shift 回视口内。 */
-function modelMenuFit(el) {
-  const a = $("modelPill");
+ * 默认向上展开、左缘对齐触发器;上方空间不足则翻到下方;左右越界则 shift 回视口内。
+ * ①锚点可参数化(Super 会话模型 pill 与 classic 同源);②补 zoom 换算——
+ * body zoom≠1 时 fixed 定位的 left/bottom 会被二次缩放(历史 bug:右溢 217px),统一按样式坐标算。 */
+function modelMenuFit(el, anchorId) {
+  const a = $(anchorId || "modelPill");
   if (!a) return;
+  let z = 1;
+  try { const zz = parseFloat(getComputedStyle(document.body).zoom || "1"); if (zz > 0) z = zz; } catch (e) { /* 忽略 */ }
   const r = a.getBoundingClientRect();
   const mw = el.offsetWidth, mh = el.offsetHeight;
-  const spaceAbove = r.top - 8, spaceBelow = window.innerHeight - r.bottom - 8;
-  const sideTop = mh <= spaceAbove || spaceAbove >= spaceBelow; // avoidCollisions flip
-  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + "px"; // align=start + shift
-  if (sideTop) { el.style.bottom = Math.max(8, window.innerHeight - r.top + 2) + "px"; el.style.top = ""; } // sideOffset=2
-  else { el.style.top = Math.max(8, r.bottom + 2) + "px"; el.style.bottom = ""; }
-  if (mh > window.innerHeight - 80) el.style.maxHeight = Math.max(160, window.innerHeight - 100) + "px";
+  const iw = window.innerWidth || document.documentElement.clientWidth || 0;
+  const ih = window.innerHeight || document.documentElement.clientHeight || 0;
+  const spaceAbove = r.top - 8, spaceBelow = ih - r.bottom - 8;
+  const sideTop = mh * z <= spaceAbove || spaceAbove >= spaceBelow; // avoidCollisions flip
+  el.style.left = Math.round(Math.max(8 / z, Math.min(r.left / z, iw / z - mw - 8 / z))) + "px"; // align=start + shift(zoom 换算)
+  if (sideTop) { el.style.bottom = Math.round((ih - r.top + 2) / z) + "px"; el.style.top = ""; } // sideOffset=2
+  else { el.style.top = Math.round(r.bottom / z + 2) + "px"; el.style.bottom = ""; }
+  if (mh * z > ih - 80) el.style.maxHeight = Math.round(Math.max(160, (ih - 100) / z)) + "px";
 }
 /** u6 可见项清单(键盘导航用):跳过被筛选隐藏/整组隐藏的行;组头/返回/跟随全域行也算可选项
  * (与现有 data-act 语义一致);锁定项可高亮但不可选。 */
@@ -134,17 +176,47 @@ function modelMenuBind(el, groups, current, subKey) {
   const rerender = (next) => {
     el.innerHTML = modelMenuHtml(groups, current, next || "");
     modelMenuBind(el, groups, current, next || "");
-    modelMenuFit(el);
+    modelMenuFit(el, modelMenuAnchorId);
   };
+ // Esc 分层语义:厂商子页→退回主面板;主面板→关闭整层(pillMenuClose)。doc keydown 同走本函数。
+  el.modelMenuEsc = () => {
+    if (subKey) rerender("");
+    else pillMenuClose();
+  };
+ // 滑块交互:点击分段/拖动圆钮即选档(吸附最近分段),走 effortV+pillRender+pillSendEffort 既有通道
+  const slideTo = (ev) => {
+    const slider = ev.target.closest ? ev.target.closest(".mm-slider") : null;
+    if (!slider || typeof EFFORTS === "undefined" || !EFFORTS.length) return;
+    const r2 = slider.getBoundingClientRect();
+    const x = (ev.clientX - r2.left) / r2.width;
+    if (x < 0 || x > 1) return;
+    const idx2 = Math.max(0, Math.min(EFFORTS.length - 1, Math.round(x * (EFFORTS.length - 1))));
+    const v2 = String(EFFORTS[idx2].v || "");
+    if (v2 !== ((typeof effortV !== "undefined" ? effortV : "") || "")) modelMenuSetEffort(v2);
+  };
+  const slider = el.querySelector(".mm-slider");
+  if (slider) {
+    slider.onclick = (ev) => { ev.stopPropagation(); slideTo(ev); };
+    slider.onmousedown = (ev) => { // 拖动:按下即选,移动吸附最近档
+      slideTo(ev);
+      const mv = (e2) => slideTo(e2);
+      const up = () => { slider.onmousemove = null; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); };
+      slider.onmousemove = mv;
+      document.addEventListener("mouseup", up);
+      ev.preventDefault();
+    };
+  }
+ // 头部厂商行点击=进厂商页;厂商页行=聚焦该厂商(回主面板);「管理模型」仍跳设置页。
   for (const it of el.querySelectorAll(".pm-item")) {
     const act = it.dataset.act;
-    if (act === "group") it.onclick = () => rerender(it.dataset.g);
+    if (act === "head") it.onclick = () => rerender("@providers");
+    else if (act === "group") it.onclick = () => rerender(it.dataset.g);
     else if (act === "back") it.onclick = () => rerender("");
-    else if (act === "follow") it.onclick = () => { pillMenuClose(); pillPickModel(null, ""); };
+    else if (act === "follow") it.onclick = () => { pillMenuClose(); pillPickModel(null, "", modelMenuSidOverride); };
     else if (act === "foot") it.onclick = () => { pillMenuClose(); switchView("sys"); setSection("model"); };
     else if (it.dataset.v) it.onclick = () => {
       if (it.classList.contains("locked")) { toast(it.querySelector(".pm-warn")?.getAttribute("title") || "该模型当前不可选", true); return; }
-      pillMenuClose(); pillPickModel(it.dataset.v, it.dataset.pid || "");
+      pillMenuClose(); pillPickModel(it.dataset.v, it.dataset.pid || "", modelMenuSidOverride);
     };
  // hover 与键盘高亮同源:鼠标进项即把 .hot 移过去(单一 highlight 通道)
     it.onmouseenter = () => modelMenuHighlight(el, it);
@@ -167,9 +239,9 @@ function modelMenuBind(el, groups, current, subKey) {
       else move(items.length - 1);
       return;
     }
-    if (e.key === "Escape") { e.preventDefault(); pillMenuClose(); return; }
+    if (e.key === "Escape") { e.preventDefault(); if (subKey) rerender(""); else pillMenuClose(); return; } // Esc 分层
     if (e.key === "ArrowRight") {
-      if (hot && hot.dataset.act === "group") { e.preventDefault(); rerender(hot.dataset.g); }
+      if (hot && (hot.dataset.act === "group" || hot.dataset.act === "head")) { e.preventDefault(); rerender(hot.dataset.act === "head" ? "@providers" : hot.dataset.g); }
       return;
     }
     if (e.key === "ArrowLeft") {
@@ -179,11 +251,12 @@ function modelMenuBind(el, groups, current, subKey) {
     if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
       e.preventDefault();
       if (!hot || hot.classList.contains("locked")) return;
-      if (hot.dataset.act === "follow") { pillMenuClose(); pillPickModel(null, ""); return; }
+      if (hot.dataset.act === "follow") { pillMenuClose(); pillPickModel(null, "", modelMenuSidOverride); return; }
       if (hot.dataset.act === "foot") { pillMenuClose(); switchView("sys"); setSection("model"); return; }
+      if (hot.dataset.act === "head") { rerender("@providers"); return; } // 头部厂商行
       if (hot.dataset.act === "group") { rerender(hot.dataset.g); return; }
       if (hot.dataset.act === "back") { rerender(""); return; }
-      if (hot.dataset.v) { const v = hot.dataset.v, pid = hot.dataset.pid || ""; pillMenuClose(); pillPickModel(v, pid); }
+      if (hot.dataset.v) { const v = hot.dataset.v, pid = hot.dataset.pid || ""; pillMenuClose(); pillPickModel(v, pid, modelMenuSidOverride); }
       return;
     }
  // typeahead:单字符键 → 从当前 hot 之后循环找可见项 .pm-name 首字母命中
@@ -203,25 +276,17 @@ function modelMenuBind(el, groups, current, subKey) {
   if (q) {
     q.oninput = () => {
       const kw = q.value.trim().toLowerCase();
-      for (const grp of el.querySelectorAll(".pm-grp")) {
-        const g = groups.find((x) => x.key === grp.dataset.g);
-        if (!g) continue;
-        if (g.directItems || grp.classList.contains("pm-lv2")) {
- // 直展组 / 二级面板:逐个模型项过滤,无命中则整组收起(返回行不计入)
-          let any = false;
-          for (const it of grp.querySelectorAll(".pm-item[data-v]")) {
-            const hit = !kw || String(it.dataset.v || "").toLowerCase().indexOf(kw) >= 0;
-            it.style.display = hit ? "" : "none";
-            if (hit) any = true;
-          }
-          grp.classList.toggle("off", !any);
-        } else {
- // 折叠组:一级只有一行,按「组名/徽标/组内任一模型」判定——命中就保留(点进去看二级列表)
-          const hit = !kw || g.label.toLowerCase().indexOf(kw) >= 0 ||
-            g.items.some((it) => it.value.toLowerCase().indexOf(kw) >= 0);
-          grp.classList.toggle("off", !hit);
-        }
+ // 主面板/厂商页不再有 .pm-grp 包裹——直接按 data-v 逐项过滤,全部隐藏时空态提示
+      let any = false;
+      for (const it of el.querySelectorAll(".pm-item[data-v]")) {
+        const hit = !kw || String(it.dataset.v || "").toLowerCase().indexOf(kw) >= 0;
+        it.style.display = hit ? "" : "none";
+        if (hit) any = true;
       }
+      let emptyEl = el.querySelector(".pm-q-empty");
+      if (!any && kw) {
+        if (!emptyEl) { emptyEl = document.createElement("div"); emptyEl.className = "pm-empty pm-q-empty"; emptyEl.textContent = "无匹配模型"; el.insertBefore(emptyEl, el.querySelector(".mm-page") || el.firstChild); }
+      } else if (emptyEl) emptyEl.remove();
       modelMenuHighlight(el, modelMenuVisibleItems(el)[0] || null); // 过滤后重置 hot 到首个可见项
     };
     setTimeout(() => q.focus(), 30);
@@ -240,9 +305,17 @@ function endpointModelGroup(list, cur) {
       return { value: v, name: v, sub: "", providerId: "", vision: vc.vision, visionInferred: vc.inferred, unverified: false };
     }) };
 }
-/** 模型菜单入口(替代 pillOpenMenu 的一层渲染):直展组/折叠组混排;无组→端点拉取兜底。 */
-function modelMenuOpen(fallbackIds) {
+/** 模型菜单入口; 起支持 opts:{anchorId(锚点 pill id)、sid(会话 id,
+ * Super 会话="super" 时 pillPickModel 的 targetSid 固定为 super,不再落到 currentSid/草稿)}。
+ * 直展组/折叠组混排;无组→端点拉取兜底。 */
+let modelMenuAnchorId = "modelPill";
+let modelMenuSidOverride = "";
+let modelMenuCur = ""; // 当前打开时快照(cur),供 modelMenuSetEffort 重渲染取值
+function modelMenuOpen(fallbackIds, opts) {
   if (pillMenuEl) { pillMenuClose(); return; } // 二点=收起
+  const o = opts || {};
+  modelMenuAnchorId = o.anchorId || "modelPill";
+  modelMenuSidOverride = o.sid || "";
   const cfg = cfgView && cfgView.config ? cfgView.config : null;
   const cur = ((cfg && cfg.coding && cfg.coding.llm) || {}).model || "";
   const groups = pillMenuModelGroups(cur);
@@ -251,16 +324,43 @@ function modelMenuOpen(fallbackIds) {
     if (!list.length) { modelMenuPending = "model"; wsSafeSend(JSON.stringify({ v: 1, type: "models.list" })); return; } // 未配置模型→端点拉取兜底
     groups.push(endpointModelGroup(list, cur));
   }
+  modelMenuCur = cur;
   const el = document.createElement("div");
   el.className = "pill-menu model-menu";
- // u5 有二级(存在折叠组=provider 子菜单)时按内容宽展开,否则固定 192px(对齐 zcode 两种 DropdownMenuContent 类)
-  const hasSub = groups.some((g) => !g.directItems);
-  el.classList.add(hasSub ? "has-sub" : "no-sub");
+  el.classList.add("zcode2"); // ZCode 复刻形态(有厂商页,恒按 320px 卡宽)
   el.innerHTML = modelMenuHtml(groups, cur, "");
   document.body.appendChild(el);
   modelMenuBind(el, groups, cur, "");
-  modelMenuFit(el);
+  modelMenuFit(el, modelMenuAnchorId);
   pillMenuEl = el;
+}
+/** 滑块/键盘共用的切档函数:走 effortV+pillRender+pillSendEffort 既有通道(热生效不关菜单),
+ * 并原位重渲滑块段(thumb 位置+aria)。 */
+function modelMenuSetEffort(v) {
+  effortV = v; pillTouched = true;
+  if (typeof pillRender === "function") pillRender();
+  if (typeof pillSendEffort === "function") pillSendEffort();
+  if (pillMenuEl) {
+    const el = pillMenuEl;
+    const sec = el.querySelector(".mm-sec-effort");
+    if (sec) { const html2 = modelMenuSlideSecHtml(); if (html2) sec.outerHTML = html2; }
+    const slider = el.querySelector(".mm-slider");
+    if (slider) {
+      const n = EFFORTS.length;
+      const idx2 = Math.max(0, EFFORTS.findIndex((x) => x.v === effortV));
+      slider.setAttribute("aria-valuenow", String(idx2));
+      const thumb = slider.querySelector(".mm-thumb");
+      if (thumb) thumb.style.left = (n > 1 ? Math.round((idx2 / (n - 1)) * 100) : 100) + "%";
+    }
+  }
+}
+/** Esc 分层入口(doc keydown 与菜单内 onkeydown 双路共用;供 script-dialogs 反射调用)。 */
+function modelMenuEsc() {
+  if (!pillMenuEl) return false;
+  const esc = pillMenuEl.modelMenuEsc;
+  if (typeof esc === "function") { return esc(); }
+  pillMenuClose();
+  return false;
 }
 
 // 候选模型聚合:来源=设置页已配置的模型(PROVIDER 列表 models;禁用项剔除),按 provider 分组。
@@ -333,8 +433,11 @@ function sessionModelEffort() {
   return effortV ? String(effortV) : null;
 }
 /** n8 会话模型选择:staged 态(点了先显新值+转轮,回包确认才落定;失败回滚)。
- * v=null 语义=「跟随全局(清除会话覆盖)」→ 发 session.model.set{model:null},成功后 pill 显示全局默认。 */
-function pillPickModel(v, providerId) {
+ * v=null 语义=「跟随全局(清除会话覆盖)」→ 发 session.model.set{model:null},成功后 pill 显示全局默认。
+ * 可选第三参 sid——指挥台(Super)会话模型菜单传 "super",targetSid 固定为 super
+ * (classic/草稿路径不变:currentSid || draftSidOf)。 */
+function pillPickModel(v, providerId, sid) {
+  const targetSidFixed = sid || "";
   const lockReason = v ? modelKeyLockReason(v) : "";
   if (lockReason) { toast(lockReason, true); return; }
   if (v && verifiedModels.size > 0 && !verifiedModels.has(v)) toast("注意:" + v + " 未经过端点验证(手填目录)——若端点不提供该模型将 404", true);
@@ -344,7 +447,8 @@ function pillPickModel(v, providerId) {
  // 第二条必撞 revision-mismatch(第一条已把 revision +1)→ 用户看到「切换失败」但其实早切好了。
  // 同值再点=完全静默;换成别的模型才给一次黄色轻提示(不弹红,不冒充失败)。
  // 判定键统一为 targetSid(currentSid || 草稿预设 sid),草稿态连点同样被拦。
-  const m9Sid = currentSid || draftSidStored();
+ // Super 会话(sid 参数)时判定键固定 super。
+  const m9Sid = targetSidFixed || (currentSid || draftSidStored());
   if (m9Sid) {
     const prev = sessionModelStaged.get(m9Sid);
     if (prev && prev.at) {
@@ -359,7 +463,7 @@ function pillPickModel(v, providerId) {
  // per-session 主模型:会话态→只改本会话;草稿态→绑定到当前项目的预设会话 id
  // (draftSidOf),同样走 session.model.set。全局 coding.llm 不再被快切菜单触碰(改全局只能去设置页),
  // 根治「草稿态换模型 → 其余所有 session 跟随全局一起变」的污染。
-  const targetSid = currentSid || draftSidOf();
+  const targetSid = targetSidFixed || (currentSid || draftSidOf());
   sessionModelStaged.set(targetSid, { model: v, ...(providerId ? { providerId: providerId } : {}), effort: eff, at: Date.now() });
   const rev = sessionModelRev.get(targetSid);
   wsSafeSend(JSON.stringify({ v: 1, type: "session.model.set", sessionId: targetSid, model: v, ...(providerId ? { providerId: providerId } : {}), effort: eff, ...(rev !== undefined ? { expectedRevision: rev } : {}) }));
@@ -595,7 +699,21 @@ function renderModelSwitch() {
   else if (modelListFailed) { cls = "err"; text = "模型目录拉取失败:" + (modelSwitchNotice && modelSwitchNotice.text ? modelSwitchNotice.text : "可点右侧「重试」"); }
   else if (modelSwitchNotice) { cls = modelSwitchNotice.cls || ""; text = modelSwitchNotice.text; }
   else if (!cfgView) { cls = ""; text = "加载配置…"; }
-  else if (noModels) { cls = "warn"; text = "还没有可选模型:先在下方「添加供应商」接入"; }
+  else if (noModels) {
+ // 首启走查(probe33):提示指向视口外的「添加供应商」,首访用户找不到入口。
+ // 改为行内按钮直达接入弹窗(prov-add-open 同一链路);无模型时下拉/确认本就禁用。
+    cls = "warn";
+    status.className = "msw-status warn";
+    status.innerHTML = esc("还没有可选模型:") +
+      '<button class="vw-act" id="ms-add-prov">+ 添加供应商,开始接入</button>';
+    sel.disabled = true;
+    btn.disabled = true;
+    btn.textContent = "确认切换";
+    var addBtn0 = status.querySelector("#ms-add-prov");
+    if (addBtn0) addBtn0.onclick = function () { var t = document.getElementById("prov-add-open"); if (t) t.click(); };
+    return;
+  }
+  else if (!eff.model) { cls = "warn"; text = "尚未配置主模型:选一个模型后确认"; }
   else if (!eff.model) { cls = "warn"; text = "尚未配置主模型:选一个模型后确认"; }
   else { cls = "ok"; text = "当前生效:" + eff.model + (eff.override ? "(本会话)" : "(全局)"); }
   status.className = "msw-status" + (cls ? " " + cls : "");
@@ -676,12 +794,37 @@ $("modelPill").onclick = () => {
   if (modelListFailed) { modelMenuPending = "model"; wsSafeSend(JSON.stringify({ v: 1, type: "models.list" })); return; }
   pillOpenMenu();
 };
+// Ctrl+T:思考强度快捷循环(仅输入框/正文聚焦时;输入框内仍允许用户正常键入 T)
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "t" && e.key !== "T") return;
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const ae = document.activeElement;
+  const tag = ae ? String(ae.tagName || "").toLowerCase() : "";
+  if (tag === "input" && !(ae && ae.classList && ae.classList.contains("pm-q"))) return; // 普通输入框内让位给用户(菜单筛选框除外)
+  e.preventDefault();
+  if (typeof EFFORTS === "undefined" || !EFFORTS.length) return;
+  const curV = (typeof effortV !== "undefined" ? effortV : "") || "";
+  let i = EFFORTS.findIndex((x) => x.v === curV);
+  i = (i + 1) % EFFORTS.length;
+  modelMenuSetEffort(String(EFFORTS[i].v || ""));
+  toast("思考强度:" + EFFORTS[i].menu + "(Ctrl+T 循环)");
+});
 // 首启引导卡按钮(事件委托:renderHistory 会增量替换空态节点,直接绑会丢)
 document.addEventListener("click", (e) => {
   const b = e.target && e.target.closest ? e.target.closest("[data-onboard]") : null;
   if (!b) return;
   const act = b.getAttribute("data-onboard");
-  if (act === "model") { switchView("sys"); try { setSection("model"); } catch (err) { /* 同上 */ } }
+  if (act === "model") {
+    switchView("sys");
+    try { setSection("model"); } catch (err) { /* 同上 */ }
+ // 首启走查:跳到模型设置后,无 Provider 时自动展开接入弹窗(预设墙)——
+ // 首访用户到此即见 16 家预设,不再面对「还没有可选模型」提示自行找入口。
+    setTimeout(function () {
+      try {
+        if (!document.querySelector(".prov-card") && document.getElementById("prov-add-open")) document.getElementById("prov-add-open").click();
+      } catch (e) { /* 弹窗装配未就绪:设置区仍有行内接入按钮兜底 */ }
+    }, 350);
+  }
   else if (act === "project") { try { dbOpen(""); } catch (err) { /* 目录浏览器未装配 */ } }
   else if (act === "task") { const ta = $("instruction"); if (ta) { ta.focus(); } }
 });

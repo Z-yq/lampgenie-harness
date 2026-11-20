@@ -6,7 +6,7 @@
 /**
  * Gateway Client Protocol(定稿)的 zod schema。
  * 模式参照 qwen-audio-agent shared/protocol(Apache-2.0,能力协商/信封纪律),
- * 内容自研——该仓协议以 voice 事件为主体,不适用 coding harness。
+ * 内容自研——参照仓的消息面只覆盖其自身场景,本仓按任务/会话/面板/标注/Rsi 等域自建。
  */
 import { z } from "zod";
 
@@ -53,7 +53,7 @@ export const ErrorCode = {
   QueueItemMissing: "queue-item-missing",
  /** 持久队列:同一幂等键但载荷指纹不同(不写入,调用方须换键或核对内容)。 */
   QueueConflict: "queue-conflict",
- // ---- 会议/团队/语音 ----
+ // ---- 会议/团队 ----
   MeetingImportFailed: "meeting-import-failed",
  /** super agent 指挥台链(新链只发这两个)。 */
   SuperFailed: "super-failed",

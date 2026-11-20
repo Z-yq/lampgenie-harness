@@ -14,7 +14,7 @@ import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 import type { TaskState, Task } from "@lampgenie/core/task/task";
 import { loadConfig } from "@lampgenie/core";
 import { buildExecutorFromConfig, buildModelProviders, buildAudioChatFromConfig } from "./factory.js";
-import { createSessionModelStore, createSessionModelFace } from "./session-model.js";
+import { createSessionModelStore, createSessionModelFace, rsiModelOverrideOf } from "./session-model.js";
 import { TaskSupervisor } from "./task-manager.js";
 import { ProjectRegistry } from "./projects.js";
 import { setRuntimePromptProvider, wireAgentLoop } from "./agent-wiring.js";
@@ -148,7 +148,10 @@ async function main(): Promise<void> {
   const sessionModelsFile = join(root, ".genie", "session-models.json");
   let sessionModelsExists = false;
   try { sessionModelsExists = existsSync(sessionModelsFile); } catch { sessionModelsExists = false; }
-  if (sessionModelsExists) try {
+ // RSI 机制模型(config.agent.rsiModel:rsi 会话无落盘覆盖时由 face.resolve 回退。
+ // 覆盖表不存在但配置了 rsiModel 时也要走派生块(否则配置静默无效)。
+  const rsiModelConfigured = rsiModelOverrideOf(config) !== undefined;
+  if (sessionModelsExists || rsiModelConfigured) try {
     const face = createSessionModelFace(config, root, createSessionModelStore(root));
     const override = face.resolve(spec.task.sessionId);
     if (override) {

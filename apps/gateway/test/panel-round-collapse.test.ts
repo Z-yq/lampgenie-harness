@@ -36,14 +36,22 @@ const FN_NAMES = [
   "roundOpenAll", "roundUserOpen", "roundRemember", "roundShouldOpen",
   "verbOf", "verbIcon", "verbSvg", "errLineRe",
   "rgPlain", "roundIsProc", "roundCountToolCards", "rgCut", "rgSum", "rgFirstNum",
-  "roundStepState", "roundStepLabel", "roundGroupHtml",
+  "roundStepState", "roundStepLabel", "roundGroupHtml", "rgOutPreview", "runFmtClock",
   "tblCellText", "tableToTsv", "tableToCsv", "csvSlug", "mdBadgeHtml",
+  "replyKeyOf", "replyBlockHtml",
 ];
 
 const SRC = [
   "let roundOpenMap = null;",
   'const ROUND_LS = "genie.round.open";',
   'let runLineVerb = "";',
+  "const ROUND_LIVE_STEPS = 3;",
+  "const LIVE_OUT_LINES = 3;",
+  "const LIVE_OUT_CHARS = 120;",
+ // replyBlockHtml 的外部依赖桩(mdToHtml/scrub 不在本切片域;只验 final 分支的壳逻辑)
+  'function scrubProtocolLines(t) { return String(t); }',
+  'function mdToHtml(t) { return "<p>" + String(t) + "</p>"; }',
+  "const replyOpen = new Set();",
   ...FN_NAMES.map((n) => sliceFn(n)),
 ].join("\n");
 
@@ -193,5 +201,63 @@ describe(" P0/P1 纯函数契约(源码切片桩求值)", () => {
     expect(mdBadgeHtml(" 待验 "), "两端空白先 trim").toContain("st-idle");
     expect(mdBadgeHtml("这是一句很长的话,里面提到完成")).toBe("");
     expect(mdBadgeHtml("")).toBe("");
+  });
+
+ // ===== 运行中过程可见 + 终稿免壳 =====
+  const toolStep = (id: string, body: string) =>
+    '<details class="tool-card" data-det-key="tool-call:' + id + '"><summary><span class="tc-state tc-ok">完成</span>' + id +
+    '</summary><div class="tc-body">' + body + "</div></details>";
+
+  it("1606 活跃组:默认展开+live+组头计时+尾 K 步展开+rs-out 摘要(更早收起)", () => {
+    const { roundGroupHtml } = load();
+    const seg = [
+      toolStep("s1", "早期步骤输出甲"),
+      toolStep("s2", "早期步骤输出乙"),
+      toolStep("s3", "l1\nl2\nl3\nl4\nl5"),
+      toolStep("s4", "输出丁"),
+      toolStep("s5", "输出戊"),
+    ];
+    const html = roundGroupHtml(seg, "round:live", false, true, Date.now() - 5000);
+    expect(/class="round-group live"[^>]*\sopen/.test(html), "活跃组带 live+open").toBe(true);
+    expect(html.indexOf("正在执行"), "组头运行动词").toBeGreaterThan(0);
+    expect(html.indexOf('data-round-clock="1"'), "组头计时挂载").toBeGreaterThan(0);
+    expect(html.indexOf('data-round-at='), "计时锚=轮起始时刻").toBeGreaterThan(0);
+    const opens = [...html.matchAll(/class="round-step[^"]*" data-det-key="[^"]*"([^>]*)>/g)].map((m) => / open/.test(m[1]));
+    expect(opens, "尾 K=3 步展开,更早收起").toEqual([false, false, true, true, true]);
+    expect((html.match(/class="rs-out"/g) || []).length, "活跃步带输出摘要").toBe(5);
+    expect(html.indexOf("l1\nl2\nl3"), "摘要 3 行截断(真实 LF 分行)").toBeGreaterThan(0);
+    expect(/l4|l5/.test((html.match(/class="rs-out"[^<]*/) || [""])[0]), "第 4 行不进摘要").toBe(false);
+  });
+
+  it("1606 活跃组:用户显式收起(=0)不弹回;终态默认收起;无记忆活跃默认展开", () => {
+    const { roundShouldOpen, roundRemember, roundGroupHtml } = load();
+    expect(roundShouldOpen("round:y", false, true), "无记忆活跃组默认展开").toBe(true);
+    expect(roundShouldOpen("round:y", true, true), "终态优先收起").toBe(false);
+    roundRemember("round:x", false); // 用户在活跃态手动收起
+    expect(roundShouldOpen("round:x", false, true), "收起记忆优先于活跃默认").toBe(false);
+    const html = roundGroupHtml([toolStep("a", "x"), toolStep("b", "y")], "round:x", false, true, 0);
+    expect(/class="round-group[^"]*"[^>]*\sopen/.test(html), "收起记忆下活跃组也不 open").toBe(false);
+  });
+
+  it("1606 rgOutPreview:无 body 回落整段;超 120 字行截断", () => {
+    const { rgOutPreview } = load();
+    expect(rgOutPreview('<div class="tool-card" data-det-key="tool-call:z"></div>')).toBe("");
+    const pv = rgOutPreview(toolStep("z", "x".repeat(150)));
+    expect(pv.endsWith("…")).toBe(true);
+    expect(pv.length).toBeLessThanOrEqual(121);
+    expect(rgOutPreview(toolStep("w", "单行输出"))).toBe("单行输出");
+  });
+
+  it("1606 终稿免壳:final=true 长文不套 reply-long 全量渲染;旧调用零变化", () => {
+    const { replyBlockHtml } = load();
+    const long = "结论先行。" + "正文填充。".repeat(300); // >1200 字阈值
+    const fin = replyBlockHtml({ payload: { text: long }, seq: 9 }, "", true);
+    expect(fin.startsWith('<div class="reply-final"'), "终稿主角层在最外层").toBe(true);
+    expect(fin.indexOf("reply-wrap")).toBe(-1);
+    expect(fin.indexOf(long.slice(0, 4)), "终稿正文全文在场").toBeGreaterThan(0);
+    const wrapped = replyBlockHtml({ payload: { text: long }, seq: 9 }, "", false);
+    expect(wrapped.indexOf("reply-long"), "final=false 保留折叠壳").toBeGreaterThan(0);
+    const short = replyBlockHtml({ payload: { text: "短回复" }, seq: 1 }, "");
+    expect(short.indexOf("reply-final"), "旧调用(无第三参)零变化").toBe(-1);
   });
 });

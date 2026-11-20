@@ -1186,7 +1186,7 @@ $("revInjMask").onclick = (e) => { if (e.target === $("revInjMask")) { $("revInj
 $("revStoreRefresh").onclick = () => revStoreLoad();
 $("sense-q").onkeydown = (e) => { if (e.key === "Enter") senseRun(); };
 // 关系图节点点击下钻( v4:点节点=以该节点为新 query 的 debug 剖面)——
-// 渲染器严格 XML 转义(archmap 的 LLM 产物不可放宽),经 g 元素 id 对照结果内 nodes 表
+// mermaid securityLevel 保持 strict(archmap 的 LLM 产物不可放宽),经 g 元素 id 对照结果内 nodes 表
 function bindSenseDrill(host, nodes) {
   const byId = {};
   for (const n of nodes) byId[n.id] = n.name;
@@ -1253,9 +1253,9 @@ const CV_CARDS = [
   { name: "wf", node: "view-wf", title: "自动化 Flows", tag: "run_workflow · 确定性编排", x: 1960, y: 600, w: 720, h: 520 },
   { name: "exp", node: "view-exp", title: "经验库 Memo", tag: "Hermes 沉淀 · 开工回顾", x: 1960, y: 1160, w: 720, h: 460 },
   { name: "team", node: "view-team", title: "团队 Crew", tag: "成员 · Issue · 看板", x: 2760, y: 0, w: 900, h: 620 },
-  { name: "nodes", node: "view-nodes", title: "节点 Fleet", tag: "注册表 · 负载 · 远程执行", x: 2760, y: 660, w: 640, h: 420 },
-  { name: "approvals", node: "view-approvals", title: "关卡 Gate", tag: "挂起权限 · 批量放行", x: 2760, y: 1120, w: 640, h: 380 },
-  { name: "market", node: "view-market", title: "插件市场 Market", tag: "资产包 · 安装即接线", x: 2760, y: 1540, w: 720, h: 520 },
+  { name: "nodes", node: "view-nodes", title: "远程控制 Remote", tag: "手机扫码 · Bot Channels", x: 2760, y: 660, w: 820, h: 700 },
+  { name: "approvals", node: "view-approvals", title: "关卡 Gate", tag: "挂起权限 · 批量放行", x: 2760, y: 1400, w: 820, h: 380 },
+  { name: "market", node: "view-market", title: "插件市场 Market", tag: "资产包 · 安装即接线", x: 2760, y: 1820, w: 820, h: 520 },
   { name: "browser", node: "view-browser", title: "网页 Webview", tag: "面板内嵌 · 新窗口兜底", x: 3660, y: 0, w: 820, h: 560 },
   { name: "sys", node: "view-sys", title: "配置台 Config", tag: "模型 · 主题 · 快捷键", x: 3660, y: 600, w: 820, h: 720 },
  // n3 看板融合:「分身 Agents」卡已删——注册/运行态/终态/失败原因(reap)/模型/会话短码

@@ -27,6 +27,11 @@ export const NIGHTLY_VERSION = 2;
 /** 预算缺省上限(令牌数):约等于一次夜间窗口的成本天花板。 */
 export const DEFAULT_MAX_TOKENS = 200_000;
 
+/** 工作单元缺省上限(分账):work-units=journal 事件数(确定性统计步的 IO/处理量),
+ * 与 LLM 计费 token 分账。标定: 经验证单窗 219120 事件/275 会话顶穿旧 200k 混用上限
+ * (1597 周期 paused 1/7 根因);取 500_000 留余量,事件轨独立限流不再误伤 token 轨。 */
+export const DEFAULT_MAX_WORK_UNITS = 500_000;
+
 /** 候选缺省上限:夜间产出必须少而准,超出的一律截断。 */
 export const DEFAULT_MAX_CANDIDATES = 50;
 
@@ -137,9 +142,12 @@ export interface NightlyUnprocessed {
   reason: string;
 }
 
+/** 双轨预算:tokens=LLM 计费口径;workUnits=journal 事件等工作单元(分账,旧记录经 markStep 兜 0)。 */
 export interface NightlyBudget {
   tokens: number;
   maxTokens: number;
+  workUnits?: number;
+  maxWorkUnits?: number;
 }
 
 export interface NightlyRun {
@@ -170,6 +178,8 @@ export interface NightlyConfig {
   /** 显式 false 时,即使 onlineBusy 也照跑。 */
   deferWhenBusy?: boolean;
   maxTokens?: number;
+ /** 工作单元上限(分账;缺省 DEFAULT_MAX_WORK_UNITS)。 */
+  maxWorkUnits?: number;
   windowFrom?: string;
   windowTo?: string;
 }
@@ -198,6 +208,8 @@ export interface MarkStepInput {
   name: NightlyStepName;
   status: NightlyStepStatus;
   tokens?: number;
+ /** 本步工作单元数(事件数; 分账:纯统计步报 0 token + N workUnits)。 */
+  workUnits?: number;
   artifactRef?: string;
   error?: string;
   note?: string;
@@ -375,6 +387,10 @@ export function startRun(input: StartRunInput): NightlyStartResult {
     typeof config.maxTokens === "number" && Number.isFinite(config.maxTokens)
       ? Math.max(0, Math.trunc(config.maxTokens))
       : DEFAULT_MAX_TOKENS;
+  const maxWorkUnits =
+    typeof config.maxWorkUnits === "number" && Number.isFinite(config.maxWorkUnits)
+      ? Math.max(0, Math.trunc(config.maxWorkUnits))
+      : DEFAULT_MAX_WORK_UNITS;
   const window = defaultWindow(date);
   const from =
     typeof config.windowFrom === "string" && config.windowFrom !== "" ? config.windowFrom : window.from;
@@ -394,7 +410,7 @@ export function startRun(input: StartRunInput): NightlyStartResult {
     coverage: emptyCoverage(),
     candidates: [],
     unprocessed: [],
-    budget: { tokens: 0, maxTokens },
+    budget: { tokens: 0, maxTokens, workUnits: 0, maxWorkUnits },
   };
 
   if (config.onlineBusy === true && config.deferWhenBusy !== false) {
@@ -435,6 +451,7 @@ export function markStep(run: NightlyRun, input: MarkStepInput): NightlyUpdate {
 
   const atIso = toIso(input.at);
   const tokens = normaliseCount(input.tokens);
+  const workUnits = normaliseCount(input.workUnits);
   const steps = run.steps.map((step, position): NightlyRunStep => {
     if (position !== index) return { ...step };
     const updated: NightlyRunStep = {
@@ -450,9 +467,15 @@ export function markStep(run: NightlyRun, input: MarkStepInput): NightlyUpdate {
     return updated;
   });
 
+ // 分账:tokens 只累计 LLM 计费;workUnits(事件等工作单元)独立累计(旧 run 缺字段兜 0)。
+  const prevWorkUnits = typeof run.budget.workUnits === "number" ? run.budget.workUnits : 0;
   const budget: NightlyBudget = {
     tokens: run.budget.tokens + tokens,
     maxTokens: run.budget.maxTokens,
+    workUnits: prevWorkUnits + workUnits,
+    ...(run.budget.maxWorkUnits === undefined
+      ? { maxWorkUnits: DEFAULT_MAX_WORK_UNITS }
+      : { maxWorkUnits: run.budget.maxWorkUnits }),
   };
   const moved: NightlyRun = {
     ...run,
@@ -467,9 +490,16 @@ export function markStep(run: NightlyRun, input: MarkStepInput): NightlyUpdate {
   }
 
   // 预算判定在「本步已记为 done」之后:越界那一步的产物不丢,只是下一轮不再继续。
+ // 双轨:token 超限=真 LLM 成本到顶;workUnits 超限=事件轨到顶(读侧兼容旧值 "budget")。
   if (budget.tokens > budget.maxTokens) {
     return {
-      run: { ...moved, status: "paused", pauseReason: "budget" },
+      run: { ...moved, status: "paused", pauseReason: "budget-tokens" },
+      codes: [NIGHTLY_CODES.NIGHTLY_STEP_DONE, NIGHTLY_CODES.NIGHTLY_BUDGET_EXCEEDED],
+    };
+  }
+  if ((budget.workUnits ?? 0) > (budget.maxWorkUnits ?? DEFAULT_MAX_WORK_UNITS)) {
+    return {
+      run: { ...moved, status: "paused", pauseReason: "budget-work-units" },
       codes: [NIGHTLY_CODES.NIGHTLY_STEP_DONE, NIGHTLY_CODES.NIGHTLY_BUDGET_EXCEEDED],
     };
   }

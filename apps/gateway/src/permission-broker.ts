@@ -4,7 +4,12 @@
  * 超时/无连接自动拒绝(fail-closed 不变);env GENIE_SUBAGENT_ASK=allow-once 优先级仍最高。
  * 会话级代答层:qwen permission-policy 组件接入——「本次会话总是允许」
  * (allow-always)除写 F2 规则文件外同时登记 policy,同会话后续 ask 免弹窗直通。
+ * super 派发的 coding agent 有基本工具/环境权限——只有危险指令、重资源
+ * (build 等)、重启/发布/推远端等影响面很宽的申请才转 super 自决;其余继续走 policy/面板
+ * (聊天窗权限设置)。分级纯函数见 super-approval-policy.ts。
  */
+import { superApprovalVerdict } from "./super-approval-policy.js";
+
 export type PermissionDecision = "allow-once" | "reject";
 /** 决策+来源(panel=面板应答;timeout=超时自动拒;offline=无面板连接;policy=会话级代答直通;
  * object-changed/object-snapshot-failed= 审批对象复核失败(fail-closed);
@@ -30,6 +35,9 @@ export interface PermissionAskInput {
   tool: string;
   summary: string;
   risk?: string;
+ /** 完整命令文本(可选;主链路从工具参数提取。super 分级用它判 build/危险/重启,
+ * 避免 summary 100 字截断把长命令尾部吞掉)。 */
+  command?: string;
   /** 会话级代答判定(qwen permission-policy 适配;缺省=不代答)。 */
   taskId?: string;
  /** :任务归属(submittedBy=super 的任务其权限 ask 转 super 自决)。 */
@@ -121,10 +129,16 @@ export class PermissionBroker {
         resolve({ decision: "allow-once", by: "policy" });
         return;
       }
- // super 派发的任务 -> super 自决(用户不再逐一授权);升级回流带 noSuper 防递归。
+ // coding agent 有基本工具/环境权限——只有危险指令、重资源操作(build 等)、
+ // 重启/发布/推远端等影响面很宽的指令才送 super 自决;日常读写/普通命令继续走聊天窗权限设置
+ // (规则/会话代答/面板审批),不再「啥指令都问 super」。升级回流带 noSuper 防递归。
       if (input.submittedBy === "super" && this.superRouter && !input.noSuper) {
-        void this.superRouter.ask(input).then(resolve, () => resolve({ decision: "reject", by: "super-error" }));
-        return;
+        const verdict = superApprovalVerdict(input);
+        if (verdict) {
+          void this.superRouter.ask({ ...input, summary: `[${verdict.category}] ${input.summary}` })
+            .then(resolve, () => resolve({ decision: "reject", by: "super-error" }));
+          return;
+        }
       }
       if (!this.online) {
         // 无面板连接:与旧 auto-fail-closed 同语义,不广播。

@@ -1,5 +1,5 @@
 /**
- * 语义流程白板存储:
+ * 语义流程白板存储(,):
  * ① BoardDoc 落盘 .genie/boards/<sessionId>/<taskId>.json(沿用 plans/exports 的 per-session 落地惯例);
  * ② 写入经 BoardDocZ 校验 + 边引用完整性检查,原子写(tmp+rename);
  * ③ symbolRef 三态解析:linked/moved(anchor 文本锚重定位)/broken——
@@ -9,7 +9,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync
 import * as fsp from "node:fs/promises"; // 异步变体专用(board-store-async):9p/drvfs 慢盘上同步 fs 阻塞事件循环
 import { createHash } from "node:crypto";
 import { extname, isAbsolute, join, resolve } from "node:path";
-import { isPathInside } from "./path-safety.js"; // :内存索引按目录归属判(Windows 分隔符)
+import { isPathInside } from "./path-safety.js"; // 2026-10-27:内存索引按目录归属判(Windows 分隔符)
 import { BoardDocZ, BoardNodeZ, type BoardDoc, type BoardEvidence, type BoardEvidenceFile, type BoardLinkState, type BoardSymbolRefZ } from "@lampgenie/protocol";
 import type { z } from "zod";
 import { computeP0Coverage, markDoneFromEvidence, validateP0Accepts } from "./board-accept.js";
@@ -33,7 +33,7 @@ export function boardPath(root: string, sessionId: string, taskId: string): stri
   return join(boardDir(root, sessionId), seg(taskId) + ".json");
 }
 
-// ---- 证据文件指纹----
+// ---- 证据文件指纹(,2026-11-06)----
 /** 内容比对上限:超过就不算 sha256(只靠 mtimeMs+size),避免每次写板都读巨型文件。 */
 const FINGERPRINT_MAX_BYTES = 512 * 1024;
 /** 代码/文本扩展名白名单(sha256 只对这些做);其它(图片/二进制)只记 mtime+size。 */
@@ -60,7 +60,7 @@ function fingerprintFile(root: string, target: string): BoardEvidenceFile | null
   if (!isPathInside(root, abs)) return null; // 只认仓内文件,不把外部路径写进板
   let st;
   try {
-    st = lstatSync(abs); // lstat:符号链接 isFile=false → 不记
+    st = lstatSync(abs); // lstat:符号链接 isFile()=false → 不记
   } catch {
     return null;
   }
@@ -88,7 +88,7 @@ export function captureEvidenceFiles(root: string, targets: string[]): BoardEvid
   return out;
 }
 
-/** 落账时给 evidence 绑文件指纹:
+/** 落账时给 evidence 绑文件指纹():
  * - 盘上同 cmd 且 ok/at/output/note **逐字相同** = 不是本次新提交(整板重存/别的字段改动)→ 保留原指纹,
  *   否则每次保存都会刷新指纹,证据永远不会过期;
  * - 其余(新 cmd / 重跑后重新提交)= 按节点 targets + symbolRef.file 现采;客户端传的 files 一律不采信;
@@ -127,7 +127,7 @@ export function stampEvidenceFingerprints(root: string, doc: BoardDoc, prev: Boa
 
 // ---- 板写入互斥(进程内)----
 /**
- * 同一块板文件的 read-modify-write 互斥(f1。
+ * 同一块板文件的 read-modify-write 互斥(f1,2026-10-24)。
  * 缺陷背景:并行派 3 个 planner 时三者都拿到同一 boardWrite.taskId，
  * `load → merge → save` 各自持旧盘内容写回，后写者按 id 整块替换先写者——先落的板静默消失。
  * 语义:按 boardPath 串成一条链,后来的排在前一个之后执行;
@@ -214,6 +214,7 @@ export interface BoardMergeResult {
 /**
  * 节点级保真合并:agent 提交整板(next)时,把板上已有(prev)的**人的痕迹**合回来,
  * 避免「人改板被 agent 全量覆盖」(人的 comments/done/pos/人工新增节点一次落板全丢)。
+ *
  * 语义:
  * 1. 以 next 为主体与顺序;同 id 节点:
  *    - 保留人的痕迹:comments(next 未给/为空时用 prev)、done(next 未显式给布尔值时保留 prev 的 true;
@@ -342,9 +343,9 @@ export function computeHumanEdits(prevNodes: unknown, nextNodes: unknown, rev: n
 }
 
 /** 校验 + 落盘(原子)。返回 {ok, path} 或 {ok:false, reason}——调用方决定 fail-soft 话术。
- * 代码级落目标两道门(只对 agent 写入面生效):
+ *  代码级落目标两道门(只对 agent 写入面生效):
  * - **落板门**:phase=P0 节点必须带非空 accept,缺则拒收并点名(板上写着 DoD 却没人核对=本次事故根因);
- * - **门**:status=done 时 P0 节点必须全部有 ok=true 证据,否则拒收并列出未覆盖节点(禁止无证据宣称完成)。
+ * - **收口门**:status=done 时 P0 节点必须全部有 ok=true 证据,否则拒收并列出未覆盖节点(禁止无证据宣称完成)。
  * opts.skipGates=true 用于系统侧回填(backfillActualFiles 的 diffstat 对账)与人工改板(board.save):
  * 那不是「agent 宣称完成」,不该被验收门卡住(人工改板也不该因缺 accept 而丢拖动结果)。
  * opts.gateExemptNodeIds=本次**不是 agent 提交**的节点(人改板保真合并保留下来的人工节点):
@@ -353,8 +354,8 @@ export function computeHumanEdits(prevNodes: unknown, nextNodes: unknown, rev: n
  * opts.agentWrite=本次写入来自 **agent 工具面**(board_upsert 传 true):额外启用 label 限长门
  * (q7,见 assertAgentLabels)。人经 board.save 改板不传=不限长——人写长 label 是他的自由,
  * 且盘上存量超长 label 的节点只要不被本次提交触及(exempt/未提交)就不会导致拒收。 */
-/** agent 写入面的常见 kind 笔误 → 最近义合法值(拒收自愈)。
- * 经验证两轮真跑(15 步/14 步)均踩同一个坑:kind 写枚举外值 → **整板拒收**,
+/** agent 写入面的常见 kind 笔误 → 最近义合法值(2026-10-31 拒收自愈)。
+ *  实测两轮真跑(15 步/14 步)均踩同一个坑:kind 写枚举外值 → **整板拒收**,
  *  白付一步 + 一条 400 字符错误回执永驻历史(board_upsert 在 NEVER_COMPACT_TOOLS 里)。
  *  schema 描述里早已写明「只能取本枚举值之一」,模型照踩——文案路线到顶,故改为机制兜底。 */
 const NODE_KIND_ALIASES: Readonly<Record<string, string>> = {
@@ -436,7 +437,7 @@ export interface SaveBoardOpts {
   /** q7 配套:这些 id 的 label 与盘上已有版本逐字相同(=本次提交没改它),
    *  限长门跳过——存量超长 label 不该让 agent 的每次整板提交都被拒。 */
   labelExemptNodeIds?: string[];
- /** 内部参数(saveBoard/saveBoardAsync 自己填,调用方不用传):
+  /**  内部参数(saveBoard/saveBoardAsync 自己填,调用方不用传):
    *  落盘前给新提交的 evidence 捕获目标文件指纹;prev 用于识别「不是本次新提交的证据」并保留原指纹。 */
   fingerprintRoot?: string;
   prevDoc?: BoardDoc | null;
@@ -444,7 +445,7 @@ export interface SaveBoardOpts {
 
 /** 校验门(纯函数,零 fs 操作):saveBoard 与 saveBoardAsync 共用,防两份校验逻辑漂移。
  *  覆盖:agentWrite 自愈(kind 校正/label 截断)→ BoardDocZ.safeParse → 边引用完整性 → id 去重 →
- * P0 落板门(composition 免)→ done 门(P0 覆盖率)→ label 限长门;通过即赋 doc.updatedAt(落盘前)。 */
+ *  P0 落板门(composition 免)→ done 收口门(P0 覆盖率)→ label 限长门;通过即赋 doc.updatedAt(落盘前)。 */
 function validateBoardInput(
   input: unknown,
   opts: SaveBoardOpts,
@@ -458,7 +459,7 @@ function validateBoardInput(
   const parsed = BoardDocZ.safeParse(normalized.value);
   if (!parsed.success) return { ok: false, reason: "白板结构不合法: " + parsed.error.issues.slice(0, 3).map((i) => i.path.join(".") + " " + i.message).join("; ") };
   const doc = parsed.data;
- // evidence 指纹必须在**门之前**捕获——done 门要按过期后的真实状态判(过期=不算通过)。
+  // :evidence 指纹必须在**门之前**捕获——done 收口门要按过期后的真实状态判(过期=不算通过)。
   // 采集不到文件时证据不带 files,与旧行为逐字相同。
   if (opts.fingerprintRoot) stampEvidenceFingerprints(opts.fingerprintRoot, doc, opts.prevDoc ?? null);
   // 边引用完整性:挂在不存在的节点上的边是脏数据,拒收(防 mermaid 渲染炸)。
@@ -472,9 +473,9 @@ function validateBoardInput(
     // 否则人工 P0 节点(人写板不必带 accept)会让 agent 的每次落板都被拒。
     const exempt = new Set(Array.isArray(opts.gateExemptNodeIds) ? opts.gateExemptNodeIds : []);
     const gated = exempt.size > 0 ? doc.nodes.filter((n) => !exempt.has(n.id)) : doc.nodes;
- // composition(作业思路板跳过 P0 accept 门:composition 是表达结构不是代码契约,
+    // composition(作业思路板,2026-11-05)跳过 P0 accept 门:composition 是表达结构不是代码契约,
     // 不出命令级验收(主题/受众/章节/章间关系),结构完整性由类型门(board-contract)管。
- // 覆盖率门/门不动——status=done 仍要求 P0 证据全绿(思路板本身不该有 P0 节点)。
+    // 覆盖率门/收口门不动——status=done 仍要求 P0 证据全绿(思路板本身不该有 P0 节点)。
     if (doc.boardType !== "composition") {
       const v = validateP0Accepts(gated);
       if (!v.ok) return { ok: false, reason: "P0 落目标缺可执行验收: " + v.problems.join("; ") };
@@ -509,7 +510,7 @@ function validateBoardInput(
   return { ok: true, doc, corrections };
 }
 
-/** 内部:直读盘上旧板(不做存在性等待,读不到=null)。写路径用它拿 prev 指纹,**不要**用 loadBoard/loadBoardAsync
+/**  内部:直读盘上旧板(不做存在性等待,读不到=null)。写路径用它拿 prev 指纹,**不要**用 loadBoard/loadBoardAsync
  *  (那两者在文件不存在时有最长 200ms 的等待,会把等待成本加到每次首次落板)。 */
 function readPrevBoardSync(root: string, sessionId: string, taskId: string): BoardDoc | null {
   try {
@@ -530,7 +531,7 @@ async function readPrevBoardAsync(root: string, sessionId: string, taskId: strin
 
 // sync-legacy:异步变体 saveBoardAsync 已就绪;本同步版供既有测试/tasks 脚本/冷路径使用,勿在新代码调用。
 export function saveBoard(root: string, input: unknown, opts: SaveBoardOpts = {}): { ok: true; path: string; doc: BoardDoc; corrections?: string[] } | { ok: false; reason: string } {
- // 先读盘上旧板(用于识别「非本次新提交的证据」并保留原指纹),再走校验门。
+  // :先读盘上旧板(用于识别「非本次新提交的证据」并保留原指纹),再走校验门。
   const loose = input as { sessionId?: unknown; taskId?: unknown } | null;
   const prevDoc = typeof loose?.sessionId === "string" && typeof loose?.taskId === "string"
     ? readPrevBoardSync(root, loose.sessionId, loose.taskId) : null;
@@ -548,6 +549,7 @@ export function saveBoard(root: string, input: unknown, opts: SaveBoardOpts = {}
   }
   // 九期补(drvfs 写后立读不可见窗):写盘成功即记忆路径——list/load 在目录枚举假阴性时按内存索引兜底
   boardMemIndex.set(p, Date.now());
+  invalidateBoardCaches(root, doc.sessionId, doc.taskId); // :写路径主动失效(读缓存防脏读)
   return { ok: true, path: p, doc, ...(corrections.length > 0 ? { corrections } : {}) };
 }
 
@@ -578,7 +580,7 @@ export function loadBoard(root: string, sessionId: string, taskId: string): Boar
     const parsed = BoardDocZ.safeParse(JSON.parse(readFileSync(p, "utf-8")));
     return parsed.success ? parsed.data : null;
   } catch (err) {
- // 六期注意:drvfs 高载下 readFileSync 间歇 EIO/ETIMEDOUT,fail-soft 吞掉=面板「凭空无板」;
+    // 六期踩坑:drvfs 高载下 readFileSync 间歇 EIO/ETIMEDOUT,fail-soft 吞掉=面板「凭空无板」;
     // 非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error("[board-store] 读板失败(非缺文件):", p, String(err).slice(0, 120));
     return null;
@@ -591,9 +593,9 @@ export function listBoards(root: string, sessionId: string): { taskId: string; t
   return listBoardsEx(root, sessionId).items;
 }
 
-/** 带 skipped 计数(损坏/不可读文件数)的列板——面板据此区分「真无板」与「板文件损坏」,
+/** :带 skipped 计数(损坏/不可读文件数)的列板——面板据此区分「真无板」与「板文件损坏」,
  * 不再把损坏静默成「该会话还没有设计白板」。
- * 补 docKind(多板按类型过滤需要);pendingComments 由 server 侧按 board-comments 内存队列合并。 */
+ * 2026-10-22:补 docKind(多板按类型过滤需要);pendingComments 由 server 侧按 board-comments 内存队列合并。 */
 // sync-legacy:异步变体 listBoardsExAsync 已就绪;本同步版供既有测试/冷路径使用,勿在新代码调用(drvfs 忙等会停摆事件循环)。
 export function listBoardsEx(root: string, sessionId: string): { items: { taskId: string; title: string; status: string; updatedAt: number; nodeCount: number; docKind?: string }[]; skipped: number } {
   const dir = boardDir(root, sessionId);
@@ -626,7 +628,7 @@ export function listBoardsEx(root: string, sessionId: string): { items: { taskId
       continue;
     }
   }
- // 内存索引对账(九期注意:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
+  // 内存索引对账(九期实测确认:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
   for (const p of memRescue(root, sessionId)) {
     const f = p.split("/").pop()!;
     if (seen.has(f)) continue;
@@ -652,7 +654,7 @@ export function backfillActualFiles(root: string, sessionId: string, taskId: str
   return saveBoard(root, doc).ok;
 }
 
-// ---- 设计沉淀索引:done 板的项目级「设计记忆」----
+// ---- 设计沉淀索引():done 板的项目级「设计记忆」----
 // 定位:白板=一次代码改动的临时任务草图;任务收官时最终板承载的设计决策沉淀为项目级知识,
 // 在代码档案里可查可看。索引只存指针与反查键(files),板全文仍以 board 文件为单一真相——
 // 点击条目走既有 board.get 通道拿 doc+links,索引损坏/缺失只影响列表不影响数据。
@@ -799,12 +801,12 @@ export function deleteOverlay(root: string, sessionId: string, taskId: string): 
   }
 }
 
-/** 任务 done 收官( §4:
+/** 任务 done 收官( §4,):
  * ① 有 checkpoint sha(开工树脏,快照钉住了任务前基线)→ diffstat 回填 actual_files(计划 vs 实际对账);
  * ② 涉事仓索引后台重建(改完码 code-index 跟着改)。
- * F 修复(撤销三期 B1 的「基线落 HEAD」):sha=null=开工时树干净(git stash
+ * 2026-10-18 F 修复( A P2,撤销三期 B1 的「基线落 HEAD」):sha=null=开工时树干净(git stash
  * create 无变更)——没有钉住的任务前基线,diff HEAD 会把仓里他人/其他任务的在途未提交改动算成本任务
- * 「计划外」(共享仓经验证纯规划板被污染 50 文件)。诚实语义:无可信基线=不对账——不回填 actual_files、
+ * 「计划外」(共享仓实测纯规划板被污染 50 文件)。诚实语义:无可信基线=不对账——不回填 actual_files、
  * 不翻 status=done;索引重建照走(指纹档判过期不依赖 git)。判据=sha 有无,不看板 kind。
  * diffstat/重建失败均 fail-soft。 */
 export async function finalizeBoardOnTaskDone(opts: {
@@ -848,7 +850,7 @@ export async function finalizeBoardOnTaskDone(opts: {
  * 字符长度与换行位置严格不变(逐字符原位替换),故行号/列位置对齐。
  * 单/双引号串未闭合时在行尾收尾(防御坏文本,C 系单行串本就换行即止);
  * 三引号串与模板串按跨行处理,未闭合则吞到文件尾。
- * 动机:旧版在整行原文本上匹配,注释/文档字符串里提到同名符号就命中 →
+ * 动机(2026-10-29):旧版在整行原文本上匹配,注释/文档字符串里提到同名符号就命中 →
  * 板 symbolRef 的「漂移」全是假阳性。 */
 export function maskNonCode(text: string): string {
   const out = text.split("");
@@ -928,7 +930,7 @@ export function maskNonCode(text: string): string {
 /** 纯函数核心(可测):在工作区文件文本里按 anchor/名字定位符号行号。
  * anchor=签名行文本(首选);退化=符号名出现行(词边界防子串误配;
  * 「ClassName.method」形态在源码里不带类前缀——全名不中再试最后一段)。返回 1-based 行号,未命中 null。
- * 假阳性修复:先在 maskNonCode 抹掉注释/字符串后的文本上定位,
+ * 2026-10-29 假阳性修复:先在 maskNonCode 抹掉注释/字符串后的文本上定位,
  * 注释里或字符串字面量里提到同名串不再算命中(否则板 symbolRef 的「漂移」全是假阳性)。 */
 export function locateSymbolInText(fileText: string, ref: SymbolRef): number | null {
   const lines = maskNonCode(fileText).split("\n");
@@ -1002,10 +1004,39 @@ export function resolveBoardLinks(
       ...(r.state === "broken" ? { note: "符号在当前代码中未找到(已删除/改名?)" } : r.state === "moved" && r.line !== undefined ? { note: `行漂移:${ref.line ?? "?"} → ${r.line}` } : {}),
     });
   }
+  //  G3 层①(设计稿 07 §11.4):routeRef 三态(与 symbolRef 对等)。
+  // UI 节点的路由注册处锚:文件在=linked(anchor 命中刷行/行漂移),文件失=broken;越界路径点名。
+  for (const n of doc.nodes) {
+    const rr = (n as { routeRef?: { path?: string; line?: number; anchor?: string } }).routeRef;
+    if (!rr || !rr.path) continue;
+    const resolveRoot = doc.root ?? root;
+    if (rr.path.startsWith("/") || rr.path.split("/").includes("..")) {
+      links.push({ nodeId: n.id, state: "broken", file: rr.path, note: "routeRef 路径越界(绝对路径/.. 逃逸)" });
+      continue;
+    }
+    let text: string | null = null;
+    try {
+      const p = join(resolveRoot, rr.path);
+      if (existsSync(p) && statSync(p).size < 4_000_000) text = readFileSync(p, "utf-8");
+    } catch {
+      text = null;
+    }
+    if (text === null) {
+      links.push({ nodeId: n.id, state: "broken", file: rr.path, note: "routeRef 路由文件未找到(已删除/改名?)" });
+      continue;
+    }
+    let line: number | undefined = undefined;
+    if (rr.anchor) {
+      const idx = text.indexOf(rr.anchor);
+      if (idx >= 0) line = text.slice(0, idx).split("\n").length;
+      else { links.push({ nodeId: n.id, state: "moved", file: rr.path, note: `routeRef 锚文本未命中(${rr.anchor.slice(0, 40)}),路由可能已改名` }); continue; }
+    } else if (rr.line !== undefined && rr.line > 0 && rr.line <= text.split("\n").length) line = rr.line;
+    links.push({ nodeId: n.id, state: "linked", file: rr.path, ...(line !== undefined ? { line } : {}) });
+  }
   return links;
 }
 
-/** targets 真实性核对:板上 targets 是「本次变更指向的实际文件路径」,
+/** targets 真实性核对(2026-11-04):板上 targets 是「本次变更指向的实际文件路径」,
  * 常因写错/文件不存在/写成绝对路径而变成幻影——这里只报不判(audit 的 ok 计算不含本项)。
  * 口径与 resolveBoardLinks 的围栏一致:拒绝以 `/` 开头与含 `..` 段;`#` 之后是行锚/符号锚,
  * 不参与路径核对。目录不算命中(targets 应指向文件)。全程 try/catch,读盘异常归 missing。
@@ -1084,15 +1115,226 @@ export async function loadBoardAsync(root: string, sessionId: string, taskId: st
     const parsed = BoardDocZ.safeParse(JSON.parse(await fsp.readFile(p, "utf-8")));
     return parsed.success ? parsed.data : null;
   } catch (err) {
- // 六期注意同款:非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
+    // 六期踩坑同款:非 ENOENT 的读错误必须留痕(boot log 可见),与「文件不存在」区分。
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error("[board-store] 读板失败(非缺文件):", p, String(err).slice(0, 120));
     return null;
   }
 }
 
-/** listBoardsEx 的异步同构:目录等待 waitForPath;坏目录 fail-soft 留痕;坏文件 skipped++ 语义不变;
- *  memRescue 对账原样(同步内存索引读取,无 fs);返回类型与同步版逐字段相同。 */
-export async function listBoardsExAsync(root: string, sessionId: string): Promise<{ items: { taskId: string; title: string; status: string; updatedAt: number; nodeCount: number; docKind?: string }[]; skipped: number }> {
+// ============================================================================
+//  白板读路径缓存层(fs 元数据热路径)
+// 归因实测(2026-11-20,pg-pass-1 会话 158 板,E 盘 DrvFs):board.list 全量 476ms 中
+// stat×158≈235ms、readFile×158≈408ms(串行),JSON.parse 0.2ms/zod 1.6ms——瓶颈是 fs
+// 系统调用次数而非解析 CPU。策略:热路径只读缓存(内容指纹校验),写路径主动失效,
+// miss 回落原全量路径(不许变慢);容量/TTL 走代码常量,不进 genie.config.json。
+// ============================================================================
+type BoardListItem = { taskId: string; title: string; status: string; updatedAt: number; nodeCount: number; docKind?: string };
+/** board.get 整包缓存(doc+links+overlayB64 派生结果)。指纹=板 json 与 overlay 各自
+ *  mtime+size(2 次 stat)换掉全量读链(60 节点板全量实测 ≈35ms;命中率场景归零)。 */
+interface BoardGetCacheEntry {
+  doc: BoardDoc | null;
+  links: BoardLinkState[];
+  overlayB64: string | null;
+  boardMtime: number;
+  boardSize: number;
+  overlayMtime: number;
+  overlaySize: number;
+  /** links/展示边的外部依赖指纹(引用文件+索引;review w1195) */
+  depsSig: string;
+  at: number;
+}
+const BOARD_GET_CACHE_MAX = 64;
+const BOARD_GET_CACHE_TTL_MS = 60_000; // 兜底 TTL:外进程写盘(不经本进程写路径)最长 60s 后必复验
+const boardGetCache = new Map<string, BoardGetCacheEntry>();
+let boardGetHits = 0;
+/** board.list 结果缓存:目录指纹(文件数+目录 mtime+文件名集哈希)。本仓写板走 tmp+rename,
+ *  目录 mtime 必变;外进程写盘由 TTL 与指纹(文件数/名字集)兜底。 */
+interface BoardListCacheEntry { items: BoardListItem[]; skipped: number; fingerprint: string; at: number }
+const BOARD_LIST_CACHE_MAX = 32;
+const BOARD_LIST_CACHE_TTL_MS = 60_000;
+const boardListCache = new Map<string, BoardListCacheEntry>();
+let boardListHits = 0;
+/** symbolRef 源码文本缓存(resolveBoardLinks 用):file 指纹 mtime+size,编辑即失配。 */
+interface LinkTextEntry { text: string | null; mtimeMs: number; size: number; at: number }
+const LINK_TEXT_CACHE_MAX = 96;
+const LINK_TEXT_TTL_MS = 120_000;
+const linkTextCache = new Map<string, LinkTextEntry>();
+let linkTextHits = 0;
+/** 最近 40 次 board.get 读链 trace(诊断出口;不含板数据本体)。 */
+export const boardLoadTrace: Record<string, number | string>[] = [];
+
+async function statOf(p: string): Promise<{ mtimeMs: number; size: number } | null> {
+  try { const st = await fsp.stat(p); return { mtimeMs: st.mtimeMs, size: st.size }; } catch { return null; }
+}
+function hashOf(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+/** 缓存诊断快照(命中率/容量/trace 尾巴)——诊断脚本与 e2e 消费。 */
+export function boardCacheStats(): { listHits: number; getHits: number; linkTextHits: number; listEntries: number; getEntries: number; linkTextEntries: number; trace: Record<string, number | string>[] } {
+  return { listHits: boardListHits, getHits: boardGetHits, linkTextHits, listEntries: boardListCache.size, getEntries: boardGetCache.size, linkTextEntries: linkTextCache.size, trace: [...boardLoadTrace] };
+}
+/** 测试/诊断用:全清(容量/命中计数/trace)。 */
+export function clearBoardCaches(): void {
+  boardGetCache.clear(); boardListCache.clear(); linkTextCache.clear();
+  boardListHits = 0; boardGetHits = 0; linkTextHits = 0; boardLoadTrace.length = 0;
+}
+/** 写路径主动失效(saveBoard/saveOverlay/deleteOverlay 调):本进程写板必清对应读缓存。
+ *  taskId 缺省=清该会话全部 get 缓存;list 缓存(目录级)一并失效。 */
+export function invalidateBoardCaches(root: string, sessionId: string, taskId?: string): void {
+  const listKey = root + "\u0000" + sessionId;
+  boardListCache.delete(listKey);
+  if (taskId !== undefined) boardGetCache.delete(listKey + "\u0000" + taskId);
+  else for (const k of [...boardGetCache.keys()]) if (k.startsWith(listKey + "\u0000")) boardGetCache.delete(k);
+}
+
+/** resolveBoardLinks 的源码文本读:路径围栏(拒绝对路径/.. 逃逸)+4MB 上限语义同原实现,
+ *  跨请求缓存按 file 指纹(mtime+size)校验——源文件被编辑→失配→重读。 */
+async function readLinkTextCached(resolveRoot: string, relFile: string): Promise<string | null> {
+  // review 修正(w1164):围栏对齐仓内 isPathInside 口径——反斜杠段(Windows ..\ 逃逸,split("/") 拆不开)
+  // 与 join 后的越界一并拒收;4MB 上限语义不变。
+  if (relFile.startsWith("/") || relFile.includes("\\") || relFile.split("/").includes("..")) return null;
+  const p = join(resolveRoot, relFile);
+  if (!isPathInside(resolveRoot, p)) return null;
+  const st = await statOf(p);
+  if (!st || st.size >= 4_000_000) return null; // 不存在/目录(读必炸→null 同语义)/超限
+  const hit = linkTextCache.get(p);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size && Date.now() - hit.at < LINK_TEXT_TTL_MS) {
+    linkTextCache.delete(p); linkTextCache.set(p, hit); // LRU 触碰
+    linkTextHits++;
+    return hit.text;
+  }
+  const text = await fsp.readFile(p, "utf-8").catch(() => null);
+  linkTextCache.set(p, { text, mtimeMs: st.mtimeMs, size: st.size, at: Date.now() });
+  if (linkTextCache.size > LINK_TEXT_CACHE_MAX) linkTextCache.delete(linkTextCache.keys().next().value as string);
+  return text;
+}
+
+/** review 修正(w1195):整包缓存内容含 links 三态与展示边,二者依赖源码文件与 code-sense 索引——
+ *  板 json/overlay 指纹之外补一份「外部依赖指纹」:引用文件集 + index.json 的 mtime+size。
+ *  agent 只改源码不碰板时,缓存不再等 TTL(≤60s)而是立即失配。无 symbolRef 的板返回 ""(零额外 stat)。 */
+async function linksFingerprintOf(doc: BoardDoc | null, root: string): Promise<string> {
+  if (!doc) return "";
+  const files = new Set<string>();
+  for (const n of doc.nodes) { const f = (n as { symbolRef?: { file?: string } }).symbolRef?.file; if (f) files.add(f); }
+  if (!files.size) return "";
+  const parts: string[] = [];
+  for (const f of files) {
+    const st = await statOf(join(doc.root ?? root, f));
+    parts.push(f + ":" + (st ? st.mtimeMs.toString(36) + "." + st.size.toString(36) : "-"));
+  }
+  try {
+    const { indexDir } = await import("@lampgenie/code-sense/callgraph/c2f");
+    const ist = await statOf(join(indexDir(doc.root ?? root), "index.json"));
+    parts.push("idx:" + (ist ? ist.mtimeMs.toString(36) + "." + ist.size.toString(36) : "-"));
+  } catch { parts.push("idx:?"); }
+  return hashOf(parts.join(","));
+}
+
+/** board.get 整包读(缓存优先):命中=2 次 stat 直接回包;miss=原全量路径
+ *  (loadBoardAsync→deriveBoardEdges(展示边)→resolveBoardLinksAsync(C3 只读索引)→loadOverlayAsync)
+ *  逐段计时进 trace。derive/links 语义与 server.ts 原内联实现逐字一致(2026-10-22 展示边/2026-10-27 C3)。 */
+export async function loadBoardPackAsync(
+  root: string,
+  sessionId: string,
+  taskId: string,
+): Promise<{ doc: BoardDoc | null; links: BoardLinkState[]; overlayB64: string | null; cache: "hit" | "miss" }> {
+  const key = root + "\u0000" + sessionId + "\u0000" + taskId;
+  const t0 = Date.now();
+  const bs = await statOf(boardPath(root, sessionId, taskId));
+  const os = await statOf(overlayPath(root, sessionId, taskId));
+  const hit = boardGetCache.get(key);
+  if (
+    hit && Date.now() - hit.at < BOARD_GET_CACHE_TTL_MS
+    && hit.boardMtime === (bs?.mtimeMs ?? -1) && hit.boardSize === (bs?.size ?? -1)
+    && hit.overlayMtime === (os?.mtimeMs ?? -1) && hit.overlaySize === (os?.size ?? -1)
+    && (await linksFingerprintOf(hit.doc, root)) === hit.depsSig // review w1195:源码/索引变化即失配
+  ) {
+    boardGetCache.delete(key); boardGetCache.set(key, hit); // LRU 触碰
+    boardGetHits++;
+    boardLoadTrace.push({ at: t0, sessionId: sessionId.slice(0, 18), taskId: taskId.slice(0, 18), verifyMs: Date.now() - t0, nodes: hit.doc?.nodes.length ?? 0, cache: "hit" });
+    if (boardLoadTrace.length > 40) boardLoadTrace.shift();
+    return { doc: hit.doc, links: hit.links.map((l) => ({ ...l })), overlayB64: hit.overlayB64, cache: "hit" };
+  }
+  const doc = await loadBoardAsync(root, sessionId, taskId);
+  const tLoad = Date.now();
+  let finalDoc = doc;
+  if (doc && (doc.docKind ?? "design") !== "workflow") {
+    const { deriveBoardEdges } = await import("./board-derive.js");
+    const { makeCalleesResolver } = await import("./board-derive-resolver.js");
+    const derived = deriveBoardEdges(
+      doc.nodes as never,
+      (doc.edges ?? []) as never,
+      { calleesOf: makeCalleesResolver(doc.root ?? root) },
+    ) as unknown as typeof doc.edges;
+    if (Array.isArray(derived) && derived.length !== (doc.edges?.length ?? 0)) finalDoc = { ...doc, edges: derived };
+  }
+  const tDerive = Date.now();
+  let links: BoardLinkState[] = [];
+  if (finalDoc) {
+    // C3:连接三态只读盘上索引(loadIndex),不 kick 重建——看图是读路径。
+    const { loadIndex } = await import("@lampgenie/code-sense");
+    const index = loadIndex(finalDoc.root ?? root);
+    const indexHas = (name: string): boolean | null => (index ? (index.byName[name]?.length ?? 0) > 0 : null);
+    links = await resolveBoardLinksAsync(root, finalDoc, indexHas);
+  }
+  const tLinks = Date.now();
+  const overlayB64 = finalDoc ? await loadOverlayAsync(root, sessionId, taskId) : null;
+  const tOv = Date.now();
+  // 回填缓存:指纹取「读完后重 stat」(读盘期间若有写,下次必失配重读——宁可少命中不脏读)
+  const bs2 = await statOf(boardPath(root, sessionId, taskId));
+  const os2 = await statOf(overlayPath(root, sessionId, taskId));
+  boardGetCache.set(key, {
+    doc: finalDoc, links, overlayB64,
+    depsSig: await linksFingerprintOf(finalDoc, root),
+    boardMtime: bs2?.mtimeMs ?? -1, boardSize: bs2?.size ?? -1,
+    overlayMtime: os2?.mtimeMs ?? -1, overlaySize: os2?.size ?? -1,
+    at: Date.now(),
+  });
+  if (boardGetCache.size > BOARD_GET_CACHE_MAX) boardGetCache.delete(boardGetCache.keys().next().value as string);
+  boardLoadTrace.push({
+    at: t0, sessionId: sessionId.slice(0, 18), taskId: taskId.slice(0, 18),
+    loadMs: tLoad - t0, deriveMs: tDerive - tLoad, linksMs: tLinks - tDerive, overlayMs: tOv - tLinks,
+    nodes: finalDoc?.nodes.length ?? 0, cache: "miss",
+  });
+  if (boardLoadTrace.length > 40) boardLoadTrace.shift();
+  return { doc: finalDoc, links, overlayB64, cache: "miss" };
+}
+
+/** listBoardsEx 的缓存优先包装():目录指纹(1 次 readdir+1 次 stat)命中→零逐文件
+ *  读直接回浅拷贝;miss/指纹变→回落全量实现并回填。items 内容/skipped/排序语义逐字段不变。 */
+export async function listBoardsExAsync(root: string, sessionId: string): Promise<{ items: BoardListItem[]; skipped: number }> {
+  const key = root + "\u0000" + sessionId;
+  const hit = boardListCache.get(key);
+  let names: string[] | null = null;
+  let fingerprint = "";
+  try {
+    names = (await fsp.readdir(boardDir(root, sessionId))).filter((f) => f.endsWith(".json"));
+  } catch {
+    names = null; // 目录不在/读失败→全量路径(waitForPath 语义在那边)
+  }
+  if (names) {
+    const dst = await statOf(boardDir(root, sessionId));
+    fingerprint = names.length + ":" + (dst ? dst.mtimeMs.toString(36) : "?") + ":" + hashOf(names.join(","));
+    if (hit && hit.fingerprint === fingerprint && Date.now() - hit.at < BOARD_LIST_CACHE_TTL_MS) {
+      boardListCache.delete(key); boardListCache.set(key, hit); // LRU 触碰
+      boardListHits++;
+      return { items: hit.items.map((it) => ({ ...it })), skipped: hit.skipped };
+    }
+  }
+  const r = await listBoardsExFullAsync(root, sessionId);
+  if (names) {
+    boardListCache.set(key, { items: r.items, skipped: r.skipped, fingerprint, at: Date.now() });
+    if (boardListCache.size > BOARD_LIST_CACHE_MAX) boardListCache.delete(boardListCache.keys().next().value as string);
+  }
+  return r;
+}
+
+/** listBoardsEx 的异步全量实现( 自 listBoardsExAsync 改名,逻辑逐字保留):目录等待
+ *  waitForPath;坏目录 fail-soft 留痕;坏文件 skipped++ 语义不变;memRescue 对账原样(同步
+ *  内存索引读取,无 fs);返回类型与同步版逐字段相同。 */
+async function listBoardsExFullAsync(root: string, sessionId: string): Promise<{ items: BoardListItem[]; skipped: number }> {
   const dir = boardDir(root, sessionId);
   {
     let present = false;
@@ -1127,7 +1369,7 @@ export async function listBoardsExAsync(root: string, sessionId: string): Promis
       continue;
     }
   }
- // 内存索引对账(九期注意同款:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
+  // 内存索引对账(九期实测确认同款:readdir 漏新写文件=「刚生成的板凭空消失」)——漏的补读
   for (const p of memRescue(root, sessionId)) {
     const f = p.split("/").pop()!;
     if (seen.has(f)) continue;
@@ -1151,7 +1393,7 @@ export async function listBoardsAsync(root: string, sessionId: string): Promise<
 /** saveBoard 的异步同构:校验门走共用 validateBoardInput(单一出处,防两份逻辑漂移);
  *  仅落盘段改 fsp.mkdir+writeFile(tmp)+rename(原子写),成功后 boardMemIndex.set 同款。 */
 export async function saveBoardAsync(root: string, input: unknown, opts: SaveBoardOpts = {}): Promise<{ ok: true; path: string; doc: BoardDoc; corrections?: string[] } | { ok: false; reason: string }> {
- // 落盘前先读盘上旧板,用于保留「非本次新提交证据」的原指纹(直读文件,不走 loadBoardAsync
+  // :落盘前先读盘上旧板,用于保留「非本次新提交证据」的原指纹(直读文件,不走 loadBoardAsync
   // 的存在性等待——首次落板不该在写路径上多等 200ms)。
   const loose = input as { sessionId?: unknown; taskId?: unknown } | null;
   const prevDoc = typeof loose?.sessionId === "string" && typeof loose?.taskId === "string"
@@ -1169,6 +1411,7 @@ export async function saveBoardAsync(root: string, input: unknown, opts: SaveBoa
     return { ok: false, reason: "白板落盘失败: " + String(err).slice(0, 120) };
   }
   boardMemIndex.set(p, Date.now());
+  invalidateBoardCaches(root, doc.sessionId, doc.taskId); // :写路径主动失效(读缓存防脏读)
   return { ok: true, path: p, doc, ...(corrections.length > 0 ? { corrections } : {}) };
 }
 
@@ -1266,6 +1509,7 @@ export async function saveOverlayAsync(root: string, sessionId: string, taskId: 
     await fsp.mkdir(boardDir(root, sessionId), { recursive: true });
     await fsp.writeFile(overlayPath(root, sessionId, taskId), buf);
     overlayMemIndex.set(overlayPath(root, sessionId, taskId), { b64: dataB64, at: Date.now() });
+    invalidateBoardCaches(root, sessionId, taskId); // :批注写入使整包缓存失效(overlayB64 在包里)
     return true;
   } catch {
     return false;
@@ -1298,6 +1542,7 @@ export async function deleteOverlayAsync(root: string, sessionId: string, taskId
     // 删除失败容忍(批注不致命)
   }
   overlayMemIndex.delete(p);
+  invalidateBoardCaches(root, sessionId, taskId); // :批注删除使整包缓存失效
 }
 
 /** resolveBoardLinks 的异步同构:路径围栏/4MB 上限/缓存语义不变,fs 调用换 fsp。 */
@@ -1307,26 +1552,16 @@ export async function resolveBoardLinksAsync(
   indexHas: (name: string) => boolean | null,
 ): Promise<BoardLinkState[]> {
   const links: BoardLinkState[] = [];
-  const fileCache = new Map<string, string | null>();
+  const fileCache = new Map<string, string | null>(); // 本次调用内去重(同文件多节点只读一次)
   for (const n of doc.nodes) {
     const ref = n.symbolRef;
     if (!ref) continue;
     const resolveRoot = doc.root ?? root;
     let text: string | null = null;
     if (ref.file) {
+      // :源码文本走跨请求缓存(file 指纹校验+TTL);大板 12 引用×stat+read 实测 25ms/次。
       if (!fileCache.has(ref.file)) {
-        let t: string | null = null;
-        try {
-          // 路径围栏(同同步版):拒绝绝对路径与 .. 逃逸,只读项目根内文件
-          if (!ref.file.startsWith("/") && !ref.file.split("/").includes("..")) {
-            const p = join(resolveRoot, ref.file);
-            const st = await fsp.stat(p);
-            if (st.isFile() && st.size < 4_000_000) t = await fsp.readFile(p, "utf-8");
-          }
-        } catch {
-          t = null;
-        }
-        fileCache.set(ref.file, t);
+        fileCache.set(ref.file, await readLinkTextCached(resolveRoot, ref.file));
       }
       text = fileCache.get(ref.file) ?? null;
     }
@@ -1338,6 +1573,34 @@ export async function resolveBoardLinksAsync(
       ...(r.line !== undefined ? { line: r.line } : {}),
       ...(r.state === "broken" ? { note: "符号在当前代码中未找到(已删除/改名?)" } : r.state === "moved" && r.line !== undefined ? { note: `行漂移:${ref.line ?? "?"} → ${r.line}` } : {}),
     });
+  }
+  //  G3 层①:routeRef 三态(与同步版同语义,fsp 异步)。
+  for (const n of doc.nodes) {
+    const rr = (n as { routeRef?: { path?: string; line?: number; anchor?: string } }).routeRef;
+    if (!rr || !rr.path) continue;
+    const resolveRoot = doc.root ?? root;
+    if (rr.path.startsWith("/") || rr.path.split("/").includes("..")) {
+      links.push({ nodeId: n.id, state: "broken", file: rr.path, note: "routeRef 路径越界(绝对路径/.. 逃逸)" });
+      continue;
+    }
+    let text: string | null = null;
+    try {
+      const p = join(resolveRoot, rr.path);
+      if ((await fsp.stat(p)).size < 4_000_000) text = await fsp.readFile(p, "utf-8");
+    } catch {
+      text = null;
+    }
+    if (text === null) {
+      links.push({ nodeId: n.id, state: "broken", file: rr.path, note: "routeRef 路由文件未找到(已删除/改名?)" });
+      continue;
+    }
+    let line: number | undefined = undefined;
+    if (rr.anchor) {
+      const idx = text.indexOf(rr.anchor);
+      if (idx >= 0) line = text.slice(0, idx).split("\n").length;
+      else { links.push({ nodeId: n.id, state: "moved", file: rr.path, note: `routeRef 锚文本未命中(${rr.anchor.slice(0, 40)}),路由可能已改名` }); continue; }
+    } else if (rr.line !== undefined && rr.line > 0 && rr.line <= text.split("\n").length) line = rr.line;
+    links.push({ nodeId: n.id, state: "linked", file: rr.path, ...(line !== undefined ? { line } : {}) });
   }
   return links;
 }

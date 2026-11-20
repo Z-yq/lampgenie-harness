@@ -1240,18 +1240,38 @@ var voiceRec = null;                    // 录音态:{mr,chunks,mime,stream,star
 var voiceDraftBySid = new Map();        // lockKey(sid) -> true:撰写中(输入锁,按会话绑定)
 var voiceStash = new Map();             // lockKey(sid) -> 任务书文本(结果到达时会话不在前台)
 var voiceDraftTimer = null;             // 撰写回执兜底闹钟(掉线丢帧时解锁,防会话永久锁死)
+/** :发送按钮三态 SVG 图标(send=纸飞机/stop=方点/queue=时钟+纸飞机)。
+ * 与 ICONS 图标库分离(该库走 stroke 描边 24 格;这里是按钮主视觉,用 fill 形态,viewBox 20)。
+ * 纯函数无面板状态依赖,可被单测独立抽取执行。 */
+function sendBtnIconSvg(mode) {
+ // (④):三态路径重做——纸飞机形心对准 20 格圆心(10,10)修偏心;停=圆心方点;排=钟面+右上小飞机。
+  const open = '<svg class="send-ic" viewBox="0 0 20 20" aria-hidden="true">';
+  if (mode === "stop") return open + '<rect class="send-ic-stop" x="6.2" y="6.2" width="7.6" height="7.6" rx="1.6"></rect></svg>';
+  if (mode === "queue") return open + '<circle class="send-ic-clockface" cx="10" cy="10" r="6.6"></circle>' +
+    '<path class="send-ic-hand" d="M10 7 L10 10.2 L12.4 11.6"></path>' +
+    '<path class="send-ic-mini" d="M13.6 3.4 L17 4.8 L13.6 6.2 Z"></path></svg>';
+  return open + '<path class="send-ic-plane" d="M3 10 L17 3.4 L10.6 17 L8.7 11.3 Z"></path>' +
+    '<path class="send-ic-tail" d="M8.7 11.3 L17 3.4 L9.5 8.9 Z"></path></svg>';
+}
 function renderSendBtn() {
  // 发送按钮状态机:fixI17——忙碌且有输入文本→「排」(排队发送,不打断当前任务);
  // 忙碌且输入空→「停」(取消);空闲→「发」。旧「忙碌一律停」会让想发消息的用户误取消在跑任务。
  // 「停/排」busy 态只对确有在跑 turn(running)的会话生效。
+ // :三态文字(发/停/排)改 SVG 图标——纸飞机=发送/方点=停止/时钟+纸飞机=排队;
+ // 类名语义(stop/queue-mode/wait-ack/disabled)与 title 文案原样保留,aria-label 随三态切换。
   const cur = currentSid ? activeTaskOf(currentSid) : activeTaskOf("__none__");
   const busy = !!(currentSid ? steerableTaskOf(currentSid) : steerableTaskOf("__none__"));
   const hasText = !!$("instruction").value.trim();
+ // (④):空输入且无待发附件=禁用态(低对比灰禁,控件自解释「能不能发」);
+ // 仅附件可发(submit 的 pendingAtts 通道);typeof 守卫防 segment 求值期 TDZ。
+  const goDisabled = !hasText && !(typeof pendingAtts !== "undefined" && pendingAtts.length);
   const stop = busy && !hasText;
   const queue = busy && hasText;
-  $("go").textContent = stop ? "停" : queue ? "排" : "发";
+  $("go").innerHTML = sendBtnIconSvg(stop ? "stop" : queue ? "queue" : "send");
   $("go").classList.toggle("stop", stop);
   $("go").classList.toggle("queue-mode", queue);
+  $("go").classList.toggle("disabled", goDisabled);
+  $("go").setAttribute("aria-label", stop ? "停止" : queue ? "排队发送" : "发送");
   $("go").title = stop ? "停止当前任务" : queue ? "排队发送:等当前任务完成后自动发送(不打断);排队中的消息可立即发送/编辑/删除" : "发送(Enter)";
  // 占位符双态(ref i18n zh-CN.ts:85-86:busyPlaceholder「输入内容会排队」/placeholder 空闲文案):
  // 会话有任何在办任务(activeTaskOf=queued/running)即 busy 态;chip 态占位符由 chipMount/chipUnmount

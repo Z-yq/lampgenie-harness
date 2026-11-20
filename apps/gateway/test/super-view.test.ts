@@ -209,7 +209,7 @@ describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", (
  // 指挥台发送载荷带附件(无附件时不写该键,旧帧字节不变); 起带固定会话 id
     expect(pageHtml).toContain('type: "super.turn", text, sessionId: "super", ...(atts.length ? { attachments: atts } : {}) }');
  // 指挥台聊天窗增强:三入口/芯片/上下文/模型 pill/右键项均在页面内
-    for (const s of ["id=\"supAttInput\"", "#supAtts", "#supRefs", "#supModelPill", "function supChatWire", "function supRefAdd", "function supAttAdd", "function supModelMenuOpen", "添加到指挥台", 'sessionId: "super", model: picked']) {
+    for (const s of ["id=\"supAttInput\"", "#supAtts", "#supRefs", "#supModelPill", "function supChatWire", "function supRefAdd", "function supAttAdd", "function supModelMenuOpen", "添加到指挥台", 'sid: "super"']) {
       expect(pageHtml).toContain(s);
     }
     expect(pageHtml).toContain('type: "ask.user.answer", requestId: it.requestId'); // 回答动作与 widget 同协议
@@ -226,8 +226,41 @@ describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", (
     expect(widgetJs).toContain('data-act="open-view"');
     expect(widgetJs).toContain('window.switchView === "function"');
   });
+  it(" 消息体化:super.event 帧进 WS 泵+superOnMsg 事件卡分支(非用户气泡)", () => {
+ // WS 路由门放行 + superOnMsg 消费分支 + 渲染卡分支(事件卡独立 kind,permission-ask 显工具/风险)
+    expect(pageHtml).toContain('m.type === "super.event"');
+    expect(pageHtml).toContain('ek === "permission-ask" ? "权限自决请求"');
+    expect(pageHtml).toContain('kind: "event"');
+    expect(pageHtml).toContain('t.kind === "event"');
+    expect(pageHtml).toContain('evk === "permission-ask" ? "权限自决"');
+    expect(pageHtml).toContain('"工具 " + supEsc(evTool)');
+ // 用户直发轮次渲染不变:super.turn.user 仍走 "u" 气泡(消息体化只改系统来源输入)
+    expect(pageHtml).toContain("supState.entries.push({ kind: \"u\", text: String(m.text || \"\")");
+  });
   it("server:super.turn.done 已改广播(第二标签页可见);error 仍单发发起端", () => {
     expect(serverSrc).toContain('opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.done"');
     expect(serverSrc).toContain('safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.SuperFailed');
+  });
+});
+
+describe(" 十一轮:Super 聊天窗引擎对齐 coding chat(打字卡顿修复)", () => {
+  it("supRenderChat=100ms 尾沿合并入口 + 内容哈希跳过 + 尾部追加快路径(不再任意帧整窗 innerHTML)", async () => {
+    const panel = servePanel(7963, () => {});
+    try {
+      await new Promise((r) => setTimeout(r, 100));
+      const html = await (await fetch("http://127.0.0.1:7963/")).text();
+      for (const marker of [
+        "function supRenderChat()", // 入口=合并壳(调用方零改动)
+        "function supRenderChatNow()",
+        "supChatTimer = setTimeout(function () { supChatTimer = 0; supRenderChatNow(); }, 100)",
+        "if (joined === supChatLastHtml) { supStreamSync(); supChatHeadSync(); return; }",
+        "joined.lastIndexOf(supChatLastHtml, 0) === 0",
+        'live.insertAdjacentHTML("beforebegin", delta)',
+      ]) {
+        expect(html, "缺少标记:" + marker).toContain(marker);
+      }
+    } finally {
+      await panel.close();
+    }
   });
 });

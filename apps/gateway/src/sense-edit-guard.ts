@@ -68,3 +68,73 @@ export function createSenseEditGuard(opts: {
     return lines.join("\n");
   };
 }
+
+/**
+ * 高影响模块编辑硬门(§11 P1「advisory→可测门」):
+ * advisory 警告经验证采纳率 0/4(生产:4 个会话收到高影响警告,code_sense 调用 114-190 次,
+ * radiation 0 次)——建议型注入在 agent 侧可被无成本忽略。本门把「改高影响模块前先拿辐射面
+ * 清单」变成**可拒绝的硬门**(与 plan-gate 同范式):
+ * - 目标文件命中 atlas 热点模块且 riskLevel=high;
+ * - 本任务尚未对其实施 radiation/impact 查询(ledger.coversFileWith 词边界覆盖判定);
+ * - → 拒绝本次编辑,回执指路 `code_sense action=radiation target=<导出符号>`;
+ * - 逃生:同模块第 3 次尝试放行(记 impact.gate.escape,防死锁);非源码/新文件/快照不可用
+ * /索引不可用一律 fail-soft 放行(绝不误伤合法流)。
+ * 与 createHighImpactEditWarning 的关系:警告保留(先给一次软提醒),门在其后;警告每模块一次,
+ * 门每次编辑前检查。通过(已查)后不再打扰。
+ */
+export interface HighImpactEditGateInfo {
+  path: string;
+  upstream: number;
+  isEntrypoint: boolean;
+  denials: number;
+}
+
+export function createHighImpactEditGate(opts: {
+  getAtlasJson: () => unknown;
+  ledger: SenseQueryLedger;
+ /** 读文件内容(覆盖判定要词边界匹配符号;新文件/读失败 → 放行)。 */
+  readFileContent?: (rel: string) => Promise<string | null>;
+ /** 同模块最多拒绝次数(缺省 2;第 3 次放行并记 escape)。 */
+  maxDenials?: number;
+  onDeny?: (info: HighImpactEditGateInfo) => void;
+  onEscape?: (info: HighImpactEditGateInfo) => void;
+}): (rel: string) => Promise<string | undefined> {
+  const attempts = new Map<string, number>();
+  const maxDenials = typeof opts.maxDenials === "number" && opts.maxDenials >= 0 ? Math.floor(opts.maxDenials) : 2;
+  return async (rel: string): Promise<string | undefined> => {
+    const r = String(rel ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!r || !isSourceFile(r)) return undefined;
+    const atlasJson = opts.getAtlasJson() as { derived?: { moduleActivity?: Array<{ path: string; context?: { upstream: number; isEntrypoint: boolean; riskLevel: "high" | "medium" | "low" } }> } } | undefined | null;
+    const modules = atlasJson?.derived?.moduleActivity ?? [];
+    const hit = modules.find((m) => {
+      if (m.context?.riskLevel !== "high") return false;
+      const mPath = m.path.replace(/\\/g, "/");
+      return r === mPath || r.endsWith("/" + mPath) || mPath.endsWith("/" + r);
+    });
+    if (hit === undefined || hit.context === undefined) return undefined;
+    let content: string | null = null;
+    try {
+      content = opts.readFileContent ? await opts.readFileContent(r) : null;
+    } catch {
+      content = null;
+    }
+    if (content === null) return undefined; // 新文件/读失败:fail-soft
+    if (opts.ledger.coversFileWith(r, content, ["radiation", "impact"])) return undefined;
+    const n = attempts.get(hit.path) ?? 0;
+    const info: HighImpactEditGateInfo = { path: hit.path, upstream: hit.context.upstream, isEntrypoint: hit.context.isEntrypoint, denials: n + 1 };
+    if (n >= maxDenials) {
+      try { opts.onEscape?.(info); } catch { /* 留痕失败不阻塞 */ }
+      return undefined; // 逃生放行(已拒 maxDenials 次)
+    }
+    attempts.set(hit.path, n + 1);
+    try { opts.onDeny?.(info); } catch { /* 留痕失败不阻塞 */ }
+    const entry = hit.context.isEntrypoint ? ",入口函数" : "";
+    return [
+      `错误:高影响模块改动被拦(impact-gate):${hit.path}(${hit.context.upstream} 个上游调用方${entry})`,
+      "本任务尚未对该模块做过影响面查询——改它之前必须拿到辐射面清单:",
+      "  code_sense action=radiation target=<本文件的导出符号>(上游调用方/下游依赖/契约/副作用四分面)",
+      "核对清单中的上游调用方是否需要同步修改,然后再重新编辑。",
+      `(已拦 ${n + 1}/${maxDenials} 次;第 ${maxDenials + 1} 次将放行以避死锁——但请先查清单。)`,
+    ].join("\n");
+  };
+}

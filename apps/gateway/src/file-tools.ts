@@ -198,7 +198,8 @@ const MAX_WALK_DEPTH = 12;
 /** 扫描跳过目录(与子代理工具面/文件索引对齐:依赖产物与元数据不入检索面)。 */
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".genie", ".zcode", ".agents", "ref", "devlog", "vendor", "coverage", ".next"]);
 
-/** 上下文卫生尾注阈值:工具输出超过该字节数时提醒主 agent「该拆子任务派子代理」。 */
+/** 上下文卫生尾注阈值:工具输出超过该字节数时提醒主 agent 收窄查询/沉淀结论
+ * (2026-11 默认自己干,只有真正并行的独立工作才派子代理)。 */
 const CONTEXT_HYGIENE_BYTES = 6 * 1024;
 
 /* ── edit_file 改后上下文快照( session 验证落地)────────────────────────
@@ -299,6 +300,8 @@ export interface FileToolsOptions {
  * 由调用方闭包自己计数);返回非空串即追加到 edit_file 回执尾部。
  * 契约扩为可返回 Promise(改前链路闸需异步取符号表);消费点 await,fail-soft 不变。 */
   editHint?: (rel: string) => string | undefined | Promise<string | undefined>;
+ /** 写前硬门(高影响模块 impact-gate):返回非空字符串=拒绝本次写(工具直接回执该文案)。 */
+  preEditGate?: (rel: string, tool: "edit_file" | "write_file") => string | undefined | Promise<string | undefined>;
 }
 
 /**
@@ -661,6 +664,12 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const a = (args ?? {}) as { path?: string; content?: string };
       const abs = await fencePath(root, a.path);
       if (!abs) return `错误:路径非法或越出项目根(${String(a.path ?? "")});只接受项目内相对路径`;
+ // 高影响模块写前硬门:整体重写同样要先有影响面证据。
+      if (opts.preEditGate) {
+        let gateDenied = "";
+        try { gateDenied = String((await opts.preEditGate(relDisplay(root, abs), "write_file")) ?? ""); } catch { gateDenied = ""; }
+        if (gateDenied) return gateDenied;
+      }
       const content = String(a.content ?? "");
       let prevText: string | undefined = ""; // 新文件:基线为空
       let existed = false;
@@ -713,6 +722,12 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const a = (args ?? {}) as { path?: string; old_string?: string; new_string?: string; replace_all?: boolean };
       const abs = await fencePath(root, a.path);
       if (!abs) return `错误:路径非法或越出项目根(${String(a.path ?? "")});只接受项目内相对路径`;
+ // 高影响模块写前硬门:advisory 警告采纳率 0 → 改为可拒绝的门(逃生在 gate 内)。
+      if (opts.preEditGate) {
+        let denied = "";
+        try { denied = String((await opts.preEditGate(relDisplay(root, abs), "edit_file")) ?? ""); } catch { denied = ""; }
+        if (denied) return denied;
+      }
       const oldStr = String(a.old_string ?? "");
       const newStr = String(a.new_string ?? "");
       if (!oldStr) return "错误:old_string 不能为空(新建文件用 write_file)";
@@ -848,12 +863,13 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
     description:
       "在项目文本文件里做正则内容检索(纯文本场景专用)。output_mode=content(缺省,返回 文件:行号: 内容行)/" +
       "files_with_matches(只列文件)/count(每文件命中数)。可用 glob 参数过滤文件(如 *.ts)、-i 忽略大小写、" +
-      "head_limit 限条数(缺省/上限 " + MAX_GREP_HITS + ")。适用:配置值/日志串/文案/命名形态不确定的模糊关键词。" +
-      "不适用:查符号定义/调用关系/改动影响面/接口结构——这些用 code_sense(毫秒级/秒级,能拿到双向调用闭包与索引面;具体能力见 tool_view),grep 扫文件推断调用关系会漏间接调用与跨语言边。",
+      "head_limit 限条数(缺省/上限 " + MAX_GREP_HITS + ")。适用:正则形态的模糊匹配(命名形态不确定/前后缀模式)。" +
+      "不适用:查符号定义/调用关系/改动影响面/接口结构——这些用 code_sense(毫秒级/秒级,能拿到双向调用闭包与索引面;具体能力见 tool_view),grep 扫文件推断调用关系会漏间接调用与跨语言边;" +
+      "也不适用:查「一个标识/字面量/CSS 类/中文文案/协议消息名在哪里被用」——code_sense action=refs 覆盖 代码+测试+文档+tasks 文本,带语境分类,且支持多候选一次查(target=\"a|b|c\" 按候选分组),比 grep alternation 的裸行清单信息密度高;符号在面板模板串里(PANEL_JS_* 内的 JS 函数)symbol miss 时会自动报 [inline-js] 位置。",
     parameters: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "正则或字面关键词(非法正则自动降级为字面匹配)。多个关键词用 alternation 合并成一次检索(a|b|c,preferred over 分多次换关键词重撞——每次往返都会把整段上下文重发一遍);要扫多个不相关位置时同一步并发发多条 grep" },
+        pattern: { type: "string", description: "正则或字面关键词(非法正则自动降级为字面匹配)。多个**候选标识/字面量**优先用 code_sense action=refs(target=\"a|b|c\",带语境分类);确需正则形态(前缀/前后缀模式)才用本工具,多关键词 alternation 合并成一次检索(a|b|c);要扫多个不相关位置时同一步并发发多条 grep" },
         path: { type: "string", description: "检索起始文件或目录(项目相对;缺省项目根)" },
         glob: { type: "string", description: "文件名过滤模式(如 *.ts、*.{json,md})" },
         output_mode: { type: "string", description: "content|files_with_matches|count(缺省 content)" },
@@ -911,10 +927,11 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
       const rows = mode === "content" ? contentLines : mode === "files_with_matches" ? fileHits.slice(0, limit) : countHits.slice(0, limit);
       if (rows.length === 0) return `(零命中)${grepZeroHint(raw)}`;
       const body = rows.join("\n") + (truncated || rows.length >= limit ? `\n(已达上限 ${limit} 条${truncated ? ",结果被截断" : ""};收窄 pattern/path/glob 或加 head_limit 不生效时换更精确的关键词)` : "");
- // 上下文卫生:大输出进主上下文=后续每步 LLM 都背着冗余跑——
-      // 尾注提醒主 agent 这类勘察/实施该拆子任务派子代理(其上下文独立)。六件套只挂主 agent,子代理不受扰。
+ // 上下文卫生(2026-11 改为「默认自己干」):大输出进主上下文=后续每步
+ // LLM 都背着冗余跑——尾注提醒收窄查询并沉淀结论,不再劝大输出一律外包(那会把连续工作切碎)。
+ // 六件套只挂主 agent,子代理不受扰。
       return Buffer.byteLength(body) > CONTEXT_HYGIENE_BYTES
-        ? body + `\n[上下文卫生] 本次输出 ${Math.round(Buffer.byteLength(body) / 1024)}KB 已进入你的上下文——此类大输出勘察/实施建议拆成子任务派 spawn_subagent(子代理上下文独立,过程细节不污染主轨),你只收结论。`
+        ? body + `\n[上下文卫生] 本次输出 ${Math.round(Buffer.byteLength(body) / 1024)}KB 已进入你的上下文——后续用更窄的 pattern/limit 或 code_sense 精准查询,已读内容不整读第二遍;先把结论写进 todo/板,只有确有多段互不依赖的实施才并行派子代理(不要为省上下文把连续工作切碎外包)。`
         : body;
     },
   };

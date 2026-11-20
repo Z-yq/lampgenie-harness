@@ -15,11 +15,17 @@ import {
 } from "./path-prune";
 import {
   microcompactMessages, shouldAggressivePrune, ASCII_TOKENS_PER_CHAR,
-  GROWTH_BUDGET_RATIO, GROWTH_BUDGET_MIN_TOKENS, HEAD_TAIL_AUDIT_TYPE,
+  GROWTH_BUDGET_RATIO, GROWTH_BUDGET_MIN_TOKENS, HEAD_TAIL_AUDIT_TYPE, priceRatioOf,
+  isSegmentCompactableResult,
   type MicrocompactConfig, type MicrocompactPolicyState,
 } from "./microcompact";
-import { createDegradationQueue } from "./degradation-queue";
+import { createDegradationQueue, observationExpired, downgradeConfirmGate, type DegradationCandidate } from "./degradation-queue";
 import { deriveFocusSegments } from "./focus-tracker";
+// 段化改造:段闭合判定+定价(§4.1.3)/确认器观察期候选挑选(§4.1.3③)。
+import {
+  scanSegmentClosures, collectAppliedSegmentIds, isCandidateStillReferenced, pickConfirmDue, type SegmentEvent,
+} from "./segment-tracker";
+import { buildSegmentSummaryPlan, SEGMENT_SUMMARY_EST_TOKENS } from "./segment-summary";
 import { AGE_CODES, ageMicrocompact } from "./microcompact-age";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定 ratio)。
 import { estimateMessagesTokens as estimateMessagesTokensUnified } from "./token-estimate";
@@ -28,6 +34,7 @@ import { buildContextBreakdown } from "./context-breakdown";
 import {
   buildModelDecisionSets,
   collectScoringCandidates,
+  confirmDowngrade,
   goalFromMessages,
   resolveModelScoringConfig,
   scoreContextCandidates,
@@ -41,6 +48,7 @@ import { renderSystemReminder } from "./reminder-source";
 import { createInjectGate, type InjectGate } from "./inject-gate";
 import { spillToolResult } from "./tool-result-spill";
 import { intakeToolResult, shouldIntake, type BigIntakeConfig, type IntakeMeta } from "./big-intake";
+import { shapeToolCallsForHistory } from "./tool-call-shape";
 import { normalizeToolArgs, renderToolArgError } from "./tool-args";
 import { envelopeFingerprint } from "./usage-envelope";
 // 双投影:展示载荷归一化(纯逻辑);loop 只做透传,模型可见路径(content/modelContent)逐字不变。
@@ -885,20 +893,11 @@ export function deriveMessages(
  // 音频回放收敛:journal 全量落音频,但 derive 只保留**最新一条**带音频的 user 消息——
   // 历史轮的音频降级为其文本占位(语音轮的占位即「(语音输入)」),防多轮后全量回放请求被 b64 撑爆。
   const audioIdx: number[] = [];
- // 视觉回放收敛( view_image;2026-11 token 轮 02 改为 turn 口径):
-  // journal 全量落 dataUrl,derive 只回收**上一 turn 及更早**的图——同 turn 内一律保留 dataUrl。
- // 旧口径「只保留最新一张」会在同一 turn 内每新增一张图就重写历史中段(经验证放大 132×),
-  // 提示缓存整段失效。图→turn 归属按事件序推:落在哪个 `turn.start` 之后就属哪个 turn
-  // (message.user / tool.result 的 payload 无 turn 字段,补字段会波及 journal schema 与老 journal 兼容)。
-  const visionEntries: { idx: number; turn: number; step: number }[] = [];
-  let currentTurn = 0;
-  /** 当前 step 号(最近一个 `step.start.payload.step`);vision epoch 回收按它分桶。
-   *  缺失(旧 journal 无 step.start)=0,与 currentTurn=0 同款兜底语义。 */
-  let currentStep = 0;
-  /** 事件流里是否真出现过带数字 turn 的 turn.start。false=旧 journal/缺字段:turn 归属无从判定,
-   *  currentTurn 恒 0 会让「turn >= lastTurn」恒真 → 一张图都不回收(静默退化成永不裁剪,
-   *  迟早把请求顶到端点上限),见下方回收分支的旧口径兜底。 */
-  let sawTurnBoundary = false;
+ // 视觉图片保留策略:derive **不再**做 turn/epoch 图片回收。
+ // 图片一经注入就逐字保留到真压缩边界(compact.done 清空历史),不在历史中段改写——
+ // 任何「历史图 → 文字占位」都会让请求前缀从该位置起失效,与「前缀不变量」冲突。
+ // 容量兜底只剩两条**异常路径**:①provider 图片尺寸 400(repairUnsupportedImage);
+ // ②图片预算错误(image-offload 在请求副本上落盘换占位)。正常路径不再主动回收。
  // 时间旅行「只删对话」:先扫出本会话全部 session.truncate 区间 (boundary, T),T=该 custom 事件自身 seq。
  // 先扫再用是为了「区间与迭代顺序无关」:区间来自**全量**事件流(含迭代中会读到的截断事件本身),
  // 多条 truncate 各自成区间、同时生效(不是只看最后一条)。无 truncate 事件 → 空数组 → 旧行为逐字节不变。
@@ -955,24 +954,12 @@ export function deriveMessages(
     const e = all[idx]!;
     if (e.sessionId !== sessionId) continue;
     if (fromIndex > 0 && idx < fromIndex) continue;
- // truncate 只作用于消息类事件:观测/审计事件(turn.start/step.start/custom…)照常进流,
- // 否则 currentTurn/currentStep 的推演会断裂,vision/压缩口径跟着变。
+ // truncate 只作用于消息类事件:观测/审计事件(turn.start/step.start/custom…)照常进流。
     if (truncateRanges.length > 0
       && TRUNCATABLE_MESSAGE_KINDS.has(e.kind)
       && truncateRanges.some((r) => r.boundary < e.seq && e.seq < r.until)) continue;
     const p = e.payload as Record<string, unknown>;
     switch (e.kind) {
-      case "turn.start":
-        // 当前 turn 号=最近一个 turn.start 的 payload.turn(loop :561 写入);判断回收只认这个。
-        if (typeof p.turn === "number") {
-          currentTurn = p.turn;
-          sawTurnBoundary = true;
-        }
-        break;
-      case "step.start":
-        // vision epoch 分桶用(loop runTurn 写 step.start.payload.step)。缺失=0,同 currentTurn 兜底语义。
-        if (typeof p.step === "number") currentStep = p.step;
-        break;
       case "message.user": {
         const audio = p.audio as AudioInput | undefined;
         const imgs = Array.isArray(p.images) ? (p.images as string[]) : undefined;
@@ -982,7 +969,6 @@ export function deriveMessages(
           ...(imgs?.length ? { images: imgs } : {}),
           ...(audio && typeof audio.data === "string" && audio.data ? { audio } : {}),
         });
-        if (imgs?.length) visionEntries.push({ idx: out.length - 1, turn: currentTurn, step: currentStep });
         if (audio && typeof audio.data === "string" && audio.data) audioIdx.push(out.length - 1);
         break;
       }
@@ -1049,7 +1035,6 @@ export function deriveMessages(
         const timgs = Array.isArray(p.images) ? (p.images as string[]) : undefined;
         if (timgs?.length) {
           out.push({ role: "user", content: "[视觉注入] " + String(p.content ?? "图片已注入"), images: timgs });
-          visionEntries.push({ idx: out.length - 1, turn: currentTurn, step: currentStep });
         }
         break;
       }
@@ -1069,10 +1054,9 @@ export function deriveMessages(
         // 现在 payload.tail 携带可重建消息数组,清空后逐条回放;其后的 message.system 照旧重注入摘要。
         if (typeof p.summary === "string" && (p.summary as string).trim().length > 0) {
           out.length = 0;
-          // 压缩边界后旧下标全部失效(消息数组被清空重放)——清空 idx 账,防回收改错消息。
-          // audioIdx 必须一起清:漏清时末尾 audioIdx.slice(0,-1) 会拿陈旧下标去删重放后另一条
-          // 消息的 audio(索引错位=静默删错,或全长时静默漏删)。
-          visionEntries.length = 0;
+ // 压缩边界后旧下标全部失效(消息数组被清空重放)——audioIdx 必须清:
+ // 漏清时末尾 audioIdx.slice(0,-1) 会拿陈旧下标去删重放后另一条消息的 audio
+ // (索引错位=静默删错,或全长时静默漏删)。图片随 compact.done 的历史清空一并消失。
           audioIdx.length = 0;
           // tail 防御性校验:role 必须三选一、content 必须字符串(坏数据跳过,不污染重放)。
           const tail = Array.isArray(p.tail) ? (p.tail as Record<string, unknown>[]) : [];
@@ -1114,58 +1098,9 @@ export function deriveMessages(
   if (audioIdx.length > 1) {
     for (const i of audioIdx.slice(0, -1)) delete (out[i] as { audio?: AudioInput }).audio;
   }
-  // 视觉回放收敛(turn 边界口径,token 优化轮 02):回收**当前 turn 之前**的图,以及同 turn 内
-  // 超过上限的旧图——删 dataUrl、文本换占位(模型仍可再 view_image);保留下来的图 dataUrl 原样,
-  // 这样同一 turn 内连续 view_image 时请求前缀逐字节稳定(旧口径每加一张图就重写历史中段,放大 132×)。
-  const lastTurn = currentTurn;
- /** 视觉 epoch 桶宽(2026-10-29 token 轮 04,经验证归因最大项 48.5%)。
-   *  病根(旧口径):回收按「同 turn 只留最新 2 张」——同一 turn 里每看第 3 张图,就把历史
- * 中段的第 1 张改写成占位,请求前缀从该位置起逐字节不同 → 整条历史重新计费。经验证 PPT 校对
-   *  会话(web-1793246472452)583 次调用里 **479 次**落入这一类,单次 21,368 uncached,
-   *  合计 10.2M uncached = 全部未命中 token 的 48.5%(脚本 .genie/tmp/agent-eff/analyze15.py)。
-   *  改法:回收粒度从「每张图」放宽到「每 VISION_EPOCH_STEPS 步 + 批量裁剪」——同 epoch 内新增
-   *  图只追加、不改写历史;只有候选池超过 MAX_VISION_KEEP 时才一次裁到 MAX_VISION_KEEP_AFTER,
-   *  即**每 5 张图才失效一次前缀**(旧口径每张一次)。一张图最长存活 2 个 epoch(≈40 步),容量有界。
-   *  为什么用 step 而不是别的维度:step.start 已在 journal 里逐事件可见(loop runTurn 写
-   *  payload.step),deriveMessages 本来就在全量扫事件流,加一个计数器零额外 IO。 */
-  const VISION_EPOCH_STEPS = 20;
-  /** 候选池上限:同 turn + 最近 2 个 epoch 内的图若不超过此数,全部保留(前缀绝对稳定)。
- * 取 8 是容量/频次权衡:8 张图常驻约 12K token(单图 ~1.5K),而一次前缀失效经验证代价
-   *  21,368 uncached token——宁可多常驻几张,也别反复改写历史。 */
-  const MAX_VISION_KEEP = 8;
-  /** 超过候选池上限时批量裁剪到的张数。一次删多张、只失效一次前缀;裁到 4 使下次裁剪间隔 ≈5 张
-   *  (旧口径间隔 1 张)。 */
-  const MAX_VISION_KEEP_AFTER = 4;
-  const keepVision = new Set<number>(); // visionEntries 下标(=保 dataUrl 的图)
-  if (!sawTurnBoundary) {
-    // 兜底(旧 journal):事件流里没有任何带数字 turn 的 turn.start 时,turn 归属无从判定,
-    // currentTurn 恒 0 会让「turn >= lastTurn」恒真 → 一张图都不回收,静默退化成永不裁剪。
-    // 这里退回 turn 口径引入前的旧行为:只保留最新一张图,更早的全部回收占位。
-    if (visionEntries.length > 0) keepVision.add(visionEntries.length - 1);
-  } else {
-    // epoch 口径(两步):
-    // ① 先按「turn=当前 turn 且 epoch ≥ 当前-1」圈定候选——跨 turn 或跨 2 个 epoch 的图一律回收,
-    //    这一刀只在 turn 边界/epoch 边界发生,不会因为「又看了一张图」而触发。
-    // ② 候选超过 MAX_VISION_KEEP 时才批量回收到 newest MAX_VISION_KEEP_AFTER 张——**一次删多张**
-    //    只让前缀失效一次,而不是像旧口径那样每来一张新图就失效一次(1/张 → 1/批)。
-    // 上一 epoch 也留在候选里:刚看过、模型可能还在推理的图不该在桶边界一到就立刻失忆。
-    const curEpoch = Math.floor(currentStep / VISION_EPOCH_STEPS);
-    const cand: number[] = [];
-    for (let i = 0; i < visionEntries.length; i++) {
-      const v = visionEntries[i]!;
-      if (v.turn < lastTurn) continue;
-      if (Math.floor(v.step / VISION_EPOCH_STEPS) >= curEpoch - 1) cand.push(i);
-    }
-    const keepFrom = cand.length > MAX_VISION_KEEP ? cand.slice(cand.length - MAX_VISION_KEEP_AFTER) : cand;
-    for (const i of keepFrom) keepVision.add(i);
-  }
-  for (let i = 0; i < visionEntries.length; i++) {
-    if (keepVision.has(i)) continue;
-    const m = out[visionEntries[i]!.idx] as { images?: string[]; content: string } | undefined;
-    if (!m?.images?.length) continue;
-    delete m.images;
-    m.content = "[视觉注入] (历史图片已从上下文移除;需要再看用 view_image)";
-  }
+ // 视觉图片不在此处回收:已注入的图逐字保留到真压缩边界,
+// 只有 compact.done(历史清空)或 provider 图片错误兜底(repairUnsupportedImage/image-offload)
+// 才会出现「图片 → 文字」。这样正常步骤的前缀逐字节稳定,不再按 turn/epoch 主动改写历史。
   return repairToolPairing(out);
 }
 
@@ -1439,6 +1374,9 @@ export class AgentLoop {
  /** cache-aware 前缀稳定策略状态( v2):clock 每步 +1;
    *  其余字段首次使用时从 journal 末条 context.prune 播种(跨 loop 实例延续——gateway 每 turn 新建 loop)。 */
   private pruneClock = 0;
+ /** 本 turn 首步:段批只在 turn 首步结算上一 turn/更早闭合的候选,中段只入队不裁决
+ * (设计 §4.1.2/§4.1.3:真裁攒批在 turn 末,前置=热区已清空;turn 中段结算会带 tail 碎前缀)。 */
+  private turnFirstStep = false;
   /** 冻结区条数 + 边界 toolCallId(前缀稳定器:只有重置才前移)。 */
   private frozenCount = 0;
   private pruneAnchor?: string;
@@ -1450,20 +1388,55 @@ export class AgentLoop {
  /** 本 turn 已重置次数(turn 首步归零,同 turn ≤1)。 */
   private resetsThisTurn = 0;
   private pruneStateSeeded = false;
- /** 上一步请求的上下文估算 tokens(算每步 growth% 供事件与看板)。
- * 缺口#34(设计 §4.3.1 S2):该字段曾是"声明后从未赋值"的死字段——
- * 现每步请求成功后用 provider usage.totalTokens(缺省 input+output)回填真值:
- * growthTokens/budgetGrowthPct/growthBudgetTokens 的分母从「未标定估算」切到真值口径。 */
+ /** 上一步请求的上下文 tokens(provider usage.inputTokens 真值;预算分母/归因用)。 */
   private lastRequestContextTokens?: number;
+ /** 上一步**消息面**估算(rawContextTokens;与 API 全量 input 不同量纲——含 system/tools)。
+ * 修复:原来 growthTokens = 消息估算 − 上步 API input,系统性为负(差 50k+),
+ * budgetExceeded 永远 0;现改为「消息估算 Δ」,分母仍用上步全量上下文(设计 §4.3 的 1.5%)。 */
+  private lastRawContextTokens?: number;
  /** 本地口径命中率(公共前缀字节占比,0~1;估算侧;§4.6.3 在线护栏用)。
  * undefined=尚无上一步可比(首步/上步无法计算)。 */
   private lastLocalHitRate?: number;
  /** 在线护栏剩余步数(§4.6.3):本地口径断崖后,禁改前缀的步数倒计时。 */
   private localGuardStepsLeft = 0;
- /** budgetExceeded 连续计数(缺口#21 处置分支:1=收紧 spill,2=aggressive,3+=登记 compact 建议)。 */
+ /** budgetExceeded 连续计数(缺口#21 处置分支:1=收紧 spill×2,2=再收紧×4,3+=登记 compact 建议;
+ * 均为**写时定形**,不改前缀——)。 */
   private budgetExceededStreak = 0;
- /** 降级事件队列(缺口#26:superseded/焦点边界入队+定价,步末按 N>r·B/W 裁决,shadow 观测)。 */
+ /** 降级候选队列(段化:段闭合入队+定价,turn 末按拍板公式 N×W>(W′+tail)×r 整批 settle)。 */
   private readonly degradationQueue = createDegradationQueue();
+ /** 已见过的段闭合边界键(segmentId;防同一边界重复入队)。 */
+  private readonly segmentSeenCloses = new Set<string>();
+ /** 段闭合扫描的本会话事件缓存(2026-11 修复:原实现每步 journal.readAll 全量扫——
+ * 生产环境 journal 2GB/千会话时主线程 100% CPU 卡死,WS/HTTP 全部饿死。段是会话内概念,
+ * 只缓存本会话事件并按 seq 增量追加;无新事件=跳过全量派生)。 */
+  private segmentScanEvents: SegmentEvent[] = [];
+ /** 已应用段批的 toolCallId 台账:从 journal `context.segment.applied` 回放 + 本实例应用时追加。
+ * 设计 §4.1.3:每条内容只随其所属段闭合降级一次;scanSegmentClosures 会按边界累计定价,
+ * 没有这张台账就会在后续边界把已裁过的结果重新入队。 */
+  private readonly appliedSegmentIds = new Set<string>();
+ /** 缓存已覆盖的最大 seq(-1=尚未加载)。 */
+  private segmentScanSeq = -1;
+ /** turn 末 settle 批准、待 microcompact 段批档执行的 toolCallId 集(应用后清空)。 */
+  private pendingSegmentClear?: ReadonlySet<string>;
+ /** 段批语义摘要(设计 §3.6.3 温区第一手段):按 pendingSegmentClear 生成并缓存;
+ * 无 digest/失败/空 → undefined,回落确定性占位。 */
+  private pendingSegmentSummaries?: ReadonlyMap<string, string>;
+ /** 摘要缓存对应的 plan 签名(同 plan 多步重试不重复烧模型)。 */
+  private pendingSegmentSummarySig?: string;
+ /** 本 plan 中「摘要形态」的 toolCallId 子集(其余条目走确定性占位兜底)。 */
+  private readonly pendingSegmentSummaryIds = new Set<string>();
+ /** 最近完整 turn 的步数史(最多 3 个):取**最小值**作为下一 turn 剩余步数 N 的保守估计。
+ * 关键(修正):gateway 每个任务可能新建 AgentLoop,实例字段跨 turn 会丢;
+ * 历史必须从**journal 事件**重放(turn.start→step.start…→turn.end),不能只靠进程内计数。 */
+  private readonly turnStepHistory: number[] = [];
+ /** 当前未闭合 turn 已见的 step.start 数(增量事件跨多次扫描,不能只看单次 delta)。 */
+  private turnStepsOpen = 0;
+ /** 观察期「仍被引用」的 id:settle 时排除,执行/冻结区重放也必须继续保护(modelKeep)。 */
+  private readonly pendingSegmentKeep = new Set<string>();
+ /** jev-150m 降级确认结果(§4.1.3③ 语义兜底):id→高置信 keep/drop;低置信不写入,回落结构信号。 */
+  private readonly segmentConfirmResults = new Map<string, { keepResult: boolean | undefined; confidence: number; atStep: number }>();
+ /** 当前模型名(priceRatioOf 逐模型现算 r 用;每步 快照刷新)。 */
+  private curModelName?: string;
  /** 上一步发出的请求消息(本地口径命中率=公共前缀消息字节占比;§4.6.3 在线护栏)。 */
   private lastReqMessages?: readonly Message[];
  /** 当前焦点段 id(缺口#29:deriveFocusSegments 派生;user 边界切换)。 */
@@ -1895,8 +1868,12 @@ export class AgentLoop {
     this.lastTrajectoryText = line.length > 120 ? line.slice(0, 119) + "…" : line;
   }
 
-  /** 跑一个 turn:用户输入 → 模型 → 工具(可多 step)→ 结束。 */
-  async runTurn(userText: string, images?: string[], meta?: { displayText?: string; attachments?: unknown[] }, audio?: AudioInput): Promise<string> {
+ /** 跑一个 turn:用户输入 → 模型 → 工具(可多 step)→ 结束。
+ * meta.event 在场=本输入是系统/机器来源(super 通道的权限自决、转接、通知),
+ * 落 message.system(payload:{ text, event })而非 message.user——模型消费面同源
+ * (deriveMessages 把 message.system 以「[系统提醒]」user 角色注入,既有系统消息面)。
+ * event 缺席=行为与旧版逐字节一致(真实用户消息照落 message.user)。 */
+  async runTurn(userText: string, images?: string[], meta?: { displayText?: string; attachments?: unknown[]; event?: Record<string, unknown> }, audio?: AudioInput): Promise<string> {
     const { journal, sessionId } = this.opts;
     // 每次 runTurn 重置取消态:上一个 turn 的 cancel 不影响新 turn(gateway 每任务新建 loop,双保险)。
     this.aborted = false;
@@ -1943,6 +1920,7 @@ export class AgentLoop {
         const turn = ++AgentLoop.turnCounter;
         journal.append({ kind: "turn.start", sessionId, payload: { turn } });
         journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: "pre-step-blocked", ...(blockReason !== undefined ? { detail: blockReason } : {}) } });
+        this.settleSegmentsBeforeTurnEnd(journal, sessionId, turn);
         return "";
       }
       input = nextInput;
@@ -1963,6 +1941,12 @@ export class AgentLoop {
  // 循环护栏状态随 turn 重置(跨 turn 不累积:上一轮的连击/配额不带进新任务)。
     this.toolGuard = new ToolLoopGuard(turn);
     journal.append({ kind: "turn.start", sessionId, payload: { turn } });
+ // 消息体化:event 在场=系统来源输入(super 通道权限自决/转接/通知),落
+ // message.system(payload:{ text, event });模型经 deriveMessages 的 message.system 分支
+ // 以「[系统提醒]」user 角色消费(与 coding↔subagent 系统注入同一通道)。event 缺席=旧分支逐字不变。
+    if (meta?.event) {
+      journal.append({ kind: "message.system", sessionId, payload: { text: input.userText, turn, event: meta.event } });
+    } else {
     journal.append({ kind: "message.user", sessionId, payload: {
       text: input.userText,
       // txa3:归属轮次(用户消息不属于某 step,故只带 turn)。
@@ -1973,8 +1957,10 @@ export class AgentLoop {
       ...(input.images?.length ? { images: input.images } : {}),
       ...(input.audio ? { audio: input.audio } : {}),
     } });
+    }
 
     const maxSteps = this.opts.maxSteps ?? 10;
+    this.turnFirstStep = true;
     let finalText = "";
  // 末步耗尽不再是「直接截停」,新终态 budget-exhausted(已做一次无工具收尾请求);
  // max-steps 保留在联合里只为兼容旧 journal/旧消费方按 reason 字符串读历史。
@@ -1998,6 +1984,7 @@ export class AgentLoop {
  // 模型切换后旧模型的原生元数据(reasoning/thinking)不能回放给新模型,正常请求也要按当前模型降级。
         const llmModelVendor = this.opts.llm as { model?: string; modelName?: string };
         const modelForDerive = llmModelVendor.modelName ?? llmModelVendor.model;
+        this.curModelName = modelForDerive;
  // provider 无模型名(=undefined)时不传:deriveMessages 走旧行为,逐字不变。
         const freshFromLastUser = this.opts.freshContext === true;
         const derived = modelForDerive !== undefined
@@ -2009,39 +1996,90 @@ export class AgentLoop {
  // 增长突增:上一请求经验证 tokens 与本次组装前估算的差 ≥ 阈值 → 本步用激进组清理。
         // 这是「膨胀速度」维度;常规阈值组清理只在总量到线时触发,感知不到单步灌入一大坨。
         const rawContextTokens = estimateMessagesTokensUnified(derived, this.stepTokenOpts());
- // 缺口#26(§4.1.2):温区精简改由降级事件驱动——焦点边界(缺口#29 deriveFocusSegments)
- // 切换时,把上一焦点工作段的旧 tool 结果入队+定价(B/W/N 记账);是否真裁由队列内
- // N>r·B/W 裁决(缺口#25 同判据),阈值触发保留为兜底(shouldLog 阶段落账 pending 观测)。
+ // 段闭合扫描先于结算:turn 首步能看到上一 turn 的 turn.end/phase 闭合
+ // (新 loop 实例也从 journal 重放;中段新闭合只入队,不在此步裁决)。
+        this.collectClosedSegments(journal, sessionId);
+ // 段化 settle(§4.1.2/§4.1.3):
+ // 真裁攒批在 turn 末;唯一的中段结算点是**下一 turn 首步**(上一 turn 的 turn.end 已闭合、
+ // 热区已清空)。turn 中段只入队+定价,不裁决不.apply——否则改写点之后的热区 tail 会被
+ // 未命中重付,且新前缀会被后续 phase 闭合反复打碎。
+ // 首步结算时 tail = 本轮新 user 段锚(段锚永不清,如实进代价项);turn 末批 tail≈0。
         {
           try {
-            const segs = deriveFocusSegments(
-              journal.readAll().map((e) => ({ type: e.kind ?? "", seq: Number(e.seq ?? 0), payload: e.payload })),
+            const r = priceRatioOf(this.curModelName);
+            const pending = this.turnFirstStep ? this.degradationQueue.pending() : [];
+ // 观察期结构检查(§4.1.3 三段式②):仍被引用的条目不参与本批,留在队列。
+            const referenced = new Set(
+              pending.filter((c) => isCandidateStillReferenced(c, this.segmentScanEvents)).map((c) => c.id),
             );
-            const active = segs.length > 0 ? segs[segs.length - 1] : undefined;
-            if (active !== undefined && active.focusId !== this.currentFocusId) {
-              this.currentFocusId = active.focusId;
-              for (const m of derived) {
-                if (m.role !== "tool" || typeof m.content !== "string" || m.content.length < 2000) continue;
-                const where = m.toolCallId ?? "";
-                this.degradationQueue.enqueue({
-                  id: `${active.focusId}:${where}:${m.content.length}`,
-                  tool: "tool", where,
-                  savedTokensW: Math.floor(m.content.length * 0.25),
-                  breakCostTokensB: rawContextTokens,
-                  remainingStepsN: 10,
-                  queuedAtStep: this.pruneClock,
+            const batch = this.turnFirstStep
+              ? this.approveSegmentBatch(derived, pending, referenced, this.remainingStepsEstimate())
+              : undefined;
+            if (batch && batch.approved > 0) {
+              try {
+                journal.append({
+                  kind: "custom", sessionId,
+                  payload: {
+                    what: "context.segment.settle", turn, step,
+                    approvedCount: batch.approved, deferredCount: batch.deferred, priceRatio: r,
+                    remainingStepsN: batch.remainingStepsN, batchW: batch.batchW,
+                    batchWPrime: batch.batchWPrime, tailTokens: batch.tailTokens,
+                    at: Date.now(),
+                  },
                 });
+              } catch { /* 观测失败不阻塞 */ }
+            }
+ // 确认器调度(§4.1.3③ 语义兜底:结构信号已排除被引用项后,每步 ≤1 条请模型确认)。
+ // 结果回填 segmentConfirmResults,供下一次 settle 判定;低置信/超时回落结构信号。
+            const scoringCfg = this.opts.modelScoring;
+            if (scoringCfg && scoringCfg.mode !== "off") {
+              const confirmTarget = pickConfirmDue(this.degradationQueue.pending(), this.pruneClock);
+ // 语义兜底只处理「结构信号说不清」的条目:仍被引用的直接回保护区,不烧模型。
+              if (confirmTarget && !this.segmentConfirmResults.has(confirmTarget.id)
+                && !isCandidateStillReferenced(confirmTarget, this.segmentScanEvents)) {
+                const toolMsg = derived.find((m) => m.role === "tool" && m.toolCallId === confirmTarget.id);
+                const preview = typeof toolMsg?.content === "string" ? toolMsg.content.slice(0, 500) : "";
+                if (preview !== "") {
+                  void confirmDowngrade(scoringCfg, { id: confirmTarget.id, role: "tool", preview }, this.stepGoal)
+                    .then((confirmed) => {
+                      if (!confirmed) return;
+                      this.segmentConfirmResults.set(confirmTarget.id, {
+                        keepResult: confirmed.keepResult,
+                        confidence: confirmed.confidence,
+                        atStep: this.pruneClock,
+                      });
+                      if (this.segmentConfirmResults.size > 500) {
+                        const first = this.segmentConfirmResults.keys().next().value;
+                        if (first !== undefined) this.segmentConfirmResults.delete(first);
+                      }
+                      try {
+                        journal.append({
+                          kind: "custom", sessionId,
+                          payload: {
+                            what: "context.model.score", kind: "downgrade-confirm",
+                            turn, step, id: confirmTarget.id,
+                            keepResult: confirmed.keepResult, confidence: confirmed.confidence,
+                            durationMs: confirmed.durationMs, at: Date.now(),
+                          },
+                        });
+                      } catch { /* 观测落账失败不打断 */ }
+                    })
+                    .catch(() => { /* fail-soft:确认器报错回落结构信号 */ });
+                }
               }
             }
-          } catch { /* 焦点派生失败不阻塞主链 */ }
+          } catch { /* settle 失败不阻塞主链 */ }
         }
- // 缺口#22 在线护栏生效步:禁前缀改写(growth-spurt 冻结);缺口#21 连续超预算 ≥2 步 →
- // 升级强制清理(处置分支第二档,滞后一步生效)。
-        const growthSpurt = (this.localGuardStepsLeft > 0 ? false : shouldAggressivePrune(
+ // 首步结算点已过:turn 中段只入队(本步 collectClosedSegments 在 settle 之前已跑),
+ // 不再在这里二次扫描/结算。真正的中段裁剪只走 microcompact 阈值兜底(保命例外)。
+        this.turnFirstStep = false;
+ // 缺口#22 在线护栏生效步:禁前缀改写(growth-spurt 冻结);缺口#21 连续超预算 →
+ // 只收紧**写时定形**(spill/big-intake),不再触发 growth-spurt(改前缀=碎缓存, // 「一定不要改前缀」)。growthSpurt 仅保留装配方显式配置的档位。
+        const growthSpurt = this.localGuardStepsLeft > 0 ? false : shouldAggressivePrune(
           rawContextTokens,
           this.lastContextTokens,
           this.opts.growthSpurtTokens,
-        )) || this.budgetExceededStreak >= 2;
+        );
         if (growthSpurt) {
           try {
             journal.append({
@@ -2056,6 +2094,13 @@ export class AgentLoop {
             });
           } catch { /* 遥测落账失败不打断主链 */ }
         }
+ // 增量口径:与上一步**消息面估算**比(不可拿消息估算减 API 全量 input,
+ // 两者差 system/tools 的 50k+ 会恒为负;经验证 context.prune.growth 全 0 = 预算形同虚设)。
+        const previousRawContextTokens = this.lastRawContextTokens;
+        const growthTokens = previousRawContextTokens !== undefined
+          ? Math.max(0, rawContextTokens - previousRawContextTokens)
+          : undefined;
+        this.lastRawContextTokens = rawContextTokens;
         this.lastContextTokens = rawContextTokens;
         // Phase 1 shadow:后台评分只留痕;Phase 2 active:高置信度 keep/drop 参与本步剪枝。
         // 节拍由跨 turn 累加的 scoringTick 决定(step 每 turn 归零,直接 % 会每 turn 首步必评)。
@@ -2095,12 +2140,101 @@ export class AgentLoop {
           ...(this.lastResetTokens !== undefined ? { lastResetTokens: this.lastResetTokens } : {}),
           ...(this.pruneAnchor !== undefined ? { frozenAnchor: this.pruneAnchor } : {}),
         };
+ // 段批语义摘要(设计 §3.6.3 温区第一手段):只对 settle 批准的 plan 生成一次,
+// 同 plan 多步重试复用;digest 未配置/超时/空 → 空 Map,回落确定性占位。
+        let segmentSummaryPlan: ReadonlyMap<string, string> | undefined;
+        if (this.pendingSegmentClear && this.pendingSegmentClear.size > 0) {
+ // 只有 tracker 逐条判定「摘要划算」的 id 才烧模型;其余条目占位兜底。
+          const summaryIds = new Set(
+            [...this.pendingSegmentSummaryIds].filter((id) => this.pendingSegmentClear!.has(id)),
+          );
+          if (summaryIds.size > 0) {
+            const sig = [...summaryIds].sort().join(",");
+            if (this.pendingSegmentSummarySig !== sig) {
+              this.pendingSegmentSummarySig = sig;
+              this.pendingSegmentSummaries = await buildSegmentSummaryPlan(derived, {
+                ids: summaryIds,
+                goal: this.stepGoal,
+                ...(this.opts.bigIntake?.digest ? { digest: this.opts.bigIntake.digest } : {}),
+                ...(this.opts.bigIntake?.digestTimeoutMs !== undefined
+                  ? { digestTimeoutMs: this.opts.bigIntake.digestTimeoutMs }
+                  : {}),
+              });
+            }
+            if (this.pendingSegmentSummaries && this.pendingSegmentSummaries.size > 0) {
+              segmentSummaryPlan = this.pendingSegmentSummaries;
+            }
+          }
+        }
+        const keepIds = this.pendingSegmentKeep.size > 0
+          ? new Set([...(modelSets?.keep ?? []), ...this.pendingSegmentKeep])
+          : modelSets?.keep;
         const microcompactConfig: MicrocompactConfig = {
           ...baseMicrocompact,
           policyState,
-          ...(modelSets ? { modelKeep: modelSets.keep, modelDrop: modelSets.drop } : {}),
+ // v2 经济判据生产转正(拍板公式 W/W′>r/N,缺口#37 弃 B 口径)
+ // + r 逐模型现算(缺口#36:deepseek 系按价表,其余家统一 10)。
+          breakEvenGateV2: true,
+          modelName: modelForDerive,
+          ...(this.pendingSegmentClear && this.pendingSegmentClear.size > 0
+            ? { segmentClearPlan: this.pendingSegmentClear }
+            : {}),
+          ...(segmentSummaryPlan ? { segmentSummaryPlan } : {}),
+          ...(keepIds ? { modelKeep: keepIds } : {}),
+          ...(modelSets ? { modelDrop: modelSets.drop } : {}),
         };
         const compacted = microcompactMessages(derived, microcompactConfig);
+ // 应用台账:只要**真正被 cleared** 的 id(含普通冻结区重放清掉的)都记 applied,
+// 设计 §4.1.3「每条内容只降级一次」;落 journal 供新 loop 回放,后续边界跳过。
+        const clearedIds = (compacted.pruned ?? [])
+          .filter((p) => p.action === "cleared" && p.toolCallId)
+          .map((p) => p.toolCallId);
+ // 已清 id 从队列移除:否则冻结区重放清掉的结果仍留在 pending,后续 ΣW 会把
+// 「已经省过的 token」重复计入(回放 T3 plan W 虚高 3.6 倍即此)。
+        this.degradationQueue.drop(new Set(clearedIds));
+        for (const id of clearedIds) this.segmentConfirmResults.delete(id);
+        const appliedNow = new Set(clearedIds.filter((id) => !this.appliedSegmentIds.has(id)));
+        if (appliedNow.size > 0) {
+          for (const id of appliedNow) this.appliedSegmentIds.add(id);
+          try {
+            journal.append({
+              kind: "custom", sessionId,
+              payload: {
+                what: "context.segment.applied", turn, step,
+                ids: [...appliedNow], reason: compacted.reason, at: Date.now(),
+              },
+            });
+          } catch { /* 台账落账失败不阻塞 */ }
+        }
+ // 已 cleared 的 id 从待执行 plan 中移除(不论它来自段批还是冻结区重放),
+ // 未 cleared 的已批准 id 保留到下一步/下一 turn。
+        if (compacted.reason === "segment-empty") {
+ // 计划命中项已不在历史(被更深压缩/截断):整批作废,不无限重试。
+          this.pendingSegmentClear = undefined;
+          this.pendingSegmentSummaries = undefined;
+          this.pendingSegmentSummarySig = undefined;
+          this.pendingSegmentSummaryIds.clear();
+          this.pendingSegmentKeep.clear();
+        } else if (this.pendingSegmentClear && clearedIds.length > 0) {
+          const clearedSet = new Set(clearedIds);
+          const remain = new Set([...this.pendingSegmentClear].filter((id) => !clearedSet.has(id)));
+          if (remain.size === 0) {
+            this.pendingSegmentClear = undefined;
+            this.pendingSegmentSummaries = undefined;
+            this.pendingSegmentSummarySig = undefined;
+            this.pendingSegmentSummaryIds.clear();
+            this.pendingSegmentKeep.clear();
+          } else {
+            this.pendingSegmentClear = remain;
+            for (const id of clearedSet) this.pendingSegmentSummaryIds.delete(id);
+            if (this.pendingSegmentSummaries) {
+              const m = new Map([...this.pendingSegmentSummaries].filter(([id]) => !clearedSet.has(id)));
+              this.pendingSegmentSummaries = m.size > 0 ? m : undefined;
+            }
+            const sigIds = [...this.pendingSegmentSummaryIds].filter((id) => remain.has(id)).sort();
+            this.pendingSegmentSummarySig = sigIds.length > 0 ? sigIds.join(",") : undefined;
+          }
+        }
         // 重置发生 → 冻结区前移(后续步只重放这个静态区),冷却基线/本 turn 计数同步推进。
         if (compacted.prefixBreak === true) {
           this.frozenCount = compacted.frozenCount ?? this.frozenCount;
@@ -2111,23 +2245,24 @@ export class AgentLoop {
           this.frozenCount = compacted.frozenCount;
         }
         if (compacted.anchor !== undefined) this.pruneAnchor = compacted.anchor;
- // 每步新增量(≤1~2%):以上一步请求估算为基线;first step 无基线不上报。
-        const growthTokens = this.lastRequestContextTokens !== undefined
-          ? Math.max(0, rawContextTokens - this.lastRequestContextTokens)
-          : undefined;
+ // 每步新增量(≤1.5%);growthTokens 已在上面用「消息估算 Δ」算好,
+ // 分母用上一步**全量上下文**(API input/total;含 system/tools),两者量纲一致。
         const budgetTokens = this.growthBudgetTokens();
-        const budgetGrowthPct = growthTokens !== undefined && this.lastRequestContextTokens
-          ? (growthTokens / this.lastRequestContextTokens) * 100
+        const growthBase = this.lastResponseContextTokens ?? this.lastRequestContextTokens ?? previousRawContextTokens;
+        const budgetGrowthPct = growthTokens !== undefined && growthBase
+          ? (growthTokens / growthBase) * 100
           : undefined;
  // 缺口#21:处置阶梯计数(无条件推进——事件去重跳过落账时 streak 也要走,处置动作滞后一步生效)。
-        const budgetExceededNow = budgetGrowthPct !== undefined
-          && budgetGrowthPct > (this.opts.growthBudgetRatio ?? GROWTH_BUDGET_RATIO) * 100
+ // 判定口径=**绝对增量超预算**(growth > max(1500, 上轮×1.5%)),不是只看百分比:
+ // 小上下文 3k 时 1.4k 增量 pct=3.6% 但仍在 1500 地板内,按旧口径会误报 budgetExceeded。
+        const budgetExceededNow = growthTokens !== undefined
+          && growthTokens > budgetTokens
           && !compacted.prefixBreak;
         this.budgetExceededStreak = budgetExceededNow ? this.budgetExceededStreak + 1 : 0;
         const budgetAction = this.budgetExceededStreak >= 3
           ? "suggest-compact"
           : this.budgetExceededStreak === 2
-            ? "aggressive-prune"
+            ? "tighten-spill-x4"
             : "tighten-spill";
         // system 提示词 in-history(token 轮 P1,designs/token-opt-round3-p1 §3):
         // 改前每步用当轮 system **原地重写** node0 → system 一变(任务类别切换/AGENTS.md 摘要刷新/
@@ -2860,11 +2995,48 @@ export class AgentLoop {
           });
         } catch { /* 轨迹旁路:吞 */ }
 
+ // 编辑型增量治理:toolCall 参数(new_string/content 等)是模型输出,下一步会
+ // 作为 assistant 历史回放。这里在**落 journal 前**定形历史副本(执行仍用原始 res.toolCalls):
+ // 大文本走 big-intake(chunk+jev/摘要)或确定性 head/tail,挂 _shaped + dump 指针;
+ // 之后 derive 回放定形版,前缀逐字稳定。异常 fail-open 保持原参数。
+        let historyToolCalls = res.toolCalls;
+        if (res.toolCalls && res.toolCalls.length > 0) {
+          try {
+            const perCallArgsBudget = Math.max(256, Math.floor(this.growthBudgetTokens() / Math.max(1, res.toolCalls.length)));
+            const shaped = await shapeToolCallsForHistory(res.toolCalls, {
+              budgetTokens: perCallArgsBudget,
+              ...(this.opts.bigIntake ? { bigIntake: this.opts.bigIntake } : {}),
+              ...(this.opts.spill?.dir
+                ? { dumpDir: this.opts.spill.dir }
+                : this.opts.bigIntake?.dumpDir ? { dumpDir: this.opts.bigIntake.dumpDir } : {}),
+              goal: this.stepGoal,
+              sessionId, turn, step,
+            });
+            historyToolCalls = shaped.calls;
+            if (shaped.records.length > 0) {
+              try {
+                journal.append({
+                  kind: "custom", sessionId,
+                  payload: {
+                    what: "context.toolcall.shape",
+                    turn, step,
+                    calls: shaped.records.length,
+                    fields: shaped.records.slice(0, 20).map((r) => ({
+                      tool: r.tool, field: r.field, originalChars: r.originalChars,
+                      shapedChars: r.shapedChars, policy: r.policy, ...(r.dump ? { dump: r.dump } : {}),
+                    })),
+                    at: Date.now(),
+                  },
+                });
+              } catch { /* 遥测失败不打断 */ }
+            }
+          } catch { /* 定形失败=原参数,绝不打断主链 */ }
+        }
         journal.append({
           kind: "message.agent",
           sessionId,
           payload: {
-            text: res.content, toolCalls: res.toolCalls,
+            text: res.content, toolCalls: historyToolCalls,
             turn, step, llmMs,
             ...(chatAttemptId ? { attemptId: chatAttemptId } : {}),
             ...(ttftMs !== undefined ? { ttftMs } : {}),
@@ -3042,6 +3214,10 @@ export class AgentLoop {
           }
         }
         const runnable = calls.filter((c) => !guardBlocked.has(c.id));
+ // 增量硬约束(设计 §4.3,1.5%):本步总预算按可执行调用数均分给每个结果。
+ // 多个工具结果同批时原来各自拿全额预算 → 合计可超 1.5% 数倍;均分后每结果按其份额定形,
+ // 写时(spill/big-intake)落地,**不改任何已发出前缀**。
+        const stepResultBudget = Math.max(1, Math.floor(this.growthBudgetTokens() / Math.max(1, runnable.length)));
  // 并发调度从「isConcurrencySafe 二分」升级为「安全 + 路径无重叠」分段:
  // 两个并发安全调用若碰同一路径(写/读改写)仍会互相覆盖或读到中间态,必须拆成串行屏障。
  // 参数里抽不到路径键的调用不进路径判定,行为与旧安全批一致。
@@ -3067,7 +3243,7 @@ export class AgentLoop {
           if (segment.parallel) {
  // 并行段:与旧安全批逐字同型(先全部 tool-begin,Promise.all 后按调用补 tool-end)。
             for (const c of segment.calls) this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
-            const rs = await Promise.all(segment.calls.map((c) => this.execOne(c, ac.signal)));
+            const rs = await Promise.all(segment.calls.map((c) => this.execOne(c, ac.signal, stepResultBudget)));
             executed.push(...rs);
             for (const c of segment.calls) { const r0 = rs.find((x) => x.call.id === c.id); this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r0?.durationMs ?? 0 }); }
             continue;
@@ -3078,7 +3254,7 @@ export class AgentLoop {
             this.opts.onStream?.({ type: "tool-begin", callId: c.id, name: c.name });
             const r = ac.signal.aborted
               ? { call: c, content: "[ABORTED_BEFORE_DISPATCH]", durationMs: 0, error: { origin: "aborted" as const, message: "[ABORTED_BEFORE_DISPATCH]", name: c.name } }
-              : await this.execOne(c, ac.signal);
+              : await this.execOne(c, ac.signal, stepResultBudget);
             executed.push(r);
             this.opts.onStream?.({ type: "tool-end", callId: c.id, name: c.name, durationMs: r.durationMs });
           }
@@ -3207,6 +3383,7 @@ export class AgentLoop {
           journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "cancelled" } });
           this.flushToolLoopGuard();
           journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: "cancelled" } });
+          this.settleSegmentsBeforeTurnEnd(journal, sessionId, turn);
           return finalText;
         }
  // 写前屏障失败:provider 未被调用,turn 中止(与取消同型:不再发起后续请求;
@@ -3214,6 +3391,7 @@ export class AgentLoop {
         if (this.writeBarrierFailed) {
           journal.append({ kind: "step.end", sessionId, payload: { turn, step, reason: "write-barrier", error: this.writeBarrierFailed.slice(0, 300) } });
           journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: "write-barrier" } });
+          this.settleSegmentsBeforeTurnEnd(journal, sessionId, turn);
           throw new WriteBarrierAbortError(this.writeBarrierFailed);
         }
         // LLM/压缩钩子/工具执行异常:补 step+turn 边界(唯一出口,防重复)后上抛。
@@ -3223,6 +3401,7 @@ export class AgentLoop {
         this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
         this.flushToolLoopGuard();
         journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: "error" } });
+        this.settleSegmentsBeforeTurnEnd(journal, sessionId, turn);
         throw err;
       }
     }
@@ -3230,7 +3409,211 @@ export class AgentLoop {
     this.emitPhaseTelemetry(phaseState, { clock: phaseClock, recorder: phaseRecorder, turn, sessionId, turnT0, usage: turnUsage, ttftMs: turnTtftMs });
     this.flushToolLoopGuard();
     journal.append({ kind: "turn.end", sessionId, payload: { turn, reason: turnReason } });
+    this.settleSegmentsBeforeTurnEnd(journal, sessionId, turn);
     return finalText;
+  }
+
+ /** 从 journal 事件重放已完成 turn 的步数(跨 AgentLoop 实例仍有效)。
+ * 只统计 turn.end 已出现的 turn;当前未闭合 turn 不参与 N 估计。 */
+  private harvestTurnStepHistory(events: readonly SegmentEvent[]): void {
+    for (const e of events) {
+      if (e.type === "turn.start") this.turnStepsOpen = 0;
+      else if (e.type === "step.start") this.turnStepsOpen += 1;
+      else if (e.type === "turn.end") {
+        this.turnStepHistory.push(Math.max(1, this.turnStepsOpen));
+        if (this.turnStepHistory.length > 3) this.turnStepHistory.shift();
+        this.turnStepsOpen = 0;
+      }
+    }
+  }
+
+ /** N_est = 最近完整 turn 步数的最小值;无历史=1(最保守)。 */
+  private remainingStepsEstimate(): number {
+    if (this.turnStepHistory.length === 0) return 1;
+    return Math.max(1, Math.min(...this.turnStepHistory));
+  }
+
+ /** 整批 rewrite 的共享 tail:最早被改写消息之后的所有字节(候选用 W′ 产物估,
+ * 其余消息用真实估算)。设计 §4.1.1 的 tail 是批次代价,不是每条 candidate 各自的。 */
+  private estimateBatchTailTokens(messages: Message[], candidates: readonly { id: string; productTokensWPrime: number }[]): number {
+    const ids = new Set(candidates.map((c) => c.id));
+    if (ids.size === 0) return 0;
+    const product = new Map(candidates.map((c) => [c.id, Math.max(0, c.productTokensWPrime)]));
+    let first = -1;
+    for (let i = 0; i < messages.length; i += 1) {
+      const m = messages[i] as { role?: string; toolCallId?: string };
+      if (m.role === "tool" && m.toolCallId && ids.has(m.toolCallId)) { first = i; break; }
+    }
+    if (first < 0) return 0; // 候选不在当前历史:executor 会 segment-empty,不猜 tail
+    let tail = 0;
+    for (let i = first; i < messages.length; i += 1) {
+      const m = messages[i] as { role?: string; toolCallId?: string };
+      const pid = m.role === "tool" && m.toolCallId ? m.toolCallId : undefined;
+      if (pid && product.has(pid)) tail += product.get(pid)!;
+      else tail += estimateMessagesTokensUnified([messages[i]!], this.stepTokenOpts());
+    }
+    return Math.round(tail);
+  }
+
+ /** 整批经济裁决 + 批准(设计 §4.1.1/§4.1.2):
+ * 用 planSegmentBatch 把「已批准候选」映射成 executor 实际会清的整批(边界内全部可清组),
+ * 再以 ΣW / ΣW′ / 共享 tail / N 估计做一次整批裁决;批准才写 pendingSegmentClear。
+ * 逐条放行会让 gate 的 ΣW 与执行集合不一致(回放已注意)。 */
+  private approveSegmentBatch(
+    messages: Message[],
+    pending: DegradationCandidate[],
+    referenced: ReadonlySet<string>,
+    remainingStepsN: number,
+  ): { approved: number; deferred: number; batchW: number; batchWPrime: number; tailTokens: number; remainingStepsN: number } | undefined {
+    if (pending.length === 0) return undefined;
+ // ① 观察期到期(§4.1.3②):刚闭合段至少经过 1 步才取得可裁资格。
+ // turn 首步的当前 clock 是 pruneClock+1(自增发生在 settle 之后);turn 末就是 pruneClock。
+    const currentClock = this.pruneClock + (this.turnFirstStep ? 1 : 0);
+    const expired = pending.filter((c) => observationExpired(c.queuedAtStep, currentClock));
+    if (expired.length === 0) {
+      return { approved: 0, deferred: pending.length, batchW: 0, batchWPrime: 0, tailTokens: 0, remainingStepsN };
+    }
+ // ② 观察期仍被引用的 id 在执行阶段也必须 modelKeep(否则冻结区重放会顺手清掉它)。
+    for (const id of referenced) this.pendingSegmentKeep.add(id);
+ // ③ jev-150m 语义兜底(§4.1.3③):结构信号已排除被引用项后,高置信 keep 回保护区;
+ // 高置信 drop 放行;低置信/无结果回落结构信号(当前即 eligible)。
+    const modelProtected = new Set<string>();
+    for (const c of expired) {
+      const verdict = downgradeConfirmGate(this.segmentConfirmResults.get(c.id));
+      if (verdict === "protect") {
+        modelProtected.add(c.id);
+        this.pendingSegmentKeep.add(c.id);
+      }
+    }
+    const exclude = new Set([...referenced, ...modelProtected]);
+    const n = Math.max(1, remainingStepsN);
+    const r = priceRatioOf(this.curModelName);
+ // 整批 ΣW/ΣW′ 以 queue 候选为准(实际已批准集合);冻结边界内的邻组是额外收益,
+ // 不放进 ΣW,避免把「已清但仍在 raw derive 里」的历史重复计入。
+    const tailTokens = this.estimateBatchTailTokens(messages, expired);
+    const batch = this.degradationQueue.settleBatch(r, {
+      remainingStepsN: n,
+      tailTokens,
+      exclude,
+    });
+    if (!batch.economic) {
+      return {
+        approved: 0, deferred: pending.length,
+        batchW: batch.batchW, batchWPrime: batch.batchWPrime, tailTokens, remainingStepsN: n,
+      };
+    }
+    const approved = new Set<string>();
+    for (const c of batch.approved) {
+      approved.add(c.id);
+      if (c.product === "summary") this.pendingSegmentSummaryIds.add(c.id);
+    }
+    const merged = new Set(this.pendingSegmentClear ?? []);
+    for (const id of approved) merged.add(id);
+    this.pendingSegmentClear = merged;
+    return {
+      approved: approved.size,
+      deferred: pending.length - approved.size,
+      batchW: batch.batchW, batchWPrime: batch.batchWPrime, tailTokens, remainingStepsN: n,
+    };
+  }
+
+ /** 段化:段闭合扫描 + 定价入队(抽成方法)。
+ * - step 起跑时调用:处理上一步/turn.end/task_phase/path-abandoned/焦点切换产生的闭合;
+ * - turn 末调用:此时 turn.end 已先落账,单轮任务也能把最后一段闭合入队(旧实现只在
+ * step 起跑扫,单轮任务永远等不到下一次扫描)。
+ * 只读本会话事件缓存,按 seq 增量追加;无新事件直接跳过(避免大 journal 全量扫)。 */
+  private collectClosedSegments(journal: Journal, sessionId: string): void {
+    try {
+      let hasNewEvents = false;
+      if (this.segmentScanSeq < 0) {
+        this.segmentScanEvents = journal.readSession(sessionId)
+          .map((e) => ({ type: e.kind ?? "", seq: Number(e.seq ?? 0), payload: e.payload }));
+        for (const e of this.segmentScanEvents) if (e.seq > this.segmentScanSeq) this.segmentScanSeq = e.seq;
+        for (const id of collectAppliedSegmentIds(this.segmentScanEvents)) this.appliedSegmentIds.add(id);
+        this.harvestTurnStepHistory(this.segmentScanEvents);
+        hasNewEvents = this.segmentScanEvents.length > 0;
+      } else {
+        const delta = journal.readSession(sessionId, this.segmentScanSeq + 1)
+          .map((e) => ({ type: e.kind ?? "", seq: Number(e.seq ?? 0), payload: e.payload }));
+        if (delta.length > 0) {
+          this.segmentScanEvents.push(...delta);
+          for (const e of delta) if (e.seq > this.segmentScanSeq) this.segmentScanSeq = e.seq;
+          for (const id of collectAppliedSegmentIds(delta)) this.appliedSegmentIds.add(id);
+          this.harvestTurnStepHistory(delta);
+          hasNewEvents = true;
+        }
+      }
+      if (!hasNewEvents) return;
+      const rawEvents = this.segmentScanEvents;
+      const segs = deriveFocusSegments(rawEvents);
+      const focusIdsBySeq = new Map<number, string>();
+      for (const s of segs) focusIdsBySeq.set(s.startSeq, s.focusId);
+      const scan = scanSegmentClosures(rawEvents, this.segmentSeenCloses, {
+        currentFocusId: this.currentFocusId,
+        focusIdsBySeq,
+ // 摘要轨可用时逐条比较 summary/placeholder 的 N=1 经济性;缺省全走占位。
+        ...(this.opts.bigIntake?.digest ? { summaryTokensWPrime: SEGMENT_SUMMARY_EST_TOKENS } : {}),
+        priceRatio: priceRatioOf(this.curModelName),
+ // 与 microcompact 实际 clear 同一准入:不可清/错误/无寻址结果不进入 ΣW。
+        isPricedTool: (tool, content) => isSegmentCompactableResult(tool, content),
+      });
+      for (const seg of scan.closed) {
+        this.segmentSeenCloses.add(seg.segmentId);
+        for (const item of seg.items) {
+ // path-abandoned 的结果已由 path-prune 主裁;段批只观察,不重复折叠(§4.8)。
+          if (item.observeOnly) continue;
+ // 已应用过的条目不再入队:scanSegmentClosures 按边界累计定价,后续边界会重复包含旧结果。
+          if (this.appliedSegmentIds.has(item.id)) continue;
+          this.degradationQueue.enqueue({
+            id: item.id,
+            tool: item.tool, where: item.where, resultSeq: item.resultSeq,
+            product: item.product,
+            savedTokensW: item.savedTokensW,
+            productTokensWPrime: item.productTokensWPrime,
+            tailTokens: item.tailTokens,
+            remainingStepsN: 1, // 拍板速算最保守档(r=10、N=1 → ≥10 倍压缩产物就值得压)
+            queuedAtStep: this.pruneClock,
+          });
+        }
+      }
+      if (scan.nextFocusId !== undefined) this.currentFocusId = scan.nextFocusId;
+    } catch { /* 段闭合派生失败不阻塞主链 */ }
+  }
+
+ /** 段化(§4.1.2/§4.1.3):turn 末整批 settle——先把本 turn 的 turn.end 闭合扫入队
+ * (调用方保证 turn.end 已先落账),再把全部 pending 按拍板公式 N×W>(W′+tail)×r 裁决
+ * (r=priceRatioOf 逐模型现算),economic 攒入 pendingSegmentClear
+ * (下一 turn 首步 microcompact 段批档执行:turn 末=最硬闭合边界,热区已清空,§3.6.2 前置满足);
+ * deferred 留队(N 随时间变小)。落 context.segment.settle 观测事件;失败不阻塞 turn。 */
+  private settleSegmentsBeforeTurnEnd(journal: Journal, sessionId: string, turn: number): void {
+ // 记录本 turn 步数,并用近期最小 turn 步数作为下一 turn 的 N 保守估计。
+    this.collectClosedSegments(journal, sessionId);
+    try {
+      const pending = this.degradationQueue.pending();
+      if (pending.length === 0) return;
+      const r = priceRatioOf(this.curModelName);
+      const messages = deriveMessages(journal, sessionId);
+      const referenced = new Set(
+        pending.filter((c) => isCandidateStillReferenced(c, this.segmentScanEvents)).map((c) => c.id),
+      );
+ // turn.end 已落账(热区已空),但整批 rewrite 的缓存失效 tail 仍是边界内全部字节;
+ // approveSegmentBatch 用 planSegmentBatch 映射实际执行集合后整批裁决。
+      const batch = this.approveSegmentBatch(messages, pending, referenced, this.remainingStepsEstimate());
+      if (batch && batch.approved > 0) {
+        try {
+          journal.append({
+            kind: "custom", sessionId,
+            payload: {
+              what: "context.segment.settle", turn, step: -1,
+              approvedCount: batch.approved, deferredCount: batch.deferred,
+              priceRatio: r, remainingStepsN: batch.remainingStepsN,
+              batchW: batch.batchW, batchWPrime: batch.batchWPrime, tailTokens: batch.tailTokens,
+              at: Date.now(),
+            },
+          });
+        } catch { /* 观测失败不阻塞 */ }
+      }
+    } catch { /* settle 失败不阻塞 turn */ }
   }
 
  /** :turn 结束时落一条护栏汇总(custom tool.loop.guard);仅在有 stop/notice/stub/quota 时落账。
@@ -3360,7 +3743,7 @@ export class AgentLoop {
     } catch { /* 遥测落账失败不打断主链 */ }
   }
 
-  private async execOne(call: ToolCall, signal?: AbortSignal): Promise<ToolExecOutcome> {
+  private async execOne(call: ToolCall, signal?: AbortSignal, resultBudgetTokens?: number): Promise<ToolExecOutcome> {
     const tool = this.tools.get(call.name);
     if (!tool) {
  // 错误框附带可达候选(工具面身份来自 registry,这里只做候选建议,不改工具面)。
@@ -3417,8 +3800,10 @@ export class AgentLoop {
       // 其余工具行为与视觉哨兵判断逐字不变。
       const isResultReadBack = call.name === "result_read";
       let intakeDone = false;
+ // 本结果可用预算 = 本步预算均分份额(单调用=全额;多调用=均分,见 stepResultBudget)。
+      const resultBudget = Math.max(1, Math.floor(resultBudgetTokens ?? this.growthBudgetTokens()));
       if (this.opts.bigIntake && !isResultReadBack && !content.startsWith(VISION_TOOL_SENTINEL)) {
-        const budgetTokens = this.growthBudgetTokens();
+        const budgetTokens = Math.min(this.growthBudgetTokens(), resultBudget);
         if (shouldIntake(content, budgetTokens, this.opts.bigIntake)) {
           const outcome = await intakeToolResult({
             content,
@@ -3440,18 +3825,27 @@ export class AgentLoop {
       // 未配置 opts.spill=完全不进此分支(行为逐字不变)。视觉哨兵不参与(它本身很小,且会被换成确认句)。
       if (!intakeDone && !isResultReadBack && this.opts.spill && !content.startsWith(VISION_TOOL_SENTINEL)) {
         try {
- // 每步新增预算( v2 1~2%):结果超过本步预算就**提前**落盘定形,
-          // 不等 8k 全局阈值——「先进上下文再靠 prune 减回去」正是要治的震荡形态。
-          // 预算 tokens → 字符按 ASCII 系数(0.25 tok/char)换算,即 budget×4 字符。
-          const budgetChars = Math.max(0, Math.floor(this.growthBudgetTokens() / ASCII_TOKENS_PER_CHAR));
+ // 每步新增预算(1.5%):结果超过本结果份额就**提前**落盘定形,不等 8k 全局阈值。
+ // 预算 tokens → 字符按 ASCII 系数(0.25 tok/char)换算;份额小也要保住头尾+回读指针
+ // (下限 256 字符,避免把结果压成空壳;极端多调用步允许轻微超份额,不为凑数丢信息)。
+          const budgetChars = Math.max(256, Math.floor(resultBudget / ASCII_TOKENS_PER_CHAR));
           let spillThreshold = this.opts.spill.thresholdChars !== undefined
             ? Math.min(this.opts.spill.thresholdChars, budgetChars)
             : budgetChars;
- // 缺口#21 处置第一档:连续超预算 → 下一步起 spill 阈值减半(把更多大结果挡在历史外)。
-          if (this.budgetExceededStreak >= 1) spillThreshold = Math.max(1024, Math.floor(spillThreshold / 2));
+ // 缺口#21 处置:连续超预算 → 下一步起进一步收紧写时定形(1 档减半,2 档再减半);
+ // 不触发 growth-spurt(改前缀=碎缓存。
+          const tighten = this.budgetExceededStreak >= 2 ? 4 : this.budgetExceededStreak >= 1 ? 2 : 1;
+          if (tighten > 1) spillThreshold = Math.max(256, Math.floor(spillThreshold / tighten));
+ // 头尾按份额缩放(默认 4096/1024 会超过小份额预算);read_file 的 32000 逐工具阈值
+ // 通过 maxThresholdChars 受份额约束(不再无条件高于预算)。
+          const headChars = Math.max(128, Math.floor(budgetChars * 0.7));
+          const tailChars = Math.max(32, Math.floor(budgetChars * 0.2));
           content = await spillToolResult({
             ...this.opts.spill,
             thresholdChars: spillThreshold,
+            maxThresholdChars: budgetChars,
+            headChars,
+            tailChars,
             sessionId: this.opts.sessionId,
             callId: call.id,
             toolName: call.name,

@@ -4,9 +4,10 @@
  */
 import { journalGate } from "./permission.js";
 import { runningWorkflows } from "./tools.js";
-import { decidePermission, riskOfTool } from "./permission.js";
+import { decidePermission, LOW_RISK_TOOLS, riskOfTool } from "./permission.js";
 import type { PermissionAskPort } from "./permission.js";
 import { outcomeByLabel } from "../permission-broker.js";
+import { commandTextOf, isCommandToolName } from "../super-approval-policy.js";
 import { repoRoot } from "../repo-root.js";
 import { systemPromptSha, recordSystemPromptSnapshot } from "../system-prompt-snapshot.js";
 import { buildVlmFromConfig } from "../factory.js";
@@ -286,19 +287,30 @@ export function buildMainLoopPermission(
           journalGate(ctx.journal, ctx.sessionId, call.name, "allowed", "session-always");
           return true;
         }
+ // 低风险记账/审计类直批:guard abstain 后、构造 broker.ask 之前,riskOfTool=low 且
+ // LOW_RISK_TOOLS 命中(纯记账/只读,无副作用)→ journalGate allowed/low-risk-auto 并放行,
+ // 不咨询 broker(逐调用审批的摩擦点)。集合里没有写类工具,与 readonly 写类拒绝天然不冲突;
+ // ask/auto/readonly/plan 各 mode 既有分支语义不变(本段只在 panelAsk 内)。
+        if (riskOfTool(call.name) === "low" && LOW_RISK_TOOLS.has(call.name)) {
+          journalGate(ctx.journal, ctx.sessionId, call.name, "allowed", "low-risk-auto");
+          return true;
+        }
  // 审批对象=执行对象:冻结真正要执行的调用(name+arguments);面板放行后复核,变了按拒绝。
         const approvalObject = () => ({ name: call.name, arguments: call.arguments });
         const snap = snapshotApprovalObject(approvalObject());
+ // super 分级:命令类工具传完整命令,避免 summary 100 字截断吞掉 build/重启尾部。
+        const cmdText = isCommandToolName(call.name) ? commandTextOf({ tool: call.name, summary: call.arguments }) : undefined;
         const o = await brokerRef.ask({
           requestId: "tool-perm-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
           sessionId: ctx.sessionId,
           tool: call.name,
           summary: preview ? `${call.name} ${preview}` : call.name,
           risk: riskOfTool(call.name),
- // 任务归属向下传 —— submittedBy=super 的任务,broker 转 super 自决。
+ // 任务归属向下传 —— submittedBy=super 的任务,broker 按审批分级决定是否转 super。
           ...(ctx.task?.submittedBy ? { submittedBy: ctx.task.submittedBy } : {}),
           ...(ctx.task?.id ? { taskId: ctx.task.id } : {}),
           ...(ctx.task?.brief ? { brief: ctx.task.brief } : {}),
+          ...(cmdText ? { command: cmdText } : {}),
         });
         const by = outcomeByLabel(o);
         const objectHash = snap.ok ? snap.hash : undefined;
@@ -602,7 +614,7 @@ export function visionBridgeFor(config: { coding?: { llm?: { vision?: boolean };
 }
 
 export const TOOL_HINTS: ToolHint[] = [
-  { name: "spawn_subagent", hint: "把子任务派给子 agent 执行,返回最终文本;任务书涉及 build 等重操作时写明预期命令(重操作需父代理审批)" },
+  { name: "spawn_subagent", hint: "把**可并行**的子任务派给子 agent(默认自己干:仅多段互不依赖的工作可并行,或需要 planner/explore/judge/test-analyst/ppt-master 特殊角色时才派);任务书涉及 build 等重操作时写明预期命令(重操作需父代理审批)" },
   { name: "answer_subagent", hint: "应答子代理的重操作执行申请(批准/拒绝+一句理由;不应答=超时自动拒绝)" },
   { name: "list_agents", hint: "列出本任务的子代理(含全部后代):agentId/状态/模型/耗时/截止/标题/结果摘要;includeDone=false 只看运行中" },
   { name: "stop_agent", hint: "中断指定子代理:只能停自己的子代理,只影响该 agentId(兄弟/父任务不动);跨任务/不存在拒绝" },
@@ -617,7 +629,7 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "edit_file", hint: "精确字面替换编辑(旧串唯一匹配,replace_all 可选);回执自带改后上下文(<edited>±5行带行号)——不要为验证改完再 read_file 同一文件" },
   { name: "deliverable", hint: "登记交付物(产出报告/PPT/图片/导出件等真实文件后用它登记路径);收尾自动核对存在性,声明后缺失会被点名" },
   { name: "glob", hint: "按模式匹配项目内文件(** 跨目录,按改动时间排序)" },
-  { name: "grep", hint: "正则文本检索(配置/日志串/文案/模糊词);查代码结构与调用关系改用 code_sense" },
+  { name: "grep", hint: "正则文本检索(仅正则形态的模糊匹配:前缀/通配/日志串模式);查符号/调用关系/影响面改用 code_sense;查「候选名/字面量/CSS 类/中文文案在哪」用 code_sense refs(target=\"a|b|c\" 多候选一次查,带语境分类)" },
  // P2-⑤a(机制注意「session_search 0 使用 vs 裸扫 journal」):台账检索标准入口+触发词。
   { name: "session_search", hint: "查历史会话/台账的标准入口(「上次怎么做的/以前谁改过/这个错以前怎么修/查 journal」都先用它,不要 read_file 裸扫 .jsonl)" },
   { name: "list_dir", hint: "列目录直接子项" },
@@ -627,7 +639,7 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "web_fetch", hint: "抓取公网页面转 markdown/纯文本(只读;SSRF/大小/超时/域名约束)。JS 渲染页会自动 browser 渲染兜底;需登录/点击仍用 browser" },
   { name: "web_search", hint: "检索网页返回 [{title,url,snippet}](配置了搜索 provider 直接走 API;未配置自动内置静态检索兜底,provider 字段标注 fallback;打开页面用 web_fetch,交互用 browser)" },
   { name: "cite_source", hint: "研究/调研写作:每个检索来源先 cite_source 登记(url+逐字出现在 web_fetch 抓取正文里的 quote),正文编号只用它返回的 [n];无检索证据的推断标 [unverified]" },
-  { name: "code_sense", hint: "代码认知唯一入口:结构面 action=impact(改动影响面,改函数前必查)/symbol/file/entrypoints/project/wire/vars/refs(字面量引用面)/branches(分支/循环骨架,条件关系)/flow(整仓代码流:入口/分层/主干/枢纽,level=auto)(毫秒级);语义画像面 mode=debug 调用链+签名+时序/plan 架构/explore grep 聚合/api 接口表面/state 状态机/algo 算法画像" },
+  { name: "code_sense", hint: "代码认知唯一入口:结构面 action=impact(改动影响面,改函数前必查)/symbol(未命中自动带 [inline-js]=模板串内前端函数位置)/file/entrypoints/project/wire/vars/refs(字面量引用面:字符串标识/CSS 类/DOM id/中文文案,代码+测试+文档+tasks 全覆盖,target=\"a|b|c\" 多候选一次查)/branches(分支/循环骨架,条件关系)/flow(整仓代码流:入口/分层/主干/枢纽,level=auto)(毫秒级);语义画像面 mode=debug 调用链+签名+时序/plan 架构/explore grep 聚合/api 接口表面/state 状态机/algo 算法画像" },
   { name: "session_search", hint: "会话全文检索/回忆:discover 用关键词找历史会话(自动化降权),scroll 看会话内命中上下文,read 读会话原文;问「上次/之前怎么做的」先调它" },
  // super agent 管理世界模型:项目主线(方向目标)由 agent 自己立线/推进/,
  // 而非只读夜间自动晋升的展示品——验收第⑤步(goal_progress)与开工简报「疑似推进主线」行都指向这里。

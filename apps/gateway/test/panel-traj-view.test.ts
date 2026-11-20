@@ -86,8 +86,9 @@ describe("轨迹独立视图 #view-traj()", () => {
 
   it("③入口改路由:composer pill / 轨迹卡「看板」都走 switchView('traj')", async () => {
     const html = await panelHtml();
-    expect(html).toContain('$("trajBoardBtn").onclick = () => { switchView("traj"); trajViewFocusLatest(); };');
     expect(html).toContain('const open = t.closest("[data-traj-open]")');
+ // 返工:trajBoardBtn onclick 已随按钮删除,入口路由断言改锁 data-traj-open 通道
+    expect(html).not.toContain('$("trajBoardBtn").onclick');
     expect(html).toContain("e.preventDefault()");
     expect(html).toContain('switchView("traj");');
     expect(html).toContain('$("trajViewRefresh").onclick = () => trajBoardRefresh();');

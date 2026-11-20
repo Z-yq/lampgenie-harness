@@ -4,6 +4,7 @@
  */
 import { ownTerminalUnits, getTerminalService } from "./wiring-core.js";
 import { outcomeByLabel } from "../permission-broker.js";
+import { commandTextOf, isCommandToolName } from "../super-approval-policy.js";
 import { skillViewTool, boardReadTool, boardUpsertTool } from "./tools.js";
 import { getJobRegistry } from "./wiring-core.js";
 import { rootScanVerdict } from "../sense-root-gate.js"; // 本文件 warmIndex 闸消费(2997)
@@ -315,9 +316,24 @@ export function decidePermission(args: {
   return ev;
 }
 
+/** 低风险工具集合(记账/审计/只读类):riskOfTool 集合命中优先于正则——
+ * 旧正则按词根判,todo_write 含 "write" 被误判 high(每次都弹审批卡);这批工具无副作用/纯记账,
+ * 先查集合→"low",其余工具走既有正则(行为不变)。 */
+export const LOW_RISK_TOOLS: ReadonlySet<string> = new Set([
+  "todo_write",
+  "list_agents",
+  "session_search",
+  "skill_view",
+  "tool_view",
+  "board_read",
+  "change_surface",
+]);
+
 /** 关卡 Gate 风险启发式(旧主链路两处硬编码 "medium" 无信号):
- * 写/执行族=high,只读族=low,其余=medium。只影响展示与播报排序,**不改审批行为**。 */
+ * 写/执行族=high,只读族=low,其余=medium。只影响展示与播报排序,**不改审批行为**。
+ * LOW_RISK_TOOLS 集合命中优先(修 todo_write 被 "write" 词根误判 high)。 */
 export function riskOfTool(tool: string): "low" | "medium" | "high" {
+  if (LOW_RISK_TOOLS.has(String(tool ?? ""))) return "low";
   const t = String(tool ?? "").toLowerCase();
   if (/(write|edit|apply|patch|create|remove|delete|rename|mkdir|terminal|shell|exec|command|run|install|annotate|board_save|checkpoint)/.test(t)) return "high";
   if (/(read|grep|search|list|ls|view|get|show|sense|profile|wiki|track|usage|history|status|export)/.test(t)) return "low";
@@ -380,6 +396,8 @@ export function makeSubagentPermissionAsker(deps: {
     }
     if (deps.broker) {
       const display = tool === "subagent" ? summary : `[子代理 ${tool}] ${summary}`;
+ // super 分级:命令类工具传完整命令(display 会截 160 字),build/重启/危险判定不被截断吞掉。
+      const cmdText = isCommandToolName(tool) ? commandTextOf({ tool, summary }) : undefined;
       const request = {
         requestId: "sub-perm-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
         sessionId: deps.sessionId,
@@ -389,6 +407,7 @@ export function makeSubagentPermissionAsker(deps: {
         ...(deps.taskOwner?.submittedBy ? { submittedBy: deps.taskOwner.submittedBy } : {}),
         ...(deps.taskOwner?.taskId ? { taskId: deps.taskOwner.taskId } : {}),
         ...(deps.taskOwner?.brief ? { brief: deps.taskOwner.brief } : {}),
+        ...(cmdText ? { command: cmdText } : {}),
       };
  // 审批对象=执行对象:ask 前冻结请求对象,面板放行后按同一对象复核(fail-closed)。
       const snap = snapshotApprovalObject(request);

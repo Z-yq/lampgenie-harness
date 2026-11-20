@@ -106,7 +106,8 @@ describe("scanLiteralRefs(本仓真实目标 graph)", () => {
     expect(testHit, "测试文件里应有 string-literal 命中").toBeTruthy();
     expect(testHit!.file).toMatch(/test\//);
 
-    // docs/ 目录已随开源仓策略移除,doc 语境命中不再存在;扫描仍应覆盖测试与源码语境
+    const docHit = r.hits.find((h) => h.file === "docs/code-sense/codesense-cli.md" && h.context === "doc");
+    expect(docHit, "docs/code-sense/codesense-cli.md 应有 doc 命中(2026-11-14 2da52c3 从 docs/ 根搬入 code-sense/)").toBeTruthy();
 
     // 语境分组自洽:每组只含本语境
     for (const [ctx, items] of Object.entries(r.groups)) {
@@ -237,5 +238,55 @@ describe("决策点标注与预览(2026-10-21,联动 sensing/decision)", () => {
     const r = await scanLiteralRefs(dir, "fixed", { engine: "walk" });
     expect(r.hits.length).toBeGreaterThan(0);
     expect(r.hits.every((h) => h.decision === undefined && h.preview === undefined)).toBe(true);
+  });
+});
+
+describe("refs 多候选(G-D:a|b|c 一次扫描按候选分组,2026-11-20)", () => {
+  it("splitRefCandidates:按 | 拆、trim、去空、去重、上限 8", async () => {
+    const { splitRefCandidates, REF_CANDIDATE_CAP } = await import("../src/retrieval/literal-refs.js");
+    expect(splitRefCandidates("a|b|a| |b")).toEqual(["a", "b"]);
+    expect(splitRefCandidates("a|")).toEqual(["a"]);
+    expect(splitRefCandidates("solo")).toEqual(["solo"]);
+    expect(splitRefCandidates("a||b").length).toBe(2);
+    expect(splitRefCandidates(["a", "b", "c", "d", "e", "f", "g", "h", "i"].join("|"))).toHaveLength(REF_CANDIDATE_CAP);
+  });
+
+  it("多候选:命中带 candidate 标注、byCandidate 分组、零命中候选可见(walk 引擎)", async () => {
+    const dir = fixture({
+      "src/a.ts": 'const x = "alphaFlag";\nif (act === "alphaFlag") {}\n',
+      "src/b.ts": 'const y = "betaFlag";\n',
+      "docs/note.md": "alphaFlag 也写在文档里\n",
+    });
+    const r = await scanLiteralRefs(dir, "alphaFlag|betaFlag|missingFlag", { engine: "walk" });
+    expect(r.candidates).toEqual(["alphaFlag", "betaFlag", "missingFlag"]);
+    expect(r.hits.length).toBeGreaterThan(0);
+    expect(r.hits.every((h) => h.candidate)).toBe(true);
+    expect(r.byCandidate.alphaFlag!.hits).toBeGreaterThanOrEqual(3); // eq + string + doc
+    expect(r.byCandidate.betaFlag!.hits).toBe(1);
+    expect(r.byCandidate.missingFlag!.hits).toBe(0);
+    expect(r.groups["eq-literal"].some((h) => h.candidate === "alphaFlag")).toBe(true);
+    expect(r.knownLimits.some((l) => l.includes("多候选模式"))).toBe(true);
+    const { renderLiteralRefs } = await import("../src/retrieval/literal-refs.js");
+    const text = renderLiteralRefs(r);
+    expect(text).toContain("候选:");
+    expect(text).toContain("missingFlag=0 行");
+    expect(text).toContain("(alphaFlag)");
+  });
+
+  it("单候选行为逐字兼容:candidate 字段缺省(旧消费方零感知)", async () => {
+    const dir = fixture({ "src/a.ts": 'const x = "soloFlag";\n' });
+    const r = await scanLiteralRefs(dir, "soloFlag", { engine: "walk" });
+    expect(r.candidates).toEqual(["soloFlag"]);
+    expect(r.hits.every((h) => h.candidate === undefined)).toBe(true);
+    const { renderLiteralRefs } = await import("../src/retrieval/literal-refs.js");
+    expect(renderLiteralRefs(r).includes("候选:")).toBe(false); // 单候选不出多候选分组头
+  });
+
+  it("grep 引擎多候选(session 真实例子):supPendingAtts|pendingAtts 一次拿两组", { timeout: 90_000 }, async () => {
+ // 审计依据:ws-mwow70j0 session 用 grep 查这组 alternation——现在 refs 直接接住。
+    const r = await scanLiteralRefs(ROOT, "supPendingAtts|pendingAtts");
+    expect(r.candidates).toEqual(["supPendingAtts", "pendingAtts"]);
+    expect(r.byCandidate.pendingAtts!.hits).toBeGreaterThan(0);
+    expect(r.byCandidate.supPendingAtts!.hits + r.byCandidate.pendingAtts!.hits).toBe(r.totals.hits);
   });
 });

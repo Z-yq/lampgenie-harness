@@ -34,18 +34,20 @@ import { PANEL_JS_PROVIDERS } from "./panel/script-providers.js";
 import { PANEL_JS_WS_ROUTER } from "./panel/script-ws-router.js";
 import { PANEL_JS_SUBMIT } from "./panel/script-submit.js";
 import { PANEL_JS_ADMIN } from "./panel/script-admin.js";
+import { PANEL_JS_REMOTE } from "./panel/script-remote.js";
 import { PANEL_JS_BOARD_RENDER } from "./panel/script-board-render.js";
 import { PANEL_JS_CANVAS } from "./panel/script-canvas.js";
 import { PANEL_JS_CANVAS_OPS } from "./panel/script-canvas-ops.js";
 import { PANEL_JS_DIALOGS } from "./panel/script-dialogs.js";
 import { PANEL_JS_MODEL_MENU } from "./panel/script-model-menu.js";
 import { PANEL_JS_COMMANDS } from "./panel/script-commands.js";
-import { PANEL_JS_VOICE_CITE } from "./panel/script-voice-cite.js";
+import { PANEL_JS_CHAT_CITE } from "./panel/script-chat-cite.js";
 import { PANEL_JS_IDE_1 } from "./panel/script-ide-1.js";
 import { PANEL_JS_IDE_2 } from "./panel/script-ide-2.js";
 import { PANEL_JS_ANNOTATE } from "./panel/script-annotate.js";
 import { PANEL_JS_SUPER_CHAT } from "./panel/script-super-chat.js";
 import { PANEL_PROFILE_PAGE } from "./panel/page-profile.js";
+import { MOBILE_PAGE } from "./panel/page-mobile.js";
 
 /** 预设目录单一出处(TS 模块)注入面板浏览器侧;JSON 只含公开 URL/模型 ID。 */
 const PRESETS_JSON = JSON.stringify(PROVIDER_PRESET_CATALOG);
@@ -73,10 +75,10 @@ const PROVIDER_PRESETS = ${PRESETS_JSON};
 ${ERROR_TEXT_JS}
 // ---- 轨迹看板数据层(单一出处=panel-traj-model.ts;buildTrajRows/summarizeTraj/fmtTokens 等由构建期注入)----
 ${TRAJ_MODEL_JS}
-${PANEL_JS_ADMIN}
+${PANEL_JS_ADMIN}${PANEL_JS_REMOTE}
 ${PANEL_JS_BOARD_RENDER}${PANEL_JS_CANVAS}
 ${PANEL_JS_CANVAS_OPS}${PANEL_JS_DIALOGS}${PANEL_JS_MODEL_MENU}
-${PANEL_JS_COMMANDS}${PANEL_JS_VOICE_CITE}
+${PANEL_JS_COMMANDS}${PANEL_JS_CHAT_CITE}
 ${PANEL_JS_IDE_1}${PANEL_JS_IDE_2}${PANEL_JS_ANNOTATE}
 </body></html>`;
 
@@ -241,6 +243,9 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
  /** IDE 图片预览取数:/ide/asset 路由按 pid 解析项目根(main 注入闭包延迟取,
    *  同 sessionExport 模式——servePanel 先于 app 创建)。返回 '' = 项目不存在/无活动项目。 */
   ideProjectRoot?: (pid?: string) => string | undefined;
+ /** 移动端远程控制:/m?pair=<token> 的配对校验(main 注入 appReady.remoteControl;
+ * app 未就绪=拒绝,不猜)。 */
+  verifyPair?: (token: string) => boolean;
 }): { close: () => Promise<void> } {
  /** Office 预览共用沙箱:与 /ide/asset 同口径 —— pid 显式优先、缺省活动项目;
    *  拒 ".." 段、拒 ".git" 段(导出类文件没必要从版本库里取,也不许拿它当读取后门);
@@ -277,6 +282,21 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
       // gateway 重建重启后窗口仍跑旧 JS(IDE 点文件空白)。带 ?b=<戳> 的自愈重载也走这里。
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, must-revalidate" });
       res.end(PAGE);
+      return;
+    }
+ // 移动端远程控制台:一次性配对链接。token 无效/过期=403(不渲染任何业务数据)。
+    if (req.url !== undefined && req.url.split("?")[0] === "/m") {
+      let token = "";
+      try { token = new URL(req.url, "http://local").searchParams.get("pair") ?? ""; } catch { token = ""; }
+      let ok = false;
+      try { ok = !!token && !!opts?.verifyPair && opts.verifyPair(token); } catch { ok = false; }
+      if (!ok) {
+        res.writeHead(403, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        res.end("<!doctype html><meta charset=\"utf-8\"><title>链接已失效</title><body style=\"background:#060403;color:#f2ecdf;font-family:-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0\"><div style=\"max-width:340px;text-align:center;padding:24px\"><h2 style=\"font-size:18px\">链接已失效</h2><p style=\"color:#a3937a;font-size:13px;line-height:1.6\">配对链接已过期或远程控制已停止。请在电脑上重新打开「远程控制」生成新的二维码。</p></div></body>");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, must-revalidate" });
+      res.end(MOBILE_PAGE);
       return;
     }
     const { readFile } = nodeFsPromises;

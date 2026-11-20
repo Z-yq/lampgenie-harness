@@ -58,7 +58,7 @@ describe("popover 治理接线(vm 层源码兜底,无 chrome 依赖)", () => {
   const views = read("script-views.ts");
   const iconsSidebar = read("script-icons-sidebar.ts");
   const submit = read("script-submit.ts");
-  const voiceCite = read("script-voice-cite.ts");
+  const voiceCite = read("script-chat-cite.ts");
   const commands = read("script-commands.ts");
 
   it("集中注册表:doc pointerdown 外点 + keydown Esc + 开新收旧 + stale 剪枝都在", () => {
@@ -70,9 +70,10 @@ describe("popover 治理接线(vm 层源码兜底,无 chrome 依赖)", () => {
     expect(dialogs).toContain('"taskMenu", "selMenu", "mentionMenu", "slashMenu", "ctxPill"');
   });
 
-  it("ctxPill:二点 toggle 守卫 + popoverOpen 接入(不叠实例)", () => {
+  it("ctxPill:onclick 接入恢复(返工轮:胶囊保留)+二点 toggle 守卫+popoverOpen(不叠实例)", () => {
     expect(views).toContain('if (pillMenuEl) { pillMenuClose(); return; } // 二点=收起');
     expect(views).toContain('popoverOpen("ctxPill"');
+    expect(views).toContain('function ctxPillRender()');
   });
 
   it("taskMenu/selMenu:打开点登记 + 旧外点通道改为注销登记", () => {

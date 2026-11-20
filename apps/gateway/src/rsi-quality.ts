@@ -32,7 +32,9 @@ export type RsiQualityIssueCode =
   | "OVER_LIMIT"
  /** 交付缺失/路径自愈(经验证:agent 抄错 runId 或没写结果文件)。 */
   | "RESULT_MISSING"
-  | "PATH_REPAIRED";
+  | "PATH_REPAIRED"
+ /** done 但无结果文件,已从 journal 最终回复代写(兜底)。 */
+  | "SALVAGED_FROM_REPLY";
 
 export interface RsiQualityIssue {
   code: RsiQualityIssueCode;

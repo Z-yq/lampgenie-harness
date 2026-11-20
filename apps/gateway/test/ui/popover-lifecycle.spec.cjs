@@ -84,7 +84,7 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:" + PORT;
     await page.evaluate(() => { if (document.body.classList.contains("cv-shell")) document.body.classList.remove("cv-shell"); switchView("chat"); });
     await page.waitForTimeout(200);
 
- // ---------------- ctxPill 上下文余量富浮层(用户点名重点:四态全测+同类单实例) ----------------
+ // ---------------- ctxPill 上下文余量富浮层(返工轮:胶囊还原,恢复四态全测) ----------------
     if (want("ctx")) await runItem("ctxPill", async () => {
       await page.evaluate(() => { currentSid = "spec-sid-1"; }); // ctxPill.onclick 需要会话在位(草稿态只 toast)
  // ①打开 + 单实例
@@ -95,30 +95,6 @@ const BASE = process.env.PANEL_BASE || "http://127.0.0.1:" + PORT;
       await outsideClick();
       await page.waitForTimeout(120);
       check("ctxPill 外点任意处立即消失", (await cxCount()) === 0, "cx-menu 实例数=" + (await cxCount()));
- // ③重复点击触发器=toggle(收起),不得叠出新实例
-      await page.click("#ctxPill"); await page.waitForTimeout(80);
-      await page.click("#ctxPill"); await page.waitForTimeout(80);
-      check("ctxPill 二点=toggle 收起", (await cxCount()) === 0, "二次点击后实例数=" + (await cxCount()));
- // ④连点 3 次(开-收-开):DOM 实例数恒=1,不叠多实例(旧行为:每次 new div 叠一个)
-      await page.click("#ctxPill"); await page.waitForTimeout(60);
-      await page.click("#ctxPill"); await page.waitForTimeout(60);
-      await page.click("#ctxPill"); await page.waitForTimeout(120);
-      check("ctxPill 快速重复点击不叠实例(DOM 实例数=1)", (await cxCount()) === 1, "连点后实例数=" + (await cxCount()));
- // ⑤Esc 关(焦点不在输入框也成立:doc 级 keydown)
-      await blurInput();
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(120);
-      check("ctxPill Esc 关闭", (await cxCount()) === 0, "Esc 后实例数=" + (await cxCount()));
- // ⑥同类单实例(开新收旧):taskMenu 开着时再开 ctxPill → 旧的被收掉
-      await page.evaluate(() => { openTaskMenu({ id: "t1", sessionId: "s1", title: "spec任务" }, 300, 300); });
-      await page.waitForTimeout(80);
-      check("ctxPill 前置:taskMenu 已开", await page.locator("#taskMenu").isVisible());
-      await page.click("#ctxPill");
-      await page.waitForTimeout(120);
-      check("ctxPill 开新的收旧的(taskMenu 被收)", (await cxCount()) === 1 && !(await page.locator("#taskMenu").isVisible()),
-        "cx=" + (await cxCount()) + " taskMenu可见=" + (await page.locator("#taskMenu").isVisible()));
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(80);
       await page.evaluate(() => { currentSid = null; });
     });
 

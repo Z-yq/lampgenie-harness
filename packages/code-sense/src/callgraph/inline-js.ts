@@ -56,11 +56,23 @@ function jsDensity(s: string): number {
   return (s.match(/\bfunction\b/g) ?? []).length + (s.match(/=>/g) ?? []).length;
 }
 
+/** 顶层声明形态( G-E 修复②):function/class/箭头 const 都算——老口径只认
+ * `function` 声明,箭头风格模板(ws-router 全箭头,fnDecls=0)被门整拒。列 0 锚定
+ * (嵌套声明按惯例缩进),export/async 前缀容忍。 */
+const TPL_JS_TOP_DECL_RE = /^(?:export\s+)?(?:async\s+)?(?:function\s*[\w$]*\s*\(|class\s+[\w$]+|(?:const|let|var)\s+[\w$]+\s*=)/;
+
+/** 声明形态计数(对模板 body 计——body 已剥离开闭反引号,「与开反引号同行的第一个函数」不再漏)。 */
+function tplJsDeclCount(body: string): number {
+  return (body.match(/^(?:export\s+)?(?:async\s+)?(?:function\s*[\w$]*\s*\(|class\s+[\w$]+|(?:const|let|var)\s+[\w$]+\s*=)/gm) ?? []).length;
+}
+
 /** 文本级预闸(毫秒级,不建 AST 就能排除绝大多数文件)。 */
 export function inlineJsTextCandidate(full: string): boolean {
   if (full.includes("<script")) return true;
   if (full.length < TPL_JS_MIN_LEN) return false;
-  return (full.match(/^[ \t]*function\s+[\w$]+\s*\(/gm) ?? []).length >= TPL_JS_MIN_FN_DECLS;
+ // G-E 修复②:与 form B 门同源(箭头 const 也算声明形态)——
+ // ws-router 全箭头风格在老口径下 textCandidate=false,collectInlineJs 直接 null。
+  return tplJsDeclCount(full) >= TPL_JS_MIN_FN_DECLS;
 }
 
 /** ${...} 插值替换为 undefined(无换行占位):tree-sitter 把 `${x}` 当语法错;
@@ -125,9 +137,33 @@ export function extractInlineJsUnits(sf: SourceFile, relFile: string): InlineJsU
   // 稳定序(文档序):两族 getDescendantsOfKind 各自有序,合并后按 start 排
   templates.sort((a, b) => a.start - b.start);
   for (const tpl of templates) {
-    const hasScript = tpl.text.includes("<script");
-    if (hasScript) {
-      // form A:逐个 <script> 块(外链 src=/非 js type 跳过)
+ // G-E 修复①:form B(整段即 JS)优先判定——老口径 `includes("<script")`
+ // 抢先路由 form A,canvas-ops 这类「裸 JS 里字符串恰好含 <script」的模板被当 HTML
+ // 拆块,110KB/81 个函数整段丢失(units=0)。鉴别:body 以 `<` 开头才是 HTML 页模板。
+    const body = tpl.text.slice(1, -1);
+    const looksHtml = /^\s*</.test(body);
+    const formB = !looksHtml
+      && tpl.text.length >= TPL_JS_MIN_LEN
+      && tplJsDeclCount(body) >= TPL_JS_MIN_FN_DECLS
+      && jsDensity(tpl.text) >= TPL_JS_MIN_DENSITY;
+    if (formB) {
+ // form B:整段模板即 JS(严密度门;tree-sitter hasError 是最终裁判)
+      n++;
+      const absContentStart = tpl.start + 1; // 跳过开 backtick
+      const sub = substituteInterpolations(body);
+      units.push({
+        unit: `${relFile}:js-${n}`,
+        container: `${tpl.varName || "tpl"}·js-${n}`,
+        js: sub.js,
+        startLine: lineAt(absContentStart),
+        approxLines: sub.approx,
+        form: "template-js",
+        hostRelFile: relFile,
+      });
+      continue;
+    }
+    if (tpl.text.includes("<script")) {
+ // form A:HTML 生成模板里的 <script> 块(外链 src=/非 js type 跳过)
       SCRIPT_BLOCK_RE.lastIndex = 0;
       for (const m of tpl.text.matchAll(SCRIPT_BLOCK_RE)) {
         const attrs = m[1] ?? "";
@@ -151,23 +187,6 @@ export function extractInlineJsUnits(sf: SourceFile, relFile: string): InlineJsU
           hostRelFile: relFile,
         });
       }
-    } else {
-      // form B:整段模板即 JS(严密度门;tree-sitter hasError 是最终裁判)
-      if (tpl.text.length < TPL_JS_MIN_LEN) continue;
-      const fnDecls = (tpl.text.match(/^[ \t]*function\s+[\w$]+\s*\(/gm) ?? []).length;
-      if (fnDecls < TPL_JS_MIN_FN_DECLS || jsDensity(tpl.text) < TPL_JS_MIN_DENSITY) continue;
-      n++;
-      const absContentStart = tpl.start + 1; // 跳过开 backtick
-      const sub = substituteInterpolations(tpl.text.slice(1, -1));
-      units.push({
-        unit: `${relFile}:js-${n}`,
-        container: `${tpl.varName || "tpl"}·js-${n}`,
-        js: sub.js,
-        startLine: lineAt(absContentStart),
-        approxLines: sub.approx,
-        form: "template-js",
-        hostRelFile: relFile,
-      });
     }
   }
   return units;
@@ -306,7 +325,11 @@ function splitJsSegments(js: string): JsSegment[] {
   let prevBlank = true;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (i === 0 || (prevBlank && TOP_DECL_RE.test(line))) starts.push({ line: i, idx });
+ // G-E 修复③:列 0 顶层声明即切分,去掉「上一行是空行」前提——紧凑风格
+ // (script-submit 102KB 顶层函数之间无空行)在老口径下永不切分,单点语法 ERROR
+ // (一个 /\s/ 正则字面量)毙掉整段 91 个函数。TOP_DECL_RE 本就列 0 锚定,
+ // 嵌套声明按惯例缩进不会误切;prevBlank 变量保留给既有读者对照,不再参与判定。
+    if (i === 0 || TOP_DECL_RE.test(line)) starts.push({ line: i, idx });
     prevBlank = line.trim() === "";
     idx += line.length + 1; // + "\n"
   }

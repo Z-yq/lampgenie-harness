@@ -1,5 +1,5 @@
 /**
- * 截图标注域消息(面板自有能力)+ 聊天窗语音任务书(voice.draft)。
+ * 截图标注域消息(面板自有能力)。
  * 自 index.ts(2941 行)按域拆分,逐字搬移。
  */
 import { z } from "zod";
@@ -141,3 +141,6 @@ export const VoiceDraftResult = Envelope.extend({
  /** ok=false:可操作错误(含「未配置 coding.models.voice」指路)。 */
   message: z.string().optional(),
 });
+
+
+

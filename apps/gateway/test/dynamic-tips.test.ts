@@ -12,8 +12,8 @@ import {
   DYN_TIPS,
   DYN_VERIFY_CADENCE_STEP,
   DYN_VERIFY_CADENCE_GAP,
-  DYN_DELEGATE_STEP,
-  DYN_DELEGATE_TOKENS,
+  DYN_CONTEXT_TRIM_STEP,
+  DYN_CONTEXT_TRIM_TOKENS,
   dynTipKeys,
   dynTipText,
   type DynSignals,
@@ -102,8 +102,8 @@ function sig(over: Partial<DynSignals> = {}): DynSignals {
 it("常量契约:阈值与卡片表一一对应(改阈值必须同时改测试)", () => {
   expect(DYN_VERIFY_CADENCE_STEP).toBe(12);
   expect(DYN_VERIFY_CADENCE_GAP).toBe(10);
-  expect(DYN_DELEGATE_STEP).toBe(25);
-  expect(DYN_DELEGATE_TOKENS).toBe(120_000);
+  expect(DYN_CONTEXT_TRIM_STEP).toBe(25);
+  expect(DYN_CONTEXT_TRIM_TOKENS).toBe(120_000);
   expect(DYN_TIP_MAX_LINES).toBe(6);
 });
 
@@ -122,32 +122,31 @@ it("dyn:verify-cadence —— step≥12 且 距上次验证 ≥10 步才命中",
   expect(txt).toContain("最小验证");
 });
 
-it("dyn:delegate —— step/spawnedSubagent/tokens 三条件全满足才命中", () => {
-  const ok = { step: DYN_DELEGATE_STEP, spawnedSubagent: false, tokensSpent: DYN_DELEGATE_TOKENS };
-  expect(dynTipKeys(sig(ok))).toContain("dyn:delegate");
-  expect(dynTipKeys(sig({ ...ok, step: DYN_DELEGATE_STEP - 1 }))).not.toContain("dyn:delegate"); // 步数不足
-  expect(dynTipKeys(sig({ ...ok, spawnedSubagent: true }))).not.toContain("dyn:delegate"); // 已 spawn
-  expect(dynTipKeys(sig({ ...ok, tokensSpent: DYN_DELEGATE_TOKENS - 1 }))).not.toContain("dyn:delegate"); // tokens 不足
+it("dyn:context-trim —— step≥25 且 tokens≥120k 才命中(不再以「未曾派发」为前提)", () => {
+  const ok = { step: DYN_CONTEXT_TRIM_STEP, tokensSpent: DYN_CONTEXT_TRIM_TOKENS };
+  expect(dynTipKeys(sig(ok))).toContain("dyn:context-trim");
+  expect(dynTipKeys(sig({ ...ok, step: DYN_CONTEXT_TRIM_STEP - 1 }))).not.toContain("dyn:context-trim"); // 步数不足
+  expect(dynTipKeys(sig({ ...ok, tokensSpent: DYN_CONTEXT_TRIM_TOKENS - 1 }))).not.toContain("dyn:context-trim"); // tokens 不足
   // 新字段缺省(旧调用方)→ 不命中
-  expect(dynTipKeys(sig({ step: 60 }))).not.toContain("dyn:delegate");
-  const txt = dynTipText("dyn:delegate");
-  expect(txt).toContain("spawn_subagent");
-  expect(txt).toContain("主轨只收结论");
+  expect(dynTipKeys(sig({ step: 60 }))).not.toContain("dyn:context-trim");
+  const txt = dynTipText("dyn:context-trim");
+  expect(txt).toContain("上下文整理");
+  expect(txt).toContain("串行工作自己做完");
 });
 
-it("顺序固定:既有三卡相对顺序不变,新卡追加在末尾(verify-cadence → delegate)", () => {
+it("顺序固定:既有卡相对顺序不变,新卡追加在末尾(verify-cadence → context-trim)", () => {
   const all = dynTipKeys(sig({
     step: 60, fileEditStreak: { "a.ts": 3 }, verifyRounds: 2, totalErrors: 2, boardTouched: false,
-    lastVerifyStep: 5, spawnedSubagent: false, tokensSpent: 200_000,
+    lastVerifyStep: 5, tokensSpent: 200_000,
   }));
   expect(all).toEqual([
-    "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:delegate",
+    "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:context-trim",
   ]);
 });
 
 it("每卡行数 ≤ DYN_TIP_MAX_LINES,且文本=fired 的 join(\"\\n\")非空", () => {
   const keys: DynTipKey[] = [
-    "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:delegate",
+    "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:context-trim",
   ];
   expect(Object.keys(DYN_TIPS).length).toBe(keys.length);
   for (const k of keys) {
@@ -168,6 +167,6 @@ it("DynSignals 不传新字段时判定与旧版完全一致(三卡口径零行�
   ];
   for (const c of legacyCases) {
     const keys = dynTipKeys(sig(c));
-    expect(keys.filter((k) => k === "dyn:verify-cadence" || k === "dyn:delegate")).toEqual([]);
+    expect(keys.filter((k) => k === "dyn:verify-cadence" || k === "dyn:context-trim")).toEqual([]);
   }
 });

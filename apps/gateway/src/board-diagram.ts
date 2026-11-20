@@ -120,6 +120,10 @@ function applyTextWrapPolicy(document: any): number {
       const shape = typeof content.shape === "string" ? content.shape : "";
       if (WRAP_READY_SHAPES.has(shape)) continue;
       const width = typeof node?.size?.width === "number" ? node.size.width : 0;
+ // D2:maxLines 不再写死 4——按节点实际高度推行数(每行 ~18px,减去上下 padding),
+ // note 等高节点(n8 height 指令撑开)能显示全部行;低节点仍自然被裁。
+      const height = typeof node?.size?.height === "number" ? node.size.height : 88;
+      const maxLines = Math.max(2, Math.min(40, Math.floor((height - 16) / 18)));
       content.sizingPolicy = {
         version: 1,
         mode: "fixed",
@@ -127,7 +131,7 @@ function applyTextWrapPolicy(document: any): number {
         maxSize: { width: 1600, height: 1200 },
         overflow: "wrap",
         clipContent: false,
-        maxLines: 4,
+        maxLines,
       };
       const padOf = SHAPE_TEXT_PADDING[shape];
       const pad = padOf ? padOf(width) : 0;
@@ -235,10 +239,17 @@ export async function renderBoardSvg(
     }
     diags.push(...((exported?.output?.diagnostics ?? []) as any[]).map(normDiag));
 
-    const svg = exported?.output?.files?.[0]?.text;
-    if (typeof svg !== "string" || !svg.trim()) {
+    const svgRaw = exported?.output?.files?.[0]?.text;
+    if (typeof svgRaw !== "string" || !svgRaw.trim()) {
       return done(false, "", [...diags, errDiag("E_NO_SVG", new Error("flowkit export 未返回 SVG 文本"))]);
     }
+ // G4 修复(容器视觉):flowkit 给根容器(dsl-*)画一张几乎包住全图的大框
+ // (经验证 3256×1974 vs viewBox 3400×2100)——「全图都在一个组里」不携带任何分组信息,
+ // 只产生一条横贯大灰框+空标题;子组(01/02/03)浅色主题下 fill=rgba(241,245,249,.52)
+ // 是高饱和亮蓝底(约 86% 不透明度),压过节点卡的存在感。后处理两步:
+ // ① 根容器框(面积 ≥ 85% viewBox)= 非语义装饰 → 摘除(标题空,无信息损失);
+ // ② 其余组容器 fill 降为 0.04~0.10 透明度(留分区感,不抢节点卡的视觉主体)。
+    const svg = postProcessContainers(svgRaw);
     const hasError = diags.some((d) => d.severity === "error");
     return done(!hasError && svg.trim().startsWith("<svg"), svg, diags);
   } catch (err) {
@@ -247,5 +258,34 @@ export async function renderBoardSvg(
       ? "E_IMPORT"
       : "E_RENDER";
     return done(false, "", [errDiag(code, err)]);
+  }
+}
+
+/** 容器视觉后处理( G4):根容器框摘除 + 子组填充降透明度。纯字符串处理,失败原样返回。 */
+function postProcessContainers(svg: string): string {
+  try {
+    const vb = svg.match(/viewBox="([\d.\-\s]+)"/);
+    if (!vb || !vb[1]) return svg;
+    const parts = vb[1].trim().split(/\s+/).map(Number);
+    const vw = parts[2] ?? NaN, vh = parts[3] ?? NaN;
+    if (!Number.isFinite(vw) || !Number.isFinite(vh)) return svg;
+    const vbArea = vw * vh;
+ // flowkit 组框形:<rect x="0" y="0" width="W" height="H" rx="12" fill="rgba(241,245,249,0.08)" stroke="#cbd5e1" .../>
+    let rootStripped = 0, fillsSoftened = 0;
+    let out = svg.replace(/<rect x="0" y="0" width="([\d.]+)" height="([\d.]+)"([^>]*fill="rgba\(241,245,249,[^"]*\)"[^>]*)\/>/g, (full, wS, hS, attrs) => {
+      const w = Number(wS), h = Number(hS);
+      if (!(w > 0 && h > 0)) return full;
+      const area = w * h;
+      if (area >= vbArea * 0.85) { rootStripped += 1; return ""; } // ① 根容器:摘框
+ // ② 子组:fill 透明度统一压到 0.06(dark 观感基准;light 原为 .52 过重)
+      fillsSoftened += 1;
+      return `<rect x="0" y="0" width="${wS}" height="${hS}"${String(attrs).replace(/fill="rgba\(241,245,249,[^"]*\)"/, 'fill="rgba(241,245,249,0.06)"')}/>`;
+    });
+    if (rootStripped || fillsSoftened) {
+      out = out.replace(/<!-- -->/g, ""); // 无 marker 占位(保 future 扩展),不动其余
+    }
+    return out;
+  } catch {
+    return svg;
   }
 }

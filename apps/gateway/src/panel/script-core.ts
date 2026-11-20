@@ -194,7 +194,7 @@ let organize = localStorage.getItem("zh:sb-organize") || "project"; // project |
 let showLimit = {};         // 分页: 桶键 -> 可见条数(复刻 ZCode 每页5,+5)
 const bucketCollapsed = new Set(JSON.parse(localStorage.getItem("zh:bucket-collapse") || "[]")); // 折叠桶键(持久)
 let ccHot = 0;
-const VIEW_NAMES = { chat: "", sense: "代码透镜 Lens", project: "代码档案 Atlas", wf: "自动化 Flows", exp: "经验库 Memo", sys: "配置台 Config", team: "团队 Crew", pipeline: "总线路", dash: "团队 · 看板", issues: "团队 · Issue", rsi: "指挥台 · 做梦", task: "指挥台 · 任务", nodes: "节点 Fleet", approvals: "关卡 Gate", board: "白板 Sketch", files: "文件树 Files", ide: "编辑器 IDE", git: "Git", term: "命令台 Shell", market: "插件市场 Market", browser: "网页 Webview", subchat: "子代理会话流", track: "追踪 Trace", traj: "轨迹 Trail", usage: "吞吐 Telemetry", super: "指挥台 Super" };
+const VIEW_NAMES = { chat: "", sense: "代码透镜 Lens", project: "代码档案 Atlas", wf: "自动化 Flows", exp: "经验库 Memo", sys: "配置台 Config", team: "团队 Crew", pipeline: "总线路", dash: "团队 · 看板", issues: "团队 · Issue", rsi: "指挥台 · 做梦", task: "指挥台 · 任务", nodes: "远程控制 Remote", approvals: "关卡 Gate", board: "白板 Sketch", files: "文件树 Files", ide: "编辑器 IDE", git: "Git", term: "命令台 Shell", market: "插件市场 Market", browser: "网页 Webview", subchat: "子代理会话流", track: "追踪 Trace", traj: "轨迹 Trail", usage: "吞吐 Telemetry", super: "指挥台 Super" };
 // ── 设置状态(全部真实生效+localStorage 持久化,参照 ZCode 设置页) ──
 const settings = {
   theme: localStorage.getItem("zh:theme") || "dark",
@@ -263,8 +263,8 @@ function applySettings() {
     setTimeout(() => document.body.classList.remove("theme-fade"), 320);
   }
   __lastThemeSig = themeSig;
- // 主题(基座/主题类)真变 → 自有图渲染器按当前基座重新 configure(明/暗调色板);
- // 渲染器未到=空转(懒加载 onload 用当前基座兜住)。
+ // 任务B:主题(基座/主题类)真变 → mermaid 用同一份归一化变量重新 initialize;
+ // 此前只有解析期一次写死 dark,浅主题下 mermaid 图恒为深色。库未到=空转(onload 用当前基座兜住)。
   try {
     if (typeof mmThemeSigApplied !== "undefined" && mmThemeSigApplied !== themeSig && typeof mmApplyTheme === "function") {
       mmThemeSigApplied = themeSig;
@@ -439,6 +439,7 @@ function notifyTaskDone(t) {
 }
 let settingsSection = localStorage.getItem("zh:settings-section") || "general";
 function setSection(sec) {
+  if (!document.getElementById("sec-" + sec)) sec = "general"; // 已删分区(如 audio)的深链/本地记忆回退通用,不白屏
   settingsSection = sec;
   localStorage.setItem("zh:settings-section", sec);
   for (const item of $("setNav").querySelectorAll(".set-nitem")) item.classList.toggle("on", item.dataset.sec === sec);
@@ -620,12 +621,20 @@ function trajCardHtml(tp, series) {
     + '<span class="tj-open" data-traj-open="1" title="打开轨迹看板:本会话每一步的类型/耗时/token/状态">看板</span>'
     + "</summary>" + subH + bars + spark + "</details>";
 }
-/** 温度三区分组(classic ctxPill 与 Super supCtx 两浮窗共用)。
+/** 上下文占用三档阈值(集中常量:pill 环形色、浮窗头余量条共用;
+ * safe(<70)/warn(70-84)/tense(≥85)。改阈值只动这里。 */
+var CX_TIERS = { warn: 70, tense: 85 };
+/** 温度三区分组(引入; 全量划分:冷+温+热 相加严格=pill 主值,删 1603 对账展示;
+ * classic ctxPill 与 Super supCtx 两浮窗共用)。
  * z = trace.stats 回包 stats.contextZones;缺席/缺任一区键/totalMessages=0 → 空串(整组不出)。
- * fmtTok = 各自 pill 的数字格式化(ctxTok/supCtxTok),保持两处 k/M 口径既有差异。
- * 口径:docs/design/02-context-economy/03-concepts.md §3——冷=[0,frozenCount) append-only;
- * 温=冻结区之后中段可精简;热=末 N 条保护窗(N=机制保护窗)。三区=派生逻辑视图,非物理分区。 */
-function ctxZonesGroupHtml(z, fmtTok) {
+ * fmtTok = 各自 pill 的数字格式化(ctxTok/supCtxTok);mainTok = pill 主值(权威总量,可空)。
+ * 归并规则(任何一条上下文内容都有且只有一个归属,MECE):
+ * 冷区 = 冻结/append-only 消息前缀 + 系统提示/技能字节(不在消息三区的部分,max(0,main-raw和));
+ * 温区 = 已闭合中段(可精简、语义保留);
+ * 热区 = 未闭合动作链 + 本步新增/未发出增量(服务端已并入,afterTraceStart)。
+ * 同一把尺子:mainTok>0 时 raw 三区(chars/4)+系统差额按占比归一到 mainTok(API 经验证
+ * inputTokens),热区吸收舍入误差 → 和严格相等;无主值=raw 原值展示(尾注标注口径)。 */
+function ctxZonesGroupHtml(z, fmtTok, mainTok) {
   if (!z || typeof z !== "object") return "";
   var zs = z.zones;
   if (!zs || typeof zs !== "object") return "";
@@ -635,22 +644,49 @@ function ctxZonesGroupHtml(z, fmtTok) {
   var fmt = typeof fmtTok === "function" ? fmtTok : String;
   var num = function (v) { var n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
   var rows = [
-    { name: "冷区·冻结", note: "append-only · reset 前移唯一路径", color: "var(--faint)", st: cold },
-    { name: "温区·可精简", note: "中段 · 可精简、语义保留", color: "var(--warn)", st: warm },
-    { name: "热区·保护窗", note: "末 N 条逐字保护(N=机制保护窗)", color: "var(--bronze)", st: hot }
+    { name: "冷区·冻结", note: "append-only · reset 前移唯一路径", color: "var(--faint)", st: cold, tag: "" },
+    { name: "温区·可精简", note: "已闭合 · 中段可精简、语义保留", color: "var(--warn)", st: warm, tag: "" },
+    { name: "热区·未闭合链", note: "未闭合链+本步增量 · 逐字保护 · 无条数上限", color: "var(--bronze)", st: hot, tag: "未闭合" }
   ];
-  var tot = num(cold.estTokens) + num(warm.estTokens) + num(hot.estTokens);
-  var html = '<div class="pm-grp"><div class="cx-sub">温度三区<span class="cx-note">(派生视图 · 消息 ' + (Number(z.totalMessages) || 0) + " 条)</span></div>";
+ // 全量划分归一(用户拍板:冷+温+热 相加=pill 主值,严格相等,不再对账):
+ // raw 三区(chars/4 估算)→ 系统提示/技能差额 max(0,main-raw和) 并入冷区(append-only 同类)
+ // → 按占比归一到 mainTok(API 经验证 inputTokens),热区吸收舍入误差(和恒等于 mainTok)。
+ // 无主值(暂无经验证)=raw 原值展示,尾注如实标注口径,不造数。
+  var rawC = num(cold.estTokens), rawW = num(warm.estTokens), rawH = num(hot.estTokens);
+  var main = Number(mainTok) > 0 ? Number(mainTok) : 0;
+  var toks, api;
+  if (main > 0) {
+    var wC = rawC + Math.max(0, main - (rawC + rawW + rawH)), wW = rawW, wH = rawH;
+    var wSum = wC + wW + wH;
+    var fC = Math.floor(main * wC / wSum), fW = Math.floor(main * wW / wSum);
+    toks = [fC, fW, main - fC - fW]; api = true; // 热区吸收舍入误差 → 和严格=main
+  } else { toks = [rawC, rawW, rawH]; api = false; }
+  var tot = toks[0] + toks[1] + toks[2];
+  var pcts = [];
+  for (var j = 0; j < 3; j++) pcts.push(tot > 0 ? Math.round((toks[j] / tot) * 1000) / 10 : 0);
+  var psum = pcts[0] + pcts[1] + pcts[2];
+  pcts[2] = Math.round((pcts[2] + (100 - psum)) * 10) / 10; // 占比和恒=100(末项吸收舍入)
+  var html = '<div class="pm-grp"><div class="cx-sub">温度三区<span class="cx-note">(全量划分 · 消息 ' + (Number(z.totalMessages) || 0) + " 条 · 三区相加=总量)</span></div>";
   for (var i = 0; i < rows.length; i++) {
-    var r = rows[i], msgs = num(r.st.messages), tok = num(r.st.estTokens);
-    var pct = tot > 0 && tok > 0 ? Math.max(1, Math.round((tok / tot) * 100)) : 0;
+    var r = rows[i], msgs = num(r.st.messages), tok = toks[i], pct = pcts[i];
+    var w = tot > 0 && tok > 0 ? Math.max(1, Math.round(pct)) : 0;
     html += '<div class="cx-row cx-zone" title="' + esc(r.name + ":" + r.note) + '">' +
       '<span class="cx-dot" style="background:' + r.color + '"></span>' +
       '<span class="cx-k">' + r.name + ' <span class="cx-note">' + esc(r.note) + '</span></span>' +
-      '<span class="cx-zbar"><i style="width:' + pct + "%;background:" + r.color + '"></i></span>' +
-      '<span class="cx-v">' + msgs + " 条 · " + fmt(tok) + " tok</span></div>";
+      '<span class="cx-zbar"><i style="width:' + w + "%;background:" + r.color + '"></i></span>' +
+      '<span class="cx-v">' + msgs + " 条 · " + tok + " tok · " + pct + "%" + (r.tag ? " · " + r.tag : "") + "</span></div>";
   }
-  html += '<div class="cx-sub" style="padding-top:0"><span class="cx-note">三区=派生视图;N=机制保护窗;tok 按 chars/4 估算,与 pill 主值(API 实测 inputTokens)口径不同,三区合计≈消息部分估算、不含系统提示</span></div></div>';
+ // jev-150m 评分保护窗=单列小注(03-concepts :22:评分器窗口,不是热区边界,不占热区行)
+  var ht = num(z.hotTailNote);
+  if (ht > 0) {
+    html += '<div class="cx-row cx-jevnote" title="jev-150m 评分器保护窗:评分时不送模型的末 N 条;与热区边界无关">' +
+      '<span class="cx-dot" style="background:transparent"></span>' +
+      '<span class="cx-k"><span class="cx-note">小注:jev-150m 评分保护窗=末 ' + ht + ' 条(评分器窗口,非热区边界)</span></span>' +
+      '<span class="cx-zbar"></span><span class="cx-v"></span></div>';
+  }
+ // 1603 对账等式块(总量=冷+温+热+区外增量+差额)已删——增量并入热区(服务端)、
+ // 系统差额并入冷区(上方归一),三区相加严格=总量,对账行/差额行不再出现。
+  html += '<div class="cx-sub" style="padding-top:0"><span class="cx-note">口径:' + (api ? "按 API 实测 inputTokens 归一(冷区含系统提示/技能字节)" : "本地 chars/4 估算(暂无 API 实测)") + ";热区=未闭合动作链+本步新增(未发出增量);冷+温+热=总量</span></div></div>";
   return html;
 }
 `;

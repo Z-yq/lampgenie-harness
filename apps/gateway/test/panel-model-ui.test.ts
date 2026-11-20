@@ -178,25 +178,32 @@ describe("模型选择 UI 对齐 ZCode 布局", () => {
     expect(html).toContain(".pill-menu.has-sub{min-width:192px;width:max-content;max-width:min(420px,calc(100vw - 2rem))}");
     expect(html).toContain(".pill-menu.no-sub{width:192px;min-width:192px;max-height:288px}");
     expect(html).toContain("max-height:min(360px,calc(100vh - 120px));overflow-y:auto}");
-    // 入口按有无折叠组切两种宿主类
-    expect(html).toContain('el.classList.add(hasSub ? "has-sub" : "no-sub")');
-    // 定位:side=top / align=start / sideOffset=2 / avoidCollisions(flip+shift)
-    const fit = sliceTopFn(html, "function modelMenuFit(el) {");
-    expect(fit).toContain("const sideTop = mh <= spaceAbove || spaceAbove >= spaceBelow;");
-    expect(fit).toContain('el.style.bottom = Math.max(8, window.innerHeight - r.top + 2) + "px";');
-    expect(fit).toContain("window.innerWidth - mw - 8");
+ // 入口:恒 ZCode 复刻形态 320px 卡宽;通用 has-sub/no-sub 类保留给旧口径消费者
+    expect(html).toContain('el.classList.add("zcode2")');
+    expect(html).toContain(".pill-menu.model-menu{width:320px;min-width:320px;max-width:320px;border-radius:12px;");
+ // 定位:side=top / align=start / sideOffset=2 / avoidCollisions(flip+shift)+ zoom 换算
+    const fit = sliceTopFn(html, "function modelMenuFit(el, anchorId) {");
+    expect(fit).toContain("const sideTop = mh * z <= spaceAbove || spaceAbove >= spaceBelow;");
+    expect(fit).toContain('el.style.bottom = Math.round((ih - r.top + 2) / z) + "px";');
+    expect(fit).toContain("iw / z - mw - 8 / z");
   });
 
-  it("⑨ 前置项组「跟随全局」+ 分隔线;sticky 页脚;搜索框保留(>12 项,样式对齐)", async () => {
+  it("⑨  主面板=头部厂商行+模型节+滑块;「跟随全局」挪到厂商页;sticky 页脚;搜索框保留", async () => {
     const html = await fetchHtml(7909);
     const menu = sliceTopFn(html, "function modelMenuHtml(groups, current, subKey) {");
-    // ① 前置项组 + 分隔线(margin:4px -4px)
-    expect(menu).toContain('<div class="pm-grp direct pm-lead"><div class="pm-item pm-follow');
-    expect(menu).toContain('<hr class="pm-sep">');
-    expect(html).toContain(".pill-menu .pm-sep{border:0;border-top:1px solid var(--border-soft);margin:4px -4px}");
-    expect(menu).toContain("跟随全局(清除会话覆盖)");
-    // 形态=RadioItem 同款(右侧勾,不加背景)
-    expect(menu).toContain('(followCk ? \'<span class="pm-ck">\' + followCk + "</span>" : "")');
+ // 主面板:头部厂商行(data-act=head)+「模型」节+聚焦厂商条目平铺
+    const head = sliceTopFn(html, "function modelMenuHeadHtml(g) {");
+    expect(head).toContain('data-act="head"');
+    expect(menu).toContain('<div class="mm-sec mm-sec-model"><div class="mm-sec-head">模型</div>');
+    expect(menu).toContain("modelMenuSlideSecHtml()");
+ // 厂商页:@providers 状态 + 厂商行 + 「跟随全局」配置项(不再混进模型列表)
+    expect(menu).toContain('subKey === "@providers"');
+    const prov = sliceTopFn(html, "function modelMenuProvidersPageHtml(groups) {");
+    expect(prov).toContain('<div class="pm-item pm-follow');
+    expect(prov).toContain("跟随全局");
+    expect(prov).toContain('data-act="follow"');
+    expect(prov).toContain("清除本会话的模型覆盖,回到全局主模型");
+    expect(html).toContain(".mm-sep{");
     // ③ sticky 页脚「» 管理模型」
     expect(menu).toContain('<div class="pm-foot sticky">');
     expect(menu).toContain('<span class="pm-flip">»</span><span class="pm-name">管理模型</span>');
@@ -214,7 +221,7 @@ describe("模型选择 UI 对齐 ZCode 布局", () => {
     const html = await fetchHtml(7910);
     const bind = sliceTopFn(html, "function modelMenuBind(el, groups, current, subKey) {");
     expect(bind).toContain('if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {');
-    expect(bind).toContain('if (e.key === "Escape") { e.preventDefault(); pillMenuClose(); return; }');
+    expect(bind).toContain('if (e.key === "Escape") { e.preventDefault(); if (subKey) rerender(""); else pillMenuClose(); return; }');
     expect(bind).toContain('if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {');
     expect(bind).toContain('if (e.key === "ArrowRight") {');
     expect(bind).toContain('if (e.key === "ArrowLeft") {');

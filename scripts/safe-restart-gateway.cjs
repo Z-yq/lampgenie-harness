@@ -9,7 +9,9 @@
  *      连不上(ECONNREFUSED)=网关本来就不在 → 直接走启动;
  *      连上但探测超时/回 error = 状态未知 → 拒绝重启(除非 --force)。
  *   2. 活跃任务>0 且无 --force → 打印任务清单 + 退出码 2。
- *   3. 定位旧进程:--pid > 端口属主(ss -tlnp) > .genie/gateway.pid > pgrep(仅默认端口)。
+ * 3. 定位旧进程:--pid > 端口属主(ss -tlnp) > .genie/gateway.pid。
+ * **禁止 pgrep 文本匹配**:复合命令/并行会话的 build shell 命令行里只要含
+ * `dist/gateway.mjs` 就会被误杀(经验证误杀并行会话 build shell 876401)。
  *   4. SIGTERM → 等待退出(killTimeoutMs;--force 超时补 SIGKILL)→ 回收陈旧 gateway.lock。
  *   5. setsid 起 node dist/gateway.mjs(日志 .genie/logs/gateway.log.<ts>),等 HTTP 200 后
  *      写 .genie/gateway.pid,再等 **WS hello 就绪探针**(--ws-ready-ms,缺省 300000)。
@@ -376,8 +378,9 @@ function looksLikeGateway(pid) {
 }
 
 /**
- * 定位旧进程。portOwner(ss) 最可信;pid 文件需 cmdline 佐证;pgrep 只在默认端口启用
- * (自定义端口的 pgrep 会误选别的网关实例)。
+ * 定位旧进程。portOwner(ss) 最可信;pid 文件需 cmdline 佐证。
+ * **不再用 pgrep 文本匹配**:命令行含 `dist/gateway.mjs` 的 shell/build 进程会被误选;
+ * 没有端口属主/有效 pid 文件时,视为「无旧进程」直接启动。
  */
 function findGatewayPid({ port, root, overridePid, defaultPort }) {
   if (overridePid) return { pid: overridePid, source: "--pid", verified: true };
@@ -398,17 +401,7 @@ function findGatewayPid({ port, root, overridePid, defaultPort }) {
   if (fromFile && pidAlive(fromFile) && looksLikeGateway(fromFile)) {
     return { pid: fromFile, source: "gateway.pid", verified: true };
   }
-  if (defaultPort !== undefined && port === defaultPort) {
-    const pg = spawnSync("pgrep", ["-f", "dist/gateway.mjs"], { encoding: "utf8" });
-    if (pg.status === 0 && pg.stdout) {
-      for (const raw of pg.stdout.split("\n")) {
-        const pid = Number(raw.trim());
-        if (!Number.isInteger(pid) || pid <= 0) continue;
-        if (pid === process.pid) continue;
-        if (looksLikeGateway(pid)) return { pid, source: "pgrep", verified: true };
-      }
-    }
-  }
+ // 没有端口属主/有效 pid 文件 = 无旧进程(或不可安全识别);绝不按命令行文本猜。
   return { pid: undefined, source: "none", verified: false };
 }
 
@@ -604,7 +597,7 @@ async function main(argv) {
   }
 
   if (!found.pid && !decision.gatewayDown) {
-    console.error("[safe-restart] 端口在听但无法定位网关进程(ss/pid 文件/pgrep 均未命中);拒绝盲目启动(会 EADDRINUSE)");
+    console.error("[safe-restart] 端口在听但无法定位网关进程(ss/pid 文件均未命中);拒绝盲目启动(会 EADDRINUSE)");
     return EXIT.stopFailed;
   }
 

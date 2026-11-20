@@ -305,7 +305,12 @@ function nodeLine(n: Node, warnings: string[]): string {
   const where = `node ${n.id}: summary`;
   const rawSummary = (n.summary ?? "").trim();
   // 「有什么用」= summary 首句,且按节点可用宽度单独限宽(DESC_LABEL_BUDGET)。
-  const summary = rawSummary ? clip(firstSentence(rawSummary), DESC_LABEL_BUDGET, where, warnings) : "";
+ // D2:note 是长文语义——不做首句截断,全文预算 300(与 height 上限 600 匹配),
+ // 超限省略号+「完整内容见板 JSON」提示;其余 shape 维持首句+DESC_LABEL_BUDGET,断言逐字不变。
+  const NOTE_BUDGET = 300;
+  const summary = rawSummary
+    ? clip(shape === "note" ? rawSummary : firstSentence(rawSummary), shape === "note" ? NOTE_BUDGET : DESC_LABEL_BUDGET, where, warnings)
+    : "";
   const outline = flowOutline(n.flow);
   // 先把 summary 与 flow 概述拼成一条,再 clip(按合并后长度截断),最后 sanitize——
   // 顺序不可反:清洗会把 1 字符展开成 2 字符,先 sanitize 后 clip 会让截断字数与 warning 不符。
@@ -328,9 +333,19 @@ function nodeLine(n: Node, warnings: string[]): string {
       desc = body ? `${anchor}${ANCHOR_SEP}${body}` : anchor;
     }
   } else if (raw) {
-    desc = sanitize(clip(raw, DESC_MAX, where, warnings), where, warnings);
+ // D2:note 长文语义用 NOTE_BUDGET(300);其余 shape 维持 DESC_MAX,断言逐字不变。
+    desc = sanitize(clip(raw, shape === "note" ? NOTE_BUDGET : DESC_MAX, where, warnings), where, warnings);
   }
   if (desc) line += `, desc: "${desc}"`;
+ // D2:note 按 summary+flow 文本量给 height 下限——OFK 取
+ // max(指令, 文本需求),估值偏低无害(文本更长时自动撑开);>60 字才输出,短 note 保持默认。
+  if (shape === "note") {
+    const textLen = summary.length + outline.length;
+    if (textLen > 60) {
+      const est = Math.min(600, Math.max(100, 40 + Math.ceil(textLen / 12) * 18));
+      line += `, height: ${est}`;
+    }
+  }
   // change 不在词表内(keep/undefined/脏值)一律不上色,且绝不抛。
   const color = colorFor(typeof n.change === "string" ? n.change : "");
   if (color) line += `, color: ${color}`;
@@ -388,6 +403,10 @@ export function serializeBoard(doc: BoardDoc): OfkSerializeResult {
   // 边:from/to 必须都在(截断后的)节点集里,否则丢边 + warning。
   const edgeLines: string[] = [];
   for (const e of Array.isArray(doc.edges) ? doc.edges : []) {
+ // 修复:「同组次序」是系统推导的布局辅助虚边(board-derive R2),不是设计关系——
+ // cards 渲染层已滤(board-ui-flow-layout.js 同判),svg 出图链此前漏滤,同组相邻链把图拉成
+ // 网状乱线(经验证 flow 板 30 边里 18 条是它,dense 38 里 9 条,交叉数翻倍)。出图层同口径滤除。
+    if (String(e.label ?? "") === "同组次序") continue;
     const from = String(e.from ?? "");
     const to = String(e.to ?? "");
     if (!known.has(from) || !known.has(to)) {

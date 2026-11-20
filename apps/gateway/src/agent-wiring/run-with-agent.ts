@@ -70,7 +70,7 @@ import { generationOfEvent, wakeVerdict, type PendingNotification, type WakeCode
 import { loadSoul, DEFAULT_SOUL_MD, MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { loadAgentProfiles, formatAgentProfiles, composeSubagentInstructions, expandToolTokens, resolveProfileTools, toolGrantMatched } from "@lampgenie/runtime/agent/agent-profiles";
 import { sessionSearchTool } from "../session-search.js";
-import { SUBAGENT_READ_TOOLS, SUBAGENT_WRITE_TOOLS } from "../llm-loop-backend.js";
+import { SUBAGENT_READ_TOOLS, SUBAGENT_WRITE_TOOLS, makeBriefScopedHeavyAskRouter } from "../llm-loop-backend.js";
 import type { SessionModelFace } from "../session-model.js";
 import type { TaskProfile } from "@lampgenie/runtime/agent/task-profile";
 import { makeCompactHook } from "../compact-hook.js";
@@ -186,7 +186,7 @@ import { homedir } from "node:os";
 import { rootScanVerdict } from "../sense-root-gate.js"; // 本文件 warmIndex 闸消费(2997)
 import { renderWorldStartBrief } from "../world-start-brief.js"; // 世界模型开工简报(L0+真命中L1,纯读产物)
 import { createSenseQueryLedger } from "../sense-query-ledger.js"; // 改前链路台账
-import { createSenseEditGuard } from "../sense-edit-guard.js"; // 改前链路闸
+import { createHighImpactEditGate, createSenseEditGuard } from "../sense-edit-guard.js"; // 改前链路闸; 高影响硬门
 import { isReadOnlyTerminal, terminalLooksLikeWrite } from "../terminal-write-guard.js"; // :plan-gate 绕写检测(剥 /dev/null 误伤)
 
 
@@ -422,6 +422,39 @@ export async function runWithAgent(
  // 改前链路闸:ledger 记录本任务 code_sense 结构面查询(codeSenseTool onQuery 喂);
  // 首次编辑源码文件且未查链路 → 显式提醒 + 自动附文件符号表(进程内索引查询,不触发构建;不可用降级纯提醒)。
   const senseLedger = createSenseQueryLedger();
+ // 高影响模块写前硬门:advisory 采纳率 0/4 → 可拒绝的门;同模块 3 次逃生。
+ // 覆盖判定复用 sense-query-ledger(radiation/impact 的符号词边界命中)。
+  const highImpactGate = createHighImpactEditGate({
+    getAtlasJson: () => atlasSnapshotForGenes,
+    ledger: senseLedger,
+    readFileContent: async (rel) => {
+      try {
+        const { readFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        return await readFile(join(taskRoot, rel), "utf8");
+      } catch {
+        return null; // 新文件/读失败 → 放行
+      }
+    },
+    onDeny: (info) => {
+      try {
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: { type: "impact.gate.denied", path: info.path, upstream: info.upstream, denials: info.denials },
+        });
+      } catch { /* 留痕失败不阻塞 */ }
+    },
+    onEscape: (info) => {
+      try {
+        journal.append({
+          kind: "custom",
+          sessionId: task.sessionId,
+          payload: { type: "impact.gate.escape", path: info.path, upstream: info.upstream },
+        });
+      } catch { /* 留痕失败不阻塞 */ }
+    },
+  });
   const senseEditGuard = createSenseEditGuard({
     root: taskRoot,
     ledger: senseLedger,
@@ -1193,13 +1226,13 @@ export async function runWithAgent(
 
   const spawnTool: Tool = {
     name: "spawn_subagent",
-    description: "Dispatch one subtask to a subagent and return its final text. Pass wait:true to block until it reaches a terminal state (zero LLM cost while waiting). **plan-gate: with no board in this task yet, write roles (worker/general) are rejected and pointed at planner; planner/explore/judge are exempt.** agentType picks the role (types listed in system prompt, default worker; read-only investigation → explore). title = one-line (<=30 chars) card label; required when several subagents run in parallel. deadlineMin = time box in minutes: on expiry the harness reaps the subagent and delivers its output as a partial result (explicitly marked, not a failure). Default = unbounded, run to completion — set it only to cap runaway jobs. A subagent is a child process agent inside THIS session (not a new session; it cannot create sessions). For independent subtasks, emit several spawn_subagent calls in one message so they run in parallel. when the task involves build/install/full test suite, state the expected commands and tell the subagent that heavy operations are gated and routed to the parent for approval — wait for the decision, never split commands to bypass it. Such approval requests surface in this session as questions; answer via answer_subagent with a reason for both approve and reject. backend:\"acp\" dispatches to an external ACP agent (Claude Code/Codex/Kimi/Hermes etc., adapter = claude-code/codex/kimi/hermes/qwen/opencode/dsh/minimax or a command). ACP permission requests use the same approval chain; ACP has no mid-run steer. worktree:true runs the subagent in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>) so parallel subagents do not collide and your workspace stays clean; the worktree and branch are kept for manual merge and the result carries worktreePath/branch. Non-git repos are rejected explicitly (no silent fallback; drop the flag to run in the main workspace).",
+    description: "**默认自己干(2026-11 ):只有①多段互不依赖的实施/只读勘察需要并行,或②需要特殊角色(planner/explore/judge/test-analyst/ppt-master)时才派。单文件/小步/串行依赖的工作自己做完;不要为省上下文把一段连续工作切碎外包,也不要用 worker 代替你干活。派发前三问:真的互不依赖能并行?特殊角色必需?自己顺序做是否更快?任一为否就不派。** Dispatch one subtask to a subagent and return its final text. Pass wait:true to block until it reaches a terminal state (zero LLM cost while waiting). **plan-gate: with no board in this task yet, write roles (worker/general) are rejected and pointed at planner; planner/explore/judge are exempt.** agentType picks the role (types listed in system prompt, default worker; read-only investigation → explore). title = one-line (<=30 chars) card label; required when several subagents run in parallel. deadlineMin = time box in minutes: on expiry the harness reaps the subagent and delivers its output as a partial result (explicitly marked, not a failure). Default = unbounded, run to completion — set it only to cap runaway jobs. A subagent is a child process agent inside THIS session (not a new session; it cannot create sessions). For independent subtasks, emit several spawn_subagent calls in one message so they run in parallel. when the task involves build/install/full test suite, state the expected commands and tell the subagent that heavy operations are gated and routed to the parent for approval — wait for the decision, never split commands to bypass it. Such approval requests surface in this session as questions; answer via answer_subagent with a reason for both approve and reject. backend:\"acp\" dispatches to an external ACP agent (Claude Code/Codex/Kimi/Hermes etc., adapter = claude-code/codex/kimi/hermes/qwen/opencode/dsh/minimax or a command). ACP permission requests use the same approval chain; ACP has no mid-run steer. worktree:true runs the subagent in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>) so parallel subagents do not collide and your workspace stays clean; the worktree and branch are kept for manual merge and the result carries worktreePath/branch. Non-git repos are rejected explicitly (no silent fallback; drop the flag to run in the main workspace).",
     parameters: {
       type: "object",
       properties: {
         instructions: { type: "string", description: "Full self-contained brief for the subagent (verb/goal/acceptance criteria)" },
         title: { type: "string", description: "One-line task summary (<=30 chars; card title; required when several subagents run in parallel)" },
-        agentType: { type: "string", description: "Subagent role: worker/explore/judge/test-analyst/planner (full list in system prompt; default worker). planner for planning/design work (it writes the board + step.md + accept, no code); explore for read-only investigation" },
+        agentType: { type: "string", description: "Subagent role: worker/explore/judge/test-analyst/planner (full list in system prompt; default worker). worker only for parallel independent implementation streams — do not use worker as a substitute for doing sequential work yourself; planner for planning/design work (it writes the board + step.md + accept, no code); explore for read-only investigation" },
         run_in_background: { type: "boolean", description: "true = background: returns agentId and output file path immediately; you decide whether to wait (hard dependency → task_output with a long waitSec) or do unrelated work first. Completion/stall is announced by a system message" },
         wait: { type: "boolean", description: "true = block until the subagent reaches a terminal state (done/failed/reaped); the result is the tool return value and your loop spends zero LLM tokens meanwhile. Mutually exclusive with run_in_background (wait wins). Default false: foreground call goes background after 180s and you decide from the receipt" },
         deadlineMin: { type: "number", description: "Time box in minutes. On expiry the harness reaps the subagent and delivers existing output as a partial result (finalText explicitly marked, not a failure). Explicit value wins; planner defaults to 8 minutes when unset (agent.plannerDeadlineMin, 0 = unbounded), other roles unbounded; agent.subagentDeadlineMin>0 sets a global box" },
@@ -1210,6 +1243,10 @@ export async function runWithAgent(
         worktree: { type: "boolean", description: "true = run in a dedicated git worktree off current HEAD (<repo>/.genie/worktrees/<agentId>, branch genie/<agentId>). Parallel subagents do not collide and the main workspace is untouched; worktree and branch are kept for manual merge. Non-git repo = explicit rejection, no silent fallback." },
         isolation: { type: "string", enum: ["none", "worktree"], description: "Isolation alias: worktree equals worktree:true; none = default" },
         context: { type: "string", enum: ["fresh", "fork"], description: "Context seed: fresh (default) = only the brief; fork = prepend a bounded summary of recent parent-session user/assistant text ([父会话上下文摘要(不可信背景)]). fork costs tokens; use it when the subtask needs the conversation's background." },
+        heavyApprove: {
+          type: "array", items: { type: "string" },
+          description: "Heavy-op pre-authorization by this brief (max 8 entries, each trimmed to <=120 chars): command prefixes listed here are auto-approved on hit (journaled brief-scoped-auto) instead of routing to the parent for approval; non-matching heavy ops still go to the parent approval chain. Only pre-authorize commands the brief explicitly sanctions. Deny red-lines (git write/destructive, gateway restart etc.) still win over this list. Empty/omitted = every heavy op asks the parent (current behavior).",
+        },
       },
       required: ["instructions"],
     },
@@ -1225,6 +1262,9 @@ export async function runWithAgent(
         resumeSessionKey?: string;
  /** 调用方自报深度:只进日志/错误文本做对照,不参与判定(判定只用 registry 链)。 */
         depth?: number;
+ /** 任务书预授权白名单(spawn_subagent.heavyApprove):≤8 条命令前缀;
+ * 规格化(逐条 trim、超 120 字符截断、丢弃空条目),接线见下方 heavyApprovePrefixes。 */
+        heavyApprove?: string[];
       };
  // ACP 后端:显式 backend 只认 "acp"(其它值 fail-visible,不静默当默认后端)。
       const backendArg = rawArgs.backend ? String(rawArgs.backend).toLowerCase() : undefined;
@@ -1232,6 +1272,16 @@ export async function runWithAgent(
         return JSON.stringify({ status: "rejected", reason: `未知 backend "${String(rawArgs.backend)}":可选 acp(缺省=服务配置 executor)` });
       }
       const acpRequested = backendArg === "acp";
+ // 任务书预授权白名单规格化(spawn_subagent.heavyApprove):≤8 条、每条 trim 后 ≤120
+ // 字符;超条丢弃、超长截断、空条目丢弃(防空前缀=恒真放行)。缺省/空数组=undefined(行为与现状
+ // 逐字一致——既不自动批也不改任何审批链)。
+      const heavyApprovePrefixes = (Array.isArray(rawArgs.heavyApprove) && rawArgs.heavyApprove.length > 0)
+        ? rawArgs.heavyApprove
+            .slice(0, 8)
+            .map((p) => String(p ?? "").trim().slice(0, 120))
+            .filter((p) => p.length > 0)
+        : undefined;
+      const heavyApproveOpt = heavyApprovePrefixes && heavyApprovePrefixes.length > 0 ? heavyApprovePrefixes : undefined;
  // worktree 隔离:worktree:true 或 isolation:"worktree";未知 isolation=fail-visible。
       const isolationArg = rawArgs.isolation === undefined ? undefined : String(rawArgs.isolation).toLowerCase();
       if (isolationArg && isolationArg !== "none" && isolationArg !== "worktree") {
@@ -1572,9 +1622,13 @@ export async function runWithAgent(
  // (未允许的仍走审批;无规则=不设闸同旧版)。
             ...(permRules ? { permissionRules: cap.denyOnly ? deriveChildRules(permRules) : permRules } : {}),
             ...(permRules ? { onPermissionAsk: makeSubagentPermissionAsker({ sessionId: task.sessionId, journal, broker: permissionBroker, taskOwner: ownerOf(task) }) } : {}),
+ // 任务书预授权白名单透传子 loop heavyOp 闸(spawn_subagent.heavyApprove)。
+            ...(heavyApproveOpt ? { heavyApprove: heavyApproveOpt } : {}),
  // 父子 ask-answer:重操作申请路由给父 agent(broker 注入+泵;超时=拒绝 fail-closed)。
+ // 任务书预授权:heavyApprove 白名单先于父审批——命中前缀直接批准留痕(brief-scoped-auto),
+ // 未命中仍走 broker.ask 逐字不变;git 写/破坏红线(git-guard)在路由前优先拦截,白名单不能越过。
             ...(parentAskBroker
-              ? { parentAsk: (input: { taskId: string; role: string; tool: string; command: string; match: import("@lampgenie/core").HeavyOpMatch }) => parentAskBroker.ask(input) }
+              ? { parentAsk: makeBriefScopedHeavyAskRouter({ journal, sessionId: task.sessionId, prefixes: heavyApprovePrefixes, ask: (input) => parentAskBroker.ask(input) }) }
               : {}),
  // 读传递( D3):父会话键传子后端——子 read_file 命中父/兄弟已读行段时尾注,
  // 登记双写父键(兄弟子代理经父键即刻共享已读事实)。
@@ -2234,6 +2288,27 @@ export async function runWithAgent(
             },
           });
         }
+ // P0 对照臂留痕:rollout 只对 treated 臂出标记,control 臂(gene 命中但被
+ // 灰度扣住)此前完全不可见 → nightly 的 A/B 永远没有对照组。全量匹配 - treated = held,
+ // 落 `gene.brief.held`;saving/一次通过率可按「注入 vs 扣住」同签名对比。
+        try {
+          const keyOf = (g: { defectClass: string; module: string }) => `${g.module}::${g.defectClass}`;
+          const treatedKeys = new Set(geneHits.map(keyOf));
+          const held = matchedDefectGenes(snapshot, taskText, { ...geneOpts, rollout: false })
+            .filter((g) => !treatedKeys.has(keyOf(g)));
+          if (held.length > 0) {
+            journal.append({
+              kind: "custom",
+              sessionId: task.sessionId,
+              payload: {
+                type: "gene.brief.held",
+                modules: [...new Set(held.map((g) => g.module))],
+                classes: [...new Set(held.map((g) => g.defectClass))],
+                count: held.length,
+              },
+            });
+          }
+        } catch { /* 对照臂标记失败不影响注入 */ }
       }
     } catch {
  // 无快照/读失败:跳过(fail-soft,不阻塞开工)
@@ -2857,7 +2932,7 @@ const composed = composeSystemPrompt({
       });
     },
   };
-  const mainTools: Tool[] = attachToolView([spawnTool, withAnswerAttentionGuard(buildSubagentAnswerTool(parentAskBroker)), codeSenseTool(taskRoot, taskRemoteProject ?? undefined, (a, t) => senseLedger.record(a, t)), changeSurfaceTool, sessionSearchTool(journal, task.sessionId), contextPruneTool(journal, task.sessionId, repoRoot()), ...(taskRemoteProject ? [] : [worldModelTool(repoRoot(), `agent:${String(task.sessionId ?? task.id ?? "main").slice(0, 24)}`)]), (() => { const rawCR = codeReviewTool(taskRoot, models?.review, journal, task.sessionId, streamSink ? (note) => streamSink(task.sessionId, { type: "tool-progress", callId: "code_review", name: "code_review", note }) : undefined, checkpointSha, taskRemoteProject ?? undefined); return { ...rawCR, async execute(args: unknown, signal?: AbortSignal) { const result = await rawCR.execute(args, signal); try { if (typeof result === "string" && (result.includes("[blocker]") || result.includes("[high]") || result.includes("blocker") || result.includes("high"))) { addEvidence(repoRoot(), { kind: "anti-pattern" as const, statement: `code_review: ${result.slice(0, 300)}`, source: { note: `session ${task.sessionId}` }, observedAt: Date.now(), projectId: "lampgenie-harness" }); } } catch { /* 回写失败不影响 */ } return result; } }; })(), runWorkflowTool(journal, executor, task.sessionId, workflowAskRouter), skillViewTool(store, () => disabledBuiltins(repoRoot())), todoTool(journal, task.sessionId, { allowParallelInProgress: agentConfig?.agent?.todoAllowParallelInProgress === true }), ...(askUser ? [askUserTool(task.sessionId, askUser)] : []), teamTaskTool(journal, task.sessionId), boardUpsertTool(journal, task.sessionId, task.id, taskRoot, undefined, undefined, { onExempt: () => { boardExemptThisTask = true; }, taskClass: () => taskClassState.value }), boardExportPptxTool(task.sessionId, task.id, taskRoot), taskPhaseTool, boardReadTool(journal, task.sessionId, undefined, { boardId: task.id, fallbackToSessionBoard: true }), meetingImportTool(llm), steerTool, taskOutputTool, (() => {
+  const mainTools: Tool[] = attachToolView([spawnTool, withAnswerAttentionGuard(buildSubagentAnswerTool(parentAskBroker)), codeSenseTool(taskRoot, taskRemoteProject ?? undefined, (a, t) => senseLedger.record(a, t)), changeSurfaceTool, sessionSearchTool(journal, task.sessionId), contextPruneTool(journal, task.sessionId, repoRoot()), ...(taskRemoteProject ? [] : [worldModelTool(repoRoot(), `agent:${String(task.sessionId ?? task.id ?? "main").slice(0, 24)}`, journal, task.sessionId)]), (() => { const rawCR = codeReviewTool(taskRoot, models?.review, journal, task.sessionId, streamSink ? (note) => streamSink(task.sessionId, { type: "tool-progress", callId: "code_review", name: "code_review", note }) : undefined, checkpointSha, taskRemoteProject ?? undefined); return { ...rawCR, async execute(args: unknown, signal?: AbortSignal) { const result = await rawCR.execute(args, signal); try { if (typeof result === "string" && (result.includes("[blocker]") || result.includes("[high]") || result.includes("blocker") || result.includes("high"))) { addEvidence(repoRoot(), { kind: "anti-pattern" as const, statement: `code_review: ${result.slice(0, 300)}`, source: { note: `session ${task.sessionId}` }, observedAt: Date.now(), projectId: _basename(repoRoot()) }); } } catch { /* 回写失败不影响 */ } return result; } }; })(), runWorkflowTool(journal, executor, task.sessionId, workflowAskRouter), skillViewTool(store, () => disabledBuiltins(repoRoot())), todoTool(journal, task.sessionId, { allowParallelInProgress: agentConfig?.agent?.todoAllowParallelInProgress === true }), ...(askUser ? [askUserTool(task.sessionId, askUser)] : []), teamTaskTool(journal, task.sessionId), boardUpsertTool(journal, task.sessionId, task.id, taskRoot, undefined, undefined, { onExempt: () => { boardExemptThisTask = true; }, taskClass: () => taskClassState.value }), boardExportPptxTool(task.sessionId, task.id, taskRoot), taskPhaseTool, boardReadTool(journal, task.sessionId, undefined, { boardId: task.id, fallbackToSessionBoard: true }), meetingImportTool(llm), steerTool, taskOutputTool, (() => {
  // 主 agent 终端(卫生提醒 + 绕写检测):命令含写文件形态且
  // 规划未落地时拦截——堵「文件工具被 plan-gate 拦、改用 echo > 绕行」的流程造假口子。
         const t = createTerminalTool({
@@ -2919,6 +2994,7 @@ const composed = composeSystemPrompt({
     ...createFileTools({
       root: taskRoot, journal, sessionId: task.sessionId,
       toolDumpDir: join(repoRoot(), ".genie", "tool-dumps"),
+      preEditGate: (rel: string) => highImpactGate(rel),
       editHint: async (rel: string) => {
  // P0:高影响警告 + 基因提示(两个都跑,各自每模块只出一次)
         const impact = highImpactWarning(rel);
@@ -3188,6 +3264,7 @@ const composed = composeSystemPrompt({
       "## 核心纪律卡(系统纪律;直接执行,不要复述此段)",
       "- 五阶段流程:理解任务→规划→开始实施→开始验收→完成——每进入一阶段用 task_phase 声明(不涉及的用 skip:true);**阶段声明与其他工具同一步发出即可(task_phase 可与真实工作并行),不要为它单独走一步**;只做当前阶段该做的事",
       "- plan-gate 硬闸:本任务白板上还没有设计节点前,派写角色子代理/直写文件都会被拒——先规划落板(planner 或内联轻量板)",
+      "- 派发时机:默认自己干(读码/改码/跑测试);只有多段互不依赖的工作可并行,或需要 planner/explore/judge/test-analyst/ppt-master 这类特殊角色时才派;串行/单文件小步不派,不把连续工作切碎外包",
       "- 输出简明扼要:结论先行、证据跟后;不长篇大论、不复述过程细节",
       "- 收尾纪律:P0 验收证据全绿前不宣称完成(收尾前 board_upsert action=audit 核对)",
       "- 交付物:本轮产出报告/截图/导出件等真实文件后,用 deliverable 登记路径(收尾自动核对存在性;改了代码就要重跑验证,否则收尾会提示)",

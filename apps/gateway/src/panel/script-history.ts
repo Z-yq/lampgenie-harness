@@ -146,6 +146,14 @@ function renderHistory() {
  // 子代理工作区 tab 激活:chatBody 归工作区渲染(完整动作/消息流回放),主历史挂起——切回「主会话」tab 即还原。
   if (subWsActive) { renderSubWorkspace(subWsActive); return; }
   turnOutcome = new Map(); // 每次全量重放重算轮次结局归属(时间轴进度着色的数据源)
+ // 终稿判定数据源——最后一条「带正文且不带 toolCalls」的 message.agent 的 seq(它=本轮
+ // 终稿,渲染免折叠壳)。排除 toolCalls:先说明再调工具的中间文本不该被当终稿免壳(code review 修)。
+  let lastAgentSeq = -1;
+  for (let li = histEvents.length - 1; li >= 0; li--) {
+    const lev = histEvents[li];
+    const hasCalls = !!(lev && lev.payload && Array.isArray(lev.payload.toolCalls) && lev.payload.toolCalls.length);
+    if (lev && lev.kind === "message.agent" && lev.payload && lev.payload.text && !hasCalls) { lastAgentSeq = Number(lev.seq ?? -1); break; }
+  }
   toolTokensScan(); // tool.tokens 事件增量预扫(toolCallId→tokens,代码块语义着色数据源)
   revSrcCache = {};        // 注入数据源随重放重建(防陈旧引用)
  // 滚动位置管理:renderChat 每条 WS 更新都全量重建 innerHTML,不保存=滚动每次被打回。
@@ -289,6 +297,11 @@ function renderHistory() {
  // 改为:同一次调用的 trace 行与其思考内容合成一张 details 卡(summary 带 roles 计数 [s×3 u×1 a×1 t×2]);
  // 无思考内容时仍是原来那一行(零变化),只压一次调用也不额外成卡。
   let traceBuf = [];
+ // ---- 十四轮·阶段带(用户参照千问办公):task_phase 声明处插阶段带,过程段收拢,结论外露 ----
+  let phaseLastReply = "";   // 本阶段至今末条回复首行(阶段带 summary 的结论位)
+  let phaseSeq = 0;          // 阶段带序号(①②③…按声明顺序)
+  const PH_NAME = { understand: "理解", plan: "规划", implement: "实施", verify: "验收", close: "完成" };
+  const PH_CIRC = { "①": 1, "②": 2, "③": 3, "④": 4, "⑤": 5, "⑥": 6, "⑦": 7, "⑧": 8 };
   const ROLE_ABBR = { system: "s", user: "u", assistant: "a", tool: "t" };
   const traceFlush = () => {
     if (!traceBuf.length) return;
@@ -469,7 +482,7 @@ function renderHistory() {
       } else {
       flushGrp(); turnSeq++;
  // P0-2:登记本轮过程段起点(用户消息行之后;roundPartsWrap 会再对齐到首个过程段)
-      roundRanges.push({ i: parts.length + 1, t: turnSeq, k: "round:" + String(currentSid || "") + ":" + turnSeq });
+      roundRanges.push({ i: parts.length + 1, t: turnSeq, k: "round:" + String(currentSid || "") + ":" + turnSeq, at: Number(ev.time || 0) });
       ED_TURN = newEdTurn(); // P1-6:新一轮的改文件聚合账清零
       const attsHtml = (ev.payload.attachments || []).length
         ? attRowHtml(ev.payload.attachments)
@@ -512,7 +525,8 @@ function renderHistory() {
         const mk = replyKeyOf(ev, rawText);
         MSGRAW[mk] = scrubProtocolLines(rawText);
         MSGQ[mk] = "> [" + msgHm(ev.time) + "] " + msgFirstLine(rawText, 40);
-        parts.push(gateL(() => replyBlockHtml(ev, q)));
+        phaseLastReply = msgFirstLine(rawText, 90); // 十四轮:阶段小结取本阶段末条回复首行(阶段带 summary 消费)
+        parts.push(gateL(() => replyBlockHtml(ev, q, lastAgentSeq >= 0 && Number(ev.seq ?? -1) === lastAgentSeq)));
         const isFinal = !(ev.payload.toolCalls && ev.payload.toolCalls.length);
         if (isFinal && ED_TURN && ED_TURN.list.length) {
           const sum = ED_TURN;
@@ -529,6 +543,22 @@ function renderHistory() {
           if (c.name === "spawn_subagent" && subAbsorbedCalls.has(String(c.id || ""))) continue; // 过程卡已承载(B )
  // 画布形态分身独立看板:spawn/answer/task_output 的调用回显不进会话流(子agent会话流卡承载)。
           if (cvHideSub && (c.name === "spawn_subagent" || c.name === "answer_subagent")) continue;
+ // 十四轮·阶段带(参照千问办公):task_phase 声明不再出工具卡——
+ // 渲染为阶段分隔带(序号+阶段名+note),后续过程段由 phaseSecWrap 收进该阶段节,结论(回复)外露。
+          if (c.name === "task_phase") {
+            flushGrp();
+            let pn = "", pnote = "";
+            try { const a = JSON.parse(String(c.arguments || "{}")); pn = String(a.phase || ""); pnote = String(a.note || ""); } catch (e) { /* 参数非法=无名阶段带 */ }
+            phaseSeq++;
+            const circ = "①②③④⑤⑥⑦⑧⑨⑩".charAt(Math.min(9, phaseSeq - 1)) || String(phaseSeq);
+            const nm = PH_NAME[pn] || pn || "阶段";
+            const prevConcl = phaseLastReply; // 上阶段结论=此刻已积累的末条回复首行
+            parts.push('<div class="phase-band" data-ph-seq="' + phaseSeq + '"><span class="ph-no">' + circ + '</span><span class="ph-name">' + esc(nm) + "</span>" +
+              (prevConcl ? '<span class="ph-concl" title="上一阶段末条结论(首行)">' + esc(prevConcl) + "</span>" : "") +
+              (pnote ? '<span class="ph-note">' + esc(pnote) + "</span>" : "") + "</div>");
+            phaseLastReply = "";
+            continue;
+          }
  // task_output 轮询聚合:同 agentId 的调用对只在首对渲染一张「等待子代理」卡,
  // 后续对被吸收(卡的状态/次数/时长随 journal 增量与 3s 轮询重渲自动更新)。
           if (c.name === "task_output" && !office) {
@@ -665,9 +695,14 @@ function renderHistory() {
       const tcs = Array.isArray(tp.toolCalls) ? tp.toolCalls.slice(0, 4).join(",") + (tp.toolCalls.length > 4 ? " +" + (tp.toolCalls.length - 4) : "") : "";
       const u = tp.usage || {};
       const iok = Number(u.inputTokens || 0), ook = Number(u.outputTokens || 0);
- // 命中率 = API 的 cached/input(input>0 且 cached>0 才出);suspect 只加行尾徽标,数字不变。
+ // 命中率 = API 的 cached/input;:0% 也显示(冷启动/缓存过期),不再隐藏——
+// 否则用户只看到 99.x% 的暖调用,却对会话平均命中率低无迹可循。
       const cok = Number(u.cachedTokens || 0);
-      const hitTxt = iok > 0 && cok > 0 ? " · 命中 " + ((cok / iok) * 100).toFixed(1) + "%" : "";
+      const hitTxt = iok > 0
+        ? (cok > 0
+          ? " · 命中 " + ((cok / iok) * 100).toFixed(1) + "%"
+          : ' · <span title="本次 provider 未返回缓存命中(cachedTokens=0):冷启动或缓存已过期/被改写;该次仍计入会话平均命中率">命中 0.0%</span>')
+        : "";
       const susTxt = tp.usageSuspect
         ? '<span class="lt-sus" title="' + esc(String(tp.usageAnomaly || "上游 usage 与本步输入不自洽")) + '">⚠</span>' : "";
       const lineHtml = gateL(() => '<div class="task-sub llm-trace-line" data-trace-file="' + esc(String(tp.file || "")) + '" title="' + esc(String(tp.file || "") + (roleFull ? " · 消息构型 " + roleFull : "")) + '" style="cursor:pointer">' +
@@ -775,7 +810,12 @@ function renderHistory() {
   const cur = [...tasks.values()].find((x) => x.sessionId === currentSid && ["queued", "running"].includes(x.state));
  // P0-5:活跃任务流尾常驻运行态行(三态动词 + 「工作中 X 时 X 分 X 秒」);
  // 1s 粒度只改该行 textContent(runStatusTick),不新增轮询、不整块重渲染;终态后该行不再产出即消失。
-  if (cur) parts.push(runStatusHtml(cur.startedAt, runLineVerb || "任务"));
+  if (cur && cur.startedAt) parts.push(runStatusHtml(cur.startedAt, runLineVerb || "任务"));
+  else if (cur) { // startedAt 缺失走事件尾兜底(F2):最后已知事件时刻起算,防「工作中」段消失/undefined
+    const le = Array.isArray(histEvents) ? histEvents[histEvents.length - 1] : null;
+    runLineFallbackAt = Number((le && le.time) || Date.now());
+    parts.push(runStatusHtml(0, runLineVerb || "任务"));
+  }
  // fixI15: 排队消息卡(队列顺序=发送顺序;每卡三按钮:立即发送/编辑/删除)。
   for (const qi of (queueBySid.get(currentSid) || [])) {
     parts.push('<div class="qm-card" data-qid="' + esc(qi.id) + '">' + ic("clock", "qm-clock") + '<div class="qm-body">'
@@ -831,7 +871,12 @@ function renderHistory() {
   }
  // T1 幂等(视频拆解):task.list 全量广播(含他山会话)每经 renderChat→renderHistory 都
  // 全量重写 chatBody,单帧重绘=问候区「周期性跳动」(帧差经验证 30s 抖 438 节点)。内容未变=不写。
-  const html = (roundPartsWrap(parts, roundRanges, (t) => turnOutcome.has(String(t))), parts.length ? parts.join("") : '<div class="empty-line">' + ic("inbox") + " 该会话暂无记录</div>" + firstRunCardHtml());
+ // 活跃信号(cur=本会话 running/queued 任务存在 → 最后一个轮区间=活跃组,运行中默认展开)。
+  const curActive = [...tasks.values()].find((x) => x.sessionId === currentSid && ["queued", "running"].includes(x.state));
+  const lastRange = roundRanges.length ? roundRanges[roundRanges.length - 1] : null;
+  const activeKey = curActive && lastRange ? String(lastRange.k || "") : "";
+  const activeAt = curActive && lastRange ? Number(lastRange.at || 0) : 0;
+  const html = (roundPartsWrap(parts, roundRanges, (t) => turnOutcome.has(String(t)), activeKey, activeAt), phaseSecWrap(parts), parts.length ? parts.join("") : '<div class="empty-line">' + ic("inbox") + " 该会话暂无记录</div>" + firstRunCardHtml());
   taskCapRender(); // P1-8:先更新 sticky 胶囊(内容未变也需刷状态),再做整帧幂等判断
   if (html === histLastHtml) return;
   histLastHtml = html;
@@ -1004,6 +1049,48 @@ function renderHistory() {
     }
   }
   renderPendingSkills(); // 会话路径也要重挂(审计 C5:此前只有草稿 renderChat 重挂,会话视图重建即丢占位)
+}
+
+/** 十四轮·阶段节包裹(参照千问办公,渲染尾部在 roundPartsWrap 之后跑):
+ * 阶段带之间的过程段(llm-trace 行/task-sub/tip/思考卡/工具卡)收进「执行过程 · N 步」折叠,
+ * 结论(task-reply)外露;阶段节 summary=阶段带本身;用户消息行=段落终结符(不吞)。
+ * 无阶段带的会话零变化。序号错位防护:扫描 parts 内容而非记录下标(roundPartsWrap 会移位)。 */
+function phaseSecWrap(parts) {
+  const has = [];
+  for (let i = 0; i < parts.length; i++) if (String(parts[i]).indexOf('class="phase-band"') >= 0) has.push(i);
+  if (!has.length) return;
+  const isUser = (h) => String(h).indexOf('class="user-line"') >= 0;
+  const isBand = (h) => String(h).indexOf('class="phase-band"') >= 0;
+  const isProc = (h) => {
+    const s = String(h);
+    if (!s) return false;
+    if (s.indexOf('class="task-reply"') >= 0) return false;
+    if (isUser(s)) return false;
+    if (isBand(s)) return false;
+    if (s.indexOf("llm-trace-line") >= 0 || s.indexOf('class="task-sub"') >= 0 || s.indexOf('class="tip-line"') >= 0) return true;
+    return roundIsProc(h);
+  };
+  let shift = 0;
+  for (let k = 0; k < has.length; k++) {
+    let s0 = has[k] + shift; // band 所在(段首)
+    let e0 = (k + 1 < has.length ? has[k + 1] + shift : parts.length);
+    if (s0 < 0 || s0 >= parts.length) continue;
+    const bandHtml = String(parts[s0]);
+    const seg = parts.slice(s0 + 1, e0);
+ // 段内扫到用户行=阶段链结束(下一任务的输入,不吞):截断
+    let cut = seg.length;
+    for (let i = 0; i < seg.length; i++) if (isUser(seg[i])) { cut = i; break; }
+    const proc = [], keep = [];
+    for (let i = 0; i < cut; i++) (isProc(seg[i]) ? proc : keep).push(seg[i]);
+    let inner = "";
+    if (proc.length >= 3) inner += '<details class="phase-flow"><summary>' + ic("bolt") + " 执行过程 · " + proc.length + " 步</summary>" + proc.join("") + "</details>";
+    else inner += proc.join("");
+    inner += keep.slice(0, cut).join("");
+    const open = k === has.length - 1 ? " open" : ""; // 末阶段=当前工作,默认展开
+    const repl = '<details class="phase-sec"' + open + "><summary>" + bandHtml + "</summary>" + '<div class="phase-body">' + inner + "</div></details>";
+    parts.splice(s0, cut + 1, repl);
+    shift -= cut; // 移除量=band+被吞段,插入量=1 → 净 -cut;尾巴(seg.slice(cut))自动前移原样保留
+  }
 }
 
 function renderChat() {

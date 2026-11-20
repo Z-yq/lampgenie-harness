@@ -87,7 +87,7 @@ export function reconcileCodingRoute(config: Config): { changed: string[]; route
 
 export type RoleName = "compact" | "review" | "subagent" | "digest" | "voice";
 // voice=语音任务书:无 provider 实例(server 每次 voice.draft 现读 live config),
-// 但路由归属/reconcile 语义与其它角色同源,进同一张 RoleName 表。
+// 故 reconcile/guard 只把归属路由写对;热切由 voice.draft 自身现读保证。
 
 export interface RoleSwitchResolution {
   role: RoleName;

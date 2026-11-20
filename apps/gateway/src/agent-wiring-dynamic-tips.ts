@@ -5,7 +5,7 @@
  * - SOP 卡按 **phase 首见** 触发(阶段事件驱动,一次为限);
  * - 动态卡按 **任务内步态信号** 触发(连续改同一文件 / 反复验证仍带错 / 步数很多却没落板),
  *   由 buildLoopTips 每步算一次信号再逐条按 key 注入。
- * 为什么不塞进 SOP_TIPS:sop: 前缀的 key 与阶段一一对应(有 phase 才有卡),而这三卡的触发与
+ * 为什么不塞进 SOP_TIPS:sop: 前缀的 key 与阶段一一对应(有 phase 才有卡),而动态卡的触发与
  * phase 无关(implement 阶段里也可能连改同一文件 5 步),混在一张表里会让「一次为限」的 episode
  * 语义与阶段绑定,反而说不清。
  * 本文件是**纯函数 + 常量**(零 io、零状态):判定口径可在 apps/gateway/test/dynamic-tips.test.ts
@@ -55,13 +55,14 @@ export const DYN_TIPS = {
     "把验证结果记进进展(phase/step/note)再继续",
     "验证红了就停下改那一处,别接着改下一处",
   ],
-  /** 触发:step≥25 且本任务从未 spawn_subagent 且 tokensSpent≥120k(上下文已重)。
- * 出处:J1 token 轮经验证——单轨长读是上下文膨胀主因,独立调研/批量读取本可隔离在子代理里。 */
-  delegate: [
-    "动态·上下文委派(步数 25+ 且上下文已重)",
-    "把下一段独立调研/批量读取派给 spawn_subagent",
-    "主轨只收结论与改动点,不自己逐文件读原文",
-    "隔离上下文:子代理读的原文不进主线窗口",
+ /** 触发:step≥25 且 tokensSpent≥120k(上下文已重)。
+ * 出处:J1 token 轮经验证——单轨长读是上下文膨胀主因;2026-11 改为「默认自己干,
+ * 上下文卫生靠沉淀不靠外包」:先落板/写结论/压缩,只有确有两段互不依赖的实施才并行派子代理。 */
+  contextTrim: [
+    "动态·上下文整理(步数 25+ 且上下文已重)",
+    "把已确认结论写进板/待办(一句话结论 + file:line)",
+    "后续只处理当前分支,已读文件不整读第二遍",
+    "确有两段互不依赖的实施才并行派子代理,串行工作自己做完",
   ],
 } as const;
 
@@ -71,7 +72,7 @@ export type DynTipKey =
   | "dyn:verify-stop"
   | "dyn:phase-align"
   | "dyn:verify-cadence"
-  | "dyn:delegate";
+  | "dyn:context-trim";
 
 /** 动态卡判定信号(buildLoopTips 每步算好后交进来;纯数据,便于单测构造)。 */
 export interface DynSignals {
@@ -89,8 +90,6 @@ export interface DynSignals {
   boardTouched: boolean;
   /** 上一次跑验证类工具的步号(从未验证=undefined → verify-cadence 卡不触发;旧调用方不传=零行为变化)。 */
   lastVerifyStep?: number;
-  /** 本任务内是否已 spawn_subagent 过(缺省 undefined 按「无信号不触发」处理)。 */
-  spawnedSubagent?: boolean;
   /** 本任务累计消耗 tokens(缺省 undefined 按「无信号不触发」处理)。 */
   tokensSpent?: number;
 }
@@ -107,15 +106,15 @@ export const DYN_PHASE_ALIGN_STEP = 40;
 export const DYN_VERIFY_CADENCE_STEP = 12;
 /** 距上次验证的步数间隔阈值(verify-cadence 卡:工作 10 步未验证)。 */
 export const DYN_VERIFY_CADENCE_GAP = 10;
-/** 步数阈值(delegate 卡)。 */
-export const DYN_DELEGATE_STEP = 25;
-/** 累计 token 阈值(delegate 卡:上下文已重)。 */
-export const DYN_DELEGATE_TOKENS = 120_000;
+/** 步数阈值(context-trim 卡)。 */
+export const DYN_CONTEXT_TRIM_STEP = 25;
+/** 累计 token 阈值(context-trim 卡:上下文已重)。 */
+export const DYN_CONTEXT_TRIM_TOKENS = 120_000;
 
 /**
  * 判定本步该注入哪些动态卡(纯函数,**无 gate / 无 fired 语义**——那两层在 buildLoopTips)。
- * 返回顺序固定:hypothesis → verify-stop → phase-align → verify-cadence → delegate
- * (先具体动作、后泛化的上下文治理;新卡追加末尾,既有三卡相对顺序不变)。
+ * 返回顺序固定:hypothesis → verify-stop → phase-align → verify-cadence → context-trim
+ * (先具体动作、后泛化的上下文治理;新卡追加末尾,既有卡相对顺序不变)。
  */
 export function dynTipKeys(sig: DynSignals): DynTipKey[] {
   const out: DynTipKey[] = [];
@@ -129,12 +128,11 @@ export function dynTipKeys(sig: DynSignals): DynTipKey[] {
     && sig.lastVerifyStep !== undefined
     && sig.step - sig.lastVerifyStep >= DYN_VERIFY_CADENCE_GAP
   ) out.push("dyn:verify-cadence");
-  // delegate:步数够 + 从未派过子代理 + 上下文已重(三条件同时满足;可选字段缺省=无信号不触发)。
+ // context-trim:步数够 + 上下文已重(两条件同时满足;tokensSpent 缺省=无信号不触发)。
   if (
-    sig.step >= DYN_DELEGATE_STEP
-    && sig.spawnedSubagent === false
-    && (sig.tokensSpent ?? 0) >= DYN_DELEGATE_TOKENS
-  ) out.push("dyn:delegate");
+    sig.step >= DYN_CONTEXT_TRIM_STEP
+    && (sig.tokensSpent ?? 0) >= DYN_CONTEXT_TRIM_TOKENS
+  ) out.push("dyn:context-trim");
   return out;
 }
 
@@ -144,6 +142,6 @@ export function dynTipText(key: DynTipKey): string {
   if (key === "dyn:verify-stop") return (DYN_TIPS.verifyStop as readonly string[]).join("\n");
   if (key === "dyn:phase-align") return (DYN_TIPS.phaseAlign as readonly string[]).join("\n");
   if (key === "dyn:verify-cadence") return (DYN_TIPS.verifyCadence as readonly string[]).join("\n");
-  if (key === "dyn:delegate") return (DYN_TIPS.delegate as readonly string[]).join("\n");
+  if (key === "dyn:context-trim") return (DYN_TIPS.contextTrim as readonly string[]).join("\n");
   return "";
 }

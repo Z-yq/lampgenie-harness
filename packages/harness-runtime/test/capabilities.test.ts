@@ -47,7 +47,7 @@ describe("SERVER_CAPABILITY_OPS 封闭清单", () => {
 describe("capabilityOpsOfTypes", () => {
   it("取首段、去重、升序,剔除无点/空/非字符串", () => {
     expect(
-      [...capabilityOpsOfTypes(["task.submit", "task.rename", "voice.tts", "ping", "", ".x", 3, null, "sys.info"])],
+      [...capabilityOpsOfTypes(["task.submit", "task.rename", "voice.transcribe", "ping", "", ".x", 3, null, "sys.info"])],
     ).toEqual(["sys", "task", "voice"]);
   });
 
@@ -88,7 +88,7 @@ describe("capabilityOpOf", () => {
   });
 
   it("补齐后的既有通道段可取回(voice/exp/team/issue/browser/sys)", () => {
-    expect(capabilityOpOf("voice.tts")).toBe("voice");
+    expect(capabilityOpOf("voice.transcribe")).toBe("voice");
     expect(capabilityOpOf("exp.distill")).toBe("exp");
     expect(capabilityOpOf("team.p2p.send")).toBe("team");
     expect(capabilityOpOf("issue.sync")).toBe("issue");

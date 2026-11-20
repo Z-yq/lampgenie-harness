@@ -135,6 +135,14 @@ export const BoardNodeZ = z.object({
  /** 验收证据:agent 回填每条 accept 的执行结果(at 由服务端补)。 */
   evidence: z.array(BoardEvidenceZ).max(24).optional(),
   pos: z.object({ x: z.number(), y: z.number() }).optional(),
+ /** G1 节点级视觉锚(设计稿 07 §11.2.1):视觉属性节点可选挂 before/after 实拍引用。
+ * 定位=给人看的改前/改后对照,不是证据——P0 证据链仍走 accept 回执,visual 缺席不影响覆盖率;
+ * provenance(captured|generated)由采集链标注,agent 不得手贴图(禁绕过「视觉稿=结构的函数」)。 */
+  visual: z.object({
+    before: z.string().max(400).optional(),
+    after: z.string().max(400).optional(),
+    note: z.string().max(300).optional(),
+  }).optional(),
 });
 export const BoardDocZ = z.object({
  /** 板文档版本:1=旧板;2= 迁移脚本升级版(字段仍按可选读取,零新必填)。

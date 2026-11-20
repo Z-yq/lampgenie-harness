@@ -26,6 +26,7 @@ import {
   createSessionModelStore,
   createSessionModelApi,
   createSessionModelFace,
+  rsiModelOverrideOf,
   SESSION_MODEL_PRUNE_LIMIT,
 } from "../src/session-model.js";
 
@@ -637,5 +638,30 @@ describe("m7 会话级 effort / m10 悬空 providerId / m5 clear+prune", () => {
     expect(all.p0004).toBeUndefined();
     expect(all.p0005, "边界:第 6 条保留").toEqual({ model: "m5" });
     expect(Object.keys(loadSessionModels(root))).toHaveLength(SESSION_MODEL_PRUNE_LIMIT); // 清理已落盘
+  });
+});
+
+describe("RSI 机制模型槽位(coding.models.rsi,2026-11-20)", () => {
+  it("rsiModelOverrideOf:解析/trim/空值零行为/reasoningEffort→effort", () => {
+    expect(rsiModelOverrideOf({ coding: { models: { rsi: { providerId: " main ", model: " deepseek-v4.1-flash-1017 ", reasoningEffort: "low" } } } }))
+      .toEqual({ model: "deepseek-v4.1-flash-1017", providerId: "main", effort: "low" });
+    expect(rsiModelOverrideOf({ coding: { models: { rsi: { model: "   " } } } })).toBeUndefined();
+    expect(rsiModelOverrideOf({})).toBeUndefined();
+    expect(rsiModelOverrideOf(undefined)).toBeUndefined();
+  });
+
+  it("face.resolve:rsi 会话回退槽位;落盘覆盖优先;非 rsi 会话不受影响", () => {
+    const base = cfg();
+    const config = ConfigSchema.parse({
+      ...base,
+      coding: { ...base.coding, models: { rsi: { providerId: "main", model: "deepseek-v4.1-flash-1017", reasoningEffort: "low" } } },
+    });
+    const root = tmpRoot();
+    const store = createSessionModelStore(root);
+    const face = createSessionModelFace(config as never, root, store);
+    expect(face.resolve("rsi")).toMatchObject({ model: "deepseek-v4.1-flash-1017", providerId: "main", effort: "low" });
+    expect(face.resolve("coding-1")).toBeUndefined(); // 非 rsi 会话零影响
+    store.set("rsi", { model: "glm-5.3", providerId: "bigmodel-plan" });
+    expect(face.resolve("rsi")).toMatchObject({ model: "glm-5.3", providerId: "bigmodel-plan" }); // 落盘覆盖优先
   });
 });

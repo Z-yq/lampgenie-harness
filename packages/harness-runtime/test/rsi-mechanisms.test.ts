@@ -1,8 +1,8 @@
 /**
  * RSI 机制目录 + brief 纯逻辑( P0-1)。
  * 钉住四件事:
- * ① 12 个 id 齐全且顺序与协议面 sections 一致;
- * ② 12 个中文标题与 rsi-status.ts 的 RSI_SECTION_TITLES 逐字全等(面板/派单共用一份短名,漂移即错);
+ * ① 13 个 id 齐全且顺序与协议面 sections 一致;
+ * ② 13 个中文标题与 rsi-status.ts 的 RSI_SECTION_TITLES 逐字全等(面板/派单共用一份短名,漂移即错);
  * ③ brief 含标题/目标/数据源绝对路径/结果路径/schema 这些不可缺的段(agent 靠它才能不编数据);
  * ④ 覆盖层(override)生效、未知 id 返回 undefined 而不是 throw。
  */
@@ -30,22 +30,23 @@ const TITLES: Record<string, string> = {
   prompts: "提示词版本",
   atlas: "方向图",
   pathology: "病理目录",
+  semanticAttribution: "语义归因",
 };
 
 const ROOT = "/repo/lampgenie-harness";
 
 describe("RSI_MECHANISM_IDS / RSI_MECHANISMS 目录", () => {
-  it("12 个 id 齐全且顺序与协议面 sections 一致", () => {
+  it("13 个 id 齐全且顺序与协议面 sections 一致", () => {
     expect([...RSI_MECHANISM_IDS]).toEqual(Object.keys(TITLES));
-    expect(RSI_MECHANISM_IDS).toHaveLength(12);
+    expect(RSI_MECHANISM_IDS).toHaveLength(13);
   });
 
-  it("RSI_MECHANISMS 恰好 12 个键,且键集与 id 列表全等", () => {
-    expect(Object.keys(RSI_MECHANISMS)).toHaveLength(12);
+  it("RSI_MECHANISMS 恰好 13 个键,且键集与 id 列表全等", () => {
+    expect(Object.keys(RSI_MECHANISMS)).toHaveLength(13);
     expect(new Set(Object.keys(RSI_MECHANISMS))).toEqual(new Set(RSI_MECHANISM_IDS));
   });
 
-  it("12 个中文标题与字面量逐字全等", () => {
+  it("13 个中文标题与字面量逐字全等", () => {
     for (const id of RSI_MECHANISM_IDS) {
       expect(RSI_MECHANISMS[id].title, id).toBe(TITLES[id]);
       expect(RSI_MECHANISMS[id].id, id).toBe(id);
@@ -168,9 +169,9 @@ describe("buildAgentBrief", () => {
     const weekly = RSI_MECHANISM_IDS.filter((id) => RSI_MECHANISMS[id].intervalDays === 7);
     const triDaily = RSI_MECHANISM_IDS.filter((id) => RSI_MECHANISMS[id].intervalDays === 3);
     expect(new Set(weekly)).toEqual(new Set(["nightly", "evidence", "experiments", "cost", "injection", "tools", "changeRequests", "cohort"]));
-    expect(new Set(triDaily)).toEqual(new Set(["negativeKb", "atlas", "pathology"]));
+    expect(new Set(triDaily)).toEqual(new Set(["negativeKb", "atlas", "pathology", "semanticAttribution"]));
     expect(RSI_MECHANISMS.prompts.intervalDays).toBe(30);
- // 全部 12 机制都有显式值(缺省 1 的兜底不用于生产分层)
+ // 全部 13 机制都有显式值(缺省 1 的兜底不用于生产分层)
     for (const id of RSI_MECHANISM_IDS) expect(RSI_MECHANISMS[id].intervalDays, id).toBeDefined();
   });
 

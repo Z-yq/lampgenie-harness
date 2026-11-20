@@ -10,8 +10,8 @@ import { parseWslPath, wslErrorHint } from "./wsl.js"; // :WSL 项目执行/目�
 import { buildRemoteSshIdentity, buildRemoteWslIdentity, parseRemoteProject, probeRemoteProject, remoteWslFromUncPath } from "./remote-project.js"; // 远程项目(remote:ssh / remote:wsl,/27)
 import { processAnnotateSubmit, type AnnotateNoteInput, type AnnotateRefineDeps, type AnnotateVoiceDeps } from "./annotate.js";
 import { createVoiceParser, parseAudioDataUrl, VOICE_PARSE_API_KEY_ENV, VOICE_PARSE_MODEL } from "./annotate-voice.js";
-import { createRecordParser, processAnnotateRecord, RECORD_PARSE_MODEL, type RecordStroke } from "./annotate-record.js";
 import { createVoiceDrafter } from "./voice-draft.js";
+import { createRecordParser, processAnnotateRecord, RECORD_PARSE_MODEL, type RecordStroke } from "./annotate-record.js";
 import { collectRsiStatus } from "./rsi-status.js"; // RSI 状态面:rsi.status 只读快照(请求-响应)
 import { annotateRsiSections, startMechanismRun } from "./rsi-agent-runner.js"; // RSI-MECH:机制开关/结果/agent 运行
 import { collectMechanismItems, deleteResultItem, setMechanism, updateResultItem } from "./rsi-mechanism-store.js";
@@ -336,6 +336,10 @@ export interface GatewayServerOptions {
   cancelOwnedUnit?: (unit: OwnerUnit) => Promise<void> | void;
  /** 权限审批中介( B2);缺省=ask 流走 auto-fail-closed(旧行为)。 */
   permissionBroker?: PermissionBroker;
+ /** 移动端远程控制(缺省=remote.control.* 报未配置)。 */
+  remoteControl?: import("./remote-control.js").RemoteControlManager;
+ /** Bot Channels(微信/飞书/Lark/Telegram;缺省=bots.* 报未配置)。 */
+  bots?: import("./bots/service.js").BotService;
   /** workflow ask 面板应答路由(F6);缺省=ask 全走 executor(旧行为)。 */
   workflowAskRouter?: WorkflowAskRouter;
   /** ask_user 面板问答路由(许愿式编程;缺省=工具返回 null,agent 自行推断继续)。 */
@@ -535,8 +539,6 @@ const SESSION_FORK_EXCLUDED_KINDS: ReadonlySet<string> = new Set([
 ]);
 let warmStarted = false; // :预热单次守卫(原每连接重触发;进程级一次足够,TTL 缓存自愈)
 
-/** TTS 客户端懒缓存(voice.tts;配置热更由重启生效——与 provider 同语义)。 */
-let ttsClientCache: { speak(text: string): Promise<{ mime: string; base64: string }> } | undefined | null = null;
 
 /* (session.history 行分页 + 流合帧):delta 游标与增量环。
  * - historyLogEpoch:进程启动时刻。网关重启(或 journal 重载)后 epoch 变化,客户端旧游标一律判失效——
@@ -1199,7 +1201,24 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
   }, 60_000);
   deliverySweepTimer.unref?.();
 
-  wss.on("connection", (ws: WebSocket) => {
+  wss.on("connection", (ws: WebSocket, req?: import("node:http").IncomingMessage) => {
+ // 移动端远程控制:手机 WS 升级请求带 ?pair=<token> 才登记为远控客户端。
+ // 普通面板连接(无 pair)零变化;token 无效直接 4003 关闭(手机页面据此显示「链接已失效」)。
+    let pairToken: string | null = null;
+    try {
+      pairToken = req?.url ? new URL(req.url, "http://local").searchParams.get("pair") : null;
+    } catch {
+      pairToken = null;
+    }
+    const remotePaired = pairToken !== null && pairToken !== "";
+    if (remotePaired) {
+      if (!opts.remoteControl?.verifyToken(pairToken!)) {
+        try { ws.close(4003, "invalid pair token"); } catch { /* 已断开 */ }
+        return;
+      }
+      opts.remoteControl.attach(ws);
+      broadcastAll({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+    }
     if (opts.permissionBroker) opts.permissionBroker.online = true;
     if (opts.workflowAskRouter) opts.workflowAskRouter.online = true;
     if (opts.askUser) opts.askUser.online = true;
@@ -1349,6 +1368,10 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
 
     ws.on("close", () => {
       clearInterval(kaTimer); unsubscribe();
+      if (remotePaired) {
+        opts.remoteControl?.detach(ws);
+        broadcastAll({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      }
       // 内置浏览器视图退订(否则截图流对已死连接空转;订阅表按 ws 存)。
       const bv = browserViewSubs.get(ws);
       if (bv) {
@@ -1687,6 +1710,17 @@ async function computeTraceStats(
     v: PROTOCOL_VERSION, type: "trace.stats.result", sessionId,
     stats: { ...stats, contextWindow: ctxWin, ...(costModels ? { costModels } : {}), ...(cacheHealth ? { cacheHealth } : {}), ...(contextZones ? { contextZones } : {}) },
   };
+}
+
+/** 移动端远程控制:status/start/stop 共用的回包帧(附带 Bot 渠道摘要)。 */
+function remoteControlStatusFrame(opts: GatewayServerOptions): import("@lampgenie/protocol").ServerMessage {
+  const st = opts.remoteControl?.status() ?? { state: "idle" as const, clients: 0 };
+  return {
+    v: PROTOCOL_VERSION,
+    type: "remote.control.status.result",
+    ...st,
+    ...(opts.bots ? { botChannels: opts.bots.channels() } : {}),
+  } as import("@lampgenie/protocol").ServerMessage;
 }
 
 async function handleMessage(
@@ -3640,48 +3674,6 @@ async function handleMessage(
       safeSend(ws, { v: PROTOCOL_VERSION, type: "git.ok", op: "plugin-toggle", detail: msg.id + (msg.enabled ? " 已启用" : " 已停用") });
       break;
     }
-    case "voice.tts": {
- // TTS 播报(二期:文本→qwen-tts→音频 base64;凭证不出服务端。
- // 通用 TTS 能力保留(设置页试听/播报面仍用),super agent 链不再调用它
-      // (指挥台出站只有 super.* 文本消息)。brief 级经 voice 包播报改写器(rewriteForSpeech)口语化限长。
-      try {
-        const cfg = (opts as { config?: import("@lampgenie/core").Config }).config;
-        const { buildTtsFromConfig } = await import("./factory.js");
-        const tts = ttsClientCache ??= buildTtsFromConfig(cfg ?? (await import("@lampgenie/core")).loadConfig({ repoRoot: repoRoot() }).config, repoRoot());
-        if (!tts) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.VoiceUnavailable, message: "audio.tts 未配置(qwen3-tts)" }); break; }
-        const { rewriteForSpeech } = await import("@lampgenie/runtime/voice/panel");
-        let text = msg.level === "brief" ? rewriteForSpeech(msg.text, 60) : msg.text;
- // 小模型兜底(「规则先行,小模型兜底」):brief 级 + GENIE_VOICE_POLISH=1 + LLM 在场时
-        // 一次口语化改写(6s 超时;任何失败回退规则版——兜底永不阻塞播报)。
-        if (msg.level === "brief" && process.env.GENIE_VOICE_POLISH === "1" && opts.llm) {
-          try {
-            const res = await Promise.race([
-              (opts.llm as import("@lampgenie/runtime/agent/loop").LlmProvider).chat(
-                [{ role: "user", content: `把下面内容改写成一句不超过 50 字的中文口语播报,直接说内容不要前缀:\n${msg.text.slice(0, 400)}` }],
-                [],
-              ),
-              new Promise<never>((_, rej) => setTimeout(() => rej(new Error("polish timeout")), 6_000)),
-            ]);
-            const polished = String((res as { content?: string }).content ?? "").trim().split("\n")[0]?.slice(0, 80);
-            if (polished) text = polished;
-          } catch { /* 兜底失败=规则版 */ }
-        }
-        const audio = await tts.speak(text, msg.voice ? { voice: msg.voice } : {});
-        safeSend(ws, { v: PROTOCOL_VERSION, type: "voice.tts.result", audioB64: audio.base64, mime: audio.mime, text, ...(msg.voice ? { voice: msg.voice } : {}) });
-      } catch (err) {
-        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.VoiceFailed, message: String(err).slice(0, 200) });
-      }
-      break;
-    }
-    case "voice.list": {
- // 音色清单(音色选择+试听):内置官方音色表按当前 audio.tts.model 过滤;
-      // 未知模型=空表(前端自定义 voice id 兜底)。清单只读,不出凭证。
-      const cfgV = (opts as { config?: import("@lampgenie/core").Config }).config;
-      const vModel = cfgV?.audio?.tts?.model ?? "";
-      const { voicesForModel } = await import("./voices.js");
-      safeSend(ws, { v: PROTOCOL_VERSION, type: "voice.list.result", model: vModel, voices: voicesForModel(vModel) });
-      break;
-    }
     case "voice.transcribe": {
  // 语音输入:浏览器 PCM16(base64)→ 服务端 ASR → 文本;不含人格设定与语音回播,
       // 前端拿到文本后自行发 super.turn(音频不再直入大脑)。
@@ -3885,6 +3877,126 @@ async function handleMessage(
         // 身份面缺席=本地模式
       }
       safeSend(ws, { v: PROTOCOL_VERSION, type: "nodes.list.result", nodes: list, identity });
+      break;
+    }
+ // ---- 移动端远程控制(原「节点 Fleet」视图改造) ----
+    case "remote.control.start": {
+      if (!opts.remoteControl) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "远程控制未启用" });
+        break;
+      }
+      opts.remoteControl.start();
+      safeSend(ws, remoteControlStatusFrame(opts));
+      opts.broadcast?.({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      break;
+    }
+    case "remote.control.status": {
+      if (!opts.remoteControl) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "远程控制未启用" });
+        break;
+      }
+      safeSend(ws, remoteControlStatusFrame(opts));
+      break;
+    }
+    case "remote.control.stop": {
+      if (!opts.remoteControl) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "远程控制未启用" });
+        break;
+      }
+      opts.remoteControl.stop();
+      safeSend(ws, remoteControlStatusFrame(opts));
+      opts.broadcast?.({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      break;
+    }
+ // ---- Bot Channels(微信/飞书/Lark/Telegram;配置+测试+微信扫码) ----
+    case "bots.list": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      safeSend(ws, {
+        v: PROTOCOL_VERSION,
+        type: "bots.list.result",
+        bots: opts.bots.list(),
+        channels: opts.bots.channels(),
+        webhookPort: Number(process.env.GENIE_BOT_WEBHOOK_PORT ?? 7802),
+      });
+      break;
+    }
+    case "bots.upsert": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      try {
+        const bot = opts.bots.upsert(msg);
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "bots.upsert.result", ok: true, bot });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "bots.changed" });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      } catch (err) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "bots.upsert.result", ok: false, error: String((err as Error)?.message || err).slice(0, 300) });
+      }
+      break;
+    }
+    case "bots.remove": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      const ok = opts.bots.remove(msg.id);
+      safeSend(ws, { v: PROTOCOL_VERSION, type: "bots.remove.result", ok, ...(ok ? {} : { error: "机器人不存在" }) });
+      if (ok) {
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "bots.changed" });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      }
+      break;
+    }
+    case "bots.test": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      const r = await opts.bots.test(msg.id);
+      safeSend(ws, { v: PROTOCOL_VERSION, type: "bots.test.result", ok: r.ok, message: r.message, ...(r.username ? { username: r.username } : {}) });
+      opts.broadcast?.({ v: PROTOCOL_VERSION, type: "bots.changed" });
+      break;
+    }
+    case "bots.weixin.begin": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      const r = await opts.bots.weixinBegin();
+      safeSend(ws, {
+        v: PROTOCOL_VERSION,
+        type: "bots.weixin.begin.result",
+        ok: r.ok,
+        ...(r.qrCode ? { qrCode: r.qrCode } : {}),
+        ...(r.qrSvg ? { qrSvg: r.qrSvg } : {}),
+        ...(r.qrImageUrl ? { qrImageUrl: r.qrImageUrl } : {}),
+        ...(r.expiresAt ? { expiresAt: r.expiresAt } : {}),
+        ...(r.interval ? { interval: r.interval } : {}),
+        ...(r.error ? { error: r.error } : {}),
+      });
+      break;
+    }
+    case "bots.weixin.poll": {
+      if (!opts.bots) {
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.NotImplemented, message: "Bot Channels 未启用" });
+        break;
+      }
+      const r = await opts.bots.weixinPoll(msg.qrCode);
+      safeSend(ws, {
+        v: PROTOCOL_VERSION,
+        type: "bots.weixin.poll.result",
+        status: r.status,
+        ...("bot" in r && r.bot ? { bot: r.bot } : {}),
+        ...("error" in r && r.error ? { error: r.error } : {}),
+      });
+      if (r.status === "success") {
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "bots.changed" });
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "remote.control.changed" });
+      }
       break;
     }
     case "node.exec": {
@@ -5704,7 +5816,7 @@ try {
       break;
     }
     case "board.get": {
-      const { loadBoardAsync, listBoardsAsync, resolveBoardLinksAsync } = await import("./board-store.js");
+      const { listBoardsAsync, loadBoardPackAsync } = await import("./board-store.js");
       const storeRoot = repoRoot();
       const sid = msg.sessionId ?? "";
       if (!sid) {
@@ -5720,37 +5832,16 @@ try {
         break;
       }
       const taskId = msg.taskId ?? (await listBoardsAsync(storeRoot, sid))[0]?.taskId ?? "";
-      const loaded = taskId ? await loadBoardAsync(storeRoot, sid, taskId) : null;
- // 存量板关系可见(用户用户反馈「看不出有什么关系」):存量板的 edges 多为空
-      // (旧版 board_upsert 不推导),只在保存时补边对它们无效。读路径按需推导一份「展示用」
-      // 边集(不落盘、不改 rev):显式边优先 + 推导 virtual 边。索引不可用则仅 R2/R4 结构边。
-      let doc = loaded;
-      if (loaded && (loaded.docKind ?? "design") !== "workflow") {
-        const { deriveBoardEdges } = await import("./board-derive.js");
-        const { makeCalleesResolver } = await import("./board-derive-resolver.js");
-        const derived = deriveBoardEdges(
-          loaded.nodes as never,
-          (loaded.edges ?? []) as never,
-          { calleesOf: makeCalleesResolver(loaded.root ?? storeRoot) },
-        ) as unknown as typeof loaded.edges;
-        if (Array.isArray(derived) && derived.length !== (loaded.edges?.length ?? 0)) {
-          doc = { ...loaded, edges: derived };
-        }
-      }
-      let links: import("@lampgenie/protocol").BoardLinkState[] = [];
-      if (doc) {
-        // C3:连接三态只读盘上索引(loadIndex),不 kick 重建——看图是读路径,
-        // 不能为「漂移/断链」徽标 fork 分钟级构建;索引缺席时 indexHas=null 退化为文件锚判定。
-        const { loadIndex } = await import("@lampgenie/code-sense");
-        const index = loadIndex(doc.root ?? storeRoot);
-        const indexHas = (name: string): boolean | null => (index ? (index.byName[name]?.length ?? 0) > 0 : null);
-        links = await resolveBoardLinksAsync(storeRoot, doc, indexHas);
-      }
-      const { loadOverlayAsync } = await import("./board-store.js");
-      const overlayB64 = doc ? await loadOverlayAsync(storeRoot, sid, taskId) : null;
+ // 整包缓存优先(指纹校验,miss 走原全量链 load→derive→links→overlay,语义不变):
+ // 展示边推导(存量板 edges 多为空,读路径按需推导 virtual 边,不落盘不改 rev)+
+ // C3 连接三态只读盘上索引(loadIndex 不 kick 重建)整体内聚进 loadBoardPackAsync。
+      const pack = taskId ? await loadBoardPackAsync(storeRoot, sid, taskId) : null;
+      const doc = pack ? pack.doc : null;
       safeSend(ws, {
-        v: PROTOCOL_VERSION, type: "board.doc", sessionId: sid, taskId, doc, links,
-        ...(overlayB64 ? { overlayB64 } : {}),
+        v: PROTOCOL_VERSION, type: "board.doc", sessionId: sid, taskId,
+        doc, links: pack ? pack.links : [],
+        cache: pack ? pack.cache : "miss",
+        ...(pack && pack.overlayB64 ? { overlayB64: pack.overlayB64 } : {}),
       });
       break;
     }
@@ -6374,9 +6465,6 @@ try {
       }
       try {
         const r = opts.cfg.set(msg.patch);
- // audio.tts 热更(音色选择):tts 客户端闭包捕获旧 voice/model——清缓存,
-        // 下次 voice.tts 按新配置重建(音色/模型热生效,与重启等价)。
-        if ((msg.patch as { audio?: { tts?: unknown } }).audio?.tts) ttsClientCache = null;
         safeSend(ws, { v: PROTOCOL_VERSION, type: "cfg.set.result", ...r });
       } catch (err) {
         safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.CfgSetFailed, message: String(err).slice(0, 300) });

@@ -481,12 +481,19 @@ function bhHcRowOf(t) {
   const r = t.closest(".proj-row,.t-row");
   return r && r.isConnected ? r : null;
 }
-/** 项目最近活动 = 该项目下所有任务的 actOf 最大值(与侧栏行 t-time 同源,不另造数据)。 */
+/** 项目最近活动 = 该项目下所有任务的 actOf 最大值(与侧栏行 t-time 同源,不另造数据)。
+ * B2:字段改 t.projectId(任务对象真字段,:1182 桶分组同源)——旧 t.pid 恒 undefined,
+ * 导致项目卡「最近活动」恒 0。 */
 function bhHcProjAct(pid) {
   let m = 0;
-  for (const t of tasks.values()) if (t && t.pid === pid) m = Math.max(m, actOf(t));
+  for (const t of tasks.values()) if (t && t.projectId === pid) m = Math.max(m, actOf(t));
   return m;
 }
+/** 悬停卡信息( B2 重写 t-row 分支):
+ * - proj-row = 项目卡:项目名 + 路径 + 项目最近活动(语义不变);
+ * - t-row = 会话卡:会话名(rowTitle) + 归属项目(名 · 路径) + 会话最近活动。
+ * 旧实现 t-row 只出项目名且读错字段(t.pid),所有具名会话一律回落「临时任务」——
+ * 现改读 t.projectId(任务对象真字段,:1182),标题用会话自己的 rowTitle(t)。 */
 function bhHcInfo(row) {
   if (row.classList.contains("proj-row")) {
     const p = projectById(row.dataset.pid);
@@ -496,11 +503,12 @@ function bhHcInfo(row) {
   const sid = row.dataset.sid;
   if (!sid) return null;
   const t = [...tasks.values()].find((x) => x.sessionId === sid) || null;
-  const p = t && t.pid ? projectById(t.pid) : null;
+  if (!t) return null;
+  const p = t.projectId ? projectById(t.projectId) : null;
   return {
-    name: p ? (p.label || p.path || "(未命名项目)") : "临时任务",
-    path: p ? (p.path || "") : "未归属项目(临时会话)",
-    act: t ? actOf(t) : 0,
+    name: rowTitle(t),                                  // 会话自己的标题(非项目名)
+    path: p ? (p.label || p.path || "(未命名项目)") + " · " + (p.path || "") : "未归属项目(临时会话)",
+    act: actOf(t),
   };
 }
 function bhHcHide() {
@@ -1243,7 +1251,9 @@ function renderSidebar() {
  // 现在折叠态显式给出被隐藏条数(与桶头 bh-ct 总数并列),展开出口在桶头 chevron。
     const hiddenCt = collapsed ? Math.max(0, b.items.length - shown.length) : 0;
     let h = bucketHead(b, collapsed) + shown.map((t) =>
-      '<div class="t-row' + (t.sessionId === currentSid ? " sel" : "") + '" data-sid="' + esc(t.sessionId) + '" title="' + esc(rowTitle(t)) + '">' +
+ // B1:t-row 去原生 title——浏览器白底 tooltip 与深色悬停卡信息重复且丑(用户视频点名去掉);
+ // 信息面由 #bhHoverCard 承接(会话名+归属项目+最近活动)。proj-row 原生 title 保留(既有 spec 兜底契约)。
+      '<div class="t-row' + (t.sessionId === currentSid ? " sel" : "") + '" data-sid="' + esc(t.sessionId) + '">' +
       indicator(t, Date.now()) + (t.pinned ? '<span class="t-pin">顶</span>' : "") + '<span class="t-title">' + esc(rowTitle(t)) + "</span>" + taskMetaHtml(t, Date.now()) + (t.__count > 1 ? '<span class="t-ct">' + t.__count + "</span>" : "") +
       (t.__files ? '<span class="t-ds" title="变更统计"><span class="da">+' + t.__add + '</span><span class="dd">-' + t.__del + "</span></span>" : "") +
  // 归档行时间用任务时间戳(按归档时点读);活跃视图用会话活动时间
@@ -1274,7 +1284,9 @@ function renderSidebar() {
     }
     const taskLive = tempSessions.filter((t) => t.state === "running" || t.state === "queued").length;
     const taskBody = (taskItems.length ? taskItems.map((t) =>
-      '<div class="t-row' + (t.sessionId === currentSid ? " sel" : "") + '" data-sid="' + esc(t.sessionId) + '" title="' + esc(rowTitle(t)) + '">' +
+ // B1:t-row 去原生 title——浏览器白底 tooltip 与深色悬停卡信息重复且丑(用户视频点名去掉);
+ // 信息面由 #bhHoverCard 承接(会话名+归属项目+最近活动)。proj-row 原生 title 保留(既有 spec 兜底契约)。
+      '<div class="t-row' + (t.sessionId === currentSid ? " sel" : "") + '" data-sid="' + esc(t.sessionId) + '">' +
       indicator(t, Date.now()) + '<span class="t-title">' + esc(rowTitle(t)) + "</span>" + taskMetaHtml(t, Date.now()) + (t.__count > 1 ? '<span class="t-ct">' + t.__count + "</span>" : "") +
       (t.__files ? '<span class="t-ds"><span class="da">+' + t.__add + '</span><span class="dd">-' + t.__del + "</span></span>" : "") +
       '<span class="t-time">' + ago(actOf(t)) + '</span>' +

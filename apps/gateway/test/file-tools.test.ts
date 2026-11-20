@@ -509,7 +509,8 @@ describe("上下文卫生尾注(2026-10-20:大输出提醒主 agent 拆子任务
       const grep = tools.find((t) => t.name === "grep")!;
       const big = String(await grep.execute({ pattern: "needle", path: "big.log", head_limit: 80 }));
       expect(big).toContain("[上下文卫生]");
-      expect(big).toContain("spawn_subagent");
+ // 2026-11 口径改为「默认自己干」:尾注不再劝一律外包,断言同步为现行文案(并行子代理只在确有必要时)。
+      expect(big).toContain("并行派子代理");
       const small = String(await grep.execute({ pattern: "needle", path: "small.log" }));
       expect(small).not.toContain("[上下文卫生]");
       expect(small).toContain("small.log:1");

@@ -4,7 +4,7 @@
 const { chromium } = require("playwright-core");
 const { mkdirSync } = require("node:fs");
 const BASE = process.env.PANEL_BASE || "http://127.0.0.1:7716";
-const OUT = process.env.WIKI_SHOTS || "/tmp/step118-shots";
+const OUT = process.env.WIKI_SHOTS || "/tmp/wiki-shots";
 
 (async () => {
   mkdirSync(OUT, { recursive: true });

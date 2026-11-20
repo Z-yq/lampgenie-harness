@@ -57,8 +57,7 @@ export function parseAudioDataUrl(dataUrl: string): AudioPayload {
 export type VoiceSegment = { at: string; text: string };
 export type VoiceTranscript = { text: string; segments: VoiceSegment[] };
 
-/** 从模型返回体里取出内容(兼容 {choices:[{message:{content}}]} 与直接给字符串/对象两种形态)。
- *  voice-draft.ts(聊天窗语音任务书)复用同一抽取逻辑,故导出。 */
+/** 从模型返回体里取出内容(兼容 {choices:[{message:{content}}]} 与直接给字符串/对象两种形态)。 */
 export function extractContent(raw: unknown): unknown {
   if (typeof raw === "string") return raw;
   if (raw && typeof raw === "object") {

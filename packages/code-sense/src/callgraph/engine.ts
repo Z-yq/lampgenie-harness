@@ -18,7 +18,7 @@ import { isVendoredPath } from "../path-filter";
  * 消费方单一真相: c2f.buildC2fIndex(落盘 C2fIndex.extractorVersion)、
  * code-sense-cli/incremental(复用闸 + sidecar.extractorVersion + 一次全量迁移)、
  * code-sense-cli/doctor(索引版本 vs 本常量的一致性告警)。 */
-export const INDEX_EXTRACTOR_VERSION = 6;
+export const INDEX_EXTRACTOR_VERSION = 7; // v7( G-E):inline-js 三修复——form B 优先路由(裸 JS 模板不再被 <script 字样劫持)/箭头 const 计入声明门/切段去空行前提(紧凑风格单点 ERROR 不再全灭)
 
 /** 符号 kind 全集(engine/c2f/incremental 共用;新增 kind 必须同步 callgraph/c2f 的
  * symKind 与 isNonCallableSymbolKind 豁免口径)。

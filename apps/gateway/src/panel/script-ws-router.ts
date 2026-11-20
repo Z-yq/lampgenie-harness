@@ -5,6 +5,8 @@
 export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   const m = JSON.parse(e.data);
   lastPong = Date.now(); // 任何入站帧都证明链路活着(pong 之外还有流式事件/广播)
+ // 远程控制/Bot Channels 分片优先处理(返回 true=已消费,不再落下面的旧分支)。
+  if (typeof rcHandleMessage === "function" && rcHandleMessage(m)) return;
  // 启动期守卫(用户报错三连):hello 可能在顶层声明(navHist/__restored 落位)前到达——
  // TDZ 异常会让 onmessage 直接抛、恢复流程全断。未就绪=缓存首帧,脚本尾部统一恢复。
  // typeof navHist 对 let-TDZ 会抛 ReferenceError,改 __navReady 标志(navHist 声明处置位)。
@@ -14,7 +16,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   if (m.type === "annotate.record.result") { if (window.__annRecordResult) window.__annRecordResult(m); return; } // 录屏批注回执
  // 指挥台帧(super.*)→ #view-super(独立聊天渲染区+看板);右下角 widget 有自己的 WS,两边各取所需互不干扰。
   if (m.type === "super.history.result" || m.type === "super.turn.user" || m.type === "super.turn.done" ||
-      m.type === "super.notice" || m.type === "super.relay" || m.type === "super.inbox.result" || m.type === "super.inbox.changed") { superOnMsg(m); return; }
+      m.type === "super.notice" || m.type === "super.relay" || m.type === "super.inbox.result" || m.type === "super.inbox.changed" ||
+      m.type === "super.event") { superOnMsg(m); return; }
  // 服务端 super 轮失败(error 只发发起 socket):清指挥台等待气泡并显式报错;其余 error 帧走既有通道。
   if (m.type === "error" && (m.code === "super-failed" || m.code === "super-announce-failed")) { supOnError(m); return; }
   if (m.type === "voice.draft.result") { voiceDraftResult(m); return; } // 语音任务书回执(解锁+回填/暂存)
@@ -220,13 +223,11 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     return;
   }
   if (m.type === "permission.history.result") { approvalHistory = Array.isArray(m.items) ? m.items : []; if (viewLive("approvals")) renderApprovals(); return; }
- // 节点 Fleet:注册/掉线/心跳翻转廉价广播 → 相关视图活着就重拉(负载细节在回包里)。
-  if (m.type === "nodes.changed") { if (viewLive("nodes") || viewLive("super") || viewLive("sys")) wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); return; }
+ // 原节点 Fleet 视图已改为远程控制;节点注册表仍服务设置-远程连接与指挥台看板。
+  if (m.type === "nodes.changed") { if (viewLive("super") || viewLive("sys")) wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); return; }
   if (m.type === "node.exec.result") {
- // 「电脑控制」真路由回执:按节点记最近一次输出(Fleet 卡内展示;旧版只 toast 名不副实)。
-    nodeExecOut.set(m.nodeId, { ok: !!m.ok, output: String(m.output || m.error || ""), at: Date.now(), durationMs: m.durationMs, cmd: nodeExecOut.get(m.nodeId)?.cmd || "" });
+ // 「电脑控制」回执(设置-远程连接下发):保留 toast;原 Fleet 卡内回显已随视图移除。
     toast((m.ok ? "✓ " : "✗ ") + "节点 " + m.nodeId + " 执行完成(" + Math.round((m.durationMs || 0) / 100) / 10 + "s)" + (m.ok ? "" : ":" + String(m.error || "").slice(0, 60)), !m.ok);
-    if (viewLive("nodes")) nodesViewRender(supState.nodes || { nodes: [] });
     return;
   }
   if (m.type === "git.status.result") { gitRenderStatus(m); ideScmOnStatus(m); try { cvStatusRefresh(); } catch (e) { /* 状态点失败不影响 Git */ } return; }
@@ -385,7 +386,7 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   if (m.type === "wsl.browse.result" && prBrowse && prBrowse.kind === "wsl") { prRenderBrowse(m); return; }
   if (m.type === "ssh.browse.result" && prBrowse && prBrowse.kind === "ssh") { prRenderBrowse(m); return; }
   if (m.type === "plugins.list.result") { mktCatalog = m.catalog || []; mktRender(); return; }
-  if (m.type === "nodes.list.result") { nodesRender(m); nodesViewRender(m); supState.nodes = m; if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 忽略 */ } } return; } // 指挥台④节点行共用此回包
+  if (m.type === "nodes.list.result") { nodesRender(m); supState.nodes = m; if (viewLive("super")) { try { supRenderBoard(); } catch (e) { /* 忽略 */ } } return; } // 指挥台④节点行共用此回包(设置-远程连接也吃它)
   if (m.type === "subagents.list.result") { subMsgRender(); return; } // n3 融合:分身目录卡已删,残留回包只触发子agent会话流重渲(旧客户端/在途请求安全)
   if (m.type === "track.view.result") { trackRender(m); return; }
   if (m.type === "usage.view.result") { usageRender(m); return; }
@@ -1121,6 +1122,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   if (m.type === "error" && (String(m.code || "").startsWith("voice-") || m.code === "companion-failed")) { errToast(m, "语音失败"); return; }
   if (m.type === "board.list.result") {
     if (m.sessionId !== currentSid) return;
+ // 记录清单归属会话——boardRefresh 据此在切会话时清旧板(在途窗残留=「错误匹配」根因)
+    boardListSid = String(m.sessionId || "");
  // n12/n14:items 原样收编——docKind(多板按类型过滤)与 pendingComments(未处理评论 chip)都在里面,
  // 不得挑字段重建(挑字段=新字段被吃,chip/过滤永久空)。
     boardItems = m.items || [];
@@ -1172,7 +1175,9 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
       }
       boardMissing = "";
       boardDoc = null; renderBoard();
-      if (!boardListSkipped && viewLive("board") && (boardListRetry || 0) < 3) {
+ // 重拉 3→5 次——super 派发多任务时磁盘高载,1.2s×3 常耗尽后面板断言「无板」(经验证盘上有板);
+ // 5 次(最长 ~7.2s)覆盖高载窗,耗尽后才如实显示空态。
+      if (!boardListSkipped && viewLive("board") && (boardListRetry || 0) < 5) {
         boardListRetry = (boardListRetry || 0) + 1;
  // 修复(5):首拉为空≠无板——先自动重拉(1.2s 退避,drvfs 高载下的假阴性窗),期间画布显示「正在加载白板清单…」
         setTimeout(() => { if (currentSid === m.sessionId && viewLive("board")) { boardItems = []; boardRefresh(); } }, 1200);
@@ -1220,6 +1225,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     return;
   }
   if (m.type === "board.doc") {
+    const bdT1 = performance.now(); // t1:回执到达(含 JSON.parse,wsOnMessage 入口已解析)
+    const bdT0 = bdPerfSentAt && bdPerfSentTask === (m.taskId || boardTaskId) ? bdPerfSentAt : 0;
  // 设计沉淀只读画布分流:拉的是沉淀板(档案灯箱),渲染进灯箱宿主,不碰会话板全局
     if (arcOpen && m.sessionId === arcSid) { arcOnDoc(m); return; }
     if (m.sessionId !== currentSid) return;
@@ -1278,6 +1285,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // renderBoard 据此显示「不存在或损坏」而不是「还没有设计白板」(清单空态)或静默滑到别的板。
     boardMissing = !m.doc && m.taskId ? m.taskId : (m.doc ? "" : boardMissing);
     boardOverlayB64 = m.overlayB64 || null;
+    bdMemCacheStore(m); // 整包进前端缓存(切回秒开;board.changed 广播负责失效)
+    const bdT2 = performance.now(); // t2:数据落位
     if (!boardDoc || (boardSelNode && !boardDoc.nodes.some((n) => n.id === boardSelNode))) boardSelNode = null;
     if (boardSaveInflight) {
  // 保存回执:退编辑态+重拉(拿新鲜连接三态)
@@ -1297,6 +1306,10 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // 内容未变(同一 rev 且结构签名一致)→ 跳过整板重画,只同步浮窗;变了才重画。
     const sameDoc = !!boardDoc && prevDocRev === boardDoc.rev && prevDocSig === cvStructSig(boardDoc);
     if (!sameDoc) renderBoard();
+    const bdT3 = performance.now(); // t3:布局+DOM 构建完成(renderBoard 内联布局)
+    requestAnimationFrame(function () { // t5:下一帧=首绘可见
+      bdPerf(m.taskId || boardTaskId, m.cache || "net", bdT0 ? { t0: bdT0, t1: bdT1, t2: bdT2, t3: bdT3, t5: performance.now() } : { t1: bdT1, t2: bdT2, t3: bdT3, t5: performance.now() });
+    });
     bdDocAt = Date.now();
     renderBoardPanel(); // 五期:浮动面板实时跟随(agent 落实模块 done 勾/评论即时可见)
  // n12:评论刚落盘(board.comment 回执=board.doc)时刷新「待读评论」计数——15s 节流,轻量重拉
@@ -1486,6 +1499,10 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
   }
   if (m.type === "board.changed") {
     const p = m.payload || {};
+ // review 修正:前端缓存失效必须在会话守卫**之前**——跨会话改板(当前在 B 会话,
+ // 板属于 A)时 board.changed 会被 sessionId 守卫丢弃,若先守卫后失效,A 的缓存条目活到 TTL,
+ // 切回 A 命中缓存=脏板(≤120s)。按 taskId 清与归属无关。
+    bdMemCacheDelete(p.taskId);
     if (p.sessionId !== currentSid) return;
  // B6:编辑态且当前板被 agent/他端更新 → 不自动刷新(保护草稿),提示+rev 乐观锁兜底
  // (浮动面板照旧刷新——它渲染的是已保存版本,不碰编辑草稿)

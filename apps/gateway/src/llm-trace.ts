@@ -240,7 +240,7 @@ function toolTextOf(tools: unknown): string {
 }
 
 /** 本地估算本次请求的输入 token 量级(空输入=0;不返回 NaN/负数)。
- *  token 口径统一见 agent/token-estimate.ts(rawTokens = 仓内自有估算;CJK 加权启发式,EWMA 标定)。 */
+ * token 口径统一见 agent/token-estimate.ts(rawTokens = cl100k 真分词计数;不可用时 CJK 回退)。 */
 export function estimateInputTokens(messages: unknown, tools?: unknown): number {
   try {
     const msgs = Array.isArray(messages) ? messages : [];
@@ -421,7 +421,7 @@ export function makeLlmTraceSink(journal: Journal, baseDir?: string, dropLogPath
  // 本地估算+前缀命中估算+上报值异常标记。**只做 CPU**(与提醒扫描/stringify 同一
       // 同步段纪律):估算 = 遍历 messages 数码点,几十 KB 级别是微秒量级;绝不能在这里新增 await。
       // 顺序:先取 baseline(上一请求)再写本次缓存——先写会把「上一步」变成自己,前缀命中恒等于全量。
-      // token 口径统一见 agent/token-estimate.ts:本地估算走 rawTokens(自有估算),
+ // token 口径统一见 agent/token-estimate.ts:本地估算走 rawTokens(cl100k 真分词),
       // 再用本 provider 的历史标定 ratio 换成「标定后估算」;ratio 恒 1(样本不足)时与 raw 相同。
       const estInputRaw = estimateInputTokens(info.messages, info.tools);
       const prevReq = prefixCacheGet(info.sessionId);

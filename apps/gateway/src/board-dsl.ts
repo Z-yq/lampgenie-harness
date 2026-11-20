@@ -92,6 +92,9 @@ export interface BoardDslResult {
   meta: { title?: string; boardType?: string; scale?: string; docKind?: string };
   nodes: BoardDslNode[];
   edges: BoardDslEdge[];
+ /** serializeBoardDsl 的 `%% json-extra` 段载荷(原样 JSON.parse 结果;无该段为 undefined)。
+ * 读侧由调用方自行 merge(主干表达不了的白名单字段:comments/pos/done/evidence/humanEdits 等)。 */
+  extra?: unknown;
 }
 
 /** 箭头 → 边 kind(文档化用)。 */
@@ -275,7 +278,11 @@ export function parseBoardDsl(text: string): BoardDslResult {
   const declared = new Map<string, number>();
   /** id → 泳道名(同一节点多个 lane 重复引用:留第一次)。 */
   const laneOf = new Map<string, string>();
+ /** accept 项 → 声明行(锚点错误诊断用行号)。 */
+  const anchorLines = new WeakMap<object, number>();
   let current: BoardDslNode | null = null;
+ /** serializeBoardDsl `%% json-extra` 段的载荷(单行 JSON,遇 `{` 开头行吞入)。 */
+  let extra: unknown;
 
   const diag = (line: number, severity: BoardDslDiag["severity"], code: string, message: string): void => {
     diags.push({ line, severity, code, message });
@@ -296,10 +303,20 @@ export function parseBoardDsl(text: string): BoardDslResult {
 
     if (body === "" || body.startsWith("#")) continue;
 
-    // 版本行:%% board v1(其它 %% 注释行也吞掉)
+ // 版本行:%% board v1(其它 %% 注释行也吞掉;紧随 json-extra 标记后的 JSON 载荷行一并收进 extra)
     if (body.startsWith("%%")) {
       if (/^%%\s*board\b/i.test(body) && !/^%%\s*board\s+v1\b/i.test(body)) {
         diag(lineNo, "warn", "W_VERSION", `未知 DSL 版本行,按 v1 解析:${body}`);
+      }
+      continue;
+    }
+
+ // json-extra 载荷行(serializeBoardDsl 输出的单行 JSON;主干永远可直接回读)
+    if (body.startsWith("{")) {
+      try {
+        extra = JSON.parse(body);
+      } catch {
+        diag(lineNo, "warn", "W_EXTRA_JSON", "json-extra 载荷不是合法 JSON,忽略");
       }
       continue;
     }
@@ -349,6 +366,7 @@ export function parseBoardDsl(text: string): BoardDslResult {
         if (noteRaw !== undefined && noteRaw.trim() !== "") {
           item.note = clip(unescapeText(noteRaw.trim()), LIMIT.acceptNote, lineNo, "W_TRUNCATE_ACCEPT_NOTE", "accept.note");
         }
+        anchorLines.set(item, lineNo);
         list.push(item);
         continue;
       }
@@ -569,5 +587,229 @@ export function parseBoardDsl(text: string): BoardDslResult {
     diag(lines.length, "error", "E_NO_NODES", "解析结果没有任何有效节点");
   }
 
-  return { ok: nodes.length > 0, diags, meta, nodes, edges };
+ // ---- accept 锚点展开(后置遍历,引用可前向声明)----
+ // 语法:accept: @p01 → 复用 p01 首条 accept 的 cmd 整条
+ // accept: @p01.cmd~"P0-4" → 以 p01.cmd 为基串,把引号内文本替换为 "P0-4"
+ // 悬空(节点不存在/无 accept)= error,不静默空 cmd;链式引用 = error;深度≤1。
+  const anchorById = new Map<string, BoardDslNode>();
+  for (const n of nodes) anchorById.set(n.id, n);
+  for (const n of nodes) {
+    const list = n.accept;
+    if (!list) continue;
+    let dropped = false;
+    for (let ai = 0; ai < list.length; ai++) {
+      const item = list[ai]!;
+      const cmd = item.cmd;
+      if (cmd === undefined || !cmd.startsWith("@")) continue;
+      const m = /^@([A-Za-z0-9_.-]+?)(?:\.cmd~"((?:[^"\\]|\\.)*)")?$/.exec(cmd);
+      if (!m) {
+        diag(anchorLines.get(item) ?? lines.length, "error", "E_ANCHOR_SYNTAX", `accept 锚点语法错误:${cmd}(支持 @<id> 或 @<id>.cmd~"<新文本>")`);
+        list.splice(ai, 1); ai--; dropped = true;
+        continue;
+      }
+      const refId = m[1] ?? "";
+      const repl = m[2] !== undefined ? unescapeText(m[2]) : undefined;
+      const ref = anchorById.get(refId);
+      const refAcc = ref?.accept?.[0];
+      const base = refAcc?.cmd;
+      if (refId === n.id) {
+        diag(anchorLines.get(item) ?? lines.length, "error", "E_ANCHOR_SELF", `accept 锚点禁止自引用:${cmd}`);
+        list.splice(ai, 1); ai--; dropped = true;
+        continue;
+      }
+      if (ref === undefined || refAcc === undefined || base === undefined) {
+        diag(anchorLines.get(item) ?? lines.length, "error", "E_ANCHOR_MISSING", `accept 锚点悬空:${cmd}(节点 ${refId} 不存在或没有 accept)`);
+        list.splice(ai, 1); ai--; dropped = true;
+        continue;
+      }
+      if (base.startsWith("@")) {
+        diag(anchorLines.get(item) ?? lines.length, "error", "E_ANCHOR_CHAIN", `accept 锚点禁止链式引用:${cmd} 的目标 cmd 仍是锚点(深度≤1)`);
+        list.splice(ai, 1); ai--; dropped = true;
+        continue;
+      }
+      if (repl === undefined) {
+        item.cmd = base;
+      } else {
+ // 前缀复用 + 替换差异后缀:以 base 为基串,把第一个引号段的引号内文本换成 repl。
+ // 例:base=`pnpm -t "P0-1" test`,repl="P0-4" → `pnpm -t "P0-4" test`。
+        const q1 = base.indexOf('"');
+        if (q1 < 0) {
+          diag(anchorLines.get(item) ?? lines.length, "error", "E_ANCHOR_NO_QUOTE", `accept 锚点替换失败:目标 cmd 无引号段可替换(${refId}.cmd=${base})`);
+          list.splice(ai, 1); ai--; dropped = true;
+          continue;
+        }
+        const q2 = base.indexOf('"', q1 + 1);
+        item.cmd = q2 > q1 ? base.slice(0, q1 + 1) + repl + base.slice(q2) : `${base} "${repl}"`;
+      }
+      if (item.expect === "通过" && refAcc.expect !== undefined) item.expect = refAcc.expect;
+    }
+    if (list.length === 0 && dropped) delete n.accept;
+  }
+
+  return { ok: nodes.length > 0, diags, meta, nodes, edges, ...(extra !== undefined ? { extra } : {}) };
+}
+
+// ---------------------------------------------------------------------------
+// G5③ 读侧序列化器:BoardDoc → DSL 文本(与写侧同文法)。
+// 双段输出防丢字段:DSL 主干 + `%% json-extra` 段(主干 serialize 不出的字段
+// comments/humanEdits/pos/done/evidence 等白名单原样 JSON;parseBoardDsl 吞掉 %% 行,
+// 主干永远可直接 parseBoardDsl 回读,extra 由读侧调用方 JSON.parse 后 merge)。
+// ---------------------------------------------------------------------------
+
+/** json-extra 白名单:节点级(按 id 收集)与板级两层;主干已表达的字段不重复存。 */
+const EXTRA_NODE_KEYS = ["comments", "pos", "done", "evidence", "fileRef", "wf", "visual"] as const;
+const EXTRA_DOC_KEYS = ["status", "rev", "docGenre", "planned_files", "actual_files", "humanEdits", "version", "updatedAt"] as const;
+
+/** D1:全角字符(等)是正文,逐字保留不转义;只转义会破坏行式语法的 `\ | "`。 */
+function escDsl(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/"/g, '\\"');
+}
+
+export function serializeBoardDsl(doc: {
+  title?: string;
+  boardType?: string;
+  scale?: string;
+  docKind?: string;
+  nodes?: unknown[];
+  edges?: { from: string; to: string; kind?: string; label?: string; virtual?: boolean }[];
+  [k: string]: unknown;
+}): string {
+  const out: string[] = ["%% board v1"];
+  if (doc.title !== undefined) out.push(`title: ${doc.title}`);
+  if (doc.boardType !== undefined) out.push(`type: ${doc.boardType}`);
+  if (doc.scale !== undefined) out.push(`scale: ${doc.scale}`);
+  if (doc.docKind !== undefined) out.push(`kind: ${doc.docKind}`);
+
+  const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
+  const extraNodes: Record<string, Record<string, unknown>> = {};
+  const laneOrder: string[] = [];
+  const laneMembers = new Map<string, string[]>();
+  for (const raw of nodes) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const n = raw as Record<string, unknown>;
+    const id = typeof n.id === "string" ? n.id : "";
+    const g = typeof n.group === "string" && n.group !== "" ? n.group : "";
+    if (id === "" || g === "") continue;
+    if (!laneMembers.has(g)) { laneMembers.set(g, []); laneOrder.push(g); }
+    laneMembers.get(g)!.push(id);
+  }
+  for (const g of laneOrder) out.push(`lane ${g} : ${(laneMembers.get(g) ?? []).join(" ")}`);
+
+  const ARROW_OF: Record<string, string> = { call: "->", data: "->>", verify: "~>", nav: "=>", contains: "=>>" };
+  for (const raw of nodes) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const n = raw as Record<string, unknown>;
+    const id = String(n.id ?? "");
+    if (id === "") continue;
+    const head = [
+      "node", id,
+      typeof n.kind === "string" ? n.kind : "function",
+      typeof n.change === "string" ? n.change : "modify",
+      ...(typeof n.phase === "string" ? [n.phase] : []),
+      `"${escDsl(typeof n.label === "string" ? n.label : id)}"`,
+    ].join(" ");
+    const summary = typeof n.summary === "string" && n.summary !== "" ? n.summary : String(n.label ?? id);
+    const before = typeof n.before === "string" && n.before !== "" ? ` | ${escDsl(n.before)}` : "";
+    out.push(`${head} | ${escDsl(summary)}${before}`);
+
+    const nodeExtra: Record<string, unknown> = {};
+    for (const key of EXTRA_NODE_KEYS) {
+      const v = n[key];
+      if (v === undefined) continue;
+      if (key === "comments" && Array.isArray(v) && v.length === 0) continue;
+      if (key === "done" && v === false) continue;
+      nodeExtra[key] = v;
+    }
+
+    if (Array.isArray(n.accept)) {
+      for (const a of n.accept) {
+        if (typeof a !== "object" || a === null) continue;
+        const acc = a as Record<string, unknown>;
+        const cmd = typeof acc.cmd === "string" ? acc.cmd : "";
+        if (cmd === "") continue;
+        const typeP = typeof acc.type === "string" ? `[${acc.type}] ` : "";
+        const note = typeof acc.note === "string" && acc.note !== "" ? ` | ${escDsl(acc.note)}` : "";
+        const expect = typeof acc.expect === "string" ? acc.expect : "通过";
+        out.push(`  accept: ${typeP}${escDsl(cmd)} => ${escDsl(expect)}${note}`);
+      }
+    }
+    if (Array.isArray(n.targets) && n.targets.length > 0) {
+      out.push(`  targets: ${n.targets.filter((t): t is string => typeof t === "string").map(escDsl).join(", ")}`);
+    }
+    const sr = n.symbolRef;
+    if (typeof sr === "object" && sr !== null) {
+      const r = sr as Record<string, unknown>;
+      const name = typeof r.name === "string" ? r.name : "";
+      if (name !== "") {
+        const file = typeof r.file === "string" ? `@${r.file}` : "";
+        const line = typeof r.line === "number" ? `:${r.line}` : "";
+        out.push(`  sym: ${name}${file}${line}`);
+      }
+    }
+    if (Array.isArray(n.flow) && n.flow.length > 0) {
+      const emitFlow = (steps: unknown[]): void => {
+        for (const raw2 of steps) {
+          if (typeof raw2 !== "object" || raw2 === null) continue;
+          const f = raw2 as Record<string, unknown>;
+          const then0 = Array.isArray(f.then) ? String((f.then[0] as Record<string, unknown> | undefined)?.text ?? "") : "";
+          if (f.type === "step") out.push(`  flow: step ${escDsl(String(f.text ?? ""))}`);
+          else if (f.type === "branch") {
+            const els = Array.isArray(f.else) && f.else.length > 0
+              ? ` : ${escDsl(String((f.else[0] as Record<string, unknown> | undefined)?.text ?? ""))}` : "";
+            out.push(`  flow: branch ${escDsl(String(f.cond ?? ""))} ? ${escDsl(then0)}${els}`);
+          } else if (f.type === "loop") {
+            const body = Array.isArray(f.body)
+              ? f.body.map((b) => String((b as Record<string, unknown>)?.text ?? "")).filter((s) => s !== "").join("; ")
+              : "";
+            out.push(`  flow: loop over ${escDsl(String(f.over ?? ""))} | body ${escDsl(body)}`);
+          }
+        }
+      };
+      emitFlow(n.flow);
+      if (!serializeFlowFlatCheck(n.flow)) nodeExtra.flow = n.flow; // 多步嵌套 DSL 表达不了 → extra 兜底
+    }
+    if (Object.keys(nodeExtra).length > 0) extraNodes[id] = nodeExtra;
+  }
+
+  const edges = Array.isArray(doc.edges) ? doc.edges : [];
+  for (const e of edges) {
+    if (!e || typeof e !== "object") continue;
+    if (e.virtual === true) continue; // 主文法无 virtual,走 json-extra,不重复出主干
+    const arrow = ARROW_OF[e.kind ?? "call"] ?? "->";
+    const label = typeof e.label === "string" && e.label !== "" ? ` : ${e.label}` : "";
+    out.push(`edge ${e.from} ${arrow} ${e.to}${label}`);
+  }
+
+ // ---- %% json-extra 段 ----
+  const extraDoc: Record<string, unknown> = {};
+  for (const key of EXTRA_DOC_KEYS) {
+    const v = doc[key];
+    if (v === undefined) continue;
+    if (key === "planned_files" && Array.isArray(v) && v.length === 0) continue;
+    if (key === "updatedAt" && v === 0) continue;
+    extraDoc[key] = v;
+  }
+  const virtualEdges = edges
+    .filter((e) => e && typeof e === "object" && e.virtual === true)
+    .map((e) => ({ from: e.from, to: e.to, kind: e.kind ?? "call", ...(e.label !== undefined ? { label: e.label } : {}) }));
+  if (virtualEdges.length > 0) extraDoc.virtualEdges = virtualEdges;
+  if (Object.keys(extraNodes).length > 0) extraDoc.nodes = extraNodes;
+
+  if (Object.keys(extraDoc).length > 0) {
+    out.push("%% json-extra(serializeBoardDsl 兜底字段:parseBoardDsl 忽略本段;读侧 JSON.parse 后 merge)");
+    out.push(JSON.stringify(extraDoc));
+  }
+  return out.join("\n") + "\n";
+}
+
+/** flow 能否被扁平 DSL 无损表达(branch 的 then/else、loop 的 body 都至多单步)。 */
+function serializeFlowFlatCheck(flow: unknown[]): boolean {
+  const flat = (steps: unknown): boolean => !Array.isArray(steps) || steps.length <= 1;
+  return flow.every((f) => {
+    if (typeof f !== "object" || f === null) return true;
+    const r = f as Record<string, unknown>;
+    if (r.type === "branch") return flat(r.then) && flat(r.else);
+    if (r.type === "loop") return flat(r.body);
+    return true;
+  });
 }

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
-import { loadPermissionRules } from "../src/agent-wiring.js";
+import { loadPermissionRules, riskOfTool, LOW_RISK_TOOLS, buildMainLoopPermission } from "../src/agent-wiring.js";
+import { setPermissionMode } from "../src/permission-mode.js";
+import { setPermissionGuards } from "../src/agent-wiring.js";
 import { TaskSupervisor } from "../src/task-manager.js";
 import { MemoryJournal } from "@lampgenie/core";
 import { wireExecutor } from "../src/executor-wiring.js";
@@ -57,6 +59,62 @@ class FakeAskBackend implements SubagentBackend {
     };
   }
 }
+
+describe("riskOfTool 集合优先(低风险工具直判)", () => {
+  it("LOW_RISK_TOOLS 命中 → low(todo_write 旧正则误判 high 已修)", () => {
+    expect(riskOfTool("todo_write")).toBe("low");
+    expect(riskOfTool("change_surface")).toBe("low");
+    expect(LOW_RISK_TOOLS.has("session_search")).toBe(true);
+    expect(LOW_RISK_TOOLS.has("skill_view")).toBe(true);
+    expect(LOW_RISK_TOOLS.has("tool_view")).toBe(true);
+    expect(LOW_RISK_TOOLS.has("board_read")).toBe(true);
+    expect(LOW_RISK_TOOLS.has("list_agents")).toBe(true);
+  });
+  it("集合外工具走既有正则,行为不变(write_file 仍 high)", () => {
+    expect(riskOfTool("write_file")).toBe("high");
+    expect(riskOfTool("edit_file")).toBe("high");
+    expect(riskOfTool("read_file")).toBe("low");
+    expect(riskOfTool("spawn_subagent")).toBe("medium");
+  });
+});
+
+describe("panelAsk 低风险直批(记账/审计类不占 broker)", () => {
+  beforeEach(() => { setPermissionMode("workspace"); setPermissionGuards([]); });
+  afterEach(() => { setPermissionMode("ask"); setPermissionGuards([]); });
+  it("todo_write:guard abstain 后直批(journal low-risk-auto,broker.ask 0 次)", async () => {
+    const journal = new MemoryJournal();
+    let brokerCalls = 0;
+    const broker = { ask: async () => { brokerCalls += 1; return { decision: "reject" as const, by: "panel" }; } };
+    const perm = buildMainLoopPermission([], broker as never, { sessionId: "s-low", journal });
+    expect(perm.onAsk).toBeTruthy();
+    const ok = await perm.onAsk!({ name: "todo_write", arguments: "{\"todos\":[{\"id\":\"a\",\"status\":\"in_progress\"}]}" });
+    expect(ok).toBe(true);
+    expect(brokerCalls).toBe(0); // 不咨询 broker
+    const gates = journal.readAll().filter((e) => e.kind === "permission.gate").map((e) => e.payload as { tool?: string; effect?: string; by?: string });
+    expect(gates.some((g) => g.tool === "todo_write" && g.effect === "allowed" && g.by === "low-risk-auto")).toBe(true);
+  });
+  it("session_search/tool_view/board_read 同直批;write_file 照旧走 broker", async () => {
+    const journal = new MemoryJournal();
+    let brokerCalls = 0;
+    const broker = { ask: async (input: { tool: string }) => { brokerCalls += 1; return { decision: "allow-once" as const, by: "panel" }; } };
+    const perm = buildMainLoopPermission([], broker as never, { sessionId: "s-low2", journal });
+    for (const t of ["session_search", "tool_view", "board_read"]) {
+      expect(await perm.onAsk!({ name: t, arguments: "{\"q\":\"x\"}" })).toBe(true);
+    }
+    expect(brokerCalls).toBe(0);
+    expect(await perm.onAsk!({ name: "write_file", arguments: "{\"path\":\"a.txt\",\"content\":\"x\"}" })).toBe(true);
+    expect(brokerCalls).toBe(1); // 集合外工具照旧咨询
+  });
+  it("guard deny 优先于低风险直批(收窄不被白名单打回)", async () => {
+    setPermissionGuards([{ id: "deny-todo", check: () => ({ verdict: "deny", reason: "禁用" }) }]);
+    const journal = new MemoryJournal();
+    const broker = { ask: async () => ({ decision: "allow-once" as const, by: "panel" }) };
+    const perm = buildMainLoopPermission([], broker as never, { sessionId: "s-low3", journal });
+    expect(await perm.onAsk!({ name: "todo_write", arguments: "{}" })).toBe(false);
+    const gates = journal.readAll().filter((e) => e.kind === "permission.gate").map((e) => e.payload as { tool?: string; effect?: string; by?: string });
+    expect(gates.some((g) => g.tool === "todo_write" && g.effect === "denied" && g.by === "guard-denied")).toBe(true);
+  });
+});
 
 describe("executor 路径 ask 自动应答( F4)", () => {
   // 环境隔离(C9 修复后补):harness 根 .genie/permissions.json 在生产永远可能存在(「总是允许」产物),

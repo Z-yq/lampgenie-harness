@@ -34,7 +34,7 @@ describe("TIP_METRICS 口径表", () => {
     for (const k of [
       "dispatch", "board-comments", "parallel", "task:trajectory",
       "sop:understand", "sop:plan", "sop:implement", "sop:debug", "sop:close",
-      "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:delegate",
+      "dyn:hypothesis", "dyn:verify-stop", "dyn:phase-align", "dyn:verify-cadence", "dyn:context-trim",
     ]) {
       const spec = TIP_METRICS[k];
       expect(spec, k).toBeTruthy();

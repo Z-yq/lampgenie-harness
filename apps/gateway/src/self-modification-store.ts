@@ -385,6 +385,14 @@ export function requestModification(
     const evaluation = rt.evaluateSelfModification(draft, policy ?? {});
     const codes = [...evaluation.codes];
     draft.decision = { kind: evaluation.decision, at: now, codes };
+ // §14.2④ 机器闸审计链:rsi 作者的可逆+零风险变更由纯函数放行(allow),
+ // 但旧实现不记审批者——账面无「谁批准」= 事后审计断链。机器闸放行时补
+ // approver={kind:"agent", id:"rsi-auto-gate"},看板/周报可与人批区分。
+    const rsiAutoGateEligible =
+      draft.author?.kind === "rsi" && draft.irreversible !== true && (draft.riskFlags?.length ?? 0) === 0;
+    if (rsiAutoGateEligible && evaluation.decision === "allow" && draft.approver === undefined) {
+      draft.approver = { kind: "agent", id: "rsi-auto-gate", at: now };
+    }
     const line: UnknownRecord = { v: SCHEMA_VERSION, type: "request", at: now, request: draft };
     if (!appendLedgerLine(base, line)) {
       return { ok: false, id, code: "MOD_LEDGER_WRITE_VERIFY_FAILED", codes: ["MOD_LEDGER_WRITE_VERIFY_FAILED"], decision: evaluation.decision };

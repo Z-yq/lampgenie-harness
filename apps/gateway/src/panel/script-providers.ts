@@ -319,6 +319,8 @@ const ROLE_DEFS = [
   { id: "role-digest", key: "digest", badge: "role-digest-badge", empty: "(默认回退压缩模型)", label: "提炼模型" },
   { id: "role-review", key: "review", badge: "role-review-badge", empty: "(不配置=仅确定性层)", label: "评审模型" },
   { id: "role-voice", key: "voice", badge: "role-voice-badge", empty: "(未配置=语音任务书不可用)", label: "语音任务书模型" },
+ // RSI 机制模型进「各角色模型」槽位(配置键 coding.models.rsi)。
+  { id: "role-rsi", key: "rsi", badge: "role-rsi-badge", empty: "(默认使用主模型)", label: "RSI 机制模型" },
 ];
 function roleCurrent(c, key) {
   const llm = (c.coding && c.coding.llm) || {};
@@ -422,15 +424,6 @@ function renderCfg() {
   $("cfg-mt").value = cl.maxTokens != null ? String(cl.maxTokens) : "";
   renderRoleSelects();
   renderEffortSeg();
-  const au = c.audio || {};
-  $("a-chat-model").value = (au.chat && au.chat.model) || "";
-  $("a-chat-url").value = (au.chat && au.chat.baseUrl) || "";
-  $("a-asr-prov").value = (au.asr && au.asr.provider) || "";
-  $("a-asr-model").value = (au.asr && au.asr.model) || "";
-  $("a-tts-prov").value = (au.tts && au.tts.provider) || "";
-  $("a-tts-model").value = (au.tts && au.tts.model) || "";
-  $("a-tts-voice").value = (au.tts && au.tts.voice) || "";
-  $("audio-track").textContent = "当前对话轨道:" + (sysMeta.llmTrack || "(未标注)");
   $("cfg-path").textContent = "配置来源:内置默认 < 用户级 < 项目级 < 环境变量";
   const cc = c.concurrency || {};
   const ag = c.agent || {};
@@ -475,21 +468,6 @@ function bindCfgApply(inputId, btnId, badgeId, makePatch, allowEmpty) {
 bindCfgApply("cfg-mt", "cfg-mt-apply", "cfg-mt-badge",
   (v) => ({ coding: { llm: { maxTokens: v ? Number(v) : 0 } } }), true);
 
-bindCfgApply("a-chat-model", "a-chat-apply", "a-chat-badge", (v) => ({ audio: { chat: { model: v } } }), true);
-
-$("a-chat-url-apply").onclick = () => {
-  const v = $("a-chat-url").value.trim();
-  $("a-chat-url-badge").textContent = "应用中…";
-  wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { audio: { chat: v ? { baseUrl: v } : { baseUrl: "" } } } }));
-};
-$("a-asr-apply").onclick = () => {
-  $("a-asr-badge").textContent = "应用中…";
-  wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { audio: { asr: { provider: $("a-asr-prov").value.trim(), model: $("a-asr-model").value.trim() } } } }));
-};
-$("a-tts-apply").onclick = () => {
-  $("a-tts-badge").textContent = "应用中…";
-  wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { audio: { tts: { provider: $("a-tts-prov").value.trim(), model: $("a-tts-model").value.trim(), voice: $("a-tts-voice").value.trim() } } } }));
-};
 $("models-probe-all").onclick = () => {
  // 全部检测( F4):队列并发 3 逐个真实探活;进度写按钮文字,徽标逐行落地。
  // 检测对象=模型目录(Provider 条目 ∪ 拉取列表),按条目归属 provider 探活。

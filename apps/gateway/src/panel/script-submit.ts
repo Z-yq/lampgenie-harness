@@ -1,66 +1,75 @@
 /**
- * 面板主脚本分片:script-submit(逐字自 panel.ts PAGE 模板搬移, 拆分)。
+ * 面板主脚本分片:script-submit(逐字自 panel.ts PAGE 模板搬移,2026-11-12 拆分)。
  * 模板约束沿袭:不得出现反引号与 ${;行内换行不得写裸转义。
  */
 export const PANEL_JS_SUBMIT = `function submit(overrideText, projectOverride) {
- // 语音任务书锁:本会话撰写中禁止提交(输入区只读;Enter/发送按钮/命令全走这里,统一守卫)。
+  // 语音任务书锁(2026-11-08):本会话撰写中禁止提交(输入区只读;Enter/发送按钮/命令全走这里,统一守卫)。
   if (voiceLocked(currentSid)) { toast("任务书撰写中,请稍候…(完成后自动填入输入框)"); return; }
- // overrideText(仅接受 string)=chip/typed 命令合成后的最终任务书(raw 行前缀+模板)——直提任务流,
- // 不再走 slash 分派(合成文本以 "/" 开头,再进 slashTypedSubmit 会把模板吞进 args 无限膨胀)。
- // 只认 string:$("go").onclick = submit 直挂会把 click 事件对象传进来,必须回落读输入框。
+  // :overrideText(仅接受 string)=chip/typed 命令合成后的最终任务书(raw 行前缀+模板)——直提任务流,
+  // 不再走 slash 分派(合成文本以 "/" 开头,再进 slashTypedSubmit 会把模板吞进 args 无限膨胀)。
+  // 只认 string:$("go").onclick = submit 直挂会把 click 事件对象传进来,必须回落读输入框。
   const fromInput = typeof overrideText !== "string";
- // 项目归属(漂移修复):重发/重试必须带**原任务的 projectId**,不能用 current active——
- // 经验证重启后点「重发」把 genie 会话的任务贴到了 harness。服务端已改为 owner 优先(双保险:
- // 老会话任务被删、owner 证据缺失时,这里仍把任务送回原项目)。
+  // 项目归属(2026-10-22 漂移修复):重发/重试必须带**原任务的 projectId**,不能用 current active——
+  // 实测重启后点「重发」把 genie 会话的任务贴到了 harness。服务端已改为 owner 优先(双保险:
+  // 老会话任务被删、owner 证据缺失时,这里仍把任务送回原项目)。
   const submitProjectId = typeof projectOverride === "string" && projectOverride ? projectOverride : activeProjectId;
   const typedText = String(fromInput ? $("instruction").value : overrideText).trim();
- // 仅附件发送:正文全空但有附件时照样可发(正文用附件占位文案补齐,下游只认 text 一套变量)
+  // 仅附件发送:正文全空但有附件时照样可发(正文用附件占位文案补齐,下游只认 text 一套变量)
   if (!typedText && !pendingAtts.length) return;
- // 连接守卫:半开 TCP 下 ws.send 抛 InvalidStateError 会被静默吞掉,消息无痕丢失——宁可显式失败
+  // (产品口径要求「发送后聊天窗的附件还没消失」根因):附件 chip 在上传回包后才进 pendingAtts——
+  // 在飞时此刻发=消息不带附件发出,回包后 chip 又被 push 回来永留输入区。拦下登记 attAutoSend,
+  // 最后一笔落定由 attMaybeAutoSubmit 自动重走本函数(排队/直发、草稿模型等待等语义按落定时点重新判定)。
+  if (attInflight > 0) {
+    if (!attAutoSend) { attAutoSend = true; toast("附件还在上传,完成后自动发送…"); }
+    return;
+  }
+  // 连接守卫:半开 TCP 下 ws.send 抛 InvalidStateError 会被静默吞掉,消息无痕丢失——宁可显式失败
   if (!ws || ws.readyState !== 1) { toast("连接未就绪,消息未发送(等待重连)", true); return; }
- // m4 防重复:草稿首发正在等 session.model.set 回包(draftSubmitPending 在飞)→ 再点发送/Enter 一律忽略,
- // 否则会再发一条 set(撞 revision-mismatch)并可能派出两个任务。
+  // m4 防重复:草稿首发正在等 session.model.set 回包(draftSubmitPending 在飞)→ 再点发送/Enter 一律忽略,
+  // 否则会再发一条 set(撞 revision-mismatch)并可能派出两个任务。
   if (draftSubmitPending) { toast("首轮消息正在等模型切换确认,请稍候…"); return; }
- // 重试料消费:上次模型切换被拒/超时(draftModelRetry 保留),本次发送先重发 session.model.set
- // 到预设会话再派任务(选择不变;新 set 仍走 staged→pending 等回包链,拒绝依旧不派单)。
+  // 2026-10-29 重试料消费:上次模型切换被拒/超时(draftModelRetry 保留),本次发送先重发 session.model.set
+  // 到预设会话再派任务(选择不变;新 set 仍走 staged→pending 等回包链,拒绝依旧不派单)。
   if (!currentSid && draftModelRetry && draftModelRetry.model && !sessionModelStaged.has(draftSidOf())) {
     const r = draftModelRetry;
     pillPickModel(r.model, r.providerId || undefined);
     if (r.effort !== undefined && typeof effortV !== "undefined") effortV = r.effort; // 档位一并复原
     draftModelRetry = null;
   }
- // 发两遍防护(视频 18:08 登记):同文本 3s 内重复提交=Enter 连击/双击,忽略
- // (草稿态首提交会新建 sid,sid 比对会漏——按文本+时间窗判定即可,3s 内同文本跨会话提交不成立)
+  // 发两遍防护(2026-10-13 视频 18:08 登记):同文本 3s 内重复提交=Enter 连击/双击,忽略
+  // (草稿态首提交会新建 sid,sid 比对会漏——按文本+时间窗判定即可,3s 内同文本跨会话提交不成立)
   if (typedText && typedText === lastSubmitText && Date.now() - lastSubmitAt < 3000) { toast("该消息 3 秒内已提交过(防重复)"); return; }
   if (typedText) { lastSubmitText = typedText; lastSubmitAt = Date.now(); }
- // 内置命令 typed 提交:"/goal x" "/compact 指示" 等直接执行,不入任务流。
+  // 内置命令 typed 提交():"/goal x" "/compact 指示" 等直接执行,不入任务流。
   if (fromInput && typedText.startsWith("/") && slashTypedSubmit(typedText)) {
- // ZCode 内置命令确认行:命令在聊天窗留下执行痕迹
+    // ZCode 内置命令确认行( 补充十五):命令在聊天窗留下执行痕迹
       chatSysLineIcon("check", typedText.slice(0, 80));
     $("instruction").value = "";
-    slashClose(); // 浮窗残留修复:程序化清空不触发 input 事件,面板若开着(空态)会永留
+    slashClose(); // 2026-11-12 浮窗残留修复:程序化清空不触发 input 事件,面板若开着(空态)会永留
     autoGrow();
     localStorage.removeItem("zh:draft:" + (currentSid || "__new__"));
     cmdChipFlash(typedText); // 真执行闪确认(仅 slashTypedSubmit 返回 true=确实执行了才闪)
     return;
   }
- // 草稿提交直接消费当前项目预设 sid(draftSidOf)——模型覆盖早已经 session.model.set
- // 绑定到它,提交即派单到同一会话。预设被任务占用后下次草稿自动轮换出新 sid。
+  // 2026-10-29:草稿提交直接消费当前项目预设 sid(draftSidOf)——模型覆盖早已经 session.model.set
+  // 绑定到它,提交即派单到同一会话。预设被任务占用后下次草稿自动轮换出新 sid。
   const sid = currentSid || draftSidOf();
   const wasDraft = !currentSid;
   const wasDraftPending = wasDraft && sessionModelStaged.has(sid); // 预设会话的模型 set 还在等回包 → 任务体暂存
-  currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid); // 会话 id 持久化(修复:#go 新建会话从不写 zh:sid→刷新后 savedSid 空→白板/会话视图全空,白板数据看似"刷新即丢")
-  const atts = pendingAtts.slice(0, ATT_MAX_COUNT).map((a) => ({ name: a.name, path: a.path, mime: a.mime, size: a.size }));
- // 占位文案必须在清空 pendingAtts **之前**取(要读得到 pastedText 的行数)
-  const text = typedText || attsPlaceholder(pendingAtts.slice(0, ATT_MAX_COUNT));
+  currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid); // 会话 id 持久化(2026-10-14 修复:#go 新建会话从不写 zh:sid→刷新后 savedSid 空→白板/会话视图全空,白板数据看似"刷新即丢")
+  // :attFull=全量附件对象(含 preview/kind/pastedText)——模型确认失败回填输入区用,不能只存瘦身版。
+  const attFull = pendingAtts.slice(0, ATT_MAX_COUNT);
+  const atts = attFull.map((a) => ({ name: a.name, path: a.path, mime: a.mime, size: a.size }));
+  // 占位文案必须在清空 pendingAtts **之前**取(要读得到 pastedText 的行数)
+  const text = typedText || attsPlaceholder(attFull);
   pendingAtts = []; attRender();
- // m4草稿首发**等 set 回包**:草稿预设会话的模型切换在飞(sessionModelStaged 命中)
- // 时先等 session.model.result,把任务体暂存成 pending(draftSubmitPending);收到 result ok 且无
- // routeError 才发 task.submit。旧实现按 draftModelPick 判定;现在 pillPickModel 在草稿态已直接发
- // session.model.set(绑定预设 sid),submit 只需识别「staged 在飞」。
- // 非草稿/覆盖已确认 → 直发 task.submit,保持原直发语义。
+  // m4(2026-10-22)草稿首发**等 set 回包**:草稿预设会话的模型切换在飞(sessionModelStaged 命中)
+  // 时先等 session.model.result,把任务体暂存成 pending(draftSubmitPending);收到 result ok 且无
+  // routeError 才发 task.submit。旧实现按 draftModelPick 判定;现在 pillPickModel 在草稿态已直接发
+  // session.model.set(绑定预设 sid),submit 只需识别「staged 在飞」。
+  // 非草稿/覆盖已确认 → 直发 task.submit,保持原直发语义。
   if (wasDraftPending) {
-    draftSubmitPending = { sid, text, atts, projectId: submitProjectId, at: Date.now(), timer: null };
+    draftSubmitPending = { sid, text, atts, attFull, projectId: submitProjectId, at: Date.now(), timer: null };
     draftSubmitPending.timer = setTimeout(() => {
       if (draftSubmitPending && draftSubmitPending.sid === sid) draftModelAbort("模型切换确认超时(服务端未回包)", "");
     }, DRAFT_MODEL_ACK_TIMEOUT);
@@ -74,9 +83,9 @@ export const PANEL_JS_SUBMIT = `function submit(overrideText, projectOverride) {
   finishSubmit(sid, text, atts, wasDraft);
 }
 /** m4/m9 共用「任务已派发后」收尾(原 submit 尾部原样搬出:pending 确认成功后走同一条,不两套清理逻辑)。
- * sameView=false(pending 期间用户已切到别的会话)→ 只记输入历史与草稿键清理,不动当前会话的输入框/渲染。 */
+ *  sameView=false(pending 期间用户已切到别的会话)→ 只记输入历史与草稿键清理,不动当前会话的输入框/渲染。 */
 function finishSubmit(sid, text, atts, wasDraft, sameView) {
- // 输入历史(ZCode PromptHistoryPlugin 裁剪):去重入栈,持久化最近 50 条
+  // 输入历史(ZCode PromptHistoryPlugin 裁剪):去重入栈,持久化最近 50 条
   promptHist = promptHist.filter((x) => x !== text); promptHist.push(text);
   if (promptHist.length > 50) promptHist.shift();
   localStorage.setItem("zh:prompt-hist", JSON.stringify(promptHist));
@@ -85,25 +94,27 @@ function finishSubmit(sid, text, atts, wasDraft, sameView) {
   if (sameView === false) { renderSendBtn(); return; }
   localStorage.removeItem("zh:draft:__new__");
   $("instruction").value = "";
-  slashClose(); // 浮窗残留修复:同上——「/xxx 已有text」空态面板开着时发送,清空后必须同步收起
+  slashClose(); // 2026-11-12 浮窗残留修复:同上——「/xxx 已有text」空态面板开着时发送,清空后必须同步收起
   autoGrow();
+  // :提交成功(含入队)后焦点回输入框——产品口径要求「发送后输入区清空、可立刻接着打」
+  try { $("instruction").focus(); } catch (e) { /* 焦点失败不影响提交 */ }
   renderSendBtn(); // fixI19:提交后输入清空,按钮语义复位(忙碌→停/空闲→发)
   switchView("chat");
   if (wasDraft) {
- // 草稿首条:乐观渲染用户消息(ZCode 乐观发送;附件卡同步带上),重放数据到达后替换
+    // 草稿首条:乐观渲染用户消息(ZCode 乐观发送;附件卡同步带上),重放数据到达后替换
     histEvents = [{ kind: "message.user", payload: { text, ...(atts && atts.length ? { attachments: atts } : {}) } }];
-    stStream = null; // 新 turn:旧流式尾块退役
+    stStream = null; // 新 turn:旧流式尾块退役()
     renderHistory();
- // 会话身份从无到有(submit 直接改 currentSid,没经过 openSession)→ 打灰激活门,
- // 让白板/追踪/吞吐/子代理流按新 sid 走一遍 onSessionChange(归属项目/卡头状态点一并校正)。
+    // 2026-10-29:会话身份从无到有(submit 直接改 currentSid,没经过 openSession)→ 打灰激活门,
+    // 让白板/追踪/吞吐/子代理流按新 sid 走一遍 onSessionChange(归属项目/卡头状态点一并校正)。
     try { onSessionChange(sid); } catch (e) { console.warn("[panel] 新会话切换失败", e); }
   }
   render();
- // 同 sid 追加任务也要重取一遍
+  // 2026-10-29 产品口径要求「添加新任务时所有面板数据刷新,尤其会话流」:同 sid 追加任务也要重取一遍
   refreshPanelsAfterSubmit(sid);
 }
 /** m4 回包确认成功 → 立即发暂存的 task.submit。先摘链再发:同一 pending 只会派单一次,
- * 重复/广播回包到达时 draftSubmitPending 已空,直接 return(连点也不会双派)。 */
+ *  重复/广播回包到达时 draftSubmitPending 已空,直接 return(连点也不会双派)。 */
 function draftSubmitFire() {
   const p = draftSubmitPending;
   if (!p) return;
@@ -114,34 +125,37 @@ function draftSubmitFire() {
   finishSubmit(p.sid, p.text, p.atts || [], true, sameView);
 }
 /** m4 拒绝/超时 → **不发** task.submit:回滚 pill + 报错(带失败原因),草稿文本与所选模型(draftModelRetry)全部保留,
- * 用户再点一次发送即按同一模型重试(不会静默降级成全局模型跑一轮)。 */
+ *  用户再点一次发送即按同一模型重试(不会静默降级成全局模型跑一轮)。 */
 function draftModelAbort(why, effModel) {
   const p = draftSubmitPending;
   if (!p) return;
   draftSubmitPending = null;
   if (p.timer) { clearTimeout(p.timer); p.timer = null; }
- // 摘链前先把在飞的选择捞出来存成重试料(旧 draftModelPick=pick 语义等价迁移)。
+  // 2026-10-29:摘链前先把在飞的选择捞出来存成重试料(旧 draftModelPick=pick 语义等价迁移)。
   const pickInFlight = sessionModelStaged.get(p.sid) || null;
   sessionModelStaged.delete(p.sid);
   const sameView = currentSid === p.sid;
- // 回草稿态:该 sid 没有任务,留着只会像卡住的空会话
+  // 回草稿态:该 sid 没有任务,留着只会像卡住的空会话
   if (sameView) { currentSid = null; sessionStorage.removeItem("zh:sid"); localStorage.removeItem("zh:sid"); histEvents = []; sessionStatus = null; ssSeqBySid.delete(p.sid); }
   modelPillRollback(p.sid, effModel ? String(effModel) : null);
   lastSubmitText = ""; // 解除 3s 同文本防重复:否则用户立刻重试会被「3 秒内已提交过」再挡一次
- // 重试料只在「用户还看着这次提交的会话」时回填:draftModelRetry 只对草稿态有意义,
- // 用户已切到别的会话时回填会污染当前会话的 pill 与输入框。
+  // 重试料只在「用户还看着这次提交的会话」时回填:draftModelRetry 只对草稿态有意义,
+  // 用户已切到别的会话时回填会污染当前会话的 pill 与输入框。
   if (sameView) {
     draftModelRetry = pickInFlight && pickInFlight.model
       ? { model: pickInFlight.model, ...(pickInFlight.providerId ? { providerId: pickInFlight.providerId } : {}), ...(pickInFlight.effort !== undefined ? { effort: pickInFlight.effort } : {}) }
       : null; // 选择保留:重试用同一模型
     if (!$("instruction").value) { $("instruction").value = p.text; autoGrow(); } // 草稿文本保留(用户已改成别的就不覆盖)
+    // : 附件同样回填——abort=消息没发出,submit 已清走的待发附件必须原样回输入区(失败路径不丢用户料);
+    // 等待期间用户新添了附件(pendingAtts 非空)就不覆盖。非 sameView 不回填(不污染别人会话的输入区)。
+    if (Array.isArray(p.attFull) && p.attFull.length && !pendingAtts.length) { pendingAtts = p.attFull.slice(); attRender(); }
     saveDraft();
     renderModelPill(cfgView);
     renderSendBtn();
     render();
   }
- // (块4·4.6):pending 摘链即摘等待禁点——sameView 分支的 renderSendBtn 已覆盖,但用户
- // 已切走(非 sameView)时当前视图按钮还挂着 wait-ack 禁点,必须显式复位(否则按钮永久不可点)。
+  // (块4·4.6):pending 摘链即摘等待禁点——sameView 分支的 renderSendBtn 已覆盖,但用户
+  // 已切走(非 sameView)时当前视图按钮还挂着 wait-ack 禁点,必须显式复位(否则按钮永久不可点)。
   else renderSendBtn();
   toast("会话模型未确认,任务未发送:" + String(why).slice(0, 80) + "(草稿与所选模型已保留,可直接重试)", true);
 }
@@ -162,13 +176,13 @@ function sideToSuper(label, text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Super Agent 指挥台 view(#view-super)。
+// :Super Agent 指挥台 view(#view-super)。
 // 左=持久聊天渲染区(journal 回放:super.history → message.user/message.agent/super.notice/
-// super.relay;刷新/重启不丢,day 卷分隔),右=调度看板四区(借鉴 ref/dsh-superagent-prototype
-// docs/005-panel.md「三问」看板与 src/core/stage.ts「人先行」阶段:待人工置顶、计数=清单长度、
-// 健康态不占位;数据全来自既有 WS,确定性聚合零 LLM)。
+//   super.relay;刷新/重启不丢,day 卷分隔),右=调度看板四区(借鉴 ref/dsh-superagent-prototype
+//   docs/005-panel.md「三问」看板与 src/core/stage.ts「人先行」阶段:待人工置顶、计数=清单长度、
+//   健康态不占位;数据全来自既有 WS,确定性聚合零 LLM)。
 // 发送/动作协议与右下角 widget(super-console.js)同源:super.turn / super.inbox /
-// ask.user.answer / permission.respond / task.resume;本视图与 widget 各自独立渲染,互不依赖。
+//   ask.user.answer / permission.respond / task.resume;本视图与 widget 各自独立渲染,互不依赖。
 // ─────────────────────────────────────────────────────────────────────────────
 const supState = {
   entries: [],      // 聊天渲染条目:{kind:"u"|"a"|"sys"|"relay"|"day", text, ts, sid?}
@@ -197,7 +211,7 @@ function supHhmm(ms) {
   const d = new Date(typeof ms === "number" && isFinite(ms) ? ms : Date.now());
   return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
 }
-/** super 固定会话 id:"super" 持久会话;旧按天日卷(super:YYYYMMDD)只读兼容不迁移。 */
+/** super 固定会话 id():"super" 持久会话;旧按天日卷(super:YYYYMMDD)只读兼容不迁移。 */
 function supDayLabel() {
   return "super";
 }
@@ -212,14 +226,14 @@ function superViewLoad() {
   wsSafeSend(JSON.stringify({ v: 1, type: "super.inbox", limit: 30 }));
   wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" }));
   supRehydrateDispatch(); // 进指挥台即从已在场的 task.list 恢复派发卡(刷新/重连后协作链不丢)
- // 网关刚重启/大 journal 时 task.list 可能晚到:短重试两次,避免首屏派发区空着
+  // 网关刚重启/大 journal 时 task.list 可能晚到:短重试两次,避免首屏派发区空着
   setTimeout(function () { try { supRehydrateDispatch(); } catch (e) {} }, 800);
   setTimeout(function () { try { supRehydrateDispatch(); } catch (e) {} }, 2500);
   supRenderChat(); supRenderBoard(); supIdeSideRender(); supRenderResults();
 }
-/* ── super IDE 三栏:侧栏两区(任务/做梦)+ 中栏路由(superIdeMain.open)────────────
- 数据同源:任务区=supState.dispatch(submittedBy=super 实时帧+历史回放派发卡同源);做梦区=rsiLast(rsi.status 回包)。
- 联动:点侧栏项/聊天流派发卡「详情」→ superIdeOpen("task"|"dream", id);WS task.changed/super.dream 同帧刷新。 */
+/* ──  super IDE 三栏:侧栏两区(任务/做梦)+ 中栏路由(superIdeMain.open)────────────
+   数据同源:任务区=supState.dispatch(submittedBy=super 实时帧+历史回放派发卡同源);做梦区=rsiLast(rsi.status 回包)。
+   联动:点侧栏项/聊天流派发卡「详情」→ superIdeOpen("task"|"dream", id);WS task.changed/super.dream 同帧刷新。 */
 var superIdeZone = "health"; // 活动栏当前区(task|dream|health; 健康一屏为默认)
 var superIdeSel = { task: "", dream: "" }; // 各区最近选中(切区不改中栏内容)
 function superIdeZoneSet(z) {
@@ -234,23 +248,23 @@ function superIdeZoneSet(z) {
   const btns = document.querySelectorAll("#superIdeAct .spide-actbtn");
   for (let i = 0; i < btns.length; i++) btns[i].classList.toggle("on", String(btns[i].dataset.spidezone || "") === superIdeZone);
   supIdeSideRender();
-  superHealthRender(); // 健康一屏随区渲染(数据 rsiLast;无数据走空态引导)
+  superHealthRender(); // :健康一屏随区渲染(数据 rsiLast;无数据走空态引导)
   if (superIdeZone === "inbox") supRenderBoard(); // 待办区:进入即刷新提问/权限/中断清单
-  if (superIdeZone === "health") superIdeOpen("health"); // 点「健」直接进健康一屏(侧栏无需先选条目)
- // 修复:活动栏「梦/任务」此前只切左栏列表,不切中栏文档——健康屏的 spide-open-health
- // 会一直压住 #superMainDream(梦区/自动周期条永远不可见)。这里显式打开对应文档;
- // 任务无选中回欢迎态(不渲染「任务不存在」假错误)。
+  if (superIdeZone === "health") superIdeOpen("health"); // :点「健」直接进健康一屏(侧栏无需先选条目)
+  // 2026-11-13 修复:活动栏「梦/任务」此前只切左栏列表,不切中栏文档——健康屏的 spide-open-health
+  // 会一直压住 #superMainDream(梦区/自动周期条永远不可见)。这里显式打开对应文档;
+  // 任务无选中回欢迎态(不渲染「任务不存在」假错误)。
   else if (superIdeZone === "dream") superIdeOpen("dream", superIdeSel.dream);
   else if (superIdeZone === "task") { if (superIdeSel.task) superIdeOpen("task", superIdeSel.task); else superIdeOpen(""); }
 }
-/* ── 健康一屏渲染(纯前端聚合;数据=rsi.status 同一份 rsiLast)────────────────
- 层级:结论层(健康度+三色计数+Top3)→ 解释层(12 体检卡一句话)→ 证据层(点卡进做梦明细)。
- 健康度=100−25×bad−8×warn(下限 0);idle(未启用)不罚分;待处理=warn+bad。
- 纪律:全部文本过 esc;无内联 onclick(事件委托绑一次);无数据/字段缺失一律降级不抛错。 */
-/* ── 结果可读层:机制 12 句话 + 条目严重度 + 人话文本 ───────────────────
-。不改数据/协议,只把服务端事实翻译成三件事:
- ①这个机制是干什么的 ②最近一次发现了什么 ③有没有要处理的。
- 纪律:所有外部文本先 rsiPlainText(去 markdown/表格/代码围栏、按整句截断)再 esc。 */
+/* ──  健康一屏渲染(纯前端聚合;数据=rsi.status 同一份 rsiLast)────────────────
+   层级:结论层(健康度+三色计数+Top3)→ 解释层(12 体检卡一句话)→ 证据层(点卡进做梦明细)。
+   健康度=100−25×bad−8×warn(下限 0);idle(未启用)不罚分;待处理=warn+bad。
+   纪律:全部文本过 esc();无内联 onclick(事件委托绑一次);无数据/字段缺失一律降级不抛错。 */
+/* ──  结果可读层:机制 12 句话 + 条目严重度 + 人话文本 ───────────────────
+   产品口径要求「结果展示还是看不懂」。不改数据/协议,只把服务端事实翻译成三件事:
+   ①这个机制是干什么的 ②最近一次发现了什么 ③有没有要处理的。
+   纪律:所有外部文本先 rsiPlainText(去 markdown/表格/代码围栏、按整句截断)再 esc()。 */
 var RSI_MECH_PURPOSE = {
   nightly: "夜间自动跑一遍固定流程,沉淀当天的经验与队列",
   evidence: "给结论挂证据,检查证据链是否完整",
@@ -417,7 +431,7 @@ function rsiHealthTopHtml(agg, loading) {
   if (!f.length) f.push(allIdle
     ? '<div class="spide-health-f t-idle"><span class="fdot"></span><span class="ft">全部未启用</span><span class="fs">运行任意机制后产生体检数据</span></div>'
     : '<div class="spide-health-f t-ok"><span class="fdot"></span><span class="ft">全部正常</span><span class="fs">没有需要处理的机制</span></div>');
- // 一眼结论:大数字=最要紧的那件事(异常几个/待关注几个/全部正常),不再用 0-100 分数(机制自报的提醒项会把分数打到 0,看不懂)
+  // 一眼结论:大数字=最要紧的那件事(异常几个/待关注几个/全部正常),不再用 0-100 分数(机制自报的提醒项会把分数打到 0,看不懂)
   var big, blabel, bcls;
   if (allIdle) { big = "—"; blabel = "未启用"; bcls = "idle"; }
   else if (agg.bad > 0) { big = String(agg.bad); blabel = "个机制有异常"; bcls = "bad"; }
@@ -465,7 +479,7 @@ function renderMechCards(sections, loading) {
     } else {
       lead = kind === "idle" ? (run ? "机制未启用,当前数据源不可用" : "还没产生数据(运行这个机制后自动更新)") : "本次运行没有产出条目";
     }
- // 一行元信息:结果几条 / 几条待关注 / 上次运行 / 成本(只在有 token 或金额时显示)
+    // 一行元信息:结果几条 / 几条待关注 / 上次运行 / 成本(只在有 token 或金额时显示)
     var meta = [];
     if (items.length) meta.push(items.length + " 条结果");
     if (watch) meta.push(watch + " 条待关注");
@@ -515,7 +529,7 @@ function superHealthRender() {
   var list = $("superSbHealthList"); if (list) list.innerHTML = err ? '<div class="spide-empty">读取失败,点上方重试。</div>' : rsiHealthSideHtml(secs, loading);
   var hint = $("superSbHealthHint");
   if (hint) hint.textContent = loading ? "正在读取 rsi.status…" : (err ? "读取失败;点「重试」重新拉取。" : (agg.total ? (agg.ok + agg.warn + agg.bad === 0 ? "还没有可运行的机制;点「全量运行」开始体检" : (agg.bad > 0 ? agg.bad + " 个机制有异常 · " : "") + (agg.warn > 0 ? agg.warn + " 个机制有待关注发现 · " : "") + "点卡片看这个机制管什么、发现了什么") : "还没有体检数据;点「全量运行」让 Super 做一次全身扫描。"));
- // 事件委托绑一次:体检卡/侧栏项→做梦明细;空态「全量运行」→rsiRunAllFire
+  // 事件委托绑一次:体检卡/侧栏项→做梦明细;空态「全量运行」→rsiRunAllFire
   if (grid && !grid.__healthBound) {
     grid.addEventListener("click", function (ev) {
       var el = ev.target && ev.target.closest ? ev.target.closest("[data-mech]") : null;
@@ -625,13 +639,13 @@ function supRunAfterTaskChange() {
     setTimeout(function () { if (supState.run && supState.run.phase === "已交付") { supState.run.active = false; supRunBarRender(); } }, 4000);
   }
 }
-/** 聊天窗头部状态:空闲/思考中/等你回答/派发中;数据全来自已在场状态,零新协议。 */
-/* ── Super 上下文经济面板 ─────────────────────────────────
- * ① 上下文 pill:主值=trace.stats(super).contextTokens(API 经验证),回退=supState.entries 尾部
- * message.agent 的 usage.inputTokens;分母=同帧 contextWindow;无数据显示「上下文 —」。
+/** 聊天窗头部状态(2026-11-13):空闲/思考中/等你回答/派发中;数据全来自已在场状态,零新协议。 */
+/* ── :Super 上下文经济面板 ─────────────────────────────────
+ * ① 上下文 pill:主值=trace.stats(super).contextTokens(API 实测),回退=supState.entries 尾部
+ *    message.agent 的 usage.inputTokens;分母=同帧 contextWindow;无数据显示「上下文 —」。
  * ② 压缩按钮:session.compact(sessionId=super,与 coding /compact 同一服务端路径);status/result
- * 帧 toast,完成后重拉 super.history(压缩标记即时可见)。 */
-var supCtxAsk = { at: 0, tries: 0 }; // 实测用量请求节流(未到数时按 6s 重试,上限 5 次)
+ *    帧 toast,完成后重拉 super.history(压缩标记即时可见)。 */
+var supCtxAsk = { at: 0, tries: 0 }; // :实测用量请求节流(未到数时按 6s 重试,上限 5 次)
 function supCtxRequest() {
   supCtxAsk.at = Date.now(); supCtxAsk.tries++;
   try { wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: "super" })); } catch (e) {}
@@ -642,8 +656,8 @@ function supCtxPillRender() {
   if (!el) return;
   var n = supCtxNums();
   if (!n.tok) {
- // 经验证未到时不再只显示「—」(用户看到 120 条历史 + 「上下文 —」会以为坏了):
- // 首次请求在途 → 测量中…;仍无数据且请求已重试过 → 「N 条 · 未经验证」(如实不报假数)。
+    // :实测未到时不再只显示「—」(用户看到 120 条历史 + 「上下文 —」会以为坏了):
+    // 首次请求在途 → 测量中…;仍无数据且请求已重试过 → 「N 条 · 未实测」(如实不报假数)。
     var waited = supCtxAsk.at ? Date.now() - supCtxAsk.at : 1e9;
     if (supCtxAsk.tries < 5 && waited > 6000) supCtxRequest();
     el.textContent = "上下文 " + (n.msgs ? n.msgs + " 条 · " : "") + (waited < 8000 ? "测量中…" : "未实测");
@@ -653,11 +667,11 @@ function supCtxPillRender() {
   el.textContent = "上下文 " + n.msgs + " 条 · " + supCtxTok(n.tok) + (n.win ? "/" + supCtxTok(n.win) + " · " + n.pct + "%" : " tok");
   el.title = "主值=最近一次 LLM 调用实测输入" + (n.win ? ";窗口 " + supCtxTok(n.win) : "") + ";超阈值自动压缩(与 coding 同源),也可点右侧「压缩」手动压";
 }
-/** Super 上下文余量浮层 + 界面缩放定位校正。
- * ① 数值同源:pill 与浮层都走 supCtxNums(traceStats.super.contextTokens,回退 entries 尾部 usage.inputTokens);
- * ② 锚定:浮层锚 #supCtxPill(pill 自己的 rect),不再落到 classic ctxPill 那条(锚隐藏元素、取别的会话);
- * ③ 缩放:面板「界面缩放」写 body.style.zoom,fixed 浮层的 left/bottom 会被再乘一次 zoom,
- * 直接用锚点 BCR 会右溢出/上飘(用户截图红圈两处)——统一按 zoom 换算样式坐标。 */
+/** :Super 上下文余量浮层 + 界面缩放定位校正。
+ *  ① 数值同源:pill 与浮层都走 supCtxNums(traceStats.super.contextTokens,回退 entries 尾部 usage.inputTokens);
+ *  ② 锚定:浮层锚 #supCtxPill(pill 自己的 rect),不再落到 classic ctxPill 那条(锚隐藏元素、取别的会话);
+ *  ③ 缩放:面板「界面缩放」写 body.style.zoom,fixed 浮层的 left/bottom 会被再乘一次 zoom,
+ *     直接用锚点 BCR 会右溢出/上飘(用户截图红圈两处)——统一按 zoom 换算样式坐标。 */
 function supUiZoom() {
   try { var z = parseFloat(getComputedStyle(document.body).zoom || "1"); return z > 0 ? z : 1; } catch (e) { return 1; }
 }
@@ -671,7 +685,7 @@ function supPillFit(anchor) {
   var w = el.offsetWidth || 0, h = el.offsetHeight || 0;
   var left = Math.max(8 / z, Math.min(r.left / z, iw / z - w - 8 / z));
   el.style.left = Math.round(left) + "px";
- // 默认向上展开(sideOffset=2);上方放不下且下方有空间 → 翻到下方(避免顶出视口)
+  // 默认向上展开(sideOffset=2);上方放不下且下方有空间 → 翻到下方(避免顶出视口)
   var upRoom = r.top - 8, downRoom = ih - r.bottom - 8;
   if (h * z > upRoom && downRoom > h * z) { el.style.top = Math.round(r.bottom / z + 2) + "px"; el.style.bottom = ""; }
   else { el.style.top = ""; el.style.bottom = Math.round((ih - r.top + 2) / z) + "px"; }
@@ -700,9 +714,14 @@ function supCtxMenuHtml() {
   var n = supCtxNums();
   var html = '<div class="pm-grp cx-head"><div class="cx-head-row"><span class="pm-name" style="font-weight:600">上下文余量</span>' +
     '<span class="cx-nums">' + (n.tok ? supCtxFmtWan(n.tok) + " / " + (n.win ? supCtxFmtWan(n.win) : "?") + (n.pct !== null ? " (" + n.pct + "%)" : "") : "暂无实测(等首次模型调用)") + "</span></div>";
-  if (n.pct !== null) html += '<div class="cx-bar"><i class="' + (n.pct >= 85 ? "hot" : "") + '" style="width:' + Math.max(2, n.pct) + '%"></i></div>';
+  if (n.pct !== null) {
+    // :三档语义色与 classic 同源(阈值=CX_TIERS;typeof 守卫防抽出求值)。
+    var T = (typeof CX_TIERS !== "undefined") ? CX_TIERS : { warn: 70, tense: 85 };
+    var cls = n.pct >= T.tense ? "hot" : (n.pct >= T.warn ? "warn" : "");
+    html += '<div class="cx-bar"><i class="' + cls + '" style="width:' + Math.max(2, n.pct) + '%"></i></div>';
+  }
   html += "</div>";
- // 构成:消息字符近似 + 系统提示/技能差额(与 classic 同一口径;只在本会话有经验证时给)
+  // 构成:消息字符近似 + 系统提示/技能差额(与 classic 同一口径;只在本会话有实测时给)
   var msgTokEst = Math.round(n.chars / 4);
   if (n.tok) {
     var sysTok = Math.max(0, n.tok - msgTokEst), total = msgTokEst + sysTok;
@@ -719,14 +738,9 @@ function supCtxMenuHtml() {
         '<div class="cx-segs">' + bars + "</div>" + rows + "</div>";
     }
   }
- // 温度三区:与 classic 同一 helper 同形态;contextZones 缺席即不渲染(空串)。
+  // 温度三区( 引入, 起为浮窗最末块):与 classic 同一 helper 同形态;contextZones 缺席即不渲染(空串)。
   var z = (typeof traceStats !== "undefined" && traceStats) ? ((traceStats["super"] || {}).contextZones) : null;
-  html += (typeof ctxZonesGroupHtml === "function" ? ctxZonesGroupHtml(z, supCtxTok) : "");
-  html += '<div class="pm-grp"><div class="pm-head">明细(消息 ' + n.msgs + " 条)</div>" +
-    '<div class="pm-item"><span class="pm-ck">' + (n.tok ? ic("check") : "·") + '</span><span class="pm-name">' +
-    (n.tok ? "当前上下文(最近一次调用实测):<b>" + n.tok + "</b> tok" + (n.win ? " / 容量 " + n.win + " tok = " + n.pct + "%" : "") : "暂无实测(等首次模型调用)") +
-    "</span></div>" +
-    '<div class="pm-item"><span class="pm-ck">·</span><span class="pm-name">对话字符粗估 ' + n.chars + " ≈" + msgTokEst + " tok(chars/4;含本轮全部消息,不含系统提示)</span></div></div>";
+  html += (typeof ctxZonesGroupHtml === "function" ? ctxZonesGroupHtml(z, supCtxTok, n.tok) : "");
   return html;
 }
 function supCtxMenuOpen() {
@@ -755,7 +769,7 @@ if (!window.__supPillResizeFit) { // 视口变化时重算开着的 Super 浮层
 }
 var supCompactPending = false;
 var supCompactToastAt = 0;
-/** 压缩 toast 去重(状态帧与回执帧可能双到;1.2s 内只提示一次)。 */
+/** :压缩 toast 去重(状态帧与回执帧可能双到;1.2s 内只提示一次)。 */
 function supCompactToast(msg, bad) {
   if (Date.now() - supCompactToastAt < 1200) return;
   supCompactToastAt = Date.now();
@@ -767,7 +781,7 @@ function supCompactSend() {
   try { wsSafeSend(JSON.stringify({ v: 1, type: "session.compact", sessionId: "super" })); } catch (e) { supCompactPending = false; }
   var btn = document.getElementById("supCompactBtn");
   if (btn) { btn.disabled = true; btn.textContent = "压缩中…"; }
- // 点击即给口径(此前要等 4s 才解锁,全程零反馈,用户不知道压没压)
+  // :点击即给口径(此前要等 4s 才解锁,全程零反馈,用户不知道压没压)
   supCompactToast("正在压缩 Super 会话上下文…");
   setTimeout(function () { // 20s 兜底解锁(admin n7 同款)
     if (!supCompactPending) return;
@@ -781,7 +795,7 @@ function supCompactDone(phase) { // ws-router 的 compact 终态帧回调:解锁
   supCompactPending = false;
   var b = document.getElementById("supCompactBtn");
   if (b) { b.disabled = false; b.textContent = "压缩"; }
- // 完成/失败/无需压缩各有口径(failed/skipped 已由 ws-router 统一 toast,这里只补 completed)
+  // :完成/失败/无需压缩各有口径(failed/skipped 已由 ws-router 统一 toast,这里只补 completed)
   if (phase === "completed") supCompactToast("已压缩 Super 会话上下文(历史已刷新,用量见左侧 pill)");
   supCtxRequest();
   try { wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 })); } catch (e) {}
@@ -790,7 +804,7 @@ function supCtxWire() {
   var btn = document.getElementById("supCompactBtn");
   if (btn && !btn.__bound) { btn.__bound = true; btn.addEventListener("click", supCompactSend); }
   var pill = document.getElementById("supCtxPill");
-  if (pill && !pill.__bound) { // 点 pill 打开本会话「上下文余量」浮层(锚自身;数值与 pill 同源)
+  if (pill && !pill.__bound) { // :点 pill 打开本会话「上下文余量」浮层(锚自身;数值与 pill 同源)
     pill.__bound = true;
     pill.addEventListener("click", function () { supCtxRequest(); supCtxMenuOpen(); });
   }
@@ -817,12 +831,12 @@ function supChatHeadSync() {
   st.textContent = state; st.className = cls;
   if (urgent > 0 || backlog > 0) { st.dataset.zone = "inbox"; st.title = "打开待办区"; } else { delete st.dataset.zone; st.title = ""; }
   sub.textContent = subText;
- // 画布形态状态点——super 卡头圆点/托盘按钮徽态与聊天头同一真源(waiting/待答/派发中/待办/空闲)。
+  // :画布形态状态点——super 卡头圆点/托盘按钮徽态与聊天头同一真源(waiting/待答/派发中/待办/空闲)。
   if (typeof cvCardStatus === "function") {
     if (supState.waiting) cvCardStatus("super", "run", "Super 正在处理");
     else if (urgent > 0) cvCardStatus("super", "warn", urgent + " 条待你回答");
     else if (running + queued > 0) cvCardStatus("super", "run", (running + queued) + " 个任务执行中");
-    else if (backlog > 0) cvCardStatus("super", "warn", backlog + " 条待办(中断/失败)"); // 琥珀不红——常驻历史积压不该常年红灯告警
+    else if (backlog > 0) cvCardStatus("super", "warn", backlog + " 条待办(中断/失败)"); // :琥珀不红——常驻历史积压不该常年红灯告警
     else cvCardStatus("super", "", "");
   }
   supCtxPillRender();
@@ -894,8 +908,8 @@ function superIdeDreamListHtml() {
   return rows.join("");
 }
 /** 面板加载/重连后从 task.list 重建 Super 派发任务(否则派发卡/协作链只在实时帧里存在,刷新即丢)。
- * task.list 是 TaskIndex 全量(含 submittedBy);取最近 20 条 Super 任务重放 supTrackDispatch,
- * 终态会触发详情补拉,恢复任务书/结果回执。 */
+ *  task.list 是 TaskIndex 全量(含 submittedBy);取最近 20 条 Super 任务重放 supTrackDispatch,
+ *  终态会触发详情补拉,恢复任务书/结果回执。 */
 function supRehydrateDispatch() {
   if (!supState || typeof tasks === "undefined" || !tasks || typeof tasks.forEach !== "function") return;
   var list = [];
@@ -935,7 +949,7 @@ function superIdeOpen(kind, id) {
     superIdeSel.dream = String(id || "");
     vs.classList.add("spide-open-dream");
     if (rsiLast) rsiRender(rsiLast); // 中栏做梦报告用既有渲染(rsiCards 内容同源;选中机制卡高亮由 rsiRender 后置)
-  } else if (kind === "health") { // 健康一屏:聚合 rsiLast 渲染总览+网格(无数据=空态引导)
+  } else if (kind === "health") { //  健康一屏:聚合 rsiLast 渲染总览+网格(无数据=空态引导)
     vs.classList.add("spide-open-health");
     superHealthRender();
   } else {
@@ -956,7 +970,7 @@ function supTaskHistPush(id, state, ts) {
   }
 }
 /** task.detail.result → Super 派发任务补全正文(索引帧不带 instruction/result;协作链/结果呈现需要)。
- * 主聊天同一帧也会更新 tasks 表;这里只补 Super 自己的 dispatch 表,互不影响。 */
+ *  主聊天同一帧也会更新 tasks 表;这里只补 Super 自己的 dispatch 表,互不影响。 */
 function supOnTaskDetail(id, task) {
   var tid = String(id || "");
   if (!tid || !task) return;
@@ -976,8 +990,8 @@ function supOnTaskDetail(id, task) {
 function superIdeTaskDocHtml(id) {
   const t = (supState.dispatch || {})[String(id || "")];
   if (!t) {
- // 结果流里点进来的任务,实时任务数据可能没同步(归档/重启/非 Super 派发的通知行)。
- // 此前一律给「任务不存在或已被清理」死胡同——改为用结果流回执正文渲染,并说明数据来源。
+    // :结果流里点进来的任务,实时任务数据可能没同步(归档/重启/非 Super 派发的通知行)。
+    // 此前一律给「任务不存在或已被清理」死胡同——改为用结果流回执正文渲染,并说明数据来源。
     var rid = String(id || ""), arr = supState.results || [], rr = null, k;
     for (k = 0; k < arr.length; k++) if (rid && String(arr[k].taskId || "") === rid) { rr = arr[k]; break; }
     if (rr) {
@@ -1000,9 +1014,9 @@ function superIdeTaskDocHtml(id) {
   const result = String(t.result || "");
   const ret = st === "done" ? { t: t.noticeAt ? "Super 已收到回执" : "已回执", c: "ok", m: "✓" } : st === "failed" ? { t: "失败回执", c: "bad", m: "✗" } : st === "cancelled" ? { t: "已取消", c: "bad", m: "×" } : st === "running" ? { t: "等待回执", c: "run", m: "…" } : { t: "排队中", c: "run", m: "…" };
   const sid = String(t.sessionId || "");
- // 状态轨迹(排队→运行→完成/失败):Super 与 Coding Agent 之间发生了什么,一眼可追。
- // 刷新后 taskHist 只剩当前帧:用 createdAt/startedAt/updatedAt 合成「创建→(运行)→终态」,
- // 时间取任务时间戳而不是重建时刻(不伪造 14:38 完成)。
+  // 状态轨迹(排队→运行→完成/失败):Super 与 Coding Agent 之间发生了什么,一眼可追。
+  // 刷新后 taskHist 只剩当前帧:用 createdAt/startedAt/updatedAt 合成「创建→(运行)→终态」,
+  // 时间取任务时间戳而不是重建时刻(不伪造 14:38 完成)。
   const hist = (supState.taskHist || {})[String(t.id || id)] || [];
   let steps = hist.slice();
   if (steps.length < 2 && t.createdAt && t.updatedAt && t.updatedAt > t.createdAt) {
@@ -1019,7 +1033,7 @@ function superIdeTaskDocHtml(id) {
     '<span class="sup-mono">' + supEsc(supHhmm(t.updatedAt)) + "</span>" +
     (sid ? '<button class="vw-act" data-supact="open" data-sid="' + supEsc(sid) + '">打开会话 ' + supEsc(sid) + "</button>" : "") +
     "</div>" +
- // 协作链:这张卡回答「谁派给谁、执行到哪、回执是什么」——Super 与 Coding Agent 的关系一眼可见
+    // 协作链:这张卡回答「谁派给谁、执行到哪、回执是什么」——Super 与 Coding Agent 的关系一眼可见
     '<div class="spide-rel">' +
       '<div class="spide-rel-chain">' +
         '<div class="rel-node sup" title="Super Agent · 指挥/拆解/派发"><b>S</b><span><span class="rn-t">Super</span><span class="rn-s">指挥 · 拆解派发</span></span></div>' +
@@ -1043,17 +1057,17 @@ function superIdeTaskDocHtml(id) {
     '<div class="sup-sec"><div class="sup-sec-h">结果回执 · Coding Agent → Super</div>' +
     '<div class="spide-doc-md">' + mdToHtml(String(terminal ? (result || "(无结果摘要)") : "Coding Agent 仍在执行,完成后 task.changed 会同帧刷新这里。"), "") + "</div></div>";
 }
-/** 指挥台总入口(侧栏 act-super / widget ▦ / genie:open-super 事件共用):画布态聚焦 super 卡(起不再退经典)。 */
+/** 指挥台总入口(侧栏 act-super / widget ▦ / genie:open-super 事件共用):画布态聚焦 super 卡( 起不再退经典)。 */
 function superOpen() {
-  switchView("super"); // 画布态=聚焦 super 卡并整卡缩放入画;经典态此调用为纯激活
-  supCtxWire(); supCtxRequest(); // 上下文 pill 接线+首次实测拉取
-try { if (typeof supChatWire === "function") supChatWire(); } catch (e) { /* 指挥台上传/模型 pill 接线:失败不阻断既有初始化 */ }
-  setTimeout(function () { superLayoutFit(); }, 80); // 视图可见后再按真实宽度收一次(启动时 clientWidth=0)
+  switchView("super"); // :画布态=聚焦 super 卡并整卡缩放入画;经典态此调用为纯激活
+  supCtxWire(); supCtxRequest(); // :上下文 pill 接线+首次实测拉取
+try { if (typeof supChatWire === "function") supChatWire(); } catch (e) { /* 2026-11-16 指挥台上传/模型 pill 接线:失败不阻断既有初始化 */ }
+  setTimeout(function () { superLayoutFit(); }, 80); // :视图可见后再按真实宽度收一次(启动时 clientWidth=0)
   setTimeout(() => { const i = document.getElementById("superInput"); if (i) i.focus(); }, 60);
 }
 /* ── Super IDE 可拖拽布局:左栏宽度 --superSb / 聊天窗宽度 --superChatW ───────────────
- 两个手柄:superSbGrip(活动栏右侧边界)、superChatGrip(聊天窗左缘)。拖动改 CSS 变量,
- pointerup 落 localStorage(genie.super.layout.v1);聊天窗不可折叠(=常驻宽度)。 */
+   两个手柄:superSbGrip(活动栏右侧边界)、superChatGrip(聊天窗左缘)。拖动改 CSS 变量,
+   pointerup 落 localStorage(genie.super.layout.v1);聊天窗不可折叠(=常驻宽度)。 */
 var SUPER_LAYOUT_KEY = "genie.super.layout.v1";
 function superLayoutVar(name, fallback) {
   var vs = $("view-super");
@@ -1077,9 +1091,9 @@ function superLayoutLoad() {
     var d = JSON.parse(localStorage.getItem(SUPER_LAYOUT_KEY) || "{}");
     var sb = Number(d && d.sb) || 280, chat = Number(d && d.chat) || 360;
     var vs = $("view-super");
- // 视图在启动时可能还 hidden(clientWidth=0);用 window.innerWidth 兜底,别用 0 宽做 clamp
+    // 视图在启动时可能还 hidden(clientWidth=0);用 window.innerWidth 兜底,别用 0 宽做 clamp
     var viewW = vs && vs.clientWidth > 0 ? vs.clientWidth : (window.innerWidth || 0);
- // 启动瞬间页面可能未完成布局(innerWidth=0):跳过 clamp 直接应用已保存值,避免把 420 误压成 360
+    // 启动瞬间页面可能未完成布局(innerWidth=0):跳过 clamp 直接应用已保存值,避免把 420 误压成 360
     if (viewW >= 800) {
       var maxTotal = Math.max(640, viewW - 56 - 420);
       if (sb + chat > maxTotal) {
@@ -1100,8 +1114,8 @@ function superLayoutGrip(el, kind) {
     var startX = ev.clientX;
     var sb0 = superLayoutVar("--superSb", 280), chat0 = superLayoutVar("--superChatW", 360);
     var wrapEl = $("superIdeWrap");
-    var maxTotal = Math.max(460, (wrapEl && wrapEl.clientWidth ? wrapEl.clientWidth : vs.clientWidth) - 56 - SUPER_MIN_MAIN); // 中栏至少 SUPER_MIN_MAIN(与 superLayoutFit 同口径)
- // 画布卡片是缩放容器:屏幕 dx 要除以卡片缩放比,分隔线才跟着光标走(经典布局 scale=1)
+    var maxTotal = Math.max(460, (wrapEl && wrapEl.clientWidth ? wrapEl.clientWidth : vs.clientWidth) - 56 - SUPER_MIN_MAIN); // 中栏至少 SUPER_MIN_MAIN(:与 superLayoutFit 同口径)
+    // 画布卡片是缩放容器:屏幕 dx 要除以卡片缩放比,分隔线才跟着光标走(经典布局 scale=1)
     var scale = 1;
     try { var vr = vs.getBoundingClientRect(); if (vs.offsetWidth > 0) scale = vr.width / vs.offsetWidth; } catch (e) { /* 忽略 */ }
     if (!(scale > 0.1 && scale < 10)) scale = 1;
@@ -1128,8 +1142,8 @@ function superLayoutGrip(el, kind) {
     document.addEventListener("pointerup", up);
   });
 }
-/** 窄宽自适应:保证中栏至少 MIN_MAIN。宽度预算超了就先收聊天窗(下限 280)再收侧栏(下限 180)。
- * 只改进 CSS 变量不落 localStorage——用户保存的偏好保留,下次进指挥台再按当时的视图宽重算。 */
+/**  窄宽自适应:保证中栏至少 MIN_MAIN。宽度预算超了就先收聊天窗(下限 280)再收侧栏(下限 180)。
+ *  只改进 CSS 变量不落 localStorage——用户保存的偏好保留,下次进指挥台再按当时的视图宽重算。 */
 var SUPER_MIN_MAIN = 320;
 function superLayoutFit() {
   var vs = $("view-super"), wrap = $("superIdeWrap");
@@ -1137,8 +1151,8 @@ function superLayoutFit() {
   var mainEl = $("superIdeMain");
   if (mainEl && mainEl.clientWidth >= SUPER_MIN_MAIN) return; // 已够宽:不干预用户拖拽
   var sb = superLayoutVar("--superSb", 280), chat = superLayoutVar("--superChatW", 360);
- // 基准必须用 #superIdeWrap 的宽(它已含 padding-right=聊天窗宽);用 #view-super 的 clientWidth
- // 会把视图内边距算进来,导致预算偏大、中栏实际被聊天窗压住(经验证 1280 下差 42px)。
+  // 基准必须用 #superIdeWrap 的宽(它已含 padding-right=聊天窗宽);用 #view-super 的 clientWidth
+  // 会把视图内边距算进来,导致预算偏大、中栏实际被聊天窗压住(实测 1280 下差 42px)。
   var avail = wrap.clientWidth - 56 - SUPER_MIN_MAIN; // 侧栏+聊天窗可用宽
   if (sb + chat <= avail) return;
   var over = sb + chat - avail;
@@ -1158,7 +1172,7 @@ function superLayoutInit() {
   }
 }
 /** super.history.result → 渲染条目(journal 事件回放;kinds: message.user/message.agent/super.notice/
- * super.relay/super.dream;message.agent 的 toolCalls/tool.result 合并进条目供 supToolResOf 预扫)。 */
+ *  super.relay/super.dream;message.agent 的 toolCalls/tool.result 合并进条目供 supToolResOf 预扫)。 */
 function supApplyHistory(events) {
   const out = [];
   const resultEntries = []; // Coding Agent 结果(通知/做梦):走中栏结果流,不进聊天
@@ -1180,8 +1194,8 @@ function supApplyHistory(events) {
     }
     if (sid && sid !== lastSid) { out.push({ kind: "day", text: sid, ts }); lastSid = sid; }
     if (kind === "message.user") {
- // 播报轮的输入是系统通知/转接(不是人说的话):历史回放不能渲染成「你」的聊天消息。
- // 通知→一行紧凑系统行(结果在中栏);转接→由 super.relay 行承载,跳过避免重复。
+      // 播报轮的输入是系统通知/转接(不是人说的话):历史回放不能渲染成「你」的聊天消息。
+      // 通知→一行紧凑系统行(结果在中栏);转接→由 super.relay 行承载,跳过避免重复。
       var utext = String(p.text || "");
       var ntm = utext.match(/^\\[系统通知\\]\\s*任务「([^」]+)」已(完成|失败|取消)/);
       if (ntm) { out.push({ kind: "sys", text: "系统通知 · 任务「" + ntm[1] + "」已" + ntm[2] + "(结果见中栏)", ts, sid }); continue; }
@@ -1191,7 +1205,7 @@ function supApplyHistory(events) {
     else if (kind === "message.agent") out.push({ kind: "a", text: String(p.text || ""), reasoning: String(p.reasoning || ""), llmMs: Number(p.llmMs || 0), toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : null, ts, sid, usage: p.usage || null }); // usage: 上下文 pill(实测 inputTokens)
     else if (kind === "super.relay" || kind === "companion.relay") out.push({ kind: "relay", text: String(p.text || ""), ts, sid });
   }
- // 工具结果回填:挂到最后一条带 toolCalls 的 assistant 条目(全量重放先扫后用,主聊天 fixH12 同语义)
+  // 工具结果回填:挂到最后一条带 toolCalls 的 assistant 条目(全量重放先扫后用,主聊天 fixH12 同语义)
   if (toolRes.length) for (let i = out.length - 1; i >= 0; i--) if (out[i].kind === "a" && out[i].toolCalls) { out[i].toolResults = toolRes; break; }
   supSetResults(resultEntries); // 先重建结果流(历史为权威),再渲染聊天
   supState.entries = out.slice(-400); // 上限护栏:超长历史只渲染尾部(journal 全量仍在,可再刷新重放)
@@ -1200,7 +1214,7 @@ function supApplyHistory(events) {
 /* supRenderChat 已上移(与派发卡/做梦卡渲染同段; 聊天窗主线)。 */
 /** 看板四区(待人工 / 工作区×任务 / 活跃流 / 系统健康)——全部从已在场状态确定性聚合。 */
 function supRenderBoard() {
- // ① 待你处理(人先行:ask/permission/interrupted/blocked 在前,failed 收尾——服务端已排序)
+  // ① 待你处理(人先行:ask/permission/interrupted/blocked 在前,failed 收尾——服务端已排序)
   const dismissed = supState.dismissed;
   const items = supState.inbox.filter((it) => it && it.id && dismissed.indexOf(it.id) < 0);
   const inboxEl = document.getElementById("supInbox");
@@ -1231,7 +1245,7 @@ function supRenderBoard() {
   if (cnt) cnt.textContent = items.length ? "· " + items.length : "";
   const ibBadge = document.getElementById("superInboxBadge"); // 活动栏红点:待办数量(三栏布局下的唯一入口提示)
   if (ibBadge) { ibBadge.textContent = items.length > 99 ? "99+" : String(items.length); ibBadge.classList.toggle("on", items.length > 0); }
- // ② 工作区 × 任务矩阵(每区最近 3 条;▶ running / ✗ failed / · 其余;点击 openSession)
+  // ② 工作区 × 任务矩阵(每区最近 3 条;▶ running / ✗ failed / · 其余;点击 openSession)
   const projEl = document.getElementById("supProjects");
   if (projEl) {
     const list = Array.isArray(projects) ? projects : [];
@@ -1256,7 +1270,7 @@ function supRenderBoard() {
     if (!list.length) rows.push('<div class="sup-empty">尚未打开项目:侧栏「+ 添加项目」或让我 project_add。</div>');
     projEl.innerHTML = rows.join("");
   }
- // ③ 活跃任务流(running/queued;group 相同聚类=联调组)
+  // ③ 活跃任务流(running/queued;group 相同聚类=联调组)
   const actEl = document.getElementById("supActive");
   if (actEl) {
     const active = [...tasks.values()].filter((t) => t.state === "running" || t.state === "queued")
@@ -1281,7 +1295,7 @@ function supRenderBoard() {
     const acnt = document.getElementById("supActiveCnt");
     if (acnt) acnt.textContent = active.length ? "· " + active.length : "";
   }
- // ④ 系统健康(健康态不占位:无异常的项收成一行;借鉴 dsh-superagent「Healthy states take no extra space」)
+  // ④ 系统健康(健康态不占位:无异常的项收成一行;借鉴 dsh-superagent「Healthy states take no extra space」)
   const healthEl = document.getElementById("supHealth");
   if (healthEl) {
     const rows = [];
@@ -1307,14 +1321,27 @@ function pLabel(pid) {
   const p = (Array.isArray(projects) ? projects : []).find((x) => x.id === pid);
   return (p && (p.label || p.id)) || String(pid || "").slice(0, 12);
 }
+/**  G4:发送键状态同步(空文本灰禁 + waiting 提交中禁用 + title/aria),
+ *  input 事件/发送成功/轮次结束三处调用——替代此前只在 input 里做的单因子禁用。 */
+function supSendBtnSync() {
+  const si = document.getElementById("superInput");
+  const sb = document.getElementById("superSend");
+  if (!si || !sb) return;
+  const empty = !String(si.value || "").trim();
+  const busy = !!supState.waiting;
+  sb.classList.toggle("disabled", empty || busy);
+  sb.title = busy ? "Super 正在处理…(完成后可继续)" : empty ? "输入内容后再发送(Enter)" : "发送 (Enter)";
+  sb.setAttribute("aria-label", busy ? "处理中" : empty ? "输入内容后再发送" : "发送");
+}
 /** 发送一轮 super.turn:等待态由 turn.user 广播回显用户气泡,done 广播回填回复(error 清等待)。
- * 带附件(上传 + 右键上下文里的文件 ref)与上下文前言块;发送后清空两处芯片。 */
+ *  2026-11-16:带附件(上传 + 右键上下文里的文件 ref)与上下文前言块;发送后清空两处芯片。 */
 function supSend() {
   const inp = document.getElementById("superInput");
-  if (!inp || supState.waiting) return;
+  if (!inp) return;
+  if (supState.waiting) { toast("Super 正在处理上一条,稍候再发(输入会保留)", true); return; } //  G4:提交中回车不再静默吞,提示且草稿不丢
   const typed = String(inp.value || "").trim();
   const refPrefix = (typeof supRefPrefix === "function") ? supRefPrefix() : "";
- // 附件来源①输入区待发附件 ②右键「添加到指挥台」里的文件类 ref(去重、按协议上限截断)
+  // 附件来源①输入区待发附件 ②右键「添加到指挥台」里的文件类 ref(去重、按协议上限截断)
   const fromBox = (typeof supAttPayload === "function") ? supAttPayload() : [];
   const fromRef = (typeof supRefAsAtts === "function") ? supRefAsAtts() : [];
   const seenPath = {};
@@ -1324,18 +1351,21 @@ function supSend() {
     return true;
   });
   const clipped = atts.length > 12 ? atts.splice(12) : []; // 按协议上限截断(surface.ts SuperTurn attachments max(12))
-  if (clipped.length) toast("附件超上限:已丢弃 " + clipped.length + " 个(最多发 12 个)", true); // 静默截断改为明示
+  if (clipped.length) toast("附件超上限:已丢弃 " + clipped.length + " 个(最多发 12 个)", true); // :静默截断改为明示
   let text = (refPrefix + typed).trim();
- // 只发附件/上下文没写字时,正文给一句可见占位(协议 text 必填,且用户要知道自己发了什么)
+  // 只发附件/上下文没写字时,正文给一句可见占位(协议 text 必填,且用户要知道自己发了什么)
   if (!text && atts.length) text = "见附件:" + atts.map(function (a) { return String(a.name || "附件"); }).join("、");
   if (!text) return;
- // 显式 sessionId="super"(固定持久会话;与 server superSessionId 同源;旧缺省行为不变)
+  // :显式 sessionId="super"(固定持久会话;与 server superSessionId() 同源;旧缺省行为不变)
   if (!wsSafeSend(JSON.stringify({ v: 1, type: "super.turn", text, sessionId: "super", ...(atts.length ? { attachments: atts } : {}) }))) { toast("连接未就绪", true); return; }
   inp.value = "";
+  try { localStorage.removeItem("sup:draft"); } catch (e) {} //  G5:已发出的草稿即刻清(未发出/失败路径不清,草稿保留)
+  try { inp.focus(); } catch (e) {} //  G7:发送后焦点回输入框,连续对话不点鼠标(coding 侧同款)
   try { inp.style.height = "auto"; } catch (e) {}
   if (typeof supAttClear === "function") supAttClear();
   if (typeof supRefClear === "function") supRefClear();
   supState.waiting = true;
+  supSendBtnSync(); //  G4:提交中禁用态即刻生效(不等 input 事件)
   supRunStart("正在理解指令");
   supRenderChat();
 }
@@ -1349,16 +1379,16 @@ function superOnMsg(m) {
     return;
   }
   if (m.type === "super.turn.done") {
-    supState.waiting = false;
+    supState.waiting = false; supSendBtnSync(); //  G4:轮次结束解除提交中禁用
     supState.stream = null;
-    supCtxRequest(); // 轮次结束刷新上下文实测(自动压缩若发生,数值即刻反映)
-    supState.revealReplyTop = true; // 终稿回放后翻到回复开头(结论在头上),见 supRenderChat // 终稿由 history 回放渲染,清 live 气泡(避免与终稿重复)
+    supCtxRequest(); // :轮次结束刷新上下文实测(自动压缩若发生,数值即刻反映)
+    supState.revealReplyTop = true; // :终稿回放后翻到回复开头(结论在头上),见 supRenderChat // 终稿由 history 回放渲染,清 live 气泡(避免与终稿重复)
     supRunEnd();
     supRunAfterTaskChange(); // 有在途委托→状态条转「已委托」;否则收起
     supState.entries.push({ kind: "a", text: String(m.text || ""), ts: Date.now(), sid: String(m.sessionId || supDayLabel()) });
     supRenderChat();
- // 实时 done 帧只带终稿文本(toolCalls 在 journal):拉一次 super.history 回放,本轮工具卡/
- // spawn_task 关系条立即出现,不必手动刷新(协作观测)。
+    // 实时 done 帧只带终稿文本(toolCalls 在 journal):拉一次 super.history 回放,本轮工具卡/
+    // spawn_task 关系条立即出现,不必手动刷新(2026-11-13 协作观测)。
     wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 }));
     return;
   }
@@ -1367,7 +1397,7 @@ function superOnMsg(m) {
     var ntext = String(m.text || ""), ntask = String(m.taskId || ""), nstate = String(m.state || "");
     if (/\\[RSI\\]/.test(ntext)) return; // 机制运行由 super.dream 结果行完整代表(含成本/摘要),通知不重复进结果流
     var nts = Date.now();
- // noticeAt 标记「Super 已收到回执」;dispatch 可能尚未建(notice 先到)→ 暂存,待 task.changed merge 时补上
+    // noticeAt 标记「Super 已收到回执」;dispatch 可能尚未建(notice 先到)→ 暂存,待 task.changed merge 时补上
     if (ntask) {
       if (supState.dispatch && supState.dispatch[ntask]) supState.dispatch[ntask].noticeAt = nts;
       else { if (!supState.pendingNoticeAt) supState.pendingNoticeAt = {}; supState.pendingNoticeAt[ntask] = nts; }
@@ -1389,11 +1419,26 @@ function superOnMsg(m) {
     supPullInboxSoft();
     return;
   }
+  if (m.type === "super.event") {
+    //  消息体化:系统来源 super 输入(权限自决/转接/通知)→ 独立事件卡(非用户气泡)。
+    // 与旧 super.notice/super.relay 并存(旧帧照发,本帧加发;渲染去重:notice 类不重复进结果流)。
+    var ek = String(m.kind || ""), ep = (m.payload && typeof m.payload === "object") ? m.payload : {};
+    var eTitle = ek === "permission-ask" ? "权限自决请求" : (ek === "relay" ? "Coding Agent 提问" : "系统事件");
+    var eBits = [];
+    if (ep.tool) eBits.push("工具 " + String(ep.tool));
+    if (ep.risk) eBits.push("风险 " + String(ep.risk));
+    if (ep.state) eBits.push("状态 " + String(ep.state));
+    var eSum = String(ep.summary || ep.question || "");
+    supState.entries.push({ kind: "event", text: eTitle + (eBits.length ? "(" + eBits.join(" · ") + ")" : "") + (eSum ? ":" + supClip(eSum, 160) : ""), ts: Date.now(), evKind: ek, requestId: String(m.requestId || ""), payload: ep });
+    supRenderChat();
+    if (ek !== "notice") supPullInboxSoft();
+    return;
+  }
   if (m.type === "super.inbox.result") { supState.inbox = Array.isArray(m.items) ? m.items : []; supRenderBoard(); supChatHeadSync(); return; }
   if (m.type === "super.inbox.changed") { supPullInboxSoft(); return; }
-  if (m.type === "super.dream") { // 做梦卡:机制运行开始/完成广播 → 中栏结果流(聊天只留对话)
+  if (m.type === "super.dream") { //  做梦卡:机制运行开始/完成广播 → 中栏结果流(聊天只留对话)
     pushSuperResult({ kind: "dream", mechanismId: String(m.mechanismId || ""), runId: String(m.runId || ""), title: String(m.title || m.mechanismId || "机制"), phase: String(m.phase || ""), cost: m.cost || null, summary: String(m.summary || ""), ts: Date.now(), key: "dream:" + String(m.runId || m.mechanismId || Date.now()) });
-    supIdeSideRender(); // 做梦完成 → 侧栏机制列表同帧刷新(成本/最近运行由 15s rsi.status 轮询追平)
+    supIdeSideRender(); // :做梦完成 → 侧栏机制列表同帧刷新(成本/最近运行由 15s rsi.status 轮询追平)
     return;
   }
 }
@@ -1401,8 +1446,8 @@ function supPullInboxSoft() {
   if (document.body.dataset.view === "super") wsSafeSend(JSON.stringify({ v: 1, type: "super.inbox", limit: 30 }));
 }
 function supOnError(m) {
- // 服务端 super-failed/super-announce-failed:清等待气泡,聊天区显式报错(对齐 widget error 分支)。
-  supState.waiting = false;
+  // 服务端 super-failed/super-announce-failed:清等待气泡,聊天区显式报错(对齐 widget error 分支)。
+  supState.waiting = false; supSendBtnSync(); //  G4:error 路径同样解除提交中禁用
   supState.stream = null;
   supRunEnd();
   supState.entries.push({ kind: "sys", text: "[出错] 调度中枢:" + supClip(String(m.message || m.code || "未知错误"), 200), ts: Date.now() });
@@ -1443,7 +1488,7 @@ function supBoardClick(ev) {
     return;
   }
   if (act === "answer") {
- // 行内回答输入框(ask 类):回车/发送 → ask.user.answer(与 widget answerAsk 同协议)。
+    // 行内回答输入框(ask 类):回车/发送 → ask.user.answer(与 widget answerAsk 同协议)。
     const row = btn.closest("[data-supitem]");
     if (!row || row.querySelector(".sup-answer")) return;
     const wrap = document.createElement("div");
@@ -1453,6 +1498,7 @@ function supBoardClick(ev) {
     const inp = wrap.querySelector("input");
     if (inp) inp.focus();
     if (inp) inp.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return; //  G1:IME 组合期守卫(同 superInput,选词回车只上屏不发送)
       if (e.key === "Enter") { e.preventDefault(); supAnswerSend(btn.dataset.id, inp.value); }
       if (e.key === "Escape") wrap.remove();
     });
@@ -1481,6 +1527,10 @@ try {
 } catch (_) {}
 document.getElementById("superSend").addEventListener("click", supSend);
 document.getElementById("superInput").addEventListener("keydown", (e) => {
+  //  G1:IME 组合期守卫(与主聊天 instruction.onkeydown 首行同款,script-chat-cite.ts)——
+  // 拼音/日文组词期 Enter 是「选词确认」不是提交,isComposing(老口径 keyCode 229)提前放行,
+  // 防选词回车把半成品发出;组合期不 preventDefault(交给输入法正常上屏)。
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); supSend(); }
 });
 /* 与主聊天同款 composer 行为:textarea 随内容增高(≤160px);+ 菜单=三个常用指令 */
@@ -1488,11 +1538,11 @@ document.getElementById("superInput").addEventListener("keydown", (e) => {
   const si = document.getElementById("superInput");
   if (si) si.addEventListener("input", function () {
     si.style.height = "auto"; si.style.height = Math.min(160, si.scrollHeight) + "px";
- // (P4):发送键禁用态——空输入=灰禁,控件自解释「能不能发」
-    var sb = document.getElementById("superSend");
-    if (sb) { var empty = !si.value.trim(); sb.classList.toggle("disabled", empty); sb.title = empty ? "输入内容后再发送(Enter)" : "发送 (Enter)"; }
+    try { localStorage.setItem("sup:draft", si.value); } catch (e) {} //  G5:草稿随打字保存(与主聊天 saveDraft zh:draft 同语义)
+    supSendBtnSync(); // (P4)+ G4:空输入/提交中双禁用态,控件自解释「能不能发」
   });
-  try { var sbInit = document.getElementById("superSend"); if (sbInit) { var ie = !String(si ? si.value : "").trim(); sbInit.classList.toggle("disabled", ie); sbInit.title = ie ? "输入内容后再发送(Enter)" : "发送 (Enter)"; } } catch (e) {} /* (m2):初始即同步 title */
+  try { var dSup = localStorage.getItem("sup:draft"); if (si && dSup) { si.value = String(dSup); si.style.height = "auto"; si.style.height = Math.min(160, si.scrollHeight) + "px"; } } catch (e) {} /*  G5:进面板恢复未发草稿 */
+  supSendBtnSync(); /* (m2)+(④/G4):初始即同步 title/aria/禁用态 */
   const qb = document.getElementById("superQuickBtn"), qm = document.getElementById("superQuickMenu");
   if (qb && qm && !qb.__bound) {
     qb.addEventListener("click", function (e) { e.stopPropagation(); qm.style.display = qm.style.display === "none" ? "flex" : "none"; });
@@ -1500,7 +1550,7 @@ document.getElementById("superInput").addEventListener("keydown", (e) => {
       const b = e.target && e.target.closest ? e.target.closest("[data-supquick]") : null;
       if (!b) return;
       const inp = document.getElementById("superInput");
-      if (inp) { inp.value = String(b.dataset.supquick || ""); inp.focus(); inp.style.height = "auto"; inp.style.height = Math.min(160, inp.scrollHeight) + "px"; }
+      if (inp) { inp.value = String(b.dataset.supquick || ""); inp.focus(); inp.style.height = "auto"; inp.style.height = Math.min(160, inp.scrollHeight) + "px"; try { localStorage.setItem("sup:draft", inp.value); } catch (e) {} supSendBtnSync(); } //  G5:快捷指令填入=草稿变更,同路径保存+按钮同步
       qm.style.display = "none";
     });
     document.addEventListener("click", function (e) {
@@ -1514,8 +1564,8 @@ document.getElementById("superInput").addEventListener("keydown", (e) => {
 document.getElementById("supInbox").addEventListener("click", supBoardClick); // 待办区已迁到三栏侧栏
 document.getElementById("supProjects").addEventListener("click", supBoardClick);
 document.getElementById("supActive").addEventListener("click", supBoardClick);
-/* ── IDE 三栏交互(事件委托,零内联 onclick)─────────────────────────
- 活动栏切区(superIdeZoneSet)/侧栏项与聊天流「详情→」→ superIdeOpen/中栏返回/聊天窗折叠。 */
+/* ──  IDE 三栏交互(事件委托,零内联 onclick)─────────────────────────
+   活动栏切区(superIdeZoneSet)/侧栏项与聊天流「详情→」→ superIdeOpen/中栏返回/聊天窗折叠。 */
 document.getElementById("superIdeAct").addEventListener("click", (ev) => {
   const btn = ev.target && ev.target.closest ? ev.target.closest(".spide-actbtn") : null;
   if (btn) superIdeZoneSet(String(btn.dataset.spidezone || "task"));
@@ -1552,10 +1602,10 @@ document.getElementById("superChatBody").addEventListener("click", (ev) => {
   }
 });
 superLayoutInit(); // 左栏/聊天窗宽度拖拽手柄(localStorage 持久;聊天窗不可折叠)
-supCtxWire(); // 上下文 pill 点击=本会话余量浮层;不只依赖 superOpen(经 switchView/深链进入时也要有绑定)
+supCtxWire(); // :上下文 pill 点击=本会话余量浮层;不只依赖 superOpen(经 switchView/深链进入时也要有绑定)
 supChatInit(); // 聊天窗头部状态 + 回最新按钮 + 快捷指令
 setInterval(function () { try { if (supState.run && supState.run.active) supRunBarRender(); } catch (e) {} }, 1000); // 状态条秒表
-superIdeZoneSet("health"); // 初始区=健康一屏(默认首屏;侧栏/中栏类就位)
+superIdeZoneSet("health"); // :初始区=健康一屏(默认首屏;侧栏/中栏类就位)
 document.getElementById("super-refresh").addEventListener("click", () => {
   supState.histLoaded = true;
   wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 }));
@@ -1572,11 +1622,11 @@ function editResend(text) {
   $("instruction").focus();
 }
 /** r3:/fork 复用入口(ZCode session-fork 两段式):forkSessionAndSubmit(src, instruction) ——
- * 先 session.fork 继承原会话全部上下文,拿到新 id 后在新会话派指令(标题 [fork] 前缀)。
- * 无独立任务对象时(/fork [sessionId])取当前会话最近一条任务作为指令与标题来源,缺则空指令兜底。 */
+ *  先 session.fork 继承原会话全部上下文,拿到新 id 后在新会话派指令(标题 [fork] 前缀)。
+ *  无独立任务对象时(/fork [sessionId])取当前会话最近一条任务作为指令与标题来源,缺则空指令兜底。 */
 function forkSessionAndSubmit(src, instruction, opt) {
   const o = opt || {};
- // 标题「[fork] 原摘要」:调用方给的标题优先(原任务标题),否则指令首行压空白取前 40 字符(task.rename 需 taskId,提交后补)
+  // 标题「[fork] 原摘要」:调用方给的标题优先(原任务标题),否则指令首行压空白取前 40 字符(task.rename 需 taskId,提交后补)
   const forkLabel = "[fork] " + String(o.title || instruction || "").replace(/\\s+/g, " ").trim().slice(0, 40);
   const listenOnce = function (match, fn) {
     const h = function (ev) {
@@ -1590,7 +1640,7 @@ function forkSessionAndSubmit(src, instruction, opt) {
     if (!m.ok || !m.sessionId) { toast("会话分叉失败:" + String(m.reason || "未知原因"), true); return; }
     const sid = m.sessionId;
     wsSafeSend(JSON.stringify({ v: 1, type: "task.submit", sessionId: sid, instruction: instruction, idempotencyKey: o.idempotencyKey || ("fork-" + Date.now()), ...(o.projectId ? { projectId: o.projectId } : {}) }));
- // 标题覆盖(协议 task.submit 无 title 位,task.submitted 到达后 rename)
+    // 标题覆盖(协议 task.submit 无 title 位,task.submitted 到达后 rename)
     const h2 = listenOnce(function (m2) { return m2.type === "task.submitted" && m2.task && m2.task.sessionId === sid; }, function (m2) {
       wsSafeSend(JSON.stringify({ v: 1, type: "task.rename", taskId: m2.task.id, title: forkLabel }));
     });
@@ -1605,12 +1655,12 @@ function builtinFork(args) {
   const a = String(args || "").trim();
   const sid = a || currentSid;
   if (!sid) { toast("当前无活动会话;/fork [sessionId] 指定要分叉的会话", true); return; }
- // 该会话最近一条任务作指令与标题来源(无任务也允许 fork:空指令兜底,服务端按空 instruction 处理)
+  // 该会话最近一条任务作指令与标题来源(无任务也允许 fork:空指令兜底,服务端按空 instruction 处理)
   const t = [...tasks.values()].filter((x) => x.sessionId === sid).sort((x, y) => y.updatedAt - x.updatedAt)[0];
   if (t) {
- // instruction 属正文(索引条目没有)→ 按需拉;取不到正文时以空指令 fork 兜底(标题仍可用)。
+    // :instruction 属正文(索引条目没有)→ 按需拉;取不到正文时以空指令 fork 兜底(标题仍可用)。
     withTaskDetail(t.id, (full) => {
- // 正文拉取失败(full=null)才提示;全程无 instruction(服务端按空指令处理)仍允许 fork。
+      // 正文拉取失败(full=null)才提示;全程无 instruction(服务端按空指令处理)仍允许 fork。
       if (!full) { toast("任务正文加载中,请稍后再试 /fork", true); return; }
       const ins = String(full.instruction || "");
       const tt = full.title || full.instruction || t.title || "";
@@ -1621,8 +1671,8 @@ function builtinFork(args) {
   forkSessionAndSubmit(sid, "", {});
 }
 /** /rewind 命令体(r3):复用 F1 快照面板既有 checkpoint 流(pendingRewind + checkpoint.preview
- * → 回包弹既有确认清单 → checkpoint.rewind,panel 9438 一带;不新写确认对话框)。
- * 无参=最近一个任务;有参=指定 taskId。无任务→先刷列表再提示。 */
+ *  → 回包弹既有确认清单 → checkpoint.rewind,panel 9438 一带;不新写确认对话框)。
+ *  无参=最近一个任务;有参=指定 taskId。无任务→先刷列表再提示。 */
 function builtinRewind(args) {
   const a = String(args || "").trim();
   const recent = [...tasks.values()].sort((x, y) => y.updatedAt - x.updatedAt)[0];
@@ -1637,7 +1687,7 @@ function builtinRewind(args) {
   wsSafeSend(JSON.stringify({ v: 1, type: "checkpoint.preview", taskId: tid }));
 }
 /** /mode 命令体(r3):切换权限模式(cfg.set permissions.mode,与 permPill 同通道热生效)。
- * 无参=toast 当前模式;无效值 toast 用法。plan 与 goal 互斥的服务端校验如实透传错误回包(不在此处理)。 */
+ *  无参=toast 当前模式;无效值 toast 用法。plan 与 goal 互斥的服务端校验如实透传错误回包(不在此处理)。 */
 function builtinMode(args) {
   const a = String(args || "").trim().toLowerCase();
   if (!a) { toast("当前权限模式:" + (PERM_MODES.find((x) => x.v === permModeV) || PERM_MODES[0]).label + "(用法:/mode <ask|auto|readonly|plan>)"); return; }
@@ -1647,11 +1697,11 @@ function builtinMode(args) {
   pillRender(); pillSendPerm(); // 复用 pill 通道:cfg.set 热生效 + localStorage + toast
 }
 function forkTask(t) {
- // fork=两段式(ZCode session-fork 语义移植,refs: ZCode):先 session.fork 让服务端把原会话
- // 全部上下文事件(剔除任务生命周期噪声)继承进新会话,拿到新 id 后再在新会话派原指令。
- // 旧行为=仅重派指令(无上下文继承)。结果经本函数自带的一次性 ws 监听接收(主 onmessage 不动)。
- // r3:实现体抽成 forkSessionAndSubmit(/fork 复用),本函数保留为任务菜单入口。
- // instruction/title 正文按需拉(task.detail.get);无正文 → toast 提示,不空派。
+  // fork=两段式(ZCode session-fork 语义移植,refs: ZCode):先 session.fork 让服务端把原会话
+  // 全部上下文事件(剔除任务生命周期噪声)继承进新会话,拿到新 id 后再在新会话派原指令。
+  // 旧行为=仅重派指令(无上下文继承)。结果经本函数自带的一次性 ws 监听接收(主 onmessage 不动)。
+  // r3:实现体抽成 forkSessionAndSubmit(/fork 复用),本函数保留为任务菜单入口。
+  // :instruction/title 正文按需拉(task.detail.get);无正文 → toast 提示,不空派。
   withTaskDetail(t.id, (full) => {
     const ins = String((full && full.instruction) || "");
     if (!ins) { toast("任务正文加载中,请稍后再点分叉", true); return; }
@@ -1659,7 +1709,7 @@ function forkTask(t) {
   });
 }
 
-// ---- 划词菜单(ZCode SelectionActionMenu 移植):选中正文→侧聊/引用入输入框 ----
+// ---- 划词菜单(,ZCode SelectionActionMenu 移植):选中正文→侧聊/引用入输入框 ----
 document.addEventListener("mouseup", (e) => {
   setTimeout(() => {
     const sel = window.getSelection && window.getSelection();
@@ -1681,14 +1731,14 @@ document.addEventListener("click", (e) => {
   popoverSyncEl("selMenu", false, "#selMenu");
 });
 
-// ---- 定时自动化管理(ZCode AutomationsSection 移植) ----
+// ---- 定时自动化管理(,ZCode AutomationsSection 移植) ----
 let automations = [];
 function ago2(ts) { if (!ts) return "未跑"; const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? "刚刚" : m < 60 ? m + "分前" : Math.round(m / 60) + "时前"; }
 function untilStr(ts) { const m = Math.round((ts - Date.now()) / 60000); return m <= 0 ? "即将" : m + "分后"; }
 function renderAutomations() {
   const host = $("autoList");
   if (!host) return;
- // scope 分栏(ZCode 全局/项目 tabs):project=scope 匹配激活项目;无 scope 视为 global。
+  // scope 分栏(,ZCode 全局/项目 tabs):project=scope 匹配激活项目;无 scope 视为 global。
   const scopePid = activeProjectId || "__harness__";
   const shown = automations.filter((a) => (autoScope === "global" ? (a.scope || "global") === "global" : a.scope === scopePid));
   host.innerHTML = shown.length
@@ -1722,14 +1772,14 @@ $("autoAdd").onclick = () => {
   const instruction = sec.querySelector("input[name=instruction]").value.trim();
   const every = Number(sec.querySelector("input[name=every]").value);
   if (!name || !instruction || !every) { toast("名称/指令/间隔都必填", true); return; }
- // scope 跟随当前分栏:本项目 tab 下创建=scope 激活项目;全局 tab=global。
+  // scope 跟随当前分栏():本项目 tab 下创建=scope 激活项目;全局 tab=global。
   const scope = autoScope === "project" ? (activeProjectId || "__harness__") : undefined;
   wsSafeSend(JSON.stringify({ v: 1, type: "automation.create", name, instruction, everyMinutes: every, ...(scope ? { scope } : {}) }));
   sec.querySelector("input[name=name]").value = "";
   sec.querySelector("input[name=instruction]").value = "";
   sec.querySelector("input[name=every]").value = "";
 };
-// ---- 终端(本地工作区命令执行;输出走 WS 流式) ----
+// ----  终端(本地工作区命令执行;输出走 WS 流式) ----
 let termBusy = false;
 function termSend(o) { if (ws.readyState === 1) wsSafeSend(JSON.stringify(Object.assign({ v: 1 }, o))); }
 function termAppend(text, cls) {

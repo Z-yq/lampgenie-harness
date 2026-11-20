@@ -16,7 +16,7 @@ const TMP_ROOT = mkdtempSync(join(tmpdir(), "genie-att-test-"));
 const OLD_ROOT = process.env.GENIE_REPO_ROOT;
 process.env.GENIE_REPO_ROOT = TMP_ROOT;
 
-const PORT = 7911;
+const PORT = Number(process.env.ATT_TEST_PORT || 7911); // 并发任务共享 7911 会 EADDRINUSE 且 fetch 打到旧实例,允许环境变量换端口
 const BASE = "http://127.0.0.1:" + PORT;
 const panel = servePanel(PORT, () => {});
 
@@ -50,7 +50,7 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
       "const ATT_IMG_MIME = [", "const ATT_VID_MIME = [",
       "const ATT_DOC_EXT = [", "const ATT_DOC_MIME = [",
       "function attKind(name, mime)", "function attLimitOf(kind)", "function attSize(n)", "function attTag(name, mime)",
-      "function attUpload(file)", "function attPostUpload(file, sid, extra)",
+      "function attUpload(file)", "function attPostUpload(file, sid, extra, onDone)",
       'toast("不支持的类型:" + file.name', 'toast("附件超限:" + file.name',
       // preview 数据:图片 dataURL / 视频 objectUrl(移除时 revoke 防泄漏)
       "r.readAsDataURL(file)", "URL.createObjectURL(file)", "URL.revokeObjectURL(a.objectUrl)",
@@ -266,7 +266,9 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
       return html.slice(i, j + 2);
     };
     const consts = html.slice(html.indexOf("const ATT_MAX_IMG"), html.indexOf("function attExt("));
-    const src = consts + [
+ // attUpload 现在带在飞记账(attInflight/attAutoSend + 落定检查),切片需补声明与空实现
+    const inflightDecl = "let attInflight = 0; let attAutoSend = false; function attMaybeAutoSubmit() {}\n";
+    const src = inflightDecl + consts + [
       sliceTopFn("function attExt("),
       sliceTopFn("function attKind("),
       sliceTopFn("function attLimitOf("),
@@ -608,5 +610,170 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     // 缺失文件(uploads 内合法路径但不存在)→ 404
     const d7 = await fetch(BASE + "/uploads?path=" + encodeURIComponent(join(upDir, "nope.png")));
     expect(d7.status).toBe(404);
+  });
+});
+
+/** 矩阵:发送(含排队)后输入区待发送项清空 —— 在飞守卫/自动续发/失败保留/出队不动输入区。
+ * 行为面用 vm 切片(真实 attUpload→FileReader→attPostUpload→attMaybeAutoSubmit 链 + 等价 submit 守卫);
+ * submit 内联守卫与 abort 回填依赖面板全局太多,用源码标记断言锁面(与 B3 同风格)。 */
+describe(" 发送后待发送项清空(在飞守卫/自动续发/失败保留)", () => {
+  it("结构:submit 在飞拦截+自动续发登记+abort 附件回填三段标记齐(源码锁面)", async () => {
+    const html = await fetchHtml();
+ // H1:submit 在飞守卫(拦下→登记 attAutoSend→return,消息绝不先发)
+    expect(html).toContain("if (attInflight > 0) {");
+    expect(html).toContain('attAutoSend = true; toast("附件还在上传,完成后自动发送…")');
+ // H1:落定自动续发(命令消息不代发;submit 抛异常不炸)
+    expect(html).toContain("function attMaybeAutoSubmit()");
+    expect(html).toContain('trim().charAt(0) === "/"');
+ // H1:每条上传出口都还账(数量拒绝/服务端错/成功/网络失败),FileReader 失败也还账
+    expect(html.match(/if \(onDone\) onDone\(\)/g)?.length).toBe(4);
+    expect(html).toContain('r.onerror = () => { toast("附件读取失败:" + file.name, true); attAutoSend = false; attDone(); };');
+ // H2:abort 回填 attFull(全量含 preview),不覆盖等待期间用户新添的附件
+    expect(html).toContain("const attFull = pendingAtts.slice(0, ATT_MAX_COUNT)");
+    expect(html).toContain("if (Array.isArray(p.attFull) && p.attFull.length && !pendingAtts.length) { pendingAtts = p.attFull.slice(); attRender(); }");
+    expect(html).toContain("draftSubmitPending = { sid, text, atts, attFull, projectId");
+  });
+
+  it("结构:出队/queue.update 不碰输入区待发送项(不二次清空他人草稿)", async () => {
+    const html = await fetchHtml();
+    const i = html.indexOf('if (m.type === "queue.update")');
+    expect(i).toBeGreaterThan(0);
+    const seg = html.slice(i, html.indexOf('if (m.type === "task.list")'));
+    expect(seg).toContain("renderHistory(); renderSendBtn();");
+    expect(seg).not.toContain("attRender");
+    expect(seg).not.toContain("pendingAtts");
+  });
+
+  type AttApi = {
+    attUpload: (f: unknown) => void;
+    attPostUpload: (f: unknown, sid: string, extra: Record<string, unknown>) => void;
+    attMaybeAutoSubmit: () => void;
+    inflight: () => number;
+    auto: () => boolean;
+  };
+ /** 真链路 harness:consts+attExt/attKind/attLimitOf/attSize+attUpload/attPostUpload/attMaybeAutoSubmit 切片;
+ * submit 桩等价 :20-23 守卫(在飞→登记 auto 返回;否则读走待发项,对齐 :59-63 的取快照+清空语义)。 */
+  const harness = (html: string) => {
+    const sliceFn = (head: string) => {
+      const i = html.indexOf(head);
+      expect(i, "缺少切片:" + head).toBeGreaterThan(0);
+      const j = html.indexOf("\n}\n", i);
+      return html.slice(i, j + 2);
+    };
+    const consts = html.slice(html.indexOf("const ATT_MAX_IMG"), html.indexOf("function attExt("));
+    const decl = html.slice(html.indexOf("let attInflight = 0;"), html.indexOf("\n", html.indexOf("let attAutoSend = false;")) + 1);
+    const src = consts + decl + ["function attExt(", "function attKind(", "function attLimitOf(", "function attSize(",
+      "function attUpload(", "function attPostUpload(", "function attMaybeAutoSubmit()"].map(sliceFn).join("\n");
+    const state = {
+      pend: [] as Record<string, unknown>[],
+      toasts: [] as string[],
+      submits: [] as unknown[][],
+      renders: 0,
+      resolveNext: null as null | ((v: unknown) => void),
+      rejectNext: null as null | ((e: unknown) => void),
+      frLoad: null as null | (() => void),
+      frErr: null as null | (() => void),
+      revokes: [] as string[],
+    };
+    const fetchStub = () => new Promise((res, rej) => {
+ // Response 形状:x.json 才是 attPostUpload 读载荷的入口(直接 resolve 裸对象会走进 catch)
+      state.resolveNext = (v) => res({ json: () => Promise.resolve(v) });
+      state.rejectNext = rej as (e: unknown) => void;
+    });
+    class FRStub {
+      result = "data:image/png;base64,AAAA";
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() { state.frLoad = () => { if (this.onload) this.onload(); }; state.frErr = () => { if (this.onerror) this.onerror(); }; }
+    }
+    let api: AttApi | null = null;
+    const submitStub = () => {
+      const a = api as AttApi;
+      if (a.inflight() > 0) { (a as unknown as { setAuto: (v: boolean) => void }).setAuto(true); state.toasts.push("附件还在上传,完成后自动发送…"); return; }
+      state.submits.push(state.pend.slice());
+      state.pend.length = 0; // 与真 submit 一致:取快照后清空(同一数组引用,vm 里的 pendingAtts 同步清空)
+    };
+    const f = new Function("pendingAtts", "toast", "attRender", "localStorage", "fetch", "URL", "FileReader", "currentSid", "submit", "$",
+      src + "\nreturn { attUpload, attPostUpload, attMaybeAutoSubmit, inflight: () => attInflight, auto: () => attAutoSend, setAuto: (v) => { attAutoSend = v; } };");
+    api = f(state.pend, (t: string) => state.toasts.push(t), () => { state.renders++; }, { setItem: () => {} }, fetchStub,
+      { revokeObjectURL: (u: string) => state.revokes.push(u) }, FRStub, "__draft__", submitStub, () => ({ value: "hello" })) as AttApi;
+    return { api: api as AttApi, state, submit: submitStub };
+  };
+  const png = { name: "g.png", size: 1024, type: "image/png" };
+
+  it("行为:图片在飞时回车被拦,上传落定自动续发且消息带附件(清≠丢);第二次新附件不被误清", async () => {
+    const h = harness(await fetchHtml());
+    h.api.attUpload(png); // FileReader 在读(9p 慢盘窗口)
+    expect(h.api.inflight()).toBe(1);
+    h.submit(); // 回车:在飞 → 拦下,消息不发
+    expect(h.state.submits.length).toBe(0);
+    expect(h.api.auto()).toBe(true);
+    expect(h.state.toasts.some((t) => t.includes("附件还在上传"))).toBe(true);
+    h.state.frLoad!(); // 读完成 → 上传在飞
+    expect(h.api.inflight()).toBe(1); // 上传在飞仍计数(账单区间覆盖 FileReader→HTTP)
+    h.state.resolveNext!({ path: "/r/.genie/uploads/s1/g.png" });
+    await wait(10);
+    expect(h.api.inflight()).toBe(0);
+    expect(h.api.auto()).toBe(false); // 落定即清位
+    expect(h.state.submits.length).toBe(1); // 自动续发
+    expect(h.state.pend.length).toBe(0); // 输入区清空(用户期望)
+    const sent = h.state.submits[0] as { name: string; path: string }[];
+    expect(sent.length).toBe(1); // 清空≠丢失:消息体带附件
+    expect(sent[0]).toMatchObject({ name: "g.png", path: "/r/.genie/uploads/s1/g.png" });
+ // 第二次:新附件不与上一笔混(幽灵复活守卫)
+    h.api.attUpload({ name: "n2.png", size: 512, type: "image/png" });
+    h.state.frLoad!();
+    h.state.resolveNext!({ path: "/p/2.png" });
+    await wait(10);
+    expect(h.api.inflight()).toBe(0);
+    expect(h.state.pend.map((x) => x.name)).toEqual(["n2.png"]);
+    expect(h.state.submits.length).toBe(1); // 未自动重发(auto 已清位,需用户再次回车)
+  });
+
+  it("行为:服务端错/网络失败/读取失败→不代发且账还清;数量拒绝不吞已就绪附件", async () => {
+ // ① 服务端报错
+    const a = harness(await fetchHtml());
+    a.api.attUpload(png); a.submit(); a.state.frLoad!();
+    a.state.resolveNext!({ error: "too large" });
+    await wait(10);
+    expect(a.api.inflight()).toBe(0);
+    expect(a.api.auto()).toBe(false);
+    expect(a.state.submits.length).toBe(0); // 不代发缺附件的消息
+    expect(a.state.pend.length).toBe(0); // 坏附件不进待发区
+    expect(a.state.toasts.some((t) => t.includes("上传失败:too large"))).toBe(true);
+ // ② 网络失败(catch)
+    const b = harness(await fetchHtml());
+    b.api.attUpload(png); b.submit(); b.state.frLoad!();
+    b.state.rejectNext!(new Error("net down"));
+    await wait(10);
+    expect(b.api.inflight()).toBe(0);
+    expect(b.api.auto()).toBe(false);
+    expect(b.state.submits.length).toBe(0);
+    expect(b.state.toasts.some((t) => t.includes("上传失败"))).toBe(true);
+ // ③ FileReader 失败:账还清、不代发、明确提示
+    const c = harness(await fetchHtml());
+    c.api.attUpload(png); c.submit();
+    c.state.frErr!();
+    await wait(10);
+    expect(c.api.inflight()).toBe(0);
+    expect(c.api.auto()).toBe(false);
+    expect(c.state.submits.length).toBe(0);
+    expect(c.state.toasts.some((t) => t.includes("附件读取失败:g.png"))).toBe(true);
+ // ④ 数量上限拒绝(doc 直传,不经 FileReader):还账、不 push、不吞已就绪的 8 个
+    const d = harness(await fetchHtml());
+    for (let k = 0; k < 8; k++) d.state.pend.push({ name: "f" + k + ".png" });
+    d.api.attUpload({ name: "x.pdf", size: 1024, type: "application/pdf" });
+    await wait(10);
+    expect(d.api.inflight()).toBe(0); // 拒绝出口也还账
+    expect(d.state.pend.length).toBe(8); // 已就绪的不被吞
+    expect(d.state.toasts.some((t) => t.includes("附件最多 8 个"))).toBe(true);
+  });
+
+  it("服务端:排队入队透传 attachments(清≠丢:入队载荷在场,durable inbox 准入落账)", async () => {
+    const { SERVER_SRC } = await import("./panel-source.js");
+ // fixI8 排队分支 + durable inbox 准入:两处都原样透传 msg.attachments
+    expect(SERVER_SRC.match(/\.\.\.\(msg\.attachments\?\.length \? \{ attachments: msg\.attachments \} : \{\}\)/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+ // 出队续发走同一条 task.submit 载荷(inbox 项带 attachments,不丢)
+    expect(SERVER_SRC).toContain("attachments");
   });
 });

@@ -93,7 +93,9 @@ function pickRealTraceFiles() {
     await page.addInitScript((sid) => { localStorage.setItem("zh:sid", sid); }, SID);
     await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
-    await page.click("#trajBoardBtn");
+ // 返工:#trajBoardBtn 按钮已删——轨迹入口改走消息区轨迹卡 summary(等价用户路径)
+    await page.evaluate(() => { const t = document.querySelector("[data-traj-open]"); if (t) t.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    await page.waitForTimeout(400);
     // 首屏:卡片=3,最新卡自动展开且已拉全文
     await page.waitForTimeout(2500);
     const st1 = await page.evaluate(() => ({

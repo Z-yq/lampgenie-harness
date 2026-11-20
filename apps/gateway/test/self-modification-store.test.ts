@@ -102,13 +102,26 @@ describe("self-modification-store", () => {
     expect(record?.applied).toBe(false);
   });
 
-  it("2b. rsi 作者可逆+零风险无 approver → 机器闸 allow(§14.2④)", async () => {
+  it("2b. rsi 作者可逆+零风险无 approver → 机器闸 allow 且记 rsi-auto-gate 审批者(§14.2④)", async () => {
     const root = await tmpRoot();
     const result = requestModification(root, makeRsiRequest({ id: "mod-rsi-rev", irreversible: false }));
     expect(result.ok).toBe(true);
     expect(result.decision).toBe("allow");
     expect(result.codes).toEqual([]);
-    expect(getModification(root, "mod-rsi-rev")?.decision.kind).toBe("allow");
+    const record = getModification(root, "mod-rsi-rev");
+    expect(record?.decision.kind).toBe("allow");
+ // 审计链:机器闸放行必须留「谁批准」——与人批可区分。
+    expect(record?.approver?.kind).toBe("agent");
+    expect(record?.approver?.id).toBe("rsi-auto-gate");
+  });
+
+  it("2c. rsi 作者不可逆(带零风险)仍 allow?——不可逆 lane 必须人批(机器闸不越权)", async () => {
+    const root = await tmpRoot();
+    const result = requestModification(root, makeRsiRequest({ id: "mod-rsi-irr" })); // irreversible: true
+    expect(result.decision).toBe("need-approval");
+    expect(result.ok).toBe(false);
+    const record = getModification(root, "mod-rsi-irr");
+    expect(record?.approver).toBeUndefined(); // 机器闸不替人批不可逆
   });
 
   it("3. 缺 evidence → deny 且 codes 含 MOD_EVIDENCE_MISSING", async () => {

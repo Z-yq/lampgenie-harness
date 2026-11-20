@@ -1,4 +1,5 @@
-/** board→pptx 导出(第三版,按 ZCode pptx skill 的设计规范重做)。
+/** board→pptx 导出(2026-10-27 第三版,按 ZCode pptx skill 的设计规范重做)。
+ *
  * 前两版的问题(用户逐条否掉):
  *   ① 白板卡片 1:1 铺成幻灯片,每页 1 行摘要 + 大片空白;
  *   ② 只有文字和表格,没有一张图(用户:「配图呢?流程图呢?说明图呢?」);
@@ -11,16 +12,18 @@
  *   - 删章节页:章名进页眉,章 claim 做本章首屏导语;
  *   - 每页必须有一种视觉版式:图 / 表格 / 对比栏 / 大数字 / 引言 / 步骤;
  *   - 调色板:近黑底 + 灰绿结构色 + 单一琥珀强调(每页最多一处)。
- * v4:默认 editorial 浅色主题(technical/executive/warm 可选);去卡片墙/阴影;
+ *
+ * 2026-11-15 v4:默认 editorial 浅色主题(technical/executive/warm 可选);去卡片墙/阴影;
  * 文案关键词门(office-voice:首先/其次/综上/这意味着/赋能 等报告腔直接拒导)。
  * 管线:parseDeckMd → validateDeck → planDeck → deckToPptx。
- * v5:
- * - 叙事层:每页必填 `> 结论:`(takeaway,8~42 字,≠标题);每章必填 claim;全场必填 spine(主线疑问句)。
- * 页面契约从「标题+图+要点」升级为五件套:标题=结论句 → 结论带=所以呢 → 图=证据 → 要点=支撑 → 来源行。
- * - 版式层:固定四区网格(眉/标题+章主张/结论带/主体+支撑/脚注);结论带紧跟标题(结论先行,不再沉底,
- * 修「洞察视觉权重最低」);支撑区锚定脚注上方、主体区垂直居中(修「下半页空白像没做完」);
- * stats 数字同权重(去 64pt hero 特权,修「同层级样式不一致」);flow 节点带边框、回边走底边正交折线、
- * 标签写条件语义(禁「回边/循环」同义反复);支撑行分隔线+主色小标题(修「像文档段落贴进 PPT」)。
+ *
+ * 2026-11-15 v5(产品口径要求「叙事没有逻辑,每页不知道想表达什么;排版布局不优雅」):
+ *   - 叙事层:每页必填 `> 结论:`(takeaway,8~42 字,≠标题);每章必填 claim;全场必填 spine(主线疑问句)。
+ *     页面契约从「标题+图+要点」升级为五件套:标题=结论句 → 结论带=所以呢 → 图=证据 → 要点=支撑 → 来源行。
+ *   - 版式层:固定四区网格(眉/标题+章主张/结论带/主体+支撑/脚注);结论带紧跟标题(结论先行,不再沉底,
+ *     修「洞察视觉权重最低」);支撑区锚定脚注上方、主体区垂直居中(修「下半页空白像没做完」);
+ *     stats 数字同权重(去 64pt hero 特权,修「同层级样式不一致」);flow 节点带边框、回边走底边正交折线、
+ *     标签写条件语义(禁「回边/循环」同义反复);支撑行分隔线+主色小标题(修「像文档段落贴进 PPT」)。
  */
 import pptxgen from "pptxgenjs";
 import { analyzeVoice } from "./office-voice.mjs";
@@ -31,8 +34,8 @@ const M = 0.6;
 const FONT = "Microsoft YaHei";
 
 /**
- * 主题( v4):默认 editorial(浅色纸感),另有 technical(深色)、executive(藏青)、warm(暖纸)。
- * 办公 PPT 先像一份给人看的报告,不是技术 Demo;配色遵循 60/30/10(底/结构/强调)。
+ * 主题(2026-11-15 v4):默认 editorial(浅色纸感),另有 technical(深色)、executive(藏青)、warm(暖纸)。
+ * 产品口径要求:办公 PPT 先像一份给人看的报告,不是技术 Demo;配色遵循 60/30/10(底/结构/强调)。
  * 强调色只用于「判断/基线/关键数字」,不做装饰。
  */
 const THEMES = {
@@ -87,8 +90,8 @@ const INTERNAL_JARGON = /回答维度|逐章扩页|骨架版|终版|规划稿|�
 const JUNK_TITLE = /骨架|逐章|扩页|终版|草稿|模板|PPT ?骨架|draft|v\d+\s*$/i;
 
 /** v6 自造词种子表(本项目黑话):正文用到就必须先有术语表定义。
- * 只收「不看上下文猜不出意思」的词;业界通用词(cache/token/API/上下文/权限…)不收。
- * 新自造词落地时往这里补——门是确定性的,词表是演进的。 */
+ *  只收「不看上下文猜不出意思」的词;业界通用词(cache/token/API/上下文/权限…)不收。
+ *  新自造词落地时往这里补——门是确定性的,词表是演进的。 */
 const COINED_SEED = [
   "世界模型", "探索税", "仪式税", "上下文经济", "前缀稳定", "失败分支定向压缩", "定向压缩",
   "注入闸", "作业思路板", "指挥台", "做梦", "白板契约", "变更契约图", "回边",
@@ -246,7 +249,7 @@ export function parseBlock(type, lines) {
 
 /**
  * markdown deck → 结构化 deck。
- * # 标题 / subtitle: / theme: / kicker: / genre: / verdict: / verdict_note: / meta:
+ *   # 标题 / subtitle: / theme: / kicker: / genre: / verdict: / verdict_note: / meta:
  *   ## 01 章 (claim:) / ### 页
  *   正文:`- **小标题** — 说明`、`| 表格 |`、```steps/layers/flow/matrix/timeline/compare/stats/quote
  *   `> 证据: 文件:行` / `> 结论: 一句话`
@@ -271,7 +274,7 @@ export function parseDeckMd(md) {
     const fenceOpen = /^\s*```+\s*([a-z-]*)\s*$/i.exec(line);
     if (fenceOpen && !fence) {
       const k = fenceOpen[1].toLowerCase();
- // fail-closed(演示生产环境质量门口径:未知=error,不静默降级):
+      // fail-closed(2026-11-05,演示运行环境质量门口径:未知=error,不静默降级):
       // 未登记的版式块以前走 kind="ignore" 被无声吞掉——写错块名的页会「导出成功但没有那张图」。
       // 现在登记到 deck.unknownBlocks,由 validateDeck 拒导并点名(带页与块名)。
       if (k && !FENCE_KINDS.has(k)) {
@@ -279,46 +282,46 @@ export function parseDeckMd(md) {
         fence = { kind: "ignore" };
       } else {
         fence = FENCE_KINDS.has(k) ? { kind: k, items: [] } : { kind: "ignore" };
-  }
-  pushTable();
+      }
+      pushTable();
       continue;
-  }
+    }
     if (/^\s*```+\s*$/.test(line) && fence) {
       if (page && fence.kind === "steps" && fence.items.length >= 2) {
         page.blocks.push({ kind: "steps", items: fence.items });
       } else if (page && fence.kind === "code") {
         if (fence.items.length >= 3) {
           page.blocks.push({ kind: "code", data: { source: fence.items[0], lines: fence.items.slice(1) } });
-  }
- } else if (page && fence.kind === "pseudo") {
- if (fence.items.length >= 2) {
- page.blocks.push({ kind: "pseudo", data: { lines: fence.items } });
-  }
- } else if (page && fence.kind === "cards" && fence.items.length >= 2) {
- // v8 cards: `标题 | 说明 | 子项1;子项2;子项3` → 圆角卡网格(workbuddy 最常用版式)
- const cards = [];
- for (const raw of fence.items) {
- const parts = raw.split("|").map((x) => x.trim);
- const title = parts[0] || "";
- const desc = parts[1] || "";
- const subs = (parts[2] || "").split(";").map((x) => x.trim).filter(Boolean);
- if (title) cards.push({ title, desc, subs });
-  }
- if (cards.length >= 2) page.blocks.push({ kind: "cards", data: { cards } });
+        }
+      } else if (page && fence.kind === "pseudo") {
+        if (fence.items.length >= 2) {
+          page.blocks.push({ kind: "pseudo", data: { lines: fence.items } });
+        }
+      } else if (page && fence.kind === "cards" && fence.items.length >= 2) {
+        // v8 cards: `标题 | 说明 | 子项1;子项2;子项3` → 圆角卡网格(workbuddy 最常用版式)
+        const cards = [];
+        for (const raw of fence.items) {
+          const parts = raw.split("|").map((x) => x.trim());
+          const title = parts[0] || "";
+          const desc = parts[1] || "";
+          const subs = (parts[2] || "").split(";").map((x) => x.trim()).filter(Boolean);
+          if (title) cards.push({ title, desc, subs });
+        }
+        if (cards.length >= 2) page.blocks.push({ kind: "cards", data: { cards } });
       } else if (page && fence.kind !== "steps" && fence.kind !== "ignore") {
         const d = ["layers", "flow", "matrix", "timeline"].includes(fence.kind)
           ? parseDiagram(fence.kind, fence.items)
           : parseBlock(fence.kind, fence.items);
         if (d) page.blocks.push({ kind: d.type, data: d });
-  }
+      }
       fence = null;
       continue;
-  }
+    }
     if (fence) {
       const t = line.trim();
       if (!t) continue;
       if (fence.kind === "steps") {
- const [label, ...rest] = t.replace(/^\d+[.]\s*/, "").split("|");
+        const [label, ...rest] = t.replace(/^\d+[.、)]\s*/, "").split("|");
         const detail = rest.join("|").trim();
         if (label.trim()) fence.items.push({ label: clamp(label, 40), detail: clamp(detail, 140) });
       } else if (fence.kind === "code") {
@@ -326,22 +329,22 @@ export function parseDeckMd(md) {
         fence.items.push(line.replace(/\t/g, "    ").replace(/\s+$/, ""));
       } else if (fence.kind !== "ignore") {
         fence.items.push(t);
-  }
+      }
       continue;
-  }
+    }
     if (/^\s*\|/.test(line)) {
       const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
       if (/^[\s|:-]+$/.test(line)) continue;
       if (!table) table = { headers: cells, rows: [] };
       else if (cells.some((c) => c !== "")) table.rows.push(cells);
       continue;
-  }
-  pushTable();
+    }
+    pushTable();
     if (!line.trim()) continue;
     if (/^#\s+/.test(line)) {
       deck.title = line.replace(/^#\s+/, "").trim();
       continue;
-  }
+    }
     if (/^##\s+/.test(line)) {
       chapter = { no: "", title: "", claim: "", pages: [] };
       const t = line.replace(/^##\s+/, "").trim();
@@ -350,53 +353,57 @@ export function parseDeckMd(md) {
       deck.chapters.push(chapter);
       page = null;
       continue;
-  }
+    }
     if (/^###\s+/.test(line)) {
       if (!chapter) continue;
- page = { title: stripNo(line.replace(/^###\s+/, "").trim), blocks: [], evidence: "", takeaway: "", definitions: [], status: "", pageLayout: "" };
+      page = { title: stripNo(line.replace(/^###\s+/, "").trim()), blocks: [], evidence: "", takeaway: "", definitions: [], status: "", pageLayout: "", carry: "" };
       chapter.pages.push(page);
       continue;
-  }
- const meta = /^(subtitle|verdict_note|verdict|meta|claim|genre|theme|kicker|spine|notcovering|datapolicy|legend)\s*[:：]\s*(.*)$/i.exec(line);
+    }
+    const meta = /^(subtitle|verdict_note|verdict|meta|claim|genre|theme|kicker|spine|notcovering|datapolicy|legend)\s*[:：]\s*(.*)$/i.exec(line);
     if (meta) {
       const key = meta[1].toLowerCase();
       const val = meta[2].trim();
       if (key === "claim") {
         if (chapter) chapter.claim = val;
       } else if (key === "subtitle") deck.subtitle = val;
- else if (key === "spine") deck.spine = val;
+      else if (key === "spine") deck.spine = val;
       else if (key === "genre") deck.genre = val;
       else if (key === "verdict") deck.verdict = val;
       else if (key === "verdict_note") deck.verdictNote = val;
       else if (key === "meta") deck.meta = val;
- else if (key === "theme") deck.theme = val;
- else if (key === "kicker") deck.kicker = val;
- else if (key === "notcovering") deck.notCovering = val;
- else if (key === "datapolicy") deck.dataPolicy = val;
- else if (key === "legend") deck.legend = val;
+      else if (key === "theme") deck.theme = val;
+      else if (key === "kicker") deck.kicker = val;
+      else if (key === "notcovering") deck.notCovering = val;
+      else if (key === "datapolicy") deck.dataPolicy = val;
+      else if (key === "legend") deck.legend = val;
       continue;
-  }
+    }
     if (/^>\s*/.test(line)) {
       if (!page) continue;
       const t = line.replace(/^>\s*/, "").trim();
       if (/^证据\s*[:：]/.test(t)) page.evidence = t.replace(/^证据\s*[:：]\s*/, "");
       else if (/^结论\s*[:：]/.test(t)) page.takeaway = t.replace(/^结论\s*[:：]\s*/, "");
- // v7 就地定义:`> 定义: 术语=一句话` —— 解释跟内容放在一起,术语表只是附录
- else if (/^定义\s*[:：]/.test(t)) {
- const body = t.replace(/^定义\s*[:：]\s*/, "");
- const eq = body.indexOf("=");
- if (eq > 0 && page.definitions.length < 2) page.definitions.push({ term: body.slice(0, eq).trim, def: body.slice(eq + 1).trim });
-  }
- // v9 状态徽标:`> 状态: 已落地` —— 机制页标落地程度,渲染成右上角彩色徽标
- else if (/^状态\s*[:：]/.test(t)) {
- page.status = t.replace(/^状态\s*[:：]\s*/, "").trim;
-  }
- // v12 版式引擎:`> 版式: 通栏|左图右文|右图左文|大字结论` —— 页面结构由源稿声明,渲染器按版式重排主体区
- else if (/^版式\s*[:：]/.test(t)) {
- page.pageLayout = t.replace(/^版式\s*[:：]\s*/, "").trim;
-  }
+      // v7 就地定义:`> 定义: 术语=一句话` —— 解释跟内容放在一起,术语表只是附录
+      else if (/^定义\s*[:：]/.test(t)) {
+        const body = t.replace(/^定义\s*[:：]\s*/, "");
+        const eq = body.indexOf("=");
+        if (eq > 0 && page.definitions.length < 2) page.definitions.push({ term: body.slice(0, eq).trim(), def: body.slice(eq + 1).trim() });
+      }
+      // v9 状态徽标:`> 状态: 已落地` —— 机制页标落地程度,渲染成右上角彩色徽标
+      else if (/^状态\s*[:：]/.test(t)) {
+        page.status = t.replace(/^状态\s*[:：]\s*/, "").trim();
+      }
+      // v12 版式引擎:`> 版式: 通栏|左图右文|右图左文|大字结论` —— 页面结构由源稿声明,渲染器按版式重排主体区
+      else if (/^版式\s*[:：]/.test(t)) {
+        page.pageLayout = t.replace(/^版式\s*[:：]\s*/, "").trim();
+      }
+      // v15 叙事粘合:`> 承上: 一句话` —— 接住上一页/上一章的哪条线(wb 每页「接前段」的对位),渲染成标题下灰字
+      else if (/^承上\s*[:：]/.test(t)) {
+        page.carry = t.replace(/^承上\s*[:：]\s*/, "").trim();
+      }
       continue;
-  }
+    }
     if (/^\s*[-*]\s+/.test(line) && page) {
       const b = parseBullet(line);
       if (!b) continue;
@@ -404,7 +411,7 @@ export function parseDeckMd(md) {
       if (last && last.kind === "bullets") last.items.push(b);
       else page.blocks.push({ kind: "bullets", items: [b] });
       continue;
-  }
+    }
   }
   pushTable();
   deck.chapters.forEach((c, i) => {
@@ -430,8 +437,8 @@ export function validateDeck(deck) {
     add("版式", `${unknownKinds.length} 个未登记版式块(${names}):导出器不认识它,内容不会被画出来——改用 §四 版式目录里的名字`);
   }
   if (deck.chapters.length < 2) add("全文", "至少 2 章才成文档");
- // 叙事层( v5:
- // 先定主线(全场回答哪个疑问句),每章 claim=本章结论方向,每页 `> 结论:`=标题没说的那半句。
+  // 叙事层(2026-11-15 v5,产品口径要求「叙事没有逻辑,每页不知道想表达什么」):
+  // 先定主线(全场回答哪个疑问句),每章 claim=本章结论方向,每页 `> 结论:`=标题没说的那半句。
   if (!deck.spine) add("全文", "缺 `spine:`——写页之前先定全场主线(一句疑问句:这场汇报回答什么)");
   else if ([...deck.spine].length < 8 || [...deck.spine].length > 80) add("全文", `spine ${[...deck.spine].length} 字(8~80):一句疑问句,不是章节目录`);
   for (const ch of deck.chapters) {
@@ -443,7 +450,7 @@ export function validateDeck(deck) {
       const at = `${ch.no}.${idx + 1} ${pg.title || "(空页标题)"}`;
       if (!pg.title) add(at, "页标题为空");
       else if (pg.title.length > 40) add(at, `页标题 ${pg.title.length} 字,超过 40`);
- // takeaway(所以呢):受众先读标题(判断)再读结论带(含义),图只是证据。
+      // takeaway(所以呢):受众先读标题(判断)再读结论带(含义),图只是证据。
       const tk = String(pg.takeaway || "").trim();
       if (!tk) add(at, "缺 `> 结论:` 行——这页要回答「所以呢」:标题给了判断,结论带给含义/影响");
       else if (tk === pg.title) add(at, "结论与标题逐字相同:标题说「是什么」,结论带要说「所以怎样」");
@@ -465,12 +472,12 @@ export function validateDeck(deck) {
       const mains = visuals.length + tables.length + steps.length + compares.length + stats.length + quotes.length + codeBlocks.length + cardsBlocks.length + pseudoBlocks.length;
       if (mains === 0) add(at, "纯文字页:每页至少配图/代码/伪代码/表格/卡片/对比栏/大数字/引言之一");
       if (visuals.length > 1) add(at, "一页最多 1 张图");
- // v8 放宽:允许「cards + visual/pseudo」或「visual + cards」组合(workbuddy 常见:
- // 因果链 flow + 条件映射 cards;伪代码 + 设计 cards)——只禁「两个同类主版式」。
+      // v8 放宽:允许「cards + visual/pseudo」或「visual + cards」组合(workbuddy 常见:
+      // 因果链 flow + 条件映射 cards;伪代码 + 设计 cards)——只禁「两个同类主版式」。
       const visualN = visuals.length + tables.length + steps.length + compares.length + stats.length + quotes.length + codeBlocks.length;
       const canCombo = (cardsBlocks.length || pseudoBlocks.length) && visualN <= 1;
       if (mains > 1 && !canCombo) add(at, "同页混排多种主版式:一页只留一种(或 cards/pseudo + 一个主版式的组合)");
- // cards 校验:2~4 张、标题 ≤20、说明 ≤60、子项各 ≤30、子项 ≤4
+      // cards 校验:2~4 张、标题 ≤20、说明 ≤60、子项各 ≤30、子项 ≤4
       for (const cb of cardsBlocks) {
         const cs = cb.data.cards || [];
         if (cs.length < 2) add(at, "卡片至少 2 张");
@@ -482,16 +489,16 @@ export function validateDeck(deck) {
           if ((c.subs || []).some((t) => [...t].length > 30)) add(at, `卡片「${clamp(c.title, 8)}」子项超 30 字`);
         }
       }
- // pseudo 校验:2~10 行,每行 ≤92 字符(同 code)
+      // pseudo 校验:2~10 行,每行 ≤92 字符(同 code)
       for (const pb of pseudoBlocks) {
         const ls = pb.data.lines || [];
         if (ls.length < 2) add(at, "伪代码至少 2 行");
         if (ls.length > 10) add(at, `伪代码 ${ls.length} 行超 10(挑核心分支)`);
         if (ls.some((l) => l.length > 92)) add(at, "伪代码有行超 92 字符");
       }
- // 每页深度(「每一页的内容质量很差」; v6):
- // 解读 2–4 条,总字数 ≥75——关键词是行文风格,不是信息裁剪;每页承载一条完整论证,不藏信息。
- // 术语表章里的页跳过字数下限:词条本身就是内容,硬凑解读反而稀释。
+      // 每页深度(2026-10-27「每一页的内容质量很差」;2026-11-15 v6 产品口径要求「就写一点点/片面式写作」):
+      // 解读 2–4 条,总字数 ≥75——关键词是行文风格,不是信息裁剪;每页承载一条完整论证,不藏信息。
+      // 术语表章里的页跳过字数下限:词条本身就是内容,硬凑解读反而稀释。
       const inGlossaryCh = /术语|概念/.test(ch.title);
       const minB = quotes.length ? 2 : 2;
       if (bullets.length < minB) add(at, `解读只有 ${bullets.length} 条:每页要 2–4 条「定义/机制/实证/影响」解读,不能只放图`);
@@ -499,7 +506,7 @@ export function validateDeck(deck) {
       const fixedZone = stats.length || compares.length;
       if (fixedZone && bullets.length > 2) add(at, "大数字/对比栏版面固定,解读限 2 条(第 3 条拆到下一页)");
       const totalChars = bullets.reduce((n, b) => n + b.lead.length + b.text.length, 0);
- // v13(轨迹分析:11/42 页要点 <100 字=骨架级不是论证级):密度下限 75→100
+      // v13(2026-11-18 轨迹分析:11/42 页要点 <100 字=骨架级不是论证级):密度下限 75→100
       if (!inGlossaryCh && bullets.length >= minB && totalChars < 100) add(at, `解读总字数 ${totalChars}<100:只写了骨架没写论证——补齐定义/机制/数据/影响,不藏信息`);
       for (const b of bullets) {
         if (!b.text && !b.lead) add(at, "空要点");
@@ -509,8 +516,8 @@ export function validateDeck(deck) {
         else if (b.text.length > 110) add(at, `解读 ${b.text.length} 字超 110(两行上限;再长拆两条)`);
         if (INTERNAL_JARGON.test(b.lead + b.text)) add(at, `要点含内部术语/占位词:「${clamp(b.lead || b.text, 16)}」`);
       }
- // 文案口径:要关键词,不要 agent 报告腔;强命中直接拒导。
- // 结论带与标题同过一套规则(它也是模型可见文案)。
+      // 文案口径(2026-11-15 产品口径要求):要关键词,不要 agent 报告腔;强命中直接拒导。
+      // 结论带与标题同过一套规则(它也是模型可见文案)。
       const voice = analyzeVoice({ title: pg.title, bullets: tk ? [...bullets, { lead: "结论", text: tk }] : bullets });
       for (const v of voice.issues) add(at, `${v.code}: ${v.msg}`);
       for (const c of codeBlocks) {
@@ -534,7 +541,7 @@ export function validateDeck(deck) {
           if ((d.nodes || []).length < 3) add(at, "流程图至少 3 个节点");
           if ((d.edges || []).some((e) => !ids.has(e.from) || !ids.has(e.to))) add(at, "流程图有边指向未定义节点");
           if ((d.nodes || []).some((n) => n.label.length > 16)) add(at, "流程图节点名超 16 字(盒子放不下)");
- // v5 回边叙事门:回边必须有「条件语义」标签——「回边/循环」是给线命名,不是解释为什么回头。
+          // v5 回边叙事门:回边必须有「条件语义」标签——「回边/循环」是给线命名,不是解释为什么回头。
           const idxOf = new Map((d.nodes || []).map((n, i) => [n.id, i]));
           for (const e of d.edges || []) {
             if ((idxOf.get(e.to) ?? 0) <= (idxOf.get(e.from) ?? 0)) {
@@ -560,7 +567,7 @@ export function validateDeck(deck) {
       for (const s of stats) {
         if (s.data.stats.length > 4) add(at, "大数字最多 4 个");
         if (s.data.stats.some((x) => x.value.length > 8)) add(at, "大数字数值超 8 字");
- // v5.1 视觉严评注意:四列时每列仅 ~2.8in,说明 >16 字折三行压到来源行——两行是硬上限
+        // v5.1 视觉严评实测确认:四列时每列仅 ~2.8in,说明 >16 字折三行压到来源行——两行是硬上限
         if (s.data.stats.some((x) => [...x.label].length > 16)) add(at, `大数字说明超 16 字(两行上限,再长进来源或拆页)`);
         if (s.data.stats.some((x) => [...(x.source || "")].length > 20)) add(at, `大数字来源超 20 字(缩写:如「常量 xxx.ts:97」)`);
       }
@@ -570,11 +577,11 @@ export function validateDeck(deck) {
       if (!pg.evidence && String(deck.genre || "") !== "composition") add(at, "缺 `> 证据:` 行");
     });
   }
- // ── v7 就地拆解契约( 「解释要和要讲的内容放在一起,开局术语表=agent 的 md 文档地图风格;
- // 概念点名不拆解,如 slide9 的 10 个 phase 是啥」)──
- // 三条规则:①自造词首次出现的**那一页**必须 `> 定义: 术语=一句话`(渲染成标题下定义带)——解释跟内容走;
- // ②术语表只允许做**收尾附录**,开局放术语表=地图风格,拒;③点名即枚举:标题/结论承诺「N 个 X」,
- // 当页主体必须把 N 项逐项摆出来(表格/步骤/流程/分层),摆不下拆页——抽象概括节点不算拆解。
+  // ── v7 就地拆解契约(2026-11-16 产品口径要求「解释要和要讲的内容放在一起,开局术语表=agent 的 md 文档地图风格;
+  //    概念点名不拆解,如 slide9 的 10 个 phase 是啥」)──
+  // 三条规则:①自造词首次出现的**那一页**必须 `> 定义: 术语=一句话`(渲染成标题下定义带)——解释跟内容走;
+  // ②术语表只允许做**收尾附录**,开局放术语表=地图风格,拒;③点名即枚举:标题/结论承诺「N 个 X」,
+  //    当页主体必须把 N 项逐项摆出来(表格/步骤/流程/分层),摆不下拆页——抽象概括节点不算拆解。
   const flatPages = [];
   deck.chapters.forEach((c, ci) => c.pages.forEach((pg, pi) => flatPages.push({ ci, pi, at: `${c.no}.${pi + 1} ${pg.title || "(空)"}`, page: pg, ch: c })));
   const pageText = (pg) => [pg.title, pg.takeaway, pg.evidence, ...(pg.definitions || []).flatMap((d) => [d.term, d.def]), ...pg.blocks.flatMap((b) => {
@@ -582,7 +589,7 @@ export function validateDeck(deck) {
     if (b.kind === "table") return [b.headers.join(" "), ...b.rows.flat()];
     return [JSON.stringify(b.data)];
   })].join(" ");
- // ① 首用即定义(附录术语表页不参与首用判定——词条正文没用就不强制)
+  // ① 首用即定义(附录术语表页不参与首用判定——词条正文没用就不强制)
   const GLOSS_RE_FIRST = /术语|概念|词汇/;
   for (const t of COINED_SEED) {
     const first = flatPages.find((fp) => !GLOSS_RE_FIRST.test(fp.ch.title) && pageText(fp.page).includes(t));
@@ -590,7 +597,7 @@ export function validateDeck(deck) {
     const hasDef = (first.page.definitions || []).some((d) => d.term.includes(t) || t.includes(d.term));
     if (!hasDef) add(first.at, `自造词「${t}」首次出现在这页,当页要给 \`> 定义: ${t}=一句话\`——解释和内容放在一起,不丢给附录`);
   }
- // ② 术语表只能做收尾附录
+  // ② 术语表只能做收尾附录
   const GLOSSARY_RE = /术语|概念|词汇/;
   const glossaryIdx = deck.chapters.map((c, i) => (GLOSSARY_RE.test(c.title) ? i : -1)).filter((i) => i >= 0);
   if (glossaryIdx.length) {
@@ -606,13 +613,13 @@ export function validateDeck(deck) {
       if ([...e.def].length < 10 || [...e.def].length > 60) add("术语表", `「${clamp(e.term, 8)}」定义 ${[...e.def].length} 字(10~60)`);
     }
   }
- // ③ 点名即枚举:标题/结论带里的「N 个/条/层/件/步/把/笔/本/面/类 X」必须当页逐项摆出
- // ── v10 叙事弧门( 「先讲通用,再讲 zcode 的做法,再详细拆解重要的地方;
- // 重要拆解要配具体做法示意 flow 图」)──
- // ① 概念首章:≥20 页成稿第一章必须是通用/概念/骨架章(先给地图,再进实现);
- // ② 承上启下:通用章与具体实现之间要有一页「从…到…」过渡,把骨架底线带进实现;
- // ③ 深拆章过程化:章标题/claim 含 拆/走读/深 的章,≥半页要有过程示意(flow/steps/pseudo/timeline)
- // ——深拆要画「怎么走」,不能只给 layers/cards 结构和清单。
+  // ③ 点名即枚举:标题/结论带里的「N 个/条/层/件/步/把/笔/本/面/类 X」必须当页逐项摆出
+  // ── v10 叙事弧门(2026-11-17 产品口径要求「先讲通用,再讲 zcode 的做法,再详细拆解重要的地方;
+  //    重要拆解要配具体做法示意 flow 图」)──
+  // ① 概念首章:≥20 页成稿第一章必须是通用/概念/骨架章(先给地图,再进实现);
+  // ② 承上启下:通用章与具体实现之间要有一页「从…到…」过渡,把骨架底线带进实现;
+  // ③ 深拆章过程化:章标题/claim 含 拆/走读/深 的章,≥半页要有过程示意(flow/steps/pseudo/timeline)
+  //    ——深拆要画「怎么走」,不能只给 layers/cards 结构和清单。
   const PROCESS_KINDS = new Set(["flow", "steps", "pseudo", "timeline"]);
   const v10Pages = deck.chapters.reduce((n, c) => n + c.pages.length, 0);
   if (v10Pages >= 20) {
@@ -634,10 +641,10 @@ export function validateDeck(deck) {
       }
     }
   }
- // ── v9 构建思路与内容质量门──
- // ① 构建思路:成稿必须声明「不讲什么」(scope 纪律)与「数字三档」(dataPolicy);
- // ② 内容质量:同一要点不得在 ≥2 页重复(递进不是复读);
- // ③ UI 设计:同章 ≥3 页连续同一版式(flow/layers/stats/cards)=节奏塌,拒;状态徽标取值必须合法。
+  // ── v9 构建思路与内容质量门(2026-11-17 产品口径要求「构建思路?内容质量?UI 设计?要成通用机制」)──
+  // ① 构建思路:成稿必须声明「不讲什么」(scope 纪律)与「数字三档」(dataPolicy);
+  // ② 内容质量:同一要点不得在 ≥2 页重复(递进不是复读);
+  // ③ UI 设计:同章 ≥3 页连续同一版式(flow/layers/stats/cards)=节奏塌,拒;状态徽标取值必须合法。
   const v9ContentPages = deck.chapters.reduce((n, c) => n + c.pages.length, 0);
   if (v9ContentPages >= 8 && !deck.notCovering) {
     add("全文", "缺 `notCovering:`——成稿要说清「这次不讲什么」(scope 纪律:不讲的部分也是信息,防读者预期落空)");
@@ -650,7 +657,7 @@ export function validateDeck(deck) {
   } else if (deck.dataPolicy && ([...deck.dataPolicy].length < 6 || [...deck.dataPolicy].length > 80)) {
     add("全文", `dataPolicy ${[...deck.dataPolicy].length} 字(6~80):写清三档口径,一句即可`);
   }
- // 去重:同一条要点(lead+text 归一化)出现在 ≥2 页 = 复读,拒
+  // 去重:同一条要点(lead+text 归一化)出现在 ≥2 页 = 复读,拒
   const bulletSeen = new Map();
   for (const fp of flatPages) {
     if (GLOSSARY_RE.test(fp.ch.title)) continue;
@@ -661,7 +668,7 @@ export function validateDeck(deck) {
       else bulletSeen.set(key, fp.at);
     }
   }
- // 节奏:同章内 ≥3 页连续同一版式(flow/layers/stats/cards)=视觉节奏塌
+  // 节奏:同章内 ≥3 页连续同一版式(flow/layers/stats/cards)=视觉节奏塌
   const layoutOfPage = (pg) => {
     const has = (k) => pg.blocks.some((b) => b.kind === k);
     if (has("code")) return "code";
@@ -691,7 +698,7 @@ export function validateDeck(deck) {
       }
     }
   }
- // 状态徽标取值
+  // 状态徽标取值
   for (const fp of flatPages) {
     const st = String(fp.page.status || "").trim();
     if (st && !/^(已落地|部分落地|设计目标|未测)$/.test(st)) add(fp.at, `状态「${st}」不合法:只能是 已落地 / 部分落地 / 设计目标 / 未测`);
@@ -723,16 +730,16 @@ export function validateDeck(deck) {
       if (units < n) add(fp.at, `标题/结论承诺「${m[1]}${m[2]}」但主体只摆了 ${units} 项——点名即枚举:N 项逐项摆出来(表格每页 ≤5 行,多则拆页/换 steps),抽象概括节点不算拆解`);
     }
   }
- // ── v11 人类阅读门( 「workbuddy 的产出更符合人类阅读习惯,genie 的是
- // agent coding 思维、平铺证据式表达;看不出 zcode 的循环是什么、有哪些步骤、每步干什么」)──
- // 对标 workbuddy 范式:过程主题先「一页走完」(全部步骤同一页,每步 名字+一句人话职责),
- // 代码引用只进页脚证据行——「置 running 并盖 startedAt」是 agent 之间的对话,不是给读者的说明。
- // ① 全流程总览:spine/章标题/章 claim/页标题/结论点名「N 相位/阶段/步/动作」→
- // 必须有一页把 N 项全部放进**同一个** steps/flow(总览页);「前五相/后五相」式拆页只能当补充。
- // ② 步骤人话:steps 说明 / flow 节点描述 / cards 说明写「这一步干什么(行为+目的)」——
- // 禁代码引用(文件/行号/函数调用)、禁复述赋值、字段/函数名 ≤1。
- // ③ 证据留页脚:表格不放「代码位置」列、单元格不写行号;要点报代码位置密度 ≤1/3,超过=平铺证据。
- // ④ 回边承诺:标题/结论说了「回边/循环回去」,主版式必须是 flow(steps 画不出边,承诺兑现不了)。
+  // ── v11 人类阅读门(2026-11-18 产品口径要求「workbuddy 的产出更符合人类阅读习惯,genie 的是
+  //    agent coding 思维、平铺证据式表达;看不出 zcode 的循环是什么、有哪些步骤、每步干什么」)──
+  // 对标 workbuddy 范式:过程主题先「一页走完」(全部步骤同一页,每步 名字+一句人话职责),
+  // 代码引用只进页脚证据行——「置 running 并盖 startedAt」是 agent 之间的对话,不是给读者的说明。
+  // ① 全流程总览:spine/章标题/章 claim/页标题/结论点名「N 相位/阶段/步/动作」→
+  //    必须有一页把 N 项全部放进**同一个** steps/flow(总览页);「前五相/后五相」式拆页只能当补充。
+  // ② 步骤人话:steps 说明 / flow 节点描述 / cards 说明写「这一步干什么(行为+目的)」——
+  //    禁代码引用(文件/行号/函数调用)、禁复述赋值、字段/函数名 ≤1。
+  // ③ 证据留页脚:表格不放「代码位置」列、单元格不写行号;要点报代码位置密度 ≤1/3,超过=平铺证据。
+  // ④ 回边承诺:标题/结论说了「回边/循环回去」,主版式必须是 flow(steps 画不出边,承诺兑现不了)。
   const cnNumOf = (s0) => {
     if (/^\d+$/.test(s0)) return Number(s0);
     const D = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
@@ -777,7 +784,7 @@ export function validateDeck(deck) {
       add(where, `点名了 ${n} 项过程(相位/阶段/步),但全稿没有一页把它走完(最大的过程页只有 ${seqMax} 项)——加一页全流程总览:全部 ${n} 项放进同一个 steps/flow,每项 名字+一句人话职责,循环回边写条件;「前半/后半」式拆页只能做补充`);
     }
   }
- // ② 步骤人话(steps 说明 / flow 节点描述 / cards 说明)
+  // ② 步骤人话(steps 说明 / flow 节点描述 / cards 说明)
   const CODE_CITE_RE = /[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|c|cpp|h)(?:\s*[:：]\s*\d+)?|\w+\(\)|:\d{1,5}(?!\d)/;
   const ASSIGN_RE = /(置|盖|赋|标|记|写)(?:为|上|到|进|入)?\s*[a-zA-Z][\w.]{3,}/;
   const ID_TOKEN_RE = /\b[a-z]+[A-Z][a-zA-Z]+\b|\b[a-z]+(?:_[a-z0-9]+)+\b/g;
@@ -808,7 +815,7 @@ export function validateDeck(deck) {
       if (b.kind === "cards") for (const c of b.data.cards || []) humanVoiceCheck(fp.at, "卡片", c.title, c.desc);
     }
   }
- // ③ 证据留页脚:表格代码列/单元格行号;要点报代码位置密度 ≤1/3
+  // ③ 证据留页脚:表格代码列/单元格行号;要点报代码位置密度 ≤1/3
   const EVIDENCE_COL_RE = /^(代码位置|代码|位置|文件|出处|源码|来源)$/i;
   const CELL_CITE_RE = /[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|c|cpp|h)(?:\s*[:：]\s*\d+)?|:\d{1,5}(?!\d)/;
   const BULLET_REF_RE = /[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java)(?:\s*[:：]\s*\d+)?|:\d{1,5}(?!\d)|\b\w+\(\)|\b[a-z]+[A-Z][a-zA-Z]{4,}\b/;
@@ -828,7 +835,7 @@ export function validateDeck(deck) {
     const bl = fp.page.blocks.filter((x) => x.kind === "bullets").flatMap((x) => x.items);
     const refs = bl.filter((b) => BULLET_REF_RE.test(`${b.lead || ""}${b.text || ""}`)).length;
     if (bl.length >= 2 && refs >= 2 && refs * 3 > bl.length) add(fp.at, `平铺证据:${refs}/${bl.length} 条要点在报代码位置/函数名——证据集中页脚一行,正文讲机制与影响(读者先看懂行为,再核对出处)`);
- // ④ 回边承诺 vs 版式能力:steps 画不出边——说了回边/循环回去就必须用 flow
+    // ④ 回边承诺 vs 版式能力:steps 画不出边——说了回边/循环回去就必须用 flow
     const saysBack = /回边|回到第|循环回|再转一圈/.test(`${fp.page.title || ""} ${fp.page.takeaway || ""}`);
     const hasFlowBack = fp.page.blocks.some((x) => x.kind === "flow");
     if (saysBack && !hasFlowBack) {
@@ -836,12 +843,12 @@ export function validateDeck(deck) {
       add(fp.at, `标题/结论说了「回边/循环回去」,但${hasSteps ? "主版式是 steps——steps 画不出回边" : "本页没有 flow"},承诺在图上兑现不了:改用 flow(回边带条件语义标签),或改标题不提回边`);
     }
   }
- // ── v12 版式配位门( 「每页格式单调,从上往下一个模子;PPT 要多元素
- // 布局:左右布局、上下布局、大框凸显」;借鉴 ref/ZCode pptx SKILL §3:每页一个视觉焦点、
- // 对比用左右、关键洞察用大字凸显、禁同版式连用)──
- // ① 版式合法性与容量:值 ∈ {通栏,左图右文,右图左文,大字结论};左右页必须有图/表/码主体且要点 ≤3,
- // steps >8 不许左右;大数字/引言/对比栏自带整页版式不许再标;大字结论页要点 ≤2 且结论 ≥14 字。
- // ② 多样性:≥10 内容页成稿,结构版式 ≥3 种;连续同结构版式 >4 页 = 翻页节奏塌。
+  // ── v12 版式配位门(2026-11-18 产品口径要求「每页格式单调,从上往下一个模子;PPT 要多元素
+  //    布局:左右布局、上下布局、大框凸显」;借鉴 ref/ZCode pptx SKILL §3:每页一个视觉焦点、
+  //    对比用左右、关键洞察用大字凸显、禁同版式连用)──
+  // ① 版式合法性与容量:值 ∈ {通栏,左图右文,右图左文,大字结论};左右页必须有图/表/码主体且要点 ≤3,
+  //    steps >8 不许左右;大数字/引言/对比栏自带整页版式不许再标;大字结论页要点 ≤2 且结论 ≥14 字。
+  // ② 多样性:≥10 内容页成稿,结构版式 ≥3 种;连续同结构版式 >4 页 = 翻页节奏塌。
   const LAYOUT_KINDS = new Set(["通栏", "左图右文", "右图左文", "大字结论"]);
   for (const fp of flatPages) {
     const pl = String(fp.page.pageLayout || "").trim();
@@ -888,9 +895,9 @@ export function validateDeck(deck) {
       } else run = 1;
     }
   }
- // ── v13 内容源覆盖门(轨迹分析:内容文档 20 份只读 2 份,叙事靠二手事实表)──
- // ≥20 页成稿,证据行引用的内容文档(叙事 md 源)≥5 份不同;代码文件是出处不是叙事源,不计入。
- // 例外:证据行 80%+ 都是代码文件(纯代码调研稿)跳过。
+  // ── v13 内容源覆盖门(2026-11-18 轨迹分析:内容文档 20 份只读 2 份,叙事靠二手事实表)──
+  // ≥20 页成稿,证据行引用的内容文档(叙事 md 源)≥5 份不同;代码文件是出处不是叙事源,不计入。
+  // 例外:证据行 80%+ 都是代码文件(纯代码调研稿)跳过。
   if (flatPages.length >= 20) {
     const evidences = flatPages.map((fp) => String(fp.page.evidence || ""));
     const docRefs = new Set();
@@ -905,12 +912,12 @@ export function validateDeck(deck) {
       add("全文", `内容源覆盖不足:证据行只引了 ${docRefs.size} 份内容文档([${[...docRefs].slice(0, 4).join("、")}${docRefs.size ? "…" : ""}]),要 ≥5 份——叙事要从内容源文档重读重写,不是转述二手事实表;纯代码调研稿(证据 80%+ 是代码文件)不受此门限制`);
     }
   }
- // ── v14 内容质量门(文本对比注意:wb 625 字/页+126 个带单位数字(39/61 页)+页页交叉引用,
- // v11 370 字/页+6 个数字(3/41 页)+0 交叉引用;素材文档单份就有 162 个数字,写作端零挖掘)──
- // ① 具体性:≥20 页稿,含带单位/量级数字的页 ≥40%(wb 为 64%)——参数/经验证/阈值是论证的骨头;
- // ② 交叉引用:正文含「见 P\d+/第 X 章」的页 ≥5——读者要知道这个话题在全篇哪里展开;
- // ③ 复述门:定义带术语与同页卡片标题/要点小标题相同=复述撑行,拒;
- // ④ 页构成节奏:连续 ≥3 页 block 构成签名完全相同=模板感,拒。
+  // ── v14 内容质量门(2026-11-18 文本对比实测确认:wb 625 字/页+126 个带单位数字(39/61 页)+页页交叉引用,
+  //    v11 370 字/页+6 个数字(3/41 页)+0 交叉引用;素材文档单份就有 162 个数字,写作端零挖掘)──
+  // ① 具体性:≥20 页稿,含带单位/量级数字的页 ≥40%(wb 为 64%)——参数/实测/阈值是论证的骨头;
+  // ② 交叉引用:正文含「见 P\d+/第 X 章」的页 ≥5——读者要知道这个话题在全篇哪里展开;
+  // ③ 复述门:定义带术语与同页卡片标题/要点小标题相同=复述撑行,拒;
+  // ④ 页构成节奏:连续 ≥3 页 block 构成签名完全相同=模板感,拒。
   if (flatPages.length >= 20) {
     const NUM_UNIT_RE = /\d+(?:\.\d+)?\s*(?:%|倍|次|毫秒|ms|s|秒|分钟|小时|天|KB|MB|GB|TB|token|K|M|万|亿|条|步|层|档|圈|轮|相位|阶段|分之)/;
     const pageTextV14 = (pg) => [pg.title, pg.takeaway, ...pg.blocks.flatMap((b) => {
@@ -932,7 +939,7 @@ export function validateDeck(deck) {
       add("全文", `交叉引用只有 ${withXref} 页:≥20 页成稿要 ≥5 页出现「见 P\d+/第 X 章」——读者要知道这个话题在后续哪章展开、在哪里回扣(总览页与深拆页互指是最低配)`);
     }
   }
- // 复述门(窄化:lead 含新词→当页定义是首用正路径,不拦;拦的是同一术语全稿重复定义)
+  // 复述门(窄化:lead 含新词→当页定义是首用正路径,不拦;拦的是同一术语全稿重复定义)
   {
     const defSeen = new Map();
     for (const fp of flatPages) {
@@ -943,6 +950,20 @@ export function validateDeck(deck) {
           add(fp.at, `术语「${clamp(term, 10)}」在第 ${defSeen.get(term)} 页已定义过——同一术语只定义一次,后面再出现直接用;重复定义=复述撑行`);
         } else defSeen.set(term, fp.at);
       }
+    }
+  }
+  // ── v15 叙事粘合门(2026-11-19 文字版对比实测确认:对标稿每页「接前段」承接句,我们 0 处——页是并列不是链条)──
+  // ≥12 内容页成稿,带 `> 承上:` 的页 ≥50%;承上 8~42 字且不得与标题同义。
+  if (flatPages.length >= 12) {
+    const withCarry = flatPages.filter((fp) => String(fp.page.carry || "").trim().length >= 8);
+    if (withCarry.length * 2 < flatPages.length) {
+      add("全文", `叙事粘合不足:只有 ${withCarry.length}/${flatPages.length} 页带 \`> 承上:\` 承接句(要 ≥50%)——每页写一句「接住上一页/上一章哪条线」(如「骨架看清了,下一问是一家怎么落地」),页与页才是链条不是并列`);
+    }
+    for (const fp of flatPages) {
+      const c = String(fp.page.carry || "").trim();
+      if (!c) continue;
+      if ([...c].length > 42) add(fp.at, `承上句 ${[...c].length} 字超 42:一句「从哪条线来」,不是摘要`);
+      if (c === (fp.page.title || "").trim()) add(fp.at, "承上句与标题重复:承上讲「上一页的线」,不是复述本页标题");
     }
   }
   {
@@ -961,7 +982,7 @@ export function validateDeck(deck) {
   return issues;
 }
 
-/** v13 代际查重( session 轨迹分析注意:重生成任务把旧稿文字照抄 41/42 页只换版式)——
+/** v13 代际查重(2026-11-18 session 轨迹分析实测确认:重生成任务把旧稿文字照抄 41/42 页只换版式)——
  * 重生成导出时与归档旧稿逐页比对,bigram Dice 相似度;换皮稿在导出层被拒,不靠任务书自觉。 */
 const bigramsOf = (t) => {
   const str = String(t || "").replace(/\s+/g, "");
@@ -978,7 +999,7 @@ const diceRatio = (a, b) => {
 };
 export function regenSimilarity(deck, oldMd) {
   const old = parseDeckMd(String(oldMd || ""));
-  const keyOf = (t) => String(t || "").replace(/[\s版式:通栏左右图文大结论,,。:;——-]/g, "").slice(0, 18);
+  const keyOf = (t) => String(t || "").replace(/[\s版式:通栏左右图文大结论(),,。:;——-]/g, "").slice(0, 18);
   const oldPages = new Map();
   old.chapters.forEach((c) => c.pages.forEach((pg) => oldPages.set(keyOf(pg.title), pg)));
   const bodyOf = (pg) => {
@@ -1038,13 +1059,13 @@ export function planDeck(deck) {
       const codeB = pick("code");
       const cardsB = pick("cards");
       const pseudoB = pick("pseudo");
- // v12 修复:visual 优先于 cards/pseudo——flow+cards 组合页旧版 layout 取 cards,flow 被静默丢弃
+      // v12 修复:visual 优先于 cards/pseudo——flow+cards 组合页旧版 layout 取 cards,flow 被静默丢弃
       const layout = codeB ? "code" : visual ? "visual" : cardsB ? "cards" : pseudoB ? "pseudo" : compare ? "compare" : stats ? "stats" : quote ? "quote" : table ? "table" : steps ? "steps" : "list";
       plan.push({
         kind: "content",
         chapterNo: ch.no,
         chapterTitle: ch.title,
- // 章主张只在本章首页展示,单行截断(网格为它保留固定一行,非首页留白)
+        // 章主张只在本章首页展示,单行截断(网格为它保留固定一行,非首页留白)
         kicker: i === 0 ? clamp(humanize(ch.claim), 64) : "",
         no: `${ch.no}.${i + 1}`,
         title: pg.title,
@@ -1063,6 +1084,7 @@ export function planDeck(deck) {
         definitions: pg.definitions || [],
         status: pg.status || "",
         pageLayout: pg.pageLayout || "",
+        carry: pg.carry || "",
         evidence: pg.evidence,
       });
     });
@@ -1073,8 +1095,8 @@ export function planDeck(deck) {
 // ---------------------------------------------------------------- 渲染
 
 /** v5 页面四区网格(所有内容页共用,翻页节奏一致):
- * 眉 0.38 → 标题 0.66(26pt,≤2 行) → 章主张行 1.50(本章首页,单行) → 结论带 1.86(高 0.52)
- * → 主体区 2.54 起 → 支撑区锚定 6.64 上方 → 脚注 6.78。主体+支撑共 4.1 英寸,按内容再分配。 */
+ *  眉 0.38 → 标题 0.66(26pt,≤2 行) → 章主张行 1.50(本章首页,单行) → 结论带 1.86(高 0.52)
+ *  → 主体区 2.54 起 → 支撑区锚定 6.64 上方 → 脚注 6.78。主体+支撑共 4.1 英寸,按内容再分配。 */
 const GRID = { eyebrowY: 0.38, titleY: 0.66, titleH: 0.8, claimY: 1.5, bandY: 1.86, bandH: 0.52, mainTop: 2.54, footLimit: 6.64 };
 
 // v12 版式引擎:主体区当前矩形(通栏=整幅;左图右文/右图左文=半幅)。主体渲染器一律读
@@ -1090,7 +1112,7 @@ function pageHead(slide, s) {
   slide.addText(`${s.chapterNo} / ${s.chapterTitle}`, {
     x: M, y: GRID.eyebrowY, w: 8, h: 0.3, fontFace: FONT, fontSize: 12, color: PRIMARY, charSpacing: 0.8, margin: 0, bold: true,
   });
- // v9 状态徽标:机制页右上角标落地程度(已落地绿/部分落地琥珀/设计目标灰)
+  // v9 状态徽标:机制页右上角标落地程度(已落地绿/部分落地琥珀/设计目标灰)
   if (s.status) {
     const st = String(s.status);
     const col = st === "已落地" ? PRIMARY : st === "部分落地" ? ACCENT : MUTED;
@@ -1102,7 +1124,12 @@ function pageHead(slide, s) {
   slide.addText(s.title, {
     x: M, y: GRID.titleY, w: W - 2 * M, h: GRID.titleH, fontFace: FONT, fontSize: 26, bold: true, color: TEXT, margin: 0, valign: "top", lineSpacingMultiple: 1.1,
   });
-  if (s.kicker) {
+  // v15 承上行:标题下一句「从上一页哪条线来」(wb 的接前段);与章主张行同位,承上优先
+  if (s.carry) {
+    slide.addText("承上 · " + clamp(s.carry, 42), {
+      x: M, y: GRID.claimY, w: W - 2 * M, h: 0.28, fontFace: FONT, fontSize: 11.5, color: MUTED, margin: 0, valign: "top",
+    });
+  } else if (s.kicker) {
     slide.addText(s.kicker, {
       x: M, y: GRID.claimY, w: W - 2 * M, h: 0.28, fontFace: FONT, fontSize: 13, color: MUTED, margin: 0, valign: "top",
     });
@@ -1111,7 +1138,7 @@ function pageHead(slide, s) {
 }
 
 /** 结论带(「结论」):紧跟标题、主体之上——结论先行,洞察不再沉底。
- * 标签用「结论」而非「所以」:单页被截图传播时,「所以」是断头逻辑。 */
+ *  标签用「结论」而非「所以」:单页被截图传播时,「所以」是断头逻辑。 */
 function renderTakeaway(slide, s, y) {
   if (!s.takeaway) return;
   const h = GRID.bandH;
@@ -1188,7 +1215,7 @@ function renderSteps(slide, s, top, h) {
     const w = (ZW - gap * (n - 1)) / n;
     const boxY = top + 0.1;
     const boxH = 1.02;
- // v5:说明区高度尊重主体区预算(旧版固定 1.05,预算小的页顶进支撑区)
+    // v5:说明区高度尊重主体区预算(旧版固定 1.05,预算小的页顶进支撑区)
     const detailH = items.some((i) => i.detail) ? Math.max(0.42, Math.min(1.05, h - 1.35)) : 0;
     items.forEach((it, i) => {
       const x = ZX + i * (w + gap);
@@ -1205,8 +1232,8 @@ function renderSteps(slide, s, top, h) {
     });
     return boxY + boxH + detailH;
   }
- // v11 两行回绕(≥7 步):全流程总览一页走完(workbuddy 范式)——单行每格宽 <1.4in,
- // 说明被挤成竖条;两行 × ceil(n/2) 格,每格放得下「名字 + 一句人话职责」。
+  // v11 两行回绕(≥7 步):全流程总览一页走完(workbuddy 范式)——单行每格宽 <1.4in,
+  // 说明被挤成竖条;两行 × ceil(n/2) 格,每格放得下「名字 + 一句人话职责」。
   const per = Math.ceil(n / 2);
   const gap = 0.2;
   const vgap = 0.34;
@@ -1231,7 +1258,7 @@ function renderSteps(slide, s, top, h) {
       }
     }
   }
- // 行间连接:第一行末尾 → 第二行开头(读者从 ⑥ 跳 ⑦ 不用猜方向)
+  // 行间连接:第一行末尾 → 第二行开头(读者从 ⑥ 跳 ⑦ 不用猜方向)
   const lastX = ZX + (Math.min(per, n) - 1) * (w + gap) + w / 2;
   const firstX = ZX + w / 2;
   const midY = top + rowH + vgap / 2;
@@ -1267,9 +1294,9 @@ function renderCompare(slide, s, top, h) {
 
 function renderStats(slide, s, top, h) {
   const st = s.stats.stats;
- // v5:数字同权重(同字号同色)——旧版第一个数字 64pt+强调色、其余 40pt,经验证被点评
- //「同层级指标样式不一致,强调逻辑说不通」。要突出结论,靠结论带,不靠数字变脸。
- // v5.1:三栏真实网格(等宽列、全部居中对齐、同一基线),数字加大到 44pt 撑起主体区。
+  // v5:数字同权重(同字号同色)——旧版第一个数字 64pt+强调色、其余 40pt,实测被点评
+  //「同层级指标样式不一致,强调逻辑说不通」。要突出结论,靠结论带,不靠数字变脸。
+  // v5.1:三栏真实网格(等宽列、全部居中对齐、同一基线),数字加大到 44pt 撑起主体区。
   const blockH = Math.min(h, 2.3);
   const n = st.length;
   const gap = 0.3;
@@ -1289,7 +1316,7 @@ function renderStats(slide, s, top, h) {
 
 function renderQuote(slide, s, top, h) {
   const q = s.quote;
- // v5:引言字号随预算收缩(预算 <2.6in 时 40pt 会顶穿支撑区)
+  // v5:引言字号随预算收缩(预算 <2.6in 时 40pt 会顶穿支撑区)
   const big = h >= 2.6;
   const fs = big ? 40 : 31;
   const y2 = top + (big ? 1.8 : 1.42);
@@ -1327,7 +1354,7 @@ function renderLayers(slide, d, top, h) {
 function renderFlow(slide, d, top, h) {
   const ids = d.nodes.map((n) => n.id);
   // 先 DFS 标出回边,只在去掉回边的 DAG 上做最长路径分层——
- // 经验证:写入链里 decide→recv 的回边把整张图的 rank 顶到极端值,节点被挤到右侧两列并互相压住。
+  // 实测:写入链里 decide→recv 的回边把整张图的 rank 顶到极端值,节点被挤到右侧两列并互相压住。
   const adj = new Map(ids.map((id) => [id, []]));
   for (const e of d.edges) (adj.get(e.from) || []).push(e.to);
   const color = new Map(ids.map((id) => [id, 0]));
@@ -1362,16 +1389,16 @@ function renderFlow(slide, d, top, h) {
     byCol.get(r).push(n);
   }
   const maxRows = Math.max(...[...byCol.values()].map((l) => l.length), 1);
- // 行数多时压节点高与行距,保证整张图落在给定高度内(经验证:固定 0.92 会压到下方要点)
+  // 行数多时压节点高与行距,保证整张图落在给定高度内(实测:固定 0.92 会压到下方要点)
   const vgap = maxRows >= 3 ? 0.22 : 0.4;
- // v11:带 desc 的节点(标题+两行说明)最低 0.74 才放得下,旧底 0.6 会溢出节点盒
+  // v11:带 desc 的节点(标题+两行说明)最低 0.74 才放得下,旧底 0.6 会溢出节点盒
   const hasDesc = d.nodes.some((n) => n.desc);
   const floorH = hasDesc ? 0.74 : 0.6;
   const nodeH = Math.min(0.92, Math.max(floorH, (h - 0.24 - vgap * (maxRows - 1)) / maxRows));
   const pos = new Map();
   for (const [r, list] of byCol) {
     const total = list.length * nodeH + (list.length - 1) * vgap;
- // v5.1:富余高度偏上 25% —— 图贴近结论带,空隙留给图与支撑区之间(有分隔线,不像洞)
+    // v5.1:富余高度偏上 25% —— 图贴近结论带,空隙留给图与支撑区之间(有分隔线收口,不像洞)
     const startY = top + 0.12 + Math.max(0, (h - 0.24 - total) * 0.25);
     list.forEach((n, i) => pos.set(n.id, { x: ZX + r * stepX, y: startY + i * (nodeH + vgap), r }));
   }
@@ -1396,7 +1423,7 @@ function renderFlow(slide, d, top, h) {
         slide.addShape("line", { x: midX, y: by, w: bx - midX, h: 0, line: { color: MUTED, width: 1.5, endArrowType: "triangle" } });
       }
       if (e.label) {
- // v11:前向边标签放「列间通道」里,不再贴目标节点顶部(旧位 by-0.34 会压到带 desc 节点的说明文字)
+        // v11:前向边标签放「列间通道」里,不再贴目标节点顶部(旧位 by-0.34 会压到带 desc 节点的说明文字)
         if (Math.abs(by - ay) < 0.02) {
           labels.push({ text: e.label, x: (ax + bx) / 2 - 0.48, y: ay - Math.max(0.3, nodeH / 2 + 0.04), w: 0.96 });
         } else {
@@ -1405,8 +1432,8 @@ function renderFlow(slide, d, top, h) {
         }
       }
     } else {
- // v5 回边:源底边中点 → 下方通道 → 目标底边中点(正交折线,箭头明确进目标底边);
- // v5.1 回边升格为主角:强调色+加粗——全页最该被看见的机制不能再是一条灰色细线。
+      // v5 回边:源底边中点 → 下方通道 → 目标底边中点(正交折线,箭头明确进目标底边);
+      // v5.1 回边升格为主角:强调色+加粗——全页最该被看见的机制不能再是一条灰色细线。
       const sx = a.x + nodeW / 2;
       const sy = a.y + nodeH;
       const tx = b.x + nodeW / 2;
@@ -1420,18 +1447,18 @@ function renderFlow(slide, d, top, h) {
   for (const n of d.nodes) {
     const p = pos.get(n.id);
     const decision = out(n.id).filter((e) => e.label).length >= 2;
- // 回边落点也升格(强调边框):回边的两端必须一眼有着落
+    // 回边落点也升格(强调边框):回边的两端必须一眼有着落
     const backTarget = d.edges.some((e) => {
       const pa = pos.get(e.from);
       const pb = pos.get(e.to);
       return pa && pb && pb.r <= pa.r && e.to === n.id;
     });
     const hot = decision || backTarget;
- // v5:普通节点也带 LINE 细边框——旧版无边框的白盒在纸底上「对比太弱,边框几乎没有」。
- // v13(全稿普查):窄列节点字号自适应——定宽硬折会把 4 字标签断成「末行单字悬挂」(9/43 页)
+    // v5:普通节点也带 LINE 细边框——旧版无边框的白盒在纸底上「对比太弱,边框几乎没有」。
+    // v13(全稿普查):窄列节点字号自适应——定宽硬折会把 4 字标签断成「末行单字悬挂」(9/43 页)
     const labelFs = nodeW < 1.75 ? 11.5 : nodeW < 2.1 ? 12.5 : 14;
     slide.addShape("roundRect", { x: p.x, y: p.y, w: nodeW, h: nodeH, rectRadius: 0.06, fill: { color: SURFACE }, line: { color: hot ? ACCENT : LINE, width: hot ? 1.5 : 1 }, shadow: { type: "none" } });
- // v8:有描述的节点分两行(标题粗体 + 描述小字),workbuddy 的因果链节点都带「为什么」
+    // v8:有描述的节点分两行(标题粗体 + 描述小字),workbuddy 的因果链节点都带「为什么」
     if (n.desc) {
       slide.addText(clamp(n.label, 16), {
         x: p.x + 0.1, y: p.y + 0.05, w: nodeW - 0.2, h: Math.max(0.22, nodeH * 0.42),
@@ -1448,7 +1475,7 @@ function renderFlow(slide, d, top, h) {
       });
     }
   }
- // v11 标签避让:同带标签两两水平重叠时上下错开(平行条件边的标签互相盖住=条件看不见)
+  // v11 标签避让:同带标签两两水平重叠时上下错开(平行条件边的标签互相盖住=条件看不见)
   labels.sort((a, b) => a.y - b.y || a.x - b.x);
   for (let i = 1; i < labels.length; i++) {
     for (let j = 0; j < i; j++) {
@@ -1459,7 +1486,7 @@ function renderFlow(slide, d, top, h) {
       }
     }
   }
- // v11 标签-节点避让:标签底块不许压节点文字——压到就挪到该节点的上方或下方空白
+  // v11 标签-节点避让:标签底块不许压节点文字——压到就挪到该节点的上方或下方空白
   const nodeRects = d.nodes.map((n) => ({ ...pos.get(n.id) })).filter(Boolean);
   for (const L of labels) {
     const lw = L.w || 0.6;
@@ -1473,7 +1500,7 @@ function renderFlow(slide, d, top, h) {
     }
   }
   for (const l of labels) {
- // v5:标签从 4 字放宽到 12 字——「回边」这类同义反复被质量门拒,标签要写条件语义。
+    // v5:标签从 4 字放宽到 12 字——「回边」这类同义反复被质量门拒,标签要写条件语义。
     slide.addText(clamp(l.text, 12), {
       x: l.x, y: l.y, w: l.w || 0.6, h: 0.3, margin: 0, fontFace: FONT,
       fontSize: 12.5, bold: true, color: ACCENT, align: "center", valign: "middle",
@@ -1522,7 +1549,7 @@ function renderTimeline(slide, d, top, h) {
   const lineY = top + 0.62;
   slide.addShape("line", { x: ZX, y: lineY, w: ZW, h: 0, line: { color: LINE, width: 2 } });
   const maxItems = Math.max(...d.phases.map((p) => p.items.length), 1);
- // v5:卡片高度尊重主体区预算——旧版固定到 2.9,预算小的页直接压进支撑区(经验证 P22 重叠 51%)。
+  // v5:卡片高度尊重主体区预算——旧版固定到 2.9,预算小的页直接压进支撑区(实测 P22 重叠 51%)。
   const cardH = Math.max(0.72, Math.min(2.6, 0.42 + maxItems * 0.44, h - 0.98));
   const cardTop = lineY + 0.34;
   const fs = cardH < 1.15 ? 12.5 : 14;
@@ -1547,7 +1574,7 @@ function renderCode(slide, s, top, h) {
   slide.addShape("roundRect", { x: ZX, y: boxY, w: ZW, h: boxH, rectRadius: 0.05, fill: { color: CODE_BG }, line: { color: LINE, width: 0.75 }, shadow: { type: "none" } });
   const lineH = Math.min(0.27, (boxH - 0.2) / Math.max(1, c.lines.length));
   const fs = lineH >= 0.26 ? 13 : 12;
- // 保留行首缩进:pptxgenjs/渲染器会折叠连续普通空格,用 NBSP 固定控制流层级。
+  // 保留行首缩进:pptxgenjs/渲染器会折叠连续普通空格,用 NBSP 固定控制流层级。
   const codeLine = (l) => l.replace(/^ +/, (m) => "\u00A0".repeat(m.length));
   slide.addText(
     c.lines.map((l, i) => ({ text: l.length ? codeLine(l) : " ", options: { breakLine: i < c.lines.length - 1 } })),
@@ -1557,30 +1584,30 @@ function renderCode(slide, s, top, h) {
 }
 
 /** v8 卡片网格(workbuddy 对齐):N 张圆角卡横排,每张「彩色标题条 + 说明 + 子项」。
- * 这是 workbuddy 最常用的版式——五条不变量、三件事、四个机制全用它。 */
+ *  这是 workbuddy 最常用的版式——五条不变量、三件事、四个机制全用它。 */
 function renderCards(slide, s, top, h) {
   const cards = s.cards.cards;
   const n = cards.length;
   const gap = 0.2;
   const w = (ZW - gap * (n - 1)) / n;
- // v13(全稿普查):卡高随内容收缩——固定满槽在「一句说明+两条目」时空置三四成,成片留白
+  // v13(全稿普查):卡高随内容收缩——固定满槽在「一句说明+两条目」时空置三四成,成片留白
   const needOf = (c) => 0.38 + 0.08 + (c.desc ? 0.55 : 0) + (c.subs && c.subs.length ? Math.min(c.subs.length, 4) * 0.34 + 0.08 : 0) + 0.1;
   const cardH = Math.max(1.1, Math.min(h, 2.6, ...cards.map(needOf)));
   cards.forEach((c, i) => {
     const x = ZX + i * (w + gap);
- // 外框
+    // 外框
     slide.addShape("roundRect", { x, y: top, w, h: cardH, rectRadius: 0.06, fill: { color: SURFACE }, line: { color: LINE, width: 1 }, shadow: { type: "none" } });
- // 标题条(彩色底)
+    // 标题条(彩色底)
     const headH = 0.38;
     slide.addShape("roundRect", { x, y: top, w, h: headH, rectRadius: 0.06, fill: { color: PRIMARY }, line: { color: PRIMARY, width: 0 }, shadow: { type: "none" } });
     slide.addText(clamp(c.title, 20), { x: x + 0.12, y: top + 0.03, w: w - 0.24, h: headH - 0.06, fontFace: FONT, fontSize: 14, bold: true, color: BG, margin: 0, valign: "middle" });
- // 说明
+    // 说明
     let y = top + headH + 0.08;
     if (c.desc) {
       slide.addText(clamp(c.desc, 60), { x: x + 0.12, y, w: w - 0.24, h: 0.5, fontFace: FONT, fontSize: 12.5, color: TEXT, margin: 0, valign: "top", lineSpacingMultiple: 1.15 });
       y += 0.55;
     }
- // 子项(圆点)
+    // 子项(圆点)
     if (c.subs && c.subs.length) {
       const subH = Math.min(cardH - (y - top) - 0.1, c.subs.length * 0.34);
       const step = Math.min(0.34, subH / c.subs.length);
@@ -1610,7 +1637,7 @@ function renderPseudo(slide, s, top, h) {
 }
 
 /** 支撑区行高估算:一行 ≈56 个汉字宽(14.5pt × 12.1in),短行单行、长行两行;
- * 估高与实际绘制同源,主体区才知道自己真正有多少预算。 */
+ *  估高与实际绘制同源,主体区才知道自己真正有多少预算。 */
 function readingRowH(b) {
   const len = [...(b.lead || "")].length + [...(b.text || "")].length + 2;
   const lines = len > 56 ? 2 : 1;
@@ -1622,8 +1649,8 @@ function estimateReadingH(bullets) {
 }
 
 /** 支撑区(v5):锚定脚注上方,每条「主色粗体小标题 + 说明」,行间细分隔线;
- * 区顶再画一条细线——主体与支撑之间的空隙从「没排完的洞」变成「有意的分节」。
- * 旧版是无锚点的裸文本行,被点评「像文档段落贴进 PPT」。 */
+ *  区顶再画一条收口细线——主体与支撑之间的空隙从「没排完的洞」变成「有意的分节」。
+ *  旧版是无锚点的裸文本行,被点评「像文档段落贴进 PPT」。 */
 function renderReading(slide, bullets, y, h) {
   slide.addShape("line", { x: ZX, y: y - 0.14, w: ZW, h: 0, line: { color: LINE, width: 0.75 } });
   let ry = y;
@@ -1659,7 +1686,7 @@ function renderDefinitions(slide, defs, y) {
 }
 
 /** v12 大字结论:结论带升格为本页唯一视觉焦点(23pt 大字 + 大底框),标题退后——
- * 关键洞察页读者第一眼看到的是那句判断,不是版式零件(ZCode SKILL §3 single-statement emphasis)。 */
+ *  关键洞察页读者第一眼看到的是那句判断,不是版式零件(ZCode SKILL §3 single-statement emphasis)。 */
 function renderFocusHero(slide, s, y) {
   const h = 1.5;
   slide.addShape("roundRect", { x: M, y, w: W - 2 * M, h, rectRadius: 0.06, fill: { color: SURFACE_2 }, line: { color: SURFACE_2, width: 0 }, shadow: { type: "none" } });
@@ -1703,7 +1730,7 @@ function renderSideReading(slide, bullets, x, w, top, h) {
 }
 
 /** v12 左右布局:主版式块占一侧(58%),要点做成侧栏卡占另一侧——打破「标题-图-要点」
- * 永远纵向三段的单调;对比页/机制页交替用 左图右文/右图左文(ZCode SKILL §3 side-by-side)。 */
+ *  永远纵向三段的单调;对比页/机制页交替用 左图右文/右图左文(ZCode SKILL §3 side-by-side)。 */
 function renderSplit(slide, s, top, bottomLimit, reversed, center) {
   const gap = 0.28;
   const totalW = W - 2 * M;
@@ -1742,10 +1769,10 @@ function renderSplit(slide, s, top, bottomLimit, reversed, center) {
 function renderContent(pptx, s) {
   const slide = pptx.addSlide();
   const grid = pageHead(slide, s);
- // 有就地定义时,定义带贴在标题下、结论带随之下移——「是什么」先于「所以呢」
+  // 有就地定义时,定义带贴在标题下、结论带随之下移——「是什么」先于「所以呢」
   const defH = renderDefinitions(slide, s.definitions, GRID.claimY + 0.32);
   const bandY = defH ? GRID.bandY + defH + 0.06 : GRID.bandY;
- // v12 版式引擎:大字结论页跳过普通结论带(结论升格为焦点),左右布局把要点挪进侧栏
+  // v12 版式引擎:大字结论页跳过普通结论带(结论升格为焦点),左右布局把要点挪进侧栏
   const layoutMode = String(s.pageLayout || "");
   const isFocus = layoutMode === "大字结论";
   const isSplit = layoutMode === "左图右文" || layoutMode === "右图左文";
@@ -1754,10 +1781,10 @@ function renderContent(pptx, s) {
   else renderTakeaway(slide, s, bandY);
   const bottomLimit = grid.footLimit;
   const nB = s.bullets.length;
- // 支撑区按实际行数估高,锚定脚注上方;主体区拿走剩余预算(左右布局的要点在侧栏,不占底部)。
+  // 支撑区按实际行数估高,锚定脚注上方;主体区拿走剩余预算(左右布局的要点在侧栏,不占底部)。
   const readingH = nB && !isSplit ? estimateReadingH(s.bullets) : 0;
   const mainBudget = Math.max(1.2, bottomLimit - top - (readingH ? readingH + 0.16 : 0));
- // 固定高度版式(stats/quote/code)在预算内垂直居中;stats 偏上 0.4(数字区更高,压死区)
+  // 固定高度版式(stats/quote/code)在预算内垂直居中;stats 偏上 0.4(数字区更高,压死区)
   const center = (actual, bias = 0.35) => top + Math.max(0, (mainBudget - actual) * bias);
   let bottom = top;
   if (isSplit) {
@@ -1766,11 +1793,11 @@ function renderContent(pptx, s) {
     const actual = Math.min(mainBudget, 0.72 + s.code.lines.length * 0.27);
     bottom = renderCode(slide, s, center(actual), mainBudget);
   } else if (s.layout === "cards") {
- // v8 cards:主版式(可与其他副版式同页——见下方的"组合区")
+    // v8 cards:主版式(可与其他副版式同页——见下方的"组合区")
     const cardN = s.cards.cards.length;
     const actual = Math.min(mainBudget, cardN <= 2 ? 2.4 : 2.0);
     bottom = renderCards(slide, s, center(actual), actual);
- // 组合区:cards 页允许再带一个 flow/pseudo(如因果链 + 伪代码)
+    // 组合区:cards 页允许再带一个 flow/pseudo(如因果链 + 伪代码)
     if (s.pseudo) {
       const pH = Math.min(bottomLimit - bottom - 0.14, 0.24 + s.pseudo.lines.length * 0.26);
       if (pH > 0.4) bottom = renderPseudo(slide, { pseudo: s.pseudo }, bottom + 0.1, pH);
@@ -1781,7 +1808,7 @@ function renderContent(pptx, s) {
     bottom = renderStats(slide, s, center(2.3, 0.4), Math.min(mainBudget, 2.3));
   } else if (s.layout === "steps") {
     if (s.steps.length >= 7) {
- // v11:两行回绕的全流程总览占满主体区(7~14 步一页走完)
+      // v11:两行回绕的全流程总览占满主体区(7~14 步一页走完)
       bottom = renderSteps(slide, s, top, mainBudget);
     } else {
       const hasDetail = s.steps.some((i) => i.detail);
@@ -1796,12 +1823,12 @@ function renderContent(pptx, s) {
     else if (d.type === "flow") bottom = renderFlow(slide, d, top, mainBudget);
     else if (d.type === "matrix") bottom = renderMatrix(slide, d, top, mainBudget);
     else bottom = renderTimeline(slide, d, top, mainBudget);
- // v8 组合区:visual 页可再带 cards(因果链 + 条件映射是 workbuddy 的常见组合)
+    // v8 组合区:visual 页可再带 cards(因果链 + 条件映射是 workbuddy 的常见组合)
     if (s.cards) {
       const cH = Math.min(bottomLimit - bottom - 0.14, 2.0);
       if (cH > 0.8) bottom = renderCards(slide, { cards: s.cards }, bottom + 0.1, cH);
     }
- // v12:visual 页也可带 pseudo(伪代码 + 流程图同页;此前该组合被静默丢 pseudo)
+    // v12:visual 页也可带 pseudo(伪代码 + 流程图同页;此前该组合被静默丢 pseudo)
     if (s.pseudo) {
       const pH = Math.min(bottomLimit - bottom - 0.14, 0.24 + s.pseudo.lines.length * 0.26);
       if (pH > 0.4) bottom = renderPseudo(slide, { pseudo: s.pseudo }, bottom + 0.1, pH);
@@ -1814,7 +1841,7 @@ function renderContent(pptx, s) {
     renderList(slide, s, top);
     bottom = bottomLimit;
   }
- // v13(全稿普查):要点带紧跟内容区(留 0.22),只有超出页底时才锚定 footLimit——固定贴底会在稀内容页留出整幅空带
+  // v13(全稿普查):要点带紧跟内容区(留 0.22),只有超出页底时才锚定 footLimit——固定贴底会在稀内容页留出整幅空带
   if (nB && !isSplit) renderReading(slide, s.bullets, Math.max(top, Math.min(bottomLimit - readingH, bottom + 0.22)), readingH);
   pageFoot(slide, s);
   return slide;
@@ -1841,12 +1868,12 @@ function renderCover(pptx, s) {
     }
   }
   cover.addText("目录", { x: 9.7, y: 1.42, w: 3.2, h: 0.3, fontFace: FONT, fontSize: 12, color: PRIMARY, charSpacing: 2, bold: true, margin: 0 });
- // v6:章数多时(如加了术语表章)自动收紧行距/字号,目录不再压到封面 meta 行(经验证 12 章重叠 47%)
+  // v6:章数多时(如加了术语表章)自动收紧行距/字号,目录不再压到封面 meta 行(实测 12 章重叠 47%)
   const tocN = (s.toc || []).length;
   const tocStep = Math.min(0.44, (6.62 - 1.88) / Math.max(1, tocN));
   const tocFs = tocN > 11 ? 11.5 : 13;
   (s.toc || []).forEach((c, i) => {
- // v13(终审复发):目录窄列长标题折行末行单字悬挂——按长度自适应字号并留断行余量
+    // v13(终审复发):目录窄列长标题折行末行单字悬挂——按长度自适应字号并留断行余量
     const tl = [...String(c.title || "")].length;
     const fs = tl > 13 ? 10.5 : tl > 10 ? 11.5 : tocFs;
     cover.addText(c.no, { x: 9.7, y: 1.88 + i * tocStep, w: 0.5, h: 0.3, fontFace: FONT, fontSize: fs, bold: true, color: ACCENT, margin: 0 });
@@ -1855,7 +1882,7 @@ function renderCover(pptx, s) {
   if (s.meta) {
     cover.addText(s.meta, { x: M, y: 6.88, w: W - 2 * M, h: 0.3, fontFace: FONT, fontSize: 11.5, color: MUTED, margin: 0 });
   }
- // v9 构建思路落封面:不讲清单 + 数字三档纪律(workbuddy 同款 scope/信任声明)
+  // v9 构建思路落封面:不讲清单 + 数字三档纪律(workbuddy 同款 scope/信任声明)
   if (s.notCovering) {
     cover.addText("不讲 " + clamp(s.notCovering, 80), { x: M, y: 6.56, w: W - 2 * M, h: 0.26, fontFace: FONT, fontSize: 11.5, color: MUTED, margin: 0 });
   }
@@ -1871,7 +1898,7 @@ export function deckToPptx(deck, outPath) {
   const pptx = new pptxgen();
   pptx.defineLayout({ name: "W16x9", width: W, height: H });
   pptx.layout = "W16x9";
-  pptx.author = "lampgenie-harness";
+  pptx.author = "genie-harness";
   pptx.title = deck.title || "评审文档";
   for (const s of plan) {
     if (s.kind === "cover") renderCover(pptx, s);
@@ -1921,7 +1948,7 @@ export function boardToDeckTemplate(doc) {
   out.push(`        回边标签写条件语义(如 还需工具),禁「回边/循环」;风险 → matrix(高影响高概率: 条目|条目);`);
   out.push(`        计划 → timeline(阶段: 事项|事项);取舍 → compare(方案A: 项|项 / 方案B: 项|项);数字 → stats(数字|说明|来源,说明 ≤16 字/来源 ≤20 字);`);
   out.push(`     单句结论 → quote(一句话 + 一句补充 + 来源);④ 2–4 条支撑要点(每条 ≤64 字,全页 ≥75 字,定义/机制/数据/影响齐给);⑤ \`> 证据:\` 来源行。 -->`);
- // 术语表章骨架( v6):先定义再用——模板阶段就占住前两章位,填完再导
+  // 术语表章骨架(2026-11-15 v6):先定义再用——模板阶段就占住前两章位,填完再导
   out.push("");
   out.push(`## 00 术语与概念`);
   out.push(`claim: <!-- 这些自造词先说清,正文首次出现不再就地解释 -->`);
@@ -1961,7 +1988,7 @@ export function boardToDeckTemplate(doc) {
   return out.join("\n");
 }
 
-/** composition 板(办公/产出类「作业思路板」)→ 汇报骨架源稿。
+/** composition 板(办公/产出类「作业思路板」)→ 汇报骨架源稿(2026-11-04)。
  *  与 docs 板(boardToDeckTemplate)的区别:板画的是表达结构(主题·受众·章节·章间关系),
  *  没有页节点与代码证据位——每章给一个「开篇」页,证据行换成可选「> 素材:」行;
  *  质量门对 genre: composition 走宽松档(不要求 `> 证据:`),结构门(纯文字页/TODO/解读深度)保留。

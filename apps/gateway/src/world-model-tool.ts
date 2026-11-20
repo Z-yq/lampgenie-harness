@@ -283,7 +283,18 @@ export function renderWorldModelRead(atlas: unknown): string {
  * 与开工简报/夜间流水线同口径—— 注意 taskRoot basename 会查错仓)
  * @param by 写入者标识(agent:<sessionId 短码>),进事件的 by 字段留审计链
  */
-export function worldModelTool(root: string, by = "agent"): Tool {
+/** 最小 journal 形状:goal_progress 成功时补一条会话级 custom 事件,供段闭合判官消费
+ * (设计 §4.1.3 判据②「goal_progress 焦点推进」;atlas 仓事件不在会话 journal 里)。 */
+export interface WorldModelJournal {
+  append(event: { kind: string; sessionId: string; payload: unknown }): unknown;
+}
+
+export function worldModelTool(
+  root: string,
+  by = "agent",
+  journal?: WorldModelJournal,
+  sessionId?: string,
+): Tool {
   const projectKey = basename(root);
  /** 写后增量重建快照(保留 derived 层);返回 null=成功(回执里拼新状态摘要)。 */
   const rebuild = (): string => {
@@ -377,6 +388,16 @@ export function worldModelTool(root: string, by = "agent"): Tool {
               return `goal_progress 失败:${written.code ?? "?"}(goalId=${goalId})${hint}`;
             }
             const warn = rebuild();
+ // 段闭合桥:会话 journal 落一条 goal_progress(设计 §4.1.3 判据②),
+ // 由 scanSegmentClosures 作为「主题切换/子目标推进」闭合边界消费。
+            if (journal && sessionId) {
+              try {
+                journal.append({
+                  kind: "custom", sessionId,
+                  payload: { what: "goal_progress", goalId, note: d.note.slice(0, 200), at: Date.now() },
+                });
+              } catch { /* 观测落账失败不影响主线推进 */ }
+            }
             const rows = ((getAtlas(root, projectKey).atlas ?? {}) as SnapshotView).goalProgress?.[goalId]?.length ?? 0;
             return `✅ 主线 ${goalId} 已登记推进(累计 ${rows} 条)${d.nextStep ? `\n下一步:${d.nextStep}` : ""}\n${warn}`;
           }
