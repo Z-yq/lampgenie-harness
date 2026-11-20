@@ -291,7 +291,8 @@ class NativeIssues implements IssueChannel {
     private readonly info: GitHostInfo,
     private readonly token: string,
     private readonly fetchImpl: FetchLike,
-    private readonly user: string) {}
+    private readonly user: string,
+  ) {}
 
   get kind(): "github" | "gitlab" {
     return this.info.kind === "github" ? "github" : "gitlab";
@@ -579,7 +580,7 @@ export class IssueService {
 }
 
 /**
- * 任务终态 → issue 回写(只写一次;失败可重试)。
+ * :任务终态 → issue 回写(只写一次;失败可重试)。
  * 幂等双保险:①journal 里已有同 key 的 custom{type:"issue.task.writeback"} → DUPLICATE;
  * ②plan 判定已经 done / 已有同文评论 → DUPLICATE。
  * 失败(update/comment 抛错或返回空)返回 INVALID/NOT_FOUND 且**不落幂等事件**(下次可重试)。
@@ -587,7 +588,8 @@ export class IssueService {
  */
 export async function writeBackIssueTask(
   channel: IssueChannel,
-  input: IssueWriteBackInput): Promise<IssueWriteBackResult> {
+  input: IssueWriteBackInput,
+): Promise<IssueWriteBackResult> {
   if (channel.writeBack) return channel.writeBack(input);
   const key = writeBackKey(input.taskId, input.number);
   try {

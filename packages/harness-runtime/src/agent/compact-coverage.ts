@@ -199,7 +199,8 @@ export function computeWatermark(
 export function verifyCoverage(
   watermark: CoverageWatermark | null | undefined,
   eventsAfter: readonly CoverageEventLike[] | undefined,
-  sessionId: string): CoverageVerification {
+  sessionId: string,
+): CoverageVerification {
   const invalid: CoverageVerification = { code: "INVALID", appendedIds: [], missingIds: [] };
   if (!watermark || typeof watermark !== "object") return invalid;
   const watermarkSeq = (watermark as { watermarkSeq?: unknown }).watermarkSeq;
@@ -248,7 +249,8 @@ export function commitDecision(input: CommitDecisionInput | null | undefined): C
 /** compact.done 的覆盖证明:字段序固定(写入侧与消费侧都按这个序读),id 集只拷贝不改入参。 */
 export function coverageProof(
   watermark: CoverageWatermark | null | undefined,
-  decision: CommitDecision | null | undefined): CoverageProof {
+  decision: CommitDecision | null | undefined,
+): CoverageProof {
   const ids = Array.isArray(watermark?.coveredIds) ? sortUniqueIds(watermark!.coveredIds) : [];
   const rawSeq = watermark?.watermarkSeq;
   const coveredWatermark = typeof rawSeq === "number" && Number.isFinite(rawSeq) ? rawSeq : 0;
@@ -268,7 +270,8 @@ export function coverageProof(
 export function mergeCoveredProofs(
   previous: readonly CoverageProof[] | undefined,
   next: CoverageProof | null | undefined,
-  maxRounds = 3): CoverageProof[] {
+  maxRounds = 3,
+): CoverageProof[] {
   const cap = typeof maxRounds === "number" && Number.isFinite(maxRounds) && maxRounds > 0 ? Math.trunc(maxRounds) : 3;
   const normalize = (proof: CoverageProof): CoverageProof => {
     const ids = Array.isArray(proof?.coveredIds) ? sortUniqueIds(proof.coveredIds) : [];

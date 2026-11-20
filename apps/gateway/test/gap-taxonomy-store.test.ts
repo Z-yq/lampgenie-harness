@@ -228,7 +228,8 @@ describe("gap-taxonomy-store", () => {
     expect(loadGaps(root).totalLines).toBe(before + 1);
 
     expect(listPreventions(root, { category: "plan-coverage" }).items.some((entry) => entry.id === "custom-overdue")).toBe(
-      false);
+      false,
+    );
     expect(expire(root, 3_000_000).ok).toBe(true);
   });
 

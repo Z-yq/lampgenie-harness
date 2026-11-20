@@ -265,7 +265,8 @@ class EffectQueueImpl implements EffectQueue {
     const at = this.now();
     // 同 kind+key 仍在等待(未 done、未用尽重试)→ 替换 payload、立即到期、保 id/队列位置。
     const waiting = this.rows.find(
-      (r) => r.kind === input.kind && r.key === input.key && r.state === "waiting" && r.attempts < this.maxAttempts);
+      (r) => r.kind === input.kind && r.key === input.key && r.state === "waiting" && r.attempts < this.maxAttempts,
+    );
     if (waiting) {
       waiting.payload = input.payload;
       waiting.nextAt = at;

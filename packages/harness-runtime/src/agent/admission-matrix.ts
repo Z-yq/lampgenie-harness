@@ -190,7 +190,8 @@ function makeDecision(
   strength: AdmissionStrength,
   reason: string,
   ruleId: string,
-  wouldAccept?: boolean): AdmissionDecision {
+  wouldAccept?: boolean,
+): AdmissionDecision {
   const decision: AdmissionDecision = { admit, strength, reason, ruleId };
   if (wouldAccept !== undefined) decision.wouldAccept = wouldAccept;
   return Object.freeze(decision);

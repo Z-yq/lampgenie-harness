@@ -1,6 +1,7 @@
 /**
- * F5 失败轮沉淀:failed 终态→incidents candidate 经验条目(hermes 负面清单纪律:
- * 未验证尝试不进 active,只做 candidate 待确认)。
+ * F5 失败轮沉淀:distillFromTask API 面仍保留(手动 F5/nightly 复用)——failed→incidents
+ * candidate(hermes 负面清单纪律:未验证尝试不进 active,只做 candidate 待确认)。
+ * 接线面:per-session 自动沉淀已移除,failed 终态不再触发提炼,改 nightly 统一蒸馏。
  */
 import { describe, it, expect } from "vitest";
 import { TaskSupervisor } from "../src/task-manager.js";
@@ -49,7 +50,7 @@ describe("F5 失败轮沉淀经验", () => {
     rmSync(dir, { recursive: true, force: true });
   }, 10_000);
 
-  it("接线面:wireExecutor 失败终态触发提炼(真实仓经验库出现锚定条目,验证后清理)", async () => {
+  it("接线面:wireExecutor 失败终态不再触发提炼( per-session 沉淀移除,负向断言)", async () => {
     const marker = "F5wireAnchor" + Date.now();
     const backend = {
       kind: "f5-e2e",
@@ -64,18 +65,12 @@ describe("F5 失败轮沉淀经验", () => {
     const t = tm.submit("user", "f5", marker);
     await new Promise((r) => setTimeout(r, 600));
     expect(tm.get(t.id)?.state).toBe("failed");
-    // 提炼异步:轮询经验库(真实仓 .genie/experiences)
+ // 经验沉淀统一移 nightly dreaming,failed 终态不再 per-session 提炼。
+ // 负向断言:等待覆盖旧异步路径窗口后,真实仓经验库不出现本任务锚定条目。
     const { repoRoot } = await import("../src/repo-root.js");
     const store = new ExperienceStore(join(repoRoot(), ".genie", "experiences"));
     const wantName = "task-" + t.id.slice(0, 8);
-    let fm = null;
-    for (let i = 0; i < 20 && !fm; i++) {
-      await new Promise((r) => setTimeout(r, 200));
-      fm = store.read("incidents", wantName);
-    }
-    expect(fm).toBeTruthy();
-    expect(fm?.description).toContain(marker.slice(0, 20));
-    // 清理:直接删条目目录(SKILL.md 所在),受控不留痕
-    rmSync(store.dirOf("incidents", wantName), { recursive: true, force: true });
+    await new Promise((r) => setTimeout(r, 1000));
+    expect(store.read("incidents", wantName)).toBeNull();
   }, 15_000);
 });

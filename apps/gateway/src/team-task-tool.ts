@@ -48,7 +48,8 @@ function errorJson(err: unknown): string {
     return JSON.stringify(
       { ok: false, code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
       null,
-      2);
+      2,
+    );
   }
   const message = err instanceof Error ? err.message : String(err);
   return JSON.stringify({ ok: false, code: "TEAM_TASK_INVALID", message }, null, 2);
@@ -111,7 +112,8 @@ export function teamTaskTool(journal: Journal, sessionId: string, opts?: { store
                 ...(Array.isArray(a.blockedBy) ? { blockedBy: a.blockedBy as string[] } : {}),
                 ...(Array.isArray(a.writeScopes) ? { writeScopes: a.writeScopes as string[] } : {}),
               },
-              expectedRevision);
+              expectedRevision,
+            );
             return JSON.stringify({ ok: true, task: summarize(task), revision: task.revision }, null, 2);
           }
           case "claim": {
@@ -119,7 +121,8 @@ export function teamTaskTool(journal: Journal, sessionId: string, opts?: { store
             return JSON.stringify(
               { ok: true, task: summarize(r.task), revision: r.task.revision, warnings: r.warnings },
               null,
-              2);
+              2,
+            );
           }
           case "heartbeat": {
             const task = store.heartbeat(id, owner, { ...(expectedRevision !== undefined ? { expectedRevision } : {}), now, ...(typeof a.ttlMs === "number" ? { ttlMs: a.ttlMs } : {}) });

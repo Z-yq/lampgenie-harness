@@ -168,7 +168,8 @@ function emit(args: CliArgs, payload: Record<string, unknown>, human: string): v
 
 function actionCount(args: CliArgs): number {
   return [args.init !== undefined, args.should, args.apply !== undefined, args.reopen, args.replay, args.report].filter(
-    (on) => on).length;
+    (on) => on,
+  ).length;
 }
 
 async function main(argv: string[]): Promise<number> {

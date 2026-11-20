@@ -111,7 +111,8 @@ export function resetSessionToolFloor(sessionId?: string): void {
 export function freezeToolsForSession<T extends { name: string }>(
   tools: T[],
   taskClass: string | undefined,
-  sessionId: string | undefined): T[] {
+  sessionId: string | undefined,
+): T[] {
   const pruned = pruneToolsForTaskClass(tools, taskClass);
   if (!sessionId) return pruned;
   const seen = SESSION_TOOL_FLOOR.get(sessionId);
@@ -171,7 +172,8 @@ export interface ToolCatalog {
 export function buildToolCatalog(
   deferredNames: string[],
   full: Map<string, Tool>,
-  maxChars: number = TOOL_CATALOG_MAX_CHARS): ToolCatalog {
+  maxChars: number = TOOL_CATALOG_MAX_CHARS,
+): ToolCatalog {
   if (deferredNames.length === 0) return { text: "", mode: "none" };
   const limit = Math.max(0, maxChars);
   const fullText = deferredNames
@@ -359,7 +361,8 @@ function toolViewTool(full: Map<string, Tool>, deferredNames: string[], catalogM
  */
 export function attachToolView(
   tools: Tool[],
-  opts?: ToolViewOptions): Tool[] {
+  opts?: ToolViewOptions,
+): Tool[] {
   try {
     return attachToolViewInner(tools, opts);
   } catch (err) {
@@ -379,7 +382,8 @@ export interface ToolViewOptions {
 
 function attachToolViewInner(
   tools: Tool[],
-  opts?: ToolViewOptions): Tool[] {
+  opts?: ToolViewOptions,
+): Tool[] {
   if (tools.length === 0) return tools;
  // 先按上下文投影一份 wire 口径的工具面(纯函数,不改入参);full 仍取**原始** tools——
  // tool_view(name) 的全文说明必须是原始完整用法,不能被投影过的描述污染。
@@ -388,7 +392,8 @@ function attachToolViewInner(
   const deferEnabled = opts?.defer ?? String(process.env.GENIE_TOOL_DEFER ?? "").toLowerCase() !== "off";
   const minChars = opts?.deferMinChars ?? TOOL_DEFER_MIN_CHARS;
   const summarized = wireTools.map((t) =>
-    t.description.length > TOOL_SUMMARY_CHARS ? { ...t, description: summarizeToolDescription(t.name, t.description) } : t);
+    t.description.length > TOOL_SUMMARY_CHARS ? { ...t, description: summarizeToolDescription(t.name, t.description) } : t,
+  );
   if (!deferEnabled) {
     summarized.push(
       toolViewTool(full, [], opts?.catalogMaxChars),

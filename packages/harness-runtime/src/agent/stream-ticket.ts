@@ -143,7 +143,8 @@ function writeTicket(store: TicketStore, ticket: StreamTicket): void {
  */
 export function issueTicket(
   store: TicketStore,
-  options: IssueTicketOptions): IssueTicketResult {
+  options: IssueTicketOptions,
+): IssueTicketResult {
   const { binding, now, ttlMs, idFactory } = options ?? ({} as IssueTicketOptions);
 
   if (!isTicketBinding(binding)) {
@@ -195,7 +196,8 @@ export function issueTicket(
  */
 export function consumeTicket(
   store: TicketStore,
-  options: ConsumeTicketOptions): ConsumeTicketResult {
+  options: ConsumeTicketOptions,
+): ConsumeTicketResult {
   const { ticketId, binding, now } = options ?? ({} as ConsumeTicketOptions);
   const id = typeof ticketId === "string" ? ticketId : "";
 

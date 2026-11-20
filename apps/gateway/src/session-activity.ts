@@ -110,7 +110,8 @@ export class SessionActivityIndex {
  */
 export function sessionSortTime(
   task: { sessionId?: string; updatedAt?: number; createdAt?: number } | undefined | null,
-  activity: Map<string, number> | undefined): number {
+  activity: Map<string, number> | undefined,
+): number {
   if (!task) return 0;
   const act = activity && task.sessionId ? activity.get(task.sessionId) ?? 0 : 0;
   return Math.max(act, task.updatedAt ?? 0, task.createdAt ?? 0);

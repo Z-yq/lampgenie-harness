@@ -12,13 +12,15 @@ import { parseArgs, flagStr, flagBool, expandTilde, type ParsedArgs } from "./ar
 import { makePalette } from "./color.js";
 import { buildIndexWithReuse, IndexBusyError } from "./incremental.js";
 import { estimateIndexMemory } from "./heap-budget.js";
-import { loadRegistry, makeEntry, normalizeRoot, purgeRootData, registryPath, removeRoot, resolveProjectRoot, upsertRoot, type RegistryEntry } from "./registry.js";
-import { ResolveError, queryAlgoCmd, queryApiCmd, queryBridgeCmd, queryCfgCmd, queryEdgeCmd, queryEntrypointsCmd, queryFileCmd, queryFlowCmd, queryGraphCmd, queryImpactCmd, queryModulesCmd, queryProjectCmd, queryRefsCmd, queryStateCmd, querySymbolCmd, queryTokensCmd, queryVarsCmd, queryBranchesCmd, resolveContext, writeCfgOut } from "./query.js";
+import { loadRegistry, makeEntry, normalizeRoot, purgeRootData, readRootStat, registryPath, removeRoot, resolveProjectRoot, upsertRoot, type RegistryEntry } from "./registry.js";
+import { ResolveError, queryAlgoCmd, queryApiCmd, queryBridgeCmd, queryCfgCmd, queryEdgeCmd, queryEntrypointsCmd, queryFileCmd, queryFlowCmd, queryGraphCmd, queryImpactCmd, queryModulesCmd, queryOrphansCmd, queryProjectCmd, queryRefsCmd, queryStateCmd, querySymbolCmd, queryTokensCmd, queryVarsCmd, queryBranchesCmd, resolveContext, writeCfgOut } from "./query.js";
 import { LlmConfigError, maskKey, readConfigFile, resolveLlmConfig, setConfigKey, unsetConfigKey, configPath } from "./llm-config.js";
 import { formatCoverageLine, coverageWarnings } from "@lampgenie/code-sense/callgraph/coverage";
 import { loadIndex } from "@lampgenie/code-sense/callgraph/c2f";
 import { codeFlowJson, renderCodeFlowDot, renderCodeFlowMermaid, type CodeFlow } from "@lampgenie/code-sense/callgraph/flow";
 import { runDoctor } from "./doctor.js";
+import { worldCmd } from "./world-cmd.js";
+import { qualityCmd } from "./quality-cmd.js";
 import { isMainEntry, serveMain } from "./serve.js";
 import { ReviewUsageError, reviewCommand } from "./review.js";
 import { WikiUsageError, wikiCommand } from "./wiki.js";
@@ -66,11 +68,22 @@ export const HELP = `codesense v${VERSION} — 代码静态调用索引 CLI(code
                          --keep-isolated  保留零连接节点;--include-tests/--all 放开测试/非产品路径
                          --dot  追加 graphviz DOT;--out flow.mmd|.dot|.json|.svg|.png  落盘
   file <path>            文件符号表(分类+出入度)——--graph 出 mermaid 文件级关系图
+  world [--rebuild]       世界模型常驻产物(2026-11-16):L0 骨架层(≤2.5KB)+ L1 模块页预渲染到
+                         <root>/.genie/sense-index/<hash>/world/,**默认只读产物、不加载索引**
+                         ——开工第一步。--module <name> 单模块页;--for "<任务文本>" 按任务文本
+                         确定性打分只给 top1-3 相关模块(按需下钻);--files a.ts,b.ts 按改动文件下钻;
+                         --rebuild 重建(需索引);--check 新鲜度+质量门(exit 1=不通过);--json 机器面
+  quality [--gate]        确定性质量门(2026-11-16,零 LLM):入口可达率/未解析边率/孤儿符号/
+                         不可达子图/契约配对/文档 file:line 校验;--gate 未达标 exit 1;
+                         --doc <file> 把该文档的 file:line 引用纳入核验;--surface 开契约配对(慢)
   branches <path>        分支/循环骨架(2026-10-21):if/elif/else 条件+while/do-while/for/
                          for-of/for-in/switch/case+三元,每点带条件文本/行距/嵌套深度/
                          迭代目标(←被迭代对象)/该分支直接调用的函数/所属函数——
                          「这个调用在什么条件下发生」的控制流答案(py/ts/js/c/cpp/java/go;
                          tree-sitter 不可用时行级降级);refs 的代码命中同步带决策点标注
+  orphans [prefix]       孤儿逻辑自查(2026-11-18 ,设计稿 14.2):孤独导出/仅测试
+                         接线/孤儿事件/双胞胎四类全仓确定性扫描;prefix=可选模块/路径前缀,
+                         缺省全仓;零 LLM 不触发索引构建,验收前毫秒级自查
   cfg <函数名>           函数级控制流图(2026-10-27):把函数体画成**语句级**流程——真实语句文本+
                          if/elif/else 菱形条件(是/否边)+ while/for 回边(循环/退出)+
                          switch/case(default 兜底)+ try/catch/finally(异常边)+
@@ -313,16 +326,27 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         }
         io.out(c.dim(`注册表: ${registryPath()}`));
         for (const e of reg.roots) {
+ // 计数与覆盖行改从 meta.json 读(1KB 级小文件),不再为打印覆盖行解析 86MB
+ // index.json(cpu-prof 经验证 loadIndex 自身 1.58s + readFileSync 1.12s)。节点/边数以
+ // meta(索引本体同源计数)为准,消解注册表快照与本体分裂(经验证 16,759 vs 27,623)。
+          const st = readRootStat(e.root);
+          const nodes = st?.nodes ?? e.stats.nodes;
+          const edges = st?.edges ?? e.stats.edges;
+          const files = st?.files ?? e.stats.files;
           io.out(`  ${c.bold(e.name)}  ${e.root}`);
-          io.out(`    ${e.stats.nodes} 节点 / ${e.stats.edges} 边 / ${e.stats.files} 文件 · 上次构建 ${e.lastBuild.mode}(复用 ${e.lastBuild.reused}/新扫 ${e.lastBuild.scanned})· ${new Date(e.lastIndexedAt).toLocaleString()}`);
- // 覆盖行( status 面):manifest 有则显,旧索引显「无覆盖数据(建议重建)」
-          const idx = loadIndex(e.root);
-          const covLine = formatCoverageLine(idx?.coverage);
+          io.out(`    ${nodes} 节点 / ${edges} 边 / ${files} 文件 · 上次构建 ${e.lastBuild.mode}(复用 ${e.lastBuild.reused}/新扫 ${e.lastBuild.scanned})· ${new Date(e.lastIndexedAt).toLocaleString()}`);
+          if (st && (e.stats.nodes !== nodes || e.stats.edges !== edges)) {
+            io.out(c.dim(`    注册表快照 ${e.stats.nodes}/${e.stats.edges} 落后于索引本体,上面按 meta.json 显示`));
+          }
+ // 覆盖行( status 面):meta 有则显,旧索引显「无覆盖数据(建议重建)」
+          const covLine = formatCoverageLine(st?.coverage);
           if (covLine) {
             io.out(`    覆盖: ${covLine}`);
-            for (const w of idx?.coverage ? coverageWarnings(idx.coverage) : []) io.out(`    ${c.yellow("[warn] 覆盖: " + w)}`);
-          } else if (idx) {
+            for (const w of st?.coverage ? coverageWarnings(st.coverage) : []) io.out(`    ${c.yellow("[warn] 覆盖: " + w)}`);
+          } else if (st) {
             io.out(c.dim(`    覆盖: 无数据(旧格式索引——codesense index 重建后提供)`));
+          } else {
+            io.out(c.dim(`    覆盖: 无索引数据(该根未建索引或产物已清)`));
           }
         }
         return 0;
@@ -748,6 +772,15 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
         return emit(io, r, json);
       }
 
+      case "orphans": {
+ // 孤儿逻辑自查(设计稿 14.2):prefix 可选=模块/路径前缀,缺省全仓。
+        const prefixArg = p._[1];
+        const ctx = await resolveContext({ root: rootArg(), noBuild: flagBool(p, "no-build"), quiet });
+        printNotes(io, c, ctx);
+        const r = await queryOrphansCmd(ctx, prefixArg, json);
+        return emit(io, r, json);
+      }
+
       case "cfg": {
         const nameArg = p._[1];
         if (!nameArg) {
@@ -795,6 +828,34 @@ export async function runCli(argv: string[], io: CliIo = defaultIo()): Promise<n
           io.out(d.ok ? c.green("doctor: 通过") : c.red("doctor: 存在 FAIL 项"));
         }
         return d.ok ? 0 : 1;
+      }
+
+      case "world": {
+ // 世界模型常驻产物:L0 骨架 + L1 模块页预渲染落盘;默认读路径不加载索引
+        return worldCmd({
+          ...(rootArg() ? { root: rootArg() } : {}),
+          rebuild: flagBool(p, "rebuild"),
+          ...(flagStr(p, "module") !== undefined ? { module: flagStr(p, "module") } : {}),
+          ...(flagStr(p, "for") !== undefined ? { forText: flagStr(p, "for") } : {}),
+          files: (flagStr(p, "files") ?? "").split(",").map((s) => s.trim()).filter((s) => s.length > 0),
+          check: flagBool(p, "check"),
+          json,
+          quiet,
+          maxModules: Number(flagStr(p, "max-modules") ?? 3) || 3,
+          ...(flagStr(p, "doc") !== undefined ? { doc: flagStr(p, "doc") } : {}),
+        });
+      }
+
+      case "quality": {
+ // 确定性质量门(零 LLM):五项指标 + --gate 硬门
+        return qualityCmd({
+          ...(rootArg() ? { root: rootArg() } : {}),
+          json,
+          gate: flagBool(p, "gate"),
+          surface: flagBool(p, "surface"),
+          quiet,
+          ...(flagStr(p, "doc") !== undefined ? { doc: flagStr(p, "doc") } : {}),
+        });
       }
 
       case "review": {

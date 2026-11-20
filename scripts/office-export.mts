@@ -184,7 +184,8 @@ async function main(): Promise<number> {
           JSON.stringify(
             { mode: "manifest-verify", ...verdict, manifest: parsed.manifestVerify, files: parsed.files },
             null,
-            2),
+            2,
+          ),
         );
       } else {
         console.log(line);
@@ -250,7 +251,8 @@ async function main(): Promise<number> {
               reportPath: out.reportPath,
             },
             null,
-            2),
+            2,
+          ),
         );
       } else {
         console.log(line);
@@ -280,7 +282,8 @@ async function main(): Promise<number> {
               reportPath: out.reportPath,
             },
             null,
-            2),
+            2,
+          ),
         );
       } else {
         console.log(

@@ -56,9 +56,9 @@ function makeRequest(overrides: Record<string, unknown> = {}): ModificationReque
   return { ...base, ...overrides } as unknown as ModificationRequest;
 }
 
-/** rsi 作者(需人类审批)。 */
+/** rsi 作者(不可逆 lane——保住「rsi 不可逆需人批」集成覆盖;可逆 lane 见 2b,§14.2④)。 */
 function makeRsiRequest(overrides: Record<string, unknown> = {}): ModificationRequest {
-  return makeRequest({ id: "mod-rsi", author: { kind: "rsi", id: "rsi-1" }, ...overrides });
+  return makeRequest({ id: "mod-rsi", author: { kind: "rsi", id: "rsi-1" }, irreversible: true, ...overrides });
 }
 
 /** 台账非空行(直接读文件,绕开投影)。 */
@@ -91,7 +91,7 @@ describe("self-modification-store", () => {
     expect(await ledgerLines(root)).toHaveLength(1);
   });
 
-  it("2. rsi 作者无 approver → need-approval 且落盘", async () => {
+  it("2. rsi 作者无 approver(不可逆)→ need-approval 且落盘", async () => {
     const root = await tmpRoot();
     const result = requestModification(root, makeRsiRequest());
     expect(result.ok).toBe(false);
@@ -100,6 +100,15 @@ describe("self-modification-store", () => {
     const record = getModification(root, "mod-rsi");
     expect(record?.decision.kind).toBe("need-approval");
     expect(record?.applied).toBe(false);
+  });
+
+  it("2b. rsi 作者可逆+零风险无 approver → 机器闸 allow(§14.2④)", async () => {
+    const root = await tmpRoot();
+    const result = requestModification(root, makeRsiRequest({ id: "mod-rsi-rev", irreversible: false }));
+    expect(result.ok).toBe(true);
+    expect(result.decision).toBe("allow");
+    expect(result.codes).toEqual([]);
+    expect(getModification(root, "mod-rsi-rev")?.decision.kind).toBe("allow");
   });
 
   it("3. 缺 evidence → deny 且 codes 含 MOD_EVIDENCE_MISSING", async () => {

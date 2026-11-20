@@ -46,25 +46,10 @@ interface StreamTicketRuntime {
   pruneExpired(store: TicketStore, now: number): { code: "TICKET_PRUNED"; pruned: string[] };
 }
 
-let streamTicketRuntime: StreamTicketRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_stream_ticket from "@lampgenie/runtime/agent/stream-ticket";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadStreamTicketRuntime(): Promise<StreamTicketRuntime> {
-  if (streamTicketRuntime) return streamTicketRuntime;
-  const spec = "@lampgenie/runtime/agent/stream-ticket";
-  try {
-    streamTicketRuntime = (await import(spec)) as StreamTicketRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/stream-ticket.ts",
-      import.meta.url).href;
-    streamTicketRuntime = (await import(srcUrl)) as StreamTicketRuntime;
-  }
-  return streamTicketRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadStreamTicketRuntime();
+const rt: StreamTicketRuntime = rt_stream_ticket;
 
 /** 票据缺省有效期(runtime 常量再导出,方便上层不额外 import)。 */
 export const STREAM_TICKET_TTL_MS = rt.STREAM_TICKET_TTL_MS;

@@ -728,7 +728,8 @@ function isDecisionRecord(v: unknown): v is DecisionRecord {
  */
 export function applyAt(
   entries: PreventionEntry[],
-  injectionPoint: InjectionPoint): { contextBlocks: string[]; gates: string[]; toolChecks: string[] } {
+  injectionPoint: InjectionPoint,
+): { contextBlocks: string[]; gates: string[]; toolChecks: string[] } {
   const empty = { contextBlocks: [] as string[], gates: [] as string[], toolChecks: [] as string[] };
   try {
     if (!Array.isArray(entries)) return empty;
@@ -753,7 +754,8 @@ export function applyAt(
 /** 过期切分:expiresAt 有限且 <= now 视为过期;无 expiresAt 的条目恒 active。 */
 export function expireEntries(
   entries: PreventionEntry[],
-  now: number): { active: PreventionEntry[]; expired: PreventionEntry[] } {
+  now: number,
+): { active: PreventionEntry[]; expired: PreventionEntry[] } {
   const active: PreventionEntry[] = [];
   const expired: PreventionEntry[] = [];
   try {

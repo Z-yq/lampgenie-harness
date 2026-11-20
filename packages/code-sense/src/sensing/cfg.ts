@@ -1819,7 +1819,8 @@ export function cfgDescriptionRows(fn: CfgFunction, markdown = true): { label: s
   // Markdown 表格里 `||` 会断列:先换「或」再兜底单竖线;CLI 文本保持原样
   const cell = (s: string, max = 240): string => clip(
     (markdown ? s.replace(/\|\|/g, " 或 ").replace(/\|/g, "/") : s).replace(/\r?\n/g, " "),
-    max);
+    max,
+  );
   const params = d.params.slice(0, 6).map((p) => mdCode(p.raw, markdown));
   const paramText = params.length > 0
     ? params.join(", ") + (d.params.length > 6 ? ` …+${d.params.length - 6}` : "")

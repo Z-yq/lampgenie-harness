@@ -864,6 +864,7 @@ function ideRowMenu(abs, rel, isDir, x, y) {
   } else {
     items.push({ label: "添加到聊天窗", act: () => ideAddToChat(abs, rel, false, "ref") });
     items.push({ label: "作为附件添加", act: () => ideAddToChat(abs, rel, false, "att") });
+    items.push({ label: "添加到指挥台", act: () => { if (typeof supRefAdd === "function") supRefAdd({ kind: "file", label: rel, path: abs }); } });
     items.push({ label: "打开", act: () => ideOpenFile(rel) });
     items.push({ label: "重命名…", act: () => ideRename(rel) });
     items.push({ label: "删除", act: () => ideDelete(rel, false) });
@@ -1260,11 +1261,13 @@ const CV_CARDS = [
  // n3 看板融合:「分身 Agents」卡已删——注册/运行态/终态/失败原因(reap)/模型/会话短码
  // 全部并入「子agent会话流」左栏条目(同一对象 agentId,两块看板数据 100% 重合,用户用户反馈「重复」)。
   { name: "subchat", node: "view-subchat", title: "子代理会话流", tag: "分身注册 · 消息流", x: 4520, y: 0, w: 780, h: 900 },
-  { name: "track", node: "view-track", title: "追踪 Trace", tag: "召回审途 · 五阶段", x: 4520, y: 520, w: 760, h: 900 },
+ // 同列三卡原坐标(y=520/1180)互相压 380px/240px(经验证世界重叠),
+ // 改为等高顺排(subchat 0-900 / track 940-1840 / usage 1880-2340,间距 40)。
+  { name: "track", node: "view-track", title: "追踪 Trace", tag: "召回审途 · 五阶段", x: 4520, y: 940, w: 760, h: 900 },
  // 轨迹拆成独立看板视图(逐次决策 + 事件账本 + 泳道,数据源 = histEvents)。
  // 坐标紧邻 track 卡右移一格(y 同排);世界边界见 canvas-shell.js 缩放下限注释。
   { name: "traj", node: "view-traj", title: "轨迹 Trail", tag: "决策 · 账本 · 泳道", x: 5320, y: 520, w: 900, h: 900 },
-  { name: "usage", node: "view-usage", title: "吞吐 Telemetry", tag: "token · 调用 · 缓存", x: 4520, y: 1180, w: 720, h: 460 },
+  { name: "usage", node: "view-usage", title: "吞吐 Telemetry", tag: "token · 调用 · 缓存", x: 4520, y: 1880, w: 720, h: 460 },
  // Super Agent 指挥台(独立画布卡:持久聊天渲染区+调度看板四区;经典侧栏 act-super 同名同串)。
  // 卡宽 900→1400(三栏 56+280+1fr+聊天360 至少要 ~1200 才能中栏≥500;旧卡右键「恢复到默认位置」即取本表新几何)。
   { name: "super", node: "view-super", title: "指挥台 Super", tag: "调度 · 看板 · 联调", x: 5320, y: 1460, w: 1400, h: 760 },
@@ -1325,6 +1328,11 @@ const CV_BRIDGE = {
  // 画布焦点=当前使用面:Super 卡聚焦时立即拉 rsi.status 并起 15s 轮询(否则画布里健康屏
  // 永远停在「正在加载」;经典布局的 rsiPollSync 只在 switchView 时触发,画布 focus 不走那里)。
     try { rsiPollSync(view === "super" || view === "dream" || view === "rsi" || view === "task" ? "super" : "canvas-other"); } catch (e) { /* 轮询失败不影响焦点 */ }
+ // 轨迹卡聚焦即回溯(画布形态下 loadViewData 可能因本会话已激活过而跳过,
+ // 且隐藏态启动的自动回溯会在第一拍自停;焦点是最可靠的「用户现在真的在看轨迹」信号)。
+    if (view === "traj") { try { trajBoardAutoBackfill(); } catch (e) { /* 回溯失败不影响焦点 */ } }
+ // 子代理流同理:历史子代理常在前 200 条之外,聚焦即回溯到出现子代理事件。
+    if (view === "subchat") { try { trajBoardAutoBackfill("subchat"); } catch (e) { /* 回溯失败不影响焦点 */ } }
     if (!view || view === mainView) return;
  // 子标签身份保护(「看板呢」注意):team 卡承载 team/dash/issues 三子标签,
  // 焦点落在 team 卡≠用户点了「成员」——切子标签后 showCard→focus 回调会把身份洗回 team,
@@ -1352,7 +1360,7 @@ const CV_BRIDGE = {
       try {
         if (!localStorage.getItem("zh:cv-hint")) {
           localStorage.setItem("zh:cv-hint", "1");
-          setTimeout(function () { try { toast("画布模式:双击卡片打开,拖动标题移动,滚轮缩放"); } catch (e) { /* 忽略 */ } }, 900);
+          setTimeout(function () { try { toast("画布模式:双击卡片打开,拖动标题移动,滚轮平移 · Ctrl+滚轮缩放"); } catch (e) { /* 忽略 */ } }, 900);
         }
       } catch (e) { /* 隐私模式:忽略 */ }
       return;

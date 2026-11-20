@@ -93,7 +93,8 @@ class Peer {
   constructor(
     readonly name: string,
     url: string,
-    readonly identityDir: string) {
+    readonly identityDir: string,
+  ) {
     this.client = new TeamRelayClient({
       url,
       identityDir,
@@ -338,7 +339,8 @@ step(
     };
   },
   // setup 例外:live 模式要等 relay 周期拉 roster(≤60s),故放宽。
-  180_000);
+  180_000,
+);
 
 // ---- 2. auth.negative ----
 
@@ -397,7 +399,8 @@ step("dev.submit", async (c) => {
       { type: "relay.teamai.push", kind: p.kind, ns: p.ns, name: p.name, description: `${p.name} —— collab 场景`, body: bodies[p.name]! },
       "relay.teamai.push.result",
       undefined,
-      90_000);
+      90_000,
+    );
     if (res.ok !== true) throw new Error(`${p.user} push ${p.name} 失败:${JSON.stringify(res)}`);
     const branch = String(res.branch ?? "");
     if (!branch.startsWith(`teamai/push/${p.user}/`)) throw new Error(`分支名不符合 teamai/push/<user>/<ts>:${branch}`);
@@ -443,7 +446,8 @@ step("review.merge", async (c, r) => {
   const digests = await waitAllDigests(
     c,
     (d) => (d.skills ?? []).some((s) => s.name === c.names.skill) && (d.rules ?? []).some((x) => x.name === `common/${c.names.rule}`),
-    90_000);
+    90_000,
+  );
   const ref = stripPulledAt(digests["demo-kai"]!);
   const inconsistent = MEMBERS.filter((m) => stripPulledAt(digests[m]!) !== ref);
   r.visibility = {
@@ -530,7 +534,8 @@ step("dev.revise", async (c) => {
     { type: "relay.teamai.push", kind: "skill", ns: "common", name: c.names.skill, description: `${c.names.skill} v2(按评审意见修订)`, body: SKILL_BODY_V2(c.names) },
     "relay.teamai.push.result",
     undefined,
-    60_000);
+    60_000,
+  );
   if (res.ok !== true) throw new Error(`revise push 失败:${JSON.stringify(res)}`);
   const branch = String(res.branch ?? "");
   bump(c, "demo-lin");
@@ -553,7 +558,8 @@ step("contribute", async (c) => {
     { type: "relay.teamai.contribute", title: c.names.learning, body: "greet 实现经验:先用空名字跑通回退,再补类型标注。", tags: ["collab", "greet"], project: c.projectId },
     "relay.teamai.contribute.result",
     undefined,
-    60_000);
+    60_000,
+  );
   if (res.ok !== true) throw new Error(`contribute 失败:${JSON.stringify(res)}`);
   bump(c, "demo-lin");
   const branch = String(res.branch ?? "");
@@ -562,7 +568,8 @@ step("contribute", async (c) => {
   const digest = await c.peers["demo-kai"]!.waitDigest(
     base,
     (d) => (d.learnings ?? []).some((l) => String(l.title ?? "").includes(c.names.learning)),
-    15_000);
+    15_000,
+  );
   const hit = (digest.learnings ?? []).find((l) => String(l.title ?? "").includes(c.names.learning));
   const ok = Boolean(hit) && String(hit!.path ?? "").startsWith("learnings/");
   return {
@@ -581,7 +588,8 @@ step("remove", async (c) => {
     { type: "relay.teamai.remove", kind: "rule", ns: "common", name: c.names.rule },
     "relay.teamai.remove.result",
     undefined,
-    60_000);
+    60_000,
+  );
   if (res.ok !== true) throw new Error(`remove 失败:${JSON.stringify(res)}`);
   bump(c, "demo-rui");
   await syncClone(c.clone);

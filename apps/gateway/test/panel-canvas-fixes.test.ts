@@ -128,7 +128,8 @@ describe("面板渲染缺陷修复批(2026-10-21)", () => {
       // 画布专属:经典布局整卡隐藏 + 托盘按钮隐藏;目录条目画布分流(跨卡定位分组,不开工作区 tab)
       expect(html).toContain("body:not(.cv-shell) #view-subchat{display:none}");
       expect(html).toContain("body:not(.cv-shell) #act-subchat{display:none}");
-      expect(html).toContain('if (name === "subchat") subMsgRender();');
+ // 进入子代理会话流同时触发历史回溯(首屏窗口常不含子代理事件)
+      expect(html).toContain('if (name === "subchat") { subMsgRender(); trajBoardAutoBackfill("subchat"); }');
       expect(html).toContain('CV_TRAY_ACT = { git: "act-git"');
       expect(html).toContain('subchat: "act-subchat"');
       expect(html).toContain("if (canvasActive() && subMsgLocate(aid)) return;");

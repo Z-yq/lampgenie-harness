@@ -1,6 +1,6 @@
 import { AGENT_WIRING_SRC } from "./panel-source.js";
 /**
- * 更正路径的接线验收——两条线:
+ * :更正路径的接线验收——两条线:
  * 1) 纯路径:surfaceGateVerdict 吃 correction(双向覆盖 / 非法回落旧行为);
  * 2) 工具路径:change_surface action=classify 落 journal + 回执带纪律 hint;
  * 3) 源码接线:agent-wiring 在 gate 调用前读更正并按水位缓存(不真起 gateway)。

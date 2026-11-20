@@ -204,6 +204,8 @@ export const SuperTurn = Envelope.extend({
   type: z.literal("super.turn"),
   text: z.string().min(1),
   sessionId: z.string().min(1).max(64).optional(),
+ /** 指挥台上传:附件随轮次透传(与 task.submit 同构字段);旧客户端不传=行为不变。 */
+  attachments: z.array(z.object({ name: z.string(), path: z.string(), mime: z.string().optional(), size: z.number().optional() })).max(12).optional(),
 });
 /** 指挥台历史浮层:sinceSeq 增量拉取。 */
 export const SuperHistory = Envelope.extend({

@@ -319,7 +319,7 @@ describe("探针 A-E(合成事件流,打印 pairs 与 issues)", () => {
     const EMiss = decideNever("subagent", "ls -la", [{ permission: "subagent", pattern: "rm -rf *", action: "never" }]);
 
     const dump = { A, B, C, D, E: { hit: EHit, miss: EMiss } };
-    console.log("[M73 探针]", JSON.stringify(dump, null, 2));
+    console.log("[探针]", JSON.stringify(dump, null, 2));
 
     expect(A).toMatchObject({ ok: true, counts: { pairs: 1, issues: 0 } });
     expect(B.issues.map((i) => i.code)).toEqual([APPROVAL_AUDIT_CODES.DANGLING_ASKED]);

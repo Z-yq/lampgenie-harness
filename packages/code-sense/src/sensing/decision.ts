@@ -56,6 +56,8 @@ export interface DecisionScanResult {
   truncated: boolean;
   totals: { points: number; functions: number };
   points: DecisionPoint[];
+ /** 条件缺陷候选( §14.3 五判据;词法判定,候选非定论)。 */
+  defects?: { kind: string; line: number; text: string }[];
   knownLimits: string[];
 }
 
@@ -608,6 +610,124 @@ function textEnginePoints(source: string): DecisionPoint[] {
   return out;
 }
 
+// ---- 条件缺陷候选( §14.3:五判据,全部确定性词法判定,候选非定论) ----
+
+const DEFECT_LIMITS = [
+  "条件缺陷候选为词法判定(候选非定论):体文本用「同函数内相邻决策点之间行」近似,精确体界不可得。",
+  "死循环风险=循环条件标识符在循环体行零出现的数据流粗判(continue/break 控制循环的形态会误报)。",
+];
+
+/** 标识符集(去关键字/数字/运算符)。 */
+function identsOf(text: string): string[] {
+  return [...text.matchAll(/[A-Za-z_$][\w$]*/g)].map((m) => m[0]!).filter((w) =>
+    !["if", "else", "while", "for", "switch", "case", "default", "return", "true", "false", "null", "undefined", "and", "or", "not", "in", "of", "let", "const", "var"].includes(w),
+  );
+}
+
+/** token 序列(压空白按词切,去运算符/标点)。 */
+function tokensOf(text: string): string[] {
+  return text.split(/[^A-Za-z0-9_$]+/).filter(Boolean);
+}
+
+function jaccard(a: string[], b: string[]): number {
+  if (a.length === 0 && b.length === 0) return 0;
+  const sa = new Set(a), sb = new Set(b);
+  let inter = 0;
+  for (const x of sa) if (sb.has(x)) inter++;
+  const union = sa.size + sb.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+export interface BranchDefect { kind: string; line: number; text: string }
+
+/**
+ * 五判据(基于已提取的 DecisionPoint[] + 源行文本;扫描时顺手判定,不二次读盘):
+ * ①死循环风险 ②同体分支 ③空转分支 ④恒真恒假 ⑤重复条件。
+ */
+export function detectBranchDefects(points: DecisionPoint[], lines: string[]): BranchDefect[] {
+  const out: BranchDefect[] = [];
+  const bodyOf = (start: number, end: number): string[] => lines.slice(start, end);
+ // 同函数分组 + 函数内相邻点序(体文本近似:本点到下一决策点/函数尾)
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
+ // 体近似:本点 lineStart+1 起到同函数内下一决策点 lineStart(或本点 lineEnd)之间
+    const next = points.slice(i + 1).find((q) => (q.fn ?? "") === (p.fn ?? "") && q.lineStart <= p.lineEnd);
+    const bodyEnd = next ? next.lineStart : p.lineEnd;
+    const body = bodyOf(p.lineStart, Math.max(p.lineStart, bodyEnd));
+
+ // ① 死循环风险:while/do-while 条件标识符在体行零出现
+    if ((p.kind === "while" || p.kind === "do-while") && p.condition) {
+      const ids = [...new Set(identsOf(p.condition))];
+      const bodyText = body.join("\n");
+      if (ids.length > 0 && ids.every((id) => !bodyText.includes(id))) {
+        out.push({ kind: "死循环风险", line: p.lineStart, text: `while(${p.condition}):条件变量在循环体零出现(数据流粗判,疑无终止)` });
+      }
+    }
+
+ // ② 同体分支:if 体与 else 体 token Jaccard ≥0.8(if 行到嵌套下一决策点 / else 同理)
+    if (p.kind === "if" && p.condition) {
+      const elsePt = points.slice(i + 1).find((q) => q.kind === "else" && (q.fn ?? "") === (p.fn ?? "") && q.lineStart >= p.lineStart && q.lineStart <= p.lineEnd && q.depth === p.depth);
+      if (elsePt) {
+        const ifEnd = points.slice(i + 1).find((q) => q.kind !== "else" && q.lineStart > p.lineStart && q.lineStart <= elsePt.lineStart);
+        const ifBody = lines.slice(p.lineStart, (ifEnd ? ifEnd.lineStart : elsePt.lineStart) - 1).join(" ");
+        const afterElse = points.slice(points.indexOf(elsePt) + 1).find((q) => (q.fn ?? "") === (p.fn ?? "") && q.lineStart <= elsePt.lineEnd);
+        const elseBody = lines.slice(elsePt.lineStart, (afterElse ? afterElse.lineStart : elsePt.lineEnd + 1) - 1).join(" ");
+        const sim = jaccard(tokensOf(ifBody), tokensOf(elseBody));
+        if (sim >= 0.8 && tokensOf(ifBody).length >= 3) {
+          out.push({ kind: "同体分支", line: p.lineStart, text: `if/else 两分支体 token 相似度 ${sim.toFixed(2)}(≥0.8,复制粘贴嫌疑)` });
+        }
+      }
+    }
+
+ // ③ 空转分支:else 点体(该行到下一决策点/函数尾)仅空白且无注释
+    if (p.kind === "else") {
+      const after = points.slice(i + 1).find((q) => (q.fn ?? "") === (p.fn ?? "") && q.lineStart <= p.lineEnd);
+      const elseBody = lines.slice(p.lineStart, (after ? after.lineStart : p.lineEnd + 1) - 1);
+ // 纯花括号行不算内容(否则空 else 体永远被 "}" 污染成非空)
+      const nonBlank = elseBody.filter((l) => l.trim().length > 0 && !/^[{}]+$/.test(l.trim()));
+      const onlyComments = nonBlank.every((l) => /^\s*(\/\/|\/\*|\*|#)/.test(l));
+      if (nonBlank.length === 0 || (onlyComments && nonBlank.length > 0)) {
+        if (elseBody.length > 0) out.push({ kind: "空转分支", line: p.lineStart, text: `else 体为空(仅空白${onlyComments ? "/注释" : ""})——分支写了没干活` });
+      }
+    }
+
+ // ④ 恒真/恒假:condition 含 true/false 字面量或 x===x 词形
+    if (p.condition) {
+      const c = p.condition;
+      const selfEq = /([\w$]+)\s*===?\s*\1\b/.exec(c);
+      if (/\btrue\b|\bfalse\b/.test(c)) {
+        out.push({ kind: "恒真恒假", line: p.lineStart, text: `条件含布尔字面量: ${c.slice(0, 80)}` });
+      } else if (selfEq) {
+        out.push({ kind: "恒真恒假", line: p.lineStart, text: `条件含自等比较 ${selfEq[1]} === ${selfEq[1]}: ${c.slice(0, 80)}` });
+      }
+    }
+  }
+
+ // ⑤ 重复条件:同函数内两个 if 点 condition token 集重叠 ≥0.8 且文本不同
+  const byFn = new Map<string, DecisionPoint[]>();
+  for (const p of points) {
+    if (p.kind !== "if" || !p.condition) continue;
+    const k = p.fn ?? "";
+    byFn.set(k, [...(byFn.get(k) ?? []), p]);
+  }
+  for (const [fn, ifs] of byFn) {
+    if (ifs.length < 2 || fn === "") continue;
+    for (let a = 0; a < ifs.length; a++) {
+      for (let b = a + 1; b < ifs.length; b++) {
+        const pa = ifs[a]!, pb = ifs[b]!;
+        if (pa.condition === pb.condition) continue;
+        const sim = jaccard(tokensOf(pa.condition!), tokensOf(pb.condition!));
+        if (sim >= 0.8) {
+          out.push({ kind: "重复条件", line: pb.lineStart, text: `与 @${pa.lineStart} 的条件 token 重叠 ${sim.toFixed(2)}(≥0.8)但文本不同: ${pb.condition!.slice(0, 70)}` });
+        }
+      }
+    }
+  }
+ // 排序稳定(line 升序,同 line 按判据名)
+  out.sort((a, b) => a.line - b.line || a.kind.localeCompare(b.kind));
+  return out;
+}
+
 // ---- 文件级入口 ----
 
 const MAX_FILE_BYTES = 1_500_000;
@@ -639,10 +759,13 @@ export async function scanDecisionFile(root: string, relFile: string): Promise<D
     };
   }
   const functions = new Set(tsPoints.map((p) => p.fn).filter(Boolean)).size;
+ // §14.3 条件缺陷候选(词法判定,候选非定论):零缺陷不写字段(负例保持旧形态)。
+  const defects = detectBranchDefects(tsPoints, text.split("\n"));
   return {
     query: "branches", file, root, lang, engine: "tree-sitter", degraded: false,
     truncated: tsPoints.length >= MAX_POINTS,
     totals: { points: tsPoints.length, functions }, points: tsPoints,
+    ...(defects.length ? { defects } : {}),
     knownLimits: TREE_LIMITS,
   };
 }
@@ -689,6 +812,11 @@ export function renderDecisionSkeleton(r: DecisionScanResult): string {
       lines.push(`${indent}         迭代: ${p.loopTarget ?? "?"} ← ${p.loopIterates ?? "?"}`);
     }
     if (p.calls.length > 0) lines.push(`${indent}         调用: ${p.calls.join(", ")}`);
+  }
+  if (r.defects?.length) {
+    lines.push("");
+    lines.push(`⚠ 条件缺陷候选: ${r.defects.length} 条(词法判定,候选非定论)`);
+    for (const d of r.defects) lines.push(`  - [${d.kind}] @${d.line} ${d.text}`);
   }
   lines.push("");
   lines.push("已知边界");

@@ -224,7 +224,8 @@ export function validateAgainstSchema(
 export function submitResult(
   state: TypedAskState,
   payload: unknown,
-  schema: JsonSchema): SubmitOutcome {
+  schema: JsonSchema,
+): SubmitOutcome {
   if (state.status !== "open") {
     return { state: { ...state }, ok: false, codes: [TYPED_ALREADY_SETTLED] };
   }

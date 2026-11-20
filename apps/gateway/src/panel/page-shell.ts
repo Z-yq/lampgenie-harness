@@ -17,7 +17,7 @@ export const PANEL_SHELL = `</style></head><body>
  <!-- nav-to-sidebar(用户):「新建任务/指挥台/RSI 看板」三入口从底部条迁回左侧栏顶部块。
  markup/id 逐字保留原底部条版本(panel-card-naming 守卫:tooltip/显示名同 CV_CARDS),onclick 绑定零改。 -->
   <nav class="sb-nav" id="sbNav" data-nav="sb-nav" aria-label="主导航">
-    <div class="sb-act" id="act-new" title="新建任务 (Ctrl+N)">
+    <div class="sb-act" id="act-new" data-newtask="1" data-kbd="ctrl+n" title="新建任务 (Ctrl+N)">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
       新建任务<span class="sb-kbd">Ctrl N</span>
     </div>
@@ -190,6 +190,14 @@ export const PANEL_SHELL = `</style></head><body>
     <div class="brand"><span class="brand-name">GENIE</span><span class="brand-sub">Harness · Live</span></div>
     <span class="view-name" id="viewName"></span>
     <div class="top-right">
+ <!-- P2-1:顶栏「新建任务」入口(web 面板;图标 + tooltip 标快捷键)。
+ 点击走既有 newDraft 链路(与侧栏 #act-new / 命令中心 newtask / keymap new-task 同一路);
+ desktop 壳已有独立入口(应用菜单 文件→新建任务 → menu-command "new-task"),按任务书不重复添加:
+ 桌面壳内由 script-super-chat.ts newTaskTopbarWire 隐藏本按钮。 -->
+      <button class="pill" id="tbNewTask" type="button" data-newtask="1" data-kbd="ctrl+n" title="新建任务 Ctrl+N" aria-label="新建任务(Ctrl+N)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>新建任务</span><span class="tb-kbd" style="font-family:var(--mono);font-size:9px;color:var(--faint)">Ctrl N</span>
+      </button>
       <div class="pill on" id="pill-conn"><span class="d" id="status"></span><span id="conn">连接中…</span></div>
     </div>
   </header>
@@ -660,16 +668,24 @@ export const PANEL_SHELL = `</style></head><body>
  <div id="superChatBody"></div>
  <!-- 与 coding agent 主聊天同款 composer:textarea + 工具栏 + 圆形发送键 + 快捷指令菜单 -->
  <div id="superComposer">
+ <!-- 2026-11-16 右键「添加到指挥台」落点:引用型上下文芯片(内存态,发送后清空) -->
+ <div id="supRefs" class="sup-refs" style="display:none"></div>
  <div class="composer" id="superComposerBox">
- <textarea id="superInput" rows="1" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调)" autocomplete="off" spellcheck="false"></textarea>
+ <textarea id="superInput" rows="1" placeholder="对 Super Agent 说…(查状态 / 派任务 / 跨项目联调;可拖入或粘贴文件/图片/视频)" autocomplete="off" spellcheck="false"></textarea>
+ <!-- 2026-11-16 待发送附件芯片(名/缩略图/大小/单删) -->
+ <div id="supAtts" class="sup-atts" style="display:none"></div>
  <div class="composer-bar">
  <div class="composer-plus" id="superQuickBtn" title="快捷指令(查活跃任务 / 今日体检 / 派任务)">+</div>
+ <button class="vw-act" id="supAttBtn" title="添加附件(文件/图片/视频;也可拖拽或粘贴)">附<span class="sup-att-n" id="supAttCount" data-count="0" style="display:none">0</span></button>
  <span class="mode-pill" id="superScopePill" title="Super 只做调度:动手任务派给 Coding Agent">指挥 · 调度</span>
  <span class="mode-pill" id="supCtxPill" title="Super 会话上下文用量(实测 inputTokens;点按刷新)">上下文</span>
  <span style="flex:1"></span>
+ <span class="sup-dot" id="supModelDot" data-state="idle" role="img" aria-label="模型可用性"></span>
+ <button class="mode-pill" id="supModelPill" title="指挥台会话模型(仅本会话生效)">模型</button>
  <button class="vw-act" id="supCompactBtn" title="手动压缩 Super 会话历史(与 coding /compact 同源;超阈也会自动压缩)" style="padding:2px 9px;font-size:11px">压缩</button>
  <button class="send-btn" id="superSend" title="发送 (Enter)">发</button>
  </div>
+ <input type="file" id="supAttInput" multiple style="display:none">
  <div id="superQuickMenu" class="sup-quick-menu" style="display:none">
  <button data-supquick="现在系统里有哪些活跃任务?">查活跃任务</button>
  <button data-supquick="简单汇报一下最近 12 小时的机制体检结果">今日体检</button>
@@ -738,7 +754,7 @@ export const PANEL_SHELL = `</style></head><body>
  三 pane 同屏切换:逐次决策(卡片)/ 事件账本(行表)/ 泳道(工具·消息·系统三轨 + turn 分隔线 + 聚合摘要)。
  唯一数据源 = histEvents(前端已在场的会话重放事件,零额外请求),取数只走 PAGE 内函数 trajBoardRefresh。 -->
  <div class="view panel-wrap" id="view-traj">
- <div class="vw-head"><span class="vw-title">轨迹 Trail</span><span class="vw-sub">逐次决策 + 事件账本 + 泳道(同一视图,数据源=本会话事件)</span>
+ <div class="vw-head"><span class="vw-title">轨迹 Trail</span><span class="vw-sub">LLM 决策 · 工具执行 · 子代理 · 事件账本 · 泳道(同一视图,数据源=本会话事件)</span>
  <span class="vw-scope" id="scopeTraj" title="本卡取数作用域:只读当前选中会话的重放事件">作用域:当前会话</span>
  <button class="vw-act" id="trajViewRefresh">刷新</button></div>
  <div id="trajBoard" class="traj-board">
@@ -749,14 +765,16 @@ export const PANEL_SHELL = `</style></head><body>
  </div>
  <div class="tb-sum" id="trajBoardSum"></div>
  <div class="tb-bar">
- <span class="tb-chip on" data-traj-pane="decisions" title="逐次 LLM 决策:一次调用一张卡,可展开看未命中输入与输出全文">逐次决策</span>
- <span class="tb-chip" data-traj-pane="ledger" title="事件账本:本会话全部事件逐行(原行表)">事件账本</span>
- <span class="tb-chip" data-traj-pane="lanes" title="泳道:工具/消息/系统三轨并排,含 turn 分隔线与聚合摘要">泳道</span>
+ <span class="tb-chip on" data-traj-pane="decisions" title="时间线:每次 LLM 决策一张卡(卡下常显本步工具执行),子代理 spawn→result 一张卡,可展开看细节">时间线</span>
+ <span class="tb-chip" data-traj-pane="ledger" title="事件账本:主轨事件逐行(子代理内部事件聚合到子代理卡,避免 200+ 行噪声)">事件账本</span>
+ <span class="tb-chip" data-traj-pane="lanes" title="泳道:工具/消息/子代理/系统四轨并排,含 turn 分隔线与聚合摘要">泳道</span>
  <span class="tb-chip on" data-traj-mode="all">全部</span>
  <span class="tb-chip" data-traj-mode="model">模型</span>
- <span class="tb-chip" data-traj-mode="tool">工具</span>
+ <span class="tb-chip" data-traj-mode="tool" title="工具执行:主轨每个工具一行,展开看参数与结果">工具</span>
+ <span class="tb-chip" data-traj-mode="subagent" title="子代理:spawn→result 聚合,展开看内部模型步/工具调用">子代理</span>
  <span class="tb-chip" data-traj-mode="error">错误</span>
- <input id="trajSearch" class="tb-search" placeholder="搜摘要/标签/工具名…" autocomplete="off" spellcheck="false">
+ <input id="trajSearch" class="tb-search" placeholder="搜摘要/标签/工具名/子代理…" autocomplete="off" spellcheck="false">
+ <span class="tb-chip" id="trajLoadMore" style="display:none" title="从 journal 回溯更早事件(轨迹/账本一起变长)">加载更早</span>
  <span class="tb-chip" id="trajExpandAll" title="展开当前可见范围内的卡片并按其拉取全文(单次上限 30 张,避免一次拉上百个文件)">全部展开</span>
  <span class="tb-chip" id="trajCopyPath" title="复制本会话的轨迹标识(前端无 journal 绝对路径变量,复制当前会话 id)">复制轨迹路径</span>
  </div>
@@ -792,6 +810,7 @@ export const PANEL_SHELL = `</style></head><body>
  <div class="set-nitem" data-sec="context">上下文精简</div>
  <div class="set-nitem" data-sec="audio">语音助手</div>
  <div class="set-ngroup">智能体能力</div>
+ <div class="set-nitem" data-sec="super">Super 指挥台</div>
  <div class="set-nitem" data-sec="agents">子智能体</div>
  <div class="set-nitem" data-sec="skills">技能</div>
  <div class="set-nitem" data-sec="cmds">命令</div>
@@ -908,6 +927,45 @@ export const PANEL_SHELL = `</style></head><body>
  <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
  <button class="vw-act" id="kbdReset">恢复默认</button>
  <span class="sd">点「自定义」后按下新组合(Esc 取消);保存在浏览器本地,冲突组合自动让位</span>
+ </div>
+ </div>
+ <div class="set-sec" id="sec-super">
+ <div class="vw-head"><span class="vw-title">Super 指挥台</span><span class="vw-sub">派发模型路由:打开后 Super 可按任务量级(level1~level3)选模型</span></div>
+ <div class="smr-panel" id="smrForm">
+ <div class="smr-master">
+ <label class="smr-switch">
+ <input type="checkbox" name="smrEnabled">
+ <span class="smr-switch-knob" aria-hidden="true"></span>
+ <span class="smr-master-tx">派发模型路由</span>
+ </label>
+ <div class="smr-master-sub">关闭=零行为变化,全部跟随 Super 模型;打开后 Super 按任务量级(level1~level3)选模型</div>
+ </div>
+ <div class="smr-levels">
+ <div class="smr-head"><span></span><span>服务商</span><span>模型</span><span>说明</span></div>
+ <div class="smr-level">
+ <span class="smr-badge lv1" title="level1 轻"><b>L1</b><i>轻</i></span>
+ <label class="smr-field"><span class="smr-fl">服务商</span><select name="smrP_level1" title="服务商(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field"><span class="smr-fl">模型</span><select name="smrM_level1" title="模型(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field smr-desc"><span class="smr-fl">说明</span><input name="smrD_level1" placeholder="说明(可选)" title="如:文件扫描/清单盘点/格式转换" autocomplete="off"></label>
+ </div>
+ <div class="smr-level">
+ <span class="smr-badge lv2" title="level2 中"><b>L2</b><i>中</i></span>
+ <label class="smr-field"><span class="smr-fl">服务商</span><select name="smrP_level2" title="服务商(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field"><span class="smr-fl">模型</span><select name="smrM_level2" title="模型(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field smr-desc"><span class="smr-fl">说明</span><input name="smrD_level2" placeholder="说明(可选)" title="如:中等规模改造" autocomplete="off"></label>
+ </div>
+ <div class="smr-level">
+ <span class="smr-badge lv3" title="level3 重"><b>L3</b><i>重</i></span>
+ <label class="smr-field"><span class="smr-fl">服务商</span><select name="smrP_level3" title="服务商(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field"><span class="smr-fl">模型</span><select name="smrM_level3" title="模型(留空=跟随 super 模型)"><option value="">跟随 super 模型</option></select></label>
+ <label class="smr-field smr-desc"><span class="smr-fl">说明</span><input name="smrD_level3" placeholder="说明(可选)" title="如:多文件编码/架构改动/测试编写" autocomplete="off"></label>
+ </div>
+ </div>
+ <div class="smr-foot">
+ <span class="smr-help" title="每档留空=跟随 super 模型(派发时刻 Super 会话生效模型);旧别名 fast→level1、heavy→level3 仍可用">留空=跟随 Super 生效模型 · 旧别名 fast→level1 / heavy→level3 仍可用</span>
+ <span id="smrStatus" class="smr-status"></span>
+ <button class="vw-act" id="smrSave">保存</button>
+ </div>
  </div>
  </div>
  <div class="set-sec" id="sec-agents">
@@ -1275,7 +1333,7 @@ export const PANEL_SHELL = `</style></head><body>
  <div class="aff-stats"><span id="c-running">0</span> 运行 · <span id="c-queued">0</span> 排队 · <span id="c-done">0</span> 完成 · <span id="c-failed">0</span> 失败</div>
  <!-- 状态 chips(清单/子代理/压缩/wf/失败/重试): 自会话流顶部迁来,单行不折,不推消息 -->
  <div id="chatStatusbar"></div>
- <!-- 轮次时间轴:#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
+ <!-- 轮次时间轴(2026-10-14):#turnNav 自聊天列右缘浮层迁入 footer,与管线状态同条——刻度=轮次,点击跳转,红=含失败 -->
  <div id="turnNav" title=""></div>
  </div>
  <!-- quick-row 快捷卡已按移除(2026-10-13 视频:「没有必要」;与侧栏 经验库/自动化 入口重复) -->

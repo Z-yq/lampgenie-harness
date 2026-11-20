@@ -107,6 +107,19 @@ export interface TraceStats {
     agents: TraceSubagentTokens[];
     totals: { calls: number; input: number; output: number; total: number; cached: number; llmMs: number };
   };
+ /** 前缀健康信号(设计稿 §4.6.2 缺口3 闭环):来自 `context.prune` 事件。
+ * `frozenCount` / `prefixBreak` / `budgetExceeded` 三个字段此前只有产出(`loop.ts` 落账)没有消费方,
+ * 这里首次把它们交给统计面。仅当至少一条 `context.prune` 事件时出现(旧 journal 不出现该键——不造数)。 */
+  prefixSignals?: {
+ /** context.prune 事件数(折叠决策留痕条数,不是被裁条目数)。 */
+    prunes: number;
+ /** 其中 `prefixBreak === true` 的条数(设计内的一次性边界重置)。 */
+    prefixBreaks: number;
+ /** 其中 `budgetExceeded === true` 的条数(单步新增超增长预算)。 */
+    budgetExceeded: number;
+ /** 最近一条带 `frozenCount` 的 context.prune 的冻结条数(缺省不出现该键)。 */
+    frozenCountLast?: number;
+  };
 }
 
 /** 单次调用的稳定键:`turn:step`。缺任一维(旧 journal / 外部后端不写)时返回 undefined,
@@ -225,6 +238,16 @@ export function deriveTraceStats(events: { kind: string; payload: unknown; time?
         out.toolCalls += 1;
         out.toolMs += typeof p.durationMs === "number" ? p.durationMs : 0;
         break;
+ // 前缀健康信号(设计稿 §4.6.2 缺口3):context.prune 的 prefixBreak /
+ // budgetExceeded / frozenCount 此前只写不读,这里给出第一个消费方(只读聚合,不改事件)。
+      case "context.prune": {
+        const sig = (out.prefixSignals ??= { prunes: 0, prefixBreaks: 0, budgetExceeded: 0 });
+        sig.prunes += 1;
+        if (p.prefixBreak === true) sig.prefixBreaks += 1;
+        if (p.budgetExceeded === true) sig.budgetExceeded += 1;
+        if (typeof p.frozenCount === "number") sig.frozenCountLast = p.frozenCount;
+        break;
+      }
       // LLM 失败(txa5):loop 在 chat 抛错时落一条带 error 的 llm.trace(成功路径不带 error)。
       // 只认非空 error——否则成功轨迹也会被算成失败;耗时取 payload.ms(缺省 0,不推断)。
       // 不动 llmCalls/llmMs 口径(那两个仍只由 message.agent 计入)。

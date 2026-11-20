@@ -126,7 +126,8 @@ export class ToolIdentityRegistry {
     // 必须暴露并剔除,不能被幂等悄悄吞掉)。
     if (reg.ownerId !== undefined) {
       const same = this.all.find(
-        (r) => r.name === name && r.source === reg.source && r.canonical === reg.canonical && r.ownerId === reg.ownerId);
+        (r) => r.name === name && r.source === reg.source && r.canonical === reg.canonical && r.ownerId === reg.ownerId,
+      );
       if (same) return { ok: true, registration: same, idempotent: true };
     }
 

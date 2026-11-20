@@ -214,6 +214,9 @@ function normalizeKey(x: { method: string; path: string }): string {
 // ============================== 状态机(P2) ==============================
 
 import { extractStateMachineSurface, STATE_FINGERPRINT_LITERALS, type StateMachineSurface } from "./statemachines";
+export { auditStateMachines } from "./statemachine-audit";
+export type { StateMachineDefect } from "./statemachine-audit";
+import { auditStateMachines, type StateMachineDefect } from "./statemachine-audit";
 
 const stateCache = new Map<string, { at: number; result: StateMachineSurfaceResult }>();
 
@@ -222,6 +225,8 @@ const stateCache = new Map<string, { at: number; result: StateMachineSurfaceResu
 export interface StateMachineSurfaceResult extends StateMachineSurface {
   /** 非产品路径过滤呈报(缺席=零过滤;filtered>0 时 note 必非空)。 */
   pathFilter?: { filtered: number; note: string };
+ /** 状态机缺陷候选( §14.4 六签名投影层;零缺陷不写字段)。 */
+  defects?: StateMachineDefect[];
 }
 
 /** 状态机表面查询(确定性;指纹预筛→行扫描;docs/examples/.md 等非产品路径先剔除)。 */
@@ -240,8 +245,11 @@ export async function queryStateMachines(root: string, opts?: { refresh?: boolea
       ? { pathFilter: { filtered: fileFilter.filtered, note: nonProductFilterNote(fileFilter.filtered, fileFilter.samples, { all: opts?.all }) } }
       : {}),
   };
-  stateCache.set(key, { at: Date.now(), result });
-  return result;
+ // §14.4 缺陷审计(纯投影层,不改提取器);零缺陷不写字段。
+  const defects = auditStateMachines(surface.machines);
+  const final: StateMachineSurfaceResult = defects.length ? { ...result, defects } : result;
+  stateCache.set(key, { at: Date.now(), result: final });
+  return final;
 }
 
 /** 文本渲染(CLI/工具面同源)。 */
@@ -265,6 +273,11 @@ export function renderStateMachines(r: StateMachineSurfaceResult): string {
   if (r.statusHints.length > 0) {
     lines.push(`  DB status 词法提示(${r.statusHints.length},词法级可能含误判,仅供人工排查入口):`);
     for (const h of r.statusHints.slice(0, 10)) lines.push(`    ${h.file}:${h.line} ${h.text}`);
+  }
+ // §14.4 缺陷附注(仅当非空;投影层候选,非定论)
+  if (r.defects?.length) {
+    lines.push(`  ⚠ 状态机缺陷: ${r.defects.length} 条(投影层判定,候选非定论)`);
+    for (const d of r.defects) lines.push(`    [${d.kind}] ${d.machine} @${d.file}:${d.line} ${d.detail}`);
   }
   return lines.join("\n");
 }

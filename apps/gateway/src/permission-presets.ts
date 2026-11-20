@@ -196,7 +196,8 @@ export function pinSession(journal: Journal, sessionId: string, presetName: stri
 export function resolveSessionPermission(
   journal: Journal,
   sessionId: string,
-  fallbackPreset: string = DEFAULT_STARTUP_PRESET): SessionPermissionPin & { pinned: boolean; source: "pin" | "default" } {
+  fallbackPreset: string = DEFAULT_STARTUP_PRESET,
+): SessionPermissionPin & { pinned: boolean; source: "pin" | "default" } {
   const pinned = findPin(journal, sessionId);
   if (pinned) return { ...pinned, pinned: true, source: "pin" };
   const n = normalizeName(fallbackPreset) || DEFAULT_STARTUP_PRESET;

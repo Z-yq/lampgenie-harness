@@ -136,7 +136,7 @@ export interface Journal {
   readSession(sessionId: string, sinceSeq?: number): JournalEvent[];
   /** 订阅新事件(只在同一进程内有效)。 */
   subscribe(listener: EventListener): () => void;
- /** 写前持久化屏障(fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
+ /** 写前持久化屏障(,fail-closed):把已记录但未落盘的事件同步落盘;失败**抛错**且不清队。
    *  可选——旧实现/测试假 journal 没有它,调用方按 no-op 处理(零回归);flush() 仍是 best-effort。 */
   flushStrict?(): void | Promise<void>;
   /** 当前水位(= 下一个 seq)。消费面把 length 当水位用(server.ts seqBefore、search.ts 增量判定),
@@ -622,6 +622,10 @@ export class FileJournal extends BaseJournal {
  * 宿主装配完成后显式开启,只有用户读会话这类显式路径才回读归档副本(经验证归档 422MB 后
    *  boot 期内部 readSession 把 29 个归档文件全 parse,6 分钟仍在装配)。 */
   private archiveReadsEnabled = false;
+ /** 归档解析缓存(LRU=1)。归档文件不可变,重复 parse 同一 39MB 文件经验证 0.6-8.4s/次
+ * 同步阻塞事件循环(session.status 全量/增量/wfAsks 回读三路都打这里)。只缓存最近 1 个文件
+ * (内存代价 ~200MB/次,6GB 帽下可控;典型生产形态=一个被盯着的归档会话)。 */
+  private archiveParseCache: { path: string; events: JournalEvent[] } | null = null;
 
   /** 开启归档冷读(boot 装配完成后由宿主显式调用;未调用前 readSession/冷读兜底都不碰 archiveDir)。 */
   enableArchiveReads(): void {
@@ -726,6 +730,16 @@ export class FileJournal extends BaseJournal {
     return out;
   }
 
+ /** 会话是否已归档(sessions 无同名文件 + archive 有 + 归档读开启)。
+ * 语义:归档文件**不可变**——调用方(如 session.status 增量轮询)可据此在「水位匹配」时
+ * 免去做冷读(readSession 的 parseFile 无缓存,39MB 归档经验证同步解析 0.7-8.4s/次,
+ * 3s 轮询×多连接曾把事件循环饿死:HTTP 6-19s、board.list 回包排不上队)。 */
+  isArchivedSession(sessionId: string): boolean {
+    if (!this.sharded || !this.archiveDir || !this.archiveReadsEnabled) return false;
+    const sid = String(sessionId);
+    return !existsSync(join(this.sessionDir, sessionFileName(sid))) && existsSync(join(this.archiveDir, sessionFileName(sid)));
+  }
+
   /**
  * 归档冷读:会话文件已移入 archiveDir 时,boot 不再入账其会话域事件,
    * 读取路径按需从归档补一份(仅当 archiveDir 配置且归档副本存在;不配置 = 逐字旧行为)。
@@ -737,7 +751,14 @@ export class FileJournal extends BaseJournal {
     if (!this.archiveDir || !this.archiveReadsEnabled) return out;
     const archivedPath = join(this.archiveDir, sessionFileName(String(sessionId)));
     if (!existsSync(archivedPath)) return out;
-    const parsed = this.parseFile(archivedPath);
+ // 归档不可变 → 解析结果按路径缓存(LRU=1),三路冷读(全量 scoped/增量 delta/wfAsks)全部吃缓存
+    let parsed: JournalEvent[] | null;
+    if (this.archiveParseCache && this.archiveParseCache.path === archivedPath) {
+      parsed = this.archiveParseCache.events;
+    } else {
+      parsed = this.parseFile(archivedPath);
+      if (parsed && parsed.length) this.archiveParseCache = { path: archivedPath, events: parsed };
+    }
     if (!parsed || parsed.length === 0) return out;
     const sid = String(sessionId);
     const have = new Set(out.map((e) => e.seq));
@@ -792,7 +813,7 @@ export class FileJournal extends BaseJournal {
     this.wbFlushAllSync();
   }
 
- /** 写前持久化屏障(fail-closed):逐 target 同步落盘。
+ /** 写前持久化屏障(,fail-closed):逐 target 同步落盘。
    *  与 flush() 的差别只有两点:①失败**抛 JournalFlushError**(不吞、不 console.error);
    *  ②**成功才清队**——失败批原样留在队列里,下次 flushStrict/flush 还能把它写出去(不丢事件)。
    *  已落盘或非 write-behind(每 append 已同步写)时无队列,等价 no-op。 */
@@ -840,7 +861,7 @@ export class FileJournal extends BaseJournal {
       const fsp = await import("node:fs/promises");
       for (const [target, queue] of this.wbQueues) {
         if (queue.length === 0) continue;
- // 先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
+ // :先取本批快照,**写成功后才出队**——失败批留在队列里,退出钩子/flushStrict 还能再写一次
         // (旧实现先清队再写:失败即永久丢这一批,屏障的「队列保留」语义会被这里的抢占抹掉)。
         const n = queue.length;
         const batch = queue.join("");
@@ -1217,7 +1238,8 @@ export class FileJournal extends BaseJournal {
   /** 流式加载收尾打点(与 afterLoad 同口径的规模/告警,但断档统计对冷会话不再逐 seq 可见)。 */
   private reportStreamLoad(
     label: string, started: number, tally: ScanTally, total: number,
-    residentCount: number, minSeq: number, maxSeq: number, dupSeqs: number, nonMonotonic: number): void {
+    residentCount: number, minSeq: number, maxSeq: number, dupSeqs: number, nonMonotonic: number,
+  ): void {
     if (dupSeqs > 0) {
       console.warn(`[journal] seq 重复 ${dupSeqs} 条已按「保留较新事件」去重(双写历史残留;新事件 seq 从 ${this.seqHigh + 1} 续)`);
     }
@@ -1327,7 +1349,8 @@ export class FileJournal extends BaseJournal {
   /** 加载收尾:告警(重复 seq/稀疏/非单调)+ 规模打点(含热窗驻留画像)。 */
   private afterLoad(
     started: number, total: number, bytes: number, dupSeqs: number,
-    gapCount: number, gapMissing: number, nonMonotonic: number, cap: number, label: string): void {
+    gapCount: number, gapMissing: number, nonMonotonic: number, cap: number, label: string,
+  ): void {
     if (dupSeqs > 0) {
       console.warn(`[journal] seq 重复 ${dupSeqs} 条已按「保留较新事件」去重(双写历史残留;新事件 seq 从 ${this.seqHigh + 1} 续)`);
     }

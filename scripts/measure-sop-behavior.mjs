@@ -121,9 +121,9 @@ const pct = (arr, q) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(q 
 const m3 = sessions.filter((s) => s.stopViolations > 0).length;
 
 console.log(`SOP 行为度量(窗口 --since ${args[sinceIdx + 1] ?? "7d"},会话文件 ${files.length} 个,其中含工具事件 ${sessions.length} 个)`);
-console.log(`M1 影响面先行率(首个写前有 code_sense): ${m1 === null ? "n/a(无写会话)" : (m1 * 100).toFixed(1) + "%(" + writeSessions.filter((s) => s.impactFirst).length + "/" + writeSessions.length + ")"}`);
-console.log(`M2 排障盲试度(error 后无探测直接连续改文件的步数): 样本 ${allBlind.length} 段, p50=${pct(allBlind, 0.5)} p90=${pct(allBlind, 0.9)} max=${allBlind.length ? allBlind[allBlind.length - 1] : 0}`);
-console.log(`M3 失败即停违规(同文件 edit 循环 >2 轮): ${m3} 个会话`);
+console.log(`影响面先行率(首个写前有 code_sense): ${m1 === null ? "n/a(无写会话)" : (m1 * 100).toFixed(1) + "%(" + writeSessions.filter((s) => s.impactFirst).length + "/" + writeSessions.length + ")"}`);
+console.log(`排障盲试度(error 后无探测直接连续改文件的步数): 样本 ${allBlind.length} 段, p50=${pct(allBlind, 0.5)} p90=${pct(allBlind, 0.9)} max=${allBlind.length ? allBlind[allBlind.length - 1] : 0}`);
+console.log(`失败即停违规(同文件 edit 循环 >2 轮): ${m3} 个会话`);
 console.log(`tip.injected keys 计数(J1): dyn:\*=${tipCount.dyn} task:trajectory=${tipCount.trajectoryBackfill} | 旧: dispatch=${tipCount.dispatch} parallel=${tipCount.parallel} board-comments=${tipCount.boardComments} sop:*=${tipCount.sop}`);
 console.log(`J1 注入间隔审计(同 key ≥10k token): 有水位样本 ${gateSamples} 对, 违规 ${gateViolations} 对`);
 console.log(`复算: node scripts/measure-sop-behavior.mjs --since 7d`);

@@ -66,7 +66,6 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "run_code",
   "board_upsert",
   "board_export_pptx",
-  "experience_fold",
   "import_meeting",
   "steer_task",
   "answer_subagent",

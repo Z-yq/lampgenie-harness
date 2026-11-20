@@ -62,7 +62,8 @@ function compareSubscriptions(a: ThreadSubscription, b: ThreadSubscription): num
 export function subscriptionsFromTickets(
   tickets: Iterable<Ticket> | ReadonlyMap<string, Ticket | undefined> | null | undefined,
   liveSubscriptions?: ReadonlyMap<string, boolean> | Record<string, boolean> | null,
-  opts?: TicketSubscriptionOptions): ThreadSubscription[] {
+  opts?: TicketSubscriptionOptions,
+): ThreadSubscription[] {
   const at = isFiniteNumber(opts?.now) ? opts!.now! : 0;
 
  // threadKey → 选中的 Ticket(同键多 Ticket 取 ticketId 字典序最小)

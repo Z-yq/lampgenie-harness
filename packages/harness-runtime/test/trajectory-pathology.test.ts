@@ -352,7 +352,8 @@ describe("overlap", () => {
   it("会话不足 2 个不命中", () => {
     expect(
       detectPrimitives({ sessions: [{ id: "s1", files: ["a.ts"] }] }).overlap
-        .hit).toBe(false);
+        .hit,
+    ).toBe(false);
   });
 });
 
@@ -366,7 +367,8 @@ describe("dangling", () => {
   it("已回答的提问不命中", () => {
     expect(
       detectPrimitives({ asks: [{ at: T0, id: "q1", resolvedAt: T0 + 5 }] })
-        .dangling.hit).toBe(false);
+        .dangling.hit,
+    ).toBe(false);
   });
 
   it("失败后同文件无成功步骤命中", () => {
@@ -457,7 +459,8 @@ describe("空轨迹与非法输入", () => {
     for (const trace of [undefined, null]) {
       const result = detectPrimitives(trace as PathologyTrace | undefined);
       expect(PATHOLOGY_PRIMITIVES.every((p) => result[p].hit === false)).toBe(
-        true);
+        true,
+      );
     }
   });
 
@@ -473,7 +476,8 @@ describe("空轨迹与非法输入", () => {
     const result = detectPrimitives(broken);
     expect(
       PATHOLOGY_PRIMITIVES.every(
-        (p) => result[p].hit === false && result[p].count === 0),
+        (p) => result[p].hit === false && result[p].count === 0,
+      ),
     ).toBe(true);
   });
 });
@@ -548,16 +552,20 @@ describe("matchForms", () => {
 
   it("族建议按 reversal→decay→fanout→overlap 顺序判定", () => {
     expect(
-      matchForms(["reversal", "decay"]).candidates[0].familySuggestion).toBe("evolution-chain");
+      matchForms(["reversal", "decay"]).candidates[0].familySuggestion,
+    ).toBe("evolution-chain");
     expect(
-      matchForms(["reversal", "dangling"]).candidates[0].familySuggestion).toBe("rework-chain");
+      matchForms(["reversal", "dangling"]).candidates[0].familySuggestion,
+    ).toBe("rework-chain");
     expect(matchForms(["fanout", "decay"]).candidates[0].familySuggestion).toBe(
       "coordination",
     );
     expect(
-      matchForms(["dangling", "overlap"]).candidates[0].familySuggestion).toBe("waste");
+      matchForms(["dangling", "overlap"]).candidates[0].familySuggestion,
+    ).toBe("waste");
     expect(
-      matchForms(["decay", "re-entry"]).candidates[0].familySuggestion).toBe("statistics");
+      matchForms(["decay", "re-entry"]).candidates[0].familySuggestion,
+    ).toBe("statistics");
   });
 });
 

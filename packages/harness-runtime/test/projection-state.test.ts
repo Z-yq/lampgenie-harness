@@ -1,5 +1,5 @@
 /**
- * 投影缓存版本键与恢复 floor(纯函数层)。
+ * :投影缓存版本键与恢复 floor(纯函数层)。
  * 锁五条:
  * ① PROJECTION_STATE_VERSION 是整数版本键,判定缺省值就是它;
  * ② projectionFloorOf 取**最后一条** restoreFloor 事件的 floorSeq,非法/负数/缺省=0,越界 clamp 到本批 maxSeq;

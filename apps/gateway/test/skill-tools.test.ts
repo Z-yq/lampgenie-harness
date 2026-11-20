@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { skillViewTool, experienceFoldTool, FOLD_CATEGORY_WHITELIST } from "../src/agent-wiring.js";
+import { skillViewTool, FOLD_CATEGORY_WHITELIST } from "../src/agent-wiring.js";
 import { ExperienceStore } from "@lampgenie/experience";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,26 +58,20 @@ describe("skill_view 工具( D4)", () => {
   });
 });
 
-describe("experience_fold 工具( D4)", () => {
-  it("白名单外拒绝;合法写入 fold-in 同名 version+1;超 60 字 description 报错不落库", async () => {
+describe("经验写库(store.write;沉淀已移 nightly dreaming)", () => {
+  it("白名单含 incidents;合法写入 fold-in 同名 version+1;超 60 字 description 报错不落库", async () => {
     const store = freshStore();
-    const tool = experienceFoldTool(store);
+    expect(FOLD_CATEGORY_WHITELIST).toContain("incidents"); // distill 兜底类目可在白名单内合并
 
-    const denied = await tool.execute({ category: "secret", name: "x", description: "d", body: "b" });
-    expect(denied).toContain("不在白名单");
-
-    const ok = await tool.execute({ category: "coding", name: "build-lock", description: "并发写经验库要过文件锁", created_by: "agent", body: "写路径整体挂锁,自旋等待。" } as never);
-    expect(ok).toContain("v1");
+    const fm = await store.write({ category: "coding", name: "build-lock", description: "并发写经验库要过文件锁", created_by: "agent" }, "写路径整体挂锁,自旋等待。");
+    expect(fm.version).toBe(1);
     expect(store.read("coding", "build-lock")?.version).toBe(1);
 
-    const ok2 = await tool.execute({ category: "coding", name: "build-lock", description: "并发写经验库要过文件锁(fold-in)", body: "写路径整体挂锁,自旋等待;超时 5s。" });
-    expect(ok2).toContain("v2");
+    const fm2 = await store.write({ category: "coding", name: "build-lock", description: "并发写经验库要过文件锁(fold-in)", created_by: "agent" }, "写路径整体挂锁,自旋等待;超时 5s。");
+    expect(fm2.version).toBe(2);
     expect(store.read("coding", "build-lock")?.version).toBe(2);
 
-    const tooLong = await tool.execute({ category: "coding", name: "long", description: "字".repeat(61), body: "b" });
-    expect(tooLong).toContain("experience_fold 错误");
+    await expect(store.write({ category: "coding", name: "long", description: "字".repeat(61), created_by: "agent" }, "b")).rejects.toThrow();
     expect(store.read("coding", "long")).toBeNull();
-
-    expect(FOLD_CATEGORY_WHITELIST).toContain("incidents"); // distill 兜底类目可在白名单内合并
   });
 });

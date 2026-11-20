@@ -126,7 +126,8 @@ export function depthOf(registry: ControlRegistry | undefined, agentId: string):
  */
 export function steerVerdict(
   record: ControlRecord | undefined,
-  opts: { byAgentId?: unknown; registry?: ControlRegistry; mode?: unknown } | undefined): SteerVerdict {
+  opts: { byAgentId?: unknown; registry?: ControlRegistry; mode?: unknown } | undefined,
+): SteerVerdict {
   const mode: "hint" | "directive" = text(opts?.mode) === "directive" ? "directive" : "hint";
   if (!record) return freeze({ ok: false, code: "NOT_FOUND" as ControlCode, mode });
   if (record.state !== "running") return freeze({ ok: false, code: "NOT_RUNNING" as ControlCode, mode });
@@ -153,7 +154,8 @@ export function steerVerdict(
  */
 export function resumePlan(
   record: ControlRecord | undefined,
-  opts: { instruction?: unknown; context?: unknown } | undefined): ResumePlan {
+  opts: { instruction?: unknown; context?: unknown } | undefined,
+): ResumePlan {
   if (!record) return freeze({ ok: false, code: "NOT_FOUND" as ControlCode, instructions: "", needsParentContext: false });
   if (!TERMINAL_STATES.has(record.state)) {
     return freeze({ ok: false, code: "NOT_RUNNING" as ControlCode, instructions: "", needsParentContext: false });
@@ -178,7 +180,8 @@ export function resumePlan(
  */
 export function forkContextBlock(
   messages: readonly { role?: string; content?: unknown }[] | undefined | null,
-  opts?: { maxChars?: number } | undefined): string {
+  opts?: { maxChars?: number } | undefined,
+): string {
   const rawMax = opts?.maxChars;
   const maxChars = typeof rawMax === "number" && Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : DEFAULT_FORK_BUDGET;
   if (!Array.isArray(messages) || messages.length === 0) return "";
@@ -224,7 +227,8 @@ export function isolationVerdict(input: { requested?: unknown; worktreeAvailable
  * worktree 模式缺 workdir → ok=false(调用方应如实说明回收失败)。
  */
 export function scratchContract(
-  input: { mode?: unknown; workdir?: unknown; changedFiles?: unknown } | undefined): ScratchContract {
+  input: { mode?: unknown; workdir?: unknown; changedFiles?: unknown } | undefined,
+): ScratchContract {
   const mode = text(input?.mode) === "worktree" ? "worktree" : "none";
   if (mode !== "worktree") return freeze({ ok: true, paths: NO_PATHS, diffHint: "" });
   const workdir = text(input?.workdir).trim();

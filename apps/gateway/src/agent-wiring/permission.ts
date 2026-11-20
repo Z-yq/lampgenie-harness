@@ -3,6 +3,7 @@
  * 原路径 agent-wiring.ts 保留具名转发 barrel;消费方零改动。
  */
 import { ownTerminalUnits, getTerminalService } from "./wiring-core.js";
+import { outcomeByLabel } from "../permission-broker.js";
 import { skillViewTool, boardReadTool, boardUpsertTool } from "./tools.js";
 import { getJobRegistry } from "./wiring-core.js";
 import { rootScanVerdict } from "../sense-root-gate.js"; // 本文件 warmIndex 闸消费(2997)
@@ -73,7 +74,7 @@ import { takePendingComments, renderPendingCommentsBlock } from "../board-commen
 import { planTaskSurface, degradeFinalFor, GUI_ONLY_TOOLS } from "../surface-capabilities.js"; // 表面/通道能力包
 import { SOP_TIPS, sopTipText, renderStartProfileTip } from "../agent-wiring-sop-tips.js";
 import { probeWorkStart, renderWorkStartBrief, verifyCommandsFor } from "../work-start-profile.js";
-// 开工前置门(基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
+// 开工前置门(:基线新鲜度 + 规则旧措辞,纯函数在 startup-freshness.ts。
 import { readBaselineStatus, planFreshnessSkip, planFreshnessAction, renderFreshnessLine, loadWordingTable, scanRuleWording, renderWordingLines } from "../startup-freshness.js";
 import type { FreshnessConfig } from "../startup-freshness.js";
 import { buildDefaultMicrocompactThreshold, DEFAULT_GROWTH_SPURT_TOKENS } from "@lampgenie/runtime/agent/microcompact";
@@ -144,9 +145,9 @@ import {
   surfaceGateVerdict,
   type ChangeSurfaceJournal,
 } from "../change-surface-tool.js";
-// 分类可更正——gate 判据前读本会话最近一条更正(按水位缓存,不每步全扫)。
+// :分类可更正——gate 判据前读本会话最近一条更正(按水位缓存,不每步全扫)。
 import { readChangeScopeCorrection, type ChangeScopeCorrection } from "../change-scope-correction.js";
-// 收尾残留重扫——surface 任务在收尾前重扫概念词,残留事实进 changeFacts.residual。
+// :收尾残留重扫——surface 任务在收尾前重扫概念词,残留事实进 changeFacts.residual。
 import { scanSurface } from "@lampgenie/code-sense/surface";
 import type { ResidualFact } from "../closeout-residual.js";
 // 任务级验证账本 / 交付物声明账本:纯函数与工具各一模块,收尾钩子在本文件。
@@ -207,7 +208,11 @@ export function loadPermissionRules(repoRootDir: string): PermissionRule[] | und
 
 /** 面板/broker 审批出口的最小面(测试可注入替身)。 */
 export interface PermissionAskPort {
-  ask(input: { requestId: string; sessionId: string; tool: string; summary: string; risk?: string }): Promise<{ decision: "allow-once" | "reject"; by: string }>;
+  ask(input: {
+    requestId: string; sessionId: string; tool: string; summary: string; risk?: string;
+ /** :任务归属(super 派发的任务其审批转 super 自决)。 */
+    taskId?: string; submittedBy?: string; brief?: string; noSuper?: boolean;
+  }): Promise<{ decision: "allow-once" | "reject"; by: string }>;
 }
 
 /** 决策落 journal(effect=allowed/denied,by=来源明细;与外部后端 ask 链同形)。 */
@@ -329,6 +334,8 @@ export function makeSubagentPermissionAsker(deps: {
   broker?: PermissionAskPort;
  /** 规则文件根(缺省 repoRoot;测试注入临时根隔离生产环境规则)。 */
   rulesRoot?: string;
+ /** :任务归属(透传 broker,submittedBy=super 的审批转 super 自决)。 */
+  taskOwner?: { taskId?: string; submittedBy?: string; brief?: string };
 }): (tool: string, summary: string) => Promise<boolean> {
   return async (tool: string, summary: string) => {
  // 单调收窄:后台子代理 ask 与前台同一判定(空链 = 行为不变);deny 不放行、
@@ -379,11 +386,14 @@ export function makeSubagentPermissionAsker(deps: {
         tool: "subagent",
         summary: display.slice(0, 160),
         risk: riskOfTool(tool),
+        ...(deps.taskOwner?.submittedBy ? { submittedBy: deps.taskOwner.submittedBy } : {}),
+        ...(deps.taskOwner?.taskId ? { taskId: deps.taskOwner.taskId } : {}),
+        ...(deps.taskOwner?.brief ? { brief: deps.taskOwner.brief } : {}),
       };
  // 审批对象=执行对象:ask 前冻结请求对象,面板放行后按同一对象复核(fail-closed)。
       const snap = snapshotApprovalObject(request);
       const o = await deps.broker.ask(request);
-      const by = o.by === "panel" ? (o.decision === "allow-once" ? "panel-approved" : "panel-denied") : "panel-" + o.by;
+      const by = outcomeByLabel(o);
       const objectHash = snap.ok ? snap.hash : undefined;
       if (o.decision === "allow-once") {
         const verdict = snap.ok
@@ -420,7 +430,8 @@ export interface SubagentCapabilityPlan {
 
 export function resolveSubagentCapability(
   profiles: import("@lampgenie/runtime/agent/agent-profiles").AgentProfile[],
-  agentType: string | undefined): SubagentCapabilityPlan {
+  agentType: string | undefined,
+): SubagentCapabilityPlan {
   const profile = profiles.find((p) => p.name === (agentType ?? "worker"));
   if (!profile) return { source: "fallback", denyOnly: false }; // 未知类型:role 原样下传走兜底
   const resolved = resolveProfileTools(profile.tools, []);
@@ -534,7 +545,7 @@ export function buildSubagentExtraTools(
         return permissionMode() === "workspace" ? fenceCommand(c, taskRoot) : null;
       },
     }), { journal: execCtx.journal, owner: execCtx.owner, sessionId: execCtx.sessionId, service: getTerminalService(execCtx.journal) }),
- // 后台命令 job(与 terminal 同 owner;通知路由回父会话)。
+ // :后台命令 job(与 terminal 同 owner;通知路由回父会话)。
     createJobTool({
       registry: getJobRegistry(execCtx.journal),
       owner: execCtx.owner,

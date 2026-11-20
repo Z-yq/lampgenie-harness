@@ -728,7 +728,8 @@ export function scanPolicy(input: ScanInput): ScanResult {
             RULE_CROSS_LAYER,
             file,
             `layer ${from.module.layer} may not import ${to.module.layer}: ${from.module.id} -> ${to.module.id}`,
-            ref.line),
+            ref.line,
+          ),
         );
       }
 
@@ -738,7 +739,8 @@ export function scanPolicy(input: ScanInput): ScanResult {
             RULE_DEEP_IMPORT,
             file,
             `deep import into ${to.module.id} bypasses entry ${to.module.entry}`,
-            ref.line),
+            ref.line,
+          ),
         );
       }
     }
@@ -807,7 +809,8 @@ export function baselineFrom(violations: Violation[], generatedAt: string): Base
 
 export function ratchet(
   violations: Violation[],
-  baseline: Baseline | undefined): { fresh: Violation[]; baselined: Violation[] } {
+  baseline: Baseline | undefined,
+): { fresh: Violation[]; baselined: Violation[] } {
   const known = new Set(
     (baseline?.entries ?? []).map((e) => `${e.rule}\u0000${e.file}\u0000${e.detailHash}`),
   );

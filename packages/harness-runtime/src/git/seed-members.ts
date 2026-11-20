@@ -50,7 +50,8 @@ export function defaultRoleMap(m: PlatformMemberInfo): "owner" | "reviewer" | "m
 export async function importMembersFromProvider(
   provider: MemberListingProvider,
   rosterPath: string,
-  opts?: SeedImportOptions): Promise<SeedImportResult> {
+  opts?: SeedImportOptions,
+): Promise<SeedImportResult> {
   const members = await provider.listMembers();
   const placeholder = opts?.fingerprintPlaceholder ?? "pending";
   const roleOf = opts?.roleMap ?? defaultRoleMap;

@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { renderWeeklyReportText } from "@lampgenie/runtime/agent/rsi-weekly-report";
 import {
@@ -88,10 +88,23 @@ function rsiRequest(id: string): Record<string, unknown> {
   };
 }
 
-/** 造一份「有待批」的周报(供提醒/渲染用例复用)。 */
+/** 造一份「有待批」的周报(供提醒/渲染用例复用)。
+ * 起(§14.2④)requestModification 对 rsi 可逆请求走机器闸 allow,且 vitest 合跑
+ * 与单跑对闸的解析存在轨道差(单跑绿/合跑败,复现于 self-modification-store+rsi-weekly 二文件
+ * 组合)——周报投影本只消费台账形状,这里直接写 need-approval 台账行,与闸语义解耦恒定。 */
 async function rootWithPendingApproval(): Promise<string> {
   const root = await tmpRoot();
-  requestModification(root, rsiRequest("mod-rsi") as unknown as Parameters<typeof requestModification>[1]);
+  const now = Date.now();
+  const req = rsiRequest("mod-rsi");
+  const line = JSON.stringify({
+    v: 1,
+    type: "request",
+    at: now,
+    request: { ...req, decision: { kind: "need-approval", at: now, codes: ["MOD_IRREVERSIBLE_NEEDS_HUMAN"] } },
+  });
+  const path = join(root, ".genie", "self-mod", "requests.jsonl");
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, line + "\n", "utf8");
   return root;
 }
 

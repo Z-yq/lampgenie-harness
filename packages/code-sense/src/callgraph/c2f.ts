@@ -13,6 +13,7 @@ import { buildCallGraph, listSourceFiles, isNonCallableSymbolKind, GRAPH_SKIP_DI
 import { indexDir, readFingerprintRecord, writeFingerprintRecord, writeIndexMeta } from "./index-meta";
 import { computeLanguageCoverage } from "./coverage";
 import { computeIndexBridge } from "./index-bridge";
+import { refreshWorldAfterSave } from "../world/refresh.js";
 import type { BridgeEdge, BridgeStats } from "../sensing/crosslang-bridge";
 
 export type NodeKind = "trunk" | "leaf" | "regular";
@@ -635,11 +636,16 @@ export function saveIndex(root: string, index: C2fIndex): string {
         error: statuses.filter((s) => s.status === "error").length,
       },
     } : {}),
+ // 覆盖报告随 meta 落盘(小文件),消费面打印覆盖行不再加载整个 index.json。
+    ...(index.coverage ? { coverage: index.coverage } : {}),
   });
   // 构建即一次「完整源文件调查」:顺手把指纹记录刷新到构建时点,后续冷进程无需重扫。
   if (index.srcMtime !== undefined && index.srcCount !== undefined) {
     writeFingerprintRecord(root, { at: index.builtAt, count: index.srcCount, maxMtime: index.srcMtime });
   }
+ // world 产物随索引落盘同代刷新(同步 fail-open;GENIE_WORLD_AUTOREFRESH=0 可关)。
+ // 刷新失败不影响索引落盘:产物留 stale,消费侧 worldFreshness 既有 banner 感知。
+  try { refreshWorldAfterSave(root, index); } catch { /* 双保险 */ }
   return p;
 }
 

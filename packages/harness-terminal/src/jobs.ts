@@ -96,7 +96,8 @@ export type JobErrorCode =
 export class JobError extends Error {
   constructor(
     message: string,
-    readonly code: JobErrorCode) {
+    readonly code: JobErrorCode,
+  ) {
     super(message);
     this.name = "JobError";
   }
@@ -137,7 +138,8 @@ class BoundedOutput {
 
   constructor(
     private readonly maxBytes: number,
-    private readonly spillPathFor: () => string) {}
+    private readonly spillPathFor: () => string,
+  ) {}
 
   get startOffset(): number {
     return this.head;
@@ -256,7 +258,8 @@ class Job {
     readonly title: string | undefined,
     now: () => number,
     bufferBytes: number,
-    spillPath: string) {
+    spillPath: string,
+  ) {
     this.startedAt = now();
     this.out = new BoundedOutput(bufferBytes, () => spillPath);
   }

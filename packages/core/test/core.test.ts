@@ -153,14 +153,16 @@ describe("permission 求值", () => {
     const r = evaluatePermission(
       "fs.read", "/tmp/a.txt",
       [[{ permission: "fs.read", pattern: "/tmp/*", action: "allow" }]],
-      wildcardMatch);
+      wildcardMatch,
+    );
     expect(r.action).toBe("allow");
   });
   it("deny 优先于不命中", () => {
     const r = evaluatePermission(
       "shell.exec", "rm -rf /",
       [[{ permission: "shell.exec", pattern: "*", action: "deny" }]],
-      wildcardMatch);
+      wildcardMatch,
+    );
     expect(r.action).toBe("deny");
   });
 });

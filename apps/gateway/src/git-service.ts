@@ -108,7 +108,8 @@ async function runGitOnce(
   args: string[],
   cwd: string,
   timeoutMs: number,
-  maxBuffer: number): Promise<string> {
+  maxBuffer: number,
+): Promise<string> {
   const inv = gitInvocationFor(cwd, args);
   if (inv.mode === "wsl") {
     const wsl = parseWslPath(cwd)!;
@@ -368,7 +369,8 @@ export async function checkpointRewind(cwd: string, sha: string): Promise<number
 /** 变更统计(内联变更条「N 个文件已更改 +A -D」):git diff --numstat 快照→当前。 */
 export async function diffstat(
   cwd: string,
-  sha: string): Promise<{ files: { path: string; add: number; del: number }[]; total: { files: number; add: number; del: number } }> {
+  sha: string,
+): Promise<{ files: { path: string; add: number; del: number }[]; total: { files: number; add: number; del: number } }> {
   const out = await git(["diff", "--numstat", sha], cwd).catch(() => "");
   const files: { path: string; add: number; del: number }[] = [];
   for (const line of out.split("\n")) {

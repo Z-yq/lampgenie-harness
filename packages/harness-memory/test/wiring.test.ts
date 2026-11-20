@@ -374,7 +374,8 @@ describe('onSessionClose', () => {
     expect(promoted[0]?.label).toBe('职业：高中语文老师')
     expect(wiring.candidatePool.list('u_manual')[0]?.state).toBe('active')
     expect(
-      wiring.provider.list('u_manual').find(document => document.scope === 'user')?.content).toContain('- 职业：高中语文老师')
+      wiring.provider.list('u_manual').find(document => document.scope === 'user')?.content,
+    ).toContain('- 职业：高中语文老师')
   })
 
   it('学习链路抛错不冒泡:audit 记 error,onSessionClose 照常 resolve', async () => {

@@ -26,7 +26,8 @@ export type { BoardContractIssue, BoardNodeT } from "./board-contract/shared.js"
 export function validateCallEdges(
   nodes: BoardNodeT[],
   edges: EdgeLike[] | undefined,
-  calleesOf?: (symbol: string) => string[] | null): BoardContractIssue[] {
+  calleesOf?: (symbol: string) => string[] | null,
+): BoardContractIssue[] {
   if (!edges || !calleesOf) return [];
   const byId = new Map(nodes.map((n) => [String(n.id), n]));
   const issues: BoardContractIssue[] = [];

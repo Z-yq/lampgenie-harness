@@ -87,7 +87,8 @@ export async function distillFromTask(
         if (op.op === "write" && op.category && op.name && op.description && op.body) {
           await store.write(
             { category: op.category, name: op.name, description: op.description, created_by: "agent", status: "active", ...(opts?.project ? { project: opts.project } : {}) },
-            op.body);
+            op.body,
+          );
           distilled++;
         } else if (op.reason) {
           skipped.push(op.reason);
@@ -106,7 +107,8 @@ async function deterministicDistill(
   store: ExperienceStore,
   task: { id: string; instruction: string; state: string },
   trace: string,
-  project?: string): Promise<{ distilled: number; skipped: string[] }> {
+  project?: string,
+): Promise<{ distilled: number; skipped: string[] }> {
   if (task.state !== "failed") {
     return { distilled: 0, skipped: ["非失败任务且无 LLM——不沉淀(避免把普通完成误当经验)"] };
   }

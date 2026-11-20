@@ -91,7 +91,8 @@ const STATUS_RANK: Record<OccurrenceStatus, number> = {
 // 稳定身份:job + 计划瞬间。非法输入返回空串(fail-closed:宁可跳过也不重复执行)。
 export function occurrenceKey(
   jobId: string | number | null | undefined,
-  scheduledInstant: number | string | null | undefined): string {
+  scheduledInstant: number | string | null | undefined,
+): string {
   const job = String(jobId ?? '').trim()
   const instant = Number(scheduledInstant)
   if (!job || !Number.isFinite(instant)) return ''
@@ -188,7 +189,8 @@ export class OccurrenceLedger {
   complete(
     jobId: string | number | null | undefined,
     instant: number | string | null | undefined,
-    { status, at = 0, manual = false }: CompleteOptions): CompleteResult {
+    { status, at = 0, manual = false }: CompleteOptions,
+  ): CompleteResult {
     const key = occurrenceKey(jobId, instant)
     if (!key) {
       return { ok: false, code: 'INVALID', key, recorded: false, stamped: false }
@@ -229,7 +231,8 @@ export class OccurrenceLedger {
  // 认领回收(claim 之后启动失败/被取消):退回未认领状态,下次可重试。
   release(
     jobId: string | number | null | undefined,
-    instant: number | string | null | undefined): boolean {
+    instant: number | string | null | undefined,
+  ): boolean {
     const key = occurrenceKey(jobId, instant)
     if (!key) return false
     const existing = this.#entries.get(key)
@@ -254,7 +257,8 @@ export class OccurrenceLedger {
 
   isCompleted(
     jobId: string | number | null | undefined,
-    instant: number | string | null | undefined): boolean {
+    instant: number | string | null | undefined,
+  ): boolean {
     const key = occurrenceKey(jobId, instant)
     if (!key) return false
     return this.#entries.get(key)?.status === 'completed'
@@ -262,7 +266,8 @@ export class OccurrenceLedger {
 
   statusOf(
     jobId: string | number | null | undefined,
-    instant: number | string | null | undefined): OccurrenceStatus | null {
+    instant: number | string | null | undefined,
+  ): OccurrenceStatus | null {
     const key = occurrenceKey(jobId, instant)
     if (!key) return null
     return this.#entries.get(key)?.status ?? null
@@ -406,7 +411,8 @@ export const OCCURRENCE_RECORD_LIMIT = 50
 /** 容量裁剪(纯函数,不改入参):按 at 升序淘汰最旧,同时刻按键名序;返回保留后的新对象。 */
 export function pruneOccurrenceRecords<T extends { at: number }>(
   records: Record<string, T> | null | undefined,
-  limit: number = OCCURRENCE_RECORD_LIMIT): Record<string, T> {
+  limit: number = OCCURRENCE_RECORD_LIMIT,
+): Record<string, T> {
   const src = records && typeof records === 'object' ? records : {}
   const keys = Object.keys(src)
   const max = Math.floor(Number(limit))
@@ -433,7 +439,8 @@ export function pruneOccurrenceRecords<T extends { at: number }>(
  * claim 可重试;completed 永不动,其它状态原样保留。返回新对象与恢复条数。
  */
 export function recoverClaimedOccurrences<T extends { status: string; at: number }>(
-  records: Record<string, T> | null | undefined): { records: Record<string, T>; recovered: number } {
+  records: Record<string, T> | null | undefined,
+): { records: Record<string, T>; recovered: number } {
   const src = records && typeof records === 'object' ? records : {}
   const out: Record<string, T> = {}
   let recovered = 0

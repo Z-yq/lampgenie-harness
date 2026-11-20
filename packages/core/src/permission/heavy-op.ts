@@ -102,7 +102,8 @@ export const DEFAULT_HEAVY_OP_EXEMPTS: string[] = [
 export function classifyHeavyOp(
   command: string,
   rules: HeavyOpRule[] = DEFAULT_HEAVY_OP_RULES,
-  exemptPatterns: string[] = DEFAULT_HEAVY_OP_EXEMPTS): HeavyOpMatch | null {
+  exemptPatterns: string[] = DEFAULT_HEAVY_OP_EXEMPTS,
+): HeavyOpMatch | null {
   const cmd = String(command ?? "").trim();
   if (!cmd) return null;
   for (const src of exemptPatterns) {

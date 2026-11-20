@@ -51,47 +51,14 @@ interface ToolUpRuntime {
   buildExperimentRecord(opts: { name: string; from: string; to: string }): unknown;
 }
 
-let runtime: ToolUpRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_tool_upgrade_protocol from "@lampgenie/runtime/agent/tool-upgrade-protocol";
 
-/** 两跳解析 runtime 模块:`node --experimental-strip-types` 直接跑 CLI 时 spec 解析不到 dist。 */
-async function loadRuntime(): Promise<ToolUpRuntime> {
-  if (runtime) return runtime;
-  const spec = "@lampgenie/runtime/agent/tool-upgrade-protocol";
-  try {
-    runtime = (await import(spec)) as unknown as ToolUpRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/tool-upgrade-protocol.ts", import.meta.url)
-      .href;
-    runtime = (await import(srcUrl)) as unknown as ToolUpRuntime;
-  }
-  return runtime;
-}
-
-/**
- * 同目录下游台账:`.ts` 显式后缀的惰性 import(静态无后缀 import 在 strip-types 下会
- * ERR_MODULE_NOT_FOUND,而 tsc 的 Bundler 解析允许动态 URL 面)。
- */
-type ExperimentStoreModule = { recordExperiment: typeof import("./experiment-store").recordExperiment };
-type BreakerStoreModule = { pause: typeof import("./rsi-breaker-store").pause };
-
-let experimentStoreModule: ExperimentStoreModule | undefined;
-let breakerStoreModule: BreakerStoreModule | undefined;
-
-async function loadExperimentStore(): Promise<ExperimentStoreModule> {
-  if (experimentStoreModule) return experimentStoreModule;
-  experimentStoreModule = (await import(new URL("./experiment-store.ts", import.meta.url).href)) as ExperimentStoreModule;
-  return experimentStoreModule;
-}
-
-async function loadBreakerStore(): Promise<BreakerStoreModule> {
-  if (breakerStoreModule) return breakerStoreModule;
-  breakerStoreModule = (await import(new URL("./rsi-breaker-store.ts", import.meta.url).href)) as BreakerStoreModule;
-  return breakerStoreModule;
-}
-
-/** 顶层 await:所有导出函数保持同步签名(switch 要同步写实验台账)。 */
-const rt = await loadRuntime();
-const expStore = await loadExperimentStore();
+const rt: ToolUpRuntime = rt_tool_upgrade_protocol;
+// 下游台账静态导入:experiment-store/rsi-breaker-store 均已 boot-safe。
+import { recordExperiment } from "./experiment-store.js";
+import { pause as breakerPause } from "./rsi-breaker-store.js";
+const expStore = { recordExperiment };
 
 /** 台账 schema 版本(与 runtime 同源)。 */
 const SCHEMA_VERSION = rt.TOOL_UPGRADE_VERSION;
@@ -444,7 +411,7 @@ export async function rollbackVersion(
     const reason =
       nonEmpty(opts.reason) ?? `rollback ${previous.name} ${previous.current}→${opts.toVersion}`;
     try {
-      const breaker = await loadBreakerStore();
+      const breaker = { pause: breakerPause };
       const paused = await breaker.pause(breakerRoot, {
         by: "tool-upgrade",
         reason,
@@ -501,7 +468,8 @@ export function resolveCall(
 /** 台账列表(name 可选过滤)。 */
 export function listUpgrades(
   root: string,
-  name?: string): {
+  name?: string,
+): {
   ok: boolean;
   upgrades: { name: string; current: string; stage: UpgradeStage | ""; aliasMap: Record<string, string>; versions: ToolVersion[] }[];
   badLines: number;

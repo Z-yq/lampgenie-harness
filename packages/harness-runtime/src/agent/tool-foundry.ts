@@ -378,7 +378,8 @@ export interface ShadowEvaluation {
 /** 影子评估:样本不足 → LOW_REUSE(仍 shadow);成功率不足 → rejected;达标 → SHADOW_PASS。 */
 export function evaluateShadow(
   candidate: ToolCandidate,
-  input: ShadowEvaluation): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  input: ShadowEvaluation,
+): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw) || raw.status !== "shadow") {
     return { candidate, codes: ["FOUNDRY_INVALID"] };
@@ -420,7 +421,8 @@ export interface RegisterDecision {
 /** 注册:必须 shadow 且 approved===true;已 registered → DUPLICATE;其余 → NEEDS_APPROVAL。 */
 export function registerCandidate(
   candidate: ToolCandidate,
-  decision: RegisterDecision): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  decision: RegisterDecision,
+): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw)) return { candidate, codes: ["FOUNDRY_INVALID"] };
   if (raw.status === "registered") return { candidate, codes: ["FOUNDRY_DUPLICATE"] };
@@ -443,7 +445,8 @@ export interface RetireDecision {
 /** 下线:reason 必填;已 retired → DUPLICATE;其余 → retired(签名留作历史,不删)。 */
 export function retireCandidate(
   candidate: ToolCandidate,
-  decision: RetireDecision): { candidate: ToolCandidate; codes: FoundryCode[] } {
+  decision: RetireDecision,
+): { candidate: ToolCandidate; codes: FoundryCode[] } {
   const raw = candidate as unknown;
   if (!isPlainObject(raw)) return { candidate, codes: ["FOUNDRY_INVALID"] };
   if (raw.status === "retired") return { candidate, codes: ["FOUNDRY_DUPLICATE"] };

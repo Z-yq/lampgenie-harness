@@ -241,30 +241,16 @@ interface SignatureRuntime {
   }): VersionChangeResult;
   markStale(
     experiments: readonly SignatureExperiment[],
-    target: VersionPair): MarkStaleResult;
+    target: VersionPair,
+  ): MarkStaleResult;
   confounders(samples: readonly SignatureSample[]): ConfounderResult;
   survivorBias(samples: readonly SignatureSample[]): SurvivorBiasResult;
 }
 
-let signatureRuntime: SignatureRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_cohort_signature from "@lampgenie/runtime/agent/cohort-signature";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadSignatureRuntime(): Promise<SignatureRuntime> {
-  if (signatureRuntime) return signatureRuntime;
-  const spec = "@lampgenie/runtime/agent/cohort-signature";
-  try {
-    signatureRuntime = (await import(spec)) as SignatureRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/cohort-signature.ts",
-      import.meta.url).href;
-    signatureRuntime = (await import(srcUrl)) as SignatureRuntime;
-  }
-  return signatureRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadSignatureRuntime();
+const rt: SignatureRuntime = rt_cohort_signature;
 
 const LINE_TYPES: ReadonlySet<string> = new Set<string>(SIGNATURE_LINE_TYPES);
 
@@ -615,7 +601,8 @@ function prevVersionOf(projection: SignatureProjection): VersionPair | undefined
  */
 export function versionChange(
   root: string,
-  opts: SignatureVersionChangeOptions): SignatureVersionChangeStoreResult {
+  opts: SignatureVersionChangeOptions,
+): SignatureVersionChangeStoreResult {
   const base = assertRoot(root);
   const modelVersion = textOf(opts?.modelVersion);
   const providerVersion = textOf(opts?.providerVersion);

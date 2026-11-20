@@ -81,7 +81,8 @@ export async function citeAt(
   cache: SourceCache,
   file: string,
   line: number,
-  endLine = line): Promise<WikiCitation | null> {
+  endLine = line,
+): Promise<WikiCitation | null> {
   const lines = await cache.load(file);
   if (!lines || lines.length === 0) return null;
   const start = Math.max(1, Math.min(line, lines.length));
@@ -203,7 +204,8 @@ export async function buildOverview(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
- narrative?: WikiNarrative): Promise<PageDraft> {
+ narrative?: WikiNarrative,
+): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const sections: string[] = [];
   sections.push(`# ${input.displayName} 仓库概览`, "", metaLine(input, narrative ? "LLM+引用回查" : "确定性骨架"), "");
@@ -260,7 +262,8 @@ function readmeParaFallback(input: WikiInput): string {
 export async function buildFileTree(
   input: WikiInput,
   cache: SourceCache,
- config: WikiConfig): Promise<PageDraft> {
+ config: WikiConfig,
+): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 文件树`, "", metaLine(input, "确定性骨架"), "", `深度上限 ${config.treeDepth};目录后括号为文件数。`, "", "```text"];
   lines.push(...renderTree(input.allFiles, config.treeDepth));
@@ -323,7 +326,8 @@ export async function buildModulePage(
   cache: SourceCache,
   config: WikiConfig,
   moduleName: string,
- narrative?: WikiNarrative): Promise<PageDraft> {
+ narrative?: WikiNarrative,
+): Promise<PageDraft> {
   const slug = slugify(moduleName);
   const files = (input.moduleFiles.get(moduleName) ?? []).slice().sort();
   const cites: WikiCitation[] = [];

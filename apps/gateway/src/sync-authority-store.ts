@@ -41,23 +41,10 @@ type SyncRuntime = {
   watermarkFor: (state: SyncState, aggregateId: string) => number;
 };
 
-let syncRuntime: SyncRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_sync_authority from "@lampgenie/runtime/agent/sync-authority";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadSyncRuntime(): Promise<SyncRuntime> {
-  if (syncRuntime) return syncRuntime;
-  const spec = "@lampgenie/runtime/agent/sync-authority";
-  try {
-    syncRuntime = (await import(spec)) as SyncRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/sync-authority.ts", import.meta.url).href;
-    syncRuntime = (await import(srcUrl)) as SyncRuntime;
-  }
-  return syncRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadSyncRuntime();
+const rt: SyncRuntime = rt_sync_authority;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -183,7 +170,8 @@ function runExclusive<T>(key: string, task: () => T): Promise<T> {
     key,
     next.then(
       () => undefined,
-      () => undefined),
+      () => undefined,
+    ),
   );
   return next;
 }

@@ -498,7 +498,8 @@ export async function parsePythonFile(root: string, relFile: string): Promise<Py
       for (const m of line.matchAll(new RegExp(SELF_CALL_RE.source, "g"))) {
         const target = m[1]!;
         const sibling = symbols.find(
-          (s) => s.name === target && s.container === range.symbol.container);
+          (s) => s.name === target && s.container === range.symbol.container,
+        );
         edges.push({
           from: range.symbol.id,
           to: sibling?.id ?? "",

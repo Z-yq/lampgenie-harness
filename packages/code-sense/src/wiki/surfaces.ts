@@ -145,7 +145,8 @@ const LAYER_ROLE = (d: number): string => (d === 0 ? "接入层(数据/触发进
 export function clusterPipelines(
   fileFlow: CodeFlow | null,
   inSurfaces: RepoSurface[],
-  maxPipelines = 8): RepoPipeline[] {
+  maxPipelines = 8,
+): RepoPipeline[] {
   if (!fileFlow || inSurfaces.length === 0) return [];
   const nodeById = new Map(fileFlow.nodes.map((n) => [n.id, n]));
   // 触发文件=入界面文件中在 file 图里有节点的(图外触发文件无下游可画,不建簇)

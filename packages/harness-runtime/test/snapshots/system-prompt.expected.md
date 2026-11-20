@@ -7,7 +7,7 @@
 - 纪律B:不引入新依赖
 
 
-# 经验索引(需要全文用 skill_view(category,name) 查看;发现经验有误用 experience_fold 修正)
+# 经验索引(需要全文用 skill_view(category,name) 查看)
 - coding/echo-executor-quirk: echo 执行器任务书要写清楚动词
 - ops/long-desc: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…
 

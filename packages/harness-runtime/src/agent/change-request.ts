@@ -359,7 +359,8 @@ export function createProposal(input: unknown, opts: { at?: number } = {}): { re
  */
 export function findDuplicate(
   existing: unknown,
-  candidate: unknown): { match?: ChangeRequest; reason?: "dedupeKey" | "similarity"; codes: string[] } {
+  candidate: unknown,
+): { match?: ChangeRequest; reason?: "dedupeKey" | "similarity"; codes: string[] } {
   if (!Array.isArray(existing) || !isChangeRequest(candidate)) return { codes: [CHANGE_REQ_INVALID] };
   const pool = existing.filter((item): item is ChangeRequest => isChangeRequest(item) && item.id !== candidate.id);
   for (const item of pool) {

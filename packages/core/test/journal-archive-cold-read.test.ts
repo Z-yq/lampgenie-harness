@@ -133,3 +133,26 @@ describe("FileJournal 归档冷读开关", () => {
     }
   });
 });
+
+// isArchivedSession 三态(归档不可变判定的依据;session.status 增量免读的守卫)
+describe("isArchivedSession()", () => {
+  it("归档在(sessions 无+archive 有+读开)=true;活跃/未开归档读/未知会话=false", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jr-arch-flag-"));
+    const sessionsDir = join(dir, "sessions");
+    const archiveDir = join(dir, "sessions-archive");
+    mkdirSync(sessionsDir, { recursive: true });
+    mkdirSync(archiveDir, { recursive: true });
+ // 活跃会话
+    writeFileSync(join(sessionsDir, "act-1.jsonl"), JSON.stringify({ kind: "custom", sessionId: "act-1", seq: 1, payload: {} }) + "\n");
+ // 归档会话(sessions 无、archive 有)
+    writeFileSync(join(archiveDir, "arch-1.jsonl"), JSON.stringify({ kind: "custom", sessionId: "arch-1", seq: 1, payload: {} }) + "\n");
+    const j = new FileJournal(join(dir, "gateway.jsonl"), { writeBehind: true, sharded: true, archiveDir });
+    j.enableArchiveReads();
+    expect(j.isArchivedSession("arch-1")).toBe(true);
+    expect(j.isArchivedSession("act-1")).toBe(false);
+    expect(j.isArchivedSession("nope-404")).toBe(false);
+ // 未开归档读 = 恒 false(冷读门控同源)
+    const j2 = new FileJournal(join(dir, "gateway2.jsonl"), { writeBehind: true, sharded: true, archiveDir });
+    expect(j2.isArchivedSession("arch-1")).toBe(false);
+  });
+});

@@ -1,5 +1,5 @@
 /**
- * 任务B 定向测试:diagram-viewport 引擎接进画布/图容器 + mermaid 主题归一化接线。
+ * 定向测试:diagram-viewport 引擎接进画布/图容器 + 自有图渲染器主题接线。
  * 四组:
  *  ① 捏合数学:pointer 距离→scale、中心移→pan(canvas-shell pinchToView 与面板 bindZoomPan 内联兜底同式);
  *  ② 锚点缩放不变式:光标下世界内容点屏幕位移恒为 0(canvas-shell zoomAt / dvZoomAtPoint / 引擎本体);
@@ -341,6 +341,6 @@ describe("任务B ⑦ transform 卫生(无 NaN/Infinity 路径 + viewBox 双写�
   it("grep viewBox:canvas-shell 仅图标模板一处(无旧 viewBox fit 双写)", () => {
     const code = readFileSync(SHELL, "utf8");
     const hits = code.split("\n").map((l, i) => (l.includes("viewBox") ? i + 1 : 0)).filter(Boolean);
-    expect(hits).toEqual([75]); // 唯一命中=ic 图标 path 的 viewBox 模板
+    expect(hits).toHaveLength(1); // 唯一命中=ic 图标 path 的 viewBox 模板(行号不锁:上方内容增删会平移)
   });
 });

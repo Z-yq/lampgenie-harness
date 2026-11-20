@@ -343,7 +343,8 @@ function probeOoxml(
   bytes: Uint8Array,
   kind: DocProbeKind,
   maxBytes: number,
-  maxUncompressed: number): DocProbeResult {
+  maxUncompressed: number,
+): DocProbeResult {
   const result: DocProbeResult = { code: "OK", kind, bytes: bytes.length, externalLinks: [], warnings: [] };
   if (bytes.length > maxBytes) {
     return { ...result, code: "TOO_LARGE", warnings: ["文件超过字节上限"] };

@@ -21,6 +21,7 @@ import {
   defaultBreakerPolicy,
   diffBaselines,
   evaluateBreaker,
+  evaluateObservationRestart,
   isBlocked,
   pause,
   planRollback,
@@ -299,8 +300,15 @@ describe("evaluateBreaker:守卫指标", () => {
 });
 
 describe("resolvePolicy / defaultBreakerPolicy", () => {
-  it("缺省策略逐字:{minNegativeStreak:3, guardrails:[], requireHumanRecovery:true}", () => {
-    expect(defaultBreakerPolicy()).toEqual({ minNegativeStreak: 3, guardrails: [], requireHumanRecovery: true });
+  it("缺省策略含观察窗三参(§14.2③)", () => {
+    expect(defaultBreakerPolicy()).toEqual({
+      minNegativeStreak: 3,
+      guardrails: [],
+      requireHumanRecovery: true,
+      observationMinPositiveWindows: 2,
+      observationWindowDays: 7,
+      restartFactor: 0.25,
+    });
     expect(RSI_BREAKER_VERSION).toBe(1);
   });
 
@@ -308,9 +316,16 @@ describe("resolvePolicy / defaultBreakerPolicy", () => {
     expect(resolvePolicy()).toEqual(defaultBreakerPolicy());
   });
 
-  it("resolvePolicy 合并部分字段,其余回落缺省", () => {
+  it("resolvePolicy 合并部分字段,其余回落缺省(含观察窗三参)", () => {
     const policy = resolvePolicy({ minNegativeStreak: 7 });
-    expect(policy).toEqual({ minNegativeStreak: 7, guardrails: [], requireHumanRecovery: true });
+    expect(policy).toEqual({
+      minNegativeStreak: 7,
+      guardrails: [],
+      requireHumanRecovery: true,
+      observationMinPositiveWindows: 2,
+      observationWindowDays: 7,
+      restartFactor: 0.25,
+    });
   });
 
   it("resolvePolicy 复制 guardrails,不回写入参", () => {
@@ -661,5 +676,49 @@ describe("码表与依赖纪律", () => {
     for (const banned of ["node:fs", "node:net", "node:http", "process.env", "fetch("]) {
       expect(source.includes(banned)).toBe(false);
     }
+  });
+});
+
+describe("§14.2③ 观察窗自动试探重启(evaluateObservationRestart)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const T0 = Date.parse("2026-01-01T00:00:00.000Z");
+
+  it("连续 2 窗净省>0 → restart:true", () => {
+    const res = evaluateObservationRestart([
+      { startAt: T0 - 14 * DAY, endAt: T0 - 7 * DAY, netSaving: 10 },
+      { startAt: T0 - 7 * DAY, endAt: T0, netSaving: 5 },
+    ]);
+    expect(res).toEqual({ restart: true, positiveWindows: 2 });
+  });
+
+  it("串中断(较旧窗净省=0)→ 不 restart(净省=0 不算正)", () => {
+    const res = evaluateObservationRestart([
+      { startAt: T0 - 14 * DAY, endAt: T0 - 7 * DAY, netSaving: 0 },
+      { startAt: T0 - 7 * DAY, endAt: T0, netSaving: 5 },
+    ]);
+    expect(res).toEqual({ restart: false, positiveWindows: 1 });
+  });
+
+  it("窗口时间不相邻(断流)→ 串断", () => {
+    const res = evaluateObservationRestart([
+      { startAt: T0 - 40 * DAY, endAt: T0 - 33 * DAY, netSaving: 8 },
+      { startAt: T0 - 7 * DAY, endAt: T0, netSaving: 5 },
+    ]);
+    expect(res.restart).toBe(false);
+  });
+
+  it("minPositiveWindows 可调(3 窗门)", () => {
+    const windows = [0, 1, 2].map((i) => ({
+      startAt: T0 - (3 - i) * 7 * DAY,
+      endAt: T0 - (2 - i) * 7 * DAY,
+      netSaving: 3,
+    }));
+    expect(evaluateObservationRestart(windows, { minPositiveWindows: 3 }).restart).toBe(true);
+    expect(evaluateObservationRestart(windows.slice(0, 2), { minPositiveWindows: 3 }).restart).toBe(false);
+  });
+
+  it("空数组/负净省 → 不 restart", () => {
+    expect(evaluateObservationRestart([]).restart).toBe(false);
+    expect(evaluateObservationRestart([{ startAt: T0 - 7 * DAY, endAt: T0, netSaving: -1 }]).restart).toBe(false);
   });
 });

@@ -336,7 +336,8 @@ function formatPct(value: number): string {
 function buildDirectionNote(
   direction: MetricDirection,
   deltaPct: number | null,
-  settled: boolean): string {
+  settled: boolean,
+): string {
   if (!settled) return "未结算";
   const word = directionWord(direction);
   const suffix = `(方向偏好${word})`;
@@ -435,7 +436,8 @@ function normalizeExperiment(raw: unknown, warnings: string[]): NormalizedChange
   const { metrics, settled, unsettled } = normalizeMetrics(
     id,
     raw.metrics === undefined ? undefined : raw.metrics,
-    warnings);
+    warnings,
+  );
   return {
     item: {
       id,

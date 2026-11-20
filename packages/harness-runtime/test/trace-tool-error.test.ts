@@ -70,7 +70,7 @@ describe("工具失败结构化归因(txa1/txa2)", () => {
     expect(err.origin).toBe("unknown-tool");
     expect(err.name).toBe("nope_tool");
     expect(String(p.content).startsWith("错误:")).toBe(true);
-    expect(String(p.content)).toBe("错误:未知工具 nope_tool;可达:ok_tool"); // 未知工具带可达候选(自我纠错) // 文案一字未改
+    expect(String(p.content)).toBe("错误:未知工具 nope_tool"); // 文案一字未改
   });
 
   it("工具 execute 抛错:error.origin=threw,message 带原始错误", async () => {

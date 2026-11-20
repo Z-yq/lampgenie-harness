@@ -279,7 +279,8 @@ export class TaskSupervisor {
     this.maxTerminalTasksPerOwner = maxTerminalTasksPerOwner
     this.progressEventIntervalMs = Math.max(
       50,
-      Number(progressEventIntervalMs) || 1_000)
+      Number(progressEventIntervalMs) || 1_000,
+    )
     this.logger = taskLogger
     this.sessionJournal = sessionJournal
     this.scheduledTaskTimeoutMs = scheduledTaskTimeoutMs
@@ -607,7 +608,8 @@ export class TaskSupervisor {
       // 修复崩溃后过期的 tasks.json。
       if (existing) {
         this.recoveryCandidates = this.recoveryCandidates.filter(
-          candidate => candidate !== existing)
+          candidate => candidate !== existing,
+        )
         this.tasks.delete(id)
       }
       this.restore([this.#withSeriesAnchor(snapshot, existing?.recurrenceStartAt)])
@@ -1151,7 +1153,8 @@ export class TaskSupervisor {
           task.status === 'completed'
             ? TaskChangeEvent.COMPLETED
             : TaskChangeEvent.FAILED,
-          task)
+          task,
+        )
         if (shouldAnnounceTaskDone(task)) {
           this.emit(TaskChangeEvent.NOTIFICATION_PENDING, task)
         }
@@ -1409,7 +1412,8 @@ export class TaskSupervisor {
       if (!isFinishedTask(task.status)) continue
       const age = now - (task.completedAt || task.createdAt)
       const awaitingDelivery = ['pending', 'delivering'].includes(
-        task.notificationStatus)
+        task.notificationStatus,
+      )
       const ttl = awaitingDelivery
         ? this.pendingNotificationTtlMs
         : this.terminalTtlMs

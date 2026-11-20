@@ -17,21 +17,14 @@ describe("主 agent 提示契约(常驻规则集, D5)", () => {
   it("变异:删掉关键纪律句即红(经真实规则+真实 glob 路径)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-mutate-"));
     try {
-      // 模块拆分后短语分散在 agent-wiring/ 子模块:变异=对各归属文件做对应删除
+      const real = readFileSync(join(repoRoot, "apps/gateway/src/agent-wiring.ts"), "utf-8");
       // split/join=replaceAll(String.replace 只换首个匹配,import 行换了调用处还在,变异会假阴性)
-      const sub = (rel: string) => readFileSync(join(repoRoot, rel), "utf-8");
-      const mutatedRunWithAgent = sub("apps/gateway/src/agent-wiring/run-with-agent.ts")
-        .split("skillViewTool(store, () => disabledBuiltins(repoRoot())), experienceFoldTool(store)").join("");
-      const mutatedLoopSupport = sub("apps/gateway/src/agent-wiring/loop-support.ts")
+      const mutated = real
         .split("如实说失败,不编造成功").join("汇报结果")
-        .split("任务书要写清楚动词、目标与验收标准").join("任务书要写清楚要求");
-      const mutatedWiringCore = sub("apps/gateway/src/agent-wiring/wiring-core.ts")
+        .split("skillViewTool(store, () => disabledBuiltins(repoRoot()))").join("")
         .split("composeSystemPrompt").join("makePrompt");
-      mkdirSync(join(dir, "apps/gateway/src/agent-wiring"), { recursive: true });
-      writeFileSync(join(dir, "apps/gateway/src/agent-wiring/run-with-agent.ts"), mutatedRunWithAgent, "utf-8");
-      writeFileSync(join(dir, "apps/gateway/src/agent-wiring/loop-support.ts"), mutatedLoopSupport, "utf-8");
-      writeFileSync(join(dir, "apps/gateway/src/agent-wiring/wiring-core.ts"), mutatedWiringCore, "utf-8");
-      writeFileSync(join(dir, "apps/gateway/src/agent-wiring/tools.ts"), sub("apps/gateway/src/agent-wiring/tools.ts"), "utf-8");
+      mkdirSync(join(dir, "apps/gateway/src"), { recursive: true });
+      writeFileSync(join(dir, "apps/gateway/src/agent-wiring.ts"), mutated, "utf-8");
       const violations = runContractEval(AGENT_PROMPT_RULES, dir);
       const rules = new Set(violations.map((v) => v.rule));
       expect(rules.has("主agent纪律句")).toBe(true);

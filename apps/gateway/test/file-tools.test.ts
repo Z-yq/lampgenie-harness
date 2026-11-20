@@ -518,3 +518,15 @@ describe("上下文卫生尾注(2026-10-20:大输出提醒主 agent 拆子任务
     }
   });
 });
+
+describe("P5 canary 分桶(rsiCanaryBucket)", () => {
+  it("确定性:同 id 恒同桶;分布:样本 id 两侧都有(<50 与 ≥50)", async () => {
+    const { rsiCanaryBucket } = await import("../src/file-tools.js");
+    expect(rsiCanaryBucket("ws-abc")).toBe(rsiCanaryBucket("ws-abc"));
+    const ids = Array.from({ length: 40 }, (_, i) => `ws-sample-${i}`);
+    const buckets = ids.map((id) => rsiCanaryBucket(id));
+    expect(buckets.every((b) => b >= 0 && b < 100)).toBe(true);
+    expect(buckets.some((b) => b < 50)).toBe(true);
+    expect(buckets.some((b) => b >= 50)).toBe(true);
+  });
+});

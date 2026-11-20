@@ -206,11 +206,17 @@ describe(" 指挥台 view 静态契约(面板 PAGE + widget + server 源码)", (
     expect(pageHtml).toContain("function supApplyHistory");
     expect(pageHtml).toContain("function superOnMsg");
     expect(pageHtml).toContain("function supSend");
-    expect(pageHtml).toContain('type: "super.turn", text, sessionId: "super" }'); // 发送载荷(起带固定会话 id)
+ // 指挥台发送载荷带附件(无附件时不写该键,旧帧字节不变); 起带固定会话 id
+    expect(pageHtml).toContain('type: "super.turn", text, sessionId: "super", ...(atts.length ? { attachments: atts } : {}) }');
+ // 指挥台聊天窗增强:三入口/芯片/上下文/模型 pill/右键项均在页面内
+    for (const s of ["id=\"supAttInput\"", "#supAtts", "#supRefs", "#supModelPill", "function supChatWire", "function supRefAdd", "function supAttAdd", "function supModelMenuOpen", "添加到指挥台", 'sessionId: "super", model: picked']) {
+      expect(pageHtml).toContain(s);
+    }
     expect(pageHtml).toContain('type: "ask.user.answer", requestId: it.requestId'); // 回答动作与 widget 同协议
  // IDE 三栏:画布卡内单列退化(旧 superLayout 双列退役);三栏骨架 CSS 在场
  // 中栏下限 minmax(420px,1fr)(旧 minmax(0,1fr) 在 900 卡宽下 1fr 只剩 182px,结果呈现栏名存实亡)
-    expect(pageHtml).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(420px,1fr)");
+ // 改回 minmax(0,1fr)+ JS superLayoutFit 收聊天窗/侧栏:420 硬下限在 1280 视口下让中栏溢出被聊天窗压住(经验证 126px)
+    expect(pageHtml).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(0,1fr)");
     expect(pageHtml).toContain("@media (max-width:900px)");
   });
   it("widget:error 帧显式消费 + 打开指挥台入口(super-failed 才渲染,无关错误不抢)", () => {

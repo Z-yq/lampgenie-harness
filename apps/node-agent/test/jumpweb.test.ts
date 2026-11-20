@@ -197,7 +197,8 @@ describe("JumpWebHost / createJumpWebHandler(node-agent execute 注入面)", () 
 async function dispatchOnce(
   agentOpts: Omit<NodeAgentOptions, "gatewayUrl">,
   dispatchMsg: Record<string, unknown>,
-  envValue: string | undefined): Promise<Record<string, unknown>> {
+  envValue: string | undefined,
+): Promise<Record<string, unknown>> {
   const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   await new Promise<void>((r) => wss.on("listening", () => r()));
   const addr = wss.address() as AddressInfo;
@@ -261,7 +262,8 @@ describe("node-agent jumpweb 分派集成(GENIE_NODE_JUMPWEB 门控)", () => {
     const result = await dispatchOnce(
       baseOpts,
       { taskId: "jw-2", instruction: "登录运营平台", kind: "jumpweb", script: LOGIN_SCRIPT },
-      undefined);
+      undefined,
+    );
     expect(result.ok).toBe(true);
     expect(String(result.output)).toContain("executed"); // 缺省 echo 执行器回执
   }, 15_000);

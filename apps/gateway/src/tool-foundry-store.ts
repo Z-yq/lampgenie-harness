@@ -73,23 +73,10 @@ interface FoundryRuntime {
   toDataToolSpec(candidate: ToolCandidate): DataToolSpecLike;
 }
 
-let foundryRuntime: FoundryRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_tool_foundry from "@lampgenie/runtime/agent/tool-foundry";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadFoundryRuntime(): Promise<FoundryRuntime> {
-  if (foundryRuntime) return foundryRuntime;
-  const spec = "@lampgenie/runtime/agent/tool-foundry";
-  try {
-    foundryRuntime = (await import(spec)) as FoundryRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/tool-foundry.ts", import.meta.url).href;
-    foundryRuntime = (await import(srcUrl)) as FoundryRuntime;
-  }
-  return foundryRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadFoundryRuntime();
+const rt: FoundryRuntime = rt_tool_foundry;
 
 /** foundry 台账绝对路径:`<root>/.genie/rsi/foundry.jsonl`。 */
 export function foundryPath(root: string): string {

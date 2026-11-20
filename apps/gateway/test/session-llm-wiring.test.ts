@@ -264,7 +264,8 @@ describe("m1 角色轨跟随会话覆盖 / m3 contextWindow 重算", () => {
     const face = createSessionModelFace(
       cfg({}, { review: { model: "glm-5.3", providerId: "main" } }),
       root,
-      store);
+      store,
+    );
     const ov = { model: "GLM-5.3", providerId: "bigmodel-plan" } as const;
     store.set("s1", { ...ov });
     const roles = face.deriveRoleModels("s1", { ...ov })!;

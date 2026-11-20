@@ -205,11 +205,14 @@ async function main(argv: string[]): Promise<number> {
       return EXIT_USAGE;
     }
     if (result.codes.includes("NIGHTLY_SKIPPED_ONLINE_BUSY")) {
-      console.log(`[nightly] 在线忙碌,本轮让路(未产生 run): ${result.codes.join(", ")}`);
+ // cr-dc78cd9ea12fb6ce 补口(修):--json 时给机器消费方结构化结果,人类文本只走非 JSON 路径。
+      if (asJson) process.stdout.write(JSON.stringify({ run: result.run, codes: result.codes }, null, 2) + "\n");
+      else console.log(`[nightly] 在线忙碌,本轮让路(未产生 run): ${result.codes.join(", ")}`);
       return EXIT_STATUS;
     }
     if (result.codes.includes("NIGHTLY_SKIPPED_DONE")) {
-      console.log(`[nightly] 已完成,跳过: ${result.run.runId} (${result.codes.join(", ")})`);
+ // cr-dc78cd9ea12fb6ce 补口:跳过分支 --json 输出结构化 run/codes(exit 保持 3),机器调用方不再解析失败。
+      printRun(result.run, result.codes, asJson);
       return EXIT_DONE;
     }
     printRun(result.run, result.codes, asJson);

@@ -19,6 +19,7 @@ import {
   getRun,
   listRuns,
   loadMechanisms,
+  markDreamNote,
   mechanismsPath,
   newRunId,
   projectResults,
@@ -56,7 +57,8 @@ async function writeRunResult(
   root: string,
   mechanismId: string,
   runId: string,
-  payload: unknown): Promise<string> {
+  payload: unknown,
+): Promise<string> {
   const file = resultFilePath(root, mechanismId, runId);
   await mkdir(join(root, ".genie", "rsi", "agent-runs", mechanismId), { recursive: true });
   await writeFile(file, typeof payload === "string" ? payload : JSON.stringify(payload), "utf8");
@@ -435,5 +437,28 @@ describe("experimentQuotaFactor 运行记录(2026-11-14)", () => {
     expect(back?.experimentQuotaFactor).toBe(0.5);
     const b = await startRun(root, { mechanismId: "experiments", runId: "run-quota-b", experimentQuotaFactor: 1 });
     expect(b.experimentQuotaFactor).toBeUndefined();
+  });
+});
+
+describe("markDreamNote 做梦卡幂等(2026-11-19)", () => {
+  it("首写 true、同 phase 再写 false,start/done 互不干扰,读回保留", async () => {
+    const root = await freshRoot();
+    await startRun(root, { mechanismId: "nightly", runId: "run_dream", taskId: "t-dream", sessionId: "rsi" });
+    expect((await getRun(root, "nightly", "run_dream"))?.dreamStartAt).toBeUndefined();
+    expect(await markDreamNote(root, "nightly", "run_dream", "start", 111)).toBe(true);
+ // 重复注卡(重入 settle / 多进程竞争):第二次必须 false
+    expect(await markDreamNote(root, "nightly", "run_dream", "start", 222)).toBe(false);
+    expect((await getRun(root, "nightly", "run_dream"))?.dreamStartAt).toBe(111);
+    expect(await markDreamNote(root, "nightly", "run_dream", "done", 333)).toBe(true);
+    expect(await markDreamNote(root, "nightly", "run_dream", "done", 444)).toBe(false);
+    const back = await getRun(root, "nightly", "run_dream");
+    expect(back?.dreamDoneAt).toBe(333);
+ // 打标记只改标记位,不动运行状态
+    expect(back?.status).toBe("running");
+  });
+
+  it("记录不存在 → false 且不 throw(注卡失败不碰收尾链路)", async () => {
+    const root = await freshRoot();
+    expect(await markDreamNote(root, "nightly", "run_nope", "done")).toBe(false);
   });
 });

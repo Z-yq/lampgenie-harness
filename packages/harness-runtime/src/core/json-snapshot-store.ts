@@ -136,7 +136,8 @@ export class JsonCheckpointStore {
       renameSync(this.filePath, sideCar)
       this.note(
         `${reason}；原文件已隔离为 ${sideCar}，服务将使用空${this.label}继续运行。`,
-        sideCar)
+        sideCar,
+      )
     } catch (error) {
       this.persistenceDisabled = true
       this.note(

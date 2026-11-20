@@ -334,7 +334,8 @@ export async function pinSession(
 export async function resolveForSession(
   root: string,
   sessionId: string,
-  key: string): Promise<{ ok: boolean; text?: string; revision?: number; codes: string[] }> {
+  key: string,
+): Promise<{ ok: boolean; text?: string; revision?: number; codes: string[] }> {
   const rt = await runtime();
   const loaded = await readBook(root);
   const pins = readPins(root).pins.sessions[sessionId.trim()];
@@ -359,7 +360,8 @@ export async function updateBuiltin(
 /** 当前覆盖 vs 新默认的行 diff。 */
 export async function diffWithDefault(
   root: string,
-  key: string): Promise<{ ok: boolean; same: boolean; lines: PromptDiffLine[]; codes: string[] }> {
+  key: string,
+): Promise<{ ok: boolean; same: boolean; lines: PromptDiffLine[]; codes: string[] }> {
   const rt = await runtime();
   const loaded = await readBook(root);
   const res = rt.diffWithDefault(loaded.book, key);

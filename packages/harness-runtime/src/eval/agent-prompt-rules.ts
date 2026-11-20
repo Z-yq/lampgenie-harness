@@ -9,8 +9,7 @@ import type { ContractRule } from "./contract-eval";
 export const AGENT_PROMPT_RULES: ContractRule[] = [
   {
     name: "主agent纪律句",
- // 模块拆分后短语分散:派发描述/纪律卡在 run-with-agent 与 loop-support
-    targetAny: ["apps/gateway/src/agent-wiring/run-with-agent.ts", "apps/gateway/src/agent-wiring/loop-support.ts"],
+    target: "apps/gateway/src/agent-wiring.ts",
     mustContain: [
       "spawn_subagent",
       "如实说失败,不编造成功",
@@ -20,17 +19,15 @@ export const AGENT_PROMPT_RULES: ContractRule[] = [
   },
   {
     name: "经验工具挂载( §3)",
- // 主工具面装配在 run-with-agent;折叠白名单在 tools
-    targetAny: ["apps/gateway/src/agent-wiring/run-with-agent.ts", "apps/gateway/src/agent-wiring/tools.ts"],
+    target: "apps/gateway/src/agent-wiring.ts",
     mustContain: [
       "skillViewTool(store, () => disabledBuiltins(repoRoot()))", // 停用门接线(审计 C3)
-      "experienceFoldTool(store)",
       "FOLD_CATEGORY_WHITELIST",
     ],
   },
   {
     name: "系统提示组装接线",
-    target: "apps/gateway/src/agent-wiring/wiring-core.ts",
+    target: "apps/gateway/src/agent-wiring.ts",
     mustContain: [
       "composeSystemPrompt",
       "discoverAgentsMd",

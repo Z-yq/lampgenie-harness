@@ -205,7 +205,8 @@ export type FreshnessEffect = "proceed" | "blocked" | "warn-block-override";
 export function planFreshnessAction(
   status: BaselineStatus,
   cfg?: FreshnessConfig,
-  env: Record<string, string | undefined> = process.env): { effect: FreshnessEffect; message?: string; note?: string } {
+  env: Record<string, string | undefined> = process.env,
+): { effect: FreshnessEffect; message?: string; note?: string } {
   if (status.state !== "behind") return { effect: "proceed" };
   const upstream = status.upstreamRef ?? "(unknown)";
   const remote = status.upstreamRef ? remoteOf(status.upstreamRef) : "origin";

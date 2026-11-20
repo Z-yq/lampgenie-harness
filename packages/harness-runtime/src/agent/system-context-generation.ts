@@ -194,7 +194,8 @@ export function renderGenerationBaseline(state: SystemContextState, keysInOrder:
 export function openNewGeneration(
   state: SystemContextState,
   keysInOrder: readonly string[],
-  baselineSeq?: number): SystemContextState {
+  baselineSeq?: number,
+): SystemContextState {
   const entries: Record<string, SystemContextEntry> = {};
   for (const key of keysInOrder) {
     const e = state.entries[key];

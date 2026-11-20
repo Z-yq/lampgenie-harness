@@ -77,12 +77,23 @@
  // (用户点名):画布形态整块退场——画布上已有 super 卡(全功能指挥台)+托盘「指挥台
  // Super」入口+卡头状态点,右下悬浮条是重复入口,删。旧理由「整块隐藏用户看不到待处理」已由
  // 卡头状态点/托盘徽态承接,不再成立。
-    "body.cv-shell #superConsole{display:none}",
+ // (用户截图点名「经典模式下切到 coding 不要这个框」):经典态同样整块退场——
+ // 右下悬浮窗压住正文/输入区(1600/2000 宽经验证);经典入口=左栏「指挥台 Super」,画布入口=super 卡;
+ // 待处理提醒由托盘/卡头状态徽承接,不再需要这个重复悬浮条。
+    "#superConsole{display:none}",
     "body[data-view=board] #sc-root .sc-body,body[data-view=board] #sc-root .sc-foot," +
       "body.dual-center #sc-root .sc-body,body.dual-center #sc-root .sc-foot{display:none}",
  // 指挥台视图已有全功能右栏聊天窗(#superIdeChat),右下角悬浮 widget 会叠在它上面
  // 挡住 #superInput 的点击(经验证 elementFromPoint 命中 sc-turns)——super 视图整个 widget 退场。
     "body[data-view=super] #superConsole,body[data-view=rsi] #superConsole{display:none}",
+ // 经典态非 super/rsi/chat 视图=悬浮条收成紧凑徽(状态点+「Super」二字,~28px 高),
+ // 不再以整条头部压住 usage/team 等视图右下内容(1280 经验证覆盖列表行);点击照常进指挥台。
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root{min-width:0}",
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-head{padding:4px 9px;gap:6px}",
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-head .sc-title,body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-head .sc-sub,body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-head .sc-acts{display:none}",
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-body,body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-foot{display:none}",
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #superConsole{width:auto}",
+    "body:not(.cv-shell):not([data-view=super]):not([data-view=rsi]):not([data-view=chat]) #sc-root .sc-head::after{content:'Super';font-size:10px;letter-spacing:.5px;color:var(--muted,#97836a)}",
     "body[data-view=board] #superConsole,body.dual-center #superConsole{width:auto;max-width:calc(100vw - 32px)}",
     "body[data-view=board] #sc-overlay,body.dual-center #sc-overlay{display:none}",
     "body.pp-wiki-tab #superConsole{display:none}",

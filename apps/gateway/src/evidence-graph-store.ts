@@ -111,16 +111,19 @@ interface EvidenceRuntime {
   correctEvidence(
     graph: EvidenceGraph,
     id: string,
-    input: CorrectEvidenceInput): { ok: boolean; graph: EvidenceGraph; node?: EvidenceNode; code?: string };
+    input: CorrectEvidenceInput,
+  ): { ok: boolean; graph: EvidenceGraph; node?: EvidenceNode; code?: string };
   markAuthoritative(
     graph: EvidenceGraph,
-    id: string): { ok: boolean; graph: EvidenceGraph; demoted: string[]; code?: string };
+    id: string,
+  ): { ok: boolean; graph: EvidenceGraph; demoted: string[]; code?: string };
   queryEvidence(graph: EvidenceGraph, filter?: EvidenceQuery): EvidenceNode[];
   conflictsOf(graph: EvidenceGraph, at?: number): EvidenceConflict[];
   historyOf(graph: EvidenceGraph, id: string): EvidenceNode[];
   applyDecay(
     graph: EvidenceGraph,
-    policy: DecayPolicy): { ok: boolean; graph: EvidenceGraph; report: DecayReport; code?: string };
+    policy: DecayPolicy,
+  ): { ok: boolean; graph: EvidenceGraph; report: DecayReport; code?: string };
   rescoreForModelVersion(
     graph: EvidenceGraph,
     modelVersion: string,
@@ -128,7 +131,8 @@ interface EvidenceRuntime {
   ): { ok: boolean; graph: EvidenceGraph; rescored: string[]; code?: string };
   linkEvidence(
     graph: EvidenceGraph,
-    input: LinkEvidenceInput): { ok: boolean; graph: EvidenceGraph; link?: EvidenceLink; code?: string };
+    input: LinkEvidenceInput,
+  ): { ok: boolean; graph: EvidenceGraph; link?: EvidenceLink; code?: string };
   linksOf(graph: EvidenceGraph, id: string): { outgoing: EvidenceLink[]; incoming: EvidenceLink[] };
 }
 
@@ -329,7 +333,8 @@ function applyLine(graph: EvidenceGraph, line: EvidenceLine): void {
  // upsert by (from,to,type):重放里同键后写的赢(备注/时间刷新)
       const links = (graph.links ??= []);
       const existing = links.find(
-        (l) => l.from === line.link.from && l.to === line.link.to && l.type === line.link.type);
+        (l) => l.from === line.link.from && l.to === line.link.to && l.type === line.link.type,
+      );
       if (existing === undefined) links.push(line.link);
       else links[links.indexOf(existing)] = line.link;
       return;
@@ -426,7 +431,8 @@ export function supersedeEvidence(
 export function correctEvidence(
   root: string,
   id: string,
-  input: CorrectEvidenceInput): EvidenceStoreResult {
+  input: CorrectEvidenceInput,
+): EvidenceStoreResult {
   const { graph } = loadEvidenceGraph(root);
   const result = rt.correctEvidence(graph, id, input);
   if (!result.ok || !result.node) return { ok: false, code: result.code ?? "EVIDENCE_STORE_ERROR" };
@@ -462,7 +468,8 @@ export function markAuthoritative(root: string, id: string): EvidenceStoreResult
 /** 加一条证据间连线(supports/contradicts/derives-from/relates-to)。端点缺失/重复折叠成稳定码。 */
 export function linkEvidence(
   root: string,
-  input: LinkEvidenceInput): { ok: boolean; code?: string; link?: EvidenceLink } {
+  input: LinkEvidenceInput,
+): { ok: boolean; code?: string; link?: EvidenceLink } {
   const { graph } = loadEvidenceGraph(root);
   const result = rt.linkEvidence(graph, input);
   if (!result.ok || !result.link) {

@@ -117,7 +117,8 @@ export type TerminalErrorCode =
 export class TerminalError extends Error {
   constructor(
     message: string,
-    readonly code: TerminalErrorCode) {
+    readonly code: TerminalErrorCode,
+  ) {
     super(message);
     this.name = "TerminalError";
   }

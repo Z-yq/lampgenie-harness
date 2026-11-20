@@ -176,22 +176,26 @@ describe("eagerFork:句柄生成与并发上限", () => {
 describe("非法 env", () => {
   it("maxConcurrency=0 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: 0 } })).code).toBe(
-      SETTLE_CODES.INVALID);
+      SETTLE_CODES.INVALID,
+    );
   });
 
   it("maxConcurrency=-1 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: -1 } })).code).toBe(
-      SETTLE_CODES.INVALID);
+      SETTLE_CODES.INVALID,
+    );
   });
 
   it("maxConcurrency=1.5 → 同步抛 SETTLE_INVALID", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: 1.5 } })).code).toBe(
-      SETTLE_CODES.INVALID);
+      SETTLE_CODES.INVALID,
+    );
   });
 
   it("maxConcurrency=NaN → 同步抛 SETTLE_INVALID(不是死锁)", () => {
     expect(expectInvalidSync(() => eagerFork<number>([], { env: { maxConcurrency: Number.NaN } })).code).toBe(
-      SETTLE_CODES.INVALID);
+      SETTLE_CODES.INVALID,
+    );
   });
 
   it("maxConcurrency=1 合法,正常调度", async () => {

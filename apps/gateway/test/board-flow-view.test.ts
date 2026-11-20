@@ -50,7 +50,8 @@ describe("board.fromsense source=decision(控制流板:符号 → 条件/循环�
   };
   /** 从 cursor 起等一条匹配帧(与 board.test.ts 同款轮询;drvfs 高载下放宽到 20s)。 */
   const waitFor = (
-    pred: (m: Record<string, unknown>) => boolean, cursor: number, tag: string, ms = 20000): Promise<Record<string, unknown>> =>
+    pred: (m: Record<string, unknown>) => boolean, cursor: number, tag: string, ms = 20000,
+  ): Promise<Record<string, unknown>> =>
     new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("等消息超时 " + tag)), ms);
       const poll = setInterval(() => {
@@ -61,7 +62,8 @@ describe("board.fromsense source=decision(控制流板:符号 → 条件/循环�
 
   /** 发一条 decision 请求,返回该板的 taskId + doc(回执先于广播,按 cursor 取本次的那一条)。 */
   const fromSenseDecision = async (
-    params: Record<string, unknown>, tag: string): Promise<{ taskId: string; doc: BoardDoc }> => {
+    params: Record<string, unknown>, tag: string,
+  ): Promise<{ taskId: string; doc: BoardDoc }> => {
     const cursor = inbox.length;
     send({ type: "board.fromsense", sessionId: SID, source: "decision", ...params });
     const m = await waitFor((mm) => mm.type === "board.doc" || mm.type === "error", cursor, tag);

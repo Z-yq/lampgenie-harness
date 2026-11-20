@@ -190,25 +190,10 @@ interface DecisionQualityRuntime {
   ): { record: DecisionRecord; codes: string[] };
 }
 
-let decisionRuntime: DecisionQualityRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_decision_quality from "@lampgenie/runtime/agent/decision-quality";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadDecisionRuntime(): Promise<DecisionQualityRuntime> {
-  if (decisionRuntime) return decisionRuntime;
-  const spec = "@lampgenie/runtime/agent/decision-quality";
-  try {
-    decisionRuntime = (await import(spec)) as DecisionQualityRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/decision-quality.ts",
-      import.meta.url).href;
-    decisionRuntime = (await import(srcUrl)) as DecisionQualityRuntime;
-  }
-  return decisionRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadDecisionRuntime();
+const rt: DecisionQualityRuntime = rt_decision_quality;
 
 const LINE_TYPES: ReadonlySet<string> = new Set<string>(DECISION_LINE_TYPES);
 const DECISION_TYPES: ReadonlySet<string> = new Set<string>([
@@ -604,7 +589,8 @@ export function counterfactual(root: string, decisionId: string): DecisionCounte
 export function humanCorrect(
   root: string,
   decisionId: string,
-  opts: DecisionHumanCorrectOptions): DecisionHumanCorrectStoreResult {
+  opts: DecisionHumanCorrectOptions,
+): DecisionHumanCorrectStoreResult {
   const base = assertRoot(root);
   const id = textOf(decisionId);
   const by = textOf(opts?.by);

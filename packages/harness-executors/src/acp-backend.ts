@@ -156,7 +156,8 @@ export function listAcpAdapters(): string[] {
 export function resolveAcpAdapter(
   input?: string,
   extraArgs: string[] = [],
-  env: NodeJS.ProcessEnv = process.env): AcpAdapterSpec | null {
+  env: NodeJS.ProcessEnv = process.env,
+): AcpAdapterSpec | null {
   const raw = (input ?? env.GENIE_ACP_ADAPTER ?? "").trim();
   if (!raw) return null;
   const envExtra = parseStringArray(env.GENIE_ACP_ADAPTER_ARGS, "GENIE_ACP_ADAPTER_ARGS");

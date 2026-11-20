@@ -102,6 +102,10 @@ describe("轨迹看板①骨架锚点", () => {
       for (const m of ["all", "model", "tool", "error"]) {
         expect(html).toContain('data-traj-mode="' + m + '"');
       }
+ // 子代理过滤面 + 加载更早 + 底部条入口接线(此前 act-traj 没有 onclick)
+      expect(html).toContain('data-traj-mode="subagent"');
+      expect(html).toContain('id="trajLoadMore"');
+      expect(html).toContain('$("act-traj").onclick');
  // pane chip 三值 + 泳道模式 chip 三值
       for (const p of ["decisions", "ledger", "lanes"]) {
         expect(html).toContain('data-traj-pane="' + p + '"');

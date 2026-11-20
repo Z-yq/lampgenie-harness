@@ -631,47 +631,158 @@ function supRunAfterTaskChange() {
  * message.agent 的 usage.inputTokens;分母=同帧 contextWindow;无数据显示「上下文 —」。
  * ② 压缩按钮:session.compact(sessionId=super,与 coding /compact 同一服务端路径);status/result
  * 帧 toast,完成后重拉 super.history(压缩标记即时可见)。 */
+var supCtxAsk = { at: 0, tries: 0 }; // 实测用量请求节流(未到数时按 6s 重试,上限 5 次)
 function supCtxRequest() {
+  supCtxAsk.at = Date.now(); supCtxAsk.tries++;
   try { wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: "super" })); } catch (e) {}
 }
 function supCtxTok(n) { const v = Number(n) || 0; return v >= 1000 ? (Math.round(v / 100) / 10) + "k" : String(v); }
 function supCtxPillRender() {
   var el = document.getElementById("supCtxPill");
   if (!el) return;
+  var n = supCtxNums();
+  if (!n.tok) {
+ // 经验证未到时不再只显示「—」(用户看到 120 条历史 + 「上下文 —」会以为坏了):
+ // 首次请求在途 → 测量中…;仍无数据且请求已重试过 → 「N 条 · 未经验证」(如实不报假数)。
+    var waited = supCtxAsk.at ? Date.now() - supCtxAsk.at : 1e9;
+    if (supCtxAsk.tries < 5 && waited > 6000) supCtxRequest();
+    el.textContent = "上下文 " + (n.msgs ? n.msgs + " 条 · " : "") + (waited < 8000 ? "测量中…" : "未实测");
+    el.title = "正在从服务端取实测用量(trace.stats);发一轮对话后立即有实测值";
+    return;
+  }
+  el.textContent = "上下文 " + n.msgs + " 条 · " + supCtxTok(n.tok) + (n.win ? "/" + supCtxTok(n.win) + " · " + n.pct + "%" : " tok");
+  el.title = "主值=最近一次 LLM 调用实测输入" + (n.win ? ";窗口 " + supCtxTok(n.win) : "") + ";超阈值自动压缩(与 coding 同源),也可点右侧「压缩」手动压";
+}
+/** Super 上下文余量浮层 + 界面缩放定位校正。
+ * ① 数值同源:pill 与浮层都走 supCtxNums(traceStats.super.contextTokens,回退 entries 尾部 usage.inputTokens);
+ * ② 锚定:浮层锚 #supCtxPill(pill 自己的 rect),不再落到 classic ctxPill 那条(锚隐藏元素、取别的会话);
+ * ③ 缩放:面板「界面缩放」写 body.style.zoom,fixed 浮层的 left/bottom 会被再乘一次 zoom,
+ * 直接用锚点 BCR 会右溢出/上飘(用户截图红圈两处)——统一按 zoom 换算样式坐标。 */
+function supUiZoom() {
+  try { var z = parseFloat(getComputedStyle(document.body).zoom || "1"); return z > 0 ? z : 1; } catch (e) { return 1; }
+}
+function supPillFit(anchor) {
+  var el = (typeof pillMenuEl !== "undefined" && pillMenuEl) ? pillMenuEl : null;
+  if (!el || !anchor) return;
+  var z = supUiZoom();
+  var r = anchor.getBoundingClientRect();
+  var iw = window.innerWidth || document.documentElement.clientWidth || 0;
+  var ih = window.innerHeight || document.documentElement.clientHeight || 0;
+  var w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+  var left = Math.max(8 / z, Math.min(r.left / z, iw / z - w - 8 / z));
+  el.style.left = Math.round(left) + "px";
+ // 默认向上展开(sideOffset=2);上方放不下且下方有空间 → 翻到下方(避免顶出视口)
+  var upRoom = r.top - 8, downRoom = ih - r.bottom - 8;
+  if (h * z > upRoom && downRoom > h * z) { el.style.top = Math.round(r.bottom / z + 2) + "px"; el.style.bottom = ""; }
+  else { el.style.top = ""; el.style.bottom = Math.round((ih - r.top + 2) / z) + "px"; }
+  el.style.maxHeight = Math.round(Math.max(140, upRoom / z)) + "px";
+}
+function supCtxNums() {
   var st = (typeof traceStats !== "undefined" && traceStats) ? (traceStats["super"] || {}) : {};
+  var evs = supState.entries || [], i, msgs = 0, chars = 0, e;
+  for (i = 0; i < evs.length; i++) {
+    e = evs[i] || {};
+    if (e.kind === "u" || e.kind === "a") { msgs++; chars += String(e.text || "").length; }
+  }
   var main = Number(st.contextTokens) > 0 ? Number(st.contextTokens) : 0;
-  if (!main) { // 回退:entries 尾部实测 usage
-    var evs = supState.entries || [];
-    for (var i = evs.length - 1; i >= 0; i--) {
+  if (!main) { // 回退:entries 尾部实测 usage(与 pill 原口径一致)
+    for (i = evs.length - 1; i >= 0; i--) {
       var u = (evs[i] || {}).usage || {};
       if (Number(u.inputTokens) > 0) { main = Number(u.inputTokens); break; }
     }
   }
-  if (!main) { el.textContent = "上下文 —"; el.title = "尚无 LLM 调用实测;发一轮对话后出现"; return; }
   var win = Number(st.contextWindow) || 0;
-  var msgs = 0; evs = supState.entries || [];
-  for (i = 0; i < evs.length; i++) if (evs[i].kind === "u" || evs[i].kind === "a") msgs++;
-  el.textContent = "上下文 " + msgs + " 条 · " + supCtxTok(main) + (win ? "/" + supCtxTok(win) + " · " + Math.min(100, Math.round((main / win) * 100)) + "%" : " tok");
-  el.title = "主值=最近一次 LLM 调用实测输入" + (win ? ";窗口 " + supCtxTok(win) : "") + ";超阈值自动压缩(与 coding 同源),也可点右侧「压缩」手动压";
+  return { tok: main, win: win, msgs: msgs, chars: chars,
+    pct: win && main ? Math.min(100, Math.round((main / win) * 100)) : null };
+}
+function supCtxFmtWan(n) { return n >= 10000 ? (Math.round(n / 1000) / 10) + "万" : String(n); }
+function supCtxMenuHtml() {
+  var n = supCtxNums();
+  var html = '<div class="pm-grp cx-head"><div class="cx-head-row"><span class="pm-name" style="font-weight:600">上下文余量</span>' +
+    '<span class="cx-nums">' + (n.tok ? supCtxFmtWan(n.tok) + " / " + (n.win ? supCtxFmtWan(n.win) : "?") + (n.pct !== null ? " (" + n.pct + "%)" : "") : "暂无实测(等首次模型调用)") + "</span></div>";
+  if (n.pct !== null) html += '<div class="cx-bar"><i class="' + (n.pct >= 85 ? "hot" : "") + '" style="width:' + Math.max(2, n.pct) + '%"></i></div>';
+  html += "</div>";
+ // 构成:消息字符近似 + 系统提示/技能差额(与 classic 同一口径;只在本会话有经验证时给)
+  var msgTokEst = Math.round(n.chars / 4);
+  if (n.tok) {
+    var sysTok = Math.max(0, n.tok - msgTokEst), total = msgTokEst + sysTok;
+    if (total > 0) {
+      var parts = [{ k: "消息", v: msgTokEst, c: "var(--bronze)" }, { k: "系统提示/技能", v: sysTok, c: "var(--faint)" }];
+      var bars = "", rows = "", i, p, share, pc;
+      for (i = 0; i < parts.length; i++) {
+        p = parts[i]; share = p.v / total; pc = Math.round(share * 1000) / 10;
+        if (p.v <= 0) continue;
+        bars += '<i style="width:' + Math.max(1, share * 100) + "%;background:" + p.c + '"></i>';
+        rows += '<div class="cx-row"><span class="cx-dot" style="background:' + p.c + '"></span><span class="cx-k">' + p.k + '</span><span class="cx-v">' + pc + "%</span></div>";
+      }
+      html += '<div class="pm-grp"><div class="cx-sub">构成<span class="cx-note">(按字符近似,非逐段实测)</span></div>' +
+        '<div class="cx-segs">' + bars + "</div>" + rows + "</div>";
+    }
+  }
+ // 温度三区:与 classic 同一 helper 同形态;contextZones 缺席即不渲染(空串)。
+  var z = (typeof traceStats !== "undefined" && traceStats) ? ((traceStats["super"] || {}).contextZones) : null;
+  html += (typeof ctxZonesGroupHtml === "function" ? ctxZonesGroupHtml(z, supCtxTok) : "");
+  html += '<div class="pm-grp"><div class="pm-head">明细(消息 ' + n.msgs + " 条)</div>" +
+    '<div class="pm-item"><span class="pm-ck">' + (n.tok ? ic("check") : "·") + '</span><span class="pm-name">' +
+    (n.tok ? "当前上下文(最近一次调用实测):<b>" + n.tok + "</b> tok" + (n.win ? " / 容量 " + n.win + " tok = " + n.pct + "%" : "") : "暂无实测(等首次模型调用)") +
+    "</span></div>" +
+    '<div class="pm-item"><span class="pm-ck">·</span><span class="pm-name">对话字符粗估 ' + n.chars + " ≈" + msgTokEst + " tok(chars/4;含本轮全部消息,不含系统提示)</span></div></div>";
+  return html;
+}
+function supCtxMenuOpen() {
+  var pill = document.getElementById("supCtxPill");
+  if (!pill) return;
+  if (typeof pillMenuEl !== "undefined" && pillMenuEl && pillMenuEl.isConnected) { pillMenuClose(); return; } // 二点=收起
+  if (!supCtxNums().tok) toast("上下文实测尚未就绪:已向服务端请求,稍候再点");
+  var el = document.createElement("div");
+  el.className = "pill-menu cx-menu";
+  el.innerHTML = supCtxMenuHtml();
+  document.body.appendChild(el);
+  pillMenuEl = el;
+  supPillFit(pill);
+  window.__supMenuAnchorId = "supCtxPill";
+}
+if (!window.__supPillResizeFit) { // 视口变化时重算开着的 Super 浮层(缩放/拖窗后不留在旧坐标)
+  window.__supPillResizeFit = true;
+  window.addEventListener("resize", function () {
+    try {
+      if (!window.__supMenuAnchorId) return;
+      if (typeof pillMenuEl === "undefined" || !pillMenuEl) { window.__supMenuAnchorId = ""; return; }
+      var a = document.getElementById(window.__supMenuAnchorId);
+      if (a) supPillFit(a);
+    } catch (e) { /* 忽略 */ }
+  });
 }
 var supCompactPending = false;
+var supCompactToastAt = 0;
+/** 压缩 toast 去重(状态帧与回执帧可能双到;1.2s 内只提示一次)。 */
+function supCompactToast(msg, bad) {
+  if (Date.now() - supCompactToastAt < 1200) return;
+  supCompactToastAt = Date.now();
+  toast(msg, !!bad);
+}
 function supCompactSend() {
   if (supCompactPending) { toast("压缩进行中,稍候"); return; }
   supCompactPending = true;
   try { wsSafeSend(JSON.stringify({ v: 1, type: "session.compact", sessionId: "super" })); } catch (e) { supCompactPending = false; }
   var btn = document.getElementById("supCompactBtn");
   if (btn) { btn.disabled = true; btn.textContent = "压缩中…"; }
+ // 点击即给口径(此前要等 4s 才解锁,全程零反馈,用户不知道压没压)
+  supCompactToast("正在压缩 Super 会话上下文…");
   setTimeout(function () { // 20s 兜底解锁(admin n7 同款)
     if (!supCompactPending) return;
     supCompactPending = false;
     var b = document.getElementById("supCompactBtn");
     if (b) { b.disabled = false; b.textContent = "压缩"; }
+    supCompactToast("压缩仍在进行(已等 20 秒):可稍后点上下文 pill 看用量,或用 /compact 重试", true);
   }, 20000);
 }
-function supCompactDone() { // ws-router 的 compact 终态帧回调:解锁按钮+重拉实测+历史重放(压缩标记可见)
+function supCompactDone(phase) { // ws-router 的 compact 终态帧回调:解锁按钮+重拉实测+历史重放(压缩标记可见)
   supCompactPending = false;
   var b = document.getElementById("supCompactBtn");
   if (b) { b.disabled = false; b.textContent = "压缩"; }
+ // 完成/失败/无需压缩各有口径(failed/skipped 已由 ws-router 统一 toast,这里只补 completed)
+  if (phase === "completed") supCompactToast("已压缩 Super 会话上下文(历史已刷新,用量见左侧 pill)");
   supCtxRequest();
   try { wsSafeSend(JSON.stringify({ v: 1, type: "super.history", sinceSeq: 0 })); } catch (e) {}
 }
@@ -679,7 +790,10 @@ function supCtxWire() {
   var btn = document.getElementById("supCompactBtn");
   if (btn && !btn.__bound) { btn.__bound = true; btn.addEventListener("click", supCompactSend); }
   var pill = document.getElementById("supCtxPill");
-  if (pill && !pill.__bound) { pill.__bound = true; pill.addEventListener("click", function () { supCtxRequest(); toast("已刷新上下文用量"); }); }
+  if (pill && !pill.__bound) { // 点 pill 打开本会话「上下文余量」浮层(锚自身;数值与 pill 同源)
+    pill.__bound = true;
+    pill.addEventListener("click", function () { supCtxRequest(); supCtxMenuOpen(); });
+  }
 }
 function supChatHeadSync() {
   var st = document.getElementById("superChatState"), sub = document.getElementById("superChatSub");
@@ -861,6 +975,23 @@ function supOnTaskDetail(id, task) {
 }
 function superIdeTaskDocHtml(id) {
   const t = (supState.dispatch || {})[String(id || "")];
+  if (!t) {
+ // 结果流里点进来的任务,实时任务数据可能没同步(归档/重启/非 Super 派发的通知行)。
+ // 此前一律给「任务不存在或已被清理」死胡同——改为用结果流回执正文渲染,并说明数据来源。
+    var rid = String(id || ""), arr = supState.results || [], rr = null, k;
+    for (k = 0; k < arr.length; k++) if (rid && String(arr[k].taskId || "") === rid) { rr = arr[k]; break; }
+    if (rr) {
+      var np = supNoticeParse(String(rr.summary || rr.noticeText || ""));
+      var rtitle = supCleanText((np && np.title) || rr.title, 60) || "任务";
+      var rbody = supCleanText((np && np.summary) || rr.summary || rr.noticeText, 400) || "无回执正文";
+      var rmeta = supResultMeta({ state: String(rr.state || "") });
+      var rwhen = rr.ts ? supWhen(rr.ts) : "";
+      return '<div class="spide-doc-h"><button class="spide-back" data-ideback="1">← 返回</button>' + supEsc(rtitle) +
+        '<span class="sup-badge ' + rmeta.cls + '">' + rmeta.label + '</span></div>' +
+        '<div class="spide-doc-md">' + supEsc(rbody) + '</div>' +
+        '<div class="sup-empty">' + (rwhen ? "回执时间 " + supEsc(rwhen) + " · " : "") + '只有结果流回执(实时任务数据未同步到本面板)。要看执行过程,可在左侧「派发任务」列表打开对应会话。</div>';
+    }
+  }
   if (!t) return '<div class="spide-doc-h"><button class="spide-back" data-ideback="1">← 返回</button></div><div class="sup-empty">任务不存在或已被清理(WS 实时帧未到/重启后等 super.history 回放)。</div>';
   const st = String(t.state || "?");
   const stLabel = superIdeStLabel(st);
@@ -916,6 +1047,8 @@ function superIdeTaskDocHtml(id) {
 function superOpen() {
   switchView("super"); // 画布态=聚焦 super 卡并整卡缩放入画;经典态此调用为纯激活
   supCtxWire(); supCtxRequest(); // 上下文 pill 接线+首次实测拉取
+try { if (typeof supChatWire === "function") supChatWire(); } catch (e) { /* 指挥台上传/模型 pill 接线:失败不阻断既有初始化 */ }
+  setTimeout(function () { superLayoutFit(); }, 80); // 视图可见后再按真实宽度收一次(启动时 clientWidth=0)
   setTimeout(() => { const i = document.getElementById("superInput"); if (i) i.focus(); }, 60);
 }
 /* ── Super IDE 可拖拽布局:左栏宽度 --superSb / 聊天窗宽度 --superChatW ───────────────
@@ -966,7 +1099,8 @@ function superLayoutGrip(el, kind) {
     if (!vs) return;
     var startX = ev.clientX;
     var sb0 = superLayoutVar("--superSb", 280), chat0 = superLayoutVar("--superChatW", 360);
-    var maxTotal = Math.max(640, vs.clientWidth - 56 - 420); // 中心至少 420px
+    var wrapEl = $("superIdeWrap");
+    var maxTotal = Math.max(460, (wrapEl && wrapEl.clientWidth ? wrapEl.clientWidth : vs.clientWidth) - 56 - SUPER_MIN_MAIN); // 中栏至少 SUPER_MIN_MAIN(与 superLayoutFit 同口径)
  // 画布卡片是缩放容器:屏幕 dx 要除以卡片缩放比,分隔线才跟着光标走(经典布局 scale=1)
     var scale = 1;
     try { var vr = vs.getBoundingClientRect(); if (vs.offsetWidth > 0) scale = vr.width / vs.offsetWidth; } catch (e) { /* 忽略 */ }
@@ -994,10 +1128,34 @@ function superLayoutGrip(el, kind) {
     document.addEventListener("pointerup", up);
   });
 }
+/** 窄宽自适应:保证中栏至少 MIN_MAIN。宽度预算超了就先收聊天窗(下限 280)再收侧栏(下限 180)。
+ * 只改进 CSS 变量不落 localStorage——用户保存的偏好保留,下次进指挥台再按当时的视图宽重算。 */
+var SUPER_MIN_MAIN = 320;
+function superLayoutFit() {
+  var vs = $("view-super"), wrap = $("superIdeWrap");
+  if (!vs || !wrap || !wrap.clientWidth) return;
+  var mainEl = $("superIdeMain");
+  if (mainEl && mainEl.clientWidth >= SUPER_MIN_MAIN) return; // 已够宽:不干预用户拖拽
+  var sb = superLayoutVar("--superSb", 280), chat = superLayoutVar("--superChatW", 360);
+ // 基准必须用 #superIdeWrap 的宽(它已含 padding-right=聊天窗宽);用 #view-super 的 clientWidth
+ // 会把视图内边距算进来,导致预算偏大、中栏实际被聊天窗压住(经验证 1280 下差 42px)。
+  var avail = wrap.clientWidth - 56 - SUPER_MIN_MAIN; // 侧栏+聊天窗可用宽
+  if (sb + chat <= avail) return;
+  var over = sb + chat - avail;
+  var chat2 = Math.max(280, chat - over);
+  over -= (chat - chat2);
+  var sb2 = Math.max(180, sb - over);
+  superLayoutApply(sb2, chat2);
+}
 function superLayoutInit() {
   superLayoutLoad();
+  superLayoutFit();
   superLayoutGrip($("superSbGrip"), "sb");
   superLayoutGrip($("superChatGrip"), "chat");
+  if (!window.__superFitBound) {
+    window.__superFitBound = true;
+    window.addEventListener("resize", function () { superLayoutFit(); });
+  }
 }
 /** super.history.result → 渲染条目(journal 事件回放;kinds: message.user/message.agent/super.notice/
  * super.relay/super.dream;message.agent 的 toolCalls/tool.result 合并进条目供 supToolResOf 预扫)。 */
@@ -1028,7 +1186,7 @@ function supApplyHistory(events) {
       var ntm = utext.match(/^\\[系统通知\\]\\s*任务「([^」]+)」已(完成|失败|取消)/);
       if (ntm) { out.push({ kind: "sys", text: "系统通知 · 任务「" + ntm[1] + "」已" + ntm[2] + "(结果见中栏)", ts, sid }); continue; }
       if (/^\\[系统转接/.test(utext)) continue;
-      out.push({ kind: "u", text: utext, ts, sid });
+      out.push({ kind: "u", text: utext, atts: Array.isArray(p.attachments) && p.attachments.length ? p.attachments : null, ts, sid });
     }
     else if (kind === "message.agent") out.push({ kind: "a", text: String(p.text || ""), reasoning: String(p.reasoning || ""), llmMs: Number(p.llmMs || 0), toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : null, ts, sid, usage: p.usage || null }); // usage: 上下文 pill(实测 inputTokens)
     else if (kind === "super.relay" || kind === "companion.relay") out.push({ kind: "relay", text: String(p.text || ""), ts, sid });
@@ -1149,16 +1307,34 @@ function pLabel(pid) {
   const p = (Array.isArray(projects) ? projects : []).find((x) => x.id === pid);
   return (p && (p.label || p.id)) || String(pid || "").slice(0, 12);
 }
-/** 发送一轮 super.turn:等待态由 turn.user 广播回显用户气泡,done 广播回填回复(error 清等待)。 */
+/** 发送一轮 super.turn:等待态由 turn.user 广播回显用户气泡,done 广播回填回复(error 清等待)。
+ * 带附件(上传 + 右键上下文里的文件 ref)与上下文前言块;发送后清空两处芯片。 */
 function supSend() {
   const inp = document.getElementById("superInput");
   if (!inp || supState.waiting) return;
-  const text = String(inp.value || "").trim();
+  const typed = String(inp.value || "").trim();
+  const refPrefix = (typeof supRefPrefix === "function") ? supRefPrefix() : "";
+ // 附件来源①输入区待发附件 ②右键「添加到指挥台」里的文件类 ref(去重、按协议上限截断)
+  const fromBox = (typeof supAttPayload === "function") ? supAttPayload() : [];
+  const fromRef = (typeof supRefAsAtts === "function") ? supRefAsAtts() : [];
+  const seenPath = {};
+  const atts = fromBox.concat(fromRef).filter(function (a) {
+    if (!a || !a.path || seenPath[a.path]) return false;
+    seenPath[a.path] = 1;
+    return true;
+  });
+  const clipped = atts.length > 12 ? atts.splice(12) : []; // 按协议上限截断(surface.ts SuperTurn attachments max(12))
+  if (clipped.length) toast("附件超上限:已丢弃 " + clipped.length + " 个(最多发 12 个)", true); // 静默截断改为明示
+  let text = (refPrefix + typed).trim();
+ // 只发附件/上下文没写字时,正文给一句可见占位(协议 text 必填,且用户要知道自己发了什么)
+  if (!text && atts.length) text = "见附件:" + atts.map(function (a) { return String(a.name || "附件"); }).join("、");
   if (!text) return;
  // 显式 sessionId="super"(固定持久会话;与 server superSessionId 同源;旧缺省行为不变)
-  if (!wsSafeSend(JSON.stringify({ v: 1, type: "super.turn", text, sessionId: "super" }))) { toast("连接未就绪", true); return; }
+  if (!wsSafeSend(JSON.stringify({ v: 1, type: "super.turn", text, sessionId: "super", ...(atts.length ? { attachments: atts } : {}) }))) { toast("连接未就绪", true); return; }
   inp.value = "";
   try { inp.style.height = "auto"; } catch (e) {}
+  if (typeof supAttClear === "function") supAttClear();
+  if (typeof supRefClear === "function") supRefClear();
   supState.waiting = true;
   supRunStart("正在理解指令");
   supRenderChat();
@@ -1168,7 +1344,7 @@ function superOnMsg(m) {
   if (m.type === "super.history.result") { supApplyHistory(m.events); return; }
   if (m.type === "super.turn.user") {
     supState.stream = null; // 新一轮:清掉上一轮流式 live 气泡
-    supState.entries.push({ kind: "u", text: String(m.text || ""), ts: Date.now(), sid: supDayLabel() });
+    supState.entries.push({ kind: "u", text: String(m.text || ""), atts: Array.isArray(m.attachments) && m.attachments.length ? m.attachments : null, ts: Date.now(), sid: supDayLabel() });
     supRenderChat();
     return;
   }
@@ -1310,7 +1486,13 @@ document.getElementById("superInput").addEventListener("keydown", (e) => {
 /* 与主聊天同款 composer 行为:textarea 随内容增高(≤160px);+ 菜单=三个常用指令 */
 (function () {
   const si = document.getElementById("superInput");
-  if (si) si.addEventListener("input", function () { si.style.height = "auto"; si.style.height = Math.min(160, si.scrollHeight) + "px"; });
+  if (si) si.addEventListener("input", function () {
+    si.style.height = "auto"; si.style.height = Math.min(160, si.scrollHeight) + "px";
+ // (P4):发送键禁用态——空输入=灰禁,控件自解释「能不能发」
+    var sb = document.getElementById("superSend");
+    if (sb) { var empty = !si.value.trim(); sb.classList.toggle("disabled", empty); sb.title = empty ? "输入内容后再发送(Enter)" : "发送 (Enter)"; }
+  });
+  try { var sbInit = document.getElementById("superSend"); if (sbInit) { var ie = !String(si ? si.value : "").trim(); sbInit.classList.toggle("disabled", ie); sbInit.title = ie ? "输入内容后再发送(Enter)" : "发送 (Enter)"; } } catch (e) {} /* (m2):初始即同步 title */
   const qb = document.getElementById("superQuickBtn"), qm = document.getElementById("superQuickMenu");
   if (qb && qm && !qb.__bound) {
     qb.addEventListener("click", function (e) { e.stopPropagation(); qm.style.display = qm.style.display === "none" ? "flex" : "none"; });
@@ -1370,6 +1552,7 @@ document.getElementById("superChatBody").addEventListener("click", (ev) => {
   }
 });
 superLayoutInit(); // 左栏/聊天窗宽度拖拽手柄(localStorage 持久;聊天窗不可折叠)
+supCtxWire(); // 上下文 pill 点击=本会话余量浮层;不只依赖 superOpen(经 switchView/深链进入时也要有绑定)
 supChatInit(); // 聊天窗头部状态 + 回最新按钮 + 快捷指令
 setInterval(function () { try { if (supState.run && supState.run.active) supRunBarRender(); } catch (e) {} }, 1000); // 状态条秒表
 superIdeZoneSet("health"); // 初始区=健康一屏(默认首屏;侧栏/中栏类就位)
@@ -1488,12 +1671,14 @@ document.addEventListener("mouseup", (e) => {
     menu.style.left = Math.min(e.clientX + 8, window.innerWidth - 180) + "px";
     menu.style.top = Math.max(8, e.clientY - 40) + "px";
     menu.dataset.txt = txt.slice(0, 400);
+    popoverSyncEl("selMenu", true, "#selMenu"); // popover 治理:外点(已有 click)+Esc(注册表补)
   }, 10);
 });
 document.addEventListener("click", (e) => {
   const m = $("selMenu");
   if (!m || (e.target.closest && e.target.closest("#selMenu"))) return;
   m.style.display = "none";
+  popoverSyncEl("selMenu", false, "#selMenu");
 });
 
 // ---- 定时自动化管理(ZCode AutomationsSection 移植) ----

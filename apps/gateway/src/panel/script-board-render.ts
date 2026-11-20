@@ -42,22 +42,31 @@ function subChatGroups() {
     if (!g) { g = { aid: aid, evs: [], msgs: [], spawnTime: 0, instructions: "", final: "", finalTime: 0 }; groups.set(aid, g); }
     return g;
   };
+ // spawn 只有 taskId、事件窗口可能从子代理中段开始(agentId 只在 event/result),
+ // 先建 taskId→agentId 映射;归属键=agentId || 映射 || taskId,与 subDirEntries 同口径。
+  const taskAgent = new Map();
+  for (const e of all) {
+    const p = e.payload || {};
+    if ((e.kind === "subagent.event" || e.kind === "subagent.result") && p.taskId && p.agentId) taskAgent.set(String(p.taskId), String(p.agentId));
+  }
+  const keyOf = (p) => String(p.agentId || taskAgent.get(String(p.taskId || "")) || p.taskId || "");
   for (const e of all) {
     const p = e.payload || {};
     if (e.kind === "subagent.spawn") {
-      const aid = String(p.agentId || "");
+      const aid = keyOf(p);
       if (!aid) continue;
       const g = gOf(aid);
       g.spawnTime = e.time || g.spawnTime;
       if (p.instructions) g.instructions = String(p.instructions);
     } else if (e.kind === "subagent.event") {
-      const aid = String(p.agentId || "");
+      const aid = keyOf(p);
       if (!aid) continue;
       const g = gOf(aid);
       g.evs.push(e);
+      if (p.kind === "message.user" && !g.instructions && p.text) g.instructions = String(p.text);
       if (p.kind === "message.agent" && p.text) g.msgs.push({ time: e.time || 0, text: String(p.text) });
     } else if (e.kind === "subagent.result") {
-      const aid = String(p.agentId || "");
+      const aid = keyOf(p);
       if (!aid) continue;
       const fin = p.event && (p.event.finalText || p.event.note);
       if (fin) { const g = gOf(aid); g.final = String(fin); g.finalTime = e.time || 0; }
@@ -138,7 +147,16 @@ function subMsgRender() {
       "</div>";
   };
   if (!list.length) {
-    listEl.innerHTML = '<div class="sl-empty">本会话暂无子代理</div>';
+ // 走查:首屏末 200 条常不含子代理事件,自动回溯在翻更早的历史页
+ // (繁忙时经验证十余秒);期间断言「本会话暂无子代理」会与轨迹看板的子代理卡自相矛盾。
+    let backfilling = false;
+    try {
+      backfilling = !!(((typeof trajBackfillTimer !== "undefined") && trajBackfillTimer && (typeof trajBackfillView !== "undefined") && trajBackfillView === "subchat")
+        || ((typeof histPageLoading !== "undefined") && histPageLoading && (typeof histHasMore !== "undefined") && histHasMore));
+    } catch (e) { backfilling = false; }
+    listEl.innerHTML = backfilling
+      ? '<div class="sl-empty">正在回溯更早历史,寻找子代理记录…</div>'
+      : '<div class="sl-empty">本会话暂无子代理</div>';
   } else {
     const runList = list.filter((g) => (dirBy.get(g.aid) || {}).cls === "run");
     const doneList = list.filter((g) => (dirBy.get(g.aid) || {}).cls !== "run");
@@ -1345,7 +1363,12 @@ function renderBoard() {
       if (box) box.innerHTML = '<div class="cc-empty">白板文件损坏——无可显示明细</div>';
       return;
     }
-    g.innerHTML = '<div class="cc-empty">该会话还没有设计白板——代码改动类任务,agent 会先画设计草图再动手;任务卡上的「白板」chip 可直达对应板</div>';
+ // 修复(5):board.list 首拉为空 ≠ 无板——重拉窗(1.2s×≤3,见 script-ws-router)内先显等待态,
+ // 不把「该会话还没有设计白板」当结论甩给用户(经验证点 2~3 次「刷新」才出图)。
+    const loadingList = (boardListRetry || 0) > 0;
+    g.innerHTML = loadingList
+      ? '<div class="cc-empty">正在加载白板清单…(已自动重试 ' + boardListRetry + " 次,稍候;也可点「刷新」手动重试)</div>"
+      : '<div class="cc-empty">该会话还没有设计白板——代码改动类任务,agent 会先画设计草图再动手;任务卡上的「白板」chip 可直达对应板</div>';
     if (nb) nb.innerHTML = "";
     if (box) box.innerHTML = '<div class="cc-empty">点节点看「干什么用」与语义流程</div>';
     return;

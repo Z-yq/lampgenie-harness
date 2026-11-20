@@ -1,5 +1,5 @@
 /**
- * 崩溃尾部修复(机制,机制矩阵 #25):
+ * 崩溃尾部修复(机制 ,机制矩阵 #25):
  * 网关在工具执行期间死掉时,journal 里会留下「有 tool.call 无 tool.result」「有 step.start 无
  * step.end / 有 turn.start 无 turn.end」的未闭合尾部。resume 后模型看到历史残缺,可能盲目重试
  * 有副作用的工具(文件已写/命令已执行却以为没做)。

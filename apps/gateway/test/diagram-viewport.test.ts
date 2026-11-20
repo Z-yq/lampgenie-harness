@@ -169,7 +169,8 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box);
+      (el: El) => el.box,
+    );
     // 并集 = (100,80,200x120) ∪ (400,300,80x20) = x:100..480, y:80..320。
     expect(bounds).toEqual({ x: 100, y: 80, width: 380, height: 240 });
   });
@@ -204,7 +205,8 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box);
+      (el: El) => el.box,
+    );
     expect(bounds).toEqual({ x: 200, y: 150, width: 300, height: 100 });
   });
 
@@ -217,7 +219,8 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box);
+      (el: El) => el.box,
+    );
     expect(keep).toEqual({ x: 0, y: 0, width: 1000, height: 800 });
 
     const none: El[] = [
@@ -230,7 +233,8 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       none,
       (el: El) => views2[none.indexOf(el)] as never,
-      (el: El) => el.box);
+      (el: El) => el.box,
+    );
     expect(fallback).toEqual({ height: 800, width: 1000, x: 0, y: 0 });
   });
 
@@ -264,7 +268,8 @@ describe("diagram-viewport resolveSvgBounds(excludes)", () => {
       rootBounds,
       els,
       (el: El) => views[els.indexOf(el)] as never,
-      (el: El) => el.box);
+      (el: El) => el.box,
+    );
     expect(bounds).toEqual({ height: 800, width: 1000, x: 0, y: 0 }); // 全排除 → 回退
   });
 });
@@ -275,19 +280,22 @@ describe("diagram-viewport 辅助导出", () => {
       isCanvasBackgroundRect(
         { tagName: "rect", className: "", stroke: "none" } as never,
         { x: 0, y: 1, width: 960, height: 800 },
-        rootBounds),
+        rootBounds,
+      ),
     ).toBe(true);
     expect(
       isCanvasBackgroundRect(
         { tagName: "rect", className: "bg", stroke: "#000" } as never,
         { x: 5, y: 5, width: 100, height: 100 },
-        rootBounds),
+        rootBounds,
+      ),
     ).toBe(false); // 不覆盖根
     expect(
       isCanvasBackgroundRect(
         { tagName: "circle", className: "", stroke: "none" } as never,
         { x: 0, y: 0, width: 1000, height: 800 },
-        rootBounds),
+        rootBounds,
+      ),
     ).toBe(false); // 非 rect
   });
 

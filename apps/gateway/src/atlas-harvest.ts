@@ -13,7 +13,7 @@
  * 依赖纪律:node:fs/node:path + direction-atlas-store(同仓 IO);不引 agent loop、不碰时钟
  * (now 可注入);坏行/坏文件 fail-soft 跳过并计数。
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { DirectionAtlas } from "@lampgenie/runtime/agent/direction-atlas";
 import { atlasJsonPath, build, writeAtlasFile } from "./direction-atlas-store.js";
@@ -66,6 +66,13 @@ export interface AtlasModuleActivity {
   sampleSessions: string[];
   firstSeen: string;
   lastSeen: string;
+ /** 结构上下文(code_sense 索引:改这个模块会波及什么。 */
+  context?: {
+    upstream: number;
+    downstream: number;
+    isEntrypoint: boolean;
+    riskLevel: "high" | "medium" | "low";
+  };
 }
 
 /** 返工信号:同一路径先被「建设类」会话编辑、窗口内又被「修复类」会话编辑(点对点链 v1 签名)。 */
@@ -96,6 +103,8 @@ export interface AtlasHarvest {
   themes: AtlasTheme[];
   moduleActivity: AtlasModuleActivity[];
   reworkSignals: AtlasReworkSignal[];
+ /** P1:近窗口被 ≥3 个不同会话 read_file 的路径 top10(重复探索浪费信号)。 */
+  repeatExploration?: Array<{ path: string; sessions: number }>;
 }
 
 /** 修复类标题判据(中文动词优先;英文 fix/bug/regress 兜底)。 */
@@ -130,6 +139,24 @@ function titleKeywords(title: string): string[] {
   return [...out].filter((k) => !STOPWORDS.has(k)).slice(0, 24);
 }
 
+/**
+ * (S3 种子):标题/主题 token 是否**全部**被停用词吸收——主题晋升 goal 回收判据。
+ * 空/无 token → false(不回收,宁漏勿误);tokenize 与 titleKeywords 同口径(过滤前全集)。
+ */
+export function isAllStopwords(title: string): boolean {
+  const text = String(title ?? "").toLowerCase();
+ // 拉丁按连字符/下划线/点断子词——slugOf 用 `-` 拼接关键词(187-195),判据须与其互逆,
+ // 否则「missing-implemented」成整 token 而 STOPWORDS 只有分词形态,恒判不中。
+  const tokens: string[] = text.match(/[a-z][a-z0-9]*/g) ?? [];
+  const cjkRuns = text.match(/[\u4e00-\u9fff]+/g) ?? [];
+  for (const run of cjkRuns) {
+    for (let i = 0; i + 1 < run.length; i++) tokens.push(run.slice(i, i + 2));
+    if (run.length === 1) tokens.push(run);
+  }
+  if (tokens.length === 0) return false;
+  return tokens.every((t) => STOPWORDS.has(t));
+}
+
 const STOPWORDS: ReadonlySet<string> = new Set<string>([
   "the", "and", "for", "with", "this", "that", "from", "into", "用户", "要求", "继续", "一个", "一下",
   "进行", "使用", "需要", "可以", "没有", "已经", "目前", "所有", "这些", "下面", "以上",
@@ -138,6 +165,10 @@ const STOPWORDS: ReadonlySet<string> = new Set<string>([
   "missing", "implemented", "partial", "mechanism", "step", "task-phase", "phase", "tools", "tool",
   "agent", "panel", "session", "fix", "test", "tests", "tasks", "update", "add", "refactor",
   "工具", "任务", "文件", "步骤", "机制", "面板",
+ // 优化(atlas 机制注意「主题簇关键词取自任务书样板」):任务书样板句的高频词
+ // 不是开发方向——它们出现在每个任务的标题里(「背景」「用户是」「口径」「优化」)。
+  "背景", "口径", "优化", "修复", "问题", "开发", "功能", "实现", "分析", "处理",
+  "lampgenie-harness", "genie", // 仓名不是方向(每个任务标题都含)
 ]);
 
 /**
@@ -353,7 +384,8 @@ function pathUnderRoot(path: string, root: string): boolean {
 function attributeByEditedPaths(
   editedPaths: string[],
   include: Set<string>,
-  projectRoots: Record<string, string> | undefined): string | undefined {
+  projectRoots: Record<string, string> | undefined,
+): string | undefined {
   if (projectRoots === undefined || editedPaths.length === 0) return undefined;
   let best: { id: string; depth: number } | undefined;
   for (const [id, root] of Object.entries(projectRoots)) {
@@ -486,6 +518,9 @@ export function harvestAtlas(journalDir: string, projectKey: string, opts: Harve
       lastSeen: toIso(list[list.length - 1]!.mtimeMs),
     }));
 
+ // code_sense 结构层集成:为热点模块补充依赖上下文(上游/下游/入口/风险)。
+ // enrichModuleContext 在 refreshAtlasSnapshot 调用(那里有 repoRoot);此处不调
+
  // ── 返工信号:同一逻辑单元(路径按 logicalPathKey 归并,脚本+同名测试=1 个变更),
  // 先有非修复会话编辑、其后 7 天内有修复类会话再编辑 ──
  // atlas 机制注意:按裸路径记会把「safe-restart.cjs + 其 .test.ts」记成两条,虚高一半。
@@ -517,6 +552,22 @@ export function harvestAtlas(journalDir: string, projectKey: string, opts: Harve
     }
   }
   base.reworkSignals = rework.sort((a, b) => a.gapMs - b.gapMs).slice(0, MAX_REWORK);
+ // P1 重复探索:≥3 会话 read_file 同一路径(每会话只算一次)
+  {
+    const readBy = new Map<string, Set<string>>();
+    for (const session of sessions) {
+      for (const rp of session.readPaths ?? []) {
+        const set = readBy.get(rp) ?? new Set<string>();
+        set.add(session.sessionId);
+        readBy.set(rp, set);
+      }
+    }
+    base.repeatExploration = [...readBy.entries()]
+      .filter(([, ids]) => ids.size >= 3)
+      .sort((a, b) => b[1].size - a[1].size)
+      .slice(0, 10)
+      .map(([rp, ids]) => ({ path: rp, sessions: ids.size }));
+  }
   return base;
 }
 
@@ -537,6 +588,8 @@ export function refreshAtlasSnapshot(
   opts: HarvestOptions & { journalDir: string; reworkSummary?: AtlasReworkSummary },
 ): RefreshAtlasResult {
   const harvest = harvestAtlas(opts.journalDir, projectKey, opts);
+ // code_sense 结构层集成:为热点模块补充依赖上下文(fail-soft,索引缺→context 不赋值)
+  try { enrichModuleContext(harvest.moduleActivity, root); } catch { /* 索引不可读 */ }
   const built = build(root, projectKey);
   if (!built.ok || built.atlas === undefined) return { ok: false, code: built.code ?? "ATLAS_STORE_ERROR", harvest };
  // 返工因果链摘要由调用方(nightly)从台账读出传入(依赖单向:rework-chain → atlas-harvest)。
@@ -557,16 +610,35 @@ const BRIEF_MAX_CHARS = 600;
 
 /** 快照的宽松读视图(renderAtlasStartBrief 用;derived 可能缺)。 */
 interface AtlasBriefView {
-  goals?: Array<{ title?: unknown; status?: unknown }>;
+  goals?: Array<{ id?: unknown; title?: unknown; status?: unknown }>;
+ /** agent 推进轨迹叠加层( super agent 管理主线;goalId → 按时间序的行)。 */
+  goalProgress?: Record<string, Array<{ at?: unknown; note?: unknown; nextStep?: unknown }>>;
   timeline?: Array<{ reason?: unknown; from?: unknown; to?: unknown; at?: unknown }>;
   conflicts?: Array<{ status?: unknown; detail?: unknown }>;
-  defectGenes?: Array<{ defectClass?: unknown; module?: unknown; count?: unknown }>;
+  defectGenes?: Array<{ defectClass?: unknown; module?: unknown; count?: unknown; lastAt?: unknown }>;
   generatedAt?: unknown;
   derived?: AtlasHarvest;
 }
 
 function clip(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
+}
+
+/** 任务/主线标题的匹配 token:ascii 词(≥3 字符,小写)+ CJK 二元组(与 world-model-tool 同口径)。 */
+function goalMatchTokens(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const m of text.match(/[A-Za-z_][A-Za-z0-9_-]{2,}/g) ?? []) tokens.add(m.toLowerCase());
+  for (const run of text.match(/[\u4e00-\u9fff]{2,}/g) ?? []) {
+    for (let i = 0; i + 2 <= run.length; i += 1) tokens.add(run.slice(i, i + 2));
+  }
+  return tokens;
+}
+
+/** 两 token 集的交集大小(≥3 视为同主线;纯口径:交集比 Jaccard 更容错短标题)。 */
+function tokenOverlap(a: Set<string>, b: Set<string>): number {
+  let n = 0;
+  for (const t of a) if (b.has(t)) n += 1;
+  return n;
 }
 
 /** defectClass → 开工提示语(确定性映射;未列类别不出行)。 */
@@ -613,29 +685,60 @@ function taskTouchesModule(text: string, module: string): boolean {
  * class 必须在 DEFECT_CLASS_HINTS 里、模块词命中 taskText;taskText 空 → []。
  * 返回按 count 降序(并列时 class、module 字典序)的**全部**命中,聚合键是 (defectClass, module)。
  */
+/** 基因治理:注入侧 TTL(设想的 confidence_decay;超期未强化的基因不注入)。 */
+export const GENE_MAX_AGE_DAYS = 60;
+
+/**
+ * P4 tips 灰度 A/B:基于 gene id + 日期的确定性伪随机 rollout。
+ * 同一天同一个基因对所有任务给同一个 arm(treated/control),隔天自动翻转——
+ * 避免「同一天内 treated 和 control 各半但任务难度不同」的混杂。
+ */
+export function geneRolloutArm(geneId: string, at?: number): "treated" | "control" {
+  const day = Math.floor((at ?? Date.now()) / 86_400_000);
+  let hash = 0;
+  const input = `${geneId}:${day}`;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0;
+  }
+  return (Math.abs(hash) % 100) < 50 ? "treated" : "control";
+}
+
 export function matchedDefectGenes(
   atlasJson: unknown,
-  taskText: string): Array<{ defectClass: string; module: string; count: number }> {
+  taskText: string,
+  opts: { moduleExists?: (module: string) => boolean; now?: number; rollout?: boolean } = {},
+): Array<{ defectClass: string; module: string; count: number }> {
   const text = (taskText ?? "").trim();
   if (text === "") return [];
   const atlas = (atlasJson ?? {}) as AtlasBriefView;
+  const now = typeof opts.now === "number" && Number.isFinite(opts.now) ? opts.now : Date.now();
   const byKey = new Map<string, { defectClass: string; module: string; count: number }>();
   for (const gene of atlas.defectGenes ?? []) {
     const cls = typeof gene.defectClass === "string" ? gene.defectClass.trim() : "";
     if (DEFECT_CLASS_HINTS[cls] === undefined) continue;
     if (typeof gene.module !== "string" || !taskTouchesModule(text, gene.module)) continue;
+ // 治理内核:①使用时校验——模块文件已删=知识腐坏,不注入;②TTL——lastAt 超期不注入。
+    if (opts.moduleExists !== undefined && !opts.moduleExists(gene.module)) continue;
+    const lastAt = Date.parse(typeof gene.lastAt === "string" ? gene.lastAt : "");
+    if (Number.isFinite(lastAt) && now - lastAt > GENE_MAX_AGE_DAYS * 86_400_000) continue;
     const count = typeof gene.count === "number" && Number.isFinite(gene.count) && gene.count > 0 ? gene.count : 1;
     const key = `${cls}\u0000${gene.module}`;
     const hit = byKey.get(key);
     if (hit === undefined) byKey.set(key, { defectClass: cls, module: gene.module, count });
     else hit.count += count;
   }
-  return [...byKey.values()].sort(
+ // P4 灰度:control 组的基因不注入(返回空——nightly 统计按 arm 分组对账)
+  const allGenes = [...byKey.values()].sort(
     (a, b) =>
       b.count - a.count ||
       a.defectClass.localeCompare(b.defectClass) ||
       a.module.localeCompare(b.module),
   );
+ // P4 灰度 opt-in:rollout=true 时才按 arm 过滤(control 组不返回);缺省=false(全量,测试兼容)
+  if ((opts as { rollout?: boolean }).rollout === true) {
+    return allGenes.filter((g) => geneRolloutArm(`${g.defectClass}:${g.module}`, opts.now) === "treated");
+  }
+  return allGenes;
 }
 
 /**
@@ -645,7 +748,8 @@ export function matchedDefectGenes(
  */
 export function createDefectGeneEditHint(
   getAtlasJson: () => unknown,
-  onHint?: (info: { path: string; modules: string[]; classes: string[] }) => void): (rel: string) => string | undefined {
+  onHint?: (info: { path: string; modules: string[]; classes: string[] }) => void,
+): (rel: string) => string | undefined {
   const hinted = new Set<string>();
   return (rel: string) => {
     const atlasJson = getAtlasJson();
@@ -662,15 +766,47 @@ export function createDefectGeneEditHint(
 }
 
 /**
+ * P0 决策点动态注入(设想的「改签名前必须列出全部 caller 并核对」):
+ * agent 首次编辑**高影响模块**(code_sense context.riskLevel=high)时,在 edit_file 回执
+ * 注入强制提示——上游调用方数量 + radiation 工具指路。每任务每模块只注入一次。
+ * 与基因提示(geneEditHint)并列,但语义不同:基因=「栽过跟头」,高影响=「改了会波及很多」。
+ */
+export function createHighImpactEditWarning(
+  getAtlasJson: () => unknown,
+  onWarn?: (info: { path: string; upstream: number; isEntrypoint: boolean }) => void,
+): (rel: string) => string | undefined {
+  const warned = new Set<string>();
+  return (rel: string) => {
+    const atlasJson = getAtlasJson() as { derived?: { moduleActivity?: AtlasModuleActivity[] } } | undefined | null;
+    if (atlasJson === undefined || atlasJson === null) return undefined;
+    const normalized = String(rel ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
+    const modules = atlasJson.derived?.moduleActivity ?? [];
+    const hit = modules.find((m) => {
+      if (m.context?.riskLevel !== "high") return false;
+      const mPath = m.path.replace(/\\/g, "/");
+      return normalized === mPath || normalized.endsWith("/" + mPath) || mPath.endsWith("/" + normalized);
+    });
+    if (hit === undefined || hit.context === undefined) return undefined;
+    if (warned.has(hit.path)) return undefined;
+    warned.add(hit.path);
+    try { onWarn?.({ path: hit.path, upstream: hit.context.upstream, isEntrypoint: hit.context.isEntrypoint }); } catch { /* 留痕失败不阻塞 */ }
+    const entry = hit.context.isEntrypoint ? ",入口函数" : "";
+    return `<system-reminder>\n⚠️ 高影响模块:${hit.path}(${hit.context.upstream} 个上游调用方${entry})\n此改动会波及大量调用方——动手前:\n1. 用 code_sense action=radiation target=<本文件的导出符号> 拿四分面辐射清单\n2. 核对清单中的上游调用方是否需要同步修改\n3. 确认影响面已闭合再继续编辑\n</system-reminder>`;
+  };
+}
+
+/**
  * 本模块历史缺陷基因行(atlas curated 层 consumption):任务文本命中模块 → 按 defectClass
  * 汇合 count,降序取前 2 类;无命中/无基因/类别无提示语 → 空数组(零变化)。
  * 选择逻辑改由 matchedDefectGenes 提供,本函数只管「前 2 类 + 行文案」,输出逐字不变。
  */
-function renderDefectGeneLines(atlas: AtlasBriefView, taskText: string): string[] {
+function renderDefectGeneLines(atlas: AtlasBriefView, taskText: string, opts: { moduleExists?: (m: string) => boolean; now?: number } = {}): string[] {
+  const text = taskText.trim();
+  if (text === "") return [];
+ // 委托 matchedDefectGenes(单一事实源;治理过滤——模块存在性+TTL——同源生效)
+  const shown = matchedDefectGenes(atlas, text, opts);
   const byClass = new Map<string, number>();
-  for (const gene of matchedDefectGenes(atlas, taskText)) {
-    byClass.set(gene.defectClass, (byClass.get(gene.defectClass) ?? 0) + gene.count);
-  }
+  for (const g of shown) byClass.set(g.defectClass, (byClass.get(g.defectClass) ?? 0) + g.count);
   const rows = [...byClass.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return rows
     .slice(0, 2)
@@ -682,12 +818,105 @@ function renderDefectGeneLines(atlas: AtlasBriefView, taskText: string): string[
  * 本周主题/热点模块/返工信号 + 本模块历史缺陷基因(需第二参 taskText 命中模块才有)。
  * 纯函数、无时间戳(稳定前缀,prompt cache 友好);空快照/空内容 → 空串(调用方按空串跳过注入)。
  */
-export function renderAtlasStartBrief(atlasJson: unknown, taskText?: string, extraLines: string[] = []): string {
+export /**
+ * code_sense 结构层集成:为热点模块补充依赖上下文。
+ * 读 .genie/sense-index/<hash>/index.json,按文件分组统计上游/下游边数+入口标志+风险分级。
+ * fail-soft:索引不可读/文件不在索引 → context 不赋值(保持 undefined)。
+ */
+function enrichModuleContext(modules: AtlasModuleActivity[], repoRoot: string): void {
+ // 用顶层 import 的 readFileSync/readdirSync/join(已在文件头导入);不加 require——ES 模块上下文不可用
+
+ // 找 lampgenie-harness 根的索引
+  const senseDir = join(repoRoot, ".genie", "sense-index");
+  if (!existsSync(senseDir)) return;
+  let indexFile: string | undefined;
+  for (const name of readdirSync(senseDir)) {
+    const candidate = join(senseDir, name, "index.json");
+    if (!existsSync(candidate)) continue;
+    try {
+      const meta = JSON.parse(readFileSync(candidate, "utf8")) as { root?: string };
+      if (meta.root === repoRoot) { indexFile = candidate; break; }
+    } catch { /* 坏索引跳过 */ }
+  }
+  if (indexFile === undefined) return;
+
+  const index = JSON.parse(readFileSync(indexFile, "utf8")) as {
+    nodes: Array<{ id: string; file: string; kind: string; symKind?: string }>;
+    edges: Array<{ from: string; to: string }>;
+  };
+
+ // 按文件分组节点 ID
+  const fileNodeIds = new Map<string, Set<string>>();
+  for (const node of index.nodes) {
+    const set = fileNodeIds.get(node.file) ?? new Set<string>();
+    set.add(node.id);
+    fileNodeIds.set(node.file, set);
+  }
+ // 入口节点集合(kind=entrypoint 的文件)
+  const entryFiles = new Set<string>();
+  for (const node of index.nodes) {
+    if (node.kind === "entrypoint") entryFiles.add(node.file);
+  }
+
+ // 边统计:from→to,按文件归属(排除同文件内边)
+  const upstreamCount = new Map<string, number>();
+  const downstreamCount = new Map<string, number>();
+  for (const edge of index.edges) {
+    const fromFile = edge.from.split("#")[0]!;
+    const toFile = edge.to.split("#")[0]!;
+    if (fromFile === toFile) continue; // 同文件内边不算
+    downstreamCount.set(fromFile, (downstreamCount.get(fromFile) ?? 0) + 1);
+    upstreamCount.set(toFile, (upstreamCount.get(toFile) ?? 0) + 1);
+  }
+
+  for (const mod of modules) {
+    const normalized = mod.path.replace(/\\/g, "/").replace(/^\.\//, "");
+    const upstream = upstreamCount.get(normalized) ?? 0;
+    const downstream = downstreamCount.get(normalized) ?? 0;
+    const isEntrypoint = entryFiles.has(normalized);
+ // 风险分级:高影响(≥10 上游)或入口 → high;中等(≥3)→ medium;其余 → low
+    const riskLevel: "high" | "medium" | "low" =
+      upstream >= 10 || isEntrypoint ? "high" : upstream >= 3 ? "medium" : "low";
+    mod.context = { upstream, downstream, isEntrypoint, riskLevel };
+  }
+}
+
+export function renderAtlasStartBrief(atlasJson: unknown, taskText?: string, extraLines: string[] = [], opts: { moduleExists?: (m: string) => boolean; now?: number } = {}): string {
   const atlas = (atlasJson ?? {}) as AtlasBriefView;
   const lines: string[] = [];
-  const activeGoals = (atlas.goals ?? []).filter((g) => g.status === "active").slice(0, 3);
-  for (const goal of activeGoals) {
-    if (typeof goal.title === "string" && goal.title.trim() !== "") lines.push(`- 方向:${clip(goal.title.trim(), 80)}`);
+ // super agent 主线驱动:方向行带上进度轨迹与下一步(goal_progress 的 nextStep
+ // 在这里显形——「下一步」是主线被持续推动的抓手);任务文本与主线标题相似时点名关联,
+ // 提醒(验收第⑤步)据此只对真的有主线的项目注入。
+  const progressOf = atlas.goalProgress ?? {};
+  const activeGoalRows = (atlas.goals ?? []).filter((g) => g.status === "active").slice(0, 3);
+  for (const goal of activeGoalRows) {
+    if (typeof goal.title !== "string" || goal.title.trim() === "") continue;
+    const goalId = typeof goal.id === "string" ? goal.id : "";
+    const rows = goalId !== "" ? progressOf[goalId] ?? [] : [];
+    const lastNote = [...rows].reverse().find((r) => typeof r.note === "string" && r.note.trim() !== "");
+    const nextStep = [...rows].reverse().find((r) => typeof r.nextStep === "string" && r.nextStep.trim() !== "");
+    const progressPart = rows.length > 0
+      ? `(进度 ${rows.length}${lastNote ? ` · 最近:${clip(String(lastNote!.note).trim(), 36)}` : ""}${nextStep ? `;下一步:${clip(String(nextStep!.nextStep).trim(), 50)}` : ""})`
+      : "";
+    lines.push(`- 方向:${clip(goal.title.trim(), 80)}${progressPart}`);
+  }
+ // 任务-主线自动关联:标题 token 重叠 ≥3(ascii 词 + CJK 二元组)→ 点名「疑似推进」,
+ // 把「任务做完登记证据」的钩子递到 agent 手边(只点一条,避免简报变成任务清单)。
+  if (typeof taskText === "string" && taskText.trim() !== "") {
+    const taskTokens = goalMatchTokens(taskText);
+    let linked: { id: string; title: string } | undefined;
+    let bestOverlap = 0;
+    for (const goal of activeGoalRows) {
+      if (typeof goal.title !== "string" || typeof goal.id !== "string") continue;
+      const overlap = tokenOverlap(taskTokens, goalMatchTokens(goal.title));
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        linked = { id: goal.id, title: goal.title };
+      }
+    }
+    if (linked !== undefined && bestOverlap >= 3) {
+      lines.push(`- 本任务疑似推进主线「${clip(linked.title, 50)}」——完成后用 world_model action=goal_progress goalId=${linked.id} 登记 note+evidence`);
+    }
   }
   const turns = (atlas.timeline ?? []).slice(-2).reverse();
   for (const turn of turns) {
@@ -702,7 +931,7 @@ export function renderAtlasStartBrief(atlasJson: unknown, taskText?: string, ext
     }
   }
  // 缺陷基因(消费面):放在 derived 统计之前,避免被 BRIEF_MAX_CHARS 截掉尾巴。
-  for (const line of renderDefectGeneLines(atlas, taskText ?? "")) lines.push(line);
+  for (const line of renderDefectGeneLines(atlas, taskText ?? "", opts)) lines.push(line);
  // (D 简报插槽):外部(机制 brief/夜报/工序纪律卡)可插自己的行——位置固定在
  // 缺陷基因之后、影响面未闭合簇(derived 统计)之前,保持「本项目的历史教训 → 全局统计」的
  // 信息梯度;默认空数组 → 输出与旧版逐字一致。
@@ -713,7 +942,7 @@ export function renderAtlasStartBrief(atlasJson: unknown, taskText?: string, ext
   if (derived?.reworkChains !== undefined && (derived.reworkChains.fanoutClusters ?? 0) > 0) {
     const worst = derived.reworkChains.impactNotClosed?.[0];
     lines.push(
-      `- 影响面未闭合簇:${derived.reworkChains.fanoutClusters} 个${worst ? `(最重:${worst.buildSession} 引发 ${worst.fixes} 修/${worst.units} 单元)` : ""}——动手前先列辐射面(上游调用方/下游消费/契约/副作用)`,
+      `- 影响面未闭合簇:${derived.reworkChains.fanoutClusters} 个${worst ? `(最重:${worst.buildSession} 引发 ${worst.fixes} 修/${worst.units} 单元)` : ""}——动手前用 code_sense action=radiation target=<符号> 拿四分面清单`,
     );
   }
   if (derived !== undefined) {
@@ -724,10 +953,19 @@ export function renderAtlasStartBrief(atlasJson: unknown, taskText?: string, ext
       );
     }
     for (const module of (derived.moduleActivity ?? []).slice(0, 3)) {
-      if (module.editSessions >= 2) lines.push(`- 热点模块:${module.path}(${module.editSessions} 会话在改)`);
+      if (module.editSessions < 2) continue;
+ // code_sense 结构层:高影响模块加风险标注(≥10 上游或入口=高影响面)
+      const ctx = module.context;
+      const riskTag = ctx?.riskLevel === "high"
+        ? ` ⚠️高影响(${ctx.upstream} 上游调用方${ctx.isEntrypoint ? ",入口" : ""})`
+        : ctx?.riskLevel === "medium" ? ` (${ctx.upstream} 上游)` : "";
+      lines.push(`- 热点模块:${module.path}(${module.editSessions} 会话在改${riskTag})`);
     }
     for (const signal of (derived.reworkSignals ?? []).slice(0, 2)) {
       lines.push(`- 返工信号:${signal.path}(先建后修 ${Math.round(signal.gapMs / 3_600_000)}h)`);
+    }
+    for (const rep of (derived.repeatExploration ?? []).slice(0, 2)) {
+      lines.push(`- 重复探索:${rep.path}(近窗口 ${rep.sessions} 会话已读过——先查 wiki/代码档案再探索)`);
     }
   }
   if (lines.length === 0) return "";

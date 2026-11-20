@@ -3,19 +3,30 @@
  * 覆盖:idle 边界(=idleMs)、未来/非法时间、tool 链不拆、system 保留、最后 user 保留、
  * keepRecentGroups、256 回滚、不可变、确定性、空消息、脏元素。
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   AGE_CODES,
   AGE_DEFAULTS,
   AGE_MIN_SAVINGS_TOKENS,
+  ageGuardEnabled,
   ageMicrocompact,
   groupMessages,
   shouldIdleCompact,
 } from "../src/agent/microcompact-age";
 import type { Message } from "../src/agent/loop";
 
+// 缺口#30 provider TTL 守卫:ageMicrocompact 缺省 SKIPPED_TTL_UNVERIFIED(零行为变化)。
+// 既有 36 例是「守卫放开后」的纯逻辑行为测试——文件顶部统一声明已验证,保持原断言语义不变;
+// 守卫本身(未验证→跳过 / verified / FORCE 越过)在独立 describe 里自行管理 env。
+process.env.GENIE_PROVIDER_TTL_VERIFIED = "true";
+
 const NOW = 1_700_000_000_000;
 const MIN = 60_000;
+const HOUR = 60 * MIN;
+
+function systemMsg(): Message {
+  return { role: "system", content: "系统契约(永不裁剪)" };
+}
 
 /** 给消息挂 journal 派生时间旁注(Message 类型无 time 字段,压缩侧按可选旁注读)。 */
 function at(m: Message, time?: number): Message {
@@ -360,8 +371,74 @@ describe("常量契约", () => {
     expect(AGE_MIN_SAVINGS_TOKENS).toBe(256);
   });
 
-  it("AGE_CODES 覆盖五个判定码", () => {
-    expect(Object.keys(AGE_CODES).sort()).toEqual(["INVALID", "OK", "ROLLED_BACK", "SKIPPED_NOT_IDLE", "SKIPPED_NOT_OLD"]);
+  it("AGE_CODES 覆盖六个判定码(缺口#30 新增 SKIPPED_TTL_UNVERIFIED)", () => {
+    expect(Object.keys(AGE_CODES).sort()).toEqual([
+      "INVALID",
+      "OK",
+      "ROLLED_BACK",
+      "SKIPPED_NOT_IDLE",
+      "SKIPPED_NOT_OLD",
+      "SKIPPED_TTL_UNVERIFIED",
+    ]);
     expect(AGE_CODES.OK).toBe("OK");
+  });
+});
+
+describe("provider TTL 守卫(缺口#30)", () => {
+  afterEach(() => {
+    process.env.GENIE_PROVIDER_TTL_VERIFIED = "true";
+    delete process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+  });
+
+  it("缺省(未验证)→ SKIPPED_TTL_UNVERIFIED,消息为输入同一引用", () => {
+    delete process.env.GENIE_PROVIDER_TTL_VERIFIED;
+    delete process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+    expect(ageGuardEnabled()).toBe(false);
+    const msgs = history(12, { time: NOW - 3 * HOUR, chars: 200 });
+    const r = ageMicrocompact(msgs, { now: NOW, lastEventAt: NOW - 2 * HOUR });
+    expect(r.code).toBe("SKIPPED_TTL_UNVERIFIED");
+    expect(r.messages).toBe(msgs); // 同一引用,零行为变化
+    expect(r.prunedGroups).toBe(0);
+    expect(r.savingsTokens).toBe(0);
+    expect(r.notes).toContain("provider-ttl-unverified");
+  });
+
+  it("SKIPPED_TTL_UNVERIFIED 在判定码集合内且不 throw(脏入参也一样)", () => {
+    delete process.env.GENIE_PROVIDER_TTL_VERIFIED;
+    delete process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+    const r = ageMicrocompact(null as unknown as Message[], { now: NaN, lastEventAt: NaN });
+    expect(r.code).toBe("SKIPPED_TTL_UNVERIFIED"); // 守卫先于参数校验
+    expect(AGE_CODES).toMatchObject({ SKIPPED_TTL_UNVERIFIED: "SKIPPED_TTL_UNVERIFIED" });
+  });
+
+  it("GENIE_PROVIDER_TTL_VERIFIED=true → 正常走判定路径(本例 SKIPPED_NOT_IDLE)", () => {
+    process.env.GENIE_PROVIDER_TTL_VERIFIED = "true";
+    delete process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+    expect(ageGuardEnabled()).toBe(true);
+    const msgs = history(12, { time: NOW, chars: 200 });
+    const r = ageMicrocompact(msgs, { now: NOW, lastEventAt: NOW }); // 未闲置
+    expect(r.code).toBe("SKIPPED_NOT_IDLE");
+    expect(r.messages).toBe(msgs);
+  });
+
+  it("GENIE_AGE_MICROCOMPACT_FORCE=1 → 未验证也越过守卫,走 OK 裁剪", () => {
+    delete process.env.GENIE_PROVIDER_TTL_VERIFIED;
+    process.env.GENIE_AGE_MICROCOMPACT_FORCE = "1";
+    expect(ageGuardEnabled()).toBe(true);
+    const msgs = [systemMsg(), ...history(12, { time: NOW - 3 * HOUR, chars: 200 })];
+    const r = ageMicrocompact(msgs, { now: NOW, lastEventAt: NOW - 2 * HOUR });
+    expect(r.code).toBe("OK");
+    expect(r.prunedGroups).toBe(9);
+    expect(r.messages).not.toBe(msgs);
+  });
+
+  it("verified=false 字符串/其它值 → 仍按未验证跳过", () => {
+    process.env.GENIE_PROVIDER_TTL_VERIFIED = "false";
+    delete process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+    expect(ageGuardEnabled()).toBe(false);
+    const msgs = history(12, { time: NOW - 3 * HOUR, chars: 200 });
+    const r = ageMicrocompact(msgs, { now: NOW, lastEventAt: NOW - 2 * HOUR });
+    expect(r.code).toBe("SKIPPED_TTL_UNVERIFIED");
+    expect(r.messages).toBe(msgs);
   });
 });

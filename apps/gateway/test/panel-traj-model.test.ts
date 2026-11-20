@@ -170,6 +170,7 @@ describe("⑥ 空/字段全缺 → 零值不抛错", () => {
       expect(s).toEqual({
         calls: 0, turns: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheHitRate: 0,
         tools: 0, errors: 0, wallMs: 0, localScores: 0, prunes: 0, rows: 0,
+        subagents: 0, subCalls: 0, subTools: 0, subInputTokens: 0, subOutputTokens: 0,
       });
       expect(s.cacheHitRate).toBe(0); // 除零防线:input=0 → 0 而非 NaN
     }
@@ -295,6 +296,99 @@ describe("⑩ fmtTokens / fmtDuration", () => {
   });
 });
 
+describe("⑬ 子代理聚合(2026-11-14:轨迹要记录子代理与工具使用)", () => {
+  const spawn = (seq: number, time: number, taskId: string, instructions: string) =>
+    ev(seq, "subagent.spawn", time, { taskId, parentTaskId: "p1", backend: "echo-child", instructions });
+  const inner = (seq: number, time: number, taskId: string, agentId: string, kind: string, payload: Record<string, unknown>) =>
+    ev(seq, "subagent.event", time, { taskId, agentId, parentTaskId: "p1", kind, ...payload });
+  const result = (seq: number, time: number, taskId: string, agentId: string, ok: boolean, finalText: string) =>
+    ev(seq, "subagent.result", time, { taskId, agentId, parentTaskId: "p1", event: { type: "result", ok, finalText } });
+
+  it("spawn→内部 LLM/工具→result 聚合成一行;子 loop 的 turn/step 不推进主轨轮号", () => {
+    const rows = buildTrajRows([
+      ev(1, "message.user", 1000, { text: "调研一下" }),
+      spawn(2, 1100, "t1", "【子智能体角色:explore】\n你是勘察子代理,先读代码。"),
+ // 子 loop 内部 events:turn=1/2/3(如果被当主轨会污染轮号)
+      inner(3, 1200, "t1", "a1", "turn.start", { turn: 1 }),
+      inner(4, 1300, "t1", "a1", "step.start", { turn: 1, step: 0 }),
+      inner(5, 1400, "t1", "a1", "llm.trace", { turn: 1, step: 0, model: "deepseek-flash", durationMs: 300, usage: { inputTokens: 1000, cachedTokens: 900, outputTokens: 50 }, responseHead: "先看看目录" }),
+      inner(6, 1500, "t1", "a1", "tool.call", { turn: 1, step: 0, toolCallId: "c1", name: "list_dir", arguments: '{"path":"."}' }),
+      inner(7, 1600, "t1", "a1", "tool.result", { turn: 1, step: 0, toolCallId: "c1", name: "list_dir", content: "a\nb", durationMs: 40 }),
+      inner(8, 1700, "t1", "a1", "step.start", { turn: 1, step: 1 }),
+      inner(9, 1800, "t1", "a1", "llm.trace", { turn: 1, step: 1, model: "deepseek-flash", durationMs: 200, usage: { inputTokens: 500, cachedTokens: 400, outputTokens: 30 }, responseHead: "读文件" }),
+      inner(10, 1900, "t1", "a1", "tool.call", { turn: 1, step: 1, toolCallId: "c2", name: "read_file", arguments: '{"path":"a"}' }),
+      inner(11, 2000, "t1", "a1", "tool.result", { turn: 1, step: 1, toolCallId: "c2", name: "read_file", content: "x", durationMs: 10 }),
+      inner(12, 2100, "t1", "a1", "message.agent", { turn: 1, step: 1, text: "读完了,结论是 A" }),
+      result(13, 2200, "t1", "a1", true, "结论:A 成立"),
+ // 主轨继续:下一轮仍应是 2(而不是被子的 turn 推高)
+      ev(14, "message.user", 3000, { text: "继续" }),
+      ev(15, "llm.trace", 3100, { turn: 2, step: 0, model: "m", durationMs: 50, usage: { inputTokens: 10 } }),
+    ]);
+    const agents = rows.filter((r) => r.kind === "subagent");
+    expect(agents.length).toBe(1);
+    const a = agents[0]!;
+    expect(a.agentRole).toBe("explore");
+    expect(a.agentTaskId).toBe("t1");
+    expect(a.agentId).toBe("a1");
+    expect(a.agentSteps).toBe(2);          // step.start 两次 → max(step)+1=2
+    expect(a.agentCalls).toBe(2);          // 内部两次 llm.trace
+    expect(a.agentToolCalls).toBe(2);      // 两次 tool.call
+    expect(a.agentInputTokens).toBe(1500);
+    expect(a.agentCachedTokens).toBe(1300);
+    expect(a.agentOutputTokens).toBe(80);
+    expect(a.agentToolHist).toEqual([{ name: "list_dir", count: 1 }, { name: "read_file", count: 1 }]);
+    expect(a.status).toBe("ok");
+    expect(a.summary).toBe("结论:A 成立");
+    expect(a.durationMs).toBe(1100);       // 1100→2200
+    expect(a.turn).toBe(1);
+ // 子事件不产顶层 tool 行;主轨下一个 turn 仍是 2
+    expect(rows.filter((r) => r.kind === "tool").length).toBe(0);
+    expect(rows.find((r) => r.seq === 15)!.turn).toBe(2);
+    const turns = groupTrajTurns(rows);
+    expect(turns.map((t) => t.turn)).toEqual([1, 2]);
+    expect(turns[0]!.agents).toBe(1);
+    const s = summarizeTraj(rows, turns);
+    expect(s.subagents).toBe(1);
+    expect(s.subCalls).toBe(2);
+    expect(s.subTools).toBe(2);
+    expect(s.subInputTokens).toBe(1500);
+    expect(s.subOutputTokens).toBe(80);
+    expect(s.calls).toBe(0); // 主轨工具口径不被子上具污染
+  });
+
+  it("子代理失败 → status=error、errors 计数;分页截断(无 spawn)也能合成一行", () => {
+    const rows = buildTrajRows([
+      ev(1, "message.user", 100, { text: "go" }),
+      inner(2, 200, "t9", "a9", "turn.start", { turn: 1 }),
+      inner(3, 300, "t9", "a9", "message.agent", { turn: 1, step: 0, text: "做到一半" }),
+      result(4, 400, "t9", "a9", false, ""),
+    ]);
+    const a = rows.find((r) => r.kind === "subagent")!;
+    expect(a).toBeTruthy();
+    expect(a.agentTaskId).toBe("t9");
+    expect(a.status).toBe("error");
+    expect(a.error).toBeTruthy();
+    const s = summarizeTraj(rows, groupTrajTurns(rows));
+    expect(s.errors).toBe(1);
+    expect(s.subagents).toBe(1);
+ // subagent 过滤面
+    expect(filterTrajRows(rows, "subagent").length).toBe(1);
+    expect(filterTrajRows(rows, "subagent", "t9").length).toBe(1);
+  });
+
+  it("工具结果正文保留预览(此前轨迹只有参数,结果被丢弃)", () => {
+    const rows = buildTrajRows([
+      ev(1, "tool.call", 100, { toolCallId: "c1", name: "read_file", arguments: '{"path":"a.ts"}', turn: 1, step: 7 }),
+      ev(2, "tool.result", 250, { toolCallId: "c1", name: "read_file", content: "export const A = 1;\nexport const B = 2;", durationMs: 150, turn: 1, step: 7 }),
+    ]);
+    const t = rows.find((r) => r.kind === "tool")!;
+    expect(t.stepNo).toBe(7);
+    expect(t.result).toContain("export const A = 1;");
+    expect(t.resultChars).toBe(39);
+    expect(t.summary).toBe('{"path":"a.ts"}'); // 摘要仍是参数(可搜原调用)
+  });
+});
+
 describe("⑪ 真实 journal 样本回放", () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const jdir = join(here, "..", "..", "..", ".genie", "journals", "sessions");
@@ -325,7 +419,7 @@ describe("⑪ 真实 journal 样本回放", () => {
     for (const r of rows) {
       expect(typeof r.seq).toBe("number");
       expect(Number.isFinite(r.turn)).toBe(true);
-      expect(["user", "model", "tool", "compact", "phase", "other"]).toContain(r.kind);
+      expect(["user", "model", "tool", "compact", "phase", "subagent", "other"]).toContain(r.kind);
       expect(["ok", "error", "pending"]).toContain(r.status);
     }
     const turns = groupTrajTurns(rows);

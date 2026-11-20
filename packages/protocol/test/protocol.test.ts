@@ -360,3 +360,34 @@ describe("trace.stats.result 逐模型字段(byModel/costModels)", () => {
     expect(r.success).toBe(false);
   });
 });
+
+// 温度三区:server.ts trace.stats 分支实发 stats.contextZones,此前 schema 未声明=漏写契约。
+describe("trace.stats.result 温度三区字段(contextZones)", () => {
+  const zones = {
+    zones: {
+      cold: { messages: 2, chars: 40, estTokens: 10 },
+      warm: { messages: 2, chars: 80, estTokens: 20 },
+      hot: { messages: 2, chars: 120, estTokens: 30 },
+    },
+    totalMessages: 6, hotTailSource: "protection-windows", frozenCount: 2, frozenFrom: "context.prune",
+  };
+  it("含 contextZones 的 stats 可解析(字段照 server.ts 实发形态)", () => {
+    const r = ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "trace.stats.result", sessionId: "s1",
+      stats: { ...baseStats, contextZones: zones },
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      const st = r.data.stats as { contextZones?: typeof zones };
+      expect(st.contextZones?.zones.cold.messages).toBe(2);
+      expect(st.contextZones?.frozenFrom).toBe("context.prune");
+    }
+  });
+  it("负面:旧 payload(无 contextZones)仍可解析;枚举外 hotTailSource 被拒", () => {
+    expect(ServerMessage.safeParse({ v: PROTOCOL_VERSION, type: "trace.stats.result", sessionId: "s1", stats: baseStats }).success).toBe(true);
+    expect(ServerMessage.safeParse({
+      v: PROTOCOL_VERSION, type: "trace.stats.result", sessionId: "s1",
+      stats: { ...baseStats, contextZones: { ...zones, hotTailSource: "oops" } },
+    }).success).toBe(false);
+  });
+});

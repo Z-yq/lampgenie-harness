@@ -12,9 +12,7 @@
  * 「翻案后过期」在行序上可区分)。坏行(JSON 坏 / v 不是 1 / type 未知 / 缺 id 或 record)只计入
  * parseErrors 并跳过:一行坏不整文件失效、不 throw。无对应 record 的孤儿事件行不算坏行,跳过。
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
- * runtime 模块按 defect-lineage-store 的既有套路惰性解析(两跳):
- * ① 带 `--conditions=development` 的运行时(vitest)走包导出 src 入口;
- * ② 裸 tsx/dist 缺该文件时回退到仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
+ * runtime 模块静态导入(修,见 loadNegKbRuntime 旧实现的 exit 13 坑注记)。
  * 除参数错误(root/input 形状不对)外不 throw:IO/投影/写校验失败一律折叠成稳定码返回。
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -93,23 +91,17 @@ interface NegKbRuntime {
   ): { candidates: DeadEndRecord[] };
 }
 
-let negkbRuntime: NegKbRuntime | undefined;
+/**
+ * runtime 面:静态导入(修,同 direction-atlas-store 的修法)。
+ * 旧实现是「两跳动态 import + 顶层 await」——本 store 被 gateway 启动路径静态引入
+ * (run-with-agent 开工注入后,顶层 await 在 bundle 里退化为运行时解析,
+ * 解析不到时 promise 永不 settle → 网关静默 exit 13(同型坑:evidence-graph-store
+ * 、direction-atlas-store 、experiment-store)。
+ * bundle 本就把 runtime 内联,静态导入零成本。
+ */
+import * as runtimeNegKb from "@lampgenie/runtime/agent/negative-knowledge";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadNegKbRuntime(): Promise<NegKbRuntime> {
-  if (negkbRuntime) return negkbRuntime;
-  const spec = "@lampgenie/runtime/agent/negative-knowledge";
-  try {
-    negkbRuntime = (await import(spec)) as NegKbRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/negative-knowledge.ts", import.meta.url).href;
-    negkbRuntime = (await import(srcUrl)) as NegKbRuntime;
-  }
-  return negkbRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadNegKbRuntime();
+const rt: NegKbRuntime = runtimeNegKb;
 
 /** 账本路径(测试/CLI 定位用)。 */
 export function negativeKbPath(root: string): string {
@@ -239,7 +231,8 @@ export function loadDeadEnds(root: string): NegKbProjection {
 /** 记一条死路:先投影判重(runtime 的 recordDeadEnd + existing),DUPLICATE 不写盘。 */
 export function recordDeadEnd(
   root: string,
-  input: RecordDeadEndInput): { ok: boolean; record?: DeadEndRecord; codes: string[] } {
+  input: RecordDeadEndInput,
+): { ok: boolean; record?: DeadEndRecord; codes: string[] } {
   assertRoot(root);
   if (typeof input !== "object" || input === null) throw new TypeError("recordDeadEnd 需要 input 对象");
   let projection: NegKbProjection;

@@ -141,25 +141,10 @@ interface HandoffRuntime {
   joinBucket(results: readonly JoinTaskResult[], bucket: string): BucketJoin;
 }
 
-let handoffRuntime: HandoffRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_subagent_handoff from "@lampgenie/runtime/agent/subagent-handoff";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadHandoffRuntime(): Promise<HandoffRuntime> {
-  if (handoffRuntime) return handoffRuntime;
-  const spec = "@lampgenie/runtime/agent/subagent-handoff";
-  try {
-    handoffRuntime = (await import(spec)) as HandoffRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/subagent-handoff.ts",
-      import.meta.url).href;
-    handoffRuntime = (await import(srcUrl)) as HandoffRuntime;
-  }
-  return handoffRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadHandoffRuntime();
+const rt: HandoffRuntime = rt_subagent_handoff;
 
 type UnknownRecord = Record<string, unknown>;
 

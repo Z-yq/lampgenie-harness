@@ -138,7 +138,8 @@ function resolveBaselineSteps(taskClass: string, injected: unknown): number {
  */
 export function computeGuidanceOutcome(
   events: readonly GuidanceOutcomeEvent[] | unknown,
-  options?: GuidanceOutcomeOptions): GuidanceOutcome {
+  options?: GuidanceOutcomeOptions,
+): GuidanceOutcome {
   const opts = (options && typeof options === "object" ? options : {}) as Partial<GuidanceOutcomeOptions>;
   const evs = [...asEvents(events)].sort((a, b) => (Number(a?.seq) || 0) - (Number(b?.seq) || 0));
   const taskClass = typeof opts.taskClass === "string" && opts.taskClass ? opts.taskClass : "coding";
@@ -331,7 +332,8 @@ function avgRates(list: GuidanceOutcome[]): OutcomeRates {
 export function compareOutcomes(
   before: readonly GuidanceOutcome[] | GuidanceOutcome | null | undefined,
   after: readonly GuidanceOutcome[] | GuidanceOutcome | null | undefined,
-  primaryMetric?: OutcomeMetricName): OutcomeCompare {
+  primaryMetric?: OutcomeMetricName,
+): OutcomeCompare {
   const b = toOutcomeList(before);
   const a = toOutcomeList(after);
   const beforeRates = avgRates(b);
@@ -391,7 +393,8 @@ export interface GuidanceExperimentSample {
 /** 把一条结果指标折叠成实验账本样本(确定性;缺字段用 "-" 占位)。 */
 export function toExperimentSample(
   outcome: GuidanceOutcome | null | undefined,
-  options?: ExperimentSampleOptions): GuidanceExperimentSample {
+  options?: ExperimentSampleOptions,
+): GuidanceExperimentSample {
   const o = (outcome && typeof outcome === "object" ? outcome : {}) as Partial<GuidanceOutcome>;
   const opts = (options && typeof options === "object" ? options : {}) as Partial<ExperimentSampleOptions>;
   const metric: OutcomeMetricName = opts.metric && OUTCOME_METRIC_NAMES.includes(opts.metric)

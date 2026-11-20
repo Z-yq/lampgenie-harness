@@ -114,7 +114,8 @@ export async function runSemanticBatch(
   taskPrompt: string,
   anchors: EvidenceAnchor[],
   extraContext: string,
-  opts?: BatchOpts): Promise<SemanticOutcome | null> {
+  opts?: BatchOpts,
+): Promise<SemanticOutcome | null> {
   const llm = deps.senseLlm;
   if (!llm || anchors.length === 0) return null;
   const anchorText = anchors

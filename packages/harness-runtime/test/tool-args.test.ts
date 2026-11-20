@@ -150,7 +150,8 @@ describe("normalizeToolArgs:required / 改名 / 未知键", () => {
     });
     const r = normalizeToolArgs(
       { filePath: "p", oldString: "o", newString: "n", replaceAll: "true", query_string: "q" },
-      schema);
+      schema,
+    );
     expect(r.ok).toBe(true);
     expect(r.renamed.map((x) => `${x.from}->${x.to}`).sort()).toEqual(
       ["filePath->path", "newString->new_string", "oldString->old_string", "query_string->query", "replaceAll->replace_all"].sort(),

@@ -186,7 +186,8 @@ export function writeShadowPair(
 /** 独立写 breadcrumb(best-effort):构建期/降级期留痕用,不额外复制影子。 */
 export function writeBreadcrumbFile(
   path: string | null | undefined,
-  breadcrumb: SearchCacheBreadcrumb): boolean {
+  breadcrumb: SearchCacheBreadcrumb,
+): boolean {
   if (!path) return false;
   return writeAtomic(path, JSON.stringify(breadcrumb));
 }

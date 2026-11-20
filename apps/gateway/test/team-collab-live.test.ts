@@ -29,5 +29,6 @@ describe.skipIf(!LIVE)("虚拟组织协作开发流(live 活组织)", () => {
       const weekly = report as CollabReport;
       expect(weekly.weekly?.total ?? -1).toBeGreaterThanOrEqual(0);
     },
-    600_000);
+    600_000,
+  );
 });

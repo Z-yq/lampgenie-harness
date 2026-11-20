@@ -136,6 +136,36 @@ function uiDialog(opts) {
 function uiAlert(msg, o) { o = Object.assign({}, o || {}); o.msg = msg; o.cancel = null; return uiDialog(o).then(() => {}); }
 function uiConfirm(msg, o) { o = Object.assign({}, o || {}); o.msg = msg; if (o.okClass === "danger") o.tone = o.tone || "danger"; return uiDialog(o).then((v) => v === true); } // danger 确认钮联动 danger tone(标题红点/文案分级随钮)
 function uiPrompt(msg, def, o) { o = Object.assign({}, o || {}); o.msg = msg; o.input = true; o.def = def; o.tone = o.tone || "info"; return uiDialog(o); }
+// ---- P0-1:富内容大视图模态(表格预览等)----
+// uiDialog 只吃纯文本 msg;这里要挂已渲染好的受信 HTML(表体)。契约:uiModal(html[,o]) → { mask, close }。
+// o:{kicker, title, sub, cls, onClose};点遮罩 / Esc / 右上「关闭」都关;内容区 .uid-body 自带滚动。
+function uiModal(html, o) {
+  const opt = o || {};
+  const mask = document.createElement("div");
+  mask.className = "uid-mask uid-modal-mask" + (opt.cls ? " " + opt.cls : "");
+  mask.innerHTML =
+    '<div class="uid-box info uid-modal' + (opt.cls ? " " + opt.cls : "") + '" role="dialog" aria-modal="true">' +
+    '<div class="uid-head">' +
+    '<div class="uid-kicker">' + esc(opt.kicker || "预览") + "</div>" +
+    (opt.title ? "<h3>" + esc(opt.title) + "</h3>" : "") +
+    (opt.sub ? '<div class="uid-sub">' + esc(opt.sub) + "</div>" : "") +
+    '<button type="button" class="uid-x" title="关闭">关闭</button></div>' +
+    '<div class="uid-body">' + String(html == null ? "" : html) + "</div></div>";
+  const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+  const close = () => {
+    if (!mask.parentNode) return;
+    mask.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (typeof opt.onClose === "function") { try { opt.onClose(); } catch (e) { /* 忽略 */ } }
+  };
+  const x = mask.querySelector(".uid-x");
+  if (x) x.onclick = close;
+ // 只在「按下点就在遮罩上」时关,避免从表体里拖选文本、松手到遮罩外误关
+  mask.addEventListener("mousedown", (e) => { if (e.target === mask) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(mask);
+  return { mask: mask, close: close };
+}
 
 // ---- 原生 select 镜像式接管(原生 select 保留为数据源;主题化按钮+弹层双向同步;键盘 ↑↓/Enter/Esc) ----
 function uiSelLabel(sel) {
@@ -311,6 +341,65 @@ document.addEventListener("mousedown", (e) => {
   pillMenuClose();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") pillMenuClose(); });
+// ---- popover 生命周期治理 ----
+// 四态语义:①doc pointerdown 外点即关 ②触发器重复点击=toggle ③同族单实例(开新收旧) ④Esc 关。
+// pillMenu 族(model/perm/effort/supCtx/supModel)已由上方 mousedown/Esc 兜住,不进本表;
+// 本表收编静态载体浮窗(#taskMenu/#selMenu/#mentionMenu/#slashMenu)+ 动态浮层(ctxPill cx-menu)。
+var POPOVER_KEYS = ["taskMenu", "selMenu", "mentionMenu", "slashMenu", "ctxPill"];
+let popoverLive = {}; // key -> { close, keep, el } keep=CSS 选择器(触发器豁免,让触发器自己的 click 走 toggle)
+function popoverClose(key, via) {
+  const p = popoverLive[key];
+  if (!p) return false;
+  delete popoverLive[key];
+  try { p.close(via); } catch (e) { /* 关闭失败不阻塞其它浮窗 */ }
+  return true;
+}
+function popoverCloseAll(except) {
+  for (const k of Object.keys(popoverLive)) if (k !== except) popoverClose(k, "supersede");
+}
+/** 剪枝:浮窗被自身关闭通道(项内 click/slashClose 等)收掉后,表里会留 stale 条目——不清会让
+ * doc 级 Esc 一直 preventDefault(吞掉查找条等其它 Esc 消费者)。静态载体=display none 即 stale;
+ * 动态浮层(带 el)=DOM 摘除即 stale。 */
+function popoverPrune() {
+  for (const k of Object.keys(popoverLive)) {
+    const p = popoverLive[k];
+    if (p.el && !p.el.isConnected) { delete popoverLive[k]; continue; }
+    if (p.carrier && p.el && p.el.style.display === "none") { delete popoverLive[k]; continue; }
+  }
+}
+/** 注册一个浮窗为「打开态」:close(via)=实际收起动作;keep=触发器选择器(外点豁免);
+ * el=载体节点(静态 div 或动态浮层,用于剪枝);carrier=true 表示静态载体(close 只隐藏)。 */
+function popoverOpen(key, close, keep, el, carrier) {
+  if (POPOVER_KEYS.indexOf(key) < 0) return;
+  popoverCloseAll(key); // 同类浮窗单实例:开新的收旧的(pill-menu 族由 pillMenuClose 负责,互不越界)
+  popoverLive[key] = { close: close, keep: keep || "", el: el || null, carrier: !!carrier };
+}
+/** 静态载体(#taskMenu 等页面常驻 div)统一接入:show=true 登记(keep=触发器豁免选择器),false 注销。 */
+function popoverSyncEl(key, show, keep) {
+  const el = document.getElementById(key);
+  if (!el) return;
+  if (show) popoverOpen(key, function () { el.style.display = "none"; }, keep, el, true);
+  else if (popoverLive[key]) popoverClose(key, "hide");
+}
+document.addEventListener("pointerdown", (e) => {
+  popoverPrune();
+  if (!Object.keys(popoverLive).length) return;
+  const t = e.target;
+  for (const k of Object.keys(popoverLive)) {
+    const p = popoverLive[k];
+    if (t && p.el && p.el.contains(t)) continue; // 点浮窗本体:不关(项内 click 自会走各自关闭)
+    if (t && p.keep && t.closest && t.closest(p.keep)) continue; // 触发器自身:让 click 走 toggle
+    popoverClose(k, "outside");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  popoverPrune();
+  const ks = Object.keys(popoverLive);
+  if (!ks.length) return;
+  e.preventDefault(); // 浮窗在场时 Esc 只服务浮窗(不冒泡给查找条等其它 Esc 消费者)
+  popoverClose(ks[ks.length - 1], "esc"); // 同帧多个浮窗(理论上不会):收最后开的
+});
 // ---- ask_user 问答条(许愿式编程) ----
 let askPending = [];
 function askRenderBar() {

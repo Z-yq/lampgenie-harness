@@ -46,7 +46,8 @@ export class ProjectRegistry {
   constructor(
     private readonly harnessRoot: string,
     /** 持久化文件;null=会话内态不落盘(测试/内存 journal 形态,与 MemoryJournal 同拍)。 */
-    private readonly file: string | null) {
+    private readonly file: string | null,
+  ) {
     this.activeProjectId = HARNESS_PROJECT_ID;
     // 默认项目=harness 本体,永在且不可移除(任务无项目时的回退)。
     this.projects.set(HARNESS_PROJECT_ID, {

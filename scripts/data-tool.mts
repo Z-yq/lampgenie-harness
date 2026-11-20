@@ -63,7 +63,8 @@ interface StoreModule {
   };
   unregisterDataTool(
     root: string,
-    name: string): { ok: boolean; codes: string[]; restored?: string; reason?: string };
+    name: string,
+  ): { ok: boolean; codes: string[]; restored?: string; reason?: string };
   listToolStore(
     root: string,
     opts?: { nativeNames?: string[]; pluginNames?: string[] },
@@ -89,10 +90,12 @@ interface StoreModule {
     root: string,
     sessionId: string,
     name: string,
-    version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
+    version: string,
+  ): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
   doctorDataTools(
     root: string,
-    env: DoctorEnvView): {
+    env: DoctorEnvView,
+  ): {
     ok: boolean;
     missing: Array<{ name: string; kind: string; dep: string }>;
     degraded: string[];

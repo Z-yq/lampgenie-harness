@@ -34,25 +34,10 @@ interface TipsRuntime {
   countWords(text: string): number;
 }
 
-let tipsRuntime: TipsRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_tips_budget from "@lampgenie/runtime/agent/tips-budget";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadTipsRuntime(): Promise<TipsRuntime> {
-  if (tipsRuntime) return tipsRuntime;
-  const spec = "@lampgenie/runtime/agent/tips-budget";
-  try {
-    tipsRuntime = (await import(spec)) as TipsRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/tips-budget.ts",
-      import.meta.url).href;
-    tipsRuntime = (await import(srcUrl)) as TipsRuntime;
-  }
-  return tipsRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadTipsRuntime();
+const rt: TipsRuntime = rt_tips_budget;
 
 /** store 稳定码:store 层自产的码(判定码沿用 runtime 的 TIPS_*)。 */
 export const TIPS_STORE_CODES = [
@@ -349,7 +334,8 @@ export function usage(root: string): TipsUsage {
  */
 function normalizeCandidates(
   candidates: unknown,
-  explicitNodeId: string | undefined): { ok: boolean; nodeId: string; candidates: unknown[] } {
+  explicitNodeId: string | undefined,
+): { ok: boolean; nodeId: string; candidates: unknown[] } {
   const list = Array.isArray(candidates) ? candidates : [];
   if (explicitNodeId !== undefined) {
     return {

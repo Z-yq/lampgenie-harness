@@ -6,6 +6,7 @@ import { journalGate } from "./permission.js";
 import { runningWorkflows } from "./tools.js";
 import { decidePermission, riskOfTool } from "./permission.js";
 import type { PermissionAskPort } from "./permission.js";
+import { outcomeByLabel } from "../permission-broker.js";
 import { repoRoot } from "../repo-root.js";
 import { systemPromptSha, recordSystemPromptSnapshot } from "../system-prompt-snapshot.js";
 import { buildVlmFromConfig } from "../factory.js";
@@ -193,7 +194,8 @@ export function plannerScopeOf(bgAgentId: string, subTaskId?: string): string {
  * 装配层再读一次会让「env 覆盖 config」出现两处口径。
  */
 export function writeBarrierOf(
-  agentConfig?: { agent?: { writeBarrier?: "off" | "hard" } } | undefined): "off" | "hard" | undefined {
+  agentConfig?: { agent?: { writeBarrier?: "off" | "hard" } } | undefined,
+): "off" | "hard" | undefined {
   const v = agentConfig?.agent?.writeBarrier;
   return v === "off" || v === "hard" ? v : undefined;
 }
@@ -266,7 +268,7 @@ export function collectSkillIndexEntries(store: ExperienceStore): SkillIndexEntr
 export function buildMainLoopPermission(
   permRules: PermissionRule[],
   broker: PermissionAskPort | undefined,
-  ctx: { sessionId: string; journal: Journal },
+  ctx: { sessionId: string; journal: Journal; task?: { id?: string; submittedBy?: string; brief?: string } },
 ): NonNullable<import("@lampgenie/runtime/agent/loop").AgentLoopOptions["permission"]> {
   const askMode = (process.env.GENIE_PERM_ASK_MODE === "allow" || permissionMode() === "auto") ? "allow" as const : "deny" as const;
   const brokerRef = broker;
@@ -293,8 +295,12 @@ export function buildMainLoopPermission(
           tool: call.name,
           summary: preview ? `${call.name} ${preview}` : call.name,
           risk: riskOfTool(call.name),
+ // 任务归属向下传 —— submittedBy=super 的任务,broker 转 super 自决。
+          ...(ctx.task?.submittedBy ? { submittedBy: ctx.task.submittedBy } : {}),
+          ...(ctx.task?.id ? { taskId: ctx.task.id } : {}),
+          ...(ctx.task?.brief ? { brief: ctx.task.brief } : {}),
         });
-        const by = o.by === "panel" ? (o.decision === "allow-once" ? "panel-approved" : "panel-denied") : "panel-" + o.by;
+        const by = outcomeByLabel(o);
         const objectHash = snap.ok ? snap.hash : undefined;
         if (o.decision === "allow-once") {
           const verdict = snap.ok
@@ -612,6 +618,8 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "deliverable", hint: "登记交付物(产出报告/PPT/图片/导出件等真实文件后用它登记路径);收尾自动核对存在性,声明后缺失会被点名" },
   { name: "glob", hint: "按模式匹配项目内文件(** 跨目录,按改动时间排序)" },
   { name: "grep", hint: "正则文本检索(配置/日志串/文案/模糊词);查代码结构与调用关系改用 code_sense" },
+ // P2-⑤a(机制注意「session_search 0 使用 vs 裸扫 journal」):台账检索标准入口+触发词。
+  { name: "session_search", hint: "查历史会话/台账的标准入口(「上次怎么做的/以前谁改过/这个错以前怎么修/查 journal」都先用它,不要 read_file 裸扫 .jsonl)" },
   { name: "list_dir", hint: "列目录直接子项" },
   { name: "terminal", hint: "持久终端会话(open/send/read/close/list):需要保活、交互式输入、跨命令保持 cwd/环境变量/后台进程时用;一次性命令用 run_cmd;**多条独立命令用 send 的 commands 数组一次往返**(逐条 send=每条烧一轮全量上下文)" },
   { name: "job", hint: "后台命令 job(start/list/read/wait/kill):长任务/构建/测试的独立句柄,有 jobId 与绝对字节 offset 增量读,wait 等结算(缺省 60s,超时不杀),kill 终止;结算只通知一次" },
@@ -621,10 +629,15 @@ export const TOOL_HINTS: ToolHint[] = [
   { name: "cite_source", hint: "研究/调研写作:每个检索来源先 cite_source 登记(url+逐字出现在 web_fetch 抓取正文里的 quote),正文编号只用它返回的 [n];无检索证据的推断标 [unverified]" },
   { name: "code_sense", hint: "代码认知唯一入口:结构面 action=impact(改动影响面,改函数前必查)/symbol/file/entrypoints/project/wire/vars/refs(字面量引用面)/branches(分支/循环骨架,条件关系)/flow(整仓代码流:入口/分层/主干/枢纽,level=auto)(毫秒级);语义画像面 mode=debug 调用链+签名+时序/plan 架构/explore grep 聚合/api 接口表面/state 状态机/algo 算法画像" },
   { name: "session_search", hint: "会话全文检索/回忆:discover 用关键词找历史会话(自动化降权),scroll 看会话内命中上下文,read 读会话原文;问「上次/之前怎么做的」先调它" },
+ // super agent 管理世界模型:项目主线(方向目标)由 agent 自己立线/推进/,
+ // 而非只读夜间自动晋升的展示品——验收第⑤步(goal_progress)与开工简报「疑似推进主线」行都指向这里。
+  { name: "world_model", hint: "项目世界模型/主线的读写入口:action=read 看主线全景(活跃 goal+进度+下一步/转向/冲突/决策);goal_add 立线/goal_progress 推进(带 nextStep 会进后续任务开工简报)/goal_close 收口;decision/change 登记关键决策与方向转向——主线由你维护,任务推进了主线就在验收时登记" },
+ // 错误路径定向剪枝:发现之前的方案路径错了,把该路径积累的工具输出折叠成占位
+ // (教训留声明点,可选进负面知识库)——上下文还给正确路径。
+  { name: "context_prune", hint: "发现之前的方案/探索路径错了:context_prune reason=为什么错 + tools/keywords 圈定该路径 → 其积累的工具输出折叠成可寻址占位,教训留在声明点(带 lesson 则进负面知识库跨会话防重走);先 dryRun=true 预览命中面与节省" },
   { name: "code_review", hint: "审查代码变更返回 findings(缺省=本任务变更集:开工 checkpoint 基线;修完复跑传 fast:true 秒级确认);coding 任务汇报前**必走**的完工验收三步之一(blocker/high 必修;非 coding 任务不调)" },
   { name: "run_workflow", hint: "标准化任务的确定性编排(测试/评审/评测)" },
   { name: "skill_view", hint: "读一条经验全文" },
-  { name: "experience_fold", hint: "沉淀/合并经验(fold-in 优先)" },
  // fixG(先骨架后丰羽翼+开发类型分治):工具索引提示补骨架先行与分治起手线
  // fixG :豁免口径绑定板规模(≤3 模块且骨架 ≤9 节点装得下)——防「任务书恰提 3 个功能模块」被读成小任务绕过分阶段
   { name: "board_upsert", hint: "设计白板=**面向人看的代码/内容逻辑图**:先画清**现状怎么走**(现有代码里真实存在的入口→分支→循环→出口,flow 写真实函数动作),本次要改的地方用 change+before 标在对应逻辑节点上(keep=纯读)。**计划留 step.md 不上板**(进度/第 N 步归 task_phase、todo_write;待办动作不画成节点);节点 symbolRef/targets 先经 code_sense 查真实符号;先骨架后丰满:第一版 ≤9 节点骨架,中大型任务第二版再展开细节" },
@@ -791,7 +804,7 @@ export function maybeWakeIdleSession(
   }
 }
 
-// 子代理生命周期注册表(进程级单例;不取代 __bgAgents 镜像,只在其上补「状态机 + 后代关系」)。
+// :子代理生命周期注册表(进程级单例;不取代 __bgAgents 镜像,只在其上补「状态机 + 后代关系」)。
 // 同一 gateway 进程内每个 task 都会 wire 一次,这里用 globalThis 复用同一实例;首次创建时从
 // __bgAgents 镜像 restore(终态保留、已存在记录不覆盖)。registry 是纯逻辑零 IO 模块,可被单测直驱。
 export const subagentRegistry: SubagentRegistry = (() => {
@@ -883,7 +896,7 @@ export function runSubagentWatchdog(journal: Journal): void {
     en.status = "failed";
     en.lastEventAt = Date.now();
     delete en.cancel;
- // watchdog 收割也是终态来源之一——registry 同步落 failed,否则 list_agents 永远显示 running。
+ // :watchdog 收割也是终态来源之一——registry 同步落 failed,否则 list_agents 永远显示 running。
     subagentRegistry.update(act.agentId, { state: "failed", resultSummary: "[watchdog 收割] 超过时间盒+宽限仍无终态,已判死并强制收尾" });
     let trail = "";
     try {

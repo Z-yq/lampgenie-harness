@@ -32,7 +32,8 @@ export function meetingHash(inputPath: string): string {
 export async function importMeeting(
   inputPath: string,
   workDir: string,
-  llm: LlmProvider): Promise<{ extraction: MeetingExtraction; draftPath: string }> {
+  llm: LlmProvider,
+): Promise<{ extraction: MeetingExtraction; draftPath: string }> {
   const hash = meetingHash(inputPath);
   const dir = join(workDir, hash);
   mkdirSync(dir, { recursive: true });

@@ -21,7 +21,7 @@
  * journal:tool.call/tool.result 由 loop 统一落账,本模块不重复记(起唯一例外:
  * read_file 成功后旁路追加 tool.tokens 遥测事件,见下方专用段)。
  */
-import { existsSync, realpathSync, type Stats } from "node:fs";
+import{existsSync, realpathSync, type Stats, readFileSync} from "node:fs";
 import { promises as fsp } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { Journal } from "@lampgenie/core";
@@ -36,6 +36,8 @@ import { permissionMode } from "./permission-mode.js";
 // 输入边界防御:read guard 顺序(归一→设备/伪文件→stat special→denylist→binary→read)、
 // 单行 clamp、编辑比例守卫;阈值常量集中在 input-boundary(本模块只引用)。
 import { BINARY_PROBE_BYTES, checkEditRatio, clampLine, readGuardPath, readHeadBytes } from "./input-boundary.js";
+// (S1 种子):repeated-reads canary tip 过注入防护闸(guardInjection→evaluateInjection)。
+import { rsiCanaryTipFor } from "./rsi-injection-store.js";
 import { readToolDump } from "@lampgenie/runtime/agent/big-intake";
 
 /** 异步文件探测(冻结治理):工具执行面的全部文件 IO 从同步 API 改 fs/promises——
@@ -57,7 +59,8 @@ async function editCheckSuffixSafe(
   absPath: string,
   settings?: LspSettings,
   baseline?: DiagnosticItem[] | null,
-  baselineText?: string): Promise<string> {
+  baselineText?: string,
+): Promise<string> {
   if (!settings || settings.enabled === false) return ""; // 低层缺省关闭:零装载开销
   try {
     const mod = await import("@lampgenie/lsp");
@@ -75,7 +78,8 @@ async function editBaselineSafe(
   root: string,
   absPath: string,
   prevText: string | undefined,
-  settings?: LspSettings): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
+  settings?: LspSettings,
+): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
   if (!settings || settings.enabled === false) return undefined;
   if (settings.baseline === false) return undefined;
   if (prevText === "") return { baseline: [], baselineText: "" }; // 新文件:基线为空(不探测)
@@ -144,7 +148,8 @@ export function scheduleToolTokens(
   callId: string | undefined,
   root: string,
   rel: string,
-  mtimeMs: number): void {
+  mtimeMs: number,
+): void {
   if (!callId || process.env.GENIE_PANEL_TOKENS === "off" || !TOKENIZED_EXT.test(rel)) return;
   toolTokensChain = toolTokensChain
     .then(async () => {
@@ -203,6 +208,21 @@ const CONTEXT_HYGIENE_BYTES = 6 * 1024;
 const EDIT_SNIPPET_CONTEXT_LINES = 5;
 const EDIT_SNIPPET_MAX_LINES = 40;
 const EDIT_SNIPPET_MAX_BYTES = 4096;
+// #192 实验干预注入位:per-session 重复读取省略计数;阈值一次/会话,网关重启自然清零。
+// P5 同日:decided=已分桶(注/不注一次定案);tipped=实际注入侧。
+const rsiRepeatReadSkips = new Map<string, { skips: number; tipped: boolean; decided: boolean }>();
+/** P5(实验方法学修复):canary 分桶比例——会话 id 稳定哈希 <此值注入,否则留对照。 */
+const RSI_TIP_CANARY_PERCENT = 50;
+
+/** 会话 id → 稳定桶(0-99,FNV-1a;同会话跨重启恒定,分桶与时间/内容无关)。测试可复算。 */
+export function rsiCanaryBucket(sessionId: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < sessionId.length; i += 1) {
+    h ^= sessionId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h % 100;
+}
 
 /**
  * 构造 <edited> 快照块:定位替换点在最终文本(可能已被格式化)的首处位置,取其 ±5 行窗口。
@@ -276,8 +296,9 @@ export interface FileToolsOptions {
    * 不传=result_read 只能吃 dump 路径(仍可用,不报错)。 */
   toolDumpDir?: string;
  /** B:首次编辑某文件时给一次「本模块历史缺陷基因」提示(每任务每模块最多一次,
- * 由调用方闭包自己计数);返回非空串即追加到 edit_file 回执尾部。 */
-  editHint?: (rel: string) => string | undefined;
+ * 由调用方闭包自己计数);返回非空串即追加到 edit_file 回执尾部。
+ * 契约扩为可返回 Promise(改前链路闸需异步取符号表);消费点 await,fail-soft 不变。 */
+  editHint?: (rel: string) => string | undefined | Promise<string | undefined>;
 }
 
 /**
@@ -556,7 +577,44 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         const v = checkRepeatRead(opts.sessionId, relForRead, mtimeMs, offset, winEnd, true);
         if (v.duplicate && !force) {
           const rangeText = offset <= 1 && winEnd >= lines.length ? "全文" : `${offset}-${winEnd}`;
-          return `[重复读取·已省略] ${relForRead} 自第 ${v.readCount} 次读取后未变,请求行段(${rangeText})已在上下文;要精确原文用 offset/limit 指定未覆盖窗口,或 force=true 重新注入`;
+ // #192 实验干预注入位(exp repeated-reads;P5 同日方法学修复):
+ // 重复省略事件累计到阈值 → canary 哈希分桶决定注/不注——处理/对照组都限定在
+ // 「触发过阈值的会话」内,消除旧口径的选择偏差(treatment=有标记会话、control=其余
+ // 全体,对照被无重复会话稀释)。桶<50% 注入+留 rsi.tip.shown;≥50% 不注+留
+ // rsi.tip.withheld(结算器以 withheld 为对照,两组同资格只差干预)。
+          let tipSuffix = "";
+          try {
+            const st = rsiRepeatReadSkips.get(opts.sessionId) ?? { skips: 0, tipped: true, decided: false };
+            st.skips += 1;
+            if (!st.decided && st.skips >= 2) {
+              st.decided = true;
+ // 修5:adopt→activate——采纳的干预从 50% 灰度升 100%(读 active-interventions)
+              const isActive = isInterventionActive("repeated-reads");
+              const bucket = isActive ? 0 : rsiCanaryBucket(opts.sessionId);
+              if (bucket < RSI_TIP_CANARY_PERCENT) {
+                st.tipped = true;
+ // (S1):tip 文本过注入防护闸(guardInjection→evaluateInjection,12 稳定码
+ // 全收集);闸拒/IO 失败 fail-closed 返回空=不注入(injection.jsonl 红灯可审计)。
+ // 文本在 rsi-injection-store 统一维护,避免两侧漂移。
+                const guardedTip = await rsiCanaryTipFor(root, opts.sessionId, st.skips);
+                tipSuffix = guardedTip === "" ? "" : `\n${guardedTip}`;
+                opts.journal.append({
+                  kind: "custom",
+                  sessionId: opts.sessionId,
+                  payload: { type: "rsi.tip.shown", ref: "repeated-reads", file: relForRead, skips: st.skips, bucket },
+                });
+              } else {
+ // 对照组:同资格触发但不注入——只留痕,回执与无干预时逐字一致。
+                opts.journal.append({
+                  kind: "custom",
+                  sessionId: opts.sessionId,
+                  payload: { type: "rsi.tip.withheld", ref: "repeated-reads", file: relForRead, skips: st.skips, bucket },
+                });
+              }
+            }
+            rsiRepeatReadSkips.set(opts.sessionId, st);
+          } catch { /* 干预提示层失败不阻塞去重回执 */ }
+          return `[重复读取·已省略] ${relForRead} 自第 ${v.readCount} 次读取后未变,请求行段(${rangeText})已在上下文;要精确原文用 offset/limit 指定未覆盖窗口,或 force=true 重新注入` + tipSuffix;
         }
       } catch { /* 提示层判定失败不阻塞读 */ }
  // 语义 token 旁路:成功读取才发射;fire-and-forget 不阻塞返回
@@ -702,7 +760,7 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
         } catch { /* 快照失败不影响编辑回执 */ }
  // B:首次改动某模块时把「该模块历史缺陷基因」注入回执(每任务每模块一次)。
         let hint = "";
-        try { hint = opts.editHint ? String(opts.editHint(relDisplay(root, abs)) ?? "") : ""; } catch { hint = ""; }
+        try { hint = opts.editHint ? String((await opts.editHint(relDisplay(root, abs))) ?? "") : ""; } catch { hint = ""; }
         return `已编辑 ${relDisplay(root, abs)}:替换 ${n} 处(${text.length} → ${replaced.length} 字符)。` + (snippet ? "\n" + snippet : "") + suffix + (hint ? "\n" + hint : "");
       } catch (err) {
         return "错误:" + String(err).slice(0, 150);
@@ -1047,4 +1105,16 @@ export function createFileTools(opts: FileToolsOptions): Tool[] {
   };
 
   return [readTool, writeTool, editTool, globTool, grepTool, listDirTool, viewImageTool, resultReadTool];
+}
+
+/** 修5:读 .genie/rsi/active-interventions.json 判断干预是否已被 adopt(100% 生效)。 */
+function isInterventionActive(ref: string): boolean {
+  try {
+    const p = join(process.cwd(), ".genie", "rsi", "active-interventions.json");
+    if (!existsSync(p)) return false;
+    const list = JSON.parse(readFileSync(p, "utf8")) as string[];
+    return Array.isArray(list) && list.includes(ref);
+  } catch {
+    return false;
+  }
 }

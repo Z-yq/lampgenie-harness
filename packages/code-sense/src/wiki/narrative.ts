@@ -51,7 +51,8 @@ export async function collectExcerpts(
   cache: SourceCache,
   files: string[],
   maxChars: number,
-  maxFiles = 6): Promise<Excerpt[]> {
+  maxFiles = 6,
+): Promise<Excerpt[]> {
   const picked: { file: string; lines: string[] }[] = [];
   for (const f of files.slice(0, maxFiles)) {
     const lines = await cache.load(f);
@@ -140,7 +141,8 @@ function cleanBody(s: string): string {
 export async function validateNarrative(
   raw: RawNarrative,
   input: WikiInput,
-  cache: SourceCache): Promise<{ narrative: WikiNarrative | null; audit: NarrativeOutcome["audit"]; reasons: string[] }> {
+  cache: SourceCache,
+): Promise<{ narrative: WikiNarrative | null; audit: NarrativeOutcome["audit"]; reasons: string[] }> {
   const audit = { checked: 0, passed: 0, failed: 0, droppedSections: 0 };
   const reasons: string[] = [];
   const sections: WikiNarrativeSection[] = [];

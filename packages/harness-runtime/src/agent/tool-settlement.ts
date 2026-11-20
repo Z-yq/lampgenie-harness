@@ -173,7 +173,8 @@ function runDoneOf(h: SettleHandle): Promise<void> {
   if (internals) return internals.runDone;
   return h.promise.then(
     () => undefined,
-    () => undefined);
+    () => undefined,
+  );
 }
 
 /**
@@ -286,12 +287,14 @@ export function abortHandle(h: SettleHandle, code: SettleCode = SETTLE_CODES.CAN
 
 async function drainInternals(
   handles: ReadonlyArray<SettleHandle>,
-  now: () => number): Promise<SettlementLog> {
+  now: () => number,
+): Promise<SettlementLog> {
   await Promise.all(
     handles.map((h) =>
       h.promise.then(
         () => undefined,
-        () => undefined),
+        () => undefined,
+      ),
     ),
   );
   const diagnostics: UnobservedRejectionDiagnostic[] = [];
@@ -353,7 +356,8 @@ export function raceSettle<T>(
  */
 export function withTimeout(
   handles: ReadonlyArray<SettleHandle>,
-  ms: number): Promise<
+  ms: number,
+): Promise<
   { status: "completed"; log: SettlementLog } | { status: "timeout"; code: "SETTLE_TIMEOUT_ABORTED"; aborted: string[] }
 > {
   if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) {

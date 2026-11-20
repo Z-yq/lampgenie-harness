@@ -45,7 +45,8 @@ export function meetingImportTool(llm: LlmProvider): Tool {
 export function scheduleMeetingTodos(
   tm: TaskSupervisor,
   todos: { content: string; owner?: string; deadline?: string }[],
-  sessionId?: string): { id: string; content: string }[] {
+  sessionId?: string,
+): { id: string; content: string }[] {
   const created: { id: string; content: string }[] = [];
   for (const t of todos.slice(0, 20)) {
     const instruction = [

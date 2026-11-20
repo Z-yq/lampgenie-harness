@@ -667,7 +667,8 @@ export function inspectDeck(
             detail: `shape#${a.index}(${a.kind}) 与 shape#${b.index}(${b.kind}) 交叠 ${round2(share * 100)}% 较小者面积(上限 ${round2(t.maxOverlapShare * 100)}%)`,
             fixHint: "挪开或缩小其中一个,实在要叠就让被压的那个整体退到背景层;压住文字会直接丢信息",
           },
-          priority);
+          priority,
+        );
       }
     }
 

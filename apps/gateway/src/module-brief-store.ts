@@ -362,7 +362,8 @@ interface DepCollection {
 function collectDeps(
   ctx: CollectContext,
   manifest: ManifestView,
-  ownerModule: PolicyModuleView | undefined): DepCollection {
+  ownerModule: PolicyModuleView | undefined,
+): DepCollection {
   const deps: DepRef[] = [];
   const unresolved: string[] = [];
   let droppedExternal = 0;
@@ -396,7 +397,8 @@ function collectDeps(
 function resolveAllowedEdge(
   policy: PolicyView | undefined,
   ownerModule: PolicyModuleView | undefined,
-  depModule: PolicyModuleView | undefined): boolean | undefined {
+  depModule: PolicyModuleView | undefined,
+): boolean | undefined {
   if (!policy || !ownerModule) return undefined;
   if (ownerModule.allowImport.length > 0 && depModule && ownerModule.allowImport.includes(depModule.id)) return true;
   if (!depModule?.layer || !ownerModule.layer) return undefined;
@@ -648,7 +650,8 @@ export async function runModuleBriefCli(argv: string[], cwd: string): Promise<Mo
         codes,
       },
       null,
-      2);
+      2,
+    );
   } else {
     output = brief.rendered;
   }

@@ -324,10 +324,7 @@ describe('wiring 接入冻结缓存', () => {
 })
 
 describe('agent-wiring 静态接线断言', () => {
-  // 模块拆分后 memory 接线搬到 agent-wiring/run-with-agent.ts(多文件拼接断言)
-  const source = ['agent-wiring/run-with-agent.ts', 'agent-wiring/loop-support.ts', 'agent-wiring/wiring-core.ts']
-    .map((rel) => readFileSync(new URL(`../../../apps/gateway/src/${rel}`, import.meta.url), 'utf8'))
-    .join('\n')
+  const source = readFileSync(new URL('../../../apps/gateway/src/agent-wiring.ts', import.meta.url), 'utf8')
 
   it('从 @lampgenie/memory 引入 shouldRecallMemory', () => {
     expect(source).toContain('import { shouldRecallMemory } from "@lampgenie/memory";')

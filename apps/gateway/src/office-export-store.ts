@@ -668,7 +668,8 @@ function isEntry(value: unknown): value is { name: string; sha256: string; bytes
 export function registerManifest(
   root: string,
   name: string,
-  filePath: string): { manifest: VendorManifest; path: string; reused: boolean } {
+  filePath: string,
+): { manifest: VendorManifest; path: string; reused: boolean } {
   const paths = officeExportPaths(root);
   const safeName = assertManifestName(name);
   let bytes: Buffer;
@@ -906,7 +907,8 @@ function equivalent(a: ExportRecord, b: ExportRecord): boolean {
  */
 export function writeExportReport(
   root: string,
-  record: ExportRecord): { reportPath: string; ledgerAppended: boolean; reused: boolean } {
+  record: ExportRecord,
+): { reportPath: string; ledgerAppended: boolean; reused: boolean } {
   const paths = officeExportPaths(root);
   const reportPath = join(paths.outDir, `${record.inputSha256.slice(0, 12)}.json`);
   let reused = false;
@@ -1055,7 +1057,8 @@ export function runVerify(
   root: string,
   filePath: string,
   artifactPath: string,
-  expectedPages?: number): { verdict: ArtifactVerdict; artifactPages: number; artifactSha256: string; reportPath: string } {
+  expectedPages?: number,
+): { verdict: ArtifactVerdict; artifactPages: number; artifactSha256: string; reportPath: string } {
   let inputBytes: Buffer;
   try {
     inputBytes = readFileSync(filePath);

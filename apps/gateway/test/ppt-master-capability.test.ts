@@ -79,10 +79,12 @@ describe("真 spawn:ppt-master 工具面 = 读四件 + 写两件 + exec + 认知
       } as never,
     });
     await backend.spawn({ taskId: "t", instructions: "探针任务", workdir: dir, permissions: "sandbox" }, () => {});
+ // 工具面在 spawn 的异步装配里展开,等一拍再断言(否则偶发空集/半集, 经验证)。
+    await new Promise((r) => setTimeout(r, 150));
  // bridge 三件套恒定追加
-    expect(seen.sort()).toEqual([
-      "board_export_pptx", "board_read", "code_sense", "edit_file", "glob", "grep",
+    expect(new Set(seen)).toEqual(new Set([
+      "board_export_pptx", "board_read", "code_sense", "deliverable", "edit_file", "glob", "grep",
       "list_dir", "read_file", "run_cmd", "skill_view", "tool_call", "tool_search", "tool_view", "write_file",
-    ]);
+    ]));
   }, 30_000);
 });

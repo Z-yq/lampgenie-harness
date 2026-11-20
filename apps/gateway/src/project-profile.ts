@@ -412,7 +412,8 @@ export class ProjectProfileIndex {
     root: string,
     idx: import("@lampgenie/code-sense").C2fIndex,
     tick: (progress: number, stage: string) => Promise<void>,
-    prev?: ProjectProfileData): Promise<void> {
+    prev?: ProjectProfileData,
+  ): Promise<void> {
     const { queryEntryPoints } = await import("@lampgenie/code-sense");
     const modOfFn = moduleOf;
     await tick(30, "从调用索引聚合模块");

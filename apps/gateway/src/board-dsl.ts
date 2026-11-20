@@ -236,7 +236,8 @@ const MERGE_FILL_KEYS = ["flow", "evidence", "comments", "wf", "fileRef", "done"
 
 export function mergeDslWithNodes(
   dslNodes: BoardDslNode[],
-  jsonNodes: unknown): { nodes: Record<string, unknown>[]; filled: number } {
+  jsonNodes: unknown,
+): { nodes: Record<string, unknown>[]; filled: number } {
   const list = Array.isArray(jsonNodes) ? jsonNodes : [];
   const byId = new Map<string, Record<string, unknown>>();
   for (const raw of list) {

@@ -149,7 +149,8 @@ interface CohortRuntime {
   linkFixes(input: { deliveries?: unknown; fixes?: unknown }, options?: { windowDays?: number }): LinkResult;
   computeCohortMetrics(
     input: { deliveries?: unknown; fixes?: unknown },
-    options?: ComputeOptions): ComputeResult;
+    options?: ComputeOptions,
+  ): ComputeResult;
   compareBeforeAfter(
     pair: { before: CohortMetrics; after: CohortMetrics },
     options?: { minDeltaPct?: number },
@@ -160,23 +161,10 @@ interface CohortRuntime {
   toAuditRows(cohorts: CohortMetrics[]): AuditRow[];
 }
 
-let cohortRuntime: CohortRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_cohort_metrics from "@lampgenie/runtime/agent/cohort-metrics";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadCohortRuntime(): Promise<CohortRuntime> {
-  if (cohortRuntime) return cohortRuntime;
-  const spec = "@lampgenie/runtime/agent/cohort-metrics";
-  try {
-    cohortRuntime = (await import(spec)) as CohortRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/cohort-metrics.ts", import.meta.url).href;
-    cohortRuntime = (await import(srcUrl)) as CohortRuntime;
-  }
-  return cohortRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadCohortRuntime();
+const rt: CohortRuntime = rt_cohort_metrics;
 
 const LINE_TYPES: ReadonlySet<string> = new Set<string>(COHORT_LINE_TYPES);
 
@@ -321,6 +309,20 @@ export function recordDelivery(root: string, delivery: unknown): CohortRecordRes
 }
 
 /** 登记一次修复;重复 id 拒收,非法输入折叠成 COHORT_INVALID_INPUT。 */
+/** P1-③:按 taskId 反查交付 id——fix 显式回链(relatedDeliveryId)的取数口。
+ * 返工链的 buildSession 即源交付;查不到=诚实 undefined(走 module+窗口兜底联结)。 */
+export function findDeliveryIdByTaskId(root: string, taskId: string): string | undefined {
+  try {
+    const projection = loadCohort(root);
+    for (const delivery of projection.deliveries) {
+      if (delivery.taskId === taskId) return delivery.id;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 export function recordFix(root: string, fix: unknown): CohortRecordResult {
   const base = assertRoot(root);
   const normalized = rt.coerceFix(fix);
@@ -337,7 +339,8 @@ export function compute(root: string, options: ComputeOptions = {}): CohortCompu
   const projection = loadCohort(base);
   const result = rt.computeCohortMetrics(
     { deliveries: projection.deliveries, fixes: projection.fixes },
-    options);
+    options,
+  );
   return {
     ok: true,
     cohorts: result.cohorts,

@@ -80,6 +80,11 @@ export type EventKind =
   // deriveMessages 不读(不是会话真相,只是读侧治理遥测);面板/审计按需消费。
   | "context.prune"
   | "context.growth"
+ // 前缀缓存命中率告警(§4.6 缺口2 闭环):session 累计 provider 口径命中率
+ // 跌破目标(缺省 98.5%)或阻断线(95%)且严重度升级时落一条。
+ // payload={verdict,hitRate,target,block,calls,inputTokens,cachedTokens,localHitRate?,reason,prefixSignals?};
+ // deriveMessages 不读(纯观测,不改请求前缀);面板/审计按需消费。
+  | "prefix.cache.warn"
  // 大结果入口闸门:工具结果进 journal **之前**被切块/摘要/落盘的留痕。
   // payload={tool,chars,tokens,chunks,keptChunks,keptChars,digestChars,policy,dumpPath?,scorer,
   //          droppedChunks,droppedChars,durationMs,dumpError?};deriveMessages 不读(不是会话真相)。

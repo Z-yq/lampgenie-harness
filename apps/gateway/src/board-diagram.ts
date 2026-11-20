@@ -159,7 +159,8 @@ export interface BoardDiagramOptions {
  */
 export async function renderBoardSvg(
   doc: BoardDoc,
-  opts?: BoardDiagramOptions): Promise<BoardDiagramResult> {
+  opts?: BoardDiagramOptions,
+): Promise<BoardDiagramResult> {
   const t0 = performance.now();
   const done = (ok: boolean, svg: string, diagnostics: BoardDiagramDiagnostic[]): BoardDiagramResult => ({
     ok,

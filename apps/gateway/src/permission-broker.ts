@@ -7,10 +7,21 @@
  */
 export type PermissionDecision = "allow-once" | "reject";
 /** 决策+来源(panel=面板应答;timeout=超时自动拒;offline=无面板连接;policy=会话级代答直通;
- * object-changed/object-snapshot-failed= 审批对象复核失败(fail-closed))。 */
+ * object-changed/object-snapshot-failed= 审批对象复核失败(fail-closed);
+ * super=super agent 自决;super-escalated-user=super 未决升级转用户后由用户裁定;
+ * super-error=super 侧异常收敛)。 */
 export interface PermissionOutcome {
   decision: PermissionDecision;
-  by: "panel" | "timeout" | "offline" | "policy" | "object-changed" | "object-snapshot-failed";
+  by: "panel" | "timeout" | "offline" | "policy" | "object-changed" | "object-snapshot-failed" | "super" | "super-escalated-user" | "super-error";
+}
+
+/** by 标签统一(三处 ask 链共用):super 自决不冒充 panel;其余沿用 panel-<by> 旧口径。 */
+export function outcomeByLabel(o: { decision: PermissionDecision; by: string }): string {
+  if (o.by === "panel") return o.decision === "allow-once" ? "panel-approved" : "panel-denied";
+  if (o.by === "super") return o.decision === "allow-once" ? "super-approved" : "super-denied";
+  if (o.by === "super-escalated-user") return "super-escalated-user";
+  if (o.by === "super-error") return "super-error";
+  return "panel-" + o.by;
 }
 
 export interface PermissionAskInput {
@@ -21,6 +32,17 @@ export interface PermissionAskInput {
   risk?: string;
   /** 会话级代答判定(qwen permission-policy 适配;缺省=不代答)。 */
   taskId?: string;
+ /** :任务归属(submittedBy=super 的任务其权限 ask 转 super 自决)。 */
+  submittedBy?: string;
+ /** 任务书节选(super 自决的范围与红线依据;非 super 任务忽略)。 */
+  brief?: string;
+ /** 升级回流防递归:super 未决 -> 转用户时必须置 true,否则又回到 super 分支。 */
+  noSuper?: boolean;
+}
+
+/** super 自决路由的最小面(SuperApprovalRouter;测试可注入替身)。 */
+export interface SuperApprovalPort {
+  ask(input: PermissionAskInput): Promise<PermissionOutcome>;
 }
 
 /** policy 窄口(只取 gateway 用得到的两面;适配 qwen TaskSupervisor 差异由装配方做)。 */
@@ -59,6 +81,8 @@ export class PermissionBroker {
   online = false;
  /** 会话级代答层:qwen permission-policy;未注入=旧行为。 */
   policy?: PermissionPolicyPort;
+ /** :super 派发任务的审批自决路由;未注入=全部走旧面板路径(零行为变化)。 */
+  superRouter?: SuperApprovalPort;
 
   private broadcastFn: (msg: Record<string, unknown>) => void = () => {};
  /** 决议回调(server 注入→广播 permission.resolved + super.inbox.changed;缺省=无)。 */
@@ -95,6 +119,11 @@ export class PermissionBroker {
  // 会话级代答:policy 说本会话/任务已授予→不弹窗直通(来源如实标 policy)。
       if (this.policy?.shouldAutoAllow("local", input.sessionId, input.taskId)) {
         resolve({ decision: "allow-once", by: "policy" });
+        return;
+      }
+ // super 派发的任务 -> super 自决(用户不再逐一授权);升级回流带 noSuper 防递归。
+      if (input.submittedBy === "super" && this.superRouter && !input.noSuper) {
+        void this.superRouter.ask(input).then(resolve, () => resolve({ decision: "reject", by: "super-error" }));
         return;
       }
       if (!this.online) {

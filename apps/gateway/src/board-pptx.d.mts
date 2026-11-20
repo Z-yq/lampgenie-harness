@@ -6,3 +6,8 @@ export declare function planDeck(deck: unknown): unknown[];
 export declare function humanize(s: unknown): string;
 export declare function boardToDeckTemplate(doc: unknown): string;
 export declare function boardToCompositionTemplate(doc: unknown, opts?: { relations?: readonly string[] }): string;
+export declare function regenSimilarity(deck: unknown, oldMd: string): { total: number; matched: number; twin: number; twins: string[] };
+
+/** v4 主题名（editorial / technical / executive / warm）。 */
+export declare const THEME_NAMES: string[];
+export declare const DEFAULT_THEME: string;

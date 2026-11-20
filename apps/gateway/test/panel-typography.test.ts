@@ -281,7 +281,8 @@ describe(" 消息流排版系统化", () => {
       "--fs-code-sm": "11.5px", "--fs-chip": "11px",
       "--lh-body": "1.85", "--lh-code": "1.6", "--lh-tight": "1.6",
       "--indent-1": "22px", "--indent-2": "44px", "--indent-3": "66px",
-      "--gap-msg": "14px", "--gap-block": "12px", "--gap-tool": "6px",
+ // 六轮:--gap-msg 14→18px;正文衬线→无衬线(--font-body 不在本表)
+      "--gap-msg": "18px", "--gap-block": "12px", "--gap-tool": "6px",
     };
     for (const [k, v] of Object.entries(SPEC)) {
       const m = new RegExp(k + "\\s*:\\s*([^;}]+)").exec(rootBlock);

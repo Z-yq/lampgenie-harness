@@ -89,14 +89,13 @@ describe("data-tool-store 落盘与热加载", () => {
     expect(after.native).toContain("web_search");
   });
 
-  it("4) rsi 注册无审批 → #196 门拒(need-approval),文件不落盘", async () => {
+  it("4) rsi 注册无审批(可逆零风险)→ 机器闸放行(§14.2④),文件落盘", async () => {
     const root = await newRoot();
     const result = registerDataTool(root, makeSpec({ name: "rsi_probe", registeredBy: "rsi" }), { now: NOW });
-    expect(result.ok).toBe(false);
-    expect(result.codes).toContain("DATA_TOOL_NEEDS_APPROVAL");
-    expect(result.codes).toContain("MOD_RSI_NEEDS_HUMAN");
-    expect(result.gate?.decision).toBe("need-approval");
-    await expect(readFile(dataToolPath(root, "rsi_probe"), "utf8")).rejects.toBeTruthy();
+    expect(result.ok).toBe(true);
+    expect(result.gate?.decision).toBe("allow");
+    expect(result.codes.filter((code) => code.startsWith("MOD_"))).toEqual([]);
+    await expect(readFile(dataToolPath(root, "rsi_probe"), "utf8")).resolves.toBeTruthy();
   });
 
   it("5) rsi 注册带人类审批 → 通过且无 MOD_ 码", async () => {

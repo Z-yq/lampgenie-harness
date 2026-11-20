@@ -496,7 +496,8 @@ function buildPattern(
   signature: string,
   type: DecisionType,
   members: DecisionRecord[],
-  now: number): Pattern {
+  now: number,
+): Pattern {
   const instances: PatternInstance[] = members.map((record) => {
     const instance: PatternInstance = { decisionId: record.id };
     if (record.context.projectId !== undefined) instance.projectId = record.context.projectId;

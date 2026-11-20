@@ -142,7 +142,7 @@ export interface ResolvedModelScoringConfig {
 export function resolveModelScoringConfig(config?: ModelScoringConfig): ResolvedModelScoringConfig {
   const d = DEFAULT_MODEL_SCORING;
   const rawMode = config?.mode;
- // 缺省/非法值一律 off——不构造 client、不发请求、不落账;shadow/active 仅显式配置时启用。
+ // :缺省/非法值一律 off——不构造 client、不发请求、不落账;shadow/active 仅显式配置时启用。
   const mode: ModelScoringMode = rawMode === "off" || rawMode === "shadow" || rawMode === "active" ? rawMode : "off";
   const reason: ResolvedModelScoringConfig["reason"] =
     rawMode === undefined || mode !== rawMode ? "default-off" : mode === "off" ? "explicit-off" : undefined;
@@ -185,7 +185,8 @@ export function scoringTotalChars(candidates: readonly ScoringCandidate[]): numb
 export function scoringSkipReason(
   candidates: readonly ScoringCandidate[],
   minCandidates: number = MIN_SCORING_CANDIDATES,
-  minTotalChars: number = MIN_SCORING_TOTAL_CHARS): ScoringSkipReason | undefined {
+  minTotalChars: number = MIN_SCORING_TOTAL_CHARS,
+): ScoringSkipReason | undefined {
   if (minCandidates > 0 && candidates.length < minCandidates) return "too-few-candidates";
   if (minTotalChars > 0 && scoringTotalChars(candidates) < minTotalChars) return "content-too-small";
   return undefined;
@@ -219,7 +220,8 @@ function djb2(text: string): string {
 export function scoringContentKey(
   sessionId: string,
   candidates: readonly ScoringCandidate[],
-  goal: string): string {
+  goal: string,
+): string {
   const shape = candidates.map((c) => `${c.id}:${c.chars}`).join("\u0001");
   return `${sessionId}\u0000${djb2(shape)}\u0000${djb2(goal.slice(0, 500))}`;
 }
@@ -279,7 +281,8 @@ export function goalFromMessages(messages: readonly Message[]): string {
 export function collectScoringCandidates(
   messages: readonly Message[],
   maxCandidates = 12,
-  hotTailMessages = 6): ScoringCandidate[] {
+  hotTailMessages = 6,
+): ScoringCandidate[] {
   const list = [...messages];
   const idx = toolCallIndex(list);
   const warmBefore = Math.max(0, list.length - Math.max(0, hotTailMessages));
@@ -311,7 +314,8 @@ export function collectScoringCandidates(
  */
 export function buildModelDecisionSets(
   decisions: readonly ScoringDecision[],
-  minConfidence = 0.9): ModelDecisionSets {
+  minConfidence = 0.9,
+): ModelDecisionSets {
   const keep = new Set<string>();
   const drop = new Set<string>();
   // 1-0.9 在浮点下是 0.099999...;阈值比较加 eps,否则模型给的 0.1 会被误判为“不一致”。
@@ -475,7 +479,8 @@ export async function scoreContextCandidates(
   config: ModelScoringConfig | undefined,
   candidates: readonly ScoringCandidate[],
   goal: string,
-  opts?: ScoreContextOptions): Promise<ScoringResult> {
+  opts?: ScoreContextOptions,
+): Promise<ScoringResult> {
   const resolved = resolveModelScoringConfig(config);
   const clock = opts?.now ?? Date.now;
   const started = clock();
@@ -576,5 +581,124 @@ export async function scoreContextCandidates(
       questionCount,
       ...(requestBytes !== undefined ? { requestBytes } : {}),
     };
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 缺口#28(§4.1.3③):jev-150m 第二用途——降级确认器。
+ * 与温区评分器(scoreContextCandidates,批量、每 N 步)的区别:
+ * - 按需单条:观察期到期的候选单独问一次「这条内容是否还被当前决策依赖」;
+ * - shadow 先行:结果只落事件(kind=downgrade-confirm),不改任何消息——是否采纳由调用方
+ * 按三段式状态机迁移,不直接驱动剪枝;
+ * - fail-soft:低置信(<minConfidence)/超时/报错返回 undefined,调用方回落结构信号;
+ * - 候选对象扩展:assistant/user 消息也问(评分器只评 role=tool)。
+ * ------------------------------------------------------------------ */
+
+/** 降级确认候选(比 ScoringCandidate 宽:含 assistant/user)。 */
+export interface DowngradeConfirmCandidate {
+  id: string;
+  role: "tool" | "assistant" | "user";
+  preview: string;
+}
+
+/** 降级确认结论:keepResult=true → 回保护区;false → 转可裁候选;undefined → 回落结构信号。 */
+export interface DowngradeConfirmResult {
+  keepResult: boolean | undefined;
+  confidence: number;
+  durationMs: number;
+  goalChars: number;
+  previewChars: number;
+  error?: string;
+}
+
+/**
+ * 按需单条降级确认。异步滞后一步由调用方安排(fire-and-forget);本函数自身不发 journal
+ * 事件(调用方以 context.model.score + kind:"downgrade-confirm" 落账,保持与评分器同账本)。
+ * mode=off 或 provider 未配置 → 直接 undefined(不算错误)。
+ */
+export async function confirmDowngrade(
+  config: ModelScoringConfig | undefined,
+  candidate: DowngradeConfirmCandidate,
+  goal: string,
+  opts?: { now?: () => number; timeoutMs?: number },
+): Promise<DowngradeConfirmResult | undefined> {
+  const resolved = resolveModelScoringConfig(config);
+  const clock = opts?.now ?? Date.now;
+  const started = clock();
+  const base = {
+    confidence: 0,
+    durationMs: 0,
+    goalChars: goal.length,
+    previewChars: candidate.preview.length,
+  };
+  if (resolved.mode === "off" || candidate.preview.trim() === "") return undefined;
+  const timeoutMs = Math.max(500, Math.min(8_000, Math.floor(opts?.timeoutMs ?? 1_500)));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = endpointOf(resolved.providerUrl, resolved.apiType);
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    const key = resolved.apiKeyEnv ? process.env[resolved.apiKeyEnv] : undefined;
+    if (key) headers.authorization = `Bearer ${key}`;
+    const question = `This ${candidate.role} message is from a work segment the focus has left. ` +
+      "It should stay verbatim-protected because the assistant is still actively depending on it";
+    const body = resolved.apiType === "jev"
+      ? {
+          state: { goal, candidates: [{ id: candidate.id, role: candidate.role, preview: candidate.preview.slice(0, 500) }] },
+          questions: {
+            [`result_${candidate.id}`]: {
+              type: "noul",
+              instructions: question,
+              criteria: { true: "Still actively depended on.", false: "No longer depended on." },
+            },
+          },
+          calibrated: true,
+        }
+      : {
+          model: resolved.model,
+          temperature: 0,
+          messages: [
+            { role: "system", content: "You are a downgrade confirmer. Output JSON only." },
+            {
+              role: "user",
+              content: [
+                "Decide whether this message should leave the verbatim-protected zone.",
+                'Return JSON only: {"keepResult":0..1,"confidence":0..1}',
+                "",
+                "GOAL:", goal,
+                "",
+                "CANDIDATE:", JSON.stringify({ id: candidate.id, role: candidate.role, preview: candidate.preview.slice(0, 500) }),
+              ].join("\n"),
+            },
+          ],
+        };
+    const response = await (resolved.fetchImpl ?? fetch)(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    let keepProb: number | undefined;
+    if (resolved.apiType === "jev") {
+      const answers = parsed as Record<string, JevAnswer>;
+      keepProb = keepProbability(answers[`result_${candidate.id}`]);
+    } else {
+      const d = (parsed.decisions as Array<Record<string, unknown>> | undefined)?.[0];
+      const kr = d?.keepResult;
+      if (typeof kr === "number" && Number.isFinite(kr)) keepProb = clamp(kr, 0, 1);
+    }
+    if (keepProb === undefined) throw new Error("响应缺少 keepResult 概率");
+    const decision = { ...base, keepResult: keepProb >= 0.5 ? true : keepProb < 0.5 ? false : undefined, confidence: resolved.minConfidence };
+ // 高置信才给结论;低置信 → undefined(调用方回落结构信号,§4.1.3③ 表)。
+    if (keepProb >= 0.5 && 1 - keepProb < 1 - 0.9 && decision.confidence >= 0.9) return decision;
+    if (keepProb < 0.5 && keepProb < 0.9) return decision;
+    return { ...decision, keepResult: undefined, durationMs: clock() - started };
+  } catch (err) {
+    return { ...base, keepResult: undefined, confidence: 0, error: err instanceof Error ? err.message : String(err), durationMs: clock() - started };
+  } finally {
+    clearTimeout(timer);
   }
 }

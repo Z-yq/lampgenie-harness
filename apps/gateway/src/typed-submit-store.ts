@@ -114,7 +114,8 @@ function badCode(code: string, reason: string): TypedSubmitOpResult {
 export function openTypedSubmit(
   root: string,
   askId: string,
-  schema: JsonSchema): TypedSubmitOpResult {
+  schema: JsonSchema,
+): TypedSubmitOpResult {
   if (typeof askId !== "string" || askId.trim() === "") {
     return badCode(TYPED_INVALID, "ask-id-required");
   }
@@ -135,7 +136,8 @@ export function openTypedSubmit(
 export function submitTypedSubmit(
   root: string,
   askId: string,
-  payload: unknown): TypedSubmitOpResult {
+  payload: unknown,
+): TypedSubmitOpResult {
   if (typeof askId !== "string" || askId.trim() === "") {
     return badCode(TYPED_INVALID, "ask-id-required");
   }

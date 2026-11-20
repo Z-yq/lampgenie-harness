@@ -23,7 +23,7 @@ import type { RemoteProject } from "./remote-project.js";
 export const SENSE_TOOL_NAME = "code_sense";
 
 /** 结构面动作(action 在场 → 走静态索引/行扫描,毫秒级)。 */
-export const SENSE_ACTIONS = ["symbol", "file", "impact", "entrypoints", "project", "wire", "refs", "surface", "vars", "branches", "flow"] as const;
+export const SENSE_ACTIONS = ["symbol", "file", "impact", "entrypoints", "project", "wire", "refs", "surface", "vars", "branches", "orphans", "flow", "radiation", "world"] as const;
 export type SenseAction = (typeof SENSE_ACTIONS)[number];
 
 /** 语义画像面(无 action 时生效)。 */
@@ -35,6 +35,9 @@ const RETIRED_ACTIONS: Record<string, string> = {
   api: "action=api 已删除:HTTP 接口表面改用 mode=api(语义面,与旧 action 完全同源)",
   graph: "action=graph 已删除:符号上下游用 action=symbol;需要调用链时序/引用面用 mode=debug",
   filegraph: "action=filegraph 已删除:文件符号表用 action=file;跨文件调用关系用 mode=debug",
+ // §12.5 漂移登记闭合:journal 经验证 grep×22/files×4 次调用落「未知 action」——补定向迁移指引。
+  grep: "action=grep 已删除:字面量引用面用 action=refs(8 类语境逐点足迹,含 UI 显示/文案/配置)",
+  files: "action=files 已删除:整文件符号表用 action=file;文件遍历式检索用 action=refs 或 mode=explore",
 };
 
 export interface SenseStructOpts {
@@ -51,9 +54,11 @@ export type SenseDispatch =
 function usage(): string {
   return [
     "code_sense 用法(二选一):",
-    "① 结构面 action=symbol|file|impact|entrypoints|project|wire|refs|surface|vars|branches|flow,target=符号名/文件相对路径/字面量/概念词/flow 的 scope;",
+    "主命令三角(优先记这三个):函数关联关系用 action=impact(上下游调用闭包+关联测试);一个数值/字面量在哪里被用(含 UI 显示位置/文案/配置)用 action=refs——UI 渲染点不走 impact 走 refs;命名形态未知的找路用 mode=explore(自由文本分词召回)。孤儿逻辑自查用 action=orphans(验收前:孤独导出/仅测试接线/孤儿事件/双胞胎,确定性毫秒级)。",
+    "① 结构面 action=symbol|file|impact|entrypoints|project|wire|refs|surface|vars|branches|orphans|flow|radiation|world,target=符号名/文件相对路径/字面量/概念词/flow 的 scope;radiation=改动辐射面四分面清单(上游/下游/契约/副作用);orphans=孤儿逻辑自查(target 可选=模块/路径前缀,缺省全仓);",
     "② 语义面 mode=auto|debug|plan|explore|ui|api|state|algo + query(符号名/关键词)。",
     "③ 概念足迹 action=surface,target=概念词(多个用逗号分隔,如 SuperAgent,dh-video):替换/迁移一个概念时 11 类(protocol/db/journal/config/symbol/ui/assets/deploy/i18n/tests/docs)表面一次列全。",
+    "④ 世界模型 action=world(纯读预渲染产物,不加载索引/不触发构建):target 空=L0 骨架全文;target=\"module:<名>\"=单模块页;target=任务文本=按词面下钻 top3 模块页(带命中理由)。",
   ].join("\n");
 }
 
@@ -108,7 +113,7 @@ export function dispatchSenseArgs(args: unknown): SenseDispatch {
  *  不拦「符号名可能不存在」(那是正常查询,空结果是有效信息)。 */
 export function structuralTargetHint(action: SenseAction, target: string): string | undefined {
   if (!target) return undefined; // 各 action 自己的「需要 target」文案更准确,这里不抢
-  const needsSymbol = action === "symbol" || action === "impact";
+  const needsSymbol = action === "symbol" || action === "impact" || action === "radiation";
   if (!needsSymbol) return undefined;
   const looksPath = /[\\/]/.test(target) || /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|c|h|cpp|hpp|md|json)$/i.test(target);
   if (!looksPath) return undefined;
@@ -191,6 +196,12 @@ async function runStructural(root: string, action: SenseAction, target: string, 
     }
     return renderDecisionSkeleton(r).slice(0, 14_000);
   }
+  if (action === "orphans") {
+ // 孤儿逻辑自查(设计稿 14.2):孤独导出/仅测试接线/孤儿事件/双胞胎,确定性行扫描,验收前毫秒级自查。
+    const { scanOrphans, renderOrphans } = await import("@lampgenie/code-sense/sensing/orphan-audit");
+    const r = await scanOrphans(root, target || undefined);
+    return renderOrphans(r).slice(0, 14_000);
+  }
   if (action === "wire") {
     // 协议表面(WS 消息 union ↔ 收发点/孤儿):与 codesense wire 同源,纯行/结构扫描,不触发索引构建。
     const { scanWire, renderWire } = await import("@lampgenie/code-sense/wire");
@@ -242,13 +253,122 @@ async function runStructural(root: string, action: SenseAction, target: string, 
       throw e;
     }
   }
-  if ((action === "symbol" || action === "file" || action === "impact") && !target) {
+  if ((action === "symbol" || action === "file" || action === "impact" || action === "radiation") && !target) {
     return action === "file"
       ? "action=file 需要 target=文件相对路径"
       : `action=${action} 需要 target=符号名`;
   }
   const { codeIndexQuery } = await import("./sense-index-manager.js");
+ // L3 radiation(设计稿 35):组合 impact+symbol 成四分面辐射清单(上游/下游/契约/副作用)
+  if (action === "radiation") {
+    return await radiationChecklist(root, target, codeIndexQuery);
+  }
   return (await codeIndexQuery(root, action, target)).slice(0, 14_000);
+}
+
+/**
+ * L3 辐射面枚举器(设计稿 35 实施;设想的「清单不靠人记靠工具产出」终态)。
+ * 组合既有 action(impact+symbol)成**四分面清单**:上游调用方/下游消费点/契约字段/副作用面。
+ * 副作用检测=import 边可证的白名单(设计稿 §2.1 确定性优先,名字命中无 import 证的进 unknown)。
+ */
+async function radiationChecklist(
+  root: string,
+  symbol: string,
+  query: (root: string, action: string, target: string) => Promise<string>,
+): Promise<string> {
+  const [impactText, symbolText] = await Promise.all([
+    query(root, "impact", symbol).catch(() => "impact 查询失败"),
+    query(root, "symbol", symbol).catch(() => "symbol 查询失败"),
+  ]);
+
+ // 从 impact 输出提取上游/下游/受影响文件/关联测试(文本解析,与 CLI 输出格式同源)
+  const callers: string[] = [];
+  const callees: string[] = [];
+  const affectedFiles: string[] = [];
+  const tests: string[] = [];
+  let section = "";
+  for (const line of impactText.split("\n")) {
+    if (line.includes("上游调用方")) section = "callers";
+    else if (line.includes("下游依赖")) section = "callees";
+    else if (line.includes("受影响文件")) section = "files";
+    else if (line.includes("关联测试")) section = "tests";
+    else if (line.trim().startsWith("(")) {
+      const trimmed = line.trim();
+      if (section === "callers") callers.push(trimmed);
+      else if (section === "callees") callees.push(trimmed);
+      else if (section === "tests") tests.push(trimmed);
+    } else if (section === "files" && line.trim() && !line.includes("汇总") && !line.includes("弃边")) {
+      affectedFiles.push(line.trim());
+    }
+  }
+
+ // 契约面:从 symbol 输出提取签名
+  const sigMatch = symbolText.match(/签名[::]\s*(.+)/);
+  const signature = sigMatch ? sigMatch[1]!.trim() : "(symbol 查询未返回签名)";
+
+ // 副作用面:下游调用名 + 受影响文件的 import 白名单检测
+  const calleeNames = callees.map((c) => {
+    const m = /\((?:d\d+,)?\s*([^@\s]+)\s*@/.exec(c) || /\)\s*(\w+)\s*@/.exec(c);
+    return m ? m[1]! : "";
+  }).filter(Boolean);
+
+  const sideEffects = detectSideEffects(calleeNames, affectedFiles);
+
+ // 渲染四分面清单
+  const lines: string[] = [
+    `## 改动辐射面:${symbol}`,
+    "",
+    "### 上游调用方(改签名/返回值前必查)",
+    ...(callers.length > 0 ? callers.map((c) => `- ${c}`) : ["- (无上游调用方——可能是入口/独立函数)"]),
+    "",
+    "### 下游依赖(行为变更需同步检查)",
+    ...(callees.length > 0 ? callees.map((c) => `- ${c}`) : ["- (无下游依赖)"]),
+    "",
+    "### 契约(签名+类型)",
+    `- 签名:${signature}`,
+    "",
+    "### 副作用面(改这里会触达什么)",
+    ...(sideEffects.length > 0 ? sideEffects : ["- (import 边未检出副作用——注意:白名单只覆盖已知模式,不代表零副作用)"]),
+    "",
+    "### 关联测试",
+    ...(tests.length > 0 ? tests.map((t) => `- ${t}`) : ["- (无关联测试——改动后可能需要补)"]),
+    "",
+    "### 受影响文件",
+    ...(affectedFiles.length > 0 ? affectedFiles.map((f) => `- ${f}`) : []),
+    "",
+    `> 来源:code_sense impact+symbol(静态索引);副作用=白名单检测(确定性优先,名字命中无 import 证进 unknown)。`,
+    `> 用途:改 ${symbol} 前先把上面的面画全——这正是「影响面未闭合」的预防动作。`,
+  ];
+  return lines.join("\n").slice(0, 14_000);
+}
+
+/** 副作用白名单(设计稿 §2.1;import 边可证的才进 high,名字命中进 low→unknown) */
+const SIDE_EFFECT_PATTERNS: ReadonlyArray<{ re: RegExp; bucket: string; label: string }> = [
+  { re: /writeFile|appendFile|mkdir|rename|unlink|rmSync|writeSync/i, bucket: "fs", label: "写文件" },
+  { re: /fetch|WebSocket|net\.connect|http\.request|axios/i, bucket: "network", label: "网络请求" },
+  { re: /execFile|spawn|execSync|child_process|process\.exit|process\.kill/i, bucket: "process", label: "进程操作" },
+  { re: /Date\.now|Math\.random|crypto\.randomUUID|hrtime/i, bucket: "nondeterminism", label: "非确定性" },
+  { re: /process\.env\[|globalThis\./i, bucket: "global", label: "全局状态" },
+];
+
+function detectSideEffects(calleeNames: readonly string[], affectedFiles: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const name of calleeNames) {
+    for (const p of SIDE_EFFECT_PATTERNS) {
+      if (p.re.test(name) && !seen.has(p.label)) {
+        seen.add(p.label);
+        out.push(`- ⚠️ ${p.label}(下游调用 \`${name}\` 命中 ${p.bucket} 模式)`);
+      }
+    }
+  }
+  for (const file of affectedFiles) {
+    if (/write|save|persist|send|emit/i.test(file) && !seen.has("文件名暗示写操作")) {
+      seen.add("文件名暗示写操作");
+      out.push(`- ⚠️ 文件名暗示写操作:${file}(需 import 边确认)`);
+    }
+  }
+  return out;
 }
 
 /** root 参数解析(巨根治理):子仓名/相对路径/绝对路径 → 绝对根;必须落在工作区内。
@@ -302,6 +422,8 @@ async function runGated(root: string, d: Exclude<SenseDispatch, { kind: "invalid
 }
 
 async function runGatedUncached(root: string, d: Exclude<SenseDispatch, { kind: "invalid" }>): Promise<string> {
+ // world:纯读几 KB 常驻产物——不走重闸/不加载索引/不触发构建,置于 rootScanVerdict 之前。
+  if (d.kind === "structural" && d.action === "world") return runWorldAction(root, d.target);
   const { rootScanVerdict, detectWorkspaceRepos, refineRootForTarget, workspaceRefusalText, renderWorkspaceRepos } = await import("./sense-root-gate.js");
   const verdict = await rootScanVerdict(root);
   if (verdict.ok) {
@@ -398,6 +520,13 @@ export function senseArgvFor(d: SenseDispatch, root: string): RemoteSensePlan {
         if (typeof o.maxNodes === "number" && Number.isFinite(o.maxNodes) && o.maxNodes > 0) argv.push("--max-nodes", String(Math.floor(o.maxNodes)));
         return { argv };
       }
+      case "world": {
+ // 世界模型:CLI `codesense world [--module <名> | --for "<任务文本>"]`,纯读产物。
+ // --root 与其余动作同口径(远端按收窄根执行;CLI world 经 rootArg 读它)。
+        if (!t) return { argv: ["world", "--root", root] };
+        if (t.startsWith("module:")) return { argv: ["world", "--module", t.slice("module:".length).trim(), "--root", root] };
+        return { argv: ["world", "--for", t, "--root", root] };
+      }
  // 穷举兜底:action 联合新增成员时若忘补 case,控制流会穿透到下面的
       // semantic 分支,TS 无法把 d 收窄 → 3 条「Property 'query'/'mode' does not exist」。
       // default 让编译器检查形参类型(不再是 never),新增 action 漏接会在类型层暴露。
@@ -441,8 +570,57 @@ export async function runRemoteSense(remote: RemoteProject, d: SenseDispatch, ro
   }
 }
 
-/** code_sense 工具(合并后唯一入口;只读、并发安全)。 */
-export function codeSenseTool(repoRoot: string, remote?: RemoteProject): Tool {
+/** world:纯读常驻产物(零索引加载/不触发构建)。
+ * 空 target=L0 骨架;module:<名>=单页;其它文本=确定性词面下钻 top3(带命中理由)。
+ * 产物缺失只给重建指路,不自动建(重建要读 86MB 索引,属显式操作)。 */
+async function runWorldAction(root: string, target: string): Promise<string> {
+  const { readWorldManifest, readWorldSkeleton, readWorldModulePage, readDrillCorpus, listWorldModules, worldFreshness } =
+    await import("@lampgenie/code-sense/world/store");
+  const { selectModules } = await import("@lampgenie/code-sense/world/drilldown");
+  const manifest = readWorldManifest(root);
+  if (!manifest) {
+    return `世界模型产物缺失(${root}/.genie/sense-index/<hash>/world/)。重建路径:\n`
+      + "  1. codesense index --register(索引缺失时;全量构建约数分钟)\n"
+      + "  2. codesense world --rebuild(读索引渲染产物,实测 ~3.4s)\n"
+      + "(world 读路径不加载索引;本提示不自动触发构建。)";
+  }
+  const fresh = worldFreshness(root, manifest);
+  const staleLine = fresh.state === "fresh" ? ""
+    : `> ⚠ 世界模型${fresh.state === "stale" ? "陈旧" : "新鲜度未知"}:${fresh.reasons.join(";")}——codesense world --rebuild 重建\n`;
+  const t = String(target ?? "").trim();
+  if (!t) {
+    const skel = readWorldSkeleton(root);
+    if (!skel.text) return "世界模型 L0 骨架缺失(manifest 在但 skeleton.md 不在)——codesense world --rebuild 重建。";
+    return (staleLine + skel.text).slice(0, 14_000);
+  }
+  if (t.startsWith("module:")) {
+    const name = t.slice("module:".length).trim();
+    const page = readWorldModulePage(root, name);
+    if (!page) {
+      const mods = listWorldModules(root);
+      return `没有模块 \`${name}\` 的页面。已产出模块(${mods.length}):${mods.slice(0, 30).join(", ")}${mods.length > 30 ? " …" : ""}\n用 target="module:<名>" 指定。`;
+    }
+    return (staleLine + page.text).slice(0, 14_000);
+  }
+  const corpus = readDrillCorpus(root);
+  if (!corpus) return "下钻语料缺失(drill.json)——codesense world --rebuild 重建。";
+  const hits = selectModules(corpus, { text: t }, { max: 3 });
+  if (hits.length === 0) {
+    const mods = listWorldModules(root).slice(0, 3);
+    return `零词面命中(任务文本与模块名/目录/文件名/符号无词面交集,不猜语义)。按规模候选:${mods.join(", ")}\n用 target="module:<名>" 指定单页。`;
+  }
+  const parts: string[] = [`${staleLine}下钻命中 ${hits.length} 个模块(确定性词面打分,零 LLM):`];
+  for (const h of hits) {
+    const page = readWorldModulePage(root, h.module);
+    if (!page) continue;
+    parts.push(`\n### ${h.module}(score=${h.score};命中:${h.hits.join(", ")})\n${page.text}`);
+  }
+  return parts.join("\n").slice(0, 14_000);
+}
+
+/** code_sense 工具(合并后唯一入口;只读、并发安全)。
+ * onQuery:结构面调用留痕回调——喂改前链路闸的 ledger(每任务实例)。 */
+export function codeSenseTool(repoRoot: string, remote?: RemoteProject, onQuery?: (action: string, target: string) => void): Tool {
   return {
     name: SENSE_TOOL_NAME,
     description:
@@ -470,7 +648,7 @@ export function codeSenseTool(repoRoot: string, remote?: RemoteProject): Tool {
           enum: [...SENSE_ACTIONS],
           description:
             "Structural face (ms): symbol|file|impact(blast radius; call before editing a function)|entrypoints(usually no need — already in kickoff context)|" +
-            "project|wire(protocol surface)|refs(literal references)|surface(concept footprint: 11 surfaces — protocol/db/journal/config/symbol/ui/assets/deploy/i18n/tests/docs — at once)|vars|branches(branch/loop conditions with each branch's calls)",
+            "project|wire(protocol surface)|refs(literal references)|surface(concept footprint: 11 surfaces — protocol/db/journal/config/symbol/ui/assets/deploy/i18n/tests/docs — at once)|vars|branches(branch/loop conditions with each branch's calls)|world(read pre-rendered world artifacts, no index load: empty target=L0 skeleton; module:<name>=one page; text=drill-down top3)",
         },
         mode: {
           type: "string",
@@ -499,6 +677,8 @@ export function codeSenseTool(repoRoot: string, remote?: RemoteProject): Tool {
     async execute(args: unknown) {
       const d = dispatchSenseArgs(args);
       if (d.kind === "invalid") return d.reason;
+ // 结构面查询留痕 → 改前链路台账(记录意图;覆盖判定仍由 ledger 按词边界做)。
+      if (d.kind === "structural") { try { onQuery?.(d.action, d.target); } catch { /* 记录失败不阻塞查询 */ } }
  // 远程项目(SSH/WSL:结构面/语义面经工作区服务在远端 CLI 执行(索引也在远端建)。
       if (remote) return await runRemoteSense(remote, d, repoRoot);
       try {

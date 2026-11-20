@@ -54,7 +54,8 @@ async function enable(root: string, patch: Record<string, unknown> = {}): Promis
       ...patch,
     } as never,
     "test",
-    NOW - 1000);
+    NOW - 1000,
+  );
   expect(r.ok).toBe(true);
 }
 
@@ -157,6 +158,66 @@ describe("tickRsiScheduler", () => {
     expect(calls).toEqual(["cost"]);
   });
 
+  it("P1(2026-11-17): 新周期第一拍先跑 code 驱动夜间管线,摘要落 runtime.nightlyPipeline", async () => {
+    await enable(root, { mechanisms: ["cost"] });
+    const pipeCalls: string[] = [];
+    const runNightlyPipeline = async (r: string, _now: number) => {
+      pipeCalls.push(r);
+      return { ok: true, runId: "ngt-test-1", note: "done steps=7/7" };
+    };
+    const start = async () => ({ ok: true, id: "cost", runId: "run-cost" });
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, start, runNightlyPipeline }));
+    expect(r.action).toBe("started");
+    expect(pipeCalls).toEqual([root]);
+    const state = await loadSchedulerState(root, NOW);
+    expect(state.runtime.nightlyPipeline).toMatchObject({ ok: true, runId: "ngt-test-1", note: "done steps=7/7" });
+  });
+
+  it("P1(2026-11-17): intervalDays 频次门——间隔未满的机制跳过派发,间隔已满正常派", async () => {
+    await enable(root, { mechanisms: ["cost", "tools"] }); // 两者 intervalDays=7
+ // cost 三秒前刚派过(7 天窗口内)→ 本轮跳过;tools 从未派过 → 正常派发。
+    const state = await loadSchedulerState(root, NOW);
+    state.runtime.mechanismLastRunAt = { cost: NOW - 3_000 };
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(schedulerPath(root), JSON.stringify({ config: state.config, runtime: state.runtime }, null, 2), "utf8");
+    const calls: string[] = [];
+    const start = async (_d: StartRunDeps, mech: string) => {
+      calls.push(mech);
+      return { ok: true, id: mech, runId: `run-${mech}` };
+    };
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, start }));
+    expect(r.action).toBe("started");
+    expect(r.mechanismId).toBe("tools");
+    expect(calls).toEqual(["tools"]);
+    const after = await loadSchedulerState(root, NOW);
+    expect(after.runtime.cycle?.settled).toContain("cost"); // 频次跳过也入 settled(不悬空)
+    expect(after.runtime.mechanismLastRunAt?.tools).toBe(NOW);
+  });
+
+  it("P4(2026-11-17): tick 互斥——管线慢(阻塞第一拍)期间重入拍返回 busy-tick 零副作用;周期先落盘", async () => {
+    await enable(root, { mechanisms: ["cost"] });
+    let releasePipeline: (() => void) | undefined;
+    const pipelineDone = new Promise<void>((resolve) => { releasePipeline = resolve; });
+    const runNightlyPipeline = async () => {
+      await pipelineDone; // 模拟 5min 管线(第一拍悬挂)
+      return { ok: true, note: "done steps=7/7" };
+    };
+    const start = async () => ({ ok: true, id: "cost", runId: "run-cost" });
+    const first = tickRsiScheduler(deps(root, { isOnlineBusy: () => false, start, runNightlyPipeline }));
+ // 让第一拍推进到挂起的管线处(微任务排空)
+    await new Promise((r) => setTimeout(r, 30));
+ // 周期已先落盘(P4:先存后跑)
+    const mid = await loadSchedulerState(root, NOW);
+    expect(mid.runtime.cycle?.id).toMatch(/^rsi-cycle-/);
+ // 重入拍:busy-tick,不改状态、不派任务
+    const second = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, start, runNightlyPipeline }));
+    expect(second.action).toBe("busy-tick");
+    releasePipeline?.();
+    const r1 = await first;
+    expect(r1.action).toBe("started");
+    expect(r1.mechanismId).toBe("cost");
+  });
+
   it("自动重试:只重试 task interrupted,旧记录 retryCount+1;用户取消不重试", async () => {
     await enable(root, { autoRetry: true, maxRetriesPerRun: 1 });
     await startRun(root, { mechanismId: "cost", runId: "old-run", taskId: "task-old" });
@@ -212,6 +273,41 @@ describe("tickRsiScheduler", () => {
     const settled = await getRun(root, "cost", "r-old");
     expect(settled?.status).toBe("done");
     expect(settled?.cost?.totalTokens).toBe(1200);
+  });
+
+  it("孤儿 run(重启后查不到 task)超宽限:本 tick 收成 failed(orphaned),不挡派发", async () => {
+    await enable(root, { mechanisms: ["cost"], autoRetry: false, roiGate: false });
+    await startRun(root, { mechanismId: "cost", runId: "r-orphan", taskId: "t-lost", sessionId: "rsi" });
+    const file = runFilePath(root, "cost", "r-orphan");
+    const rec = JSON.parse(await readFile(file, "utf8"));
+    rec.startedAt = NOW - 11 * 60_000;
+    await writeFile(file, JSON.stringify(rec, null, 2), "utf8");
+    const start = async (_d: StartRunDeps, mech: string) => ({ ok: true, id: mech, runId: "run-next" });
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, taskState: () => undefined, start }));
+    expect(r.finalized).toBe(1);
+    expect(r.action).toBe("started");
+    const orphan = await getRun(root, "cost", "r-orphan");
+    expect(orphan?.status).toBe("failed");
+    expect(orphan?.error).toContain("orphaned");
+  });
+
+  it("孤儿 run 未过宽限:仍算在跑,action=running 且不派发", async () => {
+    await enable(root, { mechanisms: ["cost"], autoRetry: false, roiGate: false });
+    await startRun(root, { mechanismId: "cost", runId: "r-fresh", taskId: "t-fresh", sessionId: "rsi" });
+    const file = runFilePath(root, "cost", "r-fresh");
+    const rec = JSON.parse(await readFile(file, "utf8"));
+    rec.startedAt = NOW - 60_000;
+    await writeFile(file, JSON.stringify(rec, null, 2), "utf8");
+    let starts = 0;
+    const start = async (_d: StartRunDeps, mech: string) => {
+      starts += 1;
+      return { ok: true, id: mech, runId: "run-x" };
+    };
+    const r = await tickRsiScheduler(deps(root, { isOnlineBusy: () => false, taskState: () => undefined, start }));
+    expect(r.action).toBe("running");
+    expect(r.finalized).toBe(0);
+    expect(starts).toBe(0);
+    expect((await getRun(root, "cost", "r-fresh"))?.status).toBe("running");
   });
 
   it("ROI downshift 因子 <1:周期机制集按比例裁剪并轮转(补齐降频运行面)", async () => {

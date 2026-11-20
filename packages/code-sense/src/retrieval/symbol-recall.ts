@@ -19,6 +19,23 @@ import { indexDir, loadIndex, type C2fEdge, type C2fIndex, type C2fNode } from "
 import { isNonProductPath, isTestPath } from "../path-filter";
 import { queryTerms, splitIdentifier, type QueryTerm, type QueryTerms } from "./cjk";
 
+/** 签名归一:string 直通;结构化(C2fNode.sig 对象)拼成 (a: T, b?: U) => R,import 路径剥掉只留类型名。 */
+function sigToString(sig: unknown): string | undefined {
+  if (!sig) return undefined;
+  if (typeof sig === "string") return sig;
+  const s = sig as { params?: ReadonlyArray<{ name?: string; type?: string; optional?: boolean }>; returnType?: string };
+  const strip = (t: string | undefined) => (t ?? "unknown").replace(/^import\([^)]*\)\./, "").replace(/^"|"$/g, "");
+  const ps = (s.params ?? []).map((p) => `${p.name ?? "?"}${p.optional ? "?" : ""}: ${strip(p.type)}`);
+  const ret = strip(s.returnType);
+  return `(${ps.join(", ")})${ret && ret !== "void" ? ` => ${ret}` : ""}`;
+}
+
+/** G-C:候选签名统一 ≤120 字符(超长截断加省略号)。 */
+function clipSig(sig: unknown): string | undefined {
+  const s = sigToString(sig);
+  return s ? (s.length > 120 ? s.slice(0, 119) + "…" : s) : undefined;
+}
+
 /** 打分用的最小符号面(C2fNode 结构兼容;单测可直接造)。 */
 export interface SymbolDoc {
   id: string;
@@ -31,6 +48,8 @@ export interface SymbolDoc {
   symKind?: string;
  /** :C/C++ 函数原型(与 C2fNode.proto 同源);同名定义在场时召回层折叠。 */
   proto?: boolean;
+ /** 完整签名(C2fNode.sig 同源;G-C explore 候选免二次 symbol 查询)。 */
+  sig?: unknown;
 }
 
 export interface SymbolScore {
@@ -65,6 +84,8 @@ export interface SymbolCandidate {
   callees: SymbolRef[];
   /** true=由前序候选的 1 跳调用关系扩展进来(定义文件的邻居)。 */
   expanded?: boolean;
+ /** 完整签名(≤120 字符截断;索引里有则带,免二次 symbol 查询——§13.8 G-C)。 */
+  sig?: string;
 }
 
 const tokenCache = new WeakMap<SymbolDoc, string[]>();
@@ -322,7 +343,9 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
     return out;
   };
 
-  const candidates: SymbolCandidate[] = primaries.map((s) => ({
+  const candidates: SymbolCandidate[] = primaries.map((s) => {
+    const sig = clipSig(s.doc.sig);
+    return {
     name: s.doc.name,
     file: s.doc.file,
     line: s.doc.line,
@@ -331,7 +354,9 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
     reasons: reasonOf(s),
     callers: refs(maps.in.get(s.doc.id) ?? [], "from").slice(0, 3),
     callees: refs(maps.out.get(s.doc.id) ?? [], "to").slice(0, 3),
-  }));
+    ...(sig ? { sig } : {}),
+    };
+  });
 
   // ④ 1 跳扩展:定义文件的邻居(调用方/被调方)也纳入结果,标 expanded。
   // 质量门:邻居名命中查询词=强相关(必收);未命中的邻居只从**第一名**候选取(≤2),
@@ -373,6 +398,7 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
         if (!pick.matched && !isFirst) continue;
         seenIds.add(pick.node.id);
         taken++;
+        const sigX = clipSig(pick.node.sig);
         expanded.push({
           name: pick.node.name,
           file: pick.node.file,
@@ -382,6 +408,7 @@ export function recallSymbols(root: string, query: string, opts: SymbolRecallOpt
           reasons: [pick.why],
           callers: [], // 扩展候选不重复展开二级关系(输出体积与噪声控制)
           callees: [],
+          ...(sigX ? { sig: sigX } : {}),
           expanded: true,
         });
       }

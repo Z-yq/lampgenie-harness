@@ -1,29 +1,33 @@
 /**
  * super agent 指挥台(更名 audio/companion agent → super agent;
  * 起旧 companion 链整体替换为指挥台后端链):
- * - 会话:sessionId = super:<YYYYMMDD>(按天滚动,journal 复用,零新存储;旧 companion: 前缀
- *   journal 只读不迁移,app.ts history 过滤与 journal kind 双认都靠它);
+ * - 会话:sessionId 固定 "super"(聊天为主工作区;journal 复用,零新存储;旧 super: 日卷与
+ * companion: 前缀 journal 只读不迁移,app.ts history 过滤与 journal kind 双认都靠它们);
  * - system 每轮重组:SOUL+记忆块(soul 双库,super agent 专有)+用户偏好摘要+ 全局状态摘要
  *   (工作区/最近任务/活跃 todo)+ 近期系统注入(通知/转接)+ 调度纪律;
  * - 工具:调度六件 + 任务全生命周期件(task_status/cancel/resend/result/resume + recall_tasks)
- * + relay_answer(ask_user 双通道答复回交)+ 系统管理五件(sys_status/sys_config/sys_provider/
- * sys_logs/sys_restart/sys_rsi,/1560/1561 全系统管理者;密钥值通道刻意不注入——Key 永不进对话/journal);
+ * + relay_answer(ask_user 双通道答复回交)+ 系统管理七件(sys_status/sys_config/sys_provider/
+ * sys_logs/sys_restart/sys_restart_queue/sys_rsi,/1560/1561/1584 全系统管理者;密钥值通道刻意不注入——Key 永不进对话/journal);
  * - 动手永远派给 coding 轨(唯一不动手边界);其余操作(取消/增删工作区/改派)直接执行+事后说明;
  * - SuperAgentChannel:ask_user 转接(coding agent 提问经指挥台转述)+ 任务状态播报
  *   (journal/广播 super.notice;interrupted/blocked/failed 额外发 super.inbox.changed);
  * - 无音频链路:语音输入走 voice.transcribe(ASR→文本),回复只有文本,无 audioB64 回传。
  */
 import { join } from "node:path";
+import { readFileSync, statSync } from "node:fs";
 import type { Journal, Task } from "@lampgenie/core";
 import type { SuperInboxItem } from "@lampgenie/protocol";
 import { AgentLoop, type LlmProvider, type Tool } from "@lampgenie/runtime/agent/loop";
 import { MemoryStore, buildSoulPreamble } from "@lampgenie/runtime/agent/soul-memory";
 import { memoryTool } from "./agent-wiring.js";
+// 指挥台上传:附件→「## 附件」块 + 视觉通道 data URL,与 coding 轨同一纯函数(口径不分叉)。
+import { buildAttachmentInjection, type AttachmentLike } from "./agent-wiring/workflow-task.js";
 import { makeLlmTraceSink } from "./llm-trace.js";
 import type { TaskSupervisor } from "./task-manager.js";
 import type { ProjectRegistry } from "./projects.js";
 import { cleanupProjectTaskRefs, HARNESS_PROJECT_ID } from "./projects.js";
 import { repoRoot } from "./repo-root.js";
+import { createFileTools } from "./file-tools.js";
 import { captureBaseline } from "./turn-change-ledger.js";
 import { runTaskCloseout } from "./task-closeout.js";
 
@@ -51,6 +55,7 @@ export interface SuperSysAdminDeps {
  /** RSI 机制体检摘要(app.ts 注入 collectRsiStatus+annotateRsiSections 同源管线;
  * 返回压缩后的中文摘要文本——12 区 ok/异常、warnings/坏条目点名、最近运行态)。 */
   rsiSummary?: () => Promise<string>;
+  restartQueue?: { list: () => Array<Record<string, unknown>>; add: (e: { title: string; reason?: string; taskId?: string; sessionId?: string }) => { ok: boolean; id?: string; duplicate?: boolean; error?: string }; close: (id: string) => { ok: boolean; error?: string } };
 }
 
 /** sys_* 工具读取的配置切片(providers/coding.llm;详见 core config schema)。 */
@@ -69,11 +74,16 @@ export interface SuperAgentDeps {
   sysAdmin?: SuperSysAdminDeps;
   /** fixC5: relay_answer 的答复回交(AskUserRouter.answer;缺省=转接通道未启用)。 */
   askAnswer?: (requestId: string, answer: string) => boolean;
+ /** :super 派发任务的权限自决落点(permission_decide 工具;未接线=工具不注册)。 */
+  permissionDecide?: (requestId: string, decision: "allow-once" | "reject" | "escalate", reason?: string) => { ok: boolean; error?: string };
  /** task_resume 工具注入的续跑回调(app.ts 用 taskManager.resumeInterrupted 接线;
    * 缺省=工具如实回「续跑未接线」)。 */
   resumeTask?: (taskId: string) => { ok: boolean; newTaskId?: string; reason?: string };
   /** fixC6: 管家自己在本轮内操作过的任务(如 task_cancel)——终态播报跳过主动轮次(已当面说明,不重复播)。 */
   channel?: SuperAgentChannel;
+ /** 指挥台会话级模型:按会话读覆盖派生 provider(缺省=deps.llm,旧行为逐字不变)。
+ * vision=false=该模型明确不支持视觉输入(图片不进 vision 通道,附件块内如实降级说明)。 */
+  resolveTurnModel?: (sessionId: string) => { llm: LlmProvider; model?: string; vision?: boolean } | undefined;
   /** 写前持久化屏障(config.agent.writeBarrier 透传):"off"|"hard";缺省=loop 内部 hard(旧行为不变)。 */
   writeBarrier?: "off" | "hard";
  /**  图片 offload 落盘根(装配方传 {root: repoRoot};缺省不传=loop 层不启用,行为逐字不变)。 */
@@ -91,6 +101,24 @@ export interface SuperAgentDeps {
     microcompact?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["microcompact"];
     spill?: import("@lampgenie/runtime/agent/loop").AgentLoopOptions["spill"];
   };
+ /** 派发模型路由——开关打开时 spawn_task 可指定 modelPreset,派发即对新会话
+ * 设 session-model 覆盖(与面板 per-session 同源;运行中任务不热切)。未接线=参数如实回拒。 */
+  setSessionModel?: (sid: string, o: { providerId?: string; model: string; effort?: string }) => boolean;
+ /** 当前生效的模型路由配置(enabled+presets;未传/未 enabled=开关关)。 */
+  modelRouting?: { enabled: boolean; presets: Record<string, { providerId?: string; model: string; effort?: string; description?: string }> };
+ /** 派发时刻 super 会话生效模型(优先 super 会话级覆盖,其次全局 coding.llm);
+ * 未单独配置的档位跟随它——派发即写同名 session-model 覆盖,与面板 per-session 同源。 */
+  resolveSuperModel?: () => { providerId?: string; model: string } | undefined;
+}
+
+/** 档位名归一化(三档口径)。trim+小写后:fast→level1、heavy→level3、level1/2/3 原样;
+ * 其它返回 undefined(调用方如实回「不在册」)。别名只在此处解析 = 配置里不再存 fast/heavy 键。 */
+export function normalizeModelPresetName(name: string): "level1" | "level2" | "level3" | undefined {
+  const n = String(name ?? "").trim().toLowerCase();
+  if (n === "fast" || n === "level1") return "level1";
+  if (n === "level2") return "level2";
+  if (n === "heavy" || n === "level3") return "level3";
+  return undefined;
 }
 
 function soulDir(): string {
@@ -132,8 +160,13 @@ export function userPreferenceSummary(soulStore: MemoryStore): string {
 export function recentSystemInjections(journal: Journal, now = new Date()): string {
   const sid = superSessionId(now);
  // kind 双认:旧 companion.notice/companion.relay 只读兼容 + 新 super.notice/super.relay(写侧)。
+ // 会话前缀双认:旧按天日卷 super:YYYYMMDD 与 companion: 只读兼容——与 app.ts history 三前缀
+ // 过滤同口径,否则迁移期的旧日卷通知对新轮次隐形(ws-compat 用例锁定的行为)。
   const KINDS = new Set(["companion.notice", "companion.relay", "super.notice", "super.relay"]);
-  const evs = journal.readAll().filter((e) => e.sessionId === sid && KINDS.has(e.kind as string));
+  const evs = journal.readAll().filter((e) => {
+    const s = String(e.sessionId ?? "");
+    return (s === sid || s.startsWith("super:") || s.startsWith("companion:")) && KINDS.has(e.kind as string);
+  });
   if (!evs.length) return "";
   const lines = evs.slice(-3).map((e) => {
     const text = String((e.payload as { text?: string }).text ?? "").slice(0, 200);
@@ -148,7 +181,13 @@ export function recentSystemInjections(journal: Journal, now = new Date()): stri
 const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与答复中枢)
 ### 权限口径
 - 你有全部操作权限:取消任务、重发任务、增删工作区、读写系统配置、管理服务商与生效模型,都直接执行,不请示、不确认;执行后在回复里用一句话说明做了什么(用户要可追溯)。
-- 唯一边界:你不直接写代码/改文件——动手一律 spawn_task 派给对应工作区的 coding agent。
+- 可读不可写(2026-11-16 ):你有只读探索工具 read_file/glob/grep/list_dir——想看清代码/文件现状、判断该派什么、写准任务书时,自己直接看,不要为一个「看一眼」的问题开任务线。
+- 唯一边界:写/改文件、跑构建、执行命令一律 spawn_task 派给对应工作区的 coding agent。越权写在工具层就不可达:你的工具面只有只读探索件,没有 write_file/edit_file/bash(不是靠自觉)。
+### 权限自决(super 派发的任务)
+- 你派出去的任务遇到权限/审批闸时,申请会以「[权限申请·requestId=...]」送到你(不再打扰主人):必须在当轮用 permission_decide 决断,不要只回文本、不要转述给主人等答复。
+- 判定口径:任务书范围与红线内的请求 -> allow(任务书要求跑构建/测试时,terminal 跑 build/test 属范围内);违反任务书红线(如任务书禁重启却请求重启、禁提交却请求 git push)-> deny,并在 reason 写明触犯哪条红线。
+- 仅当请求明显超出任务书授权、且涉及用户数据/全局配置/不可逆操作(删数据、改全局配置、重启网关、推远端)时才 escalate;默认不升级,日常读写与命令执行不要抛给主人。
+- 同一 requestId 只决一次;不调 permission_decide = 该申请按「super 未决」超时升级给主人(别靠沉默)。
 ### 系统管理面(全系统管理者)
 - 你是全系统管理者:sys_status 体检系统、sys_config 读写配置、sys_provider 管服务商与模型(连通探测/切换生效轨)、project_add/remove 管工作区、task_* 管任务全生命周期——除写代码外的系统操作你都有权直接执行,事后一句话说明。
 - 密钥红线:API Key 值永不进对话。用户要配 key 时,指路面板「设置 → 服务商」写入(.genie/secrets.json 或 env 变量);你可以查 keyEnv 变量名、key 在场状态、端点连通性。
@@ -157,15 +196,16 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 - 机制体检:用户问「体检结果/机制健康」→ sys_rsi 读 12 区摘要(它就是系统自检机制的读数),不要为此派任务。
 - 重启纪律:sys_restart 只在用户明确同意后调(confirm:true);活跃任务>0 它会自己拒——如实转告用户,不要绕过(不许派任务去 kill 进程,那会打断一切)。
 ### 指挥官纪律(聊天为主工作区)
-- 你是 super agent 指挥官:不直接编码、不跑构建、不改文件。
+- 你是 super agent 指挥官:可读不可写——能直接读文件/列目录/搜关键词看清现状,但不直接编码、不跑构建、不改文件。
 - 收到任务先拆解为可独立执行的子任务;每个子任务用 spawn_task(task.submit)派发到 coding agent session,优先复用相关既有 session。
 - 回复用户时给出拆解方案与派发明细(每个子任务:目标 session/任务要点)。
 - 仅用户明确要求时才亲自回答问题(仍不改码)。
 - accepted≠完成:spawn_task 返回只代表「已派出」。要说「已派出,完成会告诉你」,绝不说「做完了」;结果只认 task_status/task_result/系统通知。
-### 路由三判定(每轮先想清楚走哪条,选最直接且足够的)
+### 路由四判定(每轮先想清楚走哪条,选最直接且足够的)
 1. 直接答:凭当前对话与上方状态摘要就能完整回答(闲聊/状态问答)→ 直接说,不调工具。
-2. 专用工具查:查任务状态/结果/历史回忆/工作区清单/系统配置 → 调对应工具(task_status/task_result/task_resend/recall_tasks/list_tasks/list_projects/sys_status/sys_config/sys_provider),不要为查状态派任务。
-3. 派后台任务:要动手改东西、持续执行、制作交付物 → spawn_task。
+2. 只读探索:要看清代码/文件现状(某函数怎么走、关键词在哪、配置写在哪)→ 用 read_file/glob/grep/list_dir 自己看,不要为此派任务。
+3. 专用工具查:查任务状态/结果/历史回忆/工作区清单/系统配置 → 调对应工具(task_status/task_result/task_resend/recall_tasks/list_tasks/list_projects/sys_status/sys_config/sys_provider),不要为查状态派任务。
+4. 派后台任务:要动手改东西、持续执行、制作交付物 → spawn_task。
 - 调工具前不口头铺垫(「我看一下」「稍等」都不说);工具返回后再作答;不要用口头承诺代替工具调用。
 - 一轮里含多个意图就逐项处理,不要只办第一件;也不要因需要多次查工具就转去派任务。
 ### 指代消解
@@ -173,6 +213,23 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 ### 任务书纪律(许愿式转发)
 - spawn_task 的 instruction 必须自包含:写清用户是谁、在什么场景、要什么、验收标准,把口语里的指代补全——coding agent 看不到我们的对话。
 - 忠实完整化:只补完成它所必需的上下文,不擅自扩大范围(范围取舍是 coding agent 许愿式深挖的职责)。
+### 用户反馈理解协议(许愿式深挖,2026-11-16)
+用户的例子是「种子」不是「清单」——一个例子代表一类期望,用户不会逐页逐条指导:
+- **判定范围**:例子后面跟着「同理/也是/都/其他/全部」→ 通用原则;用户明确说「只改这处/就这一点/小调一下」→ 局部修复不扩散;没说范围 → **默认通用**。
+- **派发任务书必须写清四件事**:①用户原始反馈(原话) ②从例子提炼的通用原则(一句话,不是复述例子) ③适用范围(哪些页/章/文件/机制都受影响,逐个列全) ④验收标准(同类问题全消,不是只修例子那一处)。
+- **反面教材**:用户说「slide9 的 10 个 phase 拆透,其他页同理」,任务书只写「拆解 ZCode 十个 phase」=漏了 90% 的需求;正确写法是「机制点名必拆解:凡标题/结论提到 N 个 X,当页逐项列出 N 项各自是什么——slide9 是例子,全部机制页同理」。
+### 重做≠改稿(2026-11-18,轨迹分析实测确认)
+用户说"还是很差/重新生成"派重做任务时,任务书必须三条:
+- **先归档旧产物**:第一动作把旧 deck 目录移到 archive 子目录(旧稿可达=必然被照抄,实测确认:41/42 页逐字雷同);
+- **内容从内容源重写**:写明"文字禁止沿用旧稿;证据行指向内容源文档,内容文档覆盖 ≥5 份";子代理任务书禁写"文字沿用原稿";
+- **导出带 regenOf**:指向归档旧稿,换皮稿会被导出器拒;验收含"与旧稿逐页相似度"。
+
+### 人类阅读习惯(2026-11-18)
+办公产物的读者是**人**不是 agent;agent 习惯的表达(平铺证据、复述代码、名词串)对人类读者是噪声:
+- **过程主题先一页走完**:凡讲到「N 个阶段/步/相位/动作」的过程,产物必须先有一页把全部 N 项走完(每项 名字+一句人话职责:这步干什么/为什么),分段深拆只能做补充——读者要在一页看懂整个循环。
+- **人话职责,不是实现复述**:步骤说明写行为与目的(「已取消的 turn 不再花钱」),不写字段操作(「置 running 并盖 startedAt」是 agent 之间的对话);代码引用(文件/行号/函数名)收进页脚证据行,不进正文/表格列。
+- 种子原则:ZCode 循环页是例子,全部过程类内容(流程/管线/生命周期/算法)同理;文档/表格类办公产物同理。
+- **版式多样性(2026-11-18)**:办公产物不许每页一个模子——PPT 每页声明结构版式(通栏/左图右文/右图左文/大字结论),机制页与对比页左右交替、每章挑一页关键洞察用大字凸显;全稿结构版式 ≥3 种、连续同版式 ≤4 页。文档/表格同理:章节结构要有节奏变化,不许通篇一个模板。
 ### 跨项目/跨机联调
 - 多项目联动(如本地 PC 前端 + 远程 Linux 服务器后端联调):先 list_nodes/list_projects 确认对端在位与可用,再逐个 spawn_task;同批任务打同一 group 标签(如「联调-web」),看板按组聚类展示。
 - 联调任务书必须写清对端信息:地址/端口/启动方式/依赖顺序(哪边先起、等什么就绪),不能只写「和另一边联调」——coding agent 看不到别的任务。
@@ -183,18 +240,34 @@ const SUPER_AGENT_DISCIPLINE = `## 你是 Super Agent 指挥台(全局调度与�
 ### 转接与播报
 - 收到「[系统转接]」的 coding 助手提问:把问题原样转述给用户(有选项就列出选项),等用户答复;不要自己作答、不要替用户选。同一转接只转述一次。
 - 用户消息若是在回答某条未决转接(通常很短,比如直接说选项词「深色」),立即调 relay_answer(requestId 在转接原文里)交回,不要再转述一遍、不要另派任务。relay_answer 返回失效=另一边已先答,如实告诉用户即可。
-- 收到「[系统通知]」的任务终态:向用户回报一句话结果;failed 要附一句建议(如模型不存在→问用户要不要换)。
+- 收到「[系统通知]」的任务终态:向用户回报一句话结果;failed 要附一句建议(如模型不存在→问用户要不要换)。不转述 coding agent 的长文、不追问「要不要列出完整内容/清单」——细节留在指挥台看板任务卡,一句结论+指向那条任务即可。
 ### 表达纪律
-- 回复保持短句、直给结论;不念 id/路径/哈希/长数字,除非用户追问准确内容。`;
+- 回复保持短句、直给结论;不念 id/路径/哈希/长数字,除非用户追问准确内容。
+- 默认形态=一句话结论 + 指向看板/任务条目(如「已修好,细节在 xxx 任务卡」);不复述 coding agent 的长篇回复,不主动征询「要不要列出/要不要拉完整清单/要不要展开」。
+- 只有用户明确说「展开/列出来/贴出来/看细节」才展开;否则细节留在看板,不搬进聊天。`;
 
 /** 每轮组装 super agent system(SOUL+记忆+偏好摘要+全局摘要+系统注入+纪律;空块跳过)。 */
 export function buildSuperAgentSystem(deps: SuperAgentDeps, soulStore: MemoryStore): string {
   const soul = buildSoulPreamble(soulDir(), soulStore);
+ // 派发模型路由——开关开时按 level1/level2/level3 三档注入(未配置档标注跟随 super 模型);
+ // 关=零注入(行为不变)。别名 fast/heavy 在提示词里仍可用(运行时归一化解析)。
+  const rt = deps.modelRouting?.enabled ? deps.modelRouting : undefined;
+  const LEVEL_LABEL: Array<["level1" | "level2" | "level3", string]> = [["level1", "轻"], ["level2", "中"], ["level3", "重"]];
+  const routingBlock = rt
+    ? "## 派发模型路由(已开启)\nspawn_task 可带 modelPreset 按任务量级选模型(三档):\n" +
+      LEVEL_LABEL.map(([lv, label]) => {
+        const v = (rt.presets || {})[lv];
+        if (!v) return `- ${lv}(${label}): 未配置(跟随 super 模型)`;
+        return `- ${lv}(${label}): ${v.providerId ? v.providerId + "/" : ""}${v.model}${v.effort ? " (" + v.effort + ")" : ""}${v.description ? " — " + v.description : ""}`;
+      }).join("\n") +
+      "\n选型口径:文件扫描/清单盘点/调研初期/简易格式转换→level1;中等规模改造→level2;多文件编码/架构改动/测试编写→level3;未配置的档位=跟随你当前 Super 会话模型;别名 fast=level1、heavy=level3 仍可用;拿不准→不传(默认模型)。"
+    : "";
   return [
     soul,
     userPreferenceSummary(soulStore),
     globalStateSummary(deps),
     recentSystemInjections(deps.journal),
+    routingBlock,
     SUPER_AGENT_DISCIPLINE,
   ].filter((s) => s !== "").join("\n\n");
 }
@@ -215,12 +288,23 @@ export function matchTask(tm: TaskSupervisor, query: string): Task | undefined {
 }
 
 /** 白板进度(task_status 画像):该任务板的节点完成数;无板=null。 */
-async function boardProgressOf(task: Task): Promise<{ nodes: number; done: number; status: string } | null> {
+async function boardProgressOf(task: Task): Promise<{ nodes: number; done: number; status: string; p0Total: number; p0Passed: number } | null> {
   try {
     const { loadBoard } = await import("./board-store.js");
     const doc = loadBoard(repoRoot(), task.sessionId, task.id);
     if (!doc) return null;
-    return { nodes: doc.nodes.length, done: doc.nodes.filter((n) => n.done).length, status: doc.status };
+ // 对齐设计§10「真验收看板上 P0 覆盖」:Super 视野接入 P0 覆盖——复用下属链
+ // computeP0Coverage 的同源口径(covered=有证据;passed=每条 cmd 都有 ok=true 证据),不分叉;
+ // 无 P0 节点=0/0(无门要过)。stale 证据已由该函数按文件指纹剔除,不在计数内。
+    let p0Total = 0;
+    let p0Passed = 0;
+    try {
+      const { computeP0Coverage } = await import("./board-accept.js");
+      const cov = computeP0Coverage(doc);
+      p0Total = cov.total;
+      p0Passed = cov.passed;
+    } catch { /* 覆盖口径缺席时退回三弱判据,不阻塞画像 */ }
+    return { nodes: doc.nodes.length, done: doc.nodes.filter((n) => n.done).length, status: doc.status, p0Total, p0Passed };
   } catch {
     return null;
   }
@@ -228,17 +312,31 @@ async function boardProgressOf(task: Task): Promise<{ nodes: number; done: numbe
 
 /** 任务最近事件摘要(task_status 画像):会话 journal 尾部若干关键事件,单条截 80 字。 */
 function recentEventsOf(journal: Journal, task: Task, n = 4): string[] {
-  const interesting = new Set(["message.agent", "todo.updated", "turn.end", "ask.user", "task.progress"]);
-  return journal.readAll()
-    .filter((e) => e.sessionId === task.sessionId && interesting.has(e.kind))
-    .slice(-n)
-    .map((e) => {
-      const p = e.payload as { text?: string; items?: { content: string; status: string }[]; reason?: string; state?: string };
-      let s = "";
-      if (e.kind === "todo.updated" && Array.isArray(p.items)) s = `待办 ${p.items.filter((i) => i.status === "completed").length}/${p.items.length}`;
-      else s = String(p.text ?? p.reason ?? p.state ?? "").replace(/\s+/g, " ").slice(0, 80);
-      return `${e.kind}: ${s}`;
-    });
+ // 误诊修复:旧 interesting 只认「文本产出」类事件——埋头跑工具的 agent(tool.call/
+ // tool.result/step.*)在摘要里全隐形,Super 曾据此把干活中的任务判成「75 分钟无输出卡住」差点重派
+ // (依据 1cbfb4ef:journal 每分钟在写)。补工具/步骤类事件,并在最前加「最近活动 N 分钟前」
+ // (任意事件),卡死判定口径从「无文本」变为「无任何事件」。
+  const evs = journal.readAll().filter((e) => e.sessionId === task.sessionId);
+  const out: string[] = [];
+  if (evs.length) {
+    const lastAt = Number((evs[evs.length - 1] as { time?: number }).time ?? 0);
+    if (lastAt > 0) out.push(`最近活动 ${Math.max(0, Math.round((Date.now() - lastAt) / 60000))} 分钟前(任意事件;工具流也算干活)`);
+  }
+  const interesting = new Set(["message.agent", "todo.updated", "turn.end", "ask.user", "task.progress", "tool.call", "tool.result", "step.start"]);
+  out.push(
+    ...evs
+      .filter((e) => e.sessionId === task.sessionId && interesting.has(e.kind))
+      .slice(-n)
+      .map((e) => {
+        const p = e.payload as { text?: string; items?: { content: string; status: string }[]; reason?: string; state?: string; name?: string };
+        let s = "";
+        if (e.kind === "todo.updated" && Array.isArray(p.items)) s = `待办 ${p.items.filter((i) => i.status === "completed").length}/${p.items.length}`;
+        else if (e.kind === "tool.call") s = String(p.name ?? "").slice(0, 40);
+        else s = String(p.text ?? p.reason ?? p.state ?? "").replace(/\s+/g, " ").slice(0, 80);
+        return `${e.kind}: ${s}`;
+      }),
+  );
+  return out;
 }
 
 /** fixC3: 目标项目语义判定——任务书/标题命中项目 label 或路径 basename(最长命中优先);
@@ -261,6 +359,16 @@ export function inferProject(projects: ProjectRegistry, text: string): string | 
 /** 调度工具面( §2 六件 + fixC2 任务全生命周期件 + fixC5 relay_answer)。 */
 export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStore): Tool[] {
   const { taskManager: tm, projects } = deps;
+ // 只读探索权(super 想「看一眼」代码/文件时应自己看,不再为此开任务线):
+ // 复用 coding 轨的 file-tools,只放行只读四件(read_file/glob/grep/list_dir)——写类
+ // (write_file/edit_file)与命令执行根本不进 super 工具表,「能看不能干」在工具层不可达,
+ // 不靠模型自觉;围栏根=当前仓根(与 coding 轨同一 fencePath 口径)。
+  const READ_ONLY_EXPLORE = new Set(["read_file", "glob", "grep", "list_dir"]);
+  const exploreTools = createFileTools({
+    root: repoRoot(),
+    journal: deps.journal,
+    sessionId: superSessionId(),
+  }).filter((t) => READ_ONLY_EXPLORE.has(t.name));
   const listProjects: Tool = {
     name: "list_projects",
     description: "列出全部工作区与各自最近任务",
@@ -325,12 +433,14 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
         projectId: { type: "string", description: "工作区 id(用户点名时填);缺省按语义匹配" },
         title: { type: "string", description: "短标题" },
         group: { type: "string", description: "任务组标签(联调/同批派发用同一标签,看板聚类显示;如「联调-web-后端」)" },
+        modelPreset: { type: "string", description: "模型档位(路由开关开时可用):level1=简易(文件扫描/清单盘点/调研初期/简易格式转换),level2=中等规模改造,level3=多文件编码/架构改动/测试编写;未配置的档位=跟随 Super 当前会话模型;旧别名 fast=level1、heavy=level3 仍可用;拿不准不传(用默认模型)" },
+        accept: { type: "string", description: "验收契约(可选):派发时绑定的验收标准原文(命令/期望结果);非空时任务书尾部拼「## 验收契约(派发时绑定)」固定段,coding agent 收口须按它对账;拿不准就不传(验收写在 instruction 里)" },
       },
       required: ["instruction"],
     },
     isConcurrencySafe: () => false,
     async execute(args) {
-      const a = args as { instruction: string; projectId?: string; title?: string; group?: string };
+      const a = args as { instruction: string; projectId?: string; title?: string; group?: string; accept?: string };
       let pid = a.projectId?.trim() || "";
       let routing = "";
       if (!pid) {
@@ -344,17 +454,60 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       }
       const group = a.group?.trim();
       const sid = `ws-${Date.now().toString(36)}`;
+ // 对齐设计§5.5「派发-验收闭环」:可选 accept=派发时绑定的验收契约,拼任务书尾部固定段
+ // (纯文本传导,不新建 Task 存储字段——链/completion-audit 零改动即可读;设计登记见 07-design-decisions 增补节)。
+      const acceptClause = String(a.accept ?? "").trim();
+      const instruction = acceptClause
+        ? `${a.instruction.trim()}\n\n## 验收契约(派发时绑定)\n${acceptClause}`
+        : a.instruction;
  // 派发卡:super 派出的任务打 submittedBy="super"(随 task.* 事件 payload 落 journal,
  // 面板聊天流按它过滤渲染派发卡;TaskIndex 亦投影,task.list/task.changed 同源)。
-      const t = tm.submit("user", sid, a.instruction, {
+      const t = tm.submit("user", sid, instruction, {
         ...(pid ? { projectId: pid } : {}),
         ...(a.title ? { title: a.title } : {}),
         ...(group ? { group } : {}),
         submittedBy: "super",
       });
       if (deps.channel) deps.channel.markDispatched(t.id); // 终态必播(超出活跃窗也兑现「完成会告诉你」)
+ // /1583:模型档位——开关开+在册→对新会话设 per-session 覆盖;未单独配置的档位跟随 super
+ // 会话生效模型;任何不满足都如实回话,不影响派发(fail-soft)。
+      let modelNote = "";
+      const presetRaw = String((a as { modelPreset?: string }).modelPreset ?? "").trim();
+      const modelRef = (m: { providerId?: string; model: string }) => `${m.providerId ? m.providerId + "/" : ""}${m.model}`;
+      if (presetRaw) {
+        const rt = deps.modelRouting;
+        const lv = normalizeModelPresetName(presetRaw);
+        if (!rt?.enabled) modelNote = ` 模型档位「${presetRaw}」未生效:路由开关未开。`;
+        else if (!lv) modelNote = ` 模型档位「${presetRaw}」未生效:不在册(可选:level1/level2/level3;别名 fast/heavy),按默认模型跑。`;
+        else {
+ // 旧配置兼容:早期 presets 键是 fast/heavy,新键(levelN)优先,回退原始名。
+          const preset = (rt.presets || {})[lv] ?? (rt.presets || {})[presetRaw.toLowerCase()];
+          const presetModel = String(preset?.model ?? "").trim();
+          if (preset && presetModel) {
+            if (!deps.setSessionModel) modelNote = ` 模型档位「${presetRaw}」未生效:会话模型通道未接线(生产入口才启用)。`;
+            else {
+              const o = { ...(preset.providerId ? { providerId: preset.providerId } : {}), model: presetModel, ...(preset.effort ? { effort: preset.effort } : {}) };
+              modelNote = deps.setSessionModel(sid, o)
+                ? ` 模型档位「${presetRaw}」→ ${modelRef({ ...o, model: presetModel })}${preset.effort ? " (" + preset.effort + ")" : ""}。`
+                : ` 模型档位「${presetRaw}」写入失败,按默认模型跑。`;
+            }
+          } else {
+ // 未单独配置(或配置被剔除)→ 跟随 super 会话生效模型。
+            const sm = deps.resolveSuperModel?.();
+            const smModel = String(sm?.model ?? "").trim();
+            if (!sm || !smModel) modelNote = ` 模型档位「${lv}」未单独配置,跟随 super 模型(当前无法解析 super 模型,按默认模型跑)。`;
+            else if (!deps.setSessionModel) modelNote = ` 模型档位「${lv}」未单独配置,跟随 super 模型(会话模型通道未接线,按默认模型跑)。`;
+            else {
+              const o = { ...(sm.providerId ? { providerId: sm.providerId } : {}), model: smModel };
+              modelNote = deps.setSessionModel(sid, o)
+                ? ` 模型档位「${lv}」未单独配置,跟随 super 模型 → ${modelRef(o)}。`
+                : ` 模型档位「${lv}」未单独配置,跟随 super 模型(写入失败,按默认模型跑)。`;
+            }
+          }
+        }
+      }
       // fixC6: 派出的任务终态会自动播报;此处只报「已派出」(accepted≠完成)。
-      return `已派出任务 ${t.id.slice(0, 8)} → ${pid || "__harness__"}${routing}${group ? `(组:${group})` : ""}。已派出≠完成,完成/失败会播报。`;
+      return `已派出任务 ${t.id.slice(0, 8)} → ${pid || "__harness__"}${routing}${group ? `(组:${group})` : ""}。${modelNote}已派出≠完成,完成/失败会播报。`;
     },
   };
   const listTasks: Tool = {
@@ -664,6 +817,48 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       try { return await deps.sysAdmin.rsiSummary(); } catch (err) { return `RSI 摘要采集失败:${String(err).slice(0, 200)}`; }
     },
   };
+ // 待重启队列工具(只记账,不重启;RSI/自身不得重启网关)。
+  const sysRestartQueue: Tool = {
+    name: "sys_restart_queue",
+    description: "待重启队列:修复已完成但需重启网关才生效的条目。派发同类修复前先 action=list,避免同一状态点重复派发;action=add 入队;action=close 确认生效后关闭。RSI/自身不得重启网关——重启仍需用户明确同意后走 sys_restart。",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "add", "close"], description: "list=看队列;add=入队;close=关闭" },
+        id: { type: "string", description: "close 的条目 id" },
+        title: { type: "string", description: "add 的标题(状态点;同状态点已有 pending 会去重)" },
+        reason: { type: "string", description: "add 的原因" },
+        taskId: { type: "string", description: "关联任务 id(可选)" },
+        sessionId: { type: "string", description: "关联会话 id(可选)" },
+      },
+      required: ["action"],
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      const a = args as { action?: string; id?: string; title?: string; reason?: string; taskId?: string; sessionId?: string };
+      const face = deps.sysAdmin?.restartQueue;
+      if (!face) return "待重启队列未接线(本网关未启用)";
+      const action = String(a.action ?? "").trim();
+      if (action === "list") {
+        const rows = face.list();
+        return rows.length === 0 ? "待重启队列为空(没有等待重启生效的修复)。" : JSON.stringify(rows);
+      }
+      if (action === "add") {
+        const title = String(a.title ?? "").trim();
+        if (!title) return "title 必填";
+        const r = face.add({ title, ...(a.reason ? { reason: String(a.reason) } : {}), ...(a.taskId ? { taskId: String(a.taskId) } : {}), ...(a.sessionId ? { sessionId: String(a.sessionId) } : {}) });
+        if (!r.ok) return "入队失败:" + String(r.error ?? "未知原因");
+        return r.duplicate === true ? "同状态点已有待重启条目(" + String(r.id) + "),未重复入队。" : "已入待重启队列:" + String(r.id);
+      }
+      if (action === "close") {
+        const id = String(a.id ?? "").trim();
+        if (!id) return "id 必填";
+        const r = face.close(id);
+        return r.ok ? "已关闭待重启条目:" + id : "关闭失败:" + String(r.error ?? "未知原因");
+      }
+      return "action 只支持 list|add|close";
+    },
+  };
   const sysProvider: Tool = {
     name: "sys_provider",
     description: "服务商与模型管理(与设置页同源):action=list 目录+凭证在场+生效轨;action=probe 连通探测(拉模型清单);action=set 写服务商条目(name/baseUrl/apiKeyEnv 变量名/模型目录),setEffective 可同时切 coding 生效轨。密钥值写入只走面板设置页——Super 不受理 key 值(防入对话/journal),其余字段都可配。",
@@ -740,7 +935,33 @@ export function buildSuperAgentTools(deps: SuperAgentDeps, soulStore: MemoryStor
       return "action 只支持 list|probe|set";
     },
   };
-  return [listProjects, listNodes, projectAdd, projectRemove, spawnTask, listTasks, taskStatus, taskCancel, taskResend, taskResult, recallTasks, taskResume, relayAnswer, sysStatus, sysConfig, sysProvider, sysLogs, sysRestart, sysRsi, memoryTool(soulStore)];
+ // super 派发任务的权限自决(未接线=不注册,super 拿不到该工具也就无法越权替用户点头)。
+  const permissionDecideTool: Tool | undefined = deps.permissionDecide
+    ? {
+        name: "permission_decide",
+        description: "对 coding agent 的权限申请立刻作决定(requestId 来自「[权限申请·requestId=...]」原文,不得猜造)。decision: allow=任务书范围与红线内批准;deny=违反红线或越出任务书授权(须在 reason 写清理由);escalate=仅当明显超出任务书授权且涉及用户数据/全局配置/不可逆操作时升级给主人。同一 requestId 只决一次;不调本工具=该申请按「super 未决」升级给主人。",
+        parameters: {
+          type: "object",
+          properties: {
+            requestId: { type: "string", description: "申请原文里的 requestId" },
+            decision: { type: "string", enum: ["allow", "deny", "escalate"], description: "allow=批准;deny=拒绝(必须给理由);escalate=升级给主人(仅越权且涉用户数据/全局配置/不可逆操作)" },
+            reason: { type: "string", description: "一句话理由(deny 必填;会回灌到任务会话与指挥台留痕)" },
+          },
+          required: ["requestId", "decision"],
+        },
+        isConcurrencySafe: () => false,
+        async execute(args) {
+          const a = args as { requestId?: string; decision?: string; reason?: string };
+          const map: Record<string, "allow-once" | "reject" | "escalate"> = { allow: "allow-once", deny: "reject", escalate: "escalate" };
+          const d = map[String(a.decision ?? "").trim().toLowerCase()];
+          if (!d) return "decision 必须是 allow / deny / escalate";
+          const r = deps.permissionDecide!(String(a.requestId ?? "").trim(), d, String(a.reason ?? "").slice(0, 300));
+          if (!r.ok) return `未决失败:${r.error ?? "申请已失效"}(可能已超时升级给主人)`;
+          return d === "escalate" ? "已升级给主人,等待用户答复" : d === "allow-once" ? "已批准,coding agent 继续执行" : "已拒绝,coding agent 收到拒绝理由";
+        },
+      }
+    : undefined;
+  return [...exploreTools, listProjects, listNodes, projectAdd, projectRemove, spawnTask, listTasks, taskStatus, taskCancel, taskResend, taskResult, recallTasks, taskResume, relayAnswer, ...(permissionDecideTool ? [permissionDecideTool] : []), sysStatus, sysConfig, sysProvider, sysLogs, sysRestart, sysRsi, sysRestartQueue, memoryTool(soulStore)];
 }
 
 // ── fixC5/C6: super agent 活跃跟踪 + 转接/播报通道 ──
@@ -781,6 +1002,19 @@ export function buildRelayText(p: { requestId: string; question: string; options
   return `[系统转接·requestId=${p.requestId}] coding 助手在任务里向用户提问:\n问题:${p.question}${opts}${ctx}\n请把问题原样转述给用户(有选项念选项),等用户口头答复,不要自己作答。若对话里已有用户的口头回答,直接调 relay_answer 交回。`;
 }
 
+/** :权限申请注入正文(super 自决入口;requestId 原样保留,permission_decide 要用它)。 */
+export function buildPermissionAskText(input: { requestId: string; taskId?: string; tool: string; summary: string; risk?: string; brief?: string }): string {
+  const head = `[权限申请·requestId=${input.requestId}] 你派发的任务${input.taskId ? `(${input.taskId.slice(0, 8)})` : ""}的 coding agent 请求权限,需要你自决:`;
+  const lines = [
+    `- 工具:${input.tool}`,
+    `- 申请内容:${String(input.summary ?? "").slice(0, 300)}`,
+    `- 风险级:${input.risk ?? "medium"}`,
+  ];
+  if (input.brief) lines.push(`- 任务书(节选,范围与红线依据):${String(input.brief).slice(0, 1500)}`);
+  lines.push(`按「权限自决」策略立刻调 permission_decide(requestId=${input.requestId}, decision=allow|deny|escalate, reason=...)。不决 = 按「super 未决」升级给主人。`);
+  return [head, ...lines].join("\n");
+}
+
 export interface SuperAgentChannelOptions {
   activity: SuperAgentActivity;
   broadcast: (msg: Record<string, unknown>) => void;
@@ -806,7 +1040,8 @@ export class SuperAgentChannel {
   constructor(
     private readonly deps: SuperAgentDeps,
     private readonly soulStore: MemoryStore,
-    private readonly opts: SuperAgentChannelOptions) {
+    private readonly opts: SuperAgentChannelOptions,
+  ) {
     this.deps.channel = this;
   }
 
@@ -859,11 +1094,33 @@ export class SuperAgentChannel {
     void this.serialize(() => this.announce(text));
   }
 
+ /** :super 派发任务的权限申请 -> 排队跑一轮自决(忙时排队不并发;
+ * 超时/未决/异常由 SuperApprovalRouter 升级转用户,不静默)。 */
+  requestPermissionDecision(
+    input: { requestId: string; taskId?: string; sessionId: string; tool: string; summary: string; risk?: string; brief?: string },
+    onDelivered?: () => boolean,
+  ): Promise<void> {
+    const text = buildPermissionAskText(input);
+    const notice = `[super 审批] 任务 ${input.taskId ? input.taskId.slice(0, 8) : input.sessionId.slice(0, 12)} 申请 ${input.tool}:${String(input.summary ?? "").slice(0, 80)}(super 自决中)[rid=${input.requestId}]`;
+ // 修正:送达回执与「自决中」留痕都必须落在**轮次真正开始**的时刻(本 job 内)。
+ // 旧实现写在入队处:排队期(super 串行队列,经验证 70~163s)就宣告「自决中」,且决策窗从入队起算,
+ // 导致 super 的合法 allow 撞「申请已失效」。onDelivered 返回 false=排队期间已升级/已决:
+ // 跳过本申请,不向 super 注入过期申请、不白跑一轮 LLM。
+    return this.serialize(async () => {
+      if (onDelivered && !onDelivered()) return;
+      try {
+        this.deps.journal.append({ kind: "super.notice", sessionId: superSessionId(), payload: { text: notice, ...(input.taskId ? { taskId: input.taskId } : {}), state: "permission" } });
+      } catch { /* 留痕失败不碰主链 */ }
+      this.opts.broadcast({ v: 1, type: "super.notice", text: notice, ...(input.taskId ? { taskId: input.taskId } : {}), state: "permission" });
+      await runSuperAgentTurn(this.deps, text, this.soulStore);
+    });
+  }
+
  /** fixC5: 用户轮次也进串行队列——与播报/转述轮次互斥(经验证竞态:用户对转接的答复与
    * 管家转述轮次并发跑,两边互相看不见,答复轮把转述复读一遍而没走 relay_answer)。
  * 音频入参已删除(语音先走 voice.transcribe → 文本 → 本方法)。 */
-  turn(text: string): Promise<string> {
-    return this.serialize(async () => (await runSuperAgentTurn(this.deps, text, this.soulStore)).text);
+  turn(text: string, attachments?: AttachmentLike[]): Promise<string> {
+    return this.serialize(async () => (await runSuperAgentTurn(this.deps, text, this.soulStore, { attachments })).text);
   }
 
   private serialize<T>(job: () => Promise<T>): Promise<T> {
@@ -882,13 +1139,34 @@ export class SuperAgentChannel {
   }
 }
 
-/** 跑一轮 super agent 对话(每轮重建 loop=全局摘要常新;journal 连续性由 sessionId 保证)。 */
-export async function runSuperAgentTurn(deps: SuperAgentDeps, text: string, soulStore: MemoryStore): Promise<{ text: string }> {
+/** 跑一轮 super agent 对话(每轮重建 loop=全局摘要常新;journal 连续性由 sessionId 保证)。
+ * 附件随轮次透传(与 coding 轨同一注入纯函数);会话级模型覆盖经 resolveTurnModel 派生。 */
+export async function runSuperAgentTurn(
+  deps: SuperAgentDeps,
+  text: string,
+  soulStore: MemoryStore,
+  opts: { attachments?: AttachmentLike[] } = {},
+): Promise<{ text: string }> {
+  const sid = superSessionId();
+  const turnModel = deps.resolveTurnModel?.(sid);
+ // 附件注入:文本/文档=路径进「## 附件」块;图片=进视觉通道(buildAttachmentInjection 自带超限/超张数原因行)。
+  const atts = opts.attachments ?? [];
+  const injected = atts.length
+    ? buildAttachmentInjection(atts, (p) => readFileSync(p), { sizeOf: (p) => statSync(p).size })
+    : { block: "", visionImages: [] as string[] };
+ // 视觉降级不静默:模型明确无视觉能力时图片不进通道(否则整轮 400),块内如实写原因并保留路径。
+  const hasImage = atts.some((a) => String(a.mime ?? "").startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(a.name));
+  const visionOff = turnModel?.vision === false && hasImage;
+  const visionImages = visionOff ? [] : injected.visionImages;
+  const degradeNote = visionOff
+    ? "\n- [视觉降级] 当前模型 " + String(turnModel?.model ?? "(会话模型)") + " 不支持视觉输入:图片未进视觉通道,仅保留文件路径(需要内容时用 read_attachment 等工具读取)。"
+    : "";
+  const instruction = atts.length ? text + injected.block + degradeNote : text;
   const loop = new AgentLoop({
     journal: deps.journal,
-    sessionId: superSessionId(),
+    sessionId: sid,
     system: buildSuperAgentSystem(deps, soulStore),
-    llm: deps.llm,
+    llm: turnModel?.llm ?? deps.llm,
  // super agent 轨同享 LLM 轨迹(全量 messages+响应,.genie/llm-trace/)。
     llmTrace: makeLlmTraceSink(deps.journal),
     tools: buildSuperAgentTools(deps, soulStore),
@@ -909,7 +1187,7 @@ export async function runSuperAgentTurn(deps: SuperAgentDeps, text: string, soul
   const startSeq = deps.journal.length;
   // 基线采集与 runTurn 并发(git status 在大仓上秒级;不阻塞用户轮次)。
   const baselinePromise = captureBaseline(repoRoot()).catch(() => null);
-  const out = await loop.runTurn(text);
+  const out = await loop.runTurn(instruction, visionImages.length ? visionImages : undefined);
  // 落盘兜底:轮内事件(turn.start/message.user/message.agent)依赖 write-behind 的
   // microtask 批冲刷(正常毫秒级落盘)。11-09 取证口径修正:.genie/llm-trace/super:<date> 目录实为
  // companion.test.ts 的测试运行(假 LLM 固定回复文本与 trace 逐字同源),生产环境从未跑过真实 super 轮;
@@ -969,7 +1247,8 @@ const clip = (s: string, n: number): string => {
 export function buildSuperInbox(
   deps: Pick<SuperAgentDeps, "taskManager">,
   sources: SuperInboxSources = {},
-  limit = 30): SuperInboxItem[] {
+  limit = 30,
+): SuperInboxItem[] {
   const now = sources.now ?? Date.now();
   const head: SuperInboxItem[] = [];
   const failed: SuperInboxItem[] = [];

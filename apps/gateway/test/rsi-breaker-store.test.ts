@@ -7,6 +7,7 @@ import { recordExperiment } from "../src/experiment-store";
 import {
   breakerPaths,
   evaluateAndApply,
+  ensureBreakerLedger,
   getBaseline,
   getState,
   listBaselines,
@@ -326,5 +327,20 @@ describe("rsi-breaker-store:outcomesFromExperiments", () => {
   it("空 experiment 台账 → 空数组", async () => {
     const root = await tmpRoot();
     expect(await outcomesFromExperiments(root)).toEqual([]);
+  });
+});
+
+describe("ensureBreakerLedger(启动初始化)", () => {
+  it("缺失 → 建空台账且 reportBreaker 可读未暂停;已存在不动内容", async () => {
+    const root = await tmpRoot();
+    const file = breakerPaths(root).file;
+    await expect(readFile(file, "utf8")).rejects.toThrow();
+    expect(ensureBreakerLedger(root)).toBe(true);
+    expect(await readFile(file, "utf8")).toBe("");
+    const rep = await reportBreaker(root);
+    expect(rep.badLines).toBe(0);
+    expect(rep.state["paused"]).not.toBe(true);
+    expect(ensureBreakerLedger(root)).toBe(false);
+    expect(await readFile(file, "utf8")).toBe("");
   });
 });

@@ -73,5 +73,8 @@ describe("P0-1 回归核验", () => {
     console.log("\n" + lines.join("\n"));
     console.log(`\n[判定] 覆盖 <90% 的步数: ${bad}/${sink.length - 1}`);
     expect(sink.length).toBeGreaterThan(1);
+ // (设计稿 §4.6.2 缺口1 闭环):此前这里只 log 不断言,注释承诺的「覆盖率 ≥90% 回归门」
+ // 从未生效——ephemeral 前置形态(经验证 9 步 5 步塌到 2.4%)在 CI 不会红。现在任何一步 <90% 即红。
+    expect(bad).toBe(0);
   });
 });

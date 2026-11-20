@@ -137,7 +137,8 @@ export class NodeDispatch {
   constructor(
     private readonly nodes: NodeRegistry,
     private readonly connections: NodeConnections,
-    private readonly timeoutMs = 120_000) {}
+    private readonly timeoutMs = 120_000,
+  ) {}
 
   /** 委派(已在委派链上的任务再委派=机制拒绝;按硬门要求选节点;发送失败=显式失败,不假装已派)。
  * requirements.nodeId 支持精确钉选(node.exec「对指定节点下发」);仍拒绝 local(本机走任务链)。 */

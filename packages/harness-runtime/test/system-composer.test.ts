@@ -61,7 +61,7 @@ describe("system-composer 组装(D1/D3)", () => {
   it("空索引渲染 fold 引导单行,不渲染条目(D3)", () => {
     const r = composeSystemPrompt({ base: BASE, experienceIndex: [] });
     expect(r.text).toContain("# 经验索引");
-    expect(r.text).toContain("(当前为空;任务中发现可复用做法或坑,用 experience_fold 沉淀)");
+    expect(r.text).toContain("(当前为空;经验由 nightly dreaming 统一蒸馏沉淀)");
   });
 
   it("工具清单只提实际传入的(D1 条件输出)", () => {

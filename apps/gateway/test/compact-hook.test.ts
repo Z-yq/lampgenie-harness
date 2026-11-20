@@ -1,7 +1,7 @@
 /**
  * compact 钩子接线锚定(makeCompactHook):
  * ①子 agent 结果合并(tool.result)只增上下文——合并本身绝不触发压缩(解耦);
- * ②usage 经验证逼近模型窗口(80%)才真压缩,且压缩发生时同步触发 exp 经验沉淀;
+ * ②usage 经验证逼近模型窗口(80%)才真压缩(经验沉淀已移 nightly dreaming,压缩不再触发 exp);
  * ③无窗口时显式阈值(config agent.compactThresholdTokens 通道)兜底。
  */
 import { describe, it, expect } from "vitest";
@@ -41,15 +41,12 @@ describe("makeCompactHook()", () => {
       contextWindow: 8192,
       compactLlm: stubLlm("不应被调用"),
       devlogDir: tmp,
-      taskId: "t1",
-      fallbackInstruction: "",
-      store: new ExperienceStore(join(tmp, "exp0")),
     });
     await hook(j, "s1");
     expect(j.readAll().filter((e) => e.kind === "compact.start" || e.kind === "compact.done")).toHaveLength(0);
   });
 
-  it("usage ≥ 窗口 80% → 真压缩(带摘要边界)且同步触发 exp 沉淀(经验库出条目)", async () => {
+  it("usage ≥ 窗口 80% → 真压缩(带摘要边界);经验沉淀已移 nightly,压缩不再写经验库", async () => {
     const store = new ExperienceStore(join(tmp, "exp"));
     const j = new MemoryJournal();
     j.append({ kind: "message.user", sessionId: "s1", payload: { text: "调查 compact 机制并修复" } });
@@ -61,24 +58,14 @@ describe("makeCompactHook()", () => {
     agent(j, "第1步", 7000);
     j.append({ kind: "message.user", sessionId: "s1", payload: { text: "素材".repeat(20_000) } });
     agent(j, "第2步", 7000); // 窗口 8192→阈 6554;≥阈且 3 条消息>基线抑制窗 → fire+force
-    const expOps = JSON.stringify({ ops: [{ op: "write", category: "debug", name: "compact-exp-lesson", description: "压缩时同步沉淀经验", body: "压缩发生时把头部内容 fold-in 进经验库" }] });
-    const expPrompts: string[] = [];
     const compactLlm = stubLlm("目标:修 compact;已完成:闸门收敛;待办:无");
-    const expLlm = stubLlm((last) => {
-      expPrompts.push(last);
-      return expOps;
-    });
-    const hook = makeCompactHook({ contextWindow: 8192, compactLlm, expLlm, devlogDir: tmp, taskId: "t1", fallbackInstruction: "", store });
+    const hook = makeCompactHook({ contextWindow: 8192, compactLlm, devlogDir: tmp });
     await hook(j, "s1");
     const done = j.readAll().find((e) => e.kind === "compact.done");
     expect(String((done?.payload as { summary?: string } | undefined)?.summary ?? "")).toContain("compact");
-    // exp 是异步跟发(不阻塞主链路),轮询经验库出条目
-    const t0 = Date.now();
-    while (Date.now() - t0 < 3000 && !store.read("debug", "compact-exp-lesson")) {
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    expect(store.read("debug", "compact-exp-lesson")).not.toBeNull();
-    expect(expPrompts[0]).toContain("经验提炼员"); // 走 exp 提炼提示词(fold-in)
+ // 会话内不再自动沉淀:压缩后经验库保持空(nightly dreaming 统一做)。
+    await new Promise((r) => setTimeout(r, 100));
+    expect(store.index()).toHaveLength(0);
   });
 
   it("无窗口时显式阈值兜底(config agent.compactThresholdTokens 通道)", async () => {
@@ -97,9 +84,6 @@ describe("makeCompactHook()", () => {
       explicitThreshold: 24_000,
       compactLlm: stubLlm("显式阈值路径摘要"),
       devlogDir: tmp,
-      taskId: "t1",
-      fallbackInstruction: "",
-      store: new ExperienceStore(join(tmp, "exp2")),
     });
     await hook(j, "s1");
     expect(j.readAll().some((e) => e.kind === "compact.done")).toBe(true);

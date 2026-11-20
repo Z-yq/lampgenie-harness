@@ -7,7 +7,6 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryJournal } from "@lampgenie/core";
-import { ExperienceStore } from "@lampgenie/experience";
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 import { clearReadFiles, readFilesOf, recordFileRead } from "@lampgenie/runtime/agent/read-file-state";
 import {
@@ -211,9 +210,6 @@ describe("compact-hook 接线(enabled)", () => {
       contextWindow: 8192,
       compactLlm: stubLlm("摘要"),
       devlogDir: root,
-      taskId: "t-off",
-      fallbackInstruction: "",
-      store: new ExperienceStore(join(root, "exp")),
       repoRoot: root,
       compactRehydrate: { enabled: false },
     });
@@ -235,9 +231,6 @@ describe("compact-hook 接线(enabled)", () => {
       contextWindow: 8192,
       compactLlm: stubLlm("摘要"),
       devlogDir: root,
-      taskId: "t-on",
-      fallbackInstruction: "",
-      store: new ExperienceStore(join(root, "exp")),
       repoRoot: root,
     });
     await hook(j, sid);

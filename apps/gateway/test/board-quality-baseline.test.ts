@@ -76,7 +76,8 @@ describe("aggregateBoardQuality 板型质量表", () => {
             p0: { passed: 4, total: 4, rate: 1 },
           },
         },
-        -HOUR),
+        -HOUR,
+      ),
       ev(
         "board.audit",
         {
@@ -92,7 +93,8 @@ describe("aggregateBoardQuality 板型质量表", () => {
           },
           issueCounts: { contract: 2, type: 0, symbol: 0, target: 0 },
         },
-        -HOUR),
+        -HOUR,
+      ),
     ];
     const md = aggregateBoardQuality(lines, NOW, 7);
     // code:audits=2 ok率=0.5 契约均次=(1+0)/2=0.5 板型门=(0+1)/2=0.5 幻影=(2+0)/2=1 targets=(1+3)/2=2
@@ -121,7 +123,8 @@ describe("aggregateBoardQuality 板型质量表", () => {
             p0: { passed: 0, total: 0, rate: 0 },
           },
         },
-        -HOUR),
+        -HOUR,
+      ),
     ];
     const md = aggregateBoardQuality(lines, NOW, 7);
     // audits=2(第二条 grand.total=0 也计入);ok/issueCounts 未覆盖用默认值→均次=默认值本身

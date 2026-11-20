@@ -82,6 +82,12 @@ function capBadge(entry, key, label) {
 }
 
 function renderProviders() {
+ // 服务商卡 ••••末4位——首次渲染时按 keyEnv 批量拉一次末4位(cfg.secret.status 回包含 last4;
+ // 完整值永不出服务端),回包后重渲补显。
+  try {
+    const envs = [...new Set((cfgView.providers || []).map((x) => x && x.apiKeyEnv).filter((x) => x && !(x in secretLast4)))];
+    if (envs.length) wsSafeSend(JSON.stringify({ v: 1, type: "cfg.secret.status", names: envs, rid: "prov-last4" }));
+  } catch (e) {}
   if (!provDraft) return;
   const cur = (cfgView && cfgView.config && cfgView.config.coding && cfgView.config.coding.llm) || {};
   const box = $("prov-list");
@@ -147,7 +153,7 @@ function renderProviders() {
             }).join("")
           : '<div class="prov-test">还没有模型 —— 点上方「拉取模型」,或在下方手动添加</div>') +
       '</div>' +
-      '<div class="pv-madd"><input class="num-in pv-newname" placeholder="模型名" style="width:140px"><input class="num-in pv-newcw" placeholder="上下文" style="width:84px"><input class="num-in pv-newmt" placeholder="最大输出" style="width:84px"><button class="prov-act" data-a="madd">+ 添加模型</button></div>' +
+      '<div class="pv-madd"><input class="num-in pv-newname" placeholder="模型名(必填)" style="width:150px"><input class="num-in pv-newcw" placeholder="上下文" style="width:84px"><input class="num-in pv-newmt" placeholder="最大输出" style="width:84px"><button class="prov-act" data-a="madd" title="把左侧填的模型加进该供应商目录">+ 添加模型</button></div>' +
     '</div>';
   }).join("") : '<div class="cc-empty">还没有供应商 —— 点「+ 添加供应商」,从预设一键接入</div>';
 
@@ -190,18 +196,30 @@ function renderProviders() {
     const pi = Number(card ? card.dataset.i : -1);
     const btn = add.querySelector('[data-a="madd"]');
     if (!btn) continue;
-    btn.onclick = () => {
+    const nameEl = add.querySelector(".pv-newname");
+    const cwEl = add.querySelector(".pv-newcw");
+    const mtEl = add.querySelector(".pv-newmt");
+ // 用户用户反馈「添加模型按钮纯摆设」:根因=空名点击静默 return(输入框小、易漏看,零反馈)。
+ // 修:空名=toast 指路 + 聚焦输入框;名未填时按钮置灰(dim);回车=添加;成功后清空三框便于连加。
+    const syncDim = () => { btn.classList.toggle("dim", !String(nameEl.value || "").trim()); };
+    if (nameEl) { nameEl.addEventListener("input", syncDim); syncDim(); }
+    const doAdd = () => {
       const pv = provDraft[pi];
       if (!pv) return;
-      const name = add.querySelector(".pv-newname").value.trim();
-      if (!name) return;
+      const name = String(nameEl.value || "").trim();
+      if (!name) { toast("请先在按钮左侧填「模型名」再添加", true); try { nameEl.focus(); } catch (e) { /* ignore */ } return; }
       if ((pv.models || []).some((mm) => modelNameOf(mm) === name)) { toast("模型已存在:" + name, true); return; }
-      const cw = Number(add.querySelector(".pv-newcw").value) || undefined;
-      const mt = Number(add.querySelector(".pv-newmt").value) || undefined;
+      const cw = Number(cwEl.value) || undefined;
+      const mt = Number(mtEl.value) || undefined;
       pv.models = pv.models || [];
       pv.models.push({ name, ...(cw ? { contextWindow: cw } : {}), ...(mt ? { maxTokens: mt } : {}) });
+      nameEl.value = ""; if (cwEl) cwEl.value = ""; if (mtEl) mtEl.value = "";
+      syncDim();
+      toast("已添加模型:" + name);
       sendProviders(); renderProviders();
     };
+    btn.onclick = doAdd;
+    if (nameEl) nameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
   }
   for (const card of box.querySelectorAll(".prov-card")) {
     const i = Number(card.dataset.i);

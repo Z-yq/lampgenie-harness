@@ -41,7 +41,8 @@ beforeAll(async () => {
   // PAGE 顶部常量(反引号走 fromCharCode,与页面同口径)
   const pre = "const BT = String.fromCharCode(96);\n";
   const factory = new Function("ideRoot", pre + src + "\nreturn { esc, mdInlineScan, ideMdIo };") as (
-    root: unknown) => { esc: (s: string) => string; mdInlineScan: (s: string, d: number, io: unknown) => string; ideMdIo: (t: { path: string }) => unknown };
+    root: unknown,
+  ) => { esc: (s: string) => string; mdInlineScan: (s: string, d: number, io: unknown) => string; ideMdIo: (t: { path: string }) => unknown };
   const built = factory({ pid: "vitest-pid" });
   api = { esc: built.esc, mdInlineScan: built.mdInlineScan, io: built.ideMdIo({ path: MD }) };
 }, 30_000);

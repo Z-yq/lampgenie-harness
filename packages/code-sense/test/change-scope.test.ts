@@ -45,6 +45,39 @@ describe("classifyChangeScope", () => {
     }
   });
 
+  it("第三批(#213 扇出原型 2026-11-17):公共契约/签名/语义动词判 surface", () => {
+    const THIRD_BATCH = [
+      "改契约", "修改契约", "契约变更", "改公共", "修改公共", "改签名", "修改签名",
+      "改协议", "修改协议", "改语义", "修改语义", "改对外",
+    ];
+    for (const v of THIRD_BATCH) {
+      const r = classifyChangeScope(`帮我${v}接口后再同步调用方`);
+      expect(r.scope, `${v} 应判 surface`).toBe("surface");
+      expect(r.matched, `${v} 应在 matched 里`).toContain(v);
+    }
+ // 「修改公共契约」必须命中(改公共/修改公共 覆盖名词插入形态)
+    expect(classifyChangeScope("修改公共契约的返回语义").scope).toBe("surface");
+ // 英文第三批:词边界匹配
+    for (const v of ["change signature", "break the api", "breaking change"]) {
+      const r = classifyChangeScope(`this is a ${v}, update all callers`);
+      expect(r.scope, `${v} 应判 surface`).toBe("surface");
+      expect(r.matched, `${v} 应在 matched 里`).toContain(v);
+    }
+  });
+
+  it("第三批反例:提及契约名词但非变更动作的请求仍判 normal(只读分析/问答不被升级)", () => {
+    for (const text of [
+      "分析一下公共契约的调用关系",
+      "看看这个签名是怎么解析的",
+      "梳理协议字段的语义文档",
+      "给接口文档补两行说明",
+    ]) {
+      const r = classifyChangeScope(text);
+      expect(r.scope, `${JSON.stringify(text)} 应判 normal`).toBe("normal");
+      expect(r.matched).toEqual([]);
+    }
+  });
+
   it("反例:新增动词遇显式小改标记仍被抑制(normal 但 matched 照实回报)", () => {
     const r = classifyChangeScope("把这里的文案换成新标题,明确小改");
     expect(r.scope).toBe("normal");

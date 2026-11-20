@@ -282,7 +282,8 @@ async function run(): Promise<number> {
             report: report ?? null,
           },
           null,
-          2),
+          2,
+        ),
       );
       return EXIT_OK;
     }

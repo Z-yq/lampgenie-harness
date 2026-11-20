@@ -141,7 +141,7 @@ import { buildCompletionAudit, type CompletionFacts } from "../completion-audit.
 import { runTaskCloseout, type CloseoutState } from "../task-closeout.js";
 import { projectMainlineBlock } from "@lampgenie/code-sense/project-profile";
 import { codeReview } from "@lampgenie/code-sense/review";
-import { ExperienceStore, distillFromTask, mergeSkillIndex, mergeSkillIndexWith, builtinSkillBody } from "@lampgenie/experience";
+import { ExperienceStore, mergeSkillIndex, mergeSkillIndexWith, builtinSkillBody } from "@lampgenie/experience";
 import { disabledBuiltins } from "../skills-admin.js";
 import { WorkflowEngine, type WorkflowCaps, type CapsPatch } from "@lampgenie/workflow";
 import { OwnerRegistry, type OwnerUnit } from "@lampgenie/runtime/task/ownership";
@@ -1753,42 +1753,8 @@ export function skillViewTool(store: ExperienceStore, disabledBuiltinsLookup?: (
   };
 }
 
-/** experience_fold 可写类目白名单( §3「白名单内写」;distill 的 incidents 兜底同在表内)。 */
+/** 经验沉淀可写类目白名单(nightly 质量门复用;distill 的 incidents 兜底同在表内)。 */
 export const FOLD_CATEGORY_WHITELIST = ["coding", "ops", "tooling", "workflow", "incidents"];
-
-/** experience_fold 工具( §3):白名单内写,fold-in=同名覆盖更新(version+1)。 */
-export function experienceFoldTool(store: ExperienceStore): Tool {
-  return {
-    name: "experience_fold",
-    description: "沉淀/合并经验(fold-in:同 category+name 即覆盖更新)。description ≤60 字;优先合并进已有经验",
-    parameters: {
-      type: "object",
-      properties: {
-        category: { type: "string", description: `类目(白名单:${FOLD_CATEGORY_WHITELIST.join("/")})` },
-        name: { type: "string", description: "经验名(小写连字符)" },
-        description: { type: "string", description: "一句话用途 ≤60 字" },
-        body: { type: "string", description: "经验全文:什么场景/怎么做/什么坑" },
-      },
-      required: ["category", "name", "description", "body"],
-    },
-    isConcurrencySafe: () => false,
-    async execute(args: unknown) {
-      const a = args as { category: string; name: string; description: string; body: string };
-      if (!FOLD_CATEGORY_WHITELIST.includes(a.category)) {
-        return `类目 ${a.category} 不在白名单 ${FOLD_CATEGORY_WHITELIST.join("/")} 内`;
-      }
-      if (!a.name || !a.description || !a.body) return "category/name/description/body 均必填";
-      try {
-        const fm = await store.write(
-          { category: a.category, name: a.name, description: a.description, created_by: "agent" },
-          a.body);
-        return `已沉淀 ${a.category}/${a.name} v${fm.version}(fold-in)`;
-      } catch (err) {
-        return `experience_fold 错误: ${String(err).slice(0, 200)}`;
-      }
-    },
-  };
-}
 
 /* ------------------------------------------------------------------------------------------------
  * workflow 资产 / 运行期 caps / 运行中 amend(工具面)。
@@ -1813,7 +1779,8 @@ export function workflowAssetDirs(root: string = repoRoot(), home: string = home
 export function findWorkflowAsset(
   projectAssets: readonly WorkflowAsset[],
   globalAssets: readonly WorkflowAsset[],
-  name: string): WorkflowAsset | undefined {
+  name: string,
+): WorkflowAsset | undefined {
   const n = name.trim();
   return projectAssets.find((a) => a.name === n) ?? globalAssets.find((a) => a.name === n);
 }

@@ -209,7 +209,8 @@ export interface TaskKindToolFilterResult {
  */
 export function filterToolNamesByKindCapabilities(
 	names: readonly string[],
-	capabilities: TaskKindCapabilities): TaskKindToolFilterResult {
+	capabilities: TaskKindCapabilities,
+): TaskKindToolFilterResult {
 	const denied = new Set<string>();
 	if (!capabilities.canSpawnSubagent) for (const name of KIND_SPAWN_TOOLS) denied.add(name);
 	if (!capabilities.canUseTerminal) for (const name of KIND_TERMINAL_TOOLS) denied.add(name);

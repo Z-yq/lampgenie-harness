@@ -116,7 +116,8 @@ export function isMandateExpired(m: MandateLike, now: number): boolean {
  */
 export function revokeMandate(
   m: MandateLike | null | undefined,
-  input?: MandateRevokeInput): MandateChange {
+  input?: MandateRevokeInput,
+): MandateChange {
   if (m == null) return { mandate: null, code: MANDATE_CODES.NOT_FOUND };
   if (!isMandateLike(m)) return { mandate: null, code: MANDATE_CODES.INVALID };
   const by = input?.by;
@@ -146,7 +147,8 @@ export function revokeMandate(
  */
 export function expireMandate(
   m: MandateLike | null | undefined,
-  now: number): MandateChange {
+  now: number,
+): MandateChange {
   if (m == null) return { mandate: null, code: MANDATE_CODES.NOT_FOUND };
   if (!isMandateLike(m)) return { mandate: null, code: MANDATE_CODES.INVALID };
   if (m.status === "expired") return { mandate: m, code: MANDATE_CODES.EXPIRED };
@@ -165,7 +167,8 @@ export function expireMandate(
 export function revalidateForResume(
   m: MandateLike | null | undefined,
   currentPolicyVersion: string,
-  now?: number): MandateVerdict {
+  now?: number,
+): MandateVerdict {
   if (m == null) return { ok: false, code: MANDATE_CODES.NOT_FOUND, reason: "mandate not found" };
   if (!isMandateLike(m)) return { ok: false, code: MANDATE_CODES.INVALID, reason: "invalid mandate" };
   if (typeof currentPolicyVersion !== "string" || currentPolicyVersion === "") {
@@ -191,7 +194,8 @@ export function revalidateForResume(
 export function canAdmitWithMandate(
   m: MandateLike | null | undefined,
   currentPolicyVersion: string,
-  now?: number): { ok: boolean; code: MandateCode } {
+  now?: number,
+): { ok: boolean; code: MandateCode } {
   const v = revalidateForResume(m, currentPolicyVersion, now);
   return { ok: v.ok, code: v.code };
 }
@@ -210,7 +214,8 @@ function byCodeUnit(a: string, b: string): number {
  */
 export function affectedTickets(
   mandates: readonly (MandateLike | null | undefined)[],
-  newPolicyVersion: string): AffectedTickets[] {
+  newPolicyVersion: string,
+): AffectedTickets[] {
   if (!Array.isArray(mandates)) return [];
   if (typeof newPolicyVersion !== "string" || newPolicyVersion === "") return [];
   const merged = new Map<string, { policyVersion: string; ticketIds: string[] }>();

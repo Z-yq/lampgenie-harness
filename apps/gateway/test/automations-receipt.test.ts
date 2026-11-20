@@ -1,5 +1,5 @@
 /**
- * 定时投递协议 —— 探针 A-F。
+ * :定时投递协议 —— 探针 A-F。
  * 真 AutomationStore(临时目录落盘)+ 真 AutomationScheduler,onSubmit 用假实现;
  * 覆盖:成功 delivered/transient 退避/permanent 不空转/CAS/single-flight/receipt 容量/旧文件兼容。
  */

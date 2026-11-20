@@ -46,7 +46,8 @@ async function loadContract(): Promise<TraceContractModule> {
     } catch {
       const srcUrl = new URL(
         "../../../packages/harness-runtime/src/agent/trace-contract.ts",
-        import.meta.url).href;
+        import.meta.url,
+      ).href;
       return (await import(srcUrl)) as TraceContractModule;
     }
   })();

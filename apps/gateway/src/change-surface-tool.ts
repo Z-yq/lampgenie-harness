@@ -27,7 +27,7 @@ import type {
 } from "@lampgenie/code-sense/surface";
 import { classifyChangeScope } from "@lampgenie/code-sense/surface";
 import type { ChangeScope } from "@lampgenie/code-sense/surface";
-// 分类可更正——更正结构/读取/纪律提示是纯逻辑,单测在 change-scope-correction.test.ts。
+// :分类可更正——更正结构/读取/纪律提示是纯逻辑,单测在 change-scope-correction.test.ts。
 import {
   CHANGE_SCOPE_CORRECTION_TYPE,
   applyChangeScopeCorrection,
@@ -252,7 +252,8 @@ function payloadType(e: { payload?: unknown }): string | undefined {
 export function readChangeSurfaceManifest(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string): ChangeSurfaceManifest | null {
+  taskId: string,
+): ChangeSurfaceManifest | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.surface",
   );
@@ -276,7 +277,8 @@ export function readChangeSurfaceManifest(
 export function readChangeAudit(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string): ChangeAuditRecord | null {
+  taskId: string,
+): ChangeAuditRecord | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.audit",
   );
@@ -310,7 +312,8 @@ export function readChangeAudit(
 export function readChangeExempt(
   journal: ChangeSurfaceJournal,
   sessionId: string,
-  taskId: string): string | null {
+  taskId: string,
+): string | null {
   const evs = journal.readAll().filter(
     (e) => e.kind === "custom" && e.sessionId === sessionId && payloadType(e) === "change.exempt",
   );
@@ -784,7 +787,7 @@ export function makeChangeSurfaceTool(deps: ChangeSurfaceToolDeps): Tool {
       const a = (args ?? {}) as { action?: unknown; concept?: unknown; resolutions?: unknown; reason?: unknown; root?: unknown; scope?: unknown; by?: unknown };
       const action = typeof a.action === "string" ? a.action : "";
       const root = typeof a.root === "string" && a.root.trim() ? a.root.trim() : deps.root;
- // 分类更正——立刻落 journal,下一次 plan-gate 就按更正后的结论判定。
+ // :分类更正——立刻落 journal,下一次 plan-gate 就按更正后的结论判定。
       if (action === "classify") {
         const scopeKind = normalizeChangeScopeKind(typeof a.scope === "string" ? a.scope.trim() : "");
         const reason = typeof a.reason === "string" ? a.reason.trim() : "";

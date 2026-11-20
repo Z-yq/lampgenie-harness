@@ -45,7 +45,8 @@ describe("AgentLoop", () => {
     expect(calls).toHaveLength(1);
     expect(results).toHaveLength(1);
     expect((results[0]!.payload as { toolCallId: string }).toolCallId).toBe(
-      (calls[0]!.payload as { toolCallId: string }).toolCallId);
+      (calls[0]!.payload as { toolCallId: string }).toolCallId,
+    );
     // deriveMessages 重建出完整序列
     const msgs = deriveMessages(journal, "s1");
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);

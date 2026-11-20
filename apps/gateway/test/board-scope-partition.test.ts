@@ -234,7 +234,7 @@ describe("q5 显式边契约回执", () => {
 
 // ---------------------------------------------------------------- q7 ----
 describe("q7 label 限长落板门(只对 agent 写入面)", () => {
-  it("agent 提交超长 label → 自动截断落盘,回执点名 `label 超 14 字 → 截断`", async () => {
+  it("agent 提交超长 label → 拒收,点名前 3 个 `id「label」N 字` 并给改法", async () => {
     const r = tmp();
     const out = String(await boardUpsertTool(new MemoryJournal(), "s1", "t1", r, r).execute({
       title: "长 label 板",
@@ -244,12 +244,10 @@ describe("q7 label 限长落板门(只对 agent 写入面)", () => {
       ],
       edges: [],
     }));
-    expect(out).toContain("写板已自动纠正");
-    expect(out).toContain("n1 的 label 超 14 字 → 截断为");
-    expect(out).toContain("细节应写 summary");
-    const doc = loadBoard(r, "s1", "t1")!;
-    expect([...doc.nodes.find((n) => n.id === "n1")!.label].length).toBeLessThanOrEqual(14); // 截断后落盘
-    expect(doc.nodes.find((n) => n.id === "n2")!.label).toBe("短"); // 合规 label 原样保留
+    expect(out).toContain("label 过长");
+    expect(out).toContain("n1「把白板节点的标题写成一整句话这种长度」18 字");
+    expect(out).toContain("label 用名词短语 ≤14 字,细节写进 summary");
+    expect(loadBoard(r, "s1", "t1")).toBeNull(); // 拒收=没落盘
   });
 
   it("刚好 14 字放行、15 字拒收(边界)", async () => {
@@ -261,10 +259,8 @@ describe("q7 label 限长落板门(只对 agent 写入面)", () => {
     const bad = String(await boardUpsertTool(new MemoryJournal(), "s1", "t1", r, r).execute({
       title: "边界板", nodes: [{ id: "n2", kind: "module", label: "一二三四五六七八九十一二三四五", summary: "s", change: "add" }], edges: [],
     }));
-    expect(bad).toContain("写板已自动纠正");
-    expect(bad).toContain("n2 的 label 超 14 字 → 截断为「一二三四五六七八九十一二三四」"); // 15 字截到 14
-    const doc2 = loadBoard(r, "s1", "t1")!;
-    expect(doc2.nodes.find((n) => n.id === "n2")!.label).toBe("一二三四五六七八九十一二三四");
+    expect(bad).toContain("label 过长");
+    expect(bad).toContain("15 字");
   });
 
   it("人经 board.save 改板不受限(长 label 照常落盘)", async () => {
@@ -279,7 +275,7 @@ describe("q7 label 限长落板门(只对 agent 写入面)", () => {
     expect(loadBoard(r, "s1", "t1")!.nodes[0]!.label).toBe(longLabel);
   });
 
-  it("agent 整板提交:新/旧超长 label 一并自动截断(板上终态恒干净)", async () => {
+  it("存量超长 label 未被本次提交触及(逐字相同)→ 不拒收;改了它且仍超长 → 拒收", async () => {
     const r = tmp();
     const longLabel = "存量超长的节点标题超过十四个字了";
     // 先由「人」落一块带超长 label 的板(agentWrite 不传=不限长)
@@ -301,21 +297,18 @@ describe("q7 label 限长落板门(只对 agent 写入面)", () => {
       edges: [],
     }));
     expect(pass).toContain("设计白板已更新");
-    // 再**新提交**一个超长 label 的节点(板上原本没有该 id)→ 连同存量超长一并自动截断
+ // 但**新提交**一个超长 label 的节点(板上原本没有该 id,不触发撞车门)→ label 限长门拒收
     const reject = String(await boardUpsertTool(new MemoryJournal(), "s1", "t1", r, r).execute({
       title: "旧板",
       nodes: [{ id: "brand-new", kind: "module", label: "这次新加的一个同样超长的节点标题", summary: "s3", change: "add" }],
       edges: [],
     }));
-    expect(reject).toContain("写板已自动纠正 2 处");
-    expect(reject).toContain("brand-new 的 label 超 14 字 → 截断为");
-    expect(reject).toContain("old 的 label 超 14 字 → 截断为");
-    // 自动纠正=落盘:brand-new 与 old 都截断,短节点原样保留
+    expect(reject).toContain("label 过长");
+    expect(reject).toContain("brand-new");
+ // 拒收=盘上没多出这个节点(old 的超长 label 也还在,说明是被门挡的而非写坏)
     const doc = loadBoard(r, "s1", "t1")!;
-    expect(doc.nodes.map((n) => n.id).sort()).toEqual(["brand-new", "keep", "old"]);
-    expect([...doc.nodes.find((n) => n.id === "brand-new")!.label].length).toBeLessThanOrEqual(14);
-    expect([...doc.nodes.find((n) => n.id === "old")!.label].length).toBeLessThanOrEqual(14);
-    expect(doc.nodes.find((n) => n.id === "keep")!.label).toBe("短节点");
+    expect(doc.nodes.map((n) => n.id).sort()).toEqual(["keep", "old"]);
+    expect(doc.nodes.find((n) => n.id === "old")!.label).toBe(longLabel);
   });
 
   it("人保留节点(gateExempt:本次没提交)→ 不因它的超长 label 拒收 agent 的整板提交", async () => {

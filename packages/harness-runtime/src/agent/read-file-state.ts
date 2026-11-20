@@ -147,7 +147,8 @@ export function checkRepeatRead(
   mtimeMs: number,
   off: number,
   end: number,
-  exactWindow = false): RepeatReadVerdict {
+  exactWindow = false,
+): RepeatReadVerdict {
   const entry = sessions.get(sessionId)?.get(normalizeReadPath(filePath));
   if (!entry) return { duplicate: false, readCount: 0 };
   const readCount = entry.readCount ?? 1; // 旧数据(无 readCount 字段)按已读 1 次算

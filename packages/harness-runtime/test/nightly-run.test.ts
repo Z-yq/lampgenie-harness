@@ -13,13 +13,16 @@ import {
   addCandidates,
   addUnprocessed,
   buildRunReport,
+  failRun,
   finalizeRun,
   markStep,
+  migrateRunSteps,
   mineCandidates,
   nextStep,
   pauseRun,
   planRunSteps,
   recordCoverage,
+  resetStalledRun,
   resumeRun,
   retryRun,
   runKey,
@@ -72,8 +75,8 @@ function candidate(id: string, kind: NightlyCandidate["kind"] = "tip"): NightlyC
 }
 
 describe("常量与导出面", () => {
-  it("版本是 1", () => {
-    expect(NIGHTLY_VERSION).toBe(1);
+  it("版本是 2(v2 七步管线)", () => {
+    expect(NIGHTLY_VERSION).toBe(2);
   });
 
   it("14 个稳定码,值等于键名", () => {
@@ -89,13 +92,14 @@ describe("常量与导出面", () => {
     expect(DEFAULT_MAX_CANDIDATES).toBe(50);
   });
 
-  it("六步顺序固定", () => {
+  it("七步顺序固定(distill-experiences 在 generate-candidates 后)", () => {
     expect([...NIGHTLY_STEPS]).toEqual([
       "pull-traces",
       "denoise",
       "mine",
       "update-graph",
       "generate-candidates",
+      "distill-experiences",
       "queue-experiments",
     ]);
   });
@@ -118,7 +122,7 @@ describe("runKey / startRun", () => {
     expect(run.updatedAt).toBe(T0_ISO);
   });
 
-  it("正常启动:pending + 六步 pending + STARTED", () => {
+  it("正常启动:pending + 七步 pending + STARTED", () => {
     const result = startRun({ date: DATE, projectId: "demo", now: T0 });
     expect(result.codes).toEqual([NIGHTLY_CODES.NIGHTLY_STARTED] satisfies NightlyCode[]);
     expect(result.run?.status).toBe("pending");
@@ -189,7 +193,7 @@ describe("runKey / startRun", () => {
     });
     expect(result.codes).toEqual([NIGHTLY_CODES.NIGHTLY_STARTED]);
     expect(result.run?.status).toBe("pending");
-    expect(result.run?.steps).toHaveLength(6);
+    expect(result.run?.steps).toHaveLength(7);
   });
 
   it("非法 date 返回 null + NIGHTLY_INVALID", () => {
@@ -205,6 +209,62 @@ describe("runKey / startRun", () => {
     const blank = startRun({ date: DATE, projectId: "   ", now: T0 });
     expect(blank.run).toBeNull();
     expect(blank.codes).toEqual([NIGHTLY_CODES.NIGHTLY_INVALID]);
+  });
+});
+
+describe("distill-experiences(v2 新步)与旧记录兼容", () => {
+  it("步序:generate-candidates 之后、queue-experiments 之前", () => {
+    const names = [...NIGHTLY_STEPS];
+    expect(names.indexOf("distill-experiences")).toBe(names.indexOf("generate-candidates") + 1);
+    expect(names.indexOf("distill-experiences")).toBeLessThan(names.indexOf("queue-experiments"));
+  });
+
+  it("逐步推进:distill-experiences 在 generate-candidates 完成后轮到", () => {
+    let run = makeRun();
+    expect(run.steps).toHaveLength(7);
+    for (const name of ["pull-traces", "denoise", "mine", "update-graph", "generate-candidates"] as const) {
+      expect(nextStep(run)?.name).toBe(name);
+      run = markStep(run, { name, status: "done", at: T1 }).run;
+    }
+    expect(nextStep(run)?.name).toBe("distill-experiences");
+    run = markStep(run, { name: "distill-experiences", status: "done", tokens: 10, at: T1 }).run;
+    expect(nextStep(run)?.name).toBe("queue-experiments");
+    expect(run.budget.tokens).toBe(10);
+  });
+
+  it("migrateRunSteps:旧六步记录缺步补 pending,既有步数据保留,不 mutate 入参", () => {
+    const legacy = makeRun();
+    const six = legacy.steps.filter((step) => step.name !== "distill-experiences");
+    const oldRun: NightlyRun = {
+      ...legacy,
+      steps: six.map((step, i) => (i === 0 ? { ...step, status: "done" as const, consumedTokens: 5 } : { ...step })),
+    };
+    const snapshot = structuredClone(oldRun);
+    const migrated = migrateRunSteps(oldRun);
+    expect(migrated.steps).toHaveLength(7);
+    expect(migrated.steps.map((step) => step.name)).toEqual([...NIGHTLY_STEPS]);
+    const distill = migrated.steps.find((step) => step.name === "distill-experiences");
+    expect(distill?.status).toBe("pending");
+    expect(distill?.consumedTokens).toBe(0);
+    expect(migrated.steps[0].status).toBe("done");
+    expect(migrated.steps[0].consumedTokens).toBe(5);
+    expect(oldRun).toEqual(snapshot);
+  });
+
+  it("migrateRunSteps:旧 done 记录兼容加载不 throw,状态保持 done 且不再推进", () => {
+    const done = finalizeRun(completeAll(makeRun()), { at: T1 }).run;
+    const oldDone: NightlyRun = { ...done, steps: done.steps.filter((step) => step.name !== "distill-experiences") };
+    const migrated = migrateRunSteps(oldDone);
+    expect(migrated.status).toBe("done");
+    expect(migrated.steps).toHaveLength(7);
+    expect(nextStep(migrated)).toBeUndefined();
+  });
+
+  it("migrateRunSteps:已是七步原样返回;坏 steps 不 throw", () => {
+    const run = makeRun();
+    expect(migrateRunSteps(run)).toBe(run);
+    const broken = { ...run, steps: null as unknown as NightlyRun["steps"] };
+    expect(migrateRunSteps(broken)).toBe(broken);
   });
 });
 
@@ -229,13 +289,14 @@ describe("shouldSkipCompleted", () => {
 });
 
 describe("planRunSteps / nextStep", () => {
-  it("planRunSteps 重置为六步 pending 且不改入参", () => {
+  it("planRunSteps 重置为七步 pending 且不改入参", () => {
     const started = completeAll(makeRun());
     const snapshot = structuredClone(started);
     const replanned = planRunSteps(started);
-    expect(replanned.steps).toHaveLength(6);
+    expect(replanned.steps).toHaveLength(7);
     expect(replanned.steps.every((step) => step.status === "pending" && step.consumedTokens === 0)).toBe(
-      true);
+      true,
+    );
     expect(started).toEqual(snapshot);
   });
 
@@ -497,7 +558,7 @@ describe("finalizeRun / buildRunReport", () => {
     expect(result.run.status).toBe("running");
   });
 
-  it("六步全 done → done + FINALIZED + 自动报告", () => {
+  it("七步全 done → done + FINALIZED + 自动报告", () => {
     const result = finalizeRun(completeAll(makeRun()), { at: T1 });
     expect(result.codes).toEqual([NIGHTLY_CODES.NIGHTLY_FINALIZED]);
     expect(result.run.status).toBe("done");
@@ -531,7 +592,8 @@ describe("finalizeRun / buildRunReport", () => {
     expect(lines[1]).toContain("demo");
     expect(lines[1]).toContain("status");
     expect(lines.some((line) => line.startsWith("window:") && line.includes("2026-03-07T00:00:00.000"))).toBe(
-      true);
+      true,
+    );
     expect(lines.some((line) => line.startsWith("coverage:"))).toBe(true);
     expect(lines).toContain("candidates: 1");
     expect(lines).toContain("unprocessed: 1");
@@ -631,5 +693,51 @@ describe("mineCandidates", () => {
   it("同输入同输出(确定性)", () => {
     const stats = { sessions: [session("s1", { repeatedReads: 3 }), session("s2", { repeatedReads: 3 })] };
     expect(mineCandidates(stats)).toEqual(mineCandidates(stats));
+  });
+});
+
+describe("2026-11-17 陈旧 run 回收(resetStalledRun / failRun)", () => {
+  it("running 步骤退回 pending,run.status running→pending,码 RETRIED,入参不被改", () => {
+    const base = markStep(makeRun(), { name: "pull-traces", status: "running", at: T0 }).run;
+    expect(base.status).toBe("running");
+    const reset = resetStalledRun(base, { at: T1 });
+    expect(reset.codes).toEqual([NIGHTLY_CODES.NIGHTLY_RETRIED]);
+    expect(reset.run.status).toBe("pending");
+    expect(reset.run.updatedAt).toBe(new Date(T1).toISOString());
+    const step = reset.run.steps.find((entry) => entry.name === "pull-traces");
+    expect(step?.status).toBe("pending");
+    expect(step?.startedAt).toBeUndefined();
+    expect(nextStep(reset.run)?.name).toBe("pull-traces");
+ // 入参不被 mutate
+    expect(base.steps.find((entry) => entry.name === "pull-traces")?.status).toBe("running");
+  });
+
+  it("没有 running 步骤:原样返回 + 无码", () => {
+    const run = makeRun();
+    const reset = resetStalledRun(run, { at: T1 });
+    expect(reset.run).toBe(run);
+    expect(reset.codes).toEqual([]);
+  });
+
+  it("names 只重置指定步骤", () => {
+    let run = markStep(makeRun(), { name: "pull-traces", status: "running", at: T0 }).run;
+    run = markStep(run, { name: "denoise", status: "running", at: T0 }).run;
+    const reset = resetStalledRun(run, { at: T1, names: ["denoise"] });
+    expect(reset.run.steps.find((entry) => entry.name === "denoise")?.status).toBe("pending");
+    expect(reset.run.steps.find((entry) => entry.name === "pull-traces")?.status).toBe("running");
+  });
+
+  it("failRun:status=failed + error,报告里有一行 error,updatedAt 刷新", () => {
+    const failed = failRun(makeRun(), { at: T1, error: "reclaim 续跑抛错: boom" });
+    expect(failed.codes).toEqual([NIGHTLY_CODES.NIGHTLY_FAILED]);
+    expect(failed.run.status).toBe("failed");
+    expect(failed.run.error).toBe("reclaim 续跑抛错: boom");
+    expect(failed.run.updatedAt).toBe(new Date(T1).toISOString());
+    expect(buildRunReport(failed.run)).toContain("error: reclaim 续跑抛错: boom");
+  });
+
+  it("failRun:空 error 走兜底文案", () => {
+    const failed = failRun(makeRun(), { at: T1, error: "" });
+    expect(failed.run.error).toBe("nightly run failed");
   });
 });

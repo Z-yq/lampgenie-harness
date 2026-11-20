@@ -13,6 +13,7 @@ import type { SubagentBackend, SubagentEvent, SubagentHandle, TaskResult, TaskSp
 import { AgentLoop, type Message } from "@lampgenie/runtime/agent/loop";
 import { checkRepeatRead, recordFileRead, readFilesOf, renderParentReadHint, type ReadFileEntry } from "@lampgenie/runtime/agent/read-file-state";
 import { renderSystemReminder } from "@lampgenie/runtime/agent/reminder-source";
+import { contextPruneTool } from "./context-prune-tool.js";
 import { makeLlmTraceSink } from "./llm-trace.js";
 import { attachToolView } from "./tool-view.js";
 import { permissionMode } from "./permission-mode.js";
@@ -81,7 +82,8 @@ async function editCheckSuffixSafe(
   absPath: string,
   settings?: LspSettings,
   baseline?: DiagnosticItem[] | null,
-  baselineText?: string): Promise<string> {
+  baselineText?: string,
+): Promise<string> {
   if (!settings || settings.enabled === false) return ""; // 低层缺省关闭:零装载开销
   try {
     const mod = await import("@lampgenie/lsp");
@@ -100,7 +102,8 @@ async function editBaselineSafe(
   root: string,
   absPath: string,
   prevText: string | undefined,
-  settings?: LspSettings): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
+  settings?: LspSettings,
+): Promise<{ baseline: DiagnosticItem[] | null; baselineText: string } | undefined> {
   if (!settings || settings.enabled === false) return undefined;
   if (settings.baseline === false) return undefined;
   if (prevText === "") return { baseline: [], baselineText: "" }; // 新文件:基线为空(不探测)
@@ -218,7 +221,8 @@ export function buildProductiveNudge(idleSteps: number): string {
 export function pickUsableAgentText(
   instructions: string,
   entries: readonly { kind?: string; payload?: unknown }[],
-  limit = 3): { text: string; kept: number; dropped: number } {
+  limit = 3,
+): { text: string; kept: number; dropped: number } {
   const kept: string[] = [];
   let dropped = 0;
   for (const e of entries) {
@@ -468,7 +472,7 @@ const MAX_GREP_HITS = 60;
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".genie", ".zcode", ".agents", "ref", "devlog", "vendor", "coverage", ".next"]); // 与 file-index 对齐(子代理扫描面=主链路扫描面)
 
 /** 子代理读类工具名(全部声明 isReadOnly=权限闸门豁免,与主 agent 文件六件套读类同语义)。 */
-export const SUBAGENT_READ_TOOLS = ["read_file", "glob", "grep", "list_dir"] as const;
+export const SUBAGENT_READ_TOOLS = ["read_file", "glob", "grep", "list_dir", "context_prune"] as const;
 /** 子代理写/执行类工具名(过权限闸门;file.write 类别别名经 loop TASK_OUTPUT_ALIAS 覆盖写两件)。 */
 export const SUBAGENT_WRITE_TOOLS = ["write_file", "edit_file", "run_cmd"] as const;
 
@@ -922,6 +926,9 @@ export class LlmLoopBackend implements SubagentBackend {
     const pool = [
       ...llmLoopReadOnlyTools(roots, sharedReadState, readSessionRef, this.opts.parentReadSession),
       ...workerWriteTools(this.opts.workdir ?? roots[0] ?? process.cwd(), sharedReadState, this.opts.lsp, this.opts.writeGlobs),
+ // 缺口#20:子代理面注册 context_prune——错误路径剪枝不只护主 agent;
+ // 作用于子代理自己的 subJournal(读侧投影),与主 agent 面同构造。
+      contextPruneTool(subJournal, closeoutSessionId, closeoutRoot),
       ...(this.opts.extraTools ?? []),
     ];
     const tools = whitelist
@@ -965,7 +972,7 @@ export class LlmLoopBackend implements SubagentBackend {
  // 工具面契约统一:子代理与主 loop 同款——长描述摘要化 + 大 schema 工具延迟
     // 加载(用时 tool_view 激活)。此前子代理面保留原文长描述/全量 schema,两侧策略不一致
  // (经验证子代理 15 工具里 code_sense/terminal/browser/session_search 均超 240 字符)。
- // 子代理工具面与主面同款上下文投影(此前这里只有静态描述)。
+ // :子代理工具面与主面同款上下文投影(此前这里只有静态描述)。
  // - agentType=本子代理角色(planner/explore/worker…),只留痕不参与判定;
  // - permissionMode 取本进程权威源(与主面 agent-wiring 同源 permission-mode),plan/readonly 下
  // 写类工具描述带只读前缀;

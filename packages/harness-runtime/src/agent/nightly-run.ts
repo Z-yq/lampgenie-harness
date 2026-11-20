@@ -21,8 +21,8 @@
  *   即真正的 UTC 瞬时,便于与 journal 侧 epoch ms 对齐。
  */
 
-/** run 记录 schema 版本:字段语义变化时递增。 */
-export const NIGHTLY_VERSION = 1;
+/** run 记录 schema 版本:字段语义变化时递增。v2=七步(插 distill-experiences);旧 v1 记录经 migrateRunSteps 兼容。 */
+export const NIGHTLY_VERSION = 2;
 
 /** 预算缺省上限(令牌数):约等于一次夜间窗口的成本天花板。 */
 export const DEFAULT_MAX_TOKENS = 200_000;
@@ -42,13 +42,17 @@ export const NIGHTLY_STATUSES = [
 
 export type NightlyStatus = (typeof NIGHTLY_STATUSES)[number];
 
-/** 六步管线,顺序即执行顺序(mine → generate-candidates 依赖前序产物,不可换位)。 */
+/** 七步管线,顺序即执行顺序(mine → generate-candidates 依赖前序产物,不可换位)。
+ * v2( W2):generate-candidates 后插 distill-experiences——把当日轨迹蒸馏成
+ * 可复用经验候选(实际蒸馏由 nightly 机制 agent 按 brief 执行,settle 时质量门折叠入库);
+ * 旧 v1 六步记录经 migrateRunSteps 兼容加载(缺步=pending,不 throw)。 */
 export const NIGHTLY_STEPS = [
   "pull-traces",
   "denoise",
   "mine",
   "update-graph",
   "generate-candidates",
+  "distill-experiences",
   "queue-experiments",
 ] as const;
 
@@ -155,6 +159,8 @@ export interface NightlyRun {
   unprocessed: NightlyUnprocessed[];
   budget: NightlyBudget;
   pauseReason?: string;
+ /** 失败原因(reclaim 续跑抛错 / 未终态被外部置失败时可见,report 里也有一行)。 */
+  error?: string;
   report?: string[];
 }
 
@@ -336,6 +342,25 @@ export function planRunSteps(run: NightlyRun): NightlyRun {
   return { ...run, steps: NIGHTLY_STEPS.map((name) => pendingStep(name)) };
 }
 
+/** 旧记录向后兼容迁移(v1 六步 → v2 七步):按 NIGHTLY_STEPS 顺序补齐缺失步为 pending,
+ * 既有步的数据逐字保留;零 IO、不 throw、不 mutate 入参。已终局的旧 run 状态不变
+ * (nextStep 对终局 run 不推进,缺步只在报告里如实显示 pending)。 */
+export function migrateRunSteps(run: NightlyRun): NightlyRun {
+  if (!run || !Array.isArray(run.steps)) return run;
+  const byName = new Map<string, NightlyRunStep>();
+  for (const step of run.steps) {
+    if (step && isStepName(step.name) && !byName.has(step.name)) byName.set(step.name, step);
+  }
+  if (run.steps.length === NIGHTLY_STEPS.length && NIGHTLY_STEPS.every((name) => byName.has(name))) {
+    return run;
+  }
+  const steps = NIGHTLY_STEPS.map((name) => {
+    const existing = byName.get(name);
+    return existing ? { ...existing } : pendingStep(name);
+  });
+  return { ...run, steps };
+}
+
 export function startRun(input: StartRunInput): NightlyStartResult {
   const date = typeof input?.date === "string" ? input.date.trim() : "";
   const projectId = typeof input?.projectId === "string" ? input.projectId.trim() : "";
@@ -385,7 +410,8 @@ export function startRun(input: StartRunInput): NightlyStartResult {
 /** 同 idempotencyKey 且已 done → 本轮跳过(不覆盖已完成的记录)。 */
 export function shouldSkipCompleted(
   existingRuns: readonly NightlyRun[] | null | undefined,
-  key: string): boolean {
+  key: string,
+): boolean {
   if (!Array.isArray(existingRuns) || typeof key !== "string" || key === "") return false;
   return existingRuns.some((run) => run?.idempotencyKey === key && run?.status === "done");
 }
@@ -548,7 +574,8 @@ function normaliseCandidate(value: unknown): NightlyCandidate | null {
 export function addCandidates(
   run: NightlyRun,
   candidates: readonly NightlyCandidate[] | null | undefined,
-  options?: AddCandidatesOptions): NightlyUpdate {
+  options?: AddCandidatesOptions,
+): NightlyUpdate {
   const limitRaw = options?.maxCandidates;
   const limit =
     typeof limitRaw === "number" && Number.isFinite(limitRaw)
@@ -578,7 +605,8 @@ export function addCandidates(
 
 export function addUnprocessed(
   run: NightlyRun,
-  items: readonly NightlyUnprocessed[] | null | undefined): NightlyUpdate {
+  items: readonly NightlyUnprocessed[] | null | undefined,
+): NightlyUpdate {
   const incoming = Array.isArray(items) ? items : [];
   const accepted: NightlyUnprocessed[] = [];
   for (const entry of incoming) {
@@ -593,6 +621,63 @@ export function addUnprocessed(
     unprocessed: [...run.unprocessed.map((item) => ({ ...item })), ...accepted],
   };
   return { run: next, codes: accepted.length === 0 ? [] : [NIGHTLY_CODES.NIGHTLY_UNPROCESSED] };
+}
+
+export interface ResetStalledInput {
+ /** epoch ms。 */
+  at: number;
+ /** 只重置这些步骤;缺省 = 所有 running 步骤。 */
+  names?: readonly NightlyStepName[];
+}
+
+/**
+ * 陈旧 run 回收(机制审计:进程被杀后 run 文件里留 running 步骤,runNightly 的
+ * nextStep 只看 pending → 该 run 永远不再推进且永远非终态)。
+ * 把残留 running 步骤退回 pending(run.status running → pending),让 runNightly 能续跑。
+ * 纯函数:不 mutate 入参;没有可重置步骤时原样返回(无码)。
+ */
+export function resetStalledRun(run: NightlyRun, input: ResetStalledInput): NightlyUpdate {
+  const atIso = toIso(input?.at);
+  const only = Array.isArray(input?.names)
+    ? new Set(input.names.filter((name): name is NightlyStepName => isStepName(name)))
+    : null;
+  let reset = 0;
+  const steps = run.steps.map((step): NightlyRunStep => {
+    if (step.status !== "running") return { ...step };
+    if (only && !only.has(step.name)) return { ...step };
+    reset += 1;
+    const next: NightlyRunStep = { name: step.name, status: "pending", consumedTokens: step.consumedTokens };
+    if (step.artifactRef !== undefined) next.artifactRef = step.artifactRef;
+    if (step.note !== undefined) next.note = step.note;
+    return next;
+  });
+  if (reset === 0) return { run, codes: [] };
+  return {
+    run: {
+      ...run,
+      steps,
+      status: run.status === "running" ? "pending" : run.status,
+      updatedAt: atIso,
+    },
+    codes: [NIGHTLY_CODES.NIGHTLY_RETRIED],
+  };
+}
+
+export interface FailRunInput {
+ /** epoch ms。 */
+  at: number;
+  error: string;
+  report?: string[];
+}
+
+/** 外部置入失败(reclaim 续跑抛错 / 仍未终态):status=failed,error 落盘且进报告。 */
+export function failRun(run: NightlyRun, input: FailRunInput): NightlyUpdate {
+  const atIso = toIso(input?.at);
+  const message = typeof input?.error === "string" && input.error !== "" ? input.error : "nightly run failed";
+  const failed: NightlyRun = { ...run, status: "failed", error: message, updatedAt: atIso };
+  const report =
+    Array.isArray(input?.report) && input.report.length > 0 ? [...input.report] : buildRunReport(failed);
+  return { run: { ...failed, report }, codes: [NIGHTLY_CODES.NIGHTLY_FAILED] };
 }
 
 export function finalizeRun(run: NightlyRun, input: FinalizeInput): NightlyUpdate {
@@ -635,6 +720,7 @@ export function buildRunReport(run: NightlyRun): string[] {
   lines.push(`unprocessed: ${run.unprocessed.length}`);
   lines.push(`budget: tokens=${run.budget.tokens} max=${run.budget.maxTokens}`);
   if (run.pauseReason !== undefined) lines.push(`pause: ${run.pauseReason}`);
+  if (run.error !== undefined) lines.push(`error: ${run.error}`);
   return lines;
 }
 

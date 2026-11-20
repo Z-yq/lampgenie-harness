@@ -43,7 +43,8 @@ function loadRenderer(html: string): (tp: unknown, series: unknown[]) => string 
   const src = extractFn(html, "trajCardHtml");
   // eslint-disable-next-line no-new-func
   return new Function("esc", src + String.fromCharCode(10) + "return trajCardHtml;")(
-    escT) as (tp: unknown, series: unknown[]) => string;
+    escT,
+  ) as (tp: unknown, series: unknown[]) => string;
 }
 
 describe("面板轨迹卡(J1):task.trajectory → 折叠画像卡", () => {

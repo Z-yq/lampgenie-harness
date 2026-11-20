@@ -280,9 +280,7 @@ export async function grepIn(
         }
       } else {
         const { stdout } = await execFileP("grep", [
-          "-rn", "-E",
-          ...["ts","tsx","js","py","go","java","md","html"].map((e) => `--include=*.${e}`),
-          `--`, escaped, root,
+          "-rn", "-E", `--include=*.{ts,tsx,js,py,go,java,md,html}`, `--`, escaped, root,
         ], { maxBuffer: 16 * 1024 * 1024 });
         for (const line of stdout.split("\n")) {
           const clean = line.endsWith("\r") ? line.slice(0, -1) : line; // CRLF 同 rg 分支

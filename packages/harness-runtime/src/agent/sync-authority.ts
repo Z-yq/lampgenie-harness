@@ -162,7 +162,8 @@ function isValidEvent(event: AuthorityEvent): boolean {
  */
 export function acceptEvent(
   state: SyncState,
-  event: AuthorityEvent): { state: SyncState; code: SyncCode } {
+  event: AuthorityEvent,
+): { state: SyncState; code: SyncCode } {
   if (!isValidEvent(event)) return { state, code: "SYNC_INVALID" };
 
   const existing = state.aggregates?.[event.aggregateId];
@@ -349,7 +350,8 @@ function defaultSleep(ms: number): Promise<void> {
 export async function awaitCatchup(
   localSeq: number,
   watermark: number,
-  options: AwaitCatchupOptions): Promise<AwaitCatchupResult> {
+  options: AwaitCatchupOptions,
+): Promise<AwaitCatchupResult> {
   const now = typeof options?.now === "function" ? options.now : () => 0;
   const sleep = typeof options?.sleep === "function" ? options.sleep : defaultSleep;
   const readLocalSeq = typeof options?.readLocalSeq === "function" ? (options.readLocalSeq as () => number) : undefined;
@@ -409,7 +411,8 @@ export function proxyAllowed(input: { syncConnected: boolean }): {
 /** 非 GET 响应附水位头:代理/客户端据此决定要不要等追平再采信这份结果。 */
 export function responseWatermark(
   state: SyncState,
-  aggregateId: string): { watermark: number; headers: Record<string, string> } {
+  aggregateId: string,
+): { watermark: number; headers: Record<string, string> } {
   const watermark = watermarkFor(state, aggregateId);
   return { watermark, headers: { "x-sync-watermark": String(watermark) } };
 }

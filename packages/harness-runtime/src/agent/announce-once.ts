@@ -116,7 +116,8 @@ export function hardCompactSeqOf(events: readonly AnnounceEventLike[], sessionId
 export function lastAnnounceOf(
   events: readonly AnnounceEventLike[],
   sessionId: string,
-  key: string): LastAnnounce | null {
+  key: string,
+): LastAnnounce | null {
   if (typeof key !== "string" || key.length === 0 || key === INVALID) return null;
   const boundary = hardCompactSeqOf(events, sessionId);
   let found: LastAnnounce | null = null;
@@ -190,7 +191,8 @@ export function announceEvent(input: AnnouncementInput): AnnounceCustomEvent {
 export function markAnnounced(
   events: readonly AnnounceEventLike[],
   sessionId: string,
-  announcement: AnnouncementInput): AnnounceEventLike[] {
+  announcement: AnnouncementInput,
+): AnnounceEventLike[] {
   const list = Array.isArray(events) ? events : [];
   const key = typeof announcement?.key === "string" ? announcement.key : "";
   if (key.length === 0 || key === INVALID) return [];

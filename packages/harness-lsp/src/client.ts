@@ -63,7 +63,8 @@ export class LspClient {
     private readonly proc: ChildProcessWithoutNullStreams,
     readonly serverId: string,
     readonly root: string,
-    readonly defaultTimeoutMs: number) {
+    readonly defaultTimeoutMs: number,
+  ) {
     proc.stdout.on("data", (chunk: Buffer) => this.onStdout(chunk));
     proc.stderr.on("data", (chunk: Buffer) => {
       this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-MAX_STDERR_TAIL);

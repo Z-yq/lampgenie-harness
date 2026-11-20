@@ -116,7 +116,8 @@ interface ChangeRequestRuntime {
   createProposal(input: unknown, opts?: { at?: number }): { request?: ChangeRequestLike; codes: string[] };
   findDuplicate(
     existing: ChangeRequestLike[],
-    candidate: ChangeRequestLike): { match?: ChangeRequestLike; reason?: "dedupeKey" | "similarity"; codes: string[] };
+    candidate: ChangeRequestLike,
+  ): { match?: ChangeRequestLike; reason?: "dedupeKey" | "similarity"; codes: string[] };
   mergeProposal(
     existing: ChangeRequestLike,
     candidate: ChangeRequestLike,
@@ -142,23 +143,10 @@ interface ChangeRequestRuntime {
   renderProposalMarkdown(request: ChangeRequestLike): string;
 }
 
-let changeRequestRuntime: ChangeRequestRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_change_request from "@lampgenie/runtime/agent/change-request";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadChangeRequestRuntime(): Promise<ChangeRequestRuntime> {
-  if (changeRequestRuntime) return changeRequestRuntime;
-  const spec = "@lampgenie/runtime/agent/change-request";
-  try {
-    changeRequestRuntime = (await import(spec)) as ChangeRequestRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/change-request.ts", import.meta.url).href;
-    changeRequestRuntime = (await import(srcUrl)) as ChangeRequestRuntime;
-  }
-  return changeRequestRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadChangeRequestRuntime();
+const rt: ChangeRequestRuntime = rt_change_request;
 
 /** 稳定码字面量(runtime 不可用时仍能用;取值与 runtime 常量一致)。 */
 const CODE_INVALID = "CHANGE_REQ_INVALID";
@@ -428,7 +416,8 @@ function commitLine(
   root: string,
   line: ChangeRequestLine,
   codes: string[],
-  id: string): ChangeRequestResult {
+  id: string,
+): ChangeRequestResult {
   const request = line.request;
   if (request === undefined) return { ok: false, code: CODE_INVALID };
   const code = codes[0];

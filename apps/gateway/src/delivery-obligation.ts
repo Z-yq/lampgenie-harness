@@ -234,7 +234,8 @@ export function createDeliveryObligationStore(opts: DeliveryObligationStoreOptio
 export function attemptDelivery(
   store: DeliveryObligationStore,
   taskId: string,
-  send: (ob: DeliveryObligation) => boolean): DeliveryObligation | undefined {
+  send: (ob: DeliveryObligation) => boolean,
+): DeliveryObligation | undefined {
   const ob = store.beginAttempt(taskId);
   if (!ob) return undefined;
   let ok = false;

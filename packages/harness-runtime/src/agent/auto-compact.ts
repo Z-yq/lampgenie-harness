@@ -126,7 +126,8 @@ function summaryMessagesFor(
   prefixSystem: string | undefined,
   head: Message[],
   summarySystem: string,
-  previousSummary?: string): Message[] {
+  previousSummary?: string,
+): Message[] {
   const headLines = head.map((m) => ({
     role: "user" as const,
     content: `[${m.role}] ${String(m.content ?? "").slice(0, SUMMARY_MESSAGE_CHARS)}`,
@@ -303,7 +304,8 @@ function detectAbandonedCompaction(journal: Journal, sessionId: string, trigger:
 export async function autoCompact(
   journal: Journal,
   sessionId: string,
-  opts: CompactOptions): Promise<{ compacted: boolean; devlogPath?: string; summary?: string; reason?: string }> {
+  opts: CompactOptions,
+): Promise<{ compacted: boolean; devlogPath?: string; summary?: string; reason?: string }> {
  //  abandoned 检测放在最入口:即使本次因阈值/守卫被跳过,也能收尾上一次没走完的事务
   // (进程崩溃/被杀/异常逃逸留下的悬空 compact.start)。本进程有锁在跑时不检测(在途不是悬空);
   // 本次 compact.start 在本检测之后才写,不会把自己判成 abandoned。
@@ -471,7 +473,8 @@ export async function autoCompact(
       + (facts.text ? `\n\n关键事实台账(必须原样保留其中的路径/错误码/测试名/数字,不要改写):\n${facts.text}` : "");
     const summaryRes = await opts.compactLlm.chat(
       summaryMessagesFor(prefixSystem, head, summarySystem, previousSummary?.text),
-      prefixTools);
+      prefixTools,
+    );
     const summary = String(summaryRes.content ?? "");
 
     // 摘要空串=模型没产出(空 head 已在上游拦掉;这里是端点抽风/拒答)。**不写 compact.done**:

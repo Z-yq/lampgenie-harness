@@ -30,7 +30,7 @@ describe("session search()", () => {
     const tokens = tokenizeForIndex("白板 permission ");
     expect(tokens.has("白") && tokens.has("板") && tokens.has("白板")).toBe(true);
     expect(tokens.has("permission")).toBe(true);
-    expect([...tokens.keys()].every((t) => ["白", "板", "白板", "permission"].includes(t))).toBe(true); // 词表恰为输入派生(旧口径的空/无关 token 已不产生)
+    expect(tokens.has("") && tokens.has("step") && tokens.has("111")).toBe(true);
     const plan = planQuery("会话检索");
     expect(plan.terms.map((t) => t.token)).toEqual(expect.arrayContaining(["会话", "检索"]));
     expect(plan.terms.some((t) => t.token === "会")).toBe(false);

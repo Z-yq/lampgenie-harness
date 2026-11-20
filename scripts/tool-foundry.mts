@@ -73,7 +73,8 @@ interface FoundryStoreModule {
   foundryPath(root: string): string;
   observe(
     root: string,
-    input: unknown): { ok: boolean; codes: string[]; observation?: ObservationLike; reason?: string };
+    input: unknown,
+  ): { ok: boolean; codes: string[]; observation?: ObservationLike; reason?: string };
   mine(
     root: string,
     opts?: { minOccurrences?: number; minSessions?: number },

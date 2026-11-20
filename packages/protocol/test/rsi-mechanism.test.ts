@@ -45,11 +45,13 @@ describe("rsi.mechanism.run / rsi.item.*", () => {
     expect(RsiMechanismRun.safeParse({ v, type: "rsi.mechanism.run", id: "pathology" }).success).toBe(true);
     expect(RsiMechanismRun.safeParse({ v, type: "rsi.mechanism.run" }).success).toBe(false);
     expect(
-      RsiMechanismRunResult.safeParse({ v, type: "rsi.mechanism.run.result", ok: false, id: "pathology", reason: "MODEL_UNAVAILABLE" }).success).toBe(true);
+      RsiMechanismRunResult.safeParse({ v, type: "rsi.mechanism.run.result", ok: false, id: "pathology", reason: "MODEL_UNAVAILABLE" }).success,
+    ).toBe(true);
   });
   it("item.update / item.delete 字段约束", () => {
     expect(
-      RsiItemUpdate.safeParse({ v, type: "rsi.item.update", mechanismId: "cohort", itemId: "r1:i0", summary: "改过的摘要", status: "warn" }).success).toBe(true);
+      RsiItemUpdate.safeParse({ v, type: "rsi.item.update", mechanismId: "cohort", itemId: "r1:i0", summary: "改过的摘要", status: "warn" }).success,
+    ).toBe(true);
     expect(RsiItemUpdate.safeParse({ v, type: "rsi.item.update", mechanismId: "cohort", itemId: "r1:i0", status: "weird" }).success).toBe(false);
     expect(RsiItemDelete.safeParse({ v, type: "rsi.item.delete", mechanismId: "cohort", itemId: "r1:i0" }).success).toBe(true);
     expect(RsiItemDelete.safeParse({ v, type: "rsi.item.delete", mechanismId: "cohort" }).success).toBe(false);

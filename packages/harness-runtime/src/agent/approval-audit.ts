@@ -231,7 +231,8 @@ export function auditApprovals(
               APPROVAL_AUDIT_CODES.DUPLICATE_DECIDED,
               `重复 decided(${effect}),首条 seq=${first ? first.seq : "?"}`,
               requestId,
-              seq),
+              seq,
+            ),
           );
           continue;
         }
@@ -331,7 +332,8 @@ export interface NeverDecision {
 export function decideNever(
   tool: string,
   summary: string,
-  rules: readonly ApprovalRuleLike[] | null | undefined): NeverDecision | null {
+  rules: readonly ApprovalRuleLike[] | null | undefined,
+): NeverDecision | null {
   try {
     if (!Array.isArray(rules)) return null;
     const toolName = typeof tool === "string" ? tool.trim() : "";

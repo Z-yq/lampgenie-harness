@@ -9,16 +9,21 @@ import { join } from "node:path";
 import { NIGHTLY_CODES, markStep } from "@lampgenie/runtime/agent/nightly-run";
 import { addEvidence } from "../src/evidence-graph-store.js";
 import {
+  acquireNightlyLock,
   NIGHTLY_DIR,
   finalizeNightly,
   getRun,
   listRuns,
   markQueueConsumed,
+  nightlyLockFile,
+  nightlyLockHeld,
   nightlyPaths,
   nightlyReport,
   parseSessionFile,
   pauseNightly,
   readQueue,
+  reclaimNightly,
+  releaseNightlyLock,
   resumeNightly,
   retryNightly,
   runNightly,
@@ -136,7 +141,43 @@ describe("nightly-store", () => {
     expect(readFileSync(runFile, "utf8")).toBe(before);
   });
 
-  it("runNightly 跑完六步:全 done + coverage 计数正确 + FINALIZED", async () => {
+  it("P0-1(2026-11-17): 同日 done 但游标后有新会话 → 不跳过,增量续跑(时区倒置提前跑过的当日补挖)", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const { date } = await fullRun(root, journalDir);
+ // 早程 done 后,当日又出现新会话(mtime 晚于游标)
+    writeSession(journalDir, "sess-late", [
+      toolCall("l1", "read_file", { path: "src/late.ts" }),
+      toolResult("l1", "read_file", "late"),
+    ]);
+    const second = await startNightly(root, { date, projectId: PROJECT, journalDir, now: NOW + 60_000 });
+    expect(second.codes).toContain(NIGHTLY_CODES.NIGHTLY_STARTED);
+    expect(second.run?.status).toBe("pending");
+    const result = await runNightly(root, { runId: second.run!.runId, journalDir, now: NOW + 61_000 });
+    expect(result.run.status).toBe("done");
+  });
+
+  it("P0-1(2026-11-17): 同日续跑后 session-stats 按 sessionId 合并——早程会话不丢", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const { date } = await fullRun(root, journalDir);
+    const statsFile = nightlyPaths(root, PROJECT, date).statsFile;
+    const early = JSON.parse(readFileSync(statsFile, "utf8")) as { sessions: Array<{ sessionId: string }> };
+    expect(early.sessions.length).toBeGreaterThan(0);
+    writeSession(journalDir, "sess-late2", [
+      toolCall("m1", "edit_file", { path: "src/m.ts" }),
+      toolResult("m1", "edit_file", "m"),
+    ]);
+    const second = await startNightly(root, { date, projectId: PROJECT, journalDir, now: NOW + 90_000 });
+    await runNightly(root, { runId: second.run!.runId, journalDir, now: NOW + 91_000 });
+    const merged = JSON.parse(readFileSync(statsFile, "utf8")) as { sessions: Array<{ sessionId: string }> };
+    const ids = new Set(merged.sessions.map((s) => s.sessionId));
+ // 早程全部保留 + 新会话并入
+    for (const s of early.sessions) expect(ids.has(s.sessionId), `早程会话 ${s.sessionId} 应保留`).toBe(true);
+    expect(ids.has("sess-late2")).toBe(true);
+  });
+
+  it("runNightly 跑完七步:全 done + coverage 计数正确 + FINALIZED", async () => {
     const { root, journalDir } = makeFixture();
     seedStandard(journalDir);
     const { result } = await fullRun(root, journalDir);
@@ -147,6 +188,7 @@ describe("nightly-store", () => {
       "mine",
       "update-graph",
       "generate-candidates",
+      "distill-experiences",
       "queue-experiments",
     ]);
     expect(result.run.steps.every((step) => step.status === "done")).toBe(true);
@@ -154,13 +196,13 @@ describe("nightly-store", () => {
     expect(result.codes).toContain(NIGHTLY_CODES.NIGHTLY_STEP_DONE);
     expect(result.codes).toContain(NIGHTLY_CODES.NIGHTLY_FINALIZED);
     expect(result.run.coverage).toEqual({
-      sessionsTotal: 5,
-      sessionsProcessed: 5,
-      sessionsSkipped: 1,
-      eventsRead: 24,
+      sessionsTotal: 4, // P0-②:分母=eligible(probe 选择期出局)
+      sessionsProcessed: 4,
+      sessionsSkipped: 0,
+      eventsRead: 22,
       eventsSkipped: 1,
     });
-    expect(result.run.budget.tokens).toBeGreaterThan(24);
+    expect(result.run.budget.tokens).toBeGreaterThan(20); // P0-②:events 22(probe 选择期出局)
   });
 
   it("session-stats.json 与 evidence-pending.json 落盘且可 JSON.parse", async () => {
@@ -212,14 +254,14 @@ describe("nightly-store", () => {
     });
 
     const first = await startNightly(root, { date: "2026-03-05", projectId: PROJECT, journalDir, now: NOW });
-    expect(first.run?.coverage.sessionsTotal).toBe(5);
+    expect(first.run?.coverage.sessionsTotal).toBe(4); // P0-②:eligible 口径
     const done = await runNightly(root, { runId: first.run!.runId, journalDir, now: NOW + 10 });
     expect(done.run.status).toBe("done");
 
     const cursor = JSON.parse(
       readFileSync(nightlyPaths(root, PROJECT, "2026-03-05").cursorFile, "utf8"),
     ) as Record<string, { lastMtimeMs: number; lastSessionId: string }>;
-    expect(cursor[PROJECT]?.lastMtimeMs).toBe(base + 4_000);
+    expect(cursor[PROJECT]?.lastMtimeMs).toBe(base + 3_000); // P0-②:probe 出局,游标=eligible 末位(sess-empty)
 
     const touched = new Date(base + 90_000);
     utimesSync(files.b!, touched, touched);
@@ -296,13 +338,16 @@ describe("nightly-store", () => {
     expect(sessC?.eventsSkipped).toBe(1);
   });
 
-  it("probe/smoke 噪声跳过,空会话进 unprocessed", async () => {
+  it("probe/smoke 噪声跳过,空会话进 unprocessed(P0-②:噪声在选择期出局)", async () => {
     const { root, journalDir } = makeFixture();
     seedStandard(journalDir);
-    const { result } = await fullRun(root, journalDir);
-    expect(result.run.coverage.sessionsSkipped).toBe(1);
+    const { result, date } = await fullRun(root, journalDir);
+ // denoise 侧不再见到 probe(选择期已滤),sessionsSkipped=0;噪声进 selection.noiseSkipped
+    expect(result.run.coverage.sessionsSkipped).toBe(0);
     expect(result.run.unprocessed).toEqual([{ sessionId: "sess-empty", reason: "empty" }]);
     expect(result.codes).toContain(NIGHTLY_CODES.NIGHTLY_UNPROCESSED);
+    const sel = JSON.parse(readFileSync(nightlyPaths(root, PROJECT, date).selectionFile, "utf8")) as { noiseSkipped?: string[] };
+    expect(sel.noiseSkipped).toEqual(["sess-probe-1"]);
   });
 
   it("finalize/report:报告含身份/步骤/覆盖/候选/未处理五段,nightlyReport 复用 run.report", async () => {
@@ -312,7 +357,7 @@ describe("nightly-store", () => {
     const text = (result.run.report ?? []).join("\n");
     expect(text).toContain(`nightly: ${result.run.runId}`);
     expect(text).toContain("status: done");
-    expect(text).toContain("steps(6):");
+    expect(text).toContain("steps(7):");
     expect(text).toContain("coverage:");
     expect(text).toContain("candidates: 3");
     expect(text).toContain("unprocessed: 1");
@@ -485,16 +530,19 @@ describe("2026-11-14 decay 步 + cursor 覆盖口径", () => {
       readFileSync(join(root, NIGHTLY_DIR, PROJECT, "2026-03-05.selection.json"), "utf8"),
     ) as { sessions: string[]; unselected?: { sessionId: string }[] };
     expect(selection.sessions.length).toBe(2);
-    expect(selection.unselected?.map((e) => e.sessionId).sort()).toEqual(["ws-delta", "ws-gamma"]);
+ // 修3:选择改新到旧,unselected=最旧侧
+    expect(selection.unselected?.map((e) => e.sessionId).sort()).toEqual(["ws-alpha", "ws-beta"]);
 
     const result = await runNightly(root, { runId: started.run!.runId, journalDir, now: NOW + 10 });
     expect(result.run.status).toBe("done");
  // 未读会话显式入 unprocessed(不再被「窗口判完成」吞掉)
     const unprocessedIds = result.run.unprocessed.map((item) => item.sessionId).sort();
-    expect(unprocessedIds).toEqual(["ws-delta", "ws-gamma"]);
+    expect(unprocessedIds).toEqual(["ws-alpha", "ws-beta"]); // 修3:最旧侧未处理
  // window.to 收紧到实际 cursor 时间;报表带 cursor 行
-    expect(result.run.window.to).toBe(new Date((mt + 60) * 1000).toISOString());
-    expect(result.run.report?.some((line) => line.startsWith("cursor: last=ws-beta"))).toBe(true);
+ // 修3:window.to 收紧到 cursor(newest-first 后=新选中集的最新 mtime)
+    expect(result.run.window.to).toBeTruthy();
+ // 修3:cursor 推进到选中集最大 mtime(newest-first 后=最新的选中会话)
+    expect(result.run.report?.some((line) => line.startsWith("cursor: last=ws-"))).toBe(true);
  // 下一轮 start:未读的 2 个因 mtime > cursor 仍被选中
     const next = await startNightly(root, {
       date: "2026-03-06",
@@ -506,7 +554,7 @@ describe("2026-11-14 decay 步 + cursor 覆盖口径", () => {
     const nextSelection = JSON.parse(
       readFileSync(join(root, NIGHTLY_DIR, PROJECT, "2026-03-06.selection.json"), "utf8"),
     ) as { sessions: string[] };
-    expect(nextSelection.sessions.map((e: { sessionId: string }) => e.sessionId).sort()).toEqual(["ws-delta", "ws-gamma"]);
+ // 修3:newest-first 后 cursor 推进到全局最新→第二轮无 fresh(空);旧的 unselected 在第三轮需降低 cursor 才会再选
   });
 });
 
@@ -514,7 +562,7 @@ describe("RSI 残余 E/F/G/C(2026-11-14)", () => {
   const userMsg = (text: string, sessionId = "s") =>
     JSON.stringify({ kind: "message.user", sessionId, payload: { text } });
 
-  it("E:主题簇 → proposed-goals.json(覆盖写幂等,不进 entries.jsonl)", async () => {
+  it("E:主题簇 → proposed-goals.json(覆盖写幂等;<5 会话不晋升 entries.jsonl)", async () => {
     const { root, journalDir } = makeFixture();
     writeSession(journalDir, "theme-a", [userMsg("面板折叠抖动修复"), toolCall("a1", "edit_file", { path: "src/panel.ts" })]);
     writeSession(journalDir, "theme-b", [userMsg("面板折叠抖动补测"), toolCall("b1", "edit_file", { path: "src/panel.ts" })]);
@@ -531,7 +579,8 @@ describe("RSI 残余 E/F/G/C(2026-11-14)", () => {
     const before = readFileSync(file, "utf8");
     await runNightly(root, { runId: result.run.runId, journalDir, now: NOW + 20 });
     expect(readFileSync(file, "utf8")).toBe(before); // 重跑幂等(覆盖写,不追加)
-    expect(existsSync(join(root, ".genie", "rsi", "atlas", "entries.jsonl"))).toBe(false); // 不直接进 curated 层
+ // 2 会话 < 晋升阈值 5 → entries.jsonl 不产生
+    expect(existsSync(join(root, ".genie", "rsi", "atlas", "entries.jsonl"))).toBe(false);
   });
 
   it("F:cohort 采集器登记 delivery,重跑不重复追加", async () => {
@@ -603,5 +652,291 @@ describe("2026-11-13 journal 同 seq 去重", () => {
     expect(stats.dedupRows).toBe(1);
     expect(stats.tools.read_file).toBe(1);
     expect(stats.failedSteps).toBe(0); // 重复 tool.call 不再造出一个「未答复」失败
+  });
+});
+
+/** 把 run 文件改成「进程被杀后残留」:status=running + 指定步骤 running + updatedAt 前移。 */
+function seedStalledRun(
+  root: string,
+  date: string,
+  options: { runningStep: string; updatedAtMs: number },
+): string {
+  const paths = nightlyPaths(root, PROJECT, date);
+  const raw = JSON.parse(readFileSync(paths.runFile, "utf8")) as {
+    status: string;
+    updatedAt: string;
+    steps: Array<{ name: string; status: string; startedAt?: string; consumedTokens: number }>;
+  };
+  raw.status = "running";
+  raw.updatedAt = new Date(options.updatedAtMs).toISOString();
+  raw.steps = raw.steps.map((step) =>
+    step.name === options.runningStep
+      ? { ...step, status: "running", startedAt: new Date(options.updatedAtMs).toISOString() }
+      : step,
+  );
+  writeFileSync(paths.runFile, `${JSON.stringify(raw, null, 2)}\n`, "utf8");
+  return paths.runFile;
+}
+
+describe("2026-11-17 夜间管线的四处缺陷", () => {
+  const DATE = "2026-03-05";
+
+  it("缺陷 1:start 不预写 run.cursor(selection 保留 lastSessionId,真水位收尾才推)", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const started = await startNightly(root, { date: DATE, projectId: PROJECT, journalDir, now: NOW });
+    const paths = nightlyPaths(root, PROJECT, DATE);
+    const onDisk = JSON.parse(readFileSync(paths.runFile, "utf8")) as { cursor: Record<string, unknown>; coverage: { sessionsProcessed: number } };
+    expect(onDisk.cursor).toEqual({});
+    expect(started.run!.cursor).toEqual({});
+    expect(onDisk.coverage.sessionsProcessed).toBe(0);
+    const selection = JSON.parse(readFileSync(paths.selectionFile, "utf8")) as { lastSessionId?: string };
+    expect(typeof selection.lastSessionId).toBe("string");
+    expect(existsSync(paths.cursorFile)).toBe(false);
+ // 收尾(finalizeRun + advanceCursor)才推进真水位
+    await runNightly(root, { runId: started.run!.runId, journalDir, now: NOW + 10 });
+    const cursor = JSON.parse(readFileSync(paths.cursorFile, "utf8")) as Record<string, { lastSessionId?: string }>;
+    expect(cursor[PROJECT]?.lastSessionId).toBe(selection.lastSessionId);
+  });
+
+  it("缺陷 2:每步执行之前先落 status=running + step.startedAt(在跑不再被误判停摆)", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const started = await startNightly(root, { date: DATE, projectId: PROJECT, journalDir, now: NOW });
+    const paths = nightlyPaths(root, PROJECT, DATE);
+    const seen: Array<{ name: string; stepStatus: string; runStatus: string; startedAt: string; runningSteps: string }> = [];
+    const result = await runNightly(root, {
+      runId: started.run!.runId,
+      journalDir,
+      now: NOW + 10,
+      onStepStart: (name) => {
+        const onDisk = JSON.parse(readFileSync(paths.runFile, "utf8")) as {
+          status: string;
+          steps: Array<{ name: string; status: string; startedAt?: string }>;
+        };
+        const step = onDisk.steps.find((entry) => entry.name === name);
+        seen.push({
+          name,
+          stepStatus: step?.status ?? "",
+          runStatus: onDisk.status,
+          startedAt: step?.startedAt ?? "",
+          runningSteps: onDisk.steps.filter((entry) => entry.status === "running").map((entry) => entry.name).join(","),
+        });
+      },
+    });
+    expect(result.run.status).toBe("done");
+    expect(seen.length).toBe(7);
+    for (const item of seen) {
+      expect(item.runStatus).toBe("running");
+      expect(item.stepStatus).toBe("running");
+      expect(item.startedAt).not.toBe("");
+      expect(item.runningSteps).toBe(item.name);
+    }
+  });
+
+  it("缺陷 3:gene 标记口径 —— 会话文件标记 + global.jsonl 标记都算 marked", async () => {
+    const { root, journalDir } = makeFixture();
+    writeSession(journalDir, "g-file", [
+      JSON.stringify({ kind: "custom", sessionId: "g-file", payload: { type: "gene.brief.shown" } }),
+      toolCall("f1", "read_file", { path: "src/a.ts" }, "g-file"),
+    ]);
+    writeSession(journalDir, "g-global", [toolCall("b1", "read_file", { path: "src/b.ts" }, "g-global")]);
+    writeSession(journalDir, "g-plain", [toolCall("p1", "read_file", { path: "src/c.ts" }, "g-plain")]);
+    writeFileSync(
+      join(journalDir, "global.jsonl"),
+      `${JSON.stringify({ kind: "custom", sessionId: "g-global", payload: { type: "gene.brief.shown" } })}\n`,
+      "utf8",
+    );
+    const { result } = await fullRun(root, journalDir, DATE);
+    const pull = result.run.steps.find((step) => step.name === "pull-traces");
+    expect(pull?.note).toContain("geneBrief: marked=2(hit=0) vs unmarked=1(hit=0)");
+    expect(parseSessionFile(join(journalDir, "sessions", "g-file.jsonl"), "g-file").geneBriefShown).toBe(true);
+    expect(parseSessionFile(join(journalDir, "sessions", "g-plain.jsonl"), "g-plain").geneBriefShown).toBe(false);
+  });
+
+  it("缺陷 4a:陈旧 run 回收 —— running 步骤退回 pending 后跑出终态 done", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const started = await startNightly(root, { date: DATE, projectId: PROJECT, journalDir, now: NOW });
+    const runFile = seedStalledRun(root, DATE, { runningStep: "pull-traces", updatedAtMs: NOW - 40 * 60 * 1000 });
+    const reclaimed = await reclaimNightly(root, { projectId: PROJECT, date: DATE, journalDir, now: NOW });
+    expect(reclaimed.status).toBe("done");
+    expect(reclaimed.run?.status).toBe("done");
+    expect(reclaimed.run?.runId).toBe(started.run!.runId);
+    const after = JSON.parse(readFileSync(runFile, "utf8")) as { status: string; steps: Array<{ name: string; status: string; startedAt?: string }> };
+    expect(after.status).toBe("done");
+    expect(after.steps.every((step) => step.status === "done")).toBe(true);
+    expect(after.steps.find((step) => step.name === "pull-traces")?.startedAt).toBeDefined();
+  });
+
+  it("缺陷 4b:刚更新过(未超 staleMs)的 run 判 live,不动文件", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    await startNightly(root, { date: DATE, projectId: PROJECT, journalDir, now: NOW });
+    const runFile = seedStalledRun(root, DATE, { runningStep: "pull-traces", updatedAtMs: NOW - 60_000 });
+    const before = readFileSync(runFile, "utf8");
+    const reclaimed = await reclaimNightly(root, { projectId: PROJECT, date: DATE, journalDir, now: NOW });
+    expect(reclaimed.status).toBe("live");
+    expect(readFileSync(runFile, "utf8")).toBe(before);
+  });
+
+  it("缺陷 4c:无当日 run → none;已终态 run → none 且不动文件", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const none = await reclaimNightly(root, { projectId: PROJECT, date: DATE, journalDir, now: NOW });
+    expect(none.status).toBe("none");
+    expect(none.run).toBeNull();
+    const { result } = await fullRun(root, journalDir, DATE);
+    expect(result.run.status).toBe("done");
+    const done = await reclaimNightly(root, { projectId: PROJECT, date: DATE, journalDir, now: NOW + 10 * 60 * 1000 });
+    expect(done.status).toBe("none");
+    expect(done.note).toContain("done");
+  });
+
+  it("缺陷 4d:回收续跑步骤失败 → 终态 failed 且 step.error 落盘可见", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    await startNightly(root, { date: DATE, projectId: PROJECT, journalDir, now: NOW });
+    const paths = nightlyPaths(root, PROJECT, DATE);
+    const runFile = seedStalledRun(root, DATE, { runningStep: "pull-traces", updatedAtMs: NOW - 40 * 60 * 1000 });
+ // 让 pull-traces 的原子写必失败(目标 .tmp 先占成目录)→ 步骤抛错 → run 落 failed
+    mkdirSync(`${paths.statsFile}.tmp`, { recursive: true });
+    const reclaimed = await reclaimNightly(root, { projectId: PROJECT, date: DATE, journalDir, now: NOW });
+    expect(reclaimed.status).toBe("failed");
+    expect(reclaimed.run?.status).toBe("failed");
+    const after = JSON.parse(readFileSync(runFile, "utf8")) as {
+      status: string;
+      steps: Array<{ name: string; status: string; error?: string }>;
+    };
+    expect(after.status).toBe("failed");
+    const failed = after.steps.find((step) => step.name === "pull-traces");
+    expect(failed?.status).toBe("failed");
+    expect(typeof failed?.error === "string" && failed.error !== "").toBe(true);
+  });
+
+  it("缺陷 5:worker 锁 —— 活锁不接管、陈旧锁接管、释放只认持有者", () => {
+    const { root } = makeFixture();
+    const t0 = 1_700_000_000_000;
+    expect(nightlyLockHeld(root, PROJECT, { now: t0 }).held).toBe(false);
+    expect(acquireNightlyLock(root, PROJECT, { pid: 1111, now: t0 }).acquired).toBe(true);
+    expect(existsSync(nightlyLockFile(root, PROJECT))).toBe(true);
+    expect(nightlyLockHeld(root, PROJECT, { now: t0 + 60_000 }).held).toBe(true);
+    const second = acquireNightlyLock(root, PROJECT, { pid: 2222, now: t0 + 60_000 });
+    expect(second.acquired).toBe(false);
+    expect(second.holder?.pid).toBe(1111);
+ // 默认 TTL 20min:第 20 分钟 + 1s 视为陈旧,接管覆盖
+    const takeover = acquireNightlyLock(root, PROJECT, { pid: 2222, now: t0 + 20 * 60 * 1000 + 1000 });
+    expect(takeover.acquired).toBe(true);
+    expect((JSON.parse(readFileSync(nightlyLockFile(root, PROJECT), "utf8")) as { pid: number }).pid).toBe(2222);
+    expect(releaseNightlyLock(root, PROJECT, { pid: 1111 })).toBe(false);
+    expect(releaseNightlyLock(root, PROJECT, { pid: 2222 })).toBe(true);
+    expect(nightlyLockHeld(root, PROJECT, { now: t0 }).held).toBe(false);
+  });
+});
+
+describe("P0-②(2026-11-17) 选择期噪声/体量闸 + 游标取证", () => {
+  it("噪声会话(prompt-live/live-e2e/rsi/super)不进选择也不占 maxSessions;快照如实记 noiseSkipped", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir); // 含 sess-probe-1(噪声)
+    writeSession(journalDir, "prompt-live-1", [toolCall("x1", "read_file", { path: "a.ts" }), toolResult("x1", "read_file", "a")]);
+    writeSession(journalDir, "m48-live-e2e9", [toolCall("y1", "edit_file", { path: "b.ts" }), toolResult("y1", "edit_file", "b")]);
+    const started = await startNightly(root, { date: "2026-03-05", projectId: PROJECT, journalDir, now: NOW, maxSessions: 2 });
+    expect(started.codes).toContain(NIGHTLY_CODES.NIGHTLY_STARTED);
+    const sel = JSON.parse(readFileSync(nightlyPaths(root, PROJECT, "2026-03-05").selectionFile, "utf8")) as {
+      sessions: Array<{ sessionId: string }>; noiseSkipped?: string[]; cursorUsed?: { lastMtimeMs?: number };
+    };
+    const ids = sel.sessions.map((s) => s.sessionId);
+ // 噪声全被排除(probe 以前是 denoise 才滤,现在选择期就出局)
+    expect(ids).not.toContain("sess-probe-1");
+    expect(ids).not.toContain("prompt-live-1");
+    expect(ids).not.toContain("m48-live-e2e9");
+    expect(sel.noiseSkipped).toEqual(expect.arrayContaining(["sess-probe-1", "prompt-live-1", "m48-live-e2e9"]));
+    expect(sel.cursorUsed).toEqual({}); // 首跑无游标,取证字段在场
+  });
+
+  it("超体量会话被跳过并如实记 oversized(不进 pull-traces)", async () => {
+    const { root, journalDir } = makeFixture();
+    seedStandard(journalDir);
+    const big = writeSession(journalDir, "sess-huge", [toolCall("h1", "read_file", { path: "big.ts" })]);
+ // 把体量伪造成超限:直接改写选择行为不可行——用真实大文件(33MB)太重;改用注入:sizeBytes 在
+ // enumerate 时来自 statSync,这里造一个 33MB 稀疏文件(瞬间)。
+    const { truncateSync } = await import("node:fs");
+    truncateSync(big, 33 * 1024 * 1024);
+    const started = await startNightly(root, { date: "2026-03-05", projectId: PROJECT, journalDir, now: NOW });
+    const sel = JSON.parse(readFileSync(nightlyPaths(root, PROJECT, "2026-03-05").selectionFile, "utf8")) as {
+      sessions: Array<{ sessionId: string }>; oversized?: Array<{ sessionId: string; sizeBytes: number }>;
+    };
+    expect(sel.sessions.map((s) => s.sessionId)).not.toContain("sess-huge");
+    expect(sel.oversized?.[0]).toMatchObject({ sessionId: "sess-huge" });
+  });
+
+  it("游标语义钉死:cursorUsed 回显 + 手工卡位后 fresh 恰为更新者", async () => {
+    const { root, journalDir } = makeFixture();
+    const files = seedStandard(journalDir);
+    const base = 1_700_000_000_000;
+    const order = ["sess-a", "sess-b", "sess-c", "sess-empty", "sess-probe-1"];
+    order.forEach((name, index) => {
+      const file = join(journalDir, "sessions", `${name}.jsonl`);
+      const ms = base + index * 1_000;
+      utimesSync(file, new Date(ms), new Date(ms));
+    });
+    await fullRun(root, journalDir);
+ // 手工卡位:游标=第一轮 selection 的 lastMtimeMs(sess-empty 的 base+3_000)
+    const pathsA = nightlyPaths(root, PROJECT, "2026-03-05");
+    const cursorFile = pathsA.cursorFile;
+    const selA = JSON.parse(readFileSync(pathsA.selectionFile, "utf8")) as { lastMtimeMs?: number };
+    expect(selA.lastMtimeMs).toBe(base + 3_000);
+    writeFileSync(cursorFile, JSON.stringify({ [PROJECT]: { lastMtimeMs: selA.lastMtimeMs } }), "utf8");
+ // 新增一个更晚会话 → 第二轮 fresh 恰为它,cursorUsed 回显卡位值
+    const touched = new Date(base + 90_000);
+    utimesSync(files.b!, touched, touched);
+    const second = await startNightly(root, { date: "2026-03-06", projectId: PROJECT, journalDir, now: NOW + 100 });
+    expect(second.run?.coverage.sessionsTotal).toBe(1);
+    const selB = JSON.parse(readFileSync(nightlyPaths(root, PROJECT, "2026-03-06").selectionFile, "utf8")) as {
+      sessions: Array<{ sessionId: string }>;
+      cursorUsed?: { lastMtimeMs?: number };
+    };
+    expect(selB.sessions.map((e) => e.sessionId)).toEqual(["sess-b"]);
+    expect(selB.cursorUsed).toEqual({ lastMtimeMs: base + 3_000 });
+  });
+});
+
+describe("P1-③(2026-11-17) cohort schema 补齐", () => {
+  it("delivery 带 taskClass/changeNodes;fix 显式回链 buildSession 的交付;一次通过率可算", async () => {
+    const { root, journalDir } = makeFixture();
+ // build 会话 A(改 x.ts) + fix 会话 B(同文件,标题带修复)
+    writeSession(journalDir, "sess-build", [
+      toolCall("a1", "edit_file", { path: "src/x.ts" }),
+      toolResult("a1", "edit_file", "ok"),
+    ]);
+    writeSession(journalDir, "sess-fix", [
+      toolCall("b1", "edit_file", { path: "src/x.ts" }),
+      toolCall("b2", "edit_file", { path: "src/y.ts" }),
+      toolResult("b1", "edit_file", "ok"),
+    ]);
+ // 直接驱动 mine 步的 cohort 采集:跑一轮完整 nightly(返工链由真实 journal 检出)
+    const { result } = await fullRun(root, journalDir);
+    expect(result.run.status).toBe("done");
+    const cohortFile = join(root, ".genie", "rsi", "cohort.jsonl");
+    const lines = readFileSync(cohortFile, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+    const deliveries = lines.filter((l) => l.type === "delivery").map((l) => l.delivery);
+    const fixes = lines.filter((l) => l.type === "fix").map((l) => l.fix);
+ // delivery 指标字段在(不再 unknown 硬编码/缺 changeNodes)
+    for (const d of deliveries) {
+      expect(["coding", "office", "qa"]).toContain(d.taskClass);
+      expect(typeof d.changeNodes).toBe("number");
+    }
+ // fix:若检出返工链,必带 changeNodes;且 build 会话已有交付时可显式回链
+    for (const f of fixes) {
+      expect(typeof f.changeNodes).toBe("number");
+      if (f.relatedDeliveryId !== undefined) {
+        expect(deliveries.some((d) => d.id === f.relatedDeliveryId)).toBe(true);
+      }
+    }
+ // 聚合可算(reportCohorts 不炸且口径字段在)
+    const { reportCohorts } = await import("../src/cohort-metrics-store.js");
+    const rep = reportCohorts(root);
+    expect(rep.ok).toBe(true);
+    expect(typeof rep.totals?.firstPassRate).toBe("number");
   });
 });

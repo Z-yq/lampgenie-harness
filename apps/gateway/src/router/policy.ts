@@ -183,7 +183,8 @@ export function revalidate(mandate: Mandate, currentPolicyConfig: PolicyConfig):
 export function mandateAdmission(
   m: MandateLike | null | undefined,
   currentPolicyVersion: string,
-  now: number): { ok: boolean; code: MandateCode } {
+  now: number,
+): { ok: boolean; code: MandateCode } {
   return canAdmitWithMandate(m, currentPolicyVersion, now);
 }
 
@@ -203,7 +204,8 @@ export function gate(
   config: PolicyConfig,
   /** 活 Ticket 订阅表:threadKey → 是否有运行中(open)Ticket。 */
   liveSubscriptions: ReadonlyMap<string, boolean>,
-  opts?: GateOptions): GateResult {
+  opts?: GateOptions,
+): GateResult {
   const subs = opts?.subscriptions;
   const now = typeof opts?.now === "number" && Number.isFinite(opts.now) ? opts.now : 0;
  // 订阅侧结论先算:它是审计事实——即使来源未监听,也要如实记下「这里有 context/route 订阅」。

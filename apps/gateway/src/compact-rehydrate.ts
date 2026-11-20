@@ -1,5 +1,5 @@
 /**
- * 压缩后文件正文补回(矩阵 #48 missing:
+ * 压缩后文件正文补回(,矩阵 #48 missing:
  * compact.done 之后上下文只剩 summary+tail,压缩前刚读过的文件正文消失,读文件台账里只剩路径——
  * 模型只能重读(白烧往返)或凭记忆猜(幻觉)。本模块在真压缩成功后按 readAt 降序重读磁盘
  * 最近的 N 个已读文件,渲染成一个 message.system 块补回正文。
@@ -223,7 +223,8 @@ export interface HydratedFile {
 export function renderRehydrateMessage(
   files: readonly HydratedFile[],
   skipped: readonly RehydrateSkippedInfo[],
-  maxChars: number = REHYDRATE_DEFAULTS.maxChars): { message: string; partialView: boolean } {
+  maxChars: number = REHYDRATE_DEFAULTS.maxChars,
+): { message: string; partialView: boolean } {
   const lines: string[] = [`## 压缩后文件正文补回(重读磁盘;${files.length} 个)`];
   for (const f of files) {
     lines.push(`### ${f.path}(mtime ${new Date(f.mtime || 0).toISOString()},${f.lines} 行)`);

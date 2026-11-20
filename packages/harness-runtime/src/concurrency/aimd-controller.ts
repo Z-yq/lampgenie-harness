@@ -73,7 +73,8 @@ export class AimdRegulator {
    */
   constructor(
     readonly key: string,
-    readonly ceiling: number) {
+    readonly ceiling: number,
+  ) {
     this.cap = ceiling;
   }
 
@@ -157,7 +158,8 @@ export class AimdRegulator {
     now: number,
     epoch: number,
     reason: AimdThrottleCause,
-    retryAfterMs?: number): ConcurrencyShift[] {
+    retryAfterMs?: number,
+  ): ConcurrencyShift[] {
     const changes = this.relaxIfIdle(now);
     this.inFlight = Math.max(0, this.inFlight - 1);
     this.successStreak = 0;
@@ -244,7 +246,8 @@ export class AimdRegulator {
   private shiftFor(
     previous: number,
     reason: ConcurrencyShiftReason,
-    cooldownMs?: number): ConcurrencyShift {
+    cooldownMs?: number,
+  ): ConcurrencyShift {
     return {
       key: this.key,
       previous,

@@ -828,7 +828,8 @@ export async function renderSlides(
     const r2 = await runBin(
       gs,
       ["-sDEVICE=png16m", `-r${dpi}`, "-dNOPAUSE", "-dBATCH", `-sOutputFile=${join(outDir, "slide-%03d.png")}`, pdf],
-      timeoutMs);
+      timeoutMs,
+    );
     if (r2.missing) return fail(RENDER_ENGINE_MISSING, `找不到 ${gs}(ghostscript 未安装?)`);
     if (r2.timedOut) return fail(RENDER_FAILED, `gs 超时(${timeoutMs}ms)`, "soffice+gs");
     if (r2.code !== 0) return fail(RENDER_FAILED, `gs 退出码 ${r2.code}: ${r2.stderr.slice(-400)}`, "soffice+gs");

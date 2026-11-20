@@ -447,8 +447,124 @@ function openMenuAt(items, x, y) {
   if (top + h > vh - 8) top = cy - h;
   menu.style.left = Math.max(8, left) + "px";
   menu.style.top = Math.max(8, top) + "px";
+  popoverSyncEl("taskMenu", true, "#taskMenu"); // popover 治理:外点/Esc/同类收旧(doc click 外点关已有,Esc 由注册表补)
 }
 function copyText(s) { if (navigator.clipboard) navigator.clipboard.writeText(s); toast("已复制"); }
+
+// ---- P1-1:侧栏行悬停富浮层(单例 #bhHoverCard + 全局委托 + 200ms 定时器) ----
+// 现状(t=106 标杆):原生 title 延迟大、无样式、无最近活动。本层只为「项目行/任务行」出卡片:
+// 项目名 + 路径(等宽)+「最近活动 刚刚/X 分钟前」(actOf 同源,与侧栏 t-time 一致)。
+// 三条纪律:
+// ①卡片挂 body 单例、永不随行重渲消失(活动帧随时重渲侧栏);行已从 DOM 摘掉则不显示;
+// ②事件全局委托(mouseover/mouseout 冒泡),绝不给每行绑监听——行是每次重渲新建的;
+// ③滚动/按键/切行即隐藏(浮层不停在原地骗人);过渡走 CSS(.bh-hc → .bh-hc.on 的
+// opacity+translateY 120ms 淡入,类名契约见 P1-1)。
+var bhHcTid = 0, bhHcHideTid = 0, bhHcRow = null;
+const BH_HC_DELAY = 200; // 悬停判定延时(ms):太快会闪,太慢不像交互
+function bhHcEl() {
+  const old = document.getElementById("bhHoverCard");
+  if (old) return old;
+  const el = document.createElement("div");
+  el.id = "bhHoverCard";
+  el.className = "bh-hc";
+  el.style.display = "none";
+  el.style.pointerEvents = "none"; // 纯展示:不抢鼠标,避免浮层自身触发 mouseout 抖动
+ // 定位/层级属于行为而非观感(JS 直接写 left/top 布局 px),故内联兜底:即便 CSS 未就绪,浮层也贴行不落到文末。
+ // 观感(背景/圆角/阴影/字体/过渡)全部留给 CSS 类 .bh-hc / .bh-hc.on,这里不设颜色与透明度,免得内联压过样式表。
+  el.style.position = "fixed";
+  el.style.zIndex = "60";
+  document.body.appendChild(el);
+  return el;
+}
+function bhHcRowOf(t) {
+  if (!t || !t.closest) return null;
+  const r = t.closest(".proj-row,.t-row");
+  return r && r.isConnected ? r : null;
+}
+/** 项目最近活动 = 该项目下所有任务的 actOf 最大值(与侧栏行 t-time 同源,不另造数据)。 */
+function bhHcProjAct(pid) {
+  let m = 0;
+  for (const t of tasks.values()) if (t && t.pid === pid) m = Math.max(m, actOf(t));
+  return m;
+}
+function bhHcInfo(row) {
+  if (row.classList.contains("proj-row")) {
+    const p = projectById(row.dataset.pid);
+    if (!p) return null;
+    return { name: p.label || p.path || "(未命名项目)", path: p.path || "", act: bhHcProjAct(p.id) };
+  }
+  const sid = row.dataset.sid;
+  if (!sid) return null;
+  const t = [...tasks.values()].find((x) => x.sessionId === sid) || null;
+  const p = t && t.pid ? projectById(t.pid) : null;
+  return {
+    name: p ? (p.label || p.path || "(未命名项目)") : "临时任务",
+    path: p ? (p.path || "") : "未归属项目(临时会话)",
+    act: t ? actOf(t) : 0,
+  };
+}
+function bhHcHide() {
+  if (bhHcTid) { clearTimeout(bhHcTid); bhHcTid = 0; }
+  bhHcRow = null;
+  const el = document.getElementById("bhHoverCard");
+  if (!el || el.style.display === "none") return;
+  el.classList.remove("on"); // CSS 过渡:opacity 1→0 + translateY 0→-4px,120ms
+  if (bhHcHideTid) clearTimeout(bhHcHideTid);
+  bhHcHideTid = setTimeout(() => { bhHcHideTid = 0; el.style.display = "none"; }, 150);
+}
+function bhHcShow(row) {
+  const info = bhHcInfo(row);
+  if (!info) return;
+  const el = bhHcEl();
+  el.innerHTML =
+    '<div class="bh-hc-head"><span class="bh-hc-ic">&#9729;</span><span class="bh-hc-name">' + esc(info.name) + "</span></div>" +
+    '<div class="bh-hc-path">' + esc(info.path || "—") + "</div>" + // 类名契约:.bh-hc-path{font-family:var(--mono);white-space:nowrap}(路径全称可见,不截断)
+    '<div class="bh-hc-act">最近活动 ' + esc(info.act ? ago(info.act) : "—") + "</div>";
+  el.style.display = "block";
+  el.classList.remove("on");
+ // 定位:行右侧优先(不压住行);右侧不够→行下方;下方不够→行上方;最后夹进视口。
+ // body 有 CSS zoom 时 position:fixed 的 left/top 是布局 px,需先除 zoom 换进同一坐标系(同 openMenuAt)。
+  const z = menuZoom();
+  const r = row.getBoundingClientRect();
+  const rx = r.left / z, ry = r.top / z, rw = r.width / z, rh = r.height / z;
+  const vw = window.innerWidth / z, vh = window.innerHeight / z;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let left = rx + rw + 8, top = ry;
+  if (left + w > vw - 8) { left = rx; top = ry + rh + 6; }
+  if (top + h > vh - 8) top = ry - h - 6;
+  left = Math.min(Math.max(8, left), Math.max(8, vw - w - 8));
+  top = Math.min(Math.max(8, top), Math.max(8, vh - h - 8));
+  el.style.left = Math.round(left) + "px";
+  el.style.top = Math.round(top) + "px";
+  void el.offsetWidth; // 强制回流:display 变更与 class 落同一帧会让过渡不跑(生硬闪现)
+  el.classList.add("on");
+  bhHcRow = row;
+}
+document.addEventListener("mouseover", (e) => {
+  const row = bhHcRowOf(e.target);
+  if (!row) return;
+  if (row === bhHcRow && !bhHcTid) return; // 同一行内部移动:已显示/已排队,不重排
+  if (bhHcTid) { clearTimeout(bhHcTid); bhHcTid = 0; }
+  if (bhHcHideTid) { clearTimeout(bhHcHideTid); bhHcHideTid = 0; }
+  if (bhHcRow && bhHcRow !== row) bhHcHide(); // 换行:旧卡片立刻走(不带着上一行内容停 200ms)
+  bhHcRow = row;
+  bhHcTid = setTimeout(() => {
+    bhHcTid = 0;
+    if (bhHcRow && bhHcRow.isConnected) bhHcShow(bhHcRow);
+  }, BH_HC_DELAY);
+});
+document.addEventListener("mouseout", (e) => {
+  const row = bhHcRowOf(e.target);
+  if (!row) return;
+  const to = e.relatedTarget;
+  if (to && to.closest && to.closest(".proj-row,.t-row") === row) return; // 行内部移动不隐藏
+  bhHcHide();
+});
+// 滚动(捕获阶段:侧栏内部滚动不冒泡也能收到)/滚轮/按键/窗口改尺寸 → 浮层跟着消失
+document.addEventListener("scroll", bhHcHide, true);
+document.addEventListener("wheel", bhHcHide, { capture: true, passive: true });
+document.addEventListener("keydown", bhHcHide, true);
+window.addEventListener("resize", bhHcHide);
 
 function renderProjects() {
   const box = $("projList");
@@ -927,6 +1043,8 @@ function filesMenu(abs, rel, isDir, x, y) {
   items.push({ label: "复制绝对路径", act: () => copyText(abs) });
   items.push({ label: "复制相对路径", act: () => copyText(rel) });
   if (!isDir) items.push({ label: "添加到聊天", act: () => { const inp = $("instruction"); inp.value = (inp.value.trim() + " " + buildFileMention(rel, "file")).trim() + " "; switchView("chat"); fileRefRender(); inp.focus(); } });
+ // 把该条目作为可引用上下文加入指挥台(super 会话;文件类同时作附件进轮次;远程项目只留引用不塞本地路径)
+  items.push({ label: "添加到指挥台", act: () => { if (typeof supRefAdd === "function") supRefAdd({ kind: isDir ? "dir" : "file", label: rel, path: rp ? "" : abs }); } });
   openMenuAt(items, x, y);
 }
 $("filesRefresh").onclick = () => { dirCache.clear(); filesPending.clear(); filesLoad(); };
@@ -947,10 +1065,14 @@ function openTaskMenu(t, x, y) {
     { label: "删除本条任务", act: () => { uiConfirm("彻底删除任务「" + rowTitle(t).slice(0, 30) + "」?(不可恢复;归档可保留历史)", { tone: "danger" }).then((ok) => { if (ok) wsSafeSend(JSON.stringify({ v: 1, type: "task.delete", taskId: t.id })); }); } },
     ...(sessCount > 1 ? [{ label: "删除本会话全部 " + sessCount + " 条任务", act: () => { uiConfirm("彻底删除该会话的 " + sessCount + " 条任务?(不可恢复;归档可保留历史)", { tone: "danger" }).then((ok) => { if (ok) { wsSafeSend(JSON.stringify({ v: 1, type: "task.deleteSession", sessionId: t.sessionId })); sessionModelOverride.delete(t.sessionId); sessionModelStaged.delete(t.sessionId); } }); } }] : []),
     { label: "回滚到此任务前", act: () => { pendingRewind = t.id; wsSafeSend(JSON.stringify({ v: 1, type: "checkpoint.preview", taskId: t.id })); } },
+ // 任务作为可引用上下文加入指挥台(发送时以「【指挥台上下文·任务】id 标题」进前言)
+    { label: "添加到指挥台", act: () => { if (typeof supRefAdd === "function") supRefAdd({ kind: "task", label: rowTitle(t), taskId: t.id }); } },
   ];
   openMenuAt(items, x, y);
 }
-document.addEventListener("click", (e) => { if (!$("taskMenu").contains(e.target)) $("taskMenu").style.display = "none"; });
+// 外点关(既有行为保留);Esc 关由 script-dialogs 的 popover 注册表兜(doc keydown)。
+// item click 走 openMenuAt 内各自 onclick(display=none),stale 条目由 popoverPrune 剪。
+document.addEventListener("click", (e) => { if (!$("taskMenu").contains(e.target)) popoverSyncEl("taskMenu", false, "#taskMenu"); });
 $("tt-arch").onclick = () => {
   archView = !archView;
   $("tt-arch").classList.toggle("arch-on", archView);
@@ -1017,6 +1139,7 @@ function applyTaskMask() {
   el.style.webkitMaskImage = g;
 }
 function renderSidebar() {
+  bhHcHide(); // P1-1:侧栏重渲会换掉行元素,浮层若在显形则先收掉(不留指向上一条的卡片)
   let list = [...tasks.values()];
  // F5 一键沉淀:当前会话存在已终态任务时可见(renderSidebar 是 openSession/render 共同路径)
   const hasSettled = !!currentSid && list.some((t) => t.sessionId === currentSid && (t.state === "done" || t.state === "failed"));
@@ -1227,9 +1350,14 @@ function renderSidebar() {
   }
   for (const more of $("taskList").querySelectorAll(".t-more")) {
     more.onclick = () => {
-      if (more.dataset.key === "sec:tasks") { tasksLimit += 20; renderSidebar(); return; } // ZCode timeline show more = +20
-      showLimit[more.dataset.key] = (showLimit[more.dataset.key] || 5) + 5;
-      renderSidebar();
+      const k = more.dataset.key;
+      if (k === "sec:tasks") { tasksLimit += 20; renderSidebar(); } // ZCode timeline show more = +20
+      else { showLimit[k] = (showLimit[k] || 5) + 5; renderSidebar(); }
+ // 翻页后按钮会被新增行推出视口——重渲后把新按钮滚回最近可视位
+      requestAnimationFrame(() => {
+        const nm = $("taskList").querySelector('.t-more[data-key="' + k + '"]');
+        if (nm) nm.scrollIntoView({ block: "nearest" });
+      });
     };
   }
  // 桶头点击(ZCode applyWorkspaceTriggerSelection 语义):收起态点击=展开+打开该项目(草稿);

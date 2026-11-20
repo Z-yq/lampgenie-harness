@@ -225,7 +225,8 @@ export class TerminalSession {
     // 前一条失败不阻断后续命令(把链保持在 resolved 态)。
     this.sendChain = run.then(
       () => undefined,
-      () => undefined);
+      () => undefined,
+    );
     return run;
   }
 
@@ -365,7 +366,8 @@ export class TerminalSession {
     const timeoutMs = clamp(
       Math.floor(input.timeoutMs ?? DEFAULT_SEND_TIMEOUT_MS),
       MIN_SEND_TIMEOUT_MS,
-      MAX_SEND_TIMEOUT_MS);
+      MAX_SEND_TIMEOUT_MS,
+    );
     const startCursor = this.buffer.endCursor;
     if (this.status === "exited") {
       return this.finishSend(startCursor, "session-exit", this.exitCode, startedAt);
@@ -393,7 +395,8 @@ export class TerminalSession {
     startCursor: number,
     waitReason: TerminalWaitReason,
     exitCode: number | null,
-    startedAt: number): TerminalSendResult {
+    startedAt: number,
+  ): TerminalSendResult {
     const read = this.buffer.readFrom(startCursor, MAX_RETURN_CHARS);
     this.consumedCursor = Math.max(this.consumedCursor, read.nextCursor);
     return {
@@ -409,7 +412,8 @@ export class TerminalSession {
 
   private async waitForMarker(
     token: string,
-    timeoutMs: number): Promise<{ reason: TerminalWaitReason; exitCode: number | null }> {
+    timeoutMs: number,
+  ): Promise<{ reason: TerminalWaitReason; exitCode: number | null }> {
     const deadline = (this.opts.now ?? Date.now)() + timeoutMs;
     let searchFrom = this.buffer.startCursor;
     while (true) {

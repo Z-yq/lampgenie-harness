@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  renderPreventionLines,
   detectReworkChains,
   readReworkChains,
   renderPreventionLines,
@@ -195,6 +196,26 @@ describe("detectReworkChains(设想的 M 场景)", () => {
     seed(journalDir, { id: "ws-f", title: "修复 qa-touch 的空值问题", edits: ["src/qa-touch.ts"], ageDays: 1 });
     const r = detectReworkChains(root, "p", { journalDir, now: NOW, windowDays: 14 });
     expect(r.chains).toBe(0);
+  });
+
+  it("治理:prevention 注入前过 TTL 与模块存在性(知识腐坏不注入)", () => {
+    const freshChain = {
+      v: 1, at: NOW - 5 * DAY, projectId: "p", buildSession: "ws-a", buildTitle: "t", fixSession: "ws-b", fixTitle: "t",
+      logicalKey: "src/x", path: "src/x.ts", evidenceLevel: "strong" as const, classification: "rework" as const,
+      defectClass: "contract" as const, attribution: { verdict: "preventable" as const, readByA: 0, fixFaceTotal: 1, fixAddedTest: false },
+      prevention: { kind: "context" as const, note: "改契约前先列出全部调用方" },
+    };
+    const staleChain = { ...freshChain, at: NOW - 90 * DAY, path: "src/y.ts", logicalKey: "src/y", prevention: { kind: "gate" as const, note: "旧检查" } };
+    const rottedChain = { ...freshChain, path: "src/z.ts", logicalKey: "src/z", prevention: { kind: "gate" as const, note: "腐坏检查" } };
+    const text = "修改 src/x.ts src/y.ts src/z.ts";
+ // TTL 常开(默认时钟即过滤):stale(90 天)已滤,剩 x+z
+    expect(renderPreventionLines([freshChain, staleChain, rottedChain], text)).toHaveLength(2);
+ // 加模块存在性:rotted(z 不存在)也滤,只剩 x
+    const governed = renderPreventionLines([freshChain, staleChain, rottedChain], text, {
+      now: NOW,
+      moduleExists: (p) => !p.includes("z"),
+    });
+    expect(governed).toEqual(["- 预防检查单(历史返工≥2):改契约前先列出全部调用方"]);
   });
 
   it("「补测试」判据:碰过 test 路径≠missing-test;源+同名测试成对才算(TDD 不冤枉)", () => {

@@ -317,7 +317,8 @@ export function registerTool(
 
 export function unregisterTool(
   registry: DataToolRegistry,
-  name: string): { ok: boolean; registry: DataToolRegistry; codes: string[]; restored?: string; reason?: string } {
+  name: string,
+): { ok: boolean; registry: DataToolRegistry; codes: string[]; restored?: string; reason?: string } {
   const view = viewRegistry(registry);
   if (!view) return { ok: false, registry, codes: ["DATA_TOOL_INVALID"], reason: "registry 畸形" };
   const key = typeof name === "string" ? name : "";
@@ -392,7 +393,8 @@ export function checkDependencies(
 
 function withDegraded(
   payload: { spec?: DataToolSpec; layer: ToolLayer; codes: string[] },
-  degraded: string[] | undefined): { spec?: DataToolSpec; layer: ToolLayer; degraded?: string[]; codes: string[] } {
+  degraded: string[] | undefined,
+): { spec?: DataToolSpec; layer: ToolLayer; degraded?: string[]; codes: string[] } {
   return degraded && degraded.length > 0 ? { ...payload, degraded } : payload;
 }
 
@@ -420,7 +422,8 @@ export function resolveTool(
     if (current) {
       return withDegraded(
         { spec: current, layer: "data", codes: ["DATA_TOOL_PIN_UNKNOWN", "DATA_TOOL_RESOLVED"] },
-        degraded);
+        degraded,
+      );
     }
   }
 
@@ -434,7 +437,8 @@ export function pinToolVersion(
   registry: DataToolRegistry,
   sessionId: string,
   name: string,
-  version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
+  version: string,
+): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
   const view = viewRegistry(registry);
   if (!view) return { ok: false, pins: {}, codes: ["DATA_TOOL_INVALID"], reason: "registry 畸形" };
   if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
@@ -495,7 +499,8 @@ function depKey(spec: unknown): string {
 
 export function diffVersions(
   a: DataToolSpec,
-  b: DataToolSpec): { changed: boolean; schemaChanged: boolean; handlerChanged: boolean; permissionsChanged: boolean; depsChanged: boolean } {
+  b: DataToolSpec,
+): { changed: boolean; schemaChanged: boolean; handlerChanged: boolean; permissionsChanged: boolean; depsChanged: boolean } {
   const left: Record<string, unknown> = isPlainObject(a) ? a : {};
   const right: Record<string, unknown> = isPlainObject(b) ? b : {};
   const schemaChanged = stableJson(left.parameters) !== stableJson(right.parameters);

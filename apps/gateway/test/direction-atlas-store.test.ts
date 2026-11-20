@@ -16,9 +16,11 @@ import {
   atlasEntriesPath,
   atlasJsonPath,
   build,
+  closeGoal,
   getAtlas,
   ingestDefects,
   loadAtlasEvents,
+  recordGoalProgress,
   render,
   reportAtlas,
   resolveConflict,
@@ -381,5 +383,90 @@ describe("direction-atlas-store / 三视图与隔离", () => {
     expect(b.goals.map((item: any) => item.id)).toEqual(["gb"]);
     // 另一个 project 在同一 root 下也读不到这份数据
     expect(getAtlas(rootA, "p2").code).toBe(ATLAS_NOT_FOUND);
+  });
+});
+
+describe("direction-atlas-store / super agent 主线管理(2026-11-16)", () => {
+  it("recordGoalProgress:goal 存在 → 事件入台账;不存在 → ATLAS_NOT_FOUND 不写盘", async () => {
+    const root = await tmpRoot();
+    await addGoal(root, P, goal("g1"));
+    const before = await entriesBytes(root);
+    const missing = recordGoalProgress(root, P, { goalId: "nope", note: "推进", evidence: [], by: "agent:t1" }, NOW);
+    expect(missing.ok).toBe(false);
+    expect(missing.code).toBe(ATLAS_NOT_FOUND);
+    expect(await entriesBytes(root)).toBe(before); // 失败路径字节不变化
+    const ok = recordGoalProgress(root, P, { goalId: "g1", note: "完成采集面", nextStep: "接入消费面", evidence: ["task:abc"], by: "agent:t1" }, NOW);
+    expect(ok.ok).toBe(true);
+    const lines = await entryLines(root);
+    const last = JSON.parse(lines[lines.length - 1]!);
+    expect(last.kind).toBe("goal_progress");
+    expect(last.payload.goalId).toBe("g1");
+    expect(last.payload.nextStep).toBe("接入消费面");
+  });
+
+  it("build 后快照带 goalProgress 叠加层(按 goalId 聚组,时间序)", async () => {
+    const root = await tmpRoot();
+    await addGoal(root, P, goal("g1"));
+    recordGoalProgress(root, P, { goalId: "g1", note: "第一步", evidence: [], by: "a" }, "2026-11-20T01:00:00.000Z");
+    recordGoalProgress(root, P, { goalId: "g1", note: "第二步", evidence: [], by: "a" }, "2026-11-20T02:00:00.000Z");
+    const built = build(root, P, { now: NOW });
+    expect(built.ok).toBe(true);
+    const snap = getAtlas(root, P).atlas as any;
+    expect(snap.goalProgress.g1.map((r: any) => r.note)).toEqual(["第一步", "第二步"]);
+  });
+
+  it("closeGoal:goal_close 事件投影改写 status/until/evidenceRefs;重复收口幂等不追加", async () => {
+    const root = await tmpRoot();
+    await addGoal(root, P, goal("g1"));
+    const ok = closeGoal(root, P, { goalId: "g1", status: "achieved", reason: "闭环验证通过", evidence: ["task:9"], by: "agent:t1" }, NOW);
+    expect(ok.ok).toBe(true);
+    build(root, P, { now: NOW });
+    const snap = getAtlas(root, P).atlas as any;
+    expect(snap.goals[0].status).toBe("achieved");
+    expect(snap.goals[0].until).toBe(NOW);
+    expect(snap.goals[0].evidenceRefs).toContain("task:9");
+    const linesBefore = (await entryLines(root)).length;
+    const again = closeGoal(root, P, { goalId: "g1", status: "achieved", reason: "再收一次", evidence: [], by: "a" }, NOW);
+    expect(again.ok).toBe(true);
+    expect(again.idempotent).toBe(true);
+    expect((await entryLines(root)).length).toBe(linesBefore); // entries 不增长
+ // achieved → abandoned 换状态拒绝
+    const flip = closeGoal(root, P, { goalId: "g1", status: "abandoned", reason: "换状态", evidence: [], by: "a" }, NOW);
+    expect(flip.ok).toBe(false);
+  });
+
+  it("closeGoal:goal 不存在/参数坏 → 不写盘;superseded 的 goal 拒收口", async () => {
+    const root = await tmpRoot();
+    const missing = closeGoal(root, P, { goalId: "nope", status: "achieved", reason: "r", evidence: [], by: "a" }, NOW);
+    expect(missing.ok).toBe(false);
+    expect(missing.code).toBe(ATLAS_NOT_FOUND);
+    const bad = closeGoal(root, P, { goalId: "nope", status: "paused", reason: "r", evidence: [], by: "a" } as any, NOW);
+    expect(bad.ok).toBe(false);
+    await addGoal(root, P, goal("gs", { status: "superseded" }));
+    const sup = closeGoal(root, P, { goalId: "gs", status: "achieved", reason: "r", evidence: [], by: "a" }, NOW);
+    expect(sup.ok).toBe(false); // 裁决历史不可被 agent 改写
+  });
+
+  it("build(preserveDerived):derived 层跨增量重建保真", async () => {
+    const root = await tmpRoot();
+    await addGoal(root, P, goal("g1"));
+    build(root, P, { now: NOW });
+ // 模拟 nightly refresh 写入 derived 层
+    const snap = JSON.parse(await readFile(atlasJsonPath(root, P), "utf8"));
+    snap.derived = { themes: [{ id: "RSI", sessions: 6, titles: ["t"] }] };
+    await appendFile(atlasJsonPath(root, P), "");
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(atlasJsonPath(root, P), JSON.stringify(snap));
+ // agent 增量写 → preserveDerived 重建
+    recordGoalProgress(root, P, { goalId: "g1", note: "增量推进", evidence: [], by: "a" }, NOW);
+    const rebuilt = build(root, P, { now: NOW, preserveDerived: true });
+    expect(rebuilt.ok).toBe(true);
+    const after = getAtlas(root, P).atlas as any;
+    expect(after.derived.themes[0].id).toBe("RSI"); // derived 未被洗掉
+    expect(after.goalProgress.g1[0].note).toBe("增量推进");
+ // 不带 preserveDerived(夜间 refresh 路径)→ derived 由调用方重算覆盖
+    const plain = build(root, P, { now: NOW });
+    expect(plain.ok).toBe(true);
+    expect((getAtlas(root, P).atlas as any).derived).toBeUndefined();
   });
 });

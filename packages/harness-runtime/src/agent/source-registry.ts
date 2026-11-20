@@ -293,7 +293,8 @@ export function createRegistry(): SourceRegistry {
 /** 登记一个 kind:全量校验 → 保留名 → 重复 → 落库;任一步失败 registry 零变更。 */
 export function registerKind(
   registry: SourceRegistry,
-  kind: unknown): { ok: boolean; code: SourceCode; codes: SourceCode[]; kind?: SourceKind; reason?: string } {
+  kind: unknown,
+): { ok: boolean; code: SourceCode; codes: SourceCode[]; kind?: SourceKind; reason?: string } {
   if (isPlainObject(kind) && isNonEmptyString(kind["kind"]) && isReservedKind(kind["kind"])) {
     return {
       ok: false,
@@ -564,7 +565,8 @@ export function healthClaim(
 /** 让实例失效:enabled:false + 归还它占的 claim;之后写入一律 SOURCE_DISABLED。 */
 export function invalidateInstance(
   registry: SourceRegistry,
-  id: string): { ok: boolean; code: SourceCode; instance?: SourceInstance; reason?: string } {
+  id: string,
+): { ok: boolean; code: SourceCode; instance?: SourceInstance; reason?: string } {
   if (!isNonEmptyString(id)) {
     return { ok: false, code: "SOURCE_INVALID", reason: "id 必须是非空字符串" };
   }

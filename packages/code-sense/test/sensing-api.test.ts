@@ -661,7 +661,8 @@ func (api *ImportDashboardAPI) RegisterAPIEndpoints(routeRegister routing.RouteR
 				http.MethodGet,
 				"/api/prometheus/{DatasourceUID}/api/v1/alerts",
 				api.Hooks.Wrap(srv.RouteGetAlertStatuses),
-				m),
+				m,
+			),
 		)
 		route.Delete("/single", routing.Wrap(api.DeleteDashboard))
 	}, middleware.ReqSignedIn)

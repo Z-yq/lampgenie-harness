@@ -191,8 +191,8 @@ describe("探针 F:server 源码接线", () => {
   const serverSrc = readFileSync(new URL("../src/server.ts", import.meta.url), "utf-8");
 
   it("终态 onChange 调 writeBackIssueTask + findIssueByTask", () => {
-    expect(serverSrc).toContain("M91:Issue 终态回写");
-    const idx = serverSrc.indexOf("M91:Issue 终态回写");
+    expect(serverSrc).toContain("Issue 终态回写(只写一次");
+    const idx = serverSrc.indexOf("Issue 终态回写(只写一次");
     expect(idx).toBeGreaterThan(-1);
     const block = serverSrc.slice(idx, idx + 1200);
     expect(block).toContain("findIssueByTask");

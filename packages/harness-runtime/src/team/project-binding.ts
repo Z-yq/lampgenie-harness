@@ -32,7 +32,8 @@ export function normalizeRepoUrl(raw: string): string {
 export function matchProjectId(
   projects: Record<string, ProjectRegistryEntry>,
   remoteUrl: string | null,
-  label: string): string | null {
+  label: string,
+): string | null {
   if (remoteUrl) {
     const want = normalizeRepoUrl(remoteUrl);
     if (want) {

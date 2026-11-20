@@ -27,6 +27,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { collectWorkSessions, logicalPathKey, type HarvestWorkSession, type HarvestOptions } from "./atlas-harvest.js";
+import { classifyDiffSemantics, type WriteHunk, type DefectEvidence } from "./diff-semantics.js"; // 设计稿 34 主路径
 
 /** 证据级别:weak 不进台账(设想:归属切不干净,后面一切产物都不可信)。 */
 export type ChainEvidenceLevel = "strong" | "medium";
@@ -70,6 +71,10 @@ export interface ReworkChainLine {
   };
  /** 同根因重复 ≥2 次才带预防件(单例不成规)。 */
   prevention?: { kind: PreventionKind; note: string };
+ /** diff 语义分类(v2 平行台账字段;主台账按开关决定是否落 defectClass)。 */
+  defectEvidence?: DefectEvidence[];
+  defectSource?: "diff" | "title-fallback";
+  defectShadow?: DefectClass;
 }
 
 export interface FanoutClusterLine {
@@ -140,6 +145,20 @@ const PREVENTION_BY_CLASS: Readonly<Record<DefectClass, { kind: PreventionKind; 
 /** 台账路径。 */
 export function reworkChainsPath(root: string): string {
   return join(root, ".genie", "rsi", "rework-chains.jsonl");
+}
+
+/** v2 平行台账(diff 语义影子/on 档写;随时可删,原台账字节不变)。 */
+export function reworkChainsV2Path(root: string): string {
+  return join(root, ".genie", "rsi", "rework-chains.v2.jsonl");
+}
+
+/**
+ * diff 语义开关(设计稿 34 §3.3):off=缺省影子(只写 v2 平行台账,主台账不动);
+ * on=V2 决定主台账 defectClass;veto=仅当标题词表给 uncategorized 时 V2 补类(渐进档)。
+ */
+export function diffSemanticsMode(): "off" | "on" | "veto" {
+  const v = String(process.env.GENIE_REWORK_DIFF_SEMANTICS ?? "off").trim().toLowerCase();
+  return v === "on" || v === "veto" ? v : "off";
 }
 
 function classify(title: string): ChainClassification | "unrelated" {
@@ -268,7 +287,16 @@ interface WorkingChain {
  * 检测一轮返工链并**幂等追加**到台账。纯确定性:两遍(候选链 → 归因+落行)。
  * journalDir 不存在/无会话 → ok:true 零追加(不 throw)。
  */
-export function detectReworkChains(root: string, projectId: string, opts: HarvestOptions & { journalDir: string; now?: number }): DetectReworkResult {
+export function detectReworkChains(
+  root: string,
+  projectId: string,
+  opts: HarvestOptions & {
+    journalDir: string;
+    now?: number;
+ /** 读某会话的写工具 hunk(journal 解析由调用方注入;缺省=diff 语义不可用,回退标题词表)。 */
+    readWriteHunks?: (sessionId: string) => WriteHunk[];
+  },
+): DetectReworkResult {
   const now = typeof opts.now === "number" && Number.isFinite(opts.now) ? opts.now : Date.now();
   const collected = collectWorkSessions(opts.journalDir, { ...opts, now });
   const sessions = collected.sessions;
@@ -382,18 +410,49 @@ export function detectReworkChains(root: string, projectId: string, opts: Harves
   result.chains = chains.length;
 
  // ── ④根因归因:只用 A 当时的 readPaths(防事后偏见)──
+ // 设计稿 34:defectClass 升级 diff 语义(fix 会话写工具参数重放成 hunk);
+ // 三档开关:off=影子(主台账不动,只写 v2 平行台账)/on=V2 决定/veto=仅补 uncategorized。
+  const mode = diffSemanticsMode();
+  const classifyChain = (chain: WorkingChain): { cls: DefectClass; evidence: DefectEvidence[]; source: "diff" | "title-fallback" } => {
+    const fixAddedTest = addedTest(chain.fix);
+    const titleCls = defectClassOf(chain.fix.title, fixAddedTest);
+    if (opts.readWriteHunks === undefined) return { cls: titleCls, evidence: [], source: "title-fallback" };
+    let hunks: WriteHunk[] = [];
+    try {
+      hunks = opts.readWriteHunks(chain.fix.sessionId) ?? [];
+    } catch {
+      hunks = [];
+    }
+    const diff = classifyDiffSemantics({ hunks, editedPaths: chain.fix.editedPaths, fixAddedTest });
+    if (diff.cls === "uncategorized") return { cls: titleCls, evidence: [], source: "title-fallback" };
+    if (mode === "on") return { cls: diff.cls, evidence: diff.evidence, source: "diff" };
+    if (mode === "veto" && titleCls === "uncategorized") return { cls: diff.cls, evidence: diff.evidence, source: "diff" };
+    return { cls: titleCls, evidence: diff.evidence, source: mode === "off" ? "title-fallback" : "title-fallback" };
+  };
+  const chainClass = new Map<WorkingChain, { cls: DefectClass; evidence: DefectEvidence[]; source: "diff" | "title-fallback" }>();
+  const chainShadow = new Map<WorkingChain, DefectClass | undefined>();
+  for (const chain of chains) {
+    chainClass.set(chain, classifyChain(chain));
+    const shadow = opts.readWriteHunks !== undefined ? classifyDiffSemantics({
+      hunks: (() => { try { return opts.readWriteHunks!(chain.fix.sessionId) ?? []; } catch { return []; } })(),
+      editedPaths: chain.fix.editedPaths,
+      fixAddedTest: addedTest(chain.fix),
+    }) : undefined;
+    chainShadow.set(chain, shadow && shadow.cls !== "uncategorized" ? shadow.cls : undefined);
+  }
  // 单例不成规的「同根因」= **L1 缺陷类跨实体重现**(设想:同一类缺陷在不同模块出现 ≥N 次,
  // 才允许上升到任务原型/预防件;按逻辑单元计数会把跨实体重现拆成N个单例)。
   const repeats = new Map<string, number>();
   for (const chain of chains) {
-    const defectKey = defectClassOf(chain.fix.title, addedTest(chain.fix));
+    const defectKey = chainClass.get(chain)?.cls ?? defectClassOf(chain.fix.title, addedTest(chain.fix));
     repeats.set(defectKey, (repeats.get(defectKey) ?? 0) + 1);
   }
   const existingKeys = readExistingKeys(reworkChainsPath(root));
   const lines: ReworkLedgerLine[] = [];
   for (const chain of chains) {
     const fixAddedTest = addedTest(chain.fix);
-    const defectClass = defectClassOf(chain.fix.title, fixAddedTest);
+    const verdict0 = chainClass.get(chain)!;
+    const defectClass = verdict0.cls;
  // B 的修复面(逻辑键)里 A 读过几个(信息可得性)
     const fixFaceKeys = [...new Set(chain.fix.editedPaths.map((p) => logicalPathKey(p)))];
     const aReads = new Set((chain.build.readPaths ?? []).map((p) => logicalPathKey(p)));
@@ -425,6 +484,9 @@ export function detectReworkChains(root: string, projectId: string, opts: Harves
       classification: chain.classification,
       defectClass,
       attribution: { verdict, readByA, fixFaceTotal: fixFaceKeys.length, fixAddedTest },
+      ...(verdict0.evidence.length > 0 ? { defectEvidence: verdict0.evidence } : {}),
+      defectSource: verdict0.source,
+      ...(chainShadow.get(chain) !== undefined ? { defectShadow: chainShadow.get(chain) } : {}),
     };
  // 单例不成规:同缺陷类跨实体 ≥2 次才附预防件
     if ((repeats.get(defectClass) ?? 0) >= PREVENTION_MIN_REPEATS && verdict === "preventable") {
@@ -532,14 +594,31 @@ function readExistingKeys(file: string): Set<string> {
  * 行文案固定 `- 预防检查单(历史返工≥2):<note>`(无责归因:只说缺哪道检查)。taskText 为空
  * 或无命中 → []。纯函数,不读盘、不 throw。
  */
-export function renderPreventionLines(chains: ReworkLedgerLine[], taskText: string): string[] {
+/**
+ * 治理内核(设想「元形态:知识腐坏」+「TTL/使用时校验」):预防件注入前两道校验——
+ * ①模块存在性(line.path 文件已删=知识腐坏,不得注入);②TTL(链 at 距今 >maxAgeDays 未强化=过期)。
+ * 均为注入侧过滤,不改 append-only 台账(历史事实不动,消费面退化)。
+ */
+export const PREVENTION_MAX_AGE_DAYS = 60;
+
+export function renderPreventionLines(
+  chains: ReworkLedgerLine[],
+  taskText: string,
+  opts: { now?: number; moduleExists?: (path: string) => boolean; maxAgeDays?: number } = {},
+): string[] {
   const text = typeof taskText === "string" ? taskText : "";
   if (text.trim() === "") return [];
+  const now = typeof opts.now === "number" && Number.isFinite(opts.now) ? opts.now : Date.now();
+  const maxAgeDays = typeof opts.maxAgeDays === "number" && opts.maxAgeDays > 0 ? opts.maxAgeDays : PREVENTION_MAX_AGE_DAYS;
   const counted = new Map<string, number>();
   for (const line of chains) {
     if (!("fixSession" in line)) continue; // 扇出簇无 prevention
     const prevention = line.prevention;
     if (!prevention || typeof prevention.note !== "string" || prevention.note === "") continue;
+ // TTL:链落行时间距今超期 → 不注入(未强化的知识衰减,设想的 confidence_decay)
+    if (now - line.at > maxAgeDays * 86_400_000) continue;
+ // 使用时校验:模块文件已不存在 → 知识腐坏,不注入(消费面过滤,台账不动)
+    if (opts.moduleExists !== undefined && !opts.moduleExists(line.path ?? "")) continue;
     const tokens = [...pathSegmentTokens(line.path ?? ""), ...pathSegmentTokens(line.logicalKey ?? "")];
     if (!tokens.some((token) => containsBoundedToken(text, token))) continue;
     counted.set(prevention.note, (counted.get(prevention.note) ?? 0) + 1);

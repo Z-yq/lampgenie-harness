@@ -53,7 +53,8 @@ async function loadPeer(): Promise<PeerModule> {
   if (peerModule) return peerModule;
   const srcUrl = new URL(
     "../../../packages/harness-runtime/src/agent/peer-policy.ts",
-    import.meta.url).href;
+    import.meta.url,
+  ).href;
   peerModule = (await import(srcUrl)) as PeerModule;
   return peerModule;
 }
@@ -345,7 +346,8 @@ export interface PeerSnapshotStoreResult extends PeerSnapshotResult {
 
 async function persist(
   root: string,
-  snapshot: PeerSnapshot): Promise<{ file: string; written: boolean; risks?: string[] }> {
+  snapshot: PeerSnapshot,
+): Promise<{ file: string; written: boolean; risks?: string[] }> {
   const existing = await readPeerSnapshots(root);
   const peers = { ...existing.peers, [snapshot.principalId]: snapshot };
   const written = await writePeerSnapshots(root, peers);
@@ -358,7 +360,8 @@ async function persist(
 /** 生成快照并落盘(principal 级整份替换,其它 principal 的条目保留)。 */
 export async function snapshotPeer(
   root: string,
-  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions,
+): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();
@@ -385,7 +388,8 @@ export async function reloadPeer(root: string, options: PeerSnapshotOptions): Pr
  */
 export async function invalidatePeer(
   root: string,
-  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions,
+): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();
@@ -402,7 +406,8 @@ export async function invalidatePeer(
 /** 重连:保留最后一份快照(follow 原样),不重算;无既有快照时才 fresh。 */
 export async function mergeReconnectPeer(
   root: string,
-  options: PeerSnapshotOptions): Promise<PeerSnapshotStoreResult> {
+  options: PeerSnapshotOptions,
+): Promise<PeerSnapshotStoreResult> {
   assertRoot(root);
   const principal = assertPrincipal(options?.principal);
   const peer = await loadPeer();

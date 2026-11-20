@@ -382,7 +382,8 @@ export function eventAllows<T = unknown>(
 function buildBaseline(
   policySet: PolicySet | undefined,
   principal: Principal,
-  role?: string): Record<string, boolean> {
+  role?: string,
+): Record<string, boolean> {
   const baseline: Record<string, boolean> = {};
   const methods = isPlainObject(policySet) && Array.isArray((policySet as PolicySet).methods)
     ? (policySet as PolicySet).methods
@@ -420,7 +421,8 @@ export function snapshotFor(
   policySet: PolicySet | undefined,
   principal: Principal,
   at?: string,
-  role?: string): PeerSnapshotResult {
+  role?: string,
+): PeerSnapshotResult {
   void at; // 快照本体不记时间(时间属于 follow 项);保留参数以便调用方统一签名。
   const safePrincipal: Principal = {
     id: isPlainObject(principal) ? str((principal as Principal).id) : "",
@@ -459,7 +461,8 @@ export function applyFollow(
 function inferPrincipal(
   policySet: PolicySet | undefined,
   principalId: string,
-  principal?: Principal): Principal {
+  principal?: Principal,
+): Principal {
   if (isPlainObject(principal) && str((principal as Principal).kind)) {
     return { id: str((principal as Principal).id) || principalId, kind: (principal as Principal).kind };
   }
@@ -489,7 +492,8 @@ export function invalidate(
   snapshot: PeerSnapshot,
   policySet: PolicySet | undefined,
   at?: string,
-  principal?: Principal): PeerSnapshotResult {
+  principal?: Principal,
+): PeerSnapshotResult {
   void at;
   const current = isPlainObject(snapshot) ? snapshot : ({ principalId: "", baseline: {}, follow: [] } as PeerSnapshot);
   const resolved = inferPrincipal(policySet, str(current.principalId), principal);
@@ -503,7 +507,8 @@ export function invalidate(
 export function reloadSnapshot(
   policySet: PolicySet | undefined,
   principal: Principal,
-  at?: string): PeerSnapshotResult {
+  at?: string,
+): PeerSnapshotResult {
   void at;
   const safePrincipal: Principal = {
     id: isPlainObject(principal) ? str((principal as Principal).id) : "",

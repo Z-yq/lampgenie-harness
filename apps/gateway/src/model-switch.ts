@@ -131,7 +131,8 @@ export function resolveRoleSwitch(
   config: Config,
   repoRoot: string,
   role: RoleName,
-  env: NodeJS.ProcessEnv = process.env): RoleSwitchResolution | undefined {
+  env: NodeJS.ProcessEnv = process.env,
+): RoleSwitchResolution | undefined {
   const ref = config.coding.models[role];
   if (!ref?.model) return undefined;
   const merged = { ...config.coding.llm, ...ref, model: ref.model };
@@ -175,7 +176,8 @@ export function resolveRoleSwitch(
 export function resolveModelSwitch(
   config: Config,
   repoRoot: string,
-  env: NodeJS.ProcessEnv = process.env): ModelSwitchResolution {
+  env: NodeJS.ProcessEnv = process.env,
+): ModelSwitchResolution {
   const ref = config.coding.llm;
   const route = resolveCodingModelRoute(config, ref);
   if (!ref.model) return { reconciled: [], routeError: "未配置模型(coding.llm.model 为空)" };

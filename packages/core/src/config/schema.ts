@@ -334,6 +334,22 @@ export const ConfigSchema = z.object({
   agent: z.object({
  // 主 agent 单任务最大步数(上限 3000;每步=一次 LLM 调用+工具轮)。
     maxSteps: z.number().int().min(1).max(3000).default(3000),
+ /** Super 派发模型路由(「打开开关后 Super 可在派发时配 coding agent 的
+ * provider 模型,简易/扫描调研用小模型」):enabled=开关(缺省 off=spawn_task 无 modelPreset
+ * 参数、零行为变化);presets=Super 可引用的模型档位(键=档位名,值=providerId/model/effort)。
+ * 执行=派发时对新会话设 session-model 覆盖(运行中任务不热切,与面板 per-session 同源)。 */
+    superModelRouting: z.object({
+      enabled: z.boolean().default(false),
+ /** 三档(level1~level3)归一化——fast→level1、heavy→level3、model 空/纯空白条目剔除。
+ * 走 preprocess 而非事后修补:loadConfig(文件)与 applyConfigPatch(cfg.set) 两条路都经 ConfigSchema.parse,
+ * 因此 UI 留空保存 {level1:{model:""}} 会被就地剔除(deepMerge 无法删键,归一化是唯一的删除语义)。 */
+      presets: z.preprocess((v) => normalizeSuperModelPresets(v), z.record(z.string(), z.object({
+        providerId: z.string().optional(),
+        model: z.string().min(1),
+        effort: z.string().optional(),
+        description: z.string().optional(),
+      })).default({})),
+    }).default({}),
  /** 前台子代理自动转后台阈值( ZCode autoBackgroundMs 语义):超时未完→父拿 agentId 立即返回,
      * 子代理 detach 后台继续,task_output 收割。缺省 180s;0=禁用。 */
     subagentAutoBackgroundMs: z.number().int().min(0).max(3_600_000).optional(),
@@ -385,7 +401,7 @@ export const ConfigSchema = z.object({
      * 此前只在 agent-wiring 用 as cast 读,配置写了会被 schema 剥离 → 本字段补齐配置面。
      * env GENIE_CITATION_AUDIT 优先于本字段。 */
     citationAudit: z.enum(["off", "warn", "hard"]).optional(),
- /** 完成审计记分卡(2026-11):收尾聚合 board P0 / 验证账本 / 交付物 / 变更审计 / 引用账本。
+ /** 完成审计记分卡(,2026-11):收尾聚合 board P0 / 验证账本 / 交付物 / 变更审计 / 引用账本。
      * off=跳过;warn(缺省,代码内回退值)=有 fail/warn 时正文追加;hard=先补跑一轮,仍不满足 → failed。
      * env GENIE_COMPLETION_AUDIT 优先于本字段。 */
     completionAudit: z.enum(["off", "warn", "hard"]).optional(),
@@ -397,7 +413,7 @@ export const ConfigSchema = z.object({
      * gateway 事件循环,会话间进程隔离);false=进程内(旧路径,全部现有测试走的形态)。
      * env GENIE_SESSION_WORKER=off 强制关;测试环境(VITEST)自动回进程内。 */
     sessionWorker: z.boolean().optional(),
- /** 开工前置门:基线新鲜度校验(2026-11)。开工第一轮前量「本地分支 vs 上游」:
+ /** 开工前置门:基线新鲜度校验(,2026-11)。开工第一轮前量「本地分支 vs 上游」:
      * behind(上游独有提交)>0 且 blockOnBehind(缺省 true)→ 任务 failed 并给出 git pull --rebase
      * 修复命令(不在旧基线上开工);diverged/ahead 只注入提示不拦。
      * env:GENIE_FRESHNESS=off 全局关;GENIE_FRESHNESS_BLOCK=off 把 behind 降级为警告。 */
@@ -447,7 +463,49 @@ export const HOT_CONFIG_PATHS = new Set([
   "context.modelScoring.mode", "context.modelScoring.providerUrl", "context.modelScoring.model",
   "context.modelScoring.apiType", "context.modelScoring.apiKeyEnv", "context.modelScoring.minConfidence",
   "context.modelScoring.maxCandidates", "context.modelScoring.scoreEverySteps", "context.modelScoring.timeoutMs",
+ // Super 派发模型路由档位(enabled + 各档 providerId/model/description):派发时刻现读,
+ // 保存回执显示热生效(app.ts 的 get modelRouting 每轮从 config 取)。
+  "agent.superModelRouting.enabled",
+  "agent.superModelRouting.presets.level1.providerId", "agent.superModelRouting.presets.level1.model", "agent.superModelRouting.presets.level1.description",
+  "agent.superModelRouting.presets.level2.providerId", "agent.superModelRouting.presets.level2.model", "agent.superModelRouting.presets.level2.description",
+  "agent.superModelRouting.presets.level3.providerId", "agent.superModelRouting.presets.level3.model", "agent.superModelRouting.presets.level3.description",
 ]);
+
+/** Super 派发模型路由的单个档位(运行时结构,与 schema 内联对象同形)。 */
+export type SuperModelPreset = { providerId?: string; model: string; effort?: string; description?: string };
+
+/** 派发模型路由档位归一化(level1~level3 三档)。
+ * ①键归一:fast→level1、heavy→level3(两遍处理——先收 level1~3 与其它自定义键,再仅对被删除的旧键迁移;
+ * 目标键已存在时以 level1/level3 为准,旧键值既不丢到别的档也不覆盖新键)。
+ * ②model 为空/纯空白的条目丢弃(UI 留空=未配置;同时解决 deepMerge 无法删键)。
+ * ③输出不含 fast/heavy 键——运行时别名由 super-agent 的 normalizeModelPresetName 解析(旧配置/旧测试兼容)。 */
+export function normalizeSuperModelPresets(raw: unknown): Record<string, SuperModelPreset> {
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const LEGACY: Record<string, string> = { fast: "level1", heavy: "level3" };
+  const clean = (v: unknown): SuperModelPreset | undefined => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+    const o = v as Record<string, unknown>;
+    const model = typeof o.model === "string" ? o.model.trim() : "";
+    if (!model) return undefined; // 空档=未配置(UI 留空保存即清除)
+    const p: SuperModelPreset = { model };
+    if (typeof o.providerId === "string" && o.providerId.trim()) p.providerId = o.providerId.trim();
+    if (typeof o.effort === "string" && o.effort.trim()) p.effort = o.effort.trim();
+    if (typeof o.description === "string" && o.description.trim()) p.description = o.description.trim();
+    return p;
+  };
+  const out: Record<string, SuperModelPreset> = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (LEGACY[k]) continue; // 旧键第二遍再迁移(新键优先)
+    const c = clean(v);
+    if (c) out[k] = c;
+  }
+  for (const [oldKey, newKey] of Object.entries(LEGACY)) {
+    if (!(oldKey in src) || out[newKey]) continue;
+    const c = clean(src[oldKey]);
+    if (c) out[newKey] = c;
+  }
+  return out;
+}
 
 /** 旧版顶层 llm/models → coding 轨迁移(v0 配置文件兼容;一次性 preprocess,loadConfig 调用)。 */
 export function migrateLegacyConfig(raw: unknown): Record<string, unknown> {
@@ -461,6 +519,13 @@ export function migrateLegacyConfig(raw: unknown): Record<string, unknown> {
     out.coding = coding;
     delete out.llm;
     delete out.models;
+  }
+ // Super 派发模型路由旧档位(fast/heavy)→ level1/level3 在文件层显式迁移(可单测);
+ // 只在真的带 presets 时改,避免给旧配置凭空塞空对象。
+  const agent = out.agent as Record<string, unknown> | undefined;
+  const smr = agent?.superModelRouting as Record<string, unknown> | undefined;
+  if (agent && smr && typeof smr === "object" && "presets" in smr) {
+    out.agent = { ...agent, superModelRouting: { ...smr, presets: normalizeSuperModelPresets(smr.presets) } };
   }
   return out;
 }

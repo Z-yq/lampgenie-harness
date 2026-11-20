@@ -188,7 +188,8 @@ const sameKey = (a: ThreadSubscription, threadKey: string, subscriber: string, m
  */
 export function addSubscription(
   list: readonly ThreadSubscription[],
-  input: AddSubscriptionInput): SubMutationResult {
+  input: AddSubscriptionInput,
+): SubMutationResult {
   const base = list ?? [];
   if (input === null || typeof input !== "object") {
     return { ok: false, code: THREAD_SUB_INVALID, list: [...base], reason: "input" };
@@ -251,7 +252,8 @@ export function addSubscription(
 export function routeSubscriptions(
   list: readonly ThreadSubscription[],
   threadKey: string,
-  now: number): ThreadSubscription[] {
+  now: number,
+): ThreadSubscription[] {
   if (!isNonEmptyString(threadKey)) return [];
   const at = isFiniteNumber(now) ? now : 0;
   return (list ?? []).filter(
@@ -270,7 +272,8 @@ export function routeSubscriptions(
 export function contextFanout(
   list: readonly ThreadSubscription[],
   threadKey: string,
-  now: number): ThreadSubscription[] {
+  now: number,
+): ThreadSubscription[] {
   if (!isNonEmptyString(threadKey)) return [];
   const at = isFiniteNumber(now) ? now : 0;
   return (list ?? []).filter(
@@ -285,7 +288,8 @@ export function contextFanout(
 export function decideSubscription(
   list: readonly ThreadSubscription[],
   threadKey: string,
-  now: number): SubscriptionDecision {
+  now: number,
+): SubscriptionDecision {
   const route = routeSubscriptions(list, threadKey, now);
   if (route.length > 0) {
     return { decision: "routed", code: THREAD_SUB_OK, subscriptionIds: route.map((s) => s.id) };
@@ -303,7 +307,8 @@ export function decideSubscription(
  */
 export function recordDecision(
   list: readonly ThreadSubscription[],
-  input: RecordDecisionInput): SubMutationResult {
+  input: RecordDecisionInput,
+): SubMutationResult {
   const base = list ?? [];
   const invalid = (reason: string): SubMutationResult => ({ ok: false, code: THREAD_SUB_INVALID, list: [...base], recorded: 0, reason });
   if (input === null || typeof input !== "object") return invalid("input");
@@ -330,7 +335,8 @@ export function recordDecision(
 /** 过期只做逻辑标记(until<=now 或已标记),不物理删;幂等:再跑一次 expiredCount=0。 */
 export function expireSubscriptions(
   list: readonly ThreadSubscription[],
-  now: number): SubMutationResult {
+  now: number,
+): SubMutationResult {
   const base = list ?? [];
   const at = isFiniteNumber(now) ? now : 0;
   let expiredCount = 0;
@@ -377,7 +383,8 @@ export function wakePlan(sub: ThreadSubscription, now: number): WakePlan {
 export function summarizeThread(
   list: readonly ThreadSubscription[],
   threadKey: string,
-  now: number): { threadKey: string; decision: SubscriptionDecision; routeIds: string[]; contextIds: string[] } {
+  now: number,
+): { threadKey: string; decision: SubscriptionDecision; routeIds: string[]; contextIds: string[] } {
   const route = routeSubscriptions(list, threadKey, now);
   const ctx = contextFanout(list, threadKey, now);
   return {

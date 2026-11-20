@@ -327,7 +327,8 @@ async function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<
 export async function resolvePublicAddresses(
   hostname: string,
   signal: AbortSignal,
-  allowPrivate = false): Promise<LookupAddress[]> {
+  allowPrivate = false,
+): Promise<LookupAddress[]> {
   const bare = hostname.replace(/^\[|\]$/g, "");
   const literalFamily = isIP(bare);
   let addresses: LookupAddress[];
@@ -370,7 +371,8 @@ export async function resolvePublicAddresses(
 function pinnedLookup(addresses: LookupAddress[]): (
   hostname: string,
   options: { all?: boolean },
-  callback: (error: Error | null, address: string | LookupAddress[], family?: number) => void) => void {
+  callback: (error: Error | null, address: string | LookupAddress[], family?: number) => void,
+) => void {
   const primary = addresses.find((a) => a.family === 4) ?? addresses[0];
   return (_hostname, options, callback) => {
     process.nextTick(() => {
@@ -395,7 +397,8 @@ async function requestOnce(
   maxBytes: number,
   signal: AbortSignal,
   timeoutMs: number,
-  connectTimeoutMs: number): Promise<RawResponse> {
+  connectTimeoutMs: number,
+): Promise<RawResponse> {
   const lib = url.protocol === "https:" ? httpsRequest : httpRequest;
   return await new Promise<RawResponse>((resolve, reject) => {
     let settled = false;
@@ -523,7 +526,8 @@ async function requestWithAddressFallback(
   maxBytes: number,
   signal: AbortSignal,
   timeoutMs: number,
-  deadlineAt: number): Promise<RawResponse> {
+  deadlineAt: number,
+): Promise<RawResponse> {
   let lastError: unknown;
   const limit = Math.min(addresses.length, 4);
   for (let index = 0; index < limit; index++) {
@@ -625,7 +629,8 @@ export async function fetchPublicPage(input: string, options: WebFetchOptions = 
           maxBytes,
           controller.signal,
           timeoutMs,
-          deadlineAt);
+          deadlineAt,
+        );
       } catch (error: unknown) {
         throw mapError(error);
       }
@@ -933,7 +938,8 @@ export const DEFAULT_SEARCH_KEY_ENV = "DEEPSEEK_API_KEY";
 export function resolveSearchRuntimeFromConfig(
   web: WebSearchConfigLike | null,
   providers: { id: string; apiKeyEnv?: string }[],
-  readSecret: (name: string) => string | undefined): { provider: string; apiKey?: string; endpoint?: string; model?: string } | null {
+  readSecret: (name: string) => string | undefined,
+): { provider: string; apiKey?: string; endpoint?: string; model?: string } | null {
   if (web && web.disabled === true) return null;
   const explicit = String(web?.provider ?? "").trim().toLowerCase();
   const provider = explicit || DEFAULT_SEARCH_PROVIDER;
@@ -957,7 +963,8 @@ export function resolveSearchRuntimeFromConfig(
  * 解析好传入(本模块不读密钥文件)。 */
 export function resolveSearchProviderWithRuntime(
   env: NodeJS.ProcessEnv,
-  runtime: { provider: string; apiKey?: string; endpoint?: string; model?: string } | null): SearchProviderResolution {
+  runtime: { provider: string; apiKey?: string; endpoint?: string; model?: string } | null,
+): SearchProviderResolution {
   if (runtime && runtime.provider && runtime.apiKey) {
     const id = runtime.provider.toLowerCase() as SearchProviderId;
     if (id === "exa" || id === "perplexity" || id === "deepseek" || id === "custom") {
@@ -1447,7 +1454,8 @@ export function createWebSearchTool(config: WebToolConfig = {}): Tool {
       const requested = Number(a.max_results ?? configuredMax);
       const maxResults = Math.min(
         Math.max(Number.isFinite(requested) ? Math.floor(requested) : configuredMax, 1),
-        WEB_SEARCH_MAX_RESULTS);
+        WEB_SEARCH_MAX_RESULTS,
+      );
       if (!resolution.ok) {
         // 无任何 provider:自身能力兜底——先静态检索(等价 curl),失败指路 browser 工具。
         try {

@@ -223,7 +223,8 @@ function hasEvidence(refs: readonly string[]): boolean {
 /** 通用条目读取:非数组整段记 notArray;单条读不出来记 invalid(计数,不抛)。 */
 function readList<T>(
   raw: unknown,
-  read: (item: unknown) => T | undefined): { items: T[]; invalid: number; notArray: boolean } {
+  read: (item: unknown) => T | undefined,
+): { items: T[]; invalid: number; notArray: boolean } {
   if (!Array.isArray(raw)) return { items: [], invalid: 0, notArray: true };
   const items: T[] = [];
   let invalid = 0;
@@ -642,7 +643,8 @@ export function buildAtlas(input: AtlasInput, opts?: AtlasBuildOptions): AtlasRe
 export function resolveConflict(
   atlas: DirectionAtlas,
   conflictId: string,
-  opts: ConflictResolution): AtlasResult {
+  opts: ConflictResolution,
+): AtlasResult {
   const next = cloneAtlas(atlas);
   const codes = new Set<AtlasCode>();
   const conflict = next.conflicts.find((item) => item.id === conflictId);

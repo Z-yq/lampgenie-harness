@@ -130,7 +130,8 @@ function buildGroups(messages: readonly GroupableMessage[]): GroupSpan[] {
  */
 export function alignTailGroups<M extends GroupableMessage>(
   messages: readonly M[],
-  keepRecentMessages: number): TailAlignment<M> {
+  keepRecentMessages: number,
+): TailAlignment<M> {
   const list: readonly M[] = Array.isArray(messages) ? messages : [];
   const n = list.length;
   if (n === 0) {

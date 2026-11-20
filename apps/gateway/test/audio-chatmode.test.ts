@@ -56,7 +56,7 @@ describe("buildAudioChatFromConfig 形态分派", () => {
     const r = await llm.chat([{ role: "user", content: "(语音输入)", audio: { data: Buffer.from("pcm16!").toString("base64"), format: "pcm16" } }], []);
     expect(r.content).toBe("ok");
     expect(st.url).toBe("https://llm.test/v1/chat/completions");
- // 内容件:text + input_audio(pcm16 裸流自动包 WAV 容器,omni 接口经验证验证形态)
+ // 内容件:text + input_audio(pcm16 裸流自动包 WAV 容器,omni 接口实测验证形态)
     const content = (st.body.messages as { content: unknown }[])[0]!.content as { type: string; input_audio?: { data: string; format: string } }[];
     expect(content[0]).toEqual({ type: "text", text: "(语音输入)" });
     expect(content[1]!.type).toBe("input_audio");

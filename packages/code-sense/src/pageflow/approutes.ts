@@ -117,7 +117,8 @@ interface UnitRoutes {
 function routesOfUnit(
   unit: { js: string; startLine: number },
   decls: InlineJsDecl[],
-  root: JsNode): UnitRoutes {
+  root: JsNode,
+): UnitRoutes {
   const views = new Map<string, { opens: AppRouteOpen[]; entries: AppRouteEntry[] }>();
   const viewOf = (v: string): { opens: AppRouteOpen[]; entries: AppRouteEntry[] } => {
     let e = views.get(v);

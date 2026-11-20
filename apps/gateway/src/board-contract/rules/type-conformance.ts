@@ -367,7 +367,8 @@ export function validateBoardTypeConformance(
   edges: EdgeLike[] | undefined,
   boardType?: string,
   docKind?: string,
-  opts?: TypeConformanceOpts): BoardContractIssue[] {
+  opts?: TypeConformanceOpts,
+): BoardContractIssue[] {
   if (!boardType) return [];
   const es = edges ?? [];
   const text = allText(nodes);
@@ -445,7 +446,7 @@ export function validateBoardTypeConformance(
       if (unmarked.length) {
         missing.push(`步骤节点未标 change:读者看不出是复用现有逻辑还是改/加/删(${unmarked.slice(0, 8).map((n) => n.id).join(",")})——写 change=keep(复用不改)/modify(改已有)/add(新增)/delete(删)`);
       }
- // code 板画的是「现有代码/内容怎么走」,不是 agent 的实施计划。
+ // :code 板画的是「现有代码/内容怎么走」,不是 agent 的实施计划。
       // 待办动作形态的节点(实现/修复/添加…且 flow 没有函数调用形)点名回炉:改画现有代码动作,
       // 实施计划留在 step.md。
       const todos = nodes.filter((n) => !/^ph-/.test(String(n.id)) && isTodoActionNode(n));

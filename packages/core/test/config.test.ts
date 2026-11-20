@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ConfigSchema, loadConfig, deepMerge, resolveLlmApiKey, resolveLlmEndpoint, resolveTrackApiKey, resolveTrackApiKeySource, resolveTrackEndpoint, applyConfigPatch, writeProjectConfig, ensureSecretsFile, setSecretValue, listSecretKeys, HOT_CONFIG_PATHS } from "../src/index.js";
+import { ConfigSchema, loadConfig, deepMerge, resolveLlmApiKey, resolveLlmEndpoint, resolveTrackApiKey, resolveTrackApiKeySource, resolveTrackEndpoint, applyConfigPatch, writeProjectConfig, ensureSecretsFile, setSecretValue, listSecretKeys, HOT_CONFIG_PATHS, migrateLegacyConfig, normalizeSuperModelPresets } from "../src/index.js";
 
 function tmpRepo(): { root: string; userDir: string } {
   const root = mkdtempSync(join(tmpdir(), "zh-cfg-"));
@@ -388,5 +388,62 @@ describe("coding.models.routing()", () => {
   it("非法 fallbackChain 类型被拒", () => {
     const r = ConfigSchema.safeParse({ coding: { models: { routing: { memory: { model: "m1", fallbackChain: "x" } } } } });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("superModelRouting 档位迁移", () => {
+  it("别名 fast→level1、heavy→level3(输出不含旧键)", () => {
+    const out = normalizeSuperModelPresets({
+      fast: { model: "qwen3.7-flash", description: "扫描" },
+      heavy: { model: "deepseek-v4.1", providerId: "maas-bj" },
+    });
+    expect(out).toEqual({
+      level1: { model: "qwen3.7-flash", description: "扫描" },
+      level3: { model: "deepseek-v4.1", providerId: "maas-bj" },
+    });
+    expect("fast" in out).toBe(false);
+    expect("heavy" in out).toBe(false);
+  });
+
+  it("level1 已有值时不被旧 fast 覆盖(也不丢 level1)", () => {
+    const out = normalizeSuperModelPresets({ fast: { model: "old-flash" }, level1: { model: "new-flash", providerId: "p1" } });
+    expect(out.level1).toEqual({ model: "new-flash", providerId: "p1" });
+    expect(Object.keys(out)).toEqual(["level1"]);
+  });
+
+  it("model 空/纯空白/非对象条目被剔除(=UI 留空即未配置/清除)", () => {
+    const out = normalizeSuperModelPresets({ level1: { model: "" }, level2: { model: "   " }, level3: { model: "ok" }, bogus: "x", nil: null });
+    expect(out).toEqual({ level3: { model: "ok" } });
+    expect(normalizeSuperModelPresets(undefined)).toEqual({});
+    expect(normalizeSuperModelPresets("nope")).toEqual({});
+  });
+
+  it("migrateLegacyConfig 同样迁移(fast/heavy→level1/level3),无 presets 时不凭空塞", () => {
+    const migrated = migrateLegacyConfig({
+      agent: { superModelRouting: { enabled: true, presets: { fast: { model: "f1" }, heavy: { model: "h1", providerId: "p2" } } } },
+      coding: { llm: { model: "x" } },
+    }) as { agent: { superModelRouting: { enabled: boolean; presets: Record<string, unknown> } } };
+    expect(migrated.agent.superModelRouting.enabled).toBe(true);
+    expect(migrated.agent.superModelRouting.presets).toEqual({ level1: { model: "f1" }, level3: { model: "h1", providerId: "p2" } });
+    const untouched = migrateLegacyConfig({ agent: { superModelRouting: { enabled: false } } }) as { agent: { superModelRouting: Record<string, unknown> } };
+    expect("presets" in untouched.agent.superModelRouting).toBe(false);
+  });
+
+  it("ConfigSchema.parse 归一化(loadConfig 与 cfg.set 共用同一路)", () => {
+    const c = ConfigSchema.parse({ agent: { superModelRouting: { enabled: true, presets: { fast: { model: "f1" }, level2: { model: "" }, level3: { model: "h1" } } } } });
+    expect(c.agent.superModelRouting.presets).toEqual({ level1: { model: "f1" }, level3: { model: "h1" } });
+  });
+
+  it("applyConfigPatch:空档保存 {level1:{model:''}} 被剔除(deepMerge 无法删键的补偿)", () => {
+    const base = ConfigSchema.parse({ agent: { superModelRouting: { enabled: true, presets: { level1: { model: "x", providerId: "p1" }, level3: { model: "h1" } } } } });
+    const r = applyConfigPatch(base, { agent: { superModelRouting: { presets: { level1: { model: "" } } } } });
+    expect(r.next.agent.superModelRouting.presets).toEqual({ level3: { model: "h1" } }); // level1 被清除,level3 保留
+  });
+
+  it("HOT_CONFIG_PATHS 收录路由键(保存回执显示热生效)", () => {
+    expect(HOT_CONFIG_PATHS.has("agent.superModelRouting.enabled")).toBe(true);
+    for (const lv of ["level1", "level2", "level3"]) {
+      for (const k of ["providerId", "model", "description"]) expect(HOT_CONFIG_PATHS.has(`agent.superModelRouting.presets.${lv}.${k}`)).toBe(true);
+    }
   });
 });

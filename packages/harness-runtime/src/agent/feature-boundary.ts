@@ -118,7 +118,8 @@ function stepValues(surface: UISurface): string[] {
   const steps = surface?.steps;
   if (!steps || typeof steps !== "object") return [];
   return [steps.draft, steps.validate, steps.submit].filter(
-    (v): v is string => typeof v === "string" && v.length > 0);
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
 }
 
 /**
@@ -245,7 +246,8 @@ export function buildImpactBrief(input: {
       evidence: makeEvidence(
         `feature:${featureId}#entry:${entry}`,
         surface?.id,
-        ref ? `codeRef:${ref.id}` : undefined),
+        ref ? `codeRef:${ref.id}` : undefined,
+      ),
     });
   }
 
@@ -266,7 +268,8 @@ export function buildImpactBrief(input: {
       evidence: makeEvidence(
         `feature:${featureId}#dataFlow:${from}->${to}`,
         surface?.id,
-        ref ? `codeRef:${ref.id}` : undefined),
+        ref ? `codeRef:${ref.id}` : undefined,
+      ),
     });
   }
 

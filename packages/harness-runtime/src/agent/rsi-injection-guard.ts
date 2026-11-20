@@ -34,6 +34,7 @@ export const INJ_CODES = [
   "INJ_TRACE_ORIGIN_FORBIDDEN",
   "INJ_TAG_UNESCAPED",
   "INJ_HIGH_RISK_NEEDS_APPROVAL",
+  "INJ_HIGH_RISK_AUTO_REJECTED",
   "INJ_APPROVAL_MISSING",
   "INJ_TOO_LONG",
   "INJ_BLACKLISTED",
@@ -353,13 +354,16 @@ function evaluateInner(
   const escaped = escapeControlTags(body);
   if (escaped.hits.length > 0 || escaped.fenceUnpaired) add("INJ_TAG_UNESCAPED");
 
-  // ⑤ 高风险
+ // ⑤ 高风险(§14.2② 确定性拒绝即终态:命中且开启该开关且无 human approver
+ // → INJ_HIGH_RISK_AUTO_REJECTED——直接不进上下文,不挂起等人批(看板红灯事后可审计,
+ // 人复核后可把 textHash 加黑名单=事后否决)。旧码 NEEDS_APPROVAL 保留码表兼容历史台账,
+ // 不再新产。
   const riskFlags = detectHighRisk(body);
   if (riskFlags.length > 0 && pol.requireHumanForHighRisk) {
     const approver = isRecord(opts.approver) ? opts.approver : undefined;
     const humanApproved = approver?.kind === "human";
     if (!humanApproved) {
-      add("INJ_HIGH_RISK_NEEDS_APPROVAL");
+      add("INJ_HIGH_RISK_AUTO_REJECTED");
       if (!approver) add("INJ_APPROVAL_MISSING");
     }
   }

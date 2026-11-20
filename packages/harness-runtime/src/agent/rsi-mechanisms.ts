@@ -28,6 +28,7 @@ export const RSI_MECHANISM_IDS = [
   "prompts",
   "atlas",
   "pathology",
+  "semanticAttribution",
 ] as const;
 
 export type RsiMechanismId = (typeof RSI_MECHANISM_IDS)[number];
@@ -59,6 +60,17 @@ export interface RsiMechanismSpec {
  * 此前 12 个机制不论职责都塞 12 个候选,agent 实际只读台账、`已分析会话` 恒 0,
  * 预览成本却按 12 会话计入。按机制职责精确投放,才谈得上「分析的会话被认账」。 */
   analyzesSessions: boolean;
+ /** 白名单写通道(P0-4:本机制被允许的**唯一**台账写入面(逐条 CLI 命令形态)。
+ * 缺省不写——机制是只读审计员;给出通道的机制,brief 红线 #3 相应放宽为「只允许下列命令」。
+ * 设计动机(机制审计注意「复核结论从不回写台账,负知识永远 2 条」):语义判断归 agent,
+ * 写入走带形状校验的 store CLI——不开放自由写文件。 */
+  writeChannels?: readonly string[];
+ /** agent 审计频次(P1, 机制税分层):两次 agent 运行的最小间隔天数;缺省 1(每周期)。
+ * 确定性管线(nightly 六步/cohort 采集/pathology detect/结算/队列消费)由调度器 code 驱动
+ * 每周期直跑零 LLM;agent 机制只做语义审计——按信息产出速率分层:台账静态审计周级,
+ * 轨迹语义(negativeKb/atlas/pathology)3 日级。经验证依据:周期 2 全 12 机制 agent 驱动
+ * 13.96M token/零账本增长,ROI 门连负会停摆。 */
+  intervalDays?: number;
 }
 
 /**
@@ -70,10 +82,11 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     title: "夜间任务",
     goal: "复盘最近一昼夜的会话与夜间 run,判断夜间整合覆盖是否完整、候选是否被消化、有哪些该转成 follow-up 的欠账。",
     dataSources: [".genie/rsi/nightly/", ".genie/journals/", ".genie/rsi/rework-chains.jsonl"],
-    resultHint: "产出夜间整合复盘条目:覆盖了哪些会话、哪些步骤空转或失败、下一轮该补什么。",
+    resultHint: "产出夜间整合复盘条目:覆盖了哪些会话、哪些步骤空转或失败、下一轮该补什么;另按「经验蒸馏」小节把当日轨迹提炼成可复用经验候选(exp: 条目,≤5)。",
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: true,
+    intervalDays: 7,
   },
   evidence: {
     id: "evidence",
@@ -84,6 +97,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   experiments: {
     id: "experiments",
@@ -94,6 +108,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   cost: {
     id: "cost",
@@ -104,6 +119,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   injection: {
     id: "injection",
@@ -114,6 +130,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   tools: {
     id: "tools",
@@ -124,6 +141,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: true,
+    intervalDays: 7,
   },
   changeRequests: {
     id: "changeRequests",
@@ -134,6 +152,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   cohort: {
     id: "cohort",
@@ -144,16 +163,23 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 7,
   },
   negativeKb: {
     id: "negativeKb",
     title: "负面知识",
-    goal: "复核负面知识库的死路记录,判断哪些该翻案、哪些该过期、哪些该在规划期注入提醒。",
+    goal: "复核负面知识库的死路记录,判断哪些该翻案、哪些该过期、哪些该在规划期注入提醒;并把本次审计实证的新死路写回台账。",
     dataSources: [".genie/rsi/negkb.jsonl"],
-    resultHint: "产出负面知识条目:该翻案的死路、该过期的死路、该进规划注入的建议。",
+    resultHint: "产出负面知识条目:该翻案的死路、该过期的死路、该进规划注入的建议;本次新落账的死路各成一条(带 record 的 id)。",
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: true,
+    intervalDays: 3,
+    writeChannels: [
+      "记新死路(分析会话/证据后):写临时 JSON 文件再 `node --experimental-strip-types scripts/negative-kb.mts --root <root> --record <file>`(形状:{plan,context:{taskClass,module,tools,symptoms},failureEvidence:[{kind,detail,ref}],scope:{keywords,taskClass,module},confidence,alternative};证据 ref 必须指到真实 sessionId/file:line)",
+      "翻案:`node --experimental-strip-types scripts/negative-kb.mts --root <root> --revive <id> --by rsi-negativeKb --reason <证据>`",
+      "过期扫描:`node --experimental-strip-types scripts/negative-kb.mts --root <root> --expire`",
+    ],
   },
   prompts: {
     id: "prompts",
@@ -164,6 +190,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 30,
   },
   atlas: {
     id: "atlas",
@@ -174,6 +201,7 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: false,
+    intervalDays: 3,
   },
   pathology: {
     id: "pathology",
@@ -184,6 +212,22 @@ export const RSI_MECHANISMS: Record<RsiMechanismId, RsiMechanismSpec> = {
     defaultDriver: "agent",
     defaultEnabled: true,
     analyzesSessions: true,
+    intervalDays: 3,
+  },
+  semanticAttribution: {
+    id: "semanticAttribution",
+    title: "语义归因",
+    goal: "读 rework-chains 里 defectClass=uncategorized/None 的链,根据 fix diff 和 build 会话上下文,用 LLM 判断缺陷类别(contract/boundary/concurrency/resource/protocol/logic/regression)与 verdict(preventable/drift/unknown)。",
+    dataSources: [".genie/rsi/rework-chains.jsonl"],
+    resultHint: "产出语义归因条目:每条归因结果(defectClass+verdict+confidence+reason),以及覆盖率变化(归因前后 uncategorized 占比)。",
+    defaultDriver: "agent",
+    defaultEnabled: true,
+    analyzesSessions: false,
+    intervalDays: 3,
+ // 给归因 agent 开 CLI 写通道——写 enrichment 行到 rework-chains.jsonl
+    writeChannels: [
+      "归因结果写回:`node --experimental-strip-types scripts/semantic-attrib.mts --root <root> --chain <chainId> --class <defectClass> --verdict <verdict> --confidence <0-1> --reason <text> --model <model>`(形状:{chainId,defectClass,verdict,confidence,reason,model,version:1,at:ms})",
+    ],
   },
 };
 
@@ -313,6 +357,24 @@ function analysisSection(analysis: AgentBriefAnalysis | undefined): string[] {
   ];
 }
 
+/** 「经验蒸馏」小节( W2:仅 nightly 机制注入;其余机制返回空,旧行为逐字不变)。
+ * 口径:经验沉淀统一在 super agent 每日 dreaming(nightly 机制)做;候选池复用「待分析会话」
+ * (rsi-sessions 口径);产物是 exp: 前缀的结果项,settle 时经 rsi-experience-gate 质量门折叠入库。 */
+function nightlyDistillSection(id: string): string[] {
+  if (id !== "nightly") return [];
+  return [
+    "## 经验蒸馏(distill-experiences,nightly 专属)",
+    "- 复盘当日会话轨迹(候选池=本 brief 注入的会话分析计划,同一 rsi-sessions 口径;未注入计划时以数据源里的当日会话为准)时,同步提炼**可复用做法/坑**:换个任务/会话还能照做的规则才算经验;任务流水账(某任务做了什么)不是经验,不要写。",
+    "- 经验候选结果项格式(title 必须带 `exp:` 前缀,与结论条目分开计数,**最多 5 条**,少而准;没有可提炼的就一条都不写):",
+    "  - title:`exp:<category>/<name>`。category 只取 coding / ops / tooling / workflow / incidents;name 用小写连字符(如 vitest-conditions-flag),≤60 字符。",
+    "  - summary:一句话描述,**≤60 字**(经验库索引口径,超长会被质量门拒绝)。",
+    "  - detail:经验正文,**≥80 字**,必须含三部分:场景(什么时候用)/ 做法(具体怎么做)/ 坑(会踩什么)。",
+    "  - evidence:证据 refs,至少一条 `sessionId:<sid>` 或 `taskId:<tid>`,指向候选池里的真实会话/任务;无证据=质量门拒绝。",
+    "- 收尾时代码会做质量门(类目白名单 / name 形态 / description≤60 / body≥80 / 证据非空)并折叠进经验库:同名同内容跳过、同名异内容 version+1、每晚最多 5 条;不合格条目静默丢弃——请按口径一次写对。",
+    "",
+  ];
+}
+
 /** 剥掉尾部斜杠,避免拼出 `//`。 */
 function trimRoot(root: unknown): string {
   const text = typeof root === "string" ? root.trim() : "";
@@ -362,10 +424,22 @@ export function buildAgentBrief(opts: AgentBriefOptions): string {
     ...analysisSection(opts.analysis),
     ...budgetSection(opts.budgetTokens),
     ...experimentQuotaSection(spec.id, opts.experimentQuotaFactor),
+    ...nightlyDistillSection(spec.id),
+    ...(spec.writeChannels && spec.writeChannels.length > 0
+      ? [
+        "## 白名单写通道(本机制唯一允许的写入面,P0-4 2026-11-17)",
+        "语义判断(该不该记/该不该翻案)由你做;写入**只**走下列带形状校验的 CLI,禁止自由写文件:",
+        ...spec.writeChannels.map((cmd) => `- ${cmd}`),
+        "写入前后各核一次:写前确认证据齐(不齐就不写,留成结果条目);写后用 --list 复核落账。",
+        "",
+      ]
+      : []),
     "## 红线",
     "1. 只用上面数据源里的真实数据;文件缺失或为空就照实写「无数据」,不许推断或补全。",
     "2. 禁止编造数字、比例、日期、文件名与引用:每个数字都要能指到数据源里的具体行或字段。",
-    "3. 不得修改任何源码、配置与既有台账;不得写数据源目录之外的路径;不 commit、不 push。",
+    spec.writeChannels && spec.writeChannels.length > 0
+      ? "3. 不得修改任何源码与配置;台账写入**只**允许「白名单写通道」列出的命令(其它路径一律不写);不 commit、不 push。"
+      : "3. 不得修改任何源码、配置与既有台账;不得写数据源目录之外的路径;不 commit、不 push。",
     "",
     "## 任务形态(只读审计,不走编码仪式)",
     "- 这是**只读审计任务**:直接读数据源 → 写 resultPath → 最终回复列条目;不要落白板、不要 spawn_subagent、不要展开五阶段/task_phase 仪式。",
@@ -374,6 +448,7 @@ export function buildAgentBrief(opts: AgentBriefOptions): string {
     "## 允许的采集方式",
     "- 可以运行仓内 scripts/*.mts 做只读统计(先读脚本确认是只读再用)。",
     "- 可以直接读上面列出的 .genie 台账 / JSONL:大文件用 grep / head 定位,不要整读。",
+    "- P2-⑤a(2026-11-17):查历史会话/跨会话轨迹用 session_search(标准取数入口,禁止 read_file 裸扫 sessions/*.jsonl——机制实测确认 31 会话 0 次调用、裸扫 329 行)。",
     "- **不要对 .genie 全目录递归 grep/find**(324MB journal + 9p 慢盘会挂几分钟);只在上面列出的数据源路径内定向读,或 grep 指定文件。",
     "- 不跑构建、不跑全量测试、不跑任何写盘脚本。",
     "",

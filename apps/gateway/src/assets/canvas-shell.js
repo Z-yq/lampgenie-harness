@@ -30,9 +30,12 @@
   //   s < LOD_IN         → 进入 LOD
   //   s > LOD_OUT        → 退出 LOD
   //   LOD_IN..LOD_OUT 之间 → 保持当前态(LOD_MID 为设计意义上的中位参考值,亦是 LOD 视觉重心)
-  var LOD_IN = 0.40;            // 进 LOD:低于此缩放才降级(比旧 0.45 更晚降级)
-  var LOD_MID = 0.45;           // LOD 中位参考(滞回死区中值,供档位/调试口径复用)
-  var LOD_OUT = 0.56;           // 出 LOD:高于此缩放才恢复正文(比旧 0.45 更早恢复)
+ // (P1):band 0.40-0.56 档两头不靠——全览下限 0.56 时副标题仅 ~5.3px 违背「保证可读」。
+ // band 上移且 fitAll 下限取 LOD_IN*0.995(刚越过进槛):全览档直接进 LOD,卡头按 1/s 反缩放
+ // (标题恒 ≈12px 可读,正文缩略);单卡取景下限 FIT_MIN_S=0.7 与 LOD_OUT=0.70 对齐,口径统一。
+  var LOD_IN = 0.62;            // 进 LOD:低于此缩放降级(全览 floor=0.6169 即在槛内)
+  var LOD_MID = 0.66;           // LOD 中位参考(滞回死区中值,供档位/调试口径复用)
+  var LOD_OUT = 0.70;           // 出 LOD:高于此缩放才恢复正文(与 FIT_MIN_S 同值,可读口径统一)
   var Z_MAX = 2;
   var CULL_PAD = 240;           // 离屏剔除的宽容边(px,屏幕坐标)
  // 取景可读性下限:整卡入画时若按安全区能装下 ≥ 0.7,就不许取更小的倍率(900×600 经验证只到 49%,
@@ -255,6 +258,11 @@
        * 浏览器按最终设备像素重绘文字 → 锐利。Windows 缩放(dpr 1.25/1.5)下的分数设备像素同理受益。 */
       "#cvWorldShell{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}",
       "#cvWorldShell.cv-moving{will-change:transform}",
+ /* 二轮:大面板毛玻璃在软件合成/弱 GPU 下把整页压到 ~30fps(经验证 rAF p50 33.3ms,
+ * 关掉侧栏 264×822 + 底栏 1600×44 的 backdrop-filter 即 16.7ms)。交互期临时改实底,
+ * 静止 180ms 后恢复毛玻璃;小面积 HUD/小地图保留模糊(经验证非瓶颈)。 */
+      "body.cv-interacting #sidebar,body.cv-interacting .sb-acts,",
+      "body.cv-dragging #sidebar,body.cv-dragging .sb-acts{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}",
       /* 卡片 */
       ".cv-card{position:absolute;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;",
       "  background:var(--window-bg,rgba(10,7,5,.94));box-shadow:0 18px 48px rgba(0,0,0,.42);overflow:hidden;",
@@ -274,22 +282,29 @@
        * 基础规则常在场,所以 LOD 进/出两个方向都能过渡,且不影响 .off 的即时隐藏。 */
       ".cv-card-body,.cv-card-tools,.cv-rs{transition:opacity .22s ease,visibility .22s}",
       "body.cv-lod .cv-card-body,body.cv-lod .cv-card-tools,body.cv-lod .cv-rs{visibility:hidden;opacity:0}",
+ // 仅 visibility:hidden 仍占布局宽(经验证 tools 占 477px 世界坐标),
+ // 把标题 flex 项挤成 0px → 全览只看得到图标看不到卡名。LOD 下直接不参与布局。
+      "body.cv-lod .cv-card-tools{display:none}",
       /* LOD 卡片收缩到卡头高:正文藏了以后卡片还留着 g.h(640/720)就是一大片空洞。
        * 目标 = 卡头屏幕高 58px 反算回世界高(58/s),与下面卡头规则同口径。
  * 不用 min(...,100%) :允许的包含块 #cvWorldShell 是 0×0,百分比高度会解析成 0 → 卡片整张消失。
        * !important 必须有:applyCard() 给 .cv-card 写了内联 height。 */
       "body.cv-lod .cv-card{height:calc(58px / var(--cv-s,1))!important;overflow:hidden;transition:height .22s ease}",
-      "body.cv-lod .cv-card-head{height:min(calc(58px / var(--cv-s,1)),100%);padding:0 calc(8px / var(--cv-s,1));",
-      "  gap:calc(9px / var(--cv-s,1));cursor:pointer}",
-      "body.cv-lod .cv-card-ico{width:calc(26px / var(--cv-s,1));height:calc(26px / var(--cv-s,1));",
+      "body.cv-lod .cv-card-head{height:min(calc(58px / var(--cv-s,1)),100%);padding:0 calc(6px / var(--cv-s,1));",
+      "  gap:calc(7px / var(--cv-s,1));cursor:pointer}",
+      "body.cv-lod .cv-card-ico{width:calc(22px / var(--cv-s,1));height:calc(22px / var(--cv-s,1));",
       "  border-radius:calc(7px / var(--cv-s,1))}",
-      "body.cv-lod .cv-card-ico svg{width:calc(15px / var(--cv-s,1));height:calc(15px / var(--cv-s,1))}",
+      "body.cv-lod .cv-card-ico svg{width:calc(13px / var(--cv-s,1));height:calc(13px / var(--cv-s,1))}",
       "body.cv-lod .cv-card-txt{gap:calc(1px / var(--cv-s,1))}",
-      "body.cv-lod .cv-card-title{font-size:calc(12.5px / var(--cv-s,1));letter-spacing:calc(1.2px / var(--cv-s,1))}",
+      "body.cv-lod .cv-card-title{font-size:calc(12.5px / var(--cv-s,1));letter-spacing:calc(.6px / var(--cv-s,1));white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.16;text-wrap:balance}",
+ /* 两行仍截断(窄视口全览)→ 三行 11px + 隐副标题(lodTitleFit 按卡自适应打 cv-t3) */
+      "body.cv-lod .cv-card.cv-t3 .cv-card-title{-webkit-line-clamp:3;font-size:calc(11px / var(--cv-s,1));letter-spacing:calc(.3px / var(--cv-s,1));line-height:1.14}",
+      "body.cv-lod .cv-card.cv-t3 .cv-card-sub{display:none}",
       "body.cv-lod .cv-card-sub{font-size:max(calc(9.5px / var(--cv-s,1)),10px);color:color-mix(in srgb, var(--muted) 62%, var(--text) 38%)}",
  /* :离屏卡跳过渲染布局(治 LOD 跨阈 87ms 长任务峰),进入视口自动恢复 */
       ".cv-card-body{content-visibility:auto;contain-intrinsic-size:auto 400px}",
-      "body.cv-lod .cv-card-dot{width:calc(7px / var(--cv-s,1));height:calc(7px / var(--cv-s,1))}",
+ // 全览档隐藏状态点(空占 ~7px,标题因此被省略号吃字)。
+      "body.cv-lod .cv-card-dot{display:none}",
       /* ---- Dify 风卡片头:图标块 + 标题/副标题两行 + 状态点 + 工具 ---- */
       ".cv-card-head{display:flex;align-items:center;gap:9px;height:" + HEAD_H + "px;padding:0 8px 0 8px;flex-shrink:0;",
       "  background:var(--glass2);border-bottom:1px solid var(--border-soft);cursor:move;user-select:none}",
@@ -311,7 +326,7 @@
       ".cv-card-dot.st-run{background:var(--bronze);box-shadow:0 0 8px var(--bronze-glow);animation:cvDotBreath 1.6s ease-in-out infinite}",
       ".cv-card-dot.st-warn{background:var(--warn,#d9b36c)}",
       ".cv-card-dot.st-fail{background:var(--red,#e08a7a)}",
-      ".cv-card-dot.st-ok{background:var(--green,#9dc08b)}",
+      ".cv-card-dot.st-ok{background:transparent;border:1.5px solid var(--faint)}", /* :就绪=中性环,颜色只留给 运行/警告/失败 */
       "@keyframes cvDotBreath{0%,100%{opacity:.35}50%{opacity:1}}",
       ".cv-card-tag{font-size:9px;letter-spacing:1px;color:var(--faint);border:1px solid var(--border-soft);",
       "  border-radius:4px;padding:0 4px;flex-shrink:0}",
@@ -397,6 +412,12 @@
       "#cvCtx .cv-ctx-it:hover{background:var(--hover-bg2);color:var(--accent-bright)}",
       "#cvCtx .cv-ctx-it.danger{color:var(--red,#e08a7a)}",
       "#cvCtx .cv-ctx-sep{height:1px;margin:4px 6px;background:var(--border-soft)}",
+ /* (P3):多选常驻计数条——toast 会淡出,选中态存在期间底部常驻「已选 N 张 · Esc 取消」 */
+      "#cvSelBar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:46;display:none;",
+      "  align-items:center;gap:10px;padding:5px 14px;border-radius:999px;border:1px solid var(--bronze);",
+      "  background:var(--glass2,rgba(28,18,10,.92));font-size:12px;color:var(--text,#ece1d1);box-shadow:0 6px 18px rgba(0,0,0,.35)}",
+      "#cvSelBar b{color:var(--bronze,#c98f45)}",
+      "#cvSelBar button{border:none;background:transparent;color:var(--bronze,#c98f45);cursor:pointer;font-size:12px;padding:0 2px}",
       "#cvMarquee{position:absolute;z-index:45;border:1px solid var(--bronze);background:rgba(201,143,69,.10);",
       "  pointer-events:none;display:none;border-radius:2px}",
       ".cv-guide{position:absolute;z-index:44;background:var(--accent-bright);opacity:.75;pointer-events:none;display:none}",
@@ -420,7 +441,9 @@
  * 档在写者 chip 条(top:30px)前面,点 chip 既不生效也不报错(2026-10 经验证 3/6 chip 被吃)。
        * 定位挪到右下角抬高 120px:避开面板自己的 zoombar(right:10px;bottom:10px)与底部 HUD。 */
       "#cvMiniShell{position:absolute;right:10px;bottom:120px;z-index:40;width:172px;height:112px;border:1px solid var(--border);",
-      "  border-radius:10px;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);cursor:crosshair}",
+ /* 底色跟主题走:固定 rgba(0,0,0,.35) 在 light/ink/sand/plum/olive 下是一块灰板,
+ * 卡片块 rgba(150,131,106,.20) 在浅底上几乎看不见 → 小地图内容整体失读。 */
+      "  border-radius:10px;background:color-mix(in srgb, var(--window-bg,#141009) 76%, transparent);backdrop-filter:blur(6px);cursor:crosshair}",
       /* 经典回退时全部隐藏 */
       "body:not(.cv-shell) #cvRoot{display:none}",
     ].join("\n");
@@ -457,7 +480,8 @@
       '<button data-act="z100" title="100%">100%</button>' +
       '<button data-act="z200" title="200%">200%</button>' +
       '<button data-act="vreset" title="视口复位 (1:1 + 平移归零)">复位</button>' +
-      '<button data-act="fit" title="紧凑适配全部卡片 (Ctrl 0)">适</button>' +
+      '<button data-act="fit" title="适配当前焦点卡(保持可读);看全部用「全」(全部入画,卡头概览) (Ctrl 0)">适</button>' +
+      '<button data-act="fitall" title="全览:把全部卡片收进视口(允许低于可读下限;卡头进入 LOD 反缩放)">全</button>' +
       '<button data-act="reset" title="重置布局">重置</button>' +
       '<button data-act="classic" title="切回经典单视图布局 (Ctrl+Shift+C)">经典</button>' +
       '<button data-act="mode-drag" data-role="ctrlmode" title="空白处拖拽行为:平移(抓手)/ 框选(箭头);Shift 也可临时框选">✥</button>';
@@ -610,12 +634,18 @@
    * 解除提升触发浏览器按最终缩放重栅格化文字。同时把平移量取整、缩放值收规到 4 位小数,
    * 消掉 fit/持久化带来的亚像素与 0.30000000000000004 类脏值(亚像素偏移同样糊字)。 */
   var cvMovingTimer = 0;
+  var viewRaf = 0; // setView 的帧合并句柄(:120Hz 指针事件 → 每帧一次 transform 写)
   function markMoving() {
     S.world.classList.add("cv-moving");
+ // 二轮:大面板毛玻璃(侧栏 264×822 / 底栏 1600×44)在软件合成/弱 GPU 下把整页
+ // 压到 ~30fps(经验证 rAF p50 33.3ms;关掉这两处 backdrop-filter 即回到 16.7ms)。
+ // 交互期(body.cv-interacting / cv-dragging)临时去毛玻璃,静止 180ms 后恢复——视觉只在拖动时变实。
+    if (document.body) document.body.classList.add("cv-interacting");
     if (cvMovingTimer) clearTimeout(cvMovingTimer);
     cvMovingTimer = setTimeout(function () {
       cvMovingTimer = 0;
       S.world.classList.remove("cv-moving");
+      if (document.body) document.body.classList.remove("cv-interacting");
     }, 180);
   }
 
@@ -647,6 +677,35 @@
     var pct = S.hud && S.hud.querySelector('[data-role=pct]');
     if (pct) pct.textContent = Math.round(v.s * 100) + "%";
     scheduleDraw();
+    lodTitleFit();
+  }
+
+ /** 三轮:LOD 卡名自适应三行。窄视口(1280)全览时卡更窄,两行 clamp 仍会截断;
+ * 先批量读全部 scrollHeight(再统一改 class,避免逐卡强制回流),仍截断的卡放开到
+ * 3 行 + 11px 并隐藏副标题 —— 全览认卡名优先。仅在 LOD 态生效,退出 LOD 全部撤销。 */
+  var lodTitleRaf = 0;
+  var lodTitleKey = "";
+  function lodTitleFit() {
+    if (lodTitleRaf) return;
+    lodTitleRaf = requestAnimationFrame(function () {
+      lodTitleRaf = 0;
+ // 平移(scale 不变)不需要重排判定,只有倍率/LOD 态变化或 resize 才重算
+      var key = document.documentElement.style.getPropertyValue("--cv-s") + "|" + (document.body.classList.contains("cv-lod") ? 1 : 0);
+      if (key === lodTitleKey) return;
+      lodTitleKey = key;
+      var batch = [], k, c;
+      for (k in S.cards) {
+        if (!Object.prototype.hasOwnProperty.call(S.cards, k)) continue;
+        c = S.cards[k];
+        if (!c || !c.el) continue;
+        var t = c.el.querySelector(".cv-card-title");
+        if (!t) continue;
+ // LOD 关闭=统一撤销(标题一行/副标题恢复)
+        var over = document.body.classList.contains("cv-lod") && t.scrollHeight > t.clientHeight + 1;
+        batch.push({ el: c.el, over: over });
+      }
+      for (var i = 0; i < batch.length; i++) batch[i].el.classList.toggle("cv-t3", batch[i].over);
+    });
   }
 
   function applyAll() {
@@ -665,7 +724,10 @@
       y: Number.isFinite(v.y) ? v.y : 0,
       s: clamp(Number.isFinite(v.s) ? v.s : 1, Z_MIN, Z_MAX),
     };
-    applyView();
+ // 指针事件可达 120Hz,而 transform/网格/LOD/HUD 每帧只需写一次。
+ // 同一帧内多次 setView 只落最后一次(状态立即更新,绘制合并),平移帧率经验证提升。
+    if (viewRaf) return;
+    viewRaf = requestAnimationFrame(function () { viewRaf = 0; applyView(); });
   }
   /** 光标锚点缩放(任务B,引擎口径):复刻 diagram-viewport.zoomAtPoint 的数学——把光标点
    *  反解为世界坐标再以新倍率重投影,光标下的世界内容点屏幕位移恒为 0。
@@ -818,19 +880,27 @@
     };
   }
 
-  function fitAll() {
+  function fitAll(forceAll) {
     var h = hostRect();
     var a = safeArea(h);
     var b = boundsOf(visibleRects());
     // 两侧各留 24px 呼吸位(否则最外列卡缘贴死安全区边界,看着像被切了一刀)
     var v = fitInArea(b, a, 24, Z_MAX);
- // 全览可读下限(「画布模式挂了」用户用户反馈):卡量涨到 21 张后全览包围盒上到 12k px,
- // fit 会压到 Z_MIN(~15%)→ 低于 LOD 入槛整屏卡片降级成占位色块,观感=画布挂了,且无任何提示。
- // 处置:全览取景不低于 LOD 出槛(56%)——装不下就部分入画,以包围盒中心取景,配 toast 指路;
- // 想看全景仍可手动滚轮缩小(LOD 概览语义不变,只是不再被「全部入画」一键制造)。
-    if (v.s < LOD_OUT) {
-      v = viewCenterIn(b, a, LOD_OUT);
-      toast2("卡片较多,已停在 " + Math.round(LOD_OUT * 100) + "% 保证可读 · 空白拖拽/小地图可看全部");
+ // 全览可读下限(「画布模式挂了」; P1 修订):floor=LOD_IN*0.995 刚越进槛
+ // → 全览档卡头走 LOD 反缩放(标题恒 ≈12px),不再出现「副标题 5.3px 却宣称保证可读」;
+ // 装不下就部分入画(包围盒中心取景),toast 按实际 floor 值播报;想看全景仍可手动滚轮缩小。
+ // 新增 forceAll(HUD「全」)=真·全部入画(允许低于可读下限,卡头 LOD 反缩放),
+ // 解决「21 卡时适只停在 62%、只能看到 2 张、无法一眼看分布」。
+    var floorS = forceAll ? Z_MIN : LOD_IN * 0.995;
+    if (v.s < floorS) {
+ // (M1):「适」装不下时对齐**焦点卡**(21 卡世界 0.62 档仍 4146px 宽,旧世界居中只见
+ // 中间一屏、画面 80% 空白);「全」(forceAll)保持世界居中——全览语义就是看全部。
+      var anchor = (!forceAll && S.focused && S.cards[S.focused]) ? S.cards[S.focused].g : b;
+      v = viewCenterIn({ x: anchor.x, y: anchor.y, w: anchor.w, h: anchor.h }, a, floorS);
+      if (forceAll) toast2("全览 " + Math.round(v.s * 100) + "% · 全部 " + S.order.length + " 张已入画,卡头保持可读(LOD);滚轮可放大");
+      else toast2("卡片较多,已停在 " + Math.round(floorS * 100) + "% 并对齐当前焦点卡 · 卡头保持可读,正文缩略;点「全」看整板,或空白拖拽/小地图平移");
+    } else if (forceAll) {
+      toast2("全览 " + Math.round(v.s * 100) + "% · 全部 " + S.order.length + " 张已入画");
     }
     setView(v);
   }
@@ -1032,7 +1102,7 @@
       if (c && c.dataset.name) focus(c.dataset.name, { zoom: true });
     });
 
-    window.addEventListener("resize", function () { scheduleDraw(); });
+    window.addEventListener("resize", function () { scheduleDraw(); lodTitleKey = ""; lodTitleFit(); });
     document.addEventListener("keydown", function (e) {
       if (e.key === " " && !isEditable(e.target)) { spaceDown = true; S.host.classList.add("cv-grabbing"); }
     }, true);
@@ -1092,6 +1162,8 @@
       mq.style.display = "none";
       document.removeEventListener("pointermove", apply);
       document.removeEventListener("pointerup", up);
+ // (P3):框选后给数量/操作提示——此前只有卡片描边,误框后无反馈。
+      if (S.sel.length > 0) toast2("已选 " + S.sel.length + " 张卡片 · 拖动任一标题整组移动 · Esc 取消");
       scheduleDraw();
     };
     document.addEventListener("pointermove", apply);
@@ -1103,6 +1175,23 @@
     for (var n in S.cards) {
       if (!Object.prototype.hasOwnProperty.call(S.cards, n)) continue;
       S.cards[n].el.classList.toggle("sel", S.sel.indexOf(n) >= 0);
+    }
+ // (P3):常驻计数条与选中态同生命周期(惰性创建挂 root——root 已就位,不随 world 缩放)
+    var bar = document.getElementById("cvSelBar");
+    if (!bar && S.root) {
+      bar = el("div");
+      bar.id = "cvSelBar";
+      bar.innerHTML = '<span>已选 <b>0</b> 张卡片 · 拖动任一标题整组移动</span><button data-act="sel-clear" title="取消选择 (Esc)">取消</button>';
+      S.root.appendChild(bar);
+      bar.addEventListener("click", function (ev) {
+        var t = ev.target && ev.target.closest ? ev.target.closest('[data-act="sel-clear"]') : null;
+        if (t) clearSel();
+      });
+    }
+    if (bar) {
+      bar.style.display = S.sel.length ? "flex" : "none";
+      var b = bar.querySelector("b");
+      if (b) b.textContent = String(S.sel.length);
     }
   }
   function clearSel() { if (S.sel.length) setSel([]); }
@@ -1168,6 +1257,14 @@
       var targets = S.sel.length ? S.sel.slice() : (S.focused ? [S.focused] : []);
       var step = e.shiftKey ? 10 : 1;
       if (e.key === "Escape" && S.sel.length) { clearSel(); return; }
+ // (m4):Esc 返回全览——双击/托盘点入的聚焦取景后一键回全览;选中态先清选;
+ // 无焦点时 fitAll 幂等无害。
+      if (e.key === "Escape" && !S.sel.length && S.focused) {
+ // (m4):回全览同时清焦点描边(.on 高亮属聚焦态;全览下保留会误导"仍有活动卡")
+        S.focused = "";
+        try { markFocus(); } catch (err) { /* 描边清理失败不阻塞取景 */ }
+        fitAll(); return;
+      }
       if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "a" && !isEditable(e.target)) {
         e.preventDefault();
         setSel(S.order.filter(function (n) { return S.cards[n] && !S.cards[n].g.hidden; }));
@@ -1180,7 +1277,7 @@
         e.preventDefault();
         for (var i = 0; i < targets.length; i++) hideCard(targets[i]);
         clearSel();
-        toast2("已隐藏 " + targets.length + " 张卡片(侧栏托盘同名按钮可唤回;数据未动)");
+        toast2("已隐藏 " + targets.length + " 张卡片(恢复:空白右键 → 唤回全部隐藏卡;数据未动)");
         return;
       }
       var dx = 0, dy = 0;
@@ -1270,7 +1367,7 @@
           : { label: "恢复到默认位置", run: function () { var l = layoutFromSpecs((S.bridge && S.bridge.specs) || []); if (l[name]) { c.g.x = l[name].x; c.g.y = l[name].y; c.g.w = l[name].w; c.g.h = l[name].h; c.g.min = false; applyCard(name); notifyResize(name, 60); saveSoon(); scheduleDraw(); } } },
         { label: "复制位置(调试)", run: function () { try { navigator.clipboard.writeText(name + " " + JSON.stringify(c ? { x: c.g.x, y: c.g.y, w: c.g.w, h: c.g.h } : {})); toast2("坐标已复制"); } catch (err) { console.warn(err); } } },
         "-",
-        { label: "隐藏此卡(侧栏托盘同名按钮可唤回)", danger: true, run: function () { hideCard(name); } },
+        { label: "隐藏此卡(恢复:空白右键 → 唤回全部隐藏卡)", danger: true, run: function () { hideCard(name); } },
       ];
     }
     return [
@@ -1337,6 +1434,7 @@
       else if (act === "z200") zoomToScale(2);
       else if (act === "vreset") zoomReset();
       else if (act === "fit") fitAll();
+      else if (act === "fitall") fitAll(true);
       else if (act === "reset") resetLayout();
       else if (act === "classic") setMode("classic");
       else if (act === "mode-drag") {
@@ -1420,7 +1518,10 @@
   function dragCard(name, dir, ev) {
     var c = S.cards[name];
     if (!c) return;
-    var z = zOf();
+ // (第五轮 P0):拖卡片/改尺寸的屏幕位移必须换算成**世界**像素,即除以 (UI 缩放 × 画布缩放)。
+ // 旧实现只除 zOf(body 界面缩放),漏了 S.view.s:经验证 k=0.6169 时光标走 200px 卡片只走 123.4px(61.7%),
+ // k=0.1521 整组拖动只走 30.4px(15.2%),表现为"拖不动/跟不上";k=1 恰好 1:1,所以历轮未暴露。
+    var z = zOf() * (S.view && S.view.s > 0 ? S.view.s : 1);
     var g0 = { x: c.g.x, y: c.g.y, w: c.g.w, h: c.g.h };
     var sx = ev.clientX, sy = ev.clientY;
     var free = ev.altKey; // Alt=自由(不吸附/不出参考线)
@@ -1431,6 +1532,18 @@
       var gc = S.cards[group[gi]];
       if (gc) starts[group[gi]] = { x: gc.g.x, y: gc.g.y };
     }
+ // 同一帧多次 pointermove 只写一次卡片几何(状态已即时更新;
+ // 对齐线 showGuides 仍逐事件走,因为它是轻量 absolute 定位)。拖拽 p95 帧间隔经验证下降。
+    var paintRaf = 0;
+    var paint = function () {
+      if (paintRaf) return;
+      paintRaf = requestAnimationFrame(function () {
+        paintRaf = 0;
+        applyCard(name);
+        for (var pk = 0; pk < group.length; pk++) if (group[pk] !== name) applyCard(group[pk]);
+        scheduleDraw();
+      });
+    };
     var move = function (e) {
       var dx = (e.clientX - sx) / z, dy = (e.clientY - sy) / z;
       if (dir === "move") {
@@ -1454,7 +1567,6 @@
             var gc2 = S.cards[gn];
             if (!gc2 || !starts[gn]) continue;
             gc2.g.x = starts[gn].x + mx; gc2.g.y = starts[gn].y + my;
-            applyCard(gn);
           }
         }
       } else {
@@ -1470,8 +1582,7 @@
         }
         c.g.w = nw; c.g.h = nh; c.g.x = nx2; c.g.y = ny2;
       }
-      applyCard(name);
-      scheduleDraw();
+      paint();
     };
     var up = function () {
       document.removeEventListener("pointermove", move);
@@ -1490,12 +1601,34 @@
   }
 
   // ---------- 离屏剔除 + 小地图(同一 rAF) ----------
+  var miniColors = null; // 主题色缓存:drawMini 每帧 getComputedStyle(body) 会强制样式重算
+  var miniLast = 0, miniTimer = 0;
+  function readMiniColors() {
+    var css = getComputedStyle(document.body);
+    miniColors = {
+      bronze: (css.getPropertyValue("--bronze") || "#c98f45").trim(),
+      faint: (css.getPropertyValue("--faint") || "#6b5c4a").trim(),
+    };
+    return miniColors;
+  }
+  try {
+    new MutationObserver(function () { miniColors = null; })
+      .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  } catch (e) { /* 老浏览器:主题色缓存退化为永不更新 */ }
   function scheduleDraw() {
     if (S.rafPending) return;
     S.rafPending = true;
     requestAnimationFrame(function () {
       S.rafPending = false;
       cull();
+ // 交互期小地图降到 ~14fps(每帧重绘 21 卡 + 主题读值收益低);静止时首帧立即补画。
+      var moving = S.panning || document.body.classList.contains("cv-moving") || document.body.classList.contains("cv-dragging");
+      var now = (window.performance && performance.now) ? performance.now() : Date.now();
+      if (moving && now - miniLast < 70) {
+        if (!miniTimer) miniTimer = setTimeout(function () { miniTimer = 0; drawMini(); }, 80);
+        return;
+      }
+      miniLast = now;
       drawMini();
     });
   }
@@ -1563,9 +1696,9 @@
     var W = cv.width, H = cv.height;
     g.clearRect(0, 0, W, H);
     var m = miniMap();
-    var css = getComputedStyle(document.body);
-    var bronze = (css.getPropertyValue("--bronze") || "#c98f45").trim();
-    var faint = (css.getPropertyValue("--faint") || "#6b5c4a").trim();
+    var pal = miniColors || readMiniColors();
+    var bronze = pal.bronze;
+    var faint = pal.faint;
     var offx = m.offx, offy = m.offy;
     for (var i = 0; i < S.order.length; i++) {
       var n = S.order[i], c = S.cards[n];
@@ -1573,10 +1706,14 @@
       var x = offx + (c.g.x - m.b.x) * m.k;
       var y = offy + (c.g.y - m.b.y) * m.k;
       var w = Math.max(2, c.g.w * m.k), hh = Math.max(2, (c.g.min ? HEAD_H : c.g.h) * m.k);
-      g.fillStyle = n === S.focused ? "rgba(201,143,69,.42)" : "rgba(150,131,106,.20)";
+ // 卡片块颜色走主题令牌:原先硬编码 rgba(150,131,106,.20),
+ // 在浅色主题的浅底上对比近 0(经验证 light/ink 小地图只剩视口框可见)。
+      g.globalAlpha = n === S.focused ? 0.42 : 0.22;
+      g.fillStyle = n === S.focused ? bronze : faint;
       g.strokeStyle = n === S.focused ? bronze : faint;
       g.lineWidth = 1.5;
       g.fillRect(x, y, w, hh);
+      g.globalAlpha = 1; // 描边保持不透明(块内半透明只用于填充)
       g.strokeRect(x, y, w, hh);
     }
     // 视口框
@@ -1609,11 +1746,26 @@
       localStorage.setItem(LS_LAYOUT, JSON.stringify({ v: 1, view: { x: Math.round(S.view.x), y: Math.round(S.view.y), s: Number(S.view.s.toFixed(3)) }, cards: cards, focused: S.focused }));
     } catch (e) { /* 配额/隐私模式:忽略 */ }
   }
+ /**
+ * 旧布局一次性迁移(P0):
+ * v1 播种里 subchat(y=0,h=900)/track(y=520)/usage(y=1180) 同列互相重叠 380px/240px
+ * (世界坐标经验证,不是视觉错觉)。只迁移「三卡都还在旧默认位」的档,用户手动搬过的不动。
+ */
+  function migrateSavedLayout(raw) {
+    var c = raw && raw.cards;
+    if (!c || !c.subchat || !c.track || !c.usage) return raw;
+    var s = c.subchat, t = c.track, u = c.usage;
+    var legacy = Number(s.x) === 4520 && Number(s.y) === 0
+      && Number(t.x) === 4520 && Number(t.y) === 520
+      && Number(u.x) === 4520 && Number(u.y) === 1180;
+    if (legacy) { t.y = 940; u.y = 1880; }
+    return raw;
+  }
   function loadSaved() {
     try {
       var raw = JSON.parse(localStorage.getItem(LS_LAYOUT) || "null");
       if (!raw || raw.v !== 1) return null;
-      return raw;
+      return migrateSavedLayout(raw);
     } catch (e) { return null; }
   }
   function resetLayout() {

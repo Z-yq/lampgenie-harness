@@ -68,7 +68,10 @@ describe("agent-wiring 接线:brief 进稳定前缀", () => {
   });
 
   it("追加到 composeSystemPrompt 的 base(system 稳定前缀),不是 loop tips", () => {
-    expect(src).toMatch(/\+ projectMainline\s*\n?\s*(\/\/ [^\n]*\n\s*)?\+ workStartBrief,/);
+    expect(src).toMatch(/\+ projectMainline\s*\n?\s*(\/\/ [^\n]*\n\s*)?\+ workStartBrief/);
+ // 世界模型开工简报同位进 base(空串=零变化),journal work.start.world 每会话判重
+    expect(src).toContain('+ (worldStartBrief === "" ? "" : "\\n\\n" + worldStartBrief)');
+    expect(src).toContain('type: "work.start.world"');
  // 没有把 brief 塞进 buildLoopTips 的路径
     expect(src).not.toMatch(/startProfile/);
   });

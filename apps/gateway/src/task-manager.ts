@@ -160,7 +160,7 @@ export class TaskSupervisor {
  // - 教训保留:不篡改 updatedAt(时间戳是事实,收编只改状态+注明原因)。
       let finalTask: Task = t;
       if (!TERMINAL_STATES.has(t.state) && t.state !== "interrupted" && t.state !== "queued") {
- // 用户已停止(running/blocked 且会话在任务创建后有停止标记)→ 收编 cancelled,
+ // :用户已停止(running/blocked 且会话在任务创建后有停止标记)→ 收编 cancelled,
         // 结果注明「用户已停止」;不得写成 interrupted(否则面板一键续跑/自动恢复会复活它)。
         const stopped = opts?.userStopped?.(t) === true;
         finalTask = {

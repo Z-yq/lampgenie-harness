@@ -559,7 +559,7 @@ describe("model-scoring:候选过小跳过 / 内容缓存 / 失败降级(2026-11
   });
 });
 
-// 缺省 off 的三档显式开关、off 零网络零开销、确定性与不可变。
+// :缺省 off 的三档显式开关、off 零网络零开销、确定性与不可变。
 describe("model-scoring:缺省 off / 显式三档", () => {
   const cands = [scoringCand("a", 10_000), scoringCand("b", 10_000), scoringCand("c", 10_000)];
 

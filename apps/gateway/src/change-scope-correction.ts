@@ -67,7 +67,8 @@ export function normalizeChangeScopeCorrection(v: unknown): ChangeScopeCorrectio
  */
 export function applyChangeScopeCorrection(
   base: ChangeScopeBase,
-  correction: unknown): ChangeScopeCorrectionResult {
+  correction: unknown,
+): ChangeScopeCorrectionResult {
   const c = normalizeChangeScopeCorrection(correction);
   if (!c) return { ok: false, code: "INVALID" };
   if (c.reason.length > REASON_MAX) return { ok: false, code: "INVALID" };
@@ -115,7 +116,8 @@ export interface ChangeScopeCorrectionEventLike {
  */
 export function readChangeScopeCorrection(
   events: readonly ChangeScopeCorrectionEventLike[],
-  sessionId: string): ChangeScopeCorrection | null {
+  sessionId: string,
+): ChangeScopeCorrection | null {
   if (!Array.isArray(events)) return null;
   let found: ChangeScopeCorrection | null = null;
   for (const e of events) {

@@ -30,7 +30,8 @@ export class WorktreeError extends Error {
   constructor(
     public readonly code: WorktreeErrorCode,
     message: string,
-    public readonly detail?: string) {
+    public readonly detail?: string,
+  ) {
     super(message);
     this.name = "WorktreeError";
   }
@@ -601,7 +602,8 @@ export class WorktreeService {
   private async rollbackCreate(
     repoRoot: string,
     chosen: { id: string; branch: string; path: string },
-    addSucceeded: boolean): Promise<string> {
+    addSucceeded: boolean,
+  ): Promise<string> {
     const notes: string[] = [];
     const pool = this.poolFor(repoRoot);
     try {

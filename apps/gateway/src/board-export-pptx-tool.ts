@@ -10,7 +10,7 @@
  */
 import { loadBoardAsync } from "./board-store.js";
 import { repoRoot } from "./repo-root.js";
-import { deckToPptx, parseDeckMd, validateDeck, boardToDeckTemplate, boardToCompositionTemplate } from "./board-pptx.mjs";
+import { deckToPptx, parseDeckMd, validateDeck, boardToDeckTemplate, boardToCompositionTemplate, regenSimilarity } from "./board-pptx.mjs";
 import { isCompositionStructure, COMPOSITION_RELATIONS } from "./board-content-predicate.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, isAbsolute, basename, extname } from "node:path";
@@ -50,7 +50,8 @@ export function boardExportPptxTool(
   sessionId: string,
   taskId: string,
   taskRoot: string,
-  storeRoot?: string): Tool {
+  storeRoot?: string,
+): Tool {
   return {
     name: "board_export_pptx",
     description: [
@@ -72,10 +73,11 @@ export function boardExportPptxTool(
         targetTaskId: { type: "string", description: "template 用:从哪块板生成(缺省=本任务板)" },
         outDir: { type: "string", description: "输出目录(缺省 <任务仓>/docs/review)" },
         outName: { type: "string", description: "export 用:输出文件名(不含扩展名;缺省同源稿名)" },
+        regenOf: { type: "string", description: "重生成任务必填:上一版旧稿路径(已归档)。导出前做代际查重——与旧稿逐页比对,换皮稿(大量页文字逐字雷同)会被拒;版式/结构沿用不算抄袭,文字必须从内容源重写" },
       },
       required: [],
     },
-    execute: async (a: { mode?: string; source?: string; targetTaskId?: string; outDir?: string; outName?: string }) => {
+    execute: async (a: { mode?: string; source?: string; targetTaskId?: string; outDir?: string; outName?: string; regenOf?: string }) => {
       const mode = a.mode === "template" ? "template" : "export";
  // 板存储根与 board_upsert 同口径:storeRoot ?? repoRoot(经验证注意:按 taskRoot 读板,
       // 任务项目指向别仓时永远「板不存在」——planner 在同一会话画的板读不到)。
@@ -143,6 +145,23 @@ export function boardExportPptxTool(
       }
       const deck = deckParse(md);
       const issues = deckValidate(deck);
+ // v13 代际查重(轨迹分析注意:重生成任务照抄旧稿 41/42 页只换版式,门全绿但内容零新写)
+      const regenIn = typeof a.regenOf === "string" ? a.regenOf.trim() : "";
+      if (regenIn) {
+        const regenPath = isAbsolute(regenIn) ? regenIn : join(taskRoot, regenIn);
+        try {
+          const oldMd = readFileSync(regenPath, "utf8");
+          const sim = regenSimilarity(deck, oldMd);
+          if (sim.twin >= 8 || (sim.matched > 0 && sim.twin / sim.matched >= 0.4)) {
+            issues.push({
+              where: "代际查重",
+              msg: `重生成变成了换皮:与旧稿 ${basename(regenPath)} 有 ${sim.twin}/${sim.matched} 个同名页文字逐字雷同(如 ${sim.twins.slice(0, 3).join("、")})——版式/结构可以沿用,**文字必须从内容源文档重写**(每页换叙事角度/换证据/换数据,相似页回炉)`,
+            });
+          }
+        } catch {
+          issues.push({ where: "代际查重", msg: `regenOf 指向的旧稿 ${regenPath} 读不到:重生成任务先归档旧稿(移出任务目录),再带 regenOf=<归档路径> 导出` });
+        }
+      }
       if (issues.length > 0) {
         const head = issues.slice(0, 10).map((i) => `· ${i.where}:${i.msg}`).join("\n");
         return [

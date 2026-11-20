@@ -168,7 +168,8 @@ function stratumSortKey(s: ExperimentStratum): string {
 /** 两个时间窗是否重叠(ISO 字符串比较;任一方缺失视为重叠)。 */
 function windowsOverlap(
   a: { from: string; to: string } | undefined,
-  b: { from: string; to: string } | undefined): boolean {
+  b: { from: string; to: string } | undefined,
+): boolean {
   if (!a || !b) return true;
   return a.from <= b.to && b.from <= a.to;
 }
@@ -211,7 +212,8 @@ export function isProportionLike(metric: ExperimentMetric): boolean {
 
 /** 两样本差值的标准误。返回 null 表示「都不可算」。 */
 function standardErrorOfDifference(
-  metric: ExperimentMetric): { se: number; kind: "stddev" | "binomial" } | null {
+  metric: ExperimentMetric,
+): { se: number; kind: "stddev" | "binomial" } | null {
   const b = metric.baseline;
   const r = metric.result;
   if (!r) return null;

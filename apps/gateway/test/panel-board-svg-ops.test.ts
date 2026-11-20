@@ -216,7 +216,8 @@ describe("画布四件事(添加闭环/平移/连线/边标签常显)", () => {
         (fn: () => void) => { timers.push(fn); return timers.length; },
         () => { /* clearTimeout */ },
         () => "sig",
-        JSON) as {
+        JSON,
+      ) as {
         save: () => boolean; flush: () => void;
         st: () => { inflight: boolean; queued: boolean; timer: boolean };
         ack: () => void;

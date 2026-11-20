@@ -125,7 +125,7 @@ const TOOL_META = {
   code_index: { v: "代码索引", i: "search" }, code_sense: { v: "代码感知", i: "search" }, code_review: { v: "代码评审", i: "check" },
   board_upsert: { v: "更新白板", i: "grid" }, board_read: { v: "读白板", i: "grid" }, todo_write: { v: "记录计划", i: "check" },
   spawn_subagent: { v: "派子代理", i: "sub" }, task_output: { v: "取回结果", i: "sub" }, answer_subagent: { v: "答复", i: "sub" },
-  skill_view: { v: "查看技能", i: "file" }, experience_fold: { v: "沉淀经验", i: "file" }, session_search: { v: "检索会话", i: "search" },
+  skill_view: { v: "查看技能", i: "file" }, session_search: { v: "检索会话", i: "search" },
   run_workflow: { v: "运行工作流", i: "play" }, web_search: { v: "网搜", i: "search" }, web_fetch: { v: "抓取网页", i: "arrow-right" },
   browser: { v: "浏览器", i: "arrow-right" }, task_phase: { v: "进入阶段", i: "check" },
 };
@@ -319,14 +319,25 @@ function foldTermFrames(txt) {
 }
 function trBlockPreview(txt, q, compact, opts) {
   const NL = String.fromCharCode(10);
-  const cap = compact ? 12 : 40;
+ // 三级折叠第 3 级:命令文本默认只留 6 行 + 底部「展开命令 ∨」/「收起 ^」
+ // (fixH10g 同型截断展开机制,措辞统一为「展开命令/收起」;源码块 kind=code 保持原 40 行口径)
+  const cmdFold = !!(opts && (opts.cmdFold === true || opts.kind === "term"));
+  const cap = cmdFold ? 6 : compact ? 12 : 40;
   const src = opts && opts.kind === "term" ? foldTermFrames(txt) : String(txt);
   const lines = String(src).split(NL);
   const shown = lines.slice(0, cap).join(NL);
   let more = "";
   if (lines.length > cap) {
     const rest = lines.slice(cap).join(NL).slice(0, TR_CAP_CHARS);
-    more = '<details class="tr-more"><summary>展开全文(共 ' + lines.length + " 行" + (String(txt).length > TR_CAP_CHARS ? ",超出部分已截断" : "") + ')</summary><div class="tc-body tr-full">' + esc(rest) + "</div></details>";
+    if (cmdFold) {
+      const ck = "round-cmd:" + (opts && opts.cmdKey ? String(opts.cmdKey) : String(shown).slice(0, 48));
+      more = '<details class="cmd-fold" data-det-key="' + esc(ck) + '">' +
+        '<summary class="cf-sum"><span class="cf-more">展开命令 ∨</span><span class="cf-less">收起 ^</span>' +
+        '<span class="cf-n">共 ' + lines.length + ' 行</span></summary>' +
+        '<div class="tc-body tr-full">' + esc(rest) + "</div></details>";
+    } else {
+      more = '<details class="tr-more"><summary>展开全文(共 ' + lines.length + " 行" + (String(txt).length > TR_CAP_CHARS ? ",超出部分已截断" : "") + ')</summary><div class="tc-body tr-full">' + esc(rest) + "</div></details>";
+    }
   }
   return codeLinesBlock(shown, q, lines.length, null, opts) + more;
 }
@@ -947,7 +958,8 @@ function codeLinesBlock(txt, q, totalLines, toks, opts) {
   const wrapCls = "code-wrap" + (kind === "term" ? " is-term" : kind === "code" ? " is-code" : "") + (opts && opts.fail ? " tc-fail" : "");
   const body = lines.map((l) => {
     const tone = tmap ? "" : lineToneOf(l, kind); // 语义 token 在场时行调子让位
-    return '<span class="cl' + (tone ? " " + tone : "") + '">' + (tmap ? tkRowHtml(l, tmap, q) : (hl(esc(l), q) || "&nbsp;")) + "</span>";
+    const ecl = typeof errLineRe === "function" ? errLineRe(l) : ""; // P0-4③:错误行行级类名(code-err-line,标红由 CSS 负责)
+    return '<span class="cl' + (tone ? " " + tone : "") + (ecl ? " " + ecl : "") + '">' + (tmap ? tkRowHtml(l, tmap, q) : (hl(esc(l), q) || "&nbsp;")) + "</span>";
   }).join(NL);
   return '<div class="' + wrapCls + '"><div class="code-bar"><span class="code-lang">' + esc(label) + '</span></div>' +
     '<div class="tc-body tr-lines">' + body + "</div></div>";
@@ -1551,5 +1563,235 @@ function firstRunCardHtml() {
     + (hasProject ? done("2", "添加项目") : step("2", "project", "添加项目", "打开本地文件夹或连接 WSL/SSH"))
     + (hasModel ? step("3", "task", "输入需求", "在下方输入框说一句话,Enter 发送") : '<div class="fr-step" disabled><b>3</b><span>输入需求 · 先完成第 1 步</span></div>')
     + "</div></div>";
+}
+// ===== P0-2/P0-3/P0-4③/P0-5:执行过程三级折叠 + 错误行标红 + 运行态计时行 =====
+// 三级:①轮级组 round-group(默认收起,摘要「已执行 N 命令」)②子步骤行 round-step(行尾 ›)
+// ③命令文本折叠 cmd-fold(「展开命令 ∨」/「收起 ^」)。三级各挂 data-det-key,开合状态互不干扰。
+// 轮级组显式开合额外写 localStorage(zh:round-open)刷新保持;用户显式展开过的组终态不自动收起。
+const ROUND_LS = "zh:round-open";
+const roundRanges = []; // 轮级组区间登记(script-history 遍历时 push,遍历后 roundPartsWrap 消费)
+let roundOpenMap = null;
+function roundOpenAll() {
+  if (roundOpenMap) return roundOpenMap;
+  roundOpenMap = {};
+  try {
+    const raw = localStorage.getItem(ROUND_LS);
+    const o = raw ? JSON.parse(raw) : null;
+    if (o && typeof o === "object") roundOpenMap = o;
+  } catch (e) { roundOpenMap = {}; }
+  return roundOpenMap;
+}
+function roundUserOpen(key) { return !!roundOpenAll()[String(key || "")]; }
+function roundRemember(key, open) {
+  const k = String(key || "");
+  if (!k) return;
+  const m = roundOpenAll();
+  if (open) m[k] = 1; else delete m[k];
+  try { localStorage.setItem(ROUND_LS, JSON.stringify(m)); } catch (e) { /* 存储不可用=仅内存 */ }
+}
+// 默认收起;终态(该轮已出结论/任务非活跃)保持收起;用户显式展开过的永不自动收起
+function roundShouldOpen(key, terminal) {
+  if (roundUserOpen(key)) return true;
+  if (terminal) return false;
+  return false;
+}
+// 三态动词词表(P0-5;轮级组子步骤行与运行态行共用):已完成/运行中/等待超时/失败
+// i=语义图标名(doc=文档/spin=旋转),渲染走 verbIcon 映射到既有 ICONS 形(spin 另挂 rs-spin 动效类)。
+function verbOf(state, arg) {
+  const s = String(state || "done");
+  if (s === "run") return { t: "正在执行", i: "spin", c: "v-run" };
+  if (s === "wait") return { t: "任务输出 " + String(arg || "") + " 等待超时", i: "doc", c: "v-wait" };
+  if (s === "fail") return { t: "失败", i: "fail", c: "v-fail" };
+  return { t: "已执行", i: "doc", c: "v-done" };
+}
+// 语义图标名 → ICONS 实有 key(doc 借用 file 的文档形,spin 借用 run 的旋臂形),未知原样回落
+function verbIcon(name) {
+  const n = String(name || "");
+  if (n === "doc") return "file";
+  if (n === "spin") return "run";
+  return n || "dot";
+}
+function verbSvg(v) { return ic(verbIcon(v && v.i), v && v.i === "spin" ? "rs-spin" : ""); }
+// 错误行判定(纯函数,供测试锚定):<error> 开头 / Command timed out after / Error: 开头
+// 页面模板禁写含反斜杠的正则字面量 → 一律 indexOf;返回类名,空串=不标
+function errLineRe(line) {
+  const t = String(line == null ? "" : line).trim();
+  if (!t) return "";
+  const low = t.toLowerCase();
+  if (low.indexOf("<error>") === 0 || low.indexOf("<error ") === 0 || low.indexOf("<error/>") === 0) return "code-err-line";
+  if (low.indexOf("command timed out after") >= 0) return "code-err-line";
+  if (low.indexOf("error:") === 0) return "code-err-line";
+  return "";
+}
+// 去标签 + 空白折叠(子步骤行摘要取纯文本;不写含反斜杠正则)
+function rgPlain(h) {
+  const s = String(h || "");
+  let out = "", i = 0;
+  while (i < s.length) {
+    if (s.charAt(i) === "<") { const j = s.indexOf(">", i); if (j < 0) break; out += " "; i = j + 1; continue; }
+    out += s.charAt(i); i++;
+  }
+  let sp = "", prevSp = false;
+  for (let k = 0; k < out.length; k++) {
+    const c = out.charAt(k);
+    if (c.charCodeAt(0) <= 32) { if (!prevSp) sp += " "; prevSp = true; }
+    else { sp += c; prevSp = false; }
+  }
+  return sp.trim();
+}
+function roundIsProc(h) {
+  const s = String(h || "");
+  if (!s) return false;
+  if (s.indexOf('class="task-reply"') >= 0) return false; // 终稿正文=结论,留在组外
+  if (s.indexOf('data-det-key="tool-call:') >= 0) return true;
+  if (s.indexOf('data-det-key="tool-res:') >= 0) return true;
+  if (s.indexOf('class="think-card') >= 0) return true;
+  if (s.indexOf('class="sys-line') >= 0) return true;
+  if (s.indexOf('class="tool-card') >= 0) return true;
+  if (s.indexOf('class="tg-') >= 0) return true;
+  if (s.indexOf('class="sub-card') >= 0) return true;
+  if (s.indexOf('class="st-tool') >= 0) return true;
+  return false;
+}
+function roundCountToolCards(s) {
+  let n = 0, i = 0;
+  const needle = 'data-det-key="tool-call:';
+  const str = String(s || "");
+  for (;;) { const j = str.indexOf(needle, i); if (j < 0) break; n++; i = j + needle.length; }
+  return n;
+}
+// 去一段叶子 span(mark=该 span 的起始片段,如 <span class="tc-state);无匹配原样返回
+function rgCut(h, mark) {
+  const s = String(h || "");
+  const i = s.indexOf(mark);
+  if (i < 0) return s;
+  const j = s.indexOf("</span>", i);
+  if (j < 0) return s;
+  return s.slice(0, i) + s.slice(j + 7);
+}
+// 取卡片 <summary> 内纯文本(不含详情体),并去掉状态徽标 span(状态改由动词表承载,免「已执行 … 完成」叠字)
+function rgSum(h) {
+  const s = String(h || "");
+  const a = s.indexOf("<summary");
+  if (a < 0) return rgPlain(s);
+  const b = s.indexOf(">", a);
+  if (b < 0) return rgPlain(s);
+  const c = s.indexOf("</summary>", b);
+  const inner = c < 0 ? s.slice(b + 1) : s.slice(b + 1, c);
+  return rgPlain(rgCut(inner, '<span class="tc-state'));
+}
+function rgFirstNum(txt) {
+  const s = String(txt || "");
+  let i = 0;
+  while (i < s.length && (s.charAt(i) < "0" || s.charAt(i) > "9")) i++;
+  let n = "";
+  while (i < s.length && s.charAt(i) >= "0" && s.charAt(i) <= "9") { n += s.charAt(i); i++; }
+  return Number(n || 0);
+}
+// 子步骤行三态判定(P0-5 三分支):思考卡→done(措辞另给);工具卡按 tc-state 徽标→run/fail/done;
+// 其余过程行(sys-line/等待行)含「等待超时」→wait,否则 done。
+function roundStepState(h) {
+  const s = String(h || "");
+  if (s.indexOf("tc-state tc-err") >= 0 || s.indexOf("tool-card tc-fail") >= 0) return "fail";
+  if (s.indexOf("tc-state tc-run") >= 0) return "run";
+  if (s.indexOf("等待超时") >= 0) return "wait";
+  return "done";
+}
+// 子步骤行文案:已执行 <摘要> / 正在执行 <摘要> / 失败 <摘要> / 任务输出 <id> 等待超时 / 思考 持续了 X 秒
+function roundStepLabel(h) {
+  const s = String(h || "");
+  const isTool = s.indexOf('data-det-key="tool-call:') >= 0;
+  if (s.indexOf('class="think-card') >= 0) {
+    const st = rgSum(s);
+    if (st.indexOf("生成中") >= 0) return "思考 进行中";
+    const dot = st.indexOf("·");
+    const secs = rgFirstNum(dot >= 0 ? st.slice(dot + 1) : st);
+    return "思考 持续了 " + (secs > 0 ? secs : 1) + " 秒";
+  }
+  let t = rgSum(s);
+  if (t.indexOf("» ") === 0) t = t.slice(2);
+  t = t.trim();
+  if (!t) return isTool ? "已执行" : "过程";
+  const cut = t.length > 64 ? t.slice(0, 64) + "…" : t;
+  const v = verbOf(roundStepState(h));
+  if (v.c === "v-wait") return cut;
+  if (!isTool && v.c !== "v-fail") return cut;
+  return v.t + " " + cut;
+}
+function roundGroupHtml(seg, key, terminal) {
+  const inner = seg.join("");
+  const v = verbOf("done");
+  const n = roundCountToolCards(inner);
+  const open = roundShouldOpen(key, terminal);
+  runLineVerb = roundStepLabel(seg[seg.length - 1]); // P0-5 运行态行取最近一步摘要
+  const rows = seg.map((h, i) => '<details class="round-step" data-det-key="' +
+    esc("round-step:" + key + ":" + i) + '"><summary class="rs-sum">' +
+    '<span class="rs-lab ' + esc(roundStepState(h)) + '">' + esc(roundStepLabel(h)) + '</span><span class="rs-arrow">›</span></summary>' +
+    '<div class="rs-body">' + h + "</div></details>").join("");
+  return '<details class="round-group" data-det-key="' + esc(key) + '"' + (open ? " open" : "") + ">" +
+    '<summary class="rg-sum">' + verbSvg(v) + '<span class="rg-txt">' + esc(v.t + " " + n + " 命令") + '</span>' +
+    '<span class="rg-n">' + seg.length + " 步</span></summary>" +
+    '<div class="rg-body">' + rows + "</div></details>";
+}
+// 轮级折叠落位(script-history 遍历结束后调用一次):只把「连续过程段」收进组,
+// 过程段之后的结论/表格留在组外 = P0-3「完成后只留结论」的视觉前提。
+function roundPartsWrap(parts, ranges, isTerminal) {
+  if (!parts || !parts.length || !ranges || !ranges.length) { if (ranges) ranges.length = 0; return; }
+  let shift = 0;
+  for (let ri = 0; ri < ranges.length; ri++) {
+    const r = ranges[ri] || {};
+    let i = (Number(r.i) || 0) + shift;
+    let j = (ri + 1 < ranges.length ? (Number(ranges[ri + 1].i) || 0) : parts.length) + shift;
+    if (i < 0) i = 0;
+    if (j > parts.length) j = parts.length;
+    let s = i, e = j;
+    while (s < e && !roundIsProc(parts[s])) s++;
+    while (e > s && !roundIsProc(parts[e - 1])) e--;
+    if (e - s < 2) continue; // 单步不成组(单卡直出,零变化)
+    const seg = parts.slice(s, e);
+    const key = String(r.k || ("round:" + ri));
+    const term = typeof isTerminal === "function" ? !!isTerminal(r.t) : false;
+    parts.splice(s, e - s, roundGroupHtml(seg, key, term));
+    shift -= (e - s - 1);
+  }
+  ranges.length = 0;
+}
+// 轮级组开合采集:显式开合写 localStorage(刷新保持);用户展开过的组终态不自动收起
+function roundBindIn(root) {
+  const nodes = root && root.querySelectorAll ? root.querySelectorAll("details.round-group") : [];
+  for (const d of nodes) {
+    const k = d.getAttribute("data-det-key") || "";
+    if (!k) continue;
+    if (roundUserOpen(k) && !d.open) d.open = true;
+    if (d.__roundBound) continue;
+    d.__roundBound = true;
+    d.addEventListener("toggle", () => { roundRemember(d.getAttribute("data-det-key") || "", d.open); });
+  }
+}
+// ---- P0-5 运行态行:常驻流尾,1s 粒度只改本行 textContent(不整块重渲染、不新增轮询) ----
+let runLineAt = 0, runLineVerb = "", runLineTimer = null;
+function runFmtClock(ms) {
+  let s = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  return h + " 时 " + m + " 分 " + s + " 秒";
+}
+function runStatusText() {
+  const v = verbOf("run");
+  const el = runLineAt ? " · 工作中 " + runFmtClock(Date.now() - runLineAt) : "";
+  return v.t + " " + (runLineVerb || "任务") + el;
+}
+function runStatusHtml(startedAt, verb) {
+  runLineAt = Number(startedAt || 0);
+  if (verb) runLineVerb = String(verb);
+  if (runLineTimer === null) runLineTimer = setInterval(runStatusTick, 1000);
+  const v = verbOf("run");
+  return '<div class="run-status" data-run-line="1">' + verbSvg(v) +
+    '<span class="run-txt">' + esc(runStatusText()) + "</span></div>";
+}
+function runStatusTick() {
+  const el = document.querySelector('[data-run-line="1"] .run-txt');
+  if (!el) { if (runLineTimer !== null) { clearInterval(runLineTimer); runLineTimer = null; } return; }
+  el.textContent = runStatusText(); // 只改这一行文本,不重渲染
 }
 `;

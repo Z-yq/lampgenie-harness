@@ -158,7 +158,8 @@ function coerceValue(v: unknown, declared: string): CoercionOutcome {
  */
 export function normalizeToolArgs(
   raw: unknown,
-  schema?: Record<string, unknown> | null): ToolArgNormalizeResult {
+  schema?: Record<string, unknown> | null,
+): ToolArgNormalizeResult {
   const passthrough: ToolArgNormalizeResult = { ok: true, value: raw, issues: [], renamed: [], coerced: [] };
   if (!isPlainObject(schema) || schema["type"] !== "object") return passthrough;
 

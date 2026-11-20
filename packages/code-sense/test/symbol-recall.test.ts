@@ -145,7 +145,8 @@ describe("符号打分(纯函数)", () => {
     const boosted = applyNeighborCoherence(
       first,
       (id) => id === "b#LlmLoopBackend.spawn" ? ["renderSubagentHeavyOpDiscipline", "workerWriteTools"] : [],
-      t);
+      t,
+    );
     const spawnRow = boosted.find((s) => s.doc.name === "LlmLoopBackend.spawn")!;
     expect(spawnRow.neighborHits).toBeGreaterThan(0);
     expect(spawnRow.score).toBeGreaterThan(first.find((s) => s.doc.name === "LlmLoopBackend.spawn")!.score);

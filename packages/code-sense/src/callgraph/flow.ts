@@ -536,7 +536,8 @@ export function buildCodeFlow(index: C2fIndex, opts: FlowOptions = {}): CodeFlow
       const cands = suggestFlowTargets(work, level, target);
       throw new FlowTargetError(
         `未找到 flow 目标: ${target}(${level} 层可用目标示例: ${cands.slice(0, 5).join(", ") || "无"})`,
-        cands);
+        cands,
+      );
     }
     center = hit;
     targetKeep = new Set([hit]);

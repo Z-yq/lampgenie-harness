@@ -9,13 +9,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, writeFile, mkdir, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { annotateRsiSections, settleRunRecord, startMechanismRun } from "../src/rsi-agent-runner.js";
+import { annotateRsiSections, ORPHAN_GRACE_MS, settleRunRecord, startMechanismRun } from "../src/rsi-agent-runner.js";
 import {
   collectMechanismItems,
   finishRun,
   getRun,
   listRuns,
   resultFilePath,
+  runFilePath,
   setMechanism,
   startRun,
 } from "../src/rsi-mechanism-store.js";
@@ -183,6 +184,67 @@ describe("annotateRsiSections", () => {
     expect(runs[0]!.status).toBe("done");
   });
 
+  it("做梦开始卡只落一次:run 记录上有 dreamStartAt 幂等标记", async () => {
+    const cards: string[] = [];
+    const r = await startMechanismRun(
+      { root, submit: () => ({ id: "t-card" }), note: (payload) => cards.push(payload.phase) },
+      "atlas",
+    );
+    expect(r.ok).toBe(true);
+    expect(cards).toEqual(["start"]);
+    expect(typeof (await getRun(root, "atlas", r.runId!))?.dreamStartAt).toBe("number");
+  });
+
+  it("做梦完成卡只落一次:竞争的两个 settle 用同一份 running 快照也只注一张", async () => {
+    const r = await startMechanismRun({ root, submit: () => ({ id: "t-race" }) }, "atlas");
+    const stale = (await getRun(root, "atlas", r.runId!))!;
+    expect(stale.status).toBe("running");
+    const cards: string[] = [];
+    const opts = { root, taskState: () => "done", note: (payload: { phase: string }) => cards.push(payload.phase) };
+    const a = await settleRunRecord(opts, { id: "atlas", title: "方向图" }, stale);
+    expect(a.finalized).toBe(1);
+ // 竞争进程拿着同一份过期快照再收一次:状态早已 done,但幂等门在注卡这一侧
+    await settleRunRecord(opts, { id: "atlas", title: "方向图" }, stale);
+    expect(cards).toEqual(["done"]);
+    expect((await getRun(root, "atlas", r.runId!))?.dreamDoneAt).toEqual(expect.any(Number));
+  });
+
+  it("孤儿 run(重启后 task 查不到且超宽限)→ failed 且 error 含 orphaned,注失败卡", async () => {
+    const r = await startMechanismRun({ root, submit: () => ({ id: "t-gone" }) }, "atlas");
+    const file = runFilePath(root, "atlas", r.runId!);
+    const rec = JSON.parse(await readFile(file, "utf8"));
+    rec.startedAt = Date.now() - (ORPHAN_GRACE_MS + 60_000);
+    await writeFile(file, JSON.stringify(rec), "utf8");
+    const notes: { phase: string; summary?: string }[] = [];
+    const res = await annotateRsiSections({
+      root,
+      sections: [section("atlas", "方向图")],
+      taskState: () => undefined,
+      note: (payload) => notes.push(payload),
+    });
+    expect(res.finalized).toBe(1);
+    const after = await getRun(root, "atlas", r.runId!);
+    expect(after?.status).toBe("failed");
+    expect(after?.error).toContain("orphaned");
+    expect(notes.map((n) => n.phase)).toEqual(["failed"]);
+    expect(notes[0]!.summary).toContain("orphaned");
+ // 重入不重复注卡
+    await annotateRsiSections({
+      root,
+      sections: [section("atlas", "方向图")],
+      taskState: () => undefined,
+      note: (payload) => notes.push(payload),
+    });
+    expect(notes).toHaveLength(1);
+  });
+
+  it("孤儿未过宽限:task 查不到也仍视为在跑,不收尾", async () => {
+    const r = await startMechanismRun({ root, submit: () => ({ id: "t-fresh" }) }, "atlas");
+    const res = await annotateRsiSections({ root, sections: [section("atlas", "方向图")], taskState: () => undefined });
+    expect(res.finalized).toBe(0);
+    expect((await getRun(root, "atlas", r.runId!))?.status).toBe("running");
+  });
+
   it("单区读取失败 fail-open:该区保留并追加 warning,不抛", async () => {
     const res = await annotateRsiSections({
       root,
@@ -260,13 +322,14 @@ describe("会话候选注入 + 运行成本/认账(RSI-SESSION-COST)", () => {
       "nightly",
     );
     expect(r.ok).toBe(true);
-    expect(instructions[0]).toContain("待分析会话(近 3 日 · 所有项目 · 未分析过)");
+    expect(instructions[0]).toMatch(/待分析会话\(近 \d+ 日 · 所有项目 · 未分析过\)/);
     expect(instructions[0]).toContain("web-1");
     expect(instructions[0]).toContain("项目 __harness__");
     expect(instructions[0]).toContain("已分析会话:");
     const run = await getRun(root, "nightly", r.runId!);
     expect(run?.analysis).toMatchObject({
-      windowDays: 3,
+ // 窗口天数由 RSI_ANALYSIS_WINDOW_MS 决定(近期 3→14 日调整中),这里不钉死具体天数
+      windowDays: expect.any(Number),
       candidates: [{ sessionId: "web-1", projectId: "__harness__" }],
       analyzed: [],
     });

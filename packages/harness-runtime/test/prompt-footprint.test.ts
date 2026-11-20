@@ -253,8 +253,8 @@ describe(" system-composer 接线:渲染字节不变 + truncations", () => {
 
  /** 旧实现(之前)的逐字复刻,作为字节基线。 */
   function legacyRender(idx: { category: string; name: string; description: string }[]): string {
-    if (idx.length === 0) return ["# 经验索引", "(当前为空;任务中发现可复用做法或坑,用 experience_fold 沉淀)"].join("\n");
-    const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看;发现经验有误用 experience_fold 修正)"];
+    if (idx.length === 0) return ["# 经验索引", "(当前为空;经验由 nightly dreaming 统一蒸馏沉淀)"].join("\n");
+    const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看)"];
     for (const e of idx) {
       const desc = e.description.length > 60 ? `${e.description.slice(0, 60)}…` : e.description;
       lines.push(`- ${e.category}/${e.name}: ${desc}`);

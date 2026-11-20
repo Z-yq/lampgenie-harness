@@ -79,7 +79,8 @@ export function aggregateBoardQuality(
   lines: string[],
   nowMs: number,
   days: number,
-  meta?: BaselineMeta): string {
+  meta?: BaselineMeta,
+): string {
   const winStart = nowMs - days * DAY_MS;
   const byType = new Map<string, BoardTypeAgg>();
   const skeletonTasks = new Set<string>();
@@ -193,7 +194,8 @@ export function aggregateBoardQuality(
   );
   out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   const types = [...byType.values()].sort((a, b) =>
-    a.boardType < b.boardType ? -1 : a.boardType > b.boardType ? 1 : 0);
+    a.boardType < b.boardType ? -1 : a.boardType > b.boardType ? 1 : 0,
+  );
   for (const t of types) {
     const okRate = rate3(t.okCount / t.audits);
     const contract = rate3(t.issueContract / t.audits);

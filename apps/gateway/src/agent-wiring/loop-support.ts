@@ -444,7 +444,8 @@ export function progressNoteFromTrajectory(
 export function applyTrajectoryProgress(
   tm: { touch(taskId: string, patch: { phase?: string; step?: number; note?: string; at?: number }): unknown } | undefined,
   taskId: string | undefined,
-  ev: TrajectoryProgressEvent): void {
+  ev: TrajectoryProgressEvent,
+): void {
   if (!tm || !taskId) return;
   try {
     tm.touch(taskId, {
@@ -622,7 +623,8 @@ export const SYSTEM_LITE = `你是 lampgenie-harness 的 vibe coding 主 agent(�
  */
 export type RuntimePromptProvider = (
   key: "system.coding" | "system.coding.lite",
-  sessionId?: string) => string | undefined;
+  sessionId?: string,
+) => string | undefined;
 
 let runtimePromptProvider: RuntimePromptProvider | undefined;
 

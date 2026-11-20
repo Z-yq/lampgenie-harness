@@ -57,7 +57,8 @@ export async function runBatch(
   cases: BatchCase[],
   backend: BatchBackend,
   judge: BatchJudge,
-  resultsDir: string): Promise<BatchRunResult> {
+  resultsDir: string,
+): Promise<BatchRunResult> {
   mkdirSync(resultsDir, { recursive: true });
   const runId = `run-${Date.now().toString(36)}`;
   const results: BatchJudgeResult[] = [];

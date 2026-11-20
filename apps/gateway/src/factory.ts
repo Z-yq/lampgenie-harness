@@ -68,7 +68,8 @@ function providerFromRef(
   config: Config, repoRoot: string,
   track: "coding" | "audio.chat" | "audio.asr" | "audio.tts",
   ref: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number },
-  reasoningEffort?: string): ReturnType<typeof createOpenAiCompatProvider> | undefined {
+  reasoningEffort?: string,
+): ReturnType<typeof createOpenAiCompatProvider> | undefined {
   const { baseUrl, apiKeyEnv, apiType } = resolveTrackEndpoint(config, track, ref);
   if (!baseUrl || !ref.model) return undefined;
   const apiKey = resolveTrackApiKey(track, apiKeyEnv, { repoRoot });
@@ -323,7 +324,8 @@ export function buildModelProviders(config: Config, repoRoot: string, _sources?:
     role: "compact" | "review" | "subagent" | "digest",
     ref: { model?: string; baseUrl?: string; providerId?: string; apiKeyEnv?: string; timeoutMs?: number; maxTokens?: number; reasoningEffort?: string } | undefined,
     /** true=未配置时回退 undefined(compact 旧语义);false=未配置也继承主模型建实例(review/subagent)。 */
-    skipWhenUnconfigured: boolean) => {
+    skipWhenUnconfigured: boolean,
+  ) => {
     if ((!ref || !ref.model) && skipWhenUnconfigured) return undefined;
     const merged = { ...config.coding.llm, ...(ref ?? {}), model: ref?.model ?? config.coding.llm.model };
     const route = resolveCodingModelRoute(config, merged);

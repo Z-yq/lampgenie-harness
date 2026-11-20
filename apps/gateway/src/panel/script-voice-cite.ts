@@ -579,8 +579,9 @@ function mentionToken(text, caret) {
 }
 function mentionRender() {
   const box = $("mentionMenu");
-  if (!mentionOpen || mentionItems.length === 0) { box.style.display = "none"; box.innerHTML = ""; return; }
+  if (!mentionOpen || mentionItems.length === 0) { box.style.display = "none"; popoverSyncEl("mentionMenu", false, "#mentionMenu"); box.innerHTML = ""; return; }
   box.style.display = "";
+  popoverSyncEl("mentionMenu", true, "#instruction"); // popover 治理:外点即关+Esc(此前仅输入事件驱动关闭;keep=输入框,光标点回输入框不算外点)
   const kindLabel = mentionTrigger === "@" ? "文件" : mentionTrigger === "#" ? "会话" : "经验";
   box.innerHTML = mentionItems.map((f, i) =>
     '<div class="sc-item' + (i === mentionHot ? " hot" : "") + '" data-i="' + i + '">' +
@@ -610,7 +611,7 @@ function mentionExec(i) {
   el.setSelectionRange(pos, pos);
   saveDraft(); autoGrow(); fileRefRender();
 }
-function mentionClose() { mentionOpen = false; mentionItems = []; mentionHot = 0; mentionTokenStart = -1; $("mentionMenu").style.display = "none"; }
+function mentionClose() { mentionOpen = false; mentionItems = []; mentionHot = 0; mentionTokenStart = -1; $("mentionMenu").style.display = "none"; popoverSyncEl("mentionMenu", false, "#mentionMenu"); }
 function mentionUpdate() {
   const el = $("instruction");
   const tok = mentionToken(el.value, el.selectionStart ?? el.value.length);
@@ -755,6 +756,9 @@ $("act-subchat").onclick = () => switchView("subchat"); // 画布形态专属(�
 // n3 别名兼容:旧布局/旧书签/旧键盘序列仍可能送来 subagents —— 一律回退到子agent会话流,不白屏。
 function cvAliasView(name) { return name === "subagents" || name === "agents" ? "subchat" : name; }
 $("act-track").onclick = () => switchView("track");
+// 底部条「轨迹 Trail」此前没有 onclick(只有 composer pill / 轨迹卡「看板」
+// 两个入口),用户点底条无反应。补上统一视图路由。
+$("act-traj").onclick = () => switchView("traj");
 $("act-usage").onclick = () => switchView("usage");
 $("uGear").onclick = () => switchView("sys");
 $("uAva").onclick = () => switchView("sys");
@@ -1001,7 +1005,14 @@ document.addEventListener("keydown", (e) => {
   if (hitKey(e, "toggle-theme")) { e.preventDefault(); cycleTheme(); return; }
   if (hitKey(e, "model-menu")) { e.preventDefault(); refreshModelPill(); $("modelPill").click(); return; }
   if ((ctrl && key === "t") || (e.altKey && key === "t")) { e.preventDefault(); $("effortPill").click(); return; }
-  if (hitKey(e, "open-terminal", "j")) { e.preventDefault(); switchView(viewLive("term") ? "chat" : "term"); return; }
+  if (hitKey(e, "open-terminal", "j")) {
+    e.preventDefault();
+ // (m1):Ctrl+J 往返记忆原视图——旧实现回聊恒 chat,在 board/git 等视图按 Ctrl+J 后
+ // 第二次按回不到原视图(round4 依据)。记进入 term 前的视图,再按回到它;chat 视图按=去 term(不变)。
+    if ((document.body.dataset.view || "") === "term") switchView(window.__termPrevView && window.__termPrevView !== "term" ? window.__termPrevView : "chat");
+    else { window.__termPrevView = document.body.dataset.view || "chat"; if (window.__termPrevView === "term") window.__termPrevView = "chat"; switchView("term"); }
+    return;
+  }
   if (hitKey(e, "open-browser", "b")) { e.preventDefault(); switchView("browser"); return; }
  // Ctrl+W 关标签已随 tabbar 五件套删除(冗余收敛)
   if (ctrl && key === "o") { e.preventDefault(); ccOpenProjects(); return; }

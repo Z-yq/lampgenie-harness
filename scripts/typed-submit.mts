@@ -95,7 +95,8 @@ async function readStdin(): Promise<string> {
 function exitCodeOf(result: TypedSubmitOpResult): number {
   if (result.ok) return EXIT_OK;
   const hit = result.codes.some(
-    (code) => code === TYPED_VIOLATION || code === TYPED_VALIDATION_FAILED);
+    (code) => code === TYPED_VIOLATION || code === TYPED_VALIDATION_FAILED,
+  );
   return hit ? EXIT_VALIDATION : EXIT_USAGE;
 }
 

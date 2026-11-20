@@ -136,25 +136,10 @@ interface CursorRuntime {
   ): { generation: number; applied: string[] };
 }
 
-let cursorRuntime: CursorRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_session_cursor from "@lampgenie/runtime/agent/session-cursor";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadCursorRuntime(): Promise<CursorRuntime> {
-  if (cursorRuntime) return cursorRuntime;
-  const spec = "@lampgenie/runtime/agent/session-cursor";
-  try {
-    cursorRuntime = (await import(spec)) as CursorRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/session-cursor.ts",
-      import.meta.url).href;
-    cursorRuntime = (await import(srcUrl)) as CursorRuntime;
-  }
-  return cursorRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadCursorRuntime();
+const rt: CursorRuntime = rt_session_cursor;
 
 type UnknownRecord = Record<string, unknown>;
 

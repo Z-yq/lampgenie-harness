@@ -145,7 +145,8 @@ export function isReady(receipt: Receipt | null | undefined, now: number): boole
 /** 容量裁剪(纯函数,不改入参):按 at 升序淘汰最旧,同时刻按键名序;返回保留后的新对象。 */
 export function pruneReceipts<T extends { at: number }>(
   records: Record<string, T> | null | undefined,
-  limit: number = RECEIPT_KEEP): Record<string, T> {
+  limit: number = RECEIPT_KEEP,
+): Record<string, T> {
   const src = records && typeof records === "object" ? records : {};
   const keys = Object.keys(src);
   const max = Math.floor(Number(limit));

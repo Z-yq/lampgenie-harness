@@ -389,7 +389,7 @@ function renderSkills(m) {
   let html = '<div class="mgr-head">内置 · ' + builtin.length + "</div>";
   html += builtin.length ? builtin.map((x) => mgrRow(x.name, "内置", x.description, "", '<button data-act="toggle" data-name="' + esc(x.name) + '">' + (disKeys.has("builtin/" + x.name) ? "启用" : "停用") + "</button>")).join("") : '<div class="cc-empty">无</div>';
   html += '<div class="mgr-head">用户/项目 · ' + user.length + "</div>";
-  html += user.length ? user.map((x) => mgrRow(x.name, x.category, x.description, "", '<button data-act="toggle" data-name="' + esc(x.name) + '" data-cat="' + esc(x.category) + '">' + (disKeys.has(x.category + "/" + x.name) ? "启用" : "停用") + "</button>")).join("") : '<div class="cc-empty">无(主 agent 用 experience_fold 沉淀)</div>';
+  html += user.length ? user.map((x) => mgrRow(x.name, x.category, x.description, "", '<button data-act="toggle" data-name="' + esc(x.name) + '" data-cat="' + esc(x.category) + '">' + (disKeys.has(x.category + "/" + x.name) ? "启用" : "停用") + "</button>")).join("") : '<div class="cc-empty">无(经验由 nightly dreaming 统一沉淀)</div>';
   host.innerHTML = html;
   for (const b of host.querySelectorAll("button[data-act=toggle]")) {
     b.onclick = () => {
@@ -1611,7 +1611,7 @@ function renderTeam(orgs, projectTeam, projectTeams) {
         const cand = pt.candidates || [];
         const memberRows = members.length
           ? members.map((p) => {
-              const dot = { online: "#6fae7a", coding: "#6fae7a", reviewing: "#c9a25e", away: "#9a8f7a", dnd: "#c0564f", offline: "#555" }[p.state] || "#555";
+              const dot = { online: "var(--green)", coding: "var(--green)", reviewing: "var(--bronze)", away: "var(--faint)", dnd: "var(--red)", offline: "var(--faint)" }[p.state] || "var(--faint)"; /* :硬编码 hex → 主题令牌(跟主题走,降彩噪) */
               return '<div class="mgr-row"><span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>' +
                 '<span class="m-name">' + esc(p.username) + '</span><span class="m-desc">' + (TEAM_STATE_LABEL[p.state] || esc(p.state)) + '</span>' +
                 '<span class="m-meta">' + esc(String(p.fingerprint).slice(0, 12)) + "</span></div>";
@@ -2167,4 +2167,123 @@ document.getElementById("nodes-body").addEventListener("keydown", (e) => {
   }
 });
 $("nodes-refresh").onclick = () => wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" }));
+/* ── Super 派发模型路由设置卡(level1~level3 三档;每档留空=跟随 super 模型) ── */
+(function () {
+  const form = document.getElementById("smrForm");
+  if (!form) return;
+  const f = form;
+  const status = document.getElementById("smrStatus");
+  const LEVELS = ["level1", "level2", "level3"];
+  const EMPTY = "跟随 super 模型";
+  const q = (n) => f.querySelector('[name="' + n + '"]');
+  const nameOf = (mm) => (typeof mm === "string" ? mm : String((mm && mm.name) || ""));
+  let provs = [];
+  const provById = (id) => provs.filter((pv) => String((pv && pv.id) || "") === id)[0] || null;
+  const modelsOf = (pv) => {
+    const out = [], seen = {};
+    for (const mm of ((pv && pv.models) || [])) {
+      const n = nameOf(mm);
+      if (!n || seen[n]) continue;
+      seen[n] = 1; out.push(n);
+    }
+    return out;
+  };
+  const provByModel = (model) => {
+    if (!model) return null;
+    return provs.filter((pv) => modelsOf(pv).indexOf(model) >= 0)[0] || null;
+  };
+ // 重填选项:current 不在新列表时保留为「(当前值)」——目录为空也不把已配值显示为空
+  const setOptions = (sel, items, current) => {
+    if (!sel) return;
+    const keep = String(current || "");
+    const seen = {};
+    const opts = [];
+    const mk = (val, label) => { const o = document.createElement("option"); o.value = val; o.textContent = label; return o; };
+    opts.push(mk("", EMPTY));
+    for (const it of items) {
+      const v = String(it.v || "");
+      if (!v || seen[v]) continue;
+      seen[v] = 1; opts.push(mk(v, String(it.label || v)));
+    }
+    if (keep && !seen[keep]) opts.push(mk(keep, keep + " (当前值)"));
+    sel.textContent = "";
+    for (const o of opts) sel.appendChild(o);
+    sel.value = keep;
+    if (String(sel.value) !== keep) sel.value = "";
+  };
+ // 数据源=cfg.get.result 的 m.config(此钩子在 ws-router 里先于 provDraft 刷新被调,不能依赖 provDraft)
+  const fill = (cfg) => {
+    const c = cfg || {};
+    provs = (c.providers || []).slice();
+    if (!provs.length) {
+ // 旧环境无 providers 条目:用当前 coding.llm 造一条临时 provider,已配模型仍可见/可保存
+      const cl = (c.coding && c.coding.llm) || {};
+      if (cl.model) provs.push({ id: "main", name: "Coding 端点", baseUrl: cl.baseUrl, models: [cl.model] });
+    }
+    const smr = (c.agent && c.agent.superModelRouting) || {};
+    const pe = q("smrEnabled");
+    if (pe) pe.checked = smr.enabled === true;
+    const presets = smr.presets || {};
+    const provItems = provs.map((pv) => ({ v: String(pv.id || ""), label: String(pv.name || pv.id || "") }));
+    for (const lv of LEVELS) {
+      const p = presets[lv] || {};
+      const model = String(p.model || "");
+      let pid = String(p.providerId || "");
+      if (!pid) { const hit = provByModel(model); if (hit) pid = String(hit.id || ""); }
+      const pv = provById(pid);
+      if (!pv && model) {
+ // 旧配置只有 model、目录里找不到归属 provider:保留已配值(不能因目录变化把用户的档位值显示/保存成空)
+        setOptions(q("smrP_" + lv), provItems.concat([{ v: "__no_provider__", label: "(未指定 provider)" }]), "__no_provider__");
+      } else {
+        setOptions(q("smrP_" + lv), provItems, pid);
+      }
+      const list = pv ? modelsOf(pv) : (model ? [model] : []);
+      setOptions(q("smrM_" + lv), list.map((n) => ({ v: n, label: n })), model);
+      const ms = q("smrM_" + lv);
+      if (ms) ms.disabled = !pid && !model; // 既无 provider 也无已配模型=该档未配置 → 模型下拉禁用
+      const ds = q("smrD_" + lv);
+      if (ds) ds.value = String(p.description || "");
+    }
+  };
+  const bind = (lv) => {
+    const ps = q("smrP_" + lv), ms = q("smrM_" + lv);
+    if (!ps || !ms) return;
+    ps.onchange = () => {
+      const pid = String(ps.value || "");
+      const pv = provById(pid);
+      const cur = String(ms.value || "");
+      const legacy = pid === "__no_provider__"; // (未指定 provider):沿用当前模型,不做目录匹配
+      const list = legacy ? (cur ? [cur] : []) : (pv ? modelsOf(pv) : []);
+      const keep = legacy ? cur : (pid && list.indexOf(cur) >= 0 ? cur : ""); // 仍在新列表才保留,否则清空
+      setOptions(ms, list.map((n) => ({ v: n, label: n })), keep);
+      ms.disabled = !pid && !keep;
+      ms.value = keep;
+    };
+  };
+  for (const lv of LEVELS) bind(lv);
+  const read = () => {
+    const presets = {};
+    for (const lv of LEVELS) {
+      const pid0 = String((q("smrP_" + lv) || {}).value || "").trim();
+      const pid = pid0 === "__no_provider__" ? "" : pid0; // (未指定 provider)=保留旧值,不补 providerId
+      const model = String((q("smrM_" + lv) || {}).value || "").trim();
+      const desc = String((q("smrD_" + lv) || {}).value || "").trim();
+      if (!model) { presets[lv] = { model: "" }; continue; } // 留空=清除(deepMerge 需显式置空,schema 归一化再剔除)
+      const o = { ...(pid ? { providerId: pid } : {}), model: model };
+      if (desc) o.description = desc;
+      presets[lv] = o;
+    }
+    const pe = q("smrEnabled");
+    return { enabled: !!(pe && pe.checked), presets: presets };
+  };
+  try { wsSafeSend(JSON.stringify({ v: 1, type: "cfg.get" })); } catch (e) {}
+  const origHandler = window.__cfgGetForSmr || null;
+  window.__cfgGetForSmr = (m) => { if (origHandler) origHandler(m); if (m && m.type === "cfg.get.result") fill(m.config); };
+  const saveBtn = document.getElementById("smrSave");
+  if (saveBtn) saveBtn.onclick = () => {
+    const v = read();
+    wsSafeSend(JSON.stringify({ v: 1, type: "cfg.set", patch: { agent: { superModelRouting: v } } }));
+    if (status) { status.textContent = "已保存(下一轮派发即生效)"; setTimeout(() => { status.textContent = ""; }, 3000); }
+  };
+})();
 `;

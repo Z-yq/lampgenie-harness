@@ -11,9 +11,7 @@
  *   decision 携带的 resultMetrics 按指标名合并进 metrics。
  * - 坏行(JSON 坏 / 未知 v / 缺必需字段)只计入 badLines 并跳过:一行坏不整文件失效、不 throw。
  * 依赖纪律:node:fs / node:path + runtime 的纯逻辑模块;不引 agent loop、不引 gateway 业务模块。
- * runtime 模块按 trace-harvest 的既有套路惰性解析(两跳):
- * ① 带 `--conditions=development` 的运行时(vitest)走包导出的 src 入口;
- * ② 裸 tsx/dist 缺该文件时回退到仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
+ * runtime 模块静态导入(修,见 loadLedgerRuntime 旧实现的 exit 13 坑注记)。
  * 参数错误是唯一允许 throw 的情形(TypeError);IO/投影/闸门失败一律折叠成稳定码返回。
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -72,6 +70,8 @@ export interface DecideStoreOptions {
   reason?: string;
   by?: string;
   resultMetrics?: ExperimentMetric[];
+ /** §14.2①:adopt 时把 canary 视为灰度完成(status=done/percent=100)——结算器满样本语义。 */
+  canaryDone?: boolean;
 }
 
 /** runtime experiment-ledger 在本文件用到的模块面(与 467 行源文件逐一对齐)。 */
@@ -102,23 +102,16 @@ interface LedgerRuntime {
   ): Experiment[];
 }
 
-let ledgerRuntime: LedgerRuntime | undefined;
+/**
+ * runtime 面:静态导入(修,同 direction-atlas-store 的修法)。
+ * 旧实现是「两跳动态 import + 顶层 await」——本 store 被 gateway 启动路径静态引入
+ * (rsi-scheduler → experiment-settler后,顶层 await 在 bundle 里退化为
+ * 运行时解析,解析不到时 promise 永不 settle → 网关静默 exit 13(同型坑:evidence-graph-store
+ * 、direction-atlas-store)。bundle 本就把 runtime 内联,静态导入零成本。
+ */
+import * as runtimeLedger from "@lampgenie/runtime/agent/experiment-ledger";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadLedgerRuntime(): Promise<LedgerRuntime> {
-  if (ledgerRuntime) return ledgerRuntime;
-  const spec = "@lampgenie/runtime/agent/experiment-ledger";
-  try {
-    ledgerRuntime = (await import(spec)) as LedgerRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/experiment-ledger.ts", import.meta.url).href;
-    ledgerRuntime = (await import(srcUrl)) as LedgerRuntime;
-  }
-  return ledgerRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadLedgerRuntime();
+const rt: LedgerRuntime = runtimeLedger;
 
 /** 台账 schema 版本(与 runtime 同源)。 */
 const SCHEMA_VERSION = rt.EXPERIMENT_SCHEMA_VERSION;
@@ -147,7 +140,8 @@ function isRecord(value: unknown): value is UnknownRecord {
 /** 时间窗重叠(ISO 字符串比较;任一方缺失视为重叠,与 runtime 口径一致)。 */
 function windowsOverlap(
   a: { from: string; to: string } | undefined,
-  b: { from: string; to: string } | undefined): boolean {
+  b: { from: string; to: string } | undefined,
+): boolean {
   if (!a || !b) return true;
   return a.from <= b.to && b.from <= a.to;
 }
@@ -442,7 +436,25 @@ export function decideExperiment(
     const resultMetrics =
       opts.resultMetrics !== undefined ? rt.inheritMetricRoles(opts.resultMetrics, current.metrics ?? []) : undefined;
     if (kind === "adopt") {
-      const candidate: Experiment = resultMetrics !== undefined ? { ...current, metrics: resultMetrics } : current;
+ // §14.2①:opts.canaryDone=true = 结算器满样本即灰度完成(50%→100% 由
+ // active-interventions 表达,台账记录终态 done/100)——否则 runtime 门会以
+ // EXP_CANARY_INCOMPLETE 拒掉一切 canary.status=running 的生产实验。sessions 取 result
+ // 样本、projects 取 strata 数(完成化语义:满样本结算时灰度覆盖面如实入账)。
+      const canary =
+        opts.canaryDone === true && current.canary !== undefined
+          ? {
+              ...current.canary,
+              status: "done",
+              percent: 100,
+              sessions: Math.max(current.canary.sessions ?? 0, resultMetrics?.[0]?.result?.sample ?? 0),
+              projects: Math.max(current.canary.projects ?? 0, current.strata?.length ?? 0, 1),
+            }
+          : current.canary;
+      const candidate: Experiment = {
+        ...(resultMetrics !== undefined ? { metrics: resultMetrics } : {}),
+        ...current,
+        ...(canary !== undefined ? { canary } : {}),
+      } as Experiment;
       const conflicts = rt.findConflicts(candidate, projection.experiments);
       const gate = rt.decideExperiment(candidate, "adopt", {
         by: opts.by,

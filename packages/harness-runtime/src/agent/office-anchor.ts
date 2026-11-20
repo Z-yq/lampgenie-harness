@@ -260,7 +260,8 @@ function candidateOf(
  */
 export function resolveAnchor(
   headings: readonly HeadingRef[],
-  anchor: string | ParsedAnchor): AnchorResolution {
+  anchor: string | ParsedAnchor,
+): AnchorResolution {
   const parsed = typeof anchor === "string" ? parseAnchor(anchor) : anchor;
   const query = typeof anchor === "string" ? anchor : anchor.raw;
 

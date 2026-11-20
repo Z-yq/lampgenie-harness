@@ -90,7 +90,8 @@ interface SettlementRuntime {
   abortHandle(h: SettleHandle, code?: string): void;
   withTimeout(
     handles: SettleHandle[],
-    ms: number): Promise<
+    ms: number,
+  ): Promise<
     | { status: "completed"; log: SettlementLog }
     | { status: "timeout"; code: "SETTLE_TIMEOUT_ABORTED"; aborted: string[] }
   >;

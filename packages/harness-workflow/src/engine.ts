@@ -253,7 +253,7 @@ export class WorkflowEngine {
       }
     }
     this.caps = journalCaps ?? sanitizeCaps(opts.caps) ?? {};
- // 并发上限来自生效 caps(与既有缺省 8 一致);非法 maxTotal 回落到缺省而不是抛错——
+ // :并发上限来自生效 caps(与既有缺省 8 一致);非法 maxTotal 回落到缺省而不是抛错——
  // 护栏是防御面,配置写坏不该让引擎起不来(同 sanitizeCaps 的纪律)。
     this.maxTotal = typeof opts.maxTotal === "number" && Number.isInteger(opts.maxTotal) && opts.maxTotal >= 0
       ? opts.maxTotal

@@ -48,6 +48,8 @@ const CARD_FNS = [
   "trajBoardSumHtml", "trajBoardTurnHeadHtml", "trajBoardCardHeadHtml", "trajBoardThinkHtml",
   "trajBoardArgsText", "trajBoardBodyHtml", "trajBoardCardHtml", "trajBoardPruneCardHtml",
   "trajBoardCardsHtml", "filterDecisionRows", "trajBoardPrevFile", "trajBoardCardState",
+ // 决策面板改为统一时间线(模型卡+子代理卡+孤儿工具),渲染族新增两函数。
+  "trajTimelineRows", "trajToolMatched",
 ];
 
 /** 抽卡片渲染族 + 注入数据层,放进同一函数作用域求值(等同浏览器侧可见性)。 */

@@ -207,7 +207,8 @@ export function sessionSearchTool(journal: Journal, currentSessionId?: string): 
           return JSON.stringify(result);
         }
         const exclude = [...(Array.isArray(a.excludeSessionIds) ? a.excludeSessionIds : [])].filter(
-          (id): id is string => typeof id === "string" && id.length > 0);
+          (id): id is string => typeof id === "string" && id.length > 0,
+        );
         if (currentSessionId && !a.includeCurrent) exclude.push(currentSessionId);
         const result = index.discover(String(a.query ?? ""), {
           limit: clampInt(a.limit, 5, 1, 20),

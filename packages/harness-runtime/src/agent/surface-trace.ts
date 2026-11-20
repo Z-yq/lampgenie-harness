@@ -291,7 +291,8 @@ export function validateEvent(
  */
 export function applySurfaceEvent(
   state: SurfaceState,
-  event: SurfaceEvent): { state: SurfaceState; codes: string[] } {
+  event: SurfaceEvent,
+): { state: SurfaceState; codes: string[] } {
   const base = coerceState(state);
   if (!isRecord(event)) {
     return { state: base, codes: ["SURFACE_INVALID"] };

@@ -6,10 +6,14 @@ export const PANEL_JS_TRAJ = `// ===================== 轨迹看板(全屏 overl
 // 纯前端形态:数据源=histEvents(会话重放事件,已在场),建模层 buildTrajRows/groupTrajTurns/summarizeTraj/
 // filterTrajRows/capTrajRows/fmtTokens/fmtDuration 由 panel-traj-model.ts 源码注入(PAGE 无法 import)。
 // 渲染函数一律纯函数(只依赖 esc + 注入的格式化函数),面板测试可从 PAGE 抽源码 new Function 求值断言。
-let trajBoardState = { pane: "decisions", mode: "all", lmode: "sequence", q: "", sel: -1, rows: [], turns: [], view: [], files: [], ord: {}, filesKey: "", prunes: [] };
+let trajBoardState = { pane: "decisions", mode: "all", lmode: "sequence", q: "", sel: -1, rows: [], turns: [], view: [], files: [], ord: {}, filesKey: "", prunes: [], intakes: [], agentEvents: {}, toolByStep: {}, liveKey: "", liveTimer: 0 };
 // 逐次决策视图:卡体全文按需拉取;缓存 key=轨迹文件绝对路径(相邻卡的 prev 复用同一份)。
 const trajTraceCache = new Map(); // path -> {state:"loading"|"ok"|"err", data?, err?}
 const trajExpanded = new Set();   // 已展开的轨迹文件路径
+const trajAgentOpen = new Set();  // 已展开的子代理卡(key=taskId||agentId
+let trajBackfillTimer = 0;        // 打开轨迹视图时自动回溯历史页(末 1200 条内通常能覆盖最近一轮的子代理)
+const TRAJ_BACKFILL_TARGET = 1200; // 自动回溯目标事件数(超过后仍可手动「加载更早」)
+const TRAJ_BACKFILL_MAX_PAGES = 6; // 单次打开最多自动拉 6 页(200/页),防长会话无限拉史
 const TRAJ_EXPAND_ALL_MAX = 30;   // 「全部展开」单次上限(不一次拉上百个文件)
 let trajBoardInitDone = false;    // 本次打开会话只自动展开最新卡一次(不覆盖用户手动收起)
 let trajDashPullAt = 0, trajDashPullTimer = 0; // 看板在场时 dashboard.changed 驱动的增量拉史节流水位(尾沿补拉)
@@ -158,9 +162,18 @@ function trajBoardSumHtml(s, u) {
     : f("缓存命中率", (Number(a.cacheHitRate || 0) * 100).toFixed(1) + "%");
   const estH = hasU && Number(u.estRows) > 0 ? f("估算(触发用)", fmtTokens(u.estInput)) : "";
   const susH = hasU && Number(u.suspect) > 0 ? f("异常", u.suspect) : "";
+ // 子代理单列:不混进主轨 token/工具口径;有才出现,零时不占版面。
+  const subN = Number(a.subagents) || 0;
+  const subH = subN > 0
+    ? '<span title="子代理:spawn→result 聚合行;调用/工具为其内部 LLM 与工具次数,输入/输出为其 token 合计">子代理<b>'
+      + subN + "</b> · 调用 <b>" + (Number(a.subCalls) || 0) + "</b> · 工具 <b>" + (Number(a.subTools) || 0) + "</b>"
+      + (Number(a.subInputTokens) > 0 ? " · 输入 <b>" + fmtTokens(Number(a.subInputTokens)) + "</b>" : "")
+      + (Number(a.subOutputTokens) > 0 ? " · 输出 <b>" + fmtTokens(Number(a.subOutputTokens)) + "</b>" : "")
+      + "</span>"
+    : "";
   return f("调用数", a.calls) + f("轮数", a.turns) + inputH + f("输出", fmtTokens(a.outputTokens))
     + hitH + estH + f("工具数", a.tools) + f("错误数", a.errors) + f("墙钟", fmtDuration(a.wallMs))
-    + f("本地评分", a.localScores) + f("剪枝", a.prunes) + susH;
+    + f("本地评分", a.localScores) + f("剪枝", a.prunes) + susH + subH;
 }
 /** 轮头:第 N 轮 · 墙钟 · 调用数 · 工具直方图(名称×次数,最多 6 个)。 */
 function trajBoardTurnHeadHtml(t) {
@@ -184,6 +197,151 @@ function trajBoardRowHtml(r) {
     + cell(r.durationMs, true) + cell(r.inputTokens) + cell(r.cachedTokens) + cell(r.outputTokens)
     + "<span>" + st + "</span></div>";
 }
+/** 工具执行行:名称/参数摘要/耗时/状态常显;展开看参数全文与结果预览。
+ * 主轨与子代理过程共用(compact=true 时是卡下的一条紧凑行)。 */
+function trajBoardToolHtml(t, compact) {
+  const r = t || {};
+  const st = r.status === "error" ? '<span class="stt err">错误</span>'
+    : r.status === "pending" ? '<span class="stt pending">待结果</span>' : '<span class="stt">ok</span>';
+  let html = '<details class="tb-tool' + (r.status === "error" ? " err" : "") + (compact ? " compact" : "") + '">'
+    + '<summary><span class="nm">' + esc(r.toolName || r.label || "tool") + "</span>"
+    + '<span class="ag">' + esc(r.summary || "") + "</span>"
+    + '<span class="du">' + (r.durationMs === undefined ? "-" : esc(fmtDuration(Number(r.durationMs) || 0))) + "</span>"
+    + st + "</summary>"
+    + '<div class="tb-tool-b">';
+  if (r.error) html += '<div class="tb-tool-err">' + esc(r.error) + "</div>";
+  html += '<div class="k">参数</div><pre>' + esc(r.summary || "(无)") + "</pre>";
+  if (r.result) {
+    const cut = r.resultChars && r.resultChars > r.result.length;
+    html += '<div class="k">结果' + (cut ? "(预览 " + r.result.length + " / 共 " + Number(r.resultChars) + " 字)" : "") + "</div>"
+      + "<pre>" + esc(r.result) + "</pre>";
+  } else if (r.status === "pending") {
+    html += '<div class="k">结果</div><div class="none">尚未返回(执行中或已中断)</div>';
+  }
+  return html + "</div></details>";
+}
+/** 一步卡下的工具执行条(有工具才出现;空=不占版面)。 */
+function trajBoardToolsHtml(tools) {
+  const arr = Array.isArray(tools) ? tools : [];
+  if (!arr.length) return "";
+  return '<div class="tb-tools"><span class="tb-tools-k">工具执行 ' + arr.length + " 次</span>"
+    + arr.map(function (t) { return trajBoardToolHtml(t, true); }).join("") + "</div>";
+}
+/** 子代理行 key(spawn 缺 agentId,event/result 才带;两处用 taskId 对齐)。 */
+function trajAgentKey(r) {
+  return String((r && (r.agentTaskId || r.agentId)) || "");
+}
+/** 子代理过程事件 → 轨迹行(复用 buildTrajRows:同一套 call/result 合并与错误语义)。 */
+function trajAgentInnerRows(events) {
+  const evs = Array.isArray(events) ? events : [];
+  const mapped = [];
+  for (let i = 0; i < evs.length; i++) {
+    const e = evs[i] || {};
+    const p = e.payload && typeof e.payload === "object" ? e.payload : {};
+    const ik = String(p.kind || "");
+    if (!ik) continue;
+    mapped.push({ seq: e.seq, kind: ik, time: e.time, payload: p });
+  }
+  return buildTrajRows(mapped);
+}
+/** 子代理卡体:任务书摘要 + 工具直方图 + 最后动作 + 过程时间线(模型步/工具执行/消息)。 */
+function trajAgentInnerHtml(r) {
+  const key = trajAgentKey(r);
+  const evs = (trajBoardState.agentEvents || {})[key] || [];
+  let html = "";
+  const hist = trajAgentHistSort ? trajAgentHistSort(r.agentToolHist || []) : (r.agentToolHist || []);
+  if (r.agentBrief) html += '<div class="tb-agent-brief">' + esc(r.agentBrief) + "</div>";
+  if (hist.length) {
+    html += '<div class="tb-agent-hist">' + hist.slice(0, 12).map(function (h) {
+      return '<span class="hc">' + esc(h.name) + "<b>×" + Number(h.count || 0) + "</b></span>";
+    }).join("") + "</div>";
+  }
+  if (r.agentLast) html += '<div class="tb-agent-last">最后动作:' + esc(r.agentLast) + "</div>";
+  if (!evs.length) {
+    return html + '<div class="tb-c-none">没有可回放的过程事件(外部后端子代理只落 output.txt;过程见「子代理会话流」)</div>';
+  }
+  const rowsAll = trajAgentInnerRows(evs);
+ // 过程时间线只留有信息量的事件(模型步/工具执行/输入/压缩/阶段);
+ // step.start/step.end/permission.gate/custom 等治理事件折叠成一行计数,避免 66 行噪声淹没结论。
+  const rows = [];
+  const skipped = {};
+  for (let i = 0; i < rowsAll.length; i++) {
+    const row = rowsAll[i];
+    if (!row) continue;
+    if (row.kind === "model" || row.kind === "tool" || row.kind === "user" || row.kind === "compact" || row.kind === "phase") rows.push(row);
+    else skipped[row.label || "事件"] = (skipped[row.label || "事件"] || 0) + 1;
+  }
+  const skipKeys = Object.keys(skipped);
+  const skipTotal = skipKeys.reduce(function (a, k) { return a + skipped[k]; }, 0);
+  const cap = capTrajRows(rows);
+  if (cap.truncated) html += '<div class="tb-warn">…只显示最近 ' + cap.rows.length + " 条过程事件(共 " + cap.total + " 条)</div>";
+  html += '<div class="tb-agent-flow">';
+  for (let i = 0; i < cap.rows.length; i++) {
+    const row = cap.rows[i];
+    if (!row) continue;
+    if (row.kind === "tool") { html += trajBoardToolHtml(row, true); continue; }
+    const kindTxt = row.kind === "model" ? "模型" : row.kind === "user" ? "输入" : row.kind === "compact" ? "压缩" : row.kind === "phase" ? "阶段" : (row.label || "事件");
+    const bits = [];
+    if (row.kind === "model") {
+      if (row.label) bits.push('<span class="mdl">' + esc(row.label) + "</span>");
+      if (row.durationMs !== undefined) bits.push('<span class="du">' + esc(fmtDuration(Number(row.durationMs) || 0)) + "</span>");
+      const tk = [];
+      if (row.inputTokens !== undefined) tk.push("入 " + fmtTokens(row.inputTokens));
+      if (row.outputTokens !== undefined) tk.push("出 " + fmtTokens(row.outputTokens));
+      if (tk.length) bits.push('<span class="tk">' + esc(tk.join(" · ")) + "</span>");
+      if (row.tools && row.tools.length) bits.push('<span class="tl">工具 ' + esc(row.tools.join(", ")) + "</span>");
+    }
+    if (row.summary) bits.push('<span class="sm">' + esc(row.summary) + "</span>");
+    if (row.status === "error") bits.push('<span class="stt err">错误</span>');
+    html += '<div class="tb-agent-line ' + esc(row.kind) + '"><span class="k">' + esc(kindTxt) + "</span>" + bits.join("") + "</div>";
+  }
+  html += "</div>";
+  if (skipTotal > 0) {
+    html += '<div class="tb-agent-skip">另有 ' + skipTotal + " 条步骤/治理事件已折叠("
+      + esc(skipKeys.slice(0, 4).map(function (k) { return k + "×" + skipped[k]; }).join(" · "))
+      + (skipKeys.length > 4 ? " 等" : "") + ");明细见「子代理会话流」</div>";
+  }
+  return html;
+}
+/** 子代理卡:默认折叠;卡头常显角色/模型/步/调用/工具/token/墙钟/状态。 */
+function trajBoardAgentCardHtml(r, n, open) {
+  const key = trajAgentKey(r);
+  const bits = [];
+  bits.push('<span class="n">#' + Number(n) + "</span>");
+  bits.push('<span class="kbadge">子代理</span>');
+  const roleTxt = r.agentRole && r.agentRole !== "subagent" && r.agentRole !== "子代理" ? String(r.agentRole) : "";
+  const shortId = String(r.agentTaskId || r.agentId || "").slice(0, 8);
+  const title = roleTxt ? roleTxt + (r.agentModel ? " · " + r.agentModel : "") : (r.agentModel || (shortId ? "任务 " + shortId : "过程记录"));
+  bits.push('<span class="model">' + esc(title) + "</span>");
+  bits.push('<span class="pos">t' + Number(r.turn || 0) + "</span>");
+  const met = [];
+  if (r.agentSteps) met.push("步 " + Number(r.agentSteps));
+  if (r.agentCalls) met.push("模型 " + Number(r.agentCalls));
+  if (r.agentToolCalls) met.push("工具 " + Number(r.agentToolCalls));
+  if (r.agentInputTokens) met.push("入 " + fmtTokens(Number(r.agentInputTokens)));
+  if (r.agentOutputTokens) met.push("出 " + fmtTokens(Number(r.agentOutputTokens)));
+  if (r.durationMs !== undefined) met.push("墙钟 " + fmtDuration(Number(r.durationMs) || 0));
+  if (met.length) bits.push('<span class="num">' + esc(met.join(" · ")) + "</span>");
+  const hist = trajAgentHistSort ? trajAgentHistSort(r.agentToolHist || []) : (r.agentToolHist || []);
+  if (hist.length) bits.push('<span class="tools">' + esc(hist.slice(0, 5).map(function (h) { return h.name + "×" + h.count; }).join(" · ")) + "</span>");
+  if (r.agentLast) bits.push('<span class="last">' + esc(r.agentLast) + "</span>");
+  if (r.status === "error") bits.push('<span class="bad">失败</span>');
+  else if (r.status === "pending") bits.push('<span class="run">运行中</span>');
+  else bits.push('<span class="done">完成</span>');
+  bits.push('<span class="fold">' + (open ? "收起过程" : "展开过程") + "</span>");
+  let html = '<div class="tb-card tb-agent-card' + (r.status === "error" ? " err" : "") + '" data-agent-card="' + esc(key) + '">'
+    + '<div class="tb-c-head">' + bits.join("") + "</div>";
+  if (open) html += '<div class="tb-c-body">' + trajAgentInnerHtml(r) + "</div>";
+  return html + "</div>";
+}
+/** 工具列表(「工具」过滤面的主体):按发生顺序平铺,展开看参数/结果。 */
+function trajBoardToolListHtml(rows) {
+  const arr = Array.isArray(rows) ? rows : [];
+  if (!arr.length) return '<div class="tb-empty">没有匹配的工具调用</div>';
+  return '<div class="tb-warn">工具执行 ' + arr.length + " 次(按发生顺序;点一条看参数与结果)</div>"
+    + '<div class="tb-tool-list">' + arr.map(function (t) { return trajBoardToolHtml(t, false); }).join("") + "</div>";
+}
+
 /** 行表:表头 + 轮分组。>1500 行只渲染最近 1500 行且**显式提示**(不静默截断)。 */
 function trajBoardTableHtml(rows, turns) {
   const cap = capTrajRows(rows || []);
@@ -227,6 +385,17 @@ function trajBoardInspHtml(r) {
     + (r.synth ? row("来源", "synth(轨迹文件已落盘,journal 未入账)") : "")
     + row("状态", r.status === "error" ? "错误" : r.status === "pending" ? "待结果" : "ok")
     + row("工具名", r.toolName) + row("toolCallId", r.toolCallId);
+ // 子代理聚合行:账本 inspector 也给出内部规模,不用跳卡体。
+  if (r.kind === "subagent") {
+    html += row("子代理", (r.agentRole || "-") + (r.agentModel ? " · " + r.agentModel : ""))
+      + row("内部步数", r.agentSteps)
+      + row("内部模型调用", r.agentCalls)
+      + row("内部工具调用", r.agentToolCalls)
+      + row("子代理输入", r.agentInputTokens === undefined ? "-" : fmtTokens(r.agentInputTokens))
+      + row("子代理输出", r.agentOutputTokens === undefined ? "-" : fmtTokens(r.agentOutputTokens))
+      + row("最后动作", r.agentLast)
+      + (r.agentToolHist && r.agentToolHist.length ? row("工具直方图", r.agentToolHist.map(function (h) { return h.name + "×" + h.count; }).join(" · ")) : "");
+  }
   if (r.error) html += '<div class="errtext">错误文本:' + esc(r.error) + "</div>";
   return html;
 }
@@ -245,6 +414,44 @@ function filterDecisionRows(rows, mode, q) {
     if (!query) return true;
     return [r.label, r.summary, tools.join(" ")].join(" ").toLowerCase().indexOf(query) >= 0;
   });
+}
+/**
+ * 主时间线:一次 LLM 决策=一张卡,子代理 spawn→result=一张卡;工具执行挂在
+ * 对应步的卡下(orphan 工具=独立行)。mode 只筛卡的种类,不改变卡内工具条。
+ * - all:决策卡 + 子代理卡 + 无步号的孤儿工具;
+ * - model:仅决策卡;subagent:仅子代理卡;error:失败卡/失败工具;
+ * - 搜索词命中工具行时,工具也作为独立行追加(否则「搜工具名却在卡里找不到」)。
+ */
+function trajTimelineRows(rows, mode, q) {
+  const src = Array.isArray(rows) ? rows : [];
+  const query = String(q || "").trim().toLowerCase();
+  const out = [], extraTools = [];
+  for (let i = 0; i < src.length; i++) {
+    const r = src[i];
+    if (!r) continue;
+    if (r.kind === "tool") {
+      if (mode === "tool" || mode === "error") { if (mode !== "error" || r.status === "error") out.push(r); continue; }
+      if (!trajToolMatched(r)) out.push(r); // 无步号的孤儿工具
+      else if (query && (String(r.toolName || "") + " " + String(r.summary || "")).toLowerCase().indexOf(query) >= 0) extraTools.push(r);
+      continue;
+    }
+    if (r.kind === "subagent") {
+      if (mode === "subagent" || mode === "all" || (mode === "error" && r.status === "error")) out.push(r);
+      continue;
+    }
+    if (r.kind === "model" && r.traceFile) {
+      if (mode === "all" || mode === "model" || (mode === "error" && r.status === "error")) out.push(r);
+      continue;
+    }
+  }
+  if (query && mode === "all") return out.concat(extraTools);
+  return out;
+}
+/** 该工具行是否已挂到某个决策卡下(按 turn:step 匹配;匹配不到=孤儿)。 */
+function trajToolMatched(r) {
+  if (!r || r.stepNo === undefined) return false;
+  const k = String(Number(r.turn || 0)) + ":" + String(Number(r.stepNo));
+  return !!(trajBoardState.toolByStep || {})[k];
 }
 /** 上一条决策的轨迹文件(公共前缀比较基准);首条返回空串。 */
 function trajBoardPrevFile(file) {
@@ -380,12 +587,16 @@ function trajBoardBodyHtml(r, trace, prevTrace) {
     + (file ? '<span class="tb-c-copy" data-traj-copy="' + esc(file) + '">复制路径</span>' : "") + "</div>";
   return html;
 }
-/** 单卡 HTML(卡体只在展开时挂载;未缓存=占位,由 trajBoardMountBodies 触发拉取)。 */
+/** 单卡 HTML(卡体只在展开时挂载;未缓存=占位,由 trajBoardMountBodies 触发拉取)。
+ * 卡头下常显本步工具执行条(工具使用记录进主时间线,不再只藏在账本里)。 */
 function trajBoardCardHtml(r, n, st) {
   const s = st || {};
   const file = String(r.traceFile || "");
   let html = '<div class="tb-card' + (r.status === "error" ? " err" : "") + '" data-trace-card="' + Number(r.idx) + '" data-trace-file="' + esc(file) + '">'
     + '<div class="tb-c-head">' + trajBoardCardHeadHtml(r, n, !!s.expanded) + "</div>";
+  const tkey = String(Number(r.turn || 0)) + ":" + String(r.stepNo === undefined ? "-" : Number(r.stepNo));
+  const stepTools = (trajBoardState.toolByStep || {})[tkey] || [];
+  if (stepTools.length) html += trajBoardToolsHtml(stepTools);
   if (!s.expanded) return html + "</div>";
   if (s.loading) return html + '<div class="tb-c-body"><div class="tb-c-loading">正文加载中…(按需拉取 trace 文件)</div></div></div>';
   if (s.err) return html + '<div class="tb-c-body"><div class="tb-c-none">全文读取失败:' + esc(String(s.err)) + "</div></div></div>";
@@ -482,7 +693,11 @@ function trajBoardIntakeCardHtml(ev, n) {
 function trajBoardCardsHtml(rows) {
   const src = Array.isArray(rows) ? rows : [];
   const mode = trajBoardState.mode || "all";
-  const sideFiltered = mode === "tool" || mode === "error" || String(trajBoardState.q || "").trim();
+  const q = String(trajBoardState.q || "").trim();
+ // 工具面 = 已按 mode/q 过滤后的工具行(独立列表;不再伪装成决策卡)。
+  if (mode === "tool") return trajBoardToolListHtml(src.filter(function (r) { return r && r.kind === "tool"; }));
+  const timeline = trajTimelineRows(src, mode, q);
+  const sideFiltered = mode !== "all" || q !== "";
   const prunes = sideFiltered
     ? [] : (Array.isArray(trajBoardState.prunes) ? trajBoardState.prunes.slice() : [])
       .sort(function (a, b) { return Number(a && a.seq || 0) - Number(b && b.seq || 0); });
@@ -490,14 +705,25 @@ function trajBoardCardsHtml(rows) {
   const intakes = sideFiltered
     ? [] : (Array.isArray(trajBoardState.intakes) ? trajBoardState.intakes.slice() : [])
       .sort(function (a, b) { return Number(a && a.seq || 0) - Number(b && b.seq || 0); });
-  if (!src.length && !prunes.length && !intakes.length) return '<div class="tb-empty">没有匹配的决策</div>';
+  if (!timeline.length && !prunes.length && !intakes.length) return '<div class="tb-empty">没有匹配的决策</div>';
   const ord = trajBoardState.ord || {};
   const byTurn = {};
   (trajBoardState.turns || []).forEach(function (t) { if (t) byTurn[Number(t.turn)] = t; });
-  let html = '<div class="tb-warn">共 ' + src.length + " 次 LLM 决策(按发生顺序平铺;全部默认折叠,点卡头才拉取并展开正文)"
+  let nModel = 0, nAgent = 0, nTool = 0;
+  for (let i = 0; i < timeline.length; i++) {
+    const rr = timeline[i];
+    if (!rr) continue;
+    if (rr.kind === "model") nModel++;
+    else if (rr.kind === "subagent") nAgent++;
+    else if (rr.kind === "tool") nTool++;
+  }
+  let html = '<div class="tb-warn">共 ' + nModel + " 次 LLM 决策"
+    + (nAgent ? " · " + nAgent + " 个子代理" : "")
+    + (nTool ? " · " + nTool + " 次独立工具执行" : "")
+    + "(按发生顺序平铺;各步工具执行常显在卡下,点卡头展开全文)"
     + (prunes.length ? " · 另有 " + prunes.length + " 次上下文剪枝" : "")
     + (intakes.length ? " · " + intakes.length + " 次大结果闸门" : "") + "</div>";
-  let curTurn = null, pn = 0, pi = 0, inum = 0, ii = 0;
+  let curTurn = null, pn = 0, pi = 0, inum = 0, ii = 0, cardNo = 0;
   const flushPrunes = function (upto) {
     while (pi < prunes.length && Number(prunes[pi] && prunes[pi].seq || 0) <= upto) {
       pn++;
@@ -510,14 +736,23 @@ function trajBoardCardsHtml(rows) {
       ii++;
     }
   };
-  for (let i = 0; i < src.length; i++) {
-    const r = src[i];
+  for (let i = 0; i < timeline.length; i++) {
+    const r = timeline[i];
+    if (!r) continue;
     flushPrunes(Number(r.seq === undefined ? -1 : r.seq));
     if (r.turn !== curTurn) {
       curTurn = r.turn;
       html += byTurn[r.turn] ? trajBoardTurnHeadHtml(byTurn[r.turn]) : '<div class="tb-trhead">第 ' + Number(r.turn) + " 轮</div>";
     }
-    html += trajBoardCardHtml(r, ord[String(r.traceFile || "")] || i + 1, trajBoardCardState(String(r.traceFile || "")));
+    if (r.kind === "subagent") {
+      cardNo++;
+      html += trajBoardAgentCardHtml(r, cardNo, trajAgentOpen.has(trajAgentKey(r)));
+    } else if (r.kind === "tool") {
+      html += '<div class="tb-card tb-orphan-tool">' + trajBoardToolHtml(r, false) + "</div>";
+    } else {
+      cardNo++;
+      html += trajBoardCardHtml(r, ord[String(r.traceFile || "")] || cardNo, trajBoardCardState(String(r.traceFile || "")));
+    }
   }
   flushPrunes(Infinity);
   return html;
@@ -539,7 +774,8 @@ function trajLaneShortModel(m) {
 function trajLaneFmtMs(ms) {
   return ms >= 10000 ? Math.round(ms / 1000) + "s" : ms >= 1000 ? (Math.round(ms / 100) / 10) + "s" : ms + "ms";
 }
-/** 单条事件 → 泳道记录(lane/cls/label/sub/dur/err/full);返回 null = 不进泳道(tool.call 与 result 合并展示)。 */
+/** 单条事件 → 泳道记录(lane/cls/label/sub/dur/err/full);返回 null = 不进泳道(tool.call 与 result 合并展示)。
+ * 子代理 spawn/result/任务书进独立「子代理」泳道(内部逐事件不铺泳道,细节在子代理卡)。 */
 function trajLaneRecord(e) {
   const p = (e && e.payload) || {};
   const kind = String((e && e.kind) || "");
@@ -565,10 +801,22 @@ function trajLaneRecord(e) {
     case "tool.call": return null; // 与 tool.result 合并展示(配对纪律),避免泳道重复
     case "todo.updated": return { lane: "system", cls: "", label: "todo", sub: (p.items || []).length + " 项", dur: 0 };
     case "subagent.spawn": {
+      const role = (typeof trajAgentRoleOf === "function" ? trajAgentRoleOf(p) : "") || "subagent";
       const spm = trajLaneShortModel(p.model);
-      const srec = { lane: "system", cls: "", label: "spawn", sub: (spm ? spm + " · " : "") + String(p.instructions || "").slice(0, 24), dur: 0 };
+      const srec = { lane: "agent", cls: "", label: "子代理 · " + role, sub: (spm ? spm + " · " : "") + String(p.instructions || "").slice(0, 30), dur: 0 };
       if (spm) srec.full = String(p.model);
       return srec;
+    }
+    case "subagent.result": {
+      const ev = p.event && typeof p.event === "object" ? p.event : {};
+      const ok = ev.ok !== false;
+      return { lane: "agent", cls: "", label: ok ? "子代理完成" : "子代理失败", sub: String(ev.finalText || (ev.error && (ev.error.detail || ev.error.kind)) || "").slice(0, 34), dur: 0, err: !ok };
+    }
+    case "subagent.event": {
+ // 只取任务书第一条(每个子代理一条记录);内部 LLM/工具细节由子代理卡展开。
+      if (p.kind !== "message.user") return null;
+      const role = (typeof trajAgentRoleOf === "function" ? trajAgentRoleOf(p) : "") || "subagent";
+      return { lane: "agent", cls: "", label: "子代理任务 · " + role, sub: String(p.text || "").slice(0, 34), dur: 0 };
     }
     case "workflow.run.start": return { lane: "system", cls: "", label: "wf", sub: String(p.wfId || ""), dur: 0 };
     default:
@@ -582,11 +830,25 @@ function trajLaneSumHtml(events) {
   const evs = Array.isArray(events) ? events : [];
   if (!evs.length) return "";
   const kc = {}, tools = {};
-  let errs = 0;
+  let errs = 0, agents = 0, agentTools = 0;
   for (let i = 0; i < evs.length; i++) {
     const e = evs[i] || {};
     const kind = String(e.kind || "");
     kc[kind] = (kc[kind] || 0) + 1;
+    if (kind === "subagent.spawn") { agents++; continue; }
+ // 子代理内部工具也进「最慢工具」:名前缀「子·」,不混进主轨同名工具的计数歧义。
+    if (kind === "subagent.event") {
+      const sp = e.payload || {};
+      if (sp.kind !== "tool.result") continue;
+      agentTools++;
+      const snm = "子·" + String(sp.name || "tool");
+      const st = tools[snm] || (tools[snm] = { name: snm, max: 0, count: 0, err: 0 });
+      st.count++;
+      const sd = Number(sp.durationMs) || 0;
+      if (sd > st.max) st.max = sd;
+      if (sp.error || /^错误/.test(String(sp.content || ""))) { st.err++; errs++; }
+      continue;
+    }
     if (kind !== "tool.result") continue;
     const p = e.payload || {};
     const nm = String(p.name || "tool");
@@ -605,6 +867,7 @@ function trajLaneSumHtml(events) {
     }).join(" · ");
   const rows = [];
   rows.push('<span class="k">事件分布</span><span>' + (kHead || "—") + " · 共 " + evs.length + " 条"
+    + (agents ? ' · <span class="ok">子代理 ' + agents + " 个" + (agentTools ? " / 内部工具 " + agentTools + " 次" : "") + "</span>" : "")
     + (errs ? ' · <span class="err">工具错误 ' + errs + " 次</span>" : "") + "</span>");
   rows.push('<span class="k">最慢工具</span><span>' + (slow || "无工具事件") + "</span>");
   return rows.join("");
@@ -628,7 +891,10 @@ function trajLaneHtml(events, mode) {
     if (m === "time") return 8 + ((at(rec.e) - t0) / H) * (W - 100);
     return rec.i * 96 + 8; // sequence / duration:横向同序列(duration 用块内底边条表达时长)
   }
-  const laneHtml = ["tool", "message", "system"].map(function (lane) {
+  const laneOrder = ["tool", "message", "agent", "system"].filter(function (lane) {
+    return lane !== "agent" || recs.some(function (rec) { return rec.r.lane === "agent"; });
+  });
+  const laneHtml = laneOrder.map(function (lane) {
     const inner = [];
     for (let j = 0; j < recs.length; j++) {
       const rec = recs[j];
@@ -646,7 +912,7 @@ function trajLaneHtml(events, mode) {
       if (!anchor) return "";
       return '<div class="sw-turn" style="left:' + Math.max(0, Math.round(xOf(anchor)) - 12) + 'px"><span>T' + esc(String(t.turn)) + "</span></div>";
     }).join("");
-    const name = lane === "tool" ? "工 具" : lane === "message" ? "消 息" : "系 统";
+    const name = lane === "tool" ? "工 具" : lane === "message" ? "消 息" : lane === "agent" ? "子代理" : "系 统";
     return '<div class="sw-lane" data-lane="' + lane + '"><div class="sw-lane-label">' + name
       + '</div><div style="position:relative;width:' + W + 'px">' + lines + inner.join("") + "</div></div>";
   }).join("");
@@ -681,7 +947,13 @@ function trajBoardRenderRows() {
     trajBoardMarkSel();
     return;
   }
-  const cards = filterDecisionRows(trajBoardState.rows, trajBoardState.mode, trajBoardState.q);
+ // 时间线:all/model/error 走统一筛(filterTrajRows 已含子代理字段);
+ // tool/subagent 面按 kind 精确过滤。工具条由卡片内部的 toolByStep 提供,不再二次过滤。
+  const mode = trajBoardState.mode;
+  const cards = mode === "tool" ? filterTrajRows(trajBoardState.rows, "tool", trajBoardState.q)
+    : mode === "subagent" ? filterTrajRows(trajBoardState.rows, "subagent", trajBoardState.q)
+      : mode === "error" ? filterTrajRows(trajBoardState.rows, "error", trajBoardState.q)
+        : filterTrajRows(trajBoardState.rows, "all", trajBoardState.q);
   trajBoardState.view = cards;
   if (!cardsHost) return;
   const keep = cardsHost.scrollTop;
@@ -785,19 +1057,37 @@ function trajBoardLiveSync() {
   const box = $("trajBoard");
   if (!box || box.style.display === "none" || !histEvents) return;
   const files = [];
+  let saEvents = 0, saResults = 0, toolResults = 0, lastSeq = 0;
   for (let i = 0; i < histEvents.length; i++) {
     const e = histEvents[i];
-    if (e && e.kind === "llm.trace" && e.payload && e.payload.file) files.push(String(e.payload.file));
+    if (!e) continue;
+    if (Number(e.seq) > lastSeq) lastSeq = Number(e.seq);
+    if (e.kind === "llm.trace" && e.payload && e.payload.file) files.push(String(e.payload.file));
+    else if (e.kind === "subagent.event") saEvents++;
+    else if (e.kind === "subagent.result") saResults++;
+    else if (e.kind === "tool.result") toolResults++;
   }
-  const key = files.join("|");
-  if (key === (trajBoardState.filesKey || "")) return;
+ // 子代理内部事件/工具结果也要触发刷新(此前只认 llm.trace,子代理过程永远不更新);
+ // 高频事件用 350ms 尾沿节流,避免每来一条子事件就整表重渲。
+  const key = files.join("|") + "|sa:" + saEvents + "|sr:" + saResults + "|tr:" + toolResults + "|q:" + lastSeq;
+  if (key === (trajBoardState.liveKey || "")) return;
+  const prevKey = trajBoardState.liveKey || "";
+  trajBoardState.liveKey = key;
   const host = $("trajCardsHost");
   const atBottom = host ? host.scrollTop + host.clientHeight >= host.scrollHeight - 12 : true;
  // 新决策=新卡:只刷新卡头列表,不自动展开、不拉全文(默认折叠,不主动展示详情)
-  const prevFiles = trajBoardState.filesKey ? String(trajBoardState.filesKey).split("|") : [];
+  const prevFiles = prevKey ? prevKey.split("|sa:")[0].split("|").filter(Boolean) : [];
   const added = files.filter(function (f) { return prevFiles.indexOf(f) < 0; });
-  trajBoardRefresh();
-  if (added.length && atBottom && host) host.scrollTop = host.scrollHeight;
+ // 新 LLM 决策=立即出现(交互语义);纯子代理/工具高频事件走 350ms 尾沿节流(防整表狂渲)。
+  const apply = function () {
+    trajBoardState.liveTimer = 0;
+    trajBoardRefresh();
+    const h = $("trajCardsHost");
+    if (added.length && atBottom && h) h.scrollTop = h.scrollHeight;
+  };
+  if (added.length) { apply(); return; }
+  if (trajBoardState.liveTimer) clearTimeout(trajBoardState.liveTimer);
+  trajBoardState.liveTimer = setTimeout(apply, 350);
 }
 /** 看板是否在场(overlay 打开)。dashboard.changed 拉史只在在场时发生,关着=零额外请求。 */
 function trajBoardOn() {
@@ -817,6 +1107,50 @@ function trajBoardMarkSel() {
   const hit = trajBoardState.rows.filter(function (r) { return Number(r.idx) === idx; })[0];
   $("trajInsp").innerHTML = trajBoardInspHtml(hit);
 }
+/** 打开轨迹视图时自动回溯历史:首屏只载末 200 条,而最近一轮的工具/子代理
+ * 经常落在更早的页里(经验证 600 条才出现 101 条 subagent.event)。这里按 500ms 节律自动翻页,
+ * 到 1200 条或 6 页即停;用户仍可点「加载更早」继续。仅在轨迹视图内运行,离开即停表。 */
+let trajBackfillView = "traj"; // 当前回溯目标(traj 回溯到 1200 条;subchat 只需找到子代理事件)
+function trajBoardAutoBackfill(viewName) {
+  const vn = viewName === "subchat" ? "subchat" : "traj";
+ // 已有计时器:只切目标,不重开(用户从轨迹切到子代理流时,同一批历史页继续服务新目标)。
+  if (trajBackfillTimer) { trajBackfillView = vn; return; }
+  trajBackfillView = vn;
+  let pages = 0;
+  let idleTicks = 0; // 取景动画/隐藏快照刷新期的宽限:连续 20 拍(10s)都不在场才停表
+  trajBackfillTimer = setInterval(function () {
+    const target = trajBackfillView;
+    const card = target === "subchat" ? "subchat" : "traj";
+ // 在场判定放每个 tick:画布聚焦有取景动画,loadViewData 当下 inView 可能还是 false;
+ // 500ms 后卡片已入视口再决定继续。隐藏态(切会话时的快照刷新)10s 后停表,不白拉。
+    let still = false;
+    try { still = (typeof mainView !== "undefined" && mainView === target); } catch (e) { still = false; }
+    if (!still) {
+      try { still = !!(window.CanvasShell && CanvasShell.inView && CanvasShell.inView(card)); } catch (e) { still = false; }
+    }
+    if (!still) {
+      idleTicks++;
+      if (idleTicks >= 20) { clearInterval(trajBackfillTimer); trajBackfillTimer = 0; }
+      return;
+    }
+    idleTicks = 0;
+    const hasMore = (typeof histHasMore !== "undefined") && histHasMore === true;
+    const loading = (typeof histPageLoading !== "undefined") && histPageLoading === true;
+    const n = histEvents ? histEvents.length : 0;
+ // 子代理流的目标不同:找到任意子代理事件即停(不需要拉满 1200 条)。
+    const hasSub = !!(histEvents && histEvents.some(function (e) {
+      return e && (e.kind === "subagent.spawn" || e.kind === "subagent.event" || e.kind === "subagent.result");
+    }));
+    const done = target === "subchat" ? (hasSub && n > 200) : (n >= TRAJ_BACKFILL_TARGET);
+    if (!still || done || !hasMore || pages >= TRAJ_BACKFILL_MAX_PAGES) {
+      clearInterval(trajBackfillTimer); trajBackfillTimer = 0; return;
+    }
+    if (loading || !histEvents) return;
+    pages++;
+    try { loadMoreHist(); } catch (e) { clearInterval(trajBackfillTimer); trajBackfillTimer = 0; }
+  }, 500);
+}
+
 /** 打开时取快照:histEvents 为 null=会话重放还在路上 → 空态「事件加载中」。 */
 function trajBoardRefresh() {
   const box = $("trajBoard");
@@ -825,13 +1159,33 @@ function trajBoardRefresh() {
   $("trajBoardSid").textContent = sid ? sid.slice(0, 22) : "草稿态(无会话)";
   $("trajBoardSid").title = sid || "草稿态没有会话 id";
   $("trajInsp").innerHTML = trajBoardInspHtml(null);
+ // 走查:草稿态别显示「没有匹配的决策」——那是过滤空态,会让首访用户以为轨迹坏了。
+  if (!sid) {
+    $("trajBoardSum").innerHTML = "";
+    $("trajRowsHost").innerHTML = '<div class="tb-empty tb-empty-draft"><div class="tb-empty-h">尚未选择会话</div>'
+      + '<div class="tb-empty-s">在左侧会话列表选择一个会话;或直接在输入框发消息新建任务。<br>'
+      + "轨迹会同时记录 LLM 决策 · 工具执行 · 子代理过程。</div></div>";
+    if ($("trajLanesBox")) $("trajLanesBox").innerHTML = "";
+    if ($("trajLaneSum")) { $("trajLaneSum").innerHTML = ""; $("trajLaneSum").style.display = "none"; }
+    trajBoardState.rows = []; trajBoardState.turns = []; trajBoardState.view = []; trajBoardState.sel = -1;
+    trajBoardState.prunes = []; trajBoardState.intakes = []; trajBoardState.agentEvents = {}; trajBoardState.toolByStep = {};
+    return;
+  }
+ // 轨迹完整性:首屏只载入末 200 条事件;更早事件由顶部/轨迹条「加载更早」回溯。
+  const lm = $("trajLoadMore");
+  if (lm) {
+    const has = (typeof histHasMore !== "undefined") && histHasMore === true;
+    lm.style.display = has || (typeof histPageLoading !== "undefined" && histPageLoading) ? "" : "none";
+    lm.textContent = (typeof histPageLoading !== "undefined" && histPageLoading) ? "加载中…" : "加载更早";
+    lm.title = has ? "从 journal 回溯更早的事件(轨迹/账本一起变长)" : "已加载到会话最早事件";
+  }
   if (!histEvents) {
     $("trajBoardSum").innerHTML = "";
     $("trajRowsHost").innerHTML = '<div class="tb-empty">事件加载中</div>';
  // 泳道 pane 同源兜底:事件未到不渲染半截泳道(空串=整区不占版面)
     if ($("trajLanesBox")) $("trajLanesBox").innerHTML = "";
     if ($("trajLaneSum")) { $("trajLaneSum").innerHTML = ""; $("trajLaneSum").style.display = "none"; }
-    trajBoardState.rows = []; trajBoardState.turns = []; trajBoardState.view = []; trajBoardState.sel = -1; trajBoardState.prunes = []; trajBoardState.intakes = [];
+    trajBoardState.rows = []; trajBoardState.turns = []; trajBoardState.view = []; trajBoardState.sel = -1; trajBoardState.prunes = []; trajBoardState.intakes = []; trajBoardState.agentEvents = {}; trajBoardState.toolByStep = {};
     return;
   }
   const events = histEvents || [];
@@ -839,6 +1193,17 @@ function trajBoardRefresh() {
   const rows = decorateTrajUsage(buildTrajRows(events), events);
   trajBoardState.prunes = trajPruneItems(events);
   trajBoardState.intakes = trajIntakeItems(events);
+ // 子代理过程事件按 taskId||agentId 归档(卡体展开时回放;不参与主时间线铺行)。
+  const agentEvents = {};
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (!e || e.kind !== "subagent.event") continue;
+    const p = e.payload && typeof e.payload === "object" ? e.payload : {};
+    const key = String(p.taskId || p.agentId || "");
+    if (!key) continue;
+    (agentEvents[key] || (agentEvents[key] = [])).push(e);
+  }
+  trajBoardState.agentEvents = agentEvents;
   trajBoardState.sel = -1;
   trajBoardApplyRows(rows);
   trajBoardSynthHeal(rows);
@@ -850,10 +1215,16 @@ function trajBoardApplyRows(rows) {
   trajBoardState.rows = src;
   trajBoardState.turns = turns;
  // 决策卡顺序表:全量 llm.trace 的文件序列 —— 卡号、上一条(前缀比较基准)、实时去重都用它。
-  const files = [], ord = {};
+  const files = [], ord = {}, toolByStep = {};
   let nth = 0;
   for (let i = 0; i < src.length; i++) {
-    const f = src[i] && src[i].traceFile ? String(src[i].traceFile) : "";
+    const r = src[i];
+    if (!r) continue;
+    if (r.kind === "tool" && r.stepNo !== undefined) {
+      const k = String(Number(r.turn || 0)) + ":" + String(Number(r.stepNo));
+      (toolByStep[k] || (toolByStep[k] = [])).push(r);
+    }
+    const f = r.traceFile ? String(r.traceFile) : "";
     if (!f) continue;
     nth++;
     files.push(f);
@@ -861,6 +1232,7 @@ function trajBoardApplyRows(rows) {
   }
   trajBoardState.files = files;
   trajBoardState.ord = ord;
+  trajBoardState.toolByStep = toolByStep;
   trajBoardState.filesKey = files.join("|");
  // 看板所有内容默认折叠,不主动展示详情 ——
  // 自动展开最新卡会立刻拉取 2MB 级 trace 全文并整片塞进 DOM,打开面板即卡死界面。
@@ -938,6 +1310,15 @@ $("trajViewRefresh").onclick = () => trajBoardRefresh();
       toast("已复制会话 id:" + sid);
     } catch (e) { toast("复制失败:剪贴板不可用,手动选中会话 id", true); }
   };
+ // 加载更早:轨迹只拿到末 200 条事件;回溯一页后历史回包会触发 trajBoardLiveSync 重渲。
+  const lm = $("trajLoadMore");
+  if (lm) lm.onclick = function () {
+    if (typeof loadMoreHist !== "function") { toast("当前版本不支持历史回溯", "warn"); return; }
+    if (typeof histHasMore !== "undefined" && !histHasMore) { toast("已加载到会话最早事件"); return; }
+    if (typeof histPageLoading !== "undefined" && histPageLoading) return;
+    lm.textContent = "加载中…";
+    loadMoreHist();
+  };
  // 视图切换:逐次决策(默认) / 事件账本(原行表)
   const panes = document.querySelectorAll("[data-traj-pane]");
   for (let i = 0; i < panes.length; i++) {
@@ -971,6 +1352,18 @@ $("trajCardsHost").onclick = function (e) {
     const p = cp.getAttribute("data-traj-copy") || "";
     try { navigator.clipboard.writeText(p); toast("已复制轨迹文件路径:" + p.slice(-52)); }
     catch (err) { toast("复制失败:剪贴板不可用,手动选中路径", true); }
+    return;
+  }
+ // 工具条是原生 <details>:在 summary 上点的展开由浏览器处理,这里不拦截(免得卡片跟着展开)。
+  if (t.closest(".tb-tool")) return;
+  const agentCard = t.closest("[data-agent-card]");
+  if (agentCard) {
+    const head = t.closest(".tb-c-head");
+    if (!head) return; // 卡体里的点选不触发收起
+    const key = agentCard.getAttribute("data-agent-card") || "";
+    if (!key) return;
+    if (trajAgentOpen.has(key)) trajAgentOpen.delete(key); else trajAgentOpen.add(key);
+    trajBoardRenderRows();
     return;
   }
   const head = t.closest(".tb-c-head");

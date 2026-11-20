@@ -145,7 +145,8 @@ export function mergeProjection(
 export function projectSession(
   events: SessionEventLike[],
   allEvents: (SessionEventLike & { sessionId?: string })[] = [],
-  factsOut?: ProjectionDeltaFacts): SessionProjection {
+  factsOut?: ProjectionDeltaFacts,
+): SessionProjection {
   const proj: SessionProjection = {
     todo: null,
     subagents: { spawnCount: 0, resultCount: 0, running: 0 },

@@ -8,9 +8,18 @@
  * (历史经验证:每步重写历史中段 → uncached 单价是命中态的 50 倍)。为几十 token 打碎一次前缀
  * 是净亏,256 是「省下的量 > 一次前缀重建的期望代价」的经验下界,与既有 microcompact 止损同源。
  * 约束(验收契约):不拆 tool 链、system 永不丢、最后一条 user 永不丢、不可变、确定性、不 throw。
+ * provider TTL 守卫(缺口#30:按龄裁剪会改写**本次请求前缀**,它的前提是
+ * 「provider 确实按消息前缀做 prompt 缓存」(TTL 内同前缀 → cachedTokens>0)。这个前提
+ * 目前没有自动化验证过——若 provider 实际不支持(或 TTL 极短),按龄裁剪就变成「每次闲置后
+ * 全量 uncached 重算」,净亏 50 倍。所以缺省不生效,只有显式声明已验证才放开:
+ * - GENIE_PROVIDER_TTL_VERIFIED=true → 正常生效(装配方/运维确认过该 provider 的前缀缓存行为);
+ * - 缺省/其它值 → SKIPPED_TTL_UNVERIFIED,输入原引用返回,零行为变化;
+ * - GENIE_AGE_MICROCOMPACT_FORCE=1 → 人工验证场景越过守卫(配合 scripts/probe-provider-ttl.mjs)。
  */
 import { estimateMessagesTokens } from "./token-estimate";
 import type { Message } from "./loop";
+// 统一保护窗(缺口#27):keepRecentGroups 缺省从 PROTECTION_WINDOWS 引用,值不变、防漂移。
+import { PROTECTION_WINDOWS } from "./protection-windows";
 
 /** 收益下限(token):低于此值整体回滚,不改请求(见文件头注释)。 */
 export const AGE_MIN_SAVINGS_TOKENS = 256;
@@ -27,6 +36,8 @@ export const AGE_CODES = {
   ROLLED_BACK: "ROLLED_BACK",
  /** 参数非法/内部异常:原样(不 throw)。 */
   INVALID: "INVALID",
+ /** provider TTL 未验证(缺口#30):按龄裁剪的前提不成立,原样(消息引用不变)。 */
+  SKIPPED_TTL_UNVERIFIED: "SKIPPED_TTL_UNVERIFIED",
 } as const;
 
 export type AgeCode = (typeof AGE_CODES)[keyof typeof AGE_CODES];
@@ -35,8 +46,26 @@ export type AgeCode = (typeof AGE_CODES)[keyof typeof AGE_CODES];
 export const AGE_DEFAULTS = {
   idleMs: 30 * 60_000,
   maxAgeMs: 60 * 60_000,
-  keepRecentGroups: 3,
+ // 缺省改引用 PROTECTION_WINDOWS(值不变=3):四套保护窗统一登记,防两处漂移(缺口#27)。
+  keepRecentGroups: PROTECTION_WINDOWS.ageKeepRecentGroups,
 } as const;
+
+/**
+ * provider TTL 守卫(缺口#30):按龄裁剪是否被允许实际生效。
+ * 判定(先 FORCE 后 VERIFIED,任一命中即 true):
+ * - GENIE_AGE_MICROCOMPACT_FORCE=1/true → true(人工验证场景:配合 probe-provider-ttl.mjs
+ * 经验证裁剪对 cachedTokens 的影响,不受「已验证」声明约束);
+ * - GENIE_PROVIDER_TTL_VERIFIED=true → true(装配方显式声明该 provider 前缀缓存已验证);
+ * - 缺省/其它值 → false(零行为变化:ageMicrocompact 返回 SKIPPED_TTL_UNVERIFIED)。
+ * 独立导出(而不是内联在 ageMicrocompact 里)是为了:测试/探针可以单测这个判定,
+ * loop 侧将来要留痕时也复用同一口径。纯读 env,不写 env、不 throw。
+ */
+export function ageGuardEnabled(): boolean {
+  const force = process.env.GENIE_AGE_MICROCOMPACT_FORCE;
+  if (force === "1" || force === "true") return true;
+  const verified = process.env.GENIE_PROVIDER_TTL_VERIFIED;
+  return verified === "true" || verified === "1";
+}
 
 export interface AgeMicrocompactOptions {
  /** 当前时间(epoch ms)。缺省/非法 → INVALID(不猜时间)。 */
@@ -204,8 +233,8 @@ function lastUserGroupIndex(groups: readonly MessageGroup[]): number {
 
 /**
  * 按龄裁剪一次(纯函数:不改入参、同入参同输出、任何情况下不 throw)。
- * 顺序:参数校验(INVALID) → 闲置判定(SKIPPED_NOT_IDLE) → 超龄候选(SKIPPED_NOT_OLD)
- * → 估算收益(< minSavingsTokens 则 ROLLED_BACK) → OK。
+ * 顺序:TTL 守卫(SKIPPED_TTL_UNVERIFIED) → 参数校验(INVALID) → 闲置判定(SKIPPED_NOT_IDLE)
+ * → 超龄候选(SKIPPED_NOT_OLD) → 估算收益(< minSavingsTokens 则 ROLLED_BACK) → OK。
  */
 export function ageMicrocompact(
   messages: readonly Message[],
@@ -224,6 +253,13 @@ export function ageMicrocompact(
   });
 
   try {
+ // provider TTL 守卫(缺口#30):最先判定——前提不成立时连参数校验都不必做,直接零行为返回。
+ // 留 note 便于观测「为什么没动」;messages 为输入同一引用,上层零变化。
+    if (!ageGuardEnabled()) {
+      notes.push("provider-ttl-unverified");
+      return unchanged(AGE_CODES.SKIPPED_TTL_UNVERIFIED);
+    }
+
     if (!Array.isArray(messages)) {
       notes.push("messages-not-array");
       return unchanged(AGE_CODES.INVALID);

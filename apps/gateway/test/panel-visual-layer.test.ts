@@ -50,7 +50,8 @@ describe(" 视觉分层校验", () => {
       JSON_BS: String.fromCharCode(92), JSON_DQ: String.fromCharCode(34),
     };
     const api = new Function("sb", "with(sb){" + src + "\n;return {lineToneOf: lineToneOf, jsonLineHtml: jsonLineHtml};}")(
-      sandbox) as {
+      sandbox,
+    ) as {
       lineToneOf: (l: string, kind?: string) => string;
       jsonLineHtml: (l: string) => string;
     };

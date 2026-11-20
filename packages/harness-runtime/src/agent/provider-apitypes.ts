@@ -431,7 +431,8 @@ async function anthropicStreamed(
   body: Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: LlmDeltaChunk) => void,
-  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx,
+): Promise<LlmResponse> {
   const link = adapterAbortLink(signal);
   let idle: ReturnType<typeof createStreamIdleGuard> | null = null;
   try {
@@ -449,7 +450,7 @@ async function anthropicStreamed(
     let reasoning = "";
     const tools = new Map<number, { id: string; name: string; arguments: string }>();
     let parts = readAnthropicUsage(undefined); // message_start 种子 + message_delta 终值右偏合并
-    let finishReason: LlmResponse["finishReason"]; // message_delta.delta.stop_reason(M28)
+    let finishReason: LlmResponse["finishReason"]; // message_delta.delta.stop_reason
     const emit = (d: LlmDeltaChunk) => { try { onDelta(d); } catch { /* 回调异常不断流 */ } };
     idle = createStreamIdleGuard(cur.timeoutMs, (r) => link.ctrl.abort(r)); // 响应头已回:空闲窗接管超时
     idle.arm();
@@ -526,7 +527,8 @@ async function postJsonWithBodyRepair(
   initialBody: Record<string, unknown>,
   signal: AbortSignal,
   retryCtx: ApiTypeRetryCtx,
-  kind: ProviderRepairKind): Promise<Response> {
+  kind: ProviderRepairKind,
+): Promise<Response> {
   let body = initialBody;
   let attemptedRepair = false;
   let errorBody = ""; // fetch 包装里预读的非 ok 报文(peek 副本,不消费原响应体)
@@ -569,7 +571,8 @@ export async function anthropicChat(
   tools: ToolSpec[],
   signal: AbortSignal,
   onDelta: ((d: LlmDeltaChunk) => void) | undefined,
-  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx,
+): Promise<LlmResponse> {
   const body = toAnthropicBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return anthropicStreamed(cur, body, signal, onDelta, retryCtx);
@@ -711,7 +714,8 @@ async function responsesStreamed(
   body: Record<string, unknown>,
   signal: AbortSignal,
   onDelta: (d: LlmDeltaChunk) => void,
-  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx,
+): Promise<LlmResponse> {
   const link = adapterAbortLink(signal);
   let idle: ReturnType<typeof createStreamIdleGuard> | null = null;
   try {
@@ -729,7 +733,7 @@ async function responsesStreamed(
     let reasoning = "";
     const tools = new Map<string, { id: string; name: string; arguments: string }>();
     let usage: LlmResponse["usage"];
-    let finishReason: LlmResponse["finishReason"]; // response.completed/incomplete 的 status/incomplete_details(M28)
+    let finishReason: LlmResponse["finishReason"]; // response.completed/incomplete 的 status/incomplete_details
     const emit = (d: LlmDeltaChunk) => { try { onDelta(d); } catch { /* 回调异常不断流 */ } };
     idle = createStreamIdleGuard(cur.timeoutMs, (r) => link.ctrl.abort(r)); // 响应头已回:空闲窗接管超时
     idle.arm();
@@ -796,7 +800,8 @@ export async function responsesChat(
   tools: ToolSpec[],
   signal: AbortSignal,
   onDelta: ((d: LlmDeltaChunk) => void) | undefined,
-  retryCtx: ApiTypeRetryCtx): Promise<LlmResponse> {
+  retryCtx: ApiTypeRetryCtx,
+): Promise<LlmResponse> {
   const body = toResponsesBody(cur, messages, tools, Boolean(onDelta));
   dumpRequestBody(cur.model, body);
   if (onDelta) return responsesStreamed(cur, body, signal, onDelta, retryCtx);

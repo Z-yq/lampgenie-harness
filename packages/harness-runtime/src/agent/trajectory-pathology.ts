@@ -338,7 +338,8 @@ interface NormalizedTrace {
 }
 
 function normalizeTrace(
-  trace: PathologyTrace | undefined | null): NormalizedTrace {
+  trace: PathologyTrace | undefined | null,
+): NormalizedTrace {
   const t = (trace && typeof trace === "object" ? trace : {}) as Record<
     string,
     unknown
@@ -386,7 +387,8 @@ function maxInWindow(times: number[], windowMs: number): number {
 function detectReEntry(
   steps: PathologyStep[],
   windowMs: number,
-  minRepeats: number): PrimitiveHit {
+  minRepeats: number,
+): PrimitiveHit {
   const hit = emptyHit();
   const groups = new Map<string, number[]>();
   for (const step of steps) {
@@ -405,7 +407,8 @@ function detectReEntry(
   for (const [key, times] of groups) {
     const max = maxInWindow(
       times.sort((a, b) => a - b),
-      windowMs);
+      windowMs,
+    );
     if (max < minRepeats) continue;
     hit.hit = true;
     hit.count += max - minRepeats + 1;
@@ -502,7 +505,8 @@ function detectFanout(
   steps: PathologyStep[],
   edits: PathologyEdit[],
   changeNodes: PathologyChangeNode[],
-  windowMs: number): PrimitiveHit {
+  windowMs: number,
+): PrimitiveHit {
   const hit = emptyHit();
   for (const node of changeNodes) {
     if (node.fanoutEdges < 2) continue;
@@ -517,7 +521,8 @@ function detectFanout(
         s.file === edit.file &&
         s.ok === false &&
         s.at >= edit.at &&
-        s.at - edit.at <= windowMs);
+        s.at - edit.at <= windowMs,
+    );
     if (fixes.length < 2) continue;
     hit.count += 1;
     hit.evidence.push(
@@ -535,7 +540,8 @@ function detectOverlap(
 ): PrimitiveHit {
   const hit = emptyHit();
   const intervalOf = (
-    session: PathologySession): { min: number; max: number } | undefined => {
+    session: PathologySession,
+  ): { min: number; max: number } | undefined => {
     const times = steps
       .filter((s) => s.file && session.files.includes(s.file))
       .map((s) => s.at);
@@ -617,7 +623,8 @@ function detectDecay(reads: PathologyRead[]): PrimitiveHit {
 /** 六原语一次算完:返回固定顺序的 Record,绝不抛。 */
 export function detectPrimitives(
   trace: PathologyTrace | undefined | null,
-  opts?: DetectOptions): Record<PathologyPrimitive, PrimitiveHit> {
+  opts?: DetectOptions,
+): Record<PathologyPrimitive, PrimitiveHit> {
   const result: Record<PathologyPrimitive, PrimitiveHit> = {
     "re-entry": emptyHit(),
     reversal: emptyHit(),
@@ -645,7 +652,8 @@ export function detectPrimitives(
 // ---------------------------------------------------------------- 形态目录
 
 function normalizeCatalog(
-  catalog: PathologyForm[] | undefined | null): PathologyForm[] {
+  catalog: PathologyForm[] | undefined | null,
+): PathologyForm[] {
   return Array.isArray(catalog)
     ? catalog.filter((f): f is PathologyForm => !!f && typeof f === "object")
     : DEFAULT_CATALOG;
@@ -878,7 +886,8 @@ export function matchForms(
           extraPrimitives: active.filter((p) => !signature.includes(p)),
         };
       }),
-    (row) => row.form.id);
+    (row) => row.form.id,
+  );
 
   if (matched.length > 0) {
     return { matched, candidates: [], codes: [PATHOLOGY_CODES.MATCHED] };
@@ -1046,7 +1055,8 @@ function priorityOf(
   family: PathologyFamily,
   carrier: InterventionCarrier,
   index: number,
-  unknownOffset: number): number {
+  unknownOffset: number,
+): number {
   if (family === "rework-chain") {
     if (carrier === "tip") return 1;
     if (carrier === "decision-gate") return 2;

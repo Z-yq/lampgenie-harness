@@ -234,8 +234,13 @@ export function evaluateSelfModification(req: ModificationRequest, policy: SelfM
   const authorId = String(req?.author?.id ?? "");
   const approver = req?.approver;
   const hasApprover = approver !== undefined && nonEmpty(approver.id);
+ // §14.2④ 拆两档:rsi 作者的**可逆且零风险**变更走机器闸——无需人类 approver,
+ // 生效时 approver 记 {kind:"agent", id:"rsi-auto-gate"};不可逆或 riskFlags 非空照旧人批
+ // (MOD_IRREVERSIBLE_NEEDS_HUMAN 永不放宽)。
+  const rsiAutoGateEligible =
+    authorKind === "rsi" && req?.irreversible !== true && (req?.riskFlags?.length ?? 0) === 0;
   if (!hasApprover) {
-    if (authorKind === "rsi") add("MOD_RSI_NEEDS_HUMAN", "rsi 作者必须人类 approver");
+    if (authorKind === "rsi" && !rsiAutoGateEligible) add("MOD_RSI_NEEDS_HUMAN", "rsi 作者必须人类 approver");
     if (req?.irreversible === true) add("MOD_IRREVERSIBLE_NEEDS_HUMAN", "不可逆改动必须人类 approver");
     if ((req?.riskFlags?.length ?? 0) > 0) add("MOD_RISK_UNREVIEWED", "riskFlags 非空必须人类 approver");
     if (authorKind === "agent" && policy.allowAgentSelfApprove === false) {
@@ -244,7 +249,9 @@ export function evaluateSelfModification(req: ModificationRequest, policy: SelfM
   } else {
     const approverKind = String(approver.kind);
     if (approver.id === authorId) add("MOD_SELF_APPROVAL", `approver.id === author.id (${authorId})`);
-    if (authorKind === "rsi" && approverKind !== "human") {
+ // 机器闸档:rsi-auto-gate 身份的 agent approver 对「可逆+零风险」rsi 变更视同已过闸。
+    const approverIsRsiAutoGate = approverKind === "agent" && approver.id === "rsi-auto-gate";
+    if (authorKind === "rsi" && approverKind !== "human" && !(rsiAutoGateEligible && approverIsRsiAutoGate)) {
       add("MOD_AGENT_APPROVAL_FORBIDDEN", `rsi 作者不接受 ${approverKind} 审批`);
       add("MOD_RSI_NEEDS_HUMAN", `rsi 作者必须人类审批(实际 ${approverKind})`);
     }

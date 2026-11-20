@@ -127,7 +127,8 @@ export function autoCompactGate(
  /** 模型 maxOutputTokens( O3:输出预留取 min(maxOutputTokens ?? 32000, 21000))。 */
   maxOutputTokens?: number,
  /** 思考力度档位(四档联动:low/medium/high/xhigh → 阈值×0.35/0.55/0.75/1.0)。 */
-  reasoningEffort?: string): GateDecision {
+  reasoningEffort?: string,
+): GateDecision {
   let lastCompactSeq = -1;
   for (const e of events) {
     if (e.sessionId !== sessionId || e.kind !== "compact.done") continue;

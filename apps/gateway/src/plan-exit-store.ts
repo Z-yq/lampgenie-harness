@@ -131,7 +131,8 @@ let tmpSeq = 0;
  */
 export function writePlanExitStore(
   root: string,
-  store: PlanReviewStore): { ok: boolean; code: PlanExitStoreCode; file: string } {
+  store: PlanReviewStore,
+): { ok: boolean; code: PlanExitStoreCode; file: string } {
   const paths = planExitPaths(root);
   try {
     mkdirSync(paths.dir, { recursive: true });

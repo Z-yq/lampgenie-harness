@@ -1160,7 +1160,8 @@ export function subgraph(
   graph: CallGraph,
   centerPredicate: (s: Symbol) => boolean,
   depth: number,
-  root: string): { center?: Symbol; upstream: FlowEdge[]; downstream: FlowEdge[] } {
+  root: string,
+): { center?: Symbol; upstream: FlowEdge[]; downstream: FlowEdge[] } {
   const center = [...graph.symbols.values()].find(centerPredicate);
   if (!center) return { upstream: [], downstream: [] };
 

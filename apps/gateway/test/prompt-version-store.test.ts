@@ -249,16 +249,15 @@ describe("report 与坏文件", () => {
 });
 
 describe("#196 自我修改门集成", () => {
-  it("origin=rsi 无审批:真调门 → 透传 MOD_* 码且不写盘", async () => {
+  it("origin=rsi 无审批(可逆):机器闸放行但提示词面双闸兜底拒(§14.2④)", async () => {
     await seed();
     const before = readBookFile();
     const res = await saveRevision(root, { key: "system.coding", text: "{{tools}} rsi 稿", baseRevision: 1, origin: "rsi", at: T0 + 10 });
+ // 机器闸已不产 MOD_RSI_NEEDS_HUMAN(可逆+零风险);但 prompt 通道有独立双闸
+ // (#219 提示词面保守层):approval.ok 仍须 true,否则 PROMPT_NEEDS_APPROVAL。
     expect(res.ok).toBe(false);
     expect(res.codes).toContain("PROMPT_NEEDS_APPROVAL");
-    expect(res.codes.some((code) => code.startsWith("MOD_"))).toBe(true);
-    expect(res.codes).toContain("MOD_RSI_NEEDS_HUMAN");
-    expect(res.draft).toBe("{{tools}} rsi 稿");
-    expect(res.decision).toBe("need-approval");
+    expect(res.codes).not.toContain("MOD_RSI_NEEDS_HUMAN");
     expect(readBookFile()).toBe(before);
   });
 

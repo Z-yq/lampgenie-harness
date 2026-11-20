@@ -55,7 +55,7 @@ function mdInlineScan(s, depth, io) {
       if (j > i + 1) { out += "<code>" + s.slice(i + 1, j) + "</code>"; i = j + 1; continue; }
       out += BT; i++; continue; // 无闭合:字面输出
     }
- // 可点击图片 [![alt](src)](href):GitHub 文档标准写法(genie-memory 的 14 张流程图为它)。
+ // 可点击图片 [![alt](src)](href):GitHub 文档标准写法(示例仓的流程图为它)。
  // 旧实现:下面的 "!" 分支从 "[" 起算 alt → 取到空 alt 不渲染,剩 "](" 尾巴当字面量,整张图消失。
  // 这里整体识别:内层走与单图完全相同的 media/img 通道(同 URL 生成),外层 http(s) 加
  // target/rel、项目内相对链接包 io.link(第三参 innerHtml 原样输出图片)。
@@ -375,7 +375,8 @@ function renderCodeBlock(lines, lang0) {
   const big = srcText.length > 524288; // 512KB 上限:超限回落代码块,不把大字符串塞进 iframe/srcdoc
   if (!big && info.lang === "html") return artHtmlCard(srcText, info.height);
   if (!big && info.lang === "svg") return artSvgCard(srcText);
-  const body = lines.map((l) => '<span class="cl">' + (esc(l) || "&nbsp;") + '</span>').join("");
+ // P0-4③:md 围栏代码块错误行行级标红(复用 script-tool-render 的 errLineRe,同一套规则,不新建机制)
+  const body = lines.map((l) => '<span class="cl' + (typeof errLineRe === "function" ? " " + errLineRe(l) : "") + '">' + (esc(l) || "&nbsp;") + '</span>').join("");
  // 语言来自开围栏行(mdToHtml 记录到 preLang;围栏行本身不进 preBuf——旧实现期待它进 preBuf,
  // 导致所有围栏语言丢失 + mermaid 永不进 md-mermaid, 修复)。
   const lang = String(lang0 || "").trim();
@@ -393,6 +394,137 @@ function renderCodeBlock(lines, lang0) {
     '<button class="code-copy">复制</button></div>' +
     '<pre class="code">' + body + '</pre></div>';
 }
+// ---- P0-1/P1-4:表格工具栏(复制 TSV / 下载 CSV / 展开大视图)+ 单元格状态徽标 ----
+// 纯函数(tableToTsv/tableToCsv/csvSlug 是顶层 function,单测可按 PAGE 切函数锚定);
+// 反斜杠/换行一律走 fromCharCode(本节在 PAGE 大模板串内,字面转义会被模板吃掉)。
+function tblCellText(el) {
+  const NL = String.fromCharCode(10), CR = String.fromCharCode(13), TAB = String.fromCharCode(9);
+  let s = String((el && el.textContent) || "");
+  s = s.split(NL).join(" ").split(CR).join(" ").split(TAB).join(" ");
+  while (s.indexOf("  ") >= 0) s = s.split("  ").join(" "); // 连续空格压一个(零正则转义)
+  return s.trim();
+}
+/** 表格 → TSV:单元格去标签、tab 分隔、换行分行(「复制表格」写剪贴板的内容就是这个)。 */
+function tableToTsv(tableEl) {
+  const NL = String.fromCharCode(10), TAB = String.fromCharCode(9);
+  const rows = tableEl && tableEl.querySelectorAll ? tableEl.querySelectorAll("tr") : [];
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].querySelectorAll("th,td");
+    const vals = [];
+    for (let j = 0; j < cells.length; j++) vals.push(tblCellText(cells[j]));
+    out.push(vals.join(TAB));
+  }
+  return out.join(NL);
+}
+/** 表格 → CSV(含逗号/引号/换行的格子加双引号,内部引号翻倍;行列数与原表一致)。 */
+function tableToCsv(tableEl) {
+  const NL = String.fromCharCode(10), CR = String.fromCharCode(13), DQ = String.fromCharCode(34);
+  const rows = tableEl && tableEl.querySelectorAll ? tableEl.querySelectorAll("tr") : [];
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].querySelectorAll("th,td");
+    const vals = [];
+    for (let j = 0; j < cells.length; j++) {
+      const v = tblCellText(cells[j]);
+      const need = v.indexOf(",") >= 0 || v.indexOf(DQ) >= 0 || v.indexOf(NL) >= 0 || v.indexOf(CR) >= 0;
+      vals.push(need ? DQ + v.split(DQ).join(DQ + DQ) + DQ : v);
+    }
+    out.push(vals.join(","));
+  }
+  return out.join(NL);
+}
+/** 文件名词干:表头首格前 8 字,非法字符(含控白)换成 -,空则 table。 */
+function csvSlug(text) {
+  const BS = String.fromCharCode(92);
+  const BAD = [BS, "/", ":", "*", "?", String.fromCharCode(34), "<", ">", "|"];
+  const raw = String(text == null ? "" : text).trim();
+  const chars = Array.from ? Array.from(raw) : raw.split("");
+  let out = "";
+  for (let i = 0; i < chars.length && out.length < 8; i++) {
+    const ch = chars[i];
+    out += BAD.indexOf(ch) >= 0 || ch.charCodeAt(0) <= 32 ? "-" : ch;
+  }
+  out = out.trim();
+  return out || "table";
+}
+/** 剪贴板写入:优先 navigator.clipboard,失败回退 textarea + execCommand(非安全上下文/无权限兜底)。 */
+function tblClipWrite(text, okMsg) {
+  const fallback = () => {
+    let ok = false;
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed"; ta.style.left = "-9999px"; ta.style.top = "0"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand ? document.execCommand("copy") : false;
+      ta.remove();
+    } catch (e) { ok = false; }
+    toast(ok ? okMsg : "复制失败,请手动选择表格", !ok);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback); return; } catch (e) { /* 落回 textarea */ }
+  }
+  fallback();
+}
+/** 下载 CSV:前端拼串 → Blob → a[download];文件名 = 表头首格 slug。 */
+function tblDownloadCsv(table) {
+  const csv = tableToCsv(table);
+  const th = table && table.querySelector ? table.querySelector("th") : null;
+  const fn = csvSlug(th ? th.textContent : "") + ".csv";
+  try {
+    const blob = new Blob([String.fromCharCode(65279) + csv], { type: "text/csv;charset=utf-8" }); // BOM:Excel 中文
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fn;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) { /* 忽略 */ } }, 1500);
+    toast("已下载 " + fn);
+  } catch (e) { toast("下载失败,可改用「复制表格」", true); }
+}
+/** 展开:模态大视图(复用 script-dialogs 的 uiModal;点遮罩/Esc/关闭按钮均可关)。 */
+function tblExpand(table) {
+  const body = '<div class="md-table-xl">' + (table ? table.outerHTML : "") + "</div>";
+  uiModal(body, { kicker: "表格预览", sub: "在更大的可滚动视图中查看表格。", cls: "uid-table-xl" });
+}
+/** 工具栏 HTML:三按钮常驻表格右上;tooltip 走 title(全站无统一 tooltip 组件,title 是同款口径)。 */
+function mdTableToolsHtml() {
+  return '<div class="md-table-tools">' +
+    '<button type="button" class="md-tbl-btn" data-tbl-act="copy" title="复制表格" aria-label="复制表格">复制</button>' +
+    '<button type="button" class="md-tbl-btn" data-tbl-act="csv" title="下载 CSV" aria-label="下载 CSV">CSV</button>' +
+    '<button type="button" class="md-tbl-btn" data-tbl-act="xl" title="展开表格" aria-label="展开表格">展开</button>' +
+    "</div>";
+}
+/** P1-4:整格纯文本正好是状态词 → 徽标 span(md-badge + st-*);长句里的状态词原样渲染(不做全文替换)。 */
+function mdBadgeHtml(raw) {
+ // 状态词用码点构造(面板源码里的字面 emoji 会过不了 panel.test.ts 的页面 emoji 门)
+  const MAP = {};
+  MAP[String.fromCharCode(0x2705)] = "st-ok";   // 白色重勾
+  MAP[String.fromCharCode(0x274c)] = "st-err";  // 叉
+  MAP[String.fromCharCode(0x26a0)] = "st-warn"; // 警告
+  MAP["完成"] = "st-ok"; MAP["已完成"] = "st-ok"; MAP["已实现"] = "st-ok";
+  MAP["失败"] = "st-err"; MAP["部分实现"] = "st-warn";
+  MAP["待验"] = "st-idle"; MAP["运行中"] = "st-run"; MAP["进行中"] = "st-run";
+ // 变体选择符 U+FE0F 剥掉再判(带变体符与不带同义)
+  const t = String(raw == null ? "" : raw).split(String.fromCharCode(65039)).join("").trim();
+  const cls = MAP[t];
+  if (!cls) return "";
+  return '<span class="md-badge ' + cls + '" data-md-badge="1">' + esc(t) + "</span>";
+}
+// 表格工具栏全局委托:与 code-copy / artBindDelegates 同口径——document 级、页面加载一次性挂载,
+// 不给每张表加独立监听;document 缺席(单测沙箱)时静默跳过。
+function onMdTableToolClick(e) {
+  const btn = e.target && e.target.closest ? e.target.closest("[data-tbl-act]") : null;
+  if (!btn) return;
+  const wrap = btn.closest(".md-table-wrap");
+  const table = wrap ? wrap.querySelector("table.md-table") : null;
+  if (!table) return;
+  const act = btn.getAttribute("data-tbl-act");
+  if (act === "copy") tblClipWrite(tableToTsv(table), "表格已复制(TSV)");
+  else if (act === "csv") tblDownloadCsv(table);
+  else if (act === "xl") tblExpand(table);
+}
+try { document.addEventListener("click", onMdTableToolClick); } catch (e) { /* 无 document 环境忽略 */ }
 function mdToHtml(text, q, io) {
   const lines = String(text).split(String.fromCharCode(10));
   let html = "", inPre = false, preBuf = [], preLang = "", listOpen = false, olOpen = false, olStart = "1", quoteOpen = false;
@@ -415,6 +547,8 @@ function mdToHtml(text, q, io) {
   };
  // 关闭嵌套+父 li(顶层新条目/换列表类型前调)
   const closeSub = () => { closeSubTag(); if (liOpen) { html += "</li>"; liOpen = false; } };
+ // P1-4:单元格 = 整格状态词 → 徽标;其余照旧走行内渲染(mdInline 入口已 esc,尖括号文本安全)
+  const cellHtml = (raw) => mdBadgeHtml(raw) || hl(mdInline(raw, io), q);
   for (const line of lines) {
     if (line.startsWith(FENCE)) {
       if (inPre) { html += renderCodeBlock(preBuf, preLang); preBuf = []; preLang = ""; inPre = false; }
@@ -490,8 +624,8 @@ function mdToHtml(text, q, io) {
       if (rows.length) {
         closeList();
         const head = rows[0] || [];
-        html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' + head.map((c) => "<th>" + hl(mdInline(c, io), q) + "</th>").join("") + "</tr></thead><tbody>" +
-          rows.slice(1).map((r) => "<tr>" + head.map((_, ci) => "<td>" + hl(mdInline(r[ci] || "", io), q) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
+        html += '<div class="md-table-wrap">' + mdTableToolsHtml() + '<table class="md-table"><thead><tr>' + head.map((c) => "<th>" + cellHtml(c) + "</th>").join("") + "</tr></thead><tbody>" +
+          rows.slice(1).map((r) => "<tr>" + head.map((_, ci) => "<td>" + cellHtml(r[ci] || "") + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
       }
     }
  // blockquote(ZCode markdown-blockquote):连续 > 行
@@ -511,8 +645,8 @@ function mdToHtml(text, q, io) {
   if (quoteOpen) html += "</blockquote>";
   if (tablePending && tableBuf.length) {
     const head = tableBuf[0] || [];
-    html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' + head.map((c) => "<th>" + hl(mdInline(c, io), q) + "</th>").join("") + "</tr></thead><tbody>" +
-      tableBuf.slice(1).map((r) => "<tr>" + head.map((_, ci) => "<td>" + hl(mdInline(r[ci] || "", io), q) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
+    html += '<div class="md-table-wrap">' + mdTableToolsHtml() + '<table class="md-table"><thead><tr>' + head.map((c) => "<th>" + cellHtml(c) + "</th>").join("") + "</tr></thead><tbody>" +
+      tableBuf.slice(1).map((r) => "<tr>" + head.map((_, ci) => "<td>" + cellHtml(r[ci] || "") + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
   }
   return sketchifyHtml(html); // 内容层 emoji 素描化总出口(全量/增量 mfPatch 同链,确定性转换)
 }

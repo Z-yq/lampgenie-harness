@@ -116,7 +116,7 @@ export async function parseDocFile(
 ): Promise<DocParseResult> {
   const nameHint = String(opts?.name || path || "");
   const ext = extOfName(nameHint) || extOfName(String(path || ""));
- // 路径围栏(传了 roots 时附件路径必须落在任一允许根内,全不命中直接拒(不读文件);
+ // 路径围栏(:传了 roots 时附件路径必须落在任一允许根内,全不命中直接拒(不读文件);
  // 不传 / 传空数组 = 旧行为逐字不变。
   if (opts?.roots && opts.roots.length > 0) {
     const withinRoot = opts.roots.some((root) => isPathWithinRoot(path, root));
@@ -205,7 +205,8 @@ function finalizeOk(
   text: string,
   kind: "docx" | "pptx" | "xlsx" | "pdf",
   probe: DocProbeResult | undefined,
-  baseNote?: string): DocParseResult {
+  baseNote?: string,
+): DocParseResult {
   const notes: string[] = [];
   if (baseNote) notes.push(...baseNote.split(";").filter(Boolean));
   if (probe?.pages && probe.pages > 0) {

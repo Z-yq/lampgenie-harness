@@ -23,7 +23,8 @@ export class AskUserRouter {
 
   constructor(
     private readonly broadcast: (msg: Record<string, unknown>) => void,
-    private readonly timeoutMs = 10 * 60_000) {}
+    private readonly timeoutMs = 10 * 60_000,
+  ) {}
 
  /** 指挥台 inbox 的 ask 数据源(挂起中的提问,旧者在前)。 */
   pending(): { requestId: string; sessionId: string; question: string; options?: string[]; since: number }[] {

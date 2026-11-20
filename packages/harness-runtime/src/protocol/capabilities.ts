@@ -203,7 +203,8 @@ function freezeNegotiation(
   acceptedOps: readonly string[],
   rejectedOps: readonly string[],
   droppedKeys: readonly string[],
-  code: NegotiationCode): NegotiatedCapabilities {
+  code: NegotiationCode,
+): NegotiatedCapabilities {
   return Object.freeze({
     mode,
     acceptedOps: Object.freeze([...acceptedOps]),

@@ -413,7 +413,8 @@ export type IssuedEnvelopeLookup =
 /** 从 journal 事件里取该 task 最近一条 task.envelope.issued。 */
 export function findIssuedEnvelope(
   events: readonly { kind?: string; payload?: unknown }[] | undefined,
-  taskId: string): IssuedEnvelopeLookup {
+  taskId: string,
+): IssuedEnvelopeLookup {
   if (!Array.isArray(events)) return { kind: "none" };
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const payload = events[i]?.payload as { type?: unknown; taskId?: unknown; envelope?: unknown } | undefined;

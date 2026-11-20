@@ -186,7 +186,8 @@ export interface CredentialAuditLine {
 export function credentialAuditLine(
   ref: string | undefined | null,
   origin: CredentialOrigin | string,
-  result: CredentialResolution | undefined | null): CredentialAuditLine {
+  result: CredentialResolution | undefined | null,
+): CredentialAuditLine {
   const name = typeof ref === "string" ? ref.trim() : "";
   const originName = typeof origin === "string" ? origin : "";
   try {

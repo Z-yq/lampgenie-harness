@@ -20,7 +20,7 @@
  */
 
 /** 规则表版本:任何规则/权重/打分常数变动都必须改这个版本号,历史报告据此判断可比性。 */
-export const DEAI_RULES_VERSION = "1.0.0";
+export const DEAI_RULES_VERSION = "1.1.0";
 
 /** 稳定码:每个码对应一个可判定的结局(调用方按码分流,不解析中文文案)。 */
 export const DEAI_CODES = [
@@ -188,7 +188,7 @@ const BULLET_PENALTY_MAX = 12;
 const EXCERPT_MAX = 40;
 
 /**
- * 规则表(31 条:zh 15 / en 14,emoji 两条双语)。
+ * 规则表(34 条:zh 18 / en 14,emoji 两条双语; 增报告腔三规则)。
  * 为什么这样分七类:这七类对应「读起来像 AI」的实际成因——空泛夸张(puffery)、
  * 不敢下结论(hedging)、模板开场收尾(template)、机械连接词(connector)、
  * 自我指涉(meta)、表情滥用(emoji)、排比同构(symmetry)。缺任何一类,
@@ -455,6 +455,34 @@ export const DEAI_RULES: readonly DeaiRule[] = [
     locales: ["en"],
     hint: "Express the limitation as a checklist item, not as self-narration.",
   },
+ // ── 报告腔三连:关键词优先补充 ─────────────────────────
+  {
+    id: "zh-meta-report-frame",
+    category: "meta",
+    weight: 1.5,
+    patterns: [{ source: String.raw`本页|本节|本次(?:分享|汇报)|接下来(?:我们)?|下面(?:我们)?(?:来看|开始|进入)`, flags: "g" }],
+    severity: "medium",
+    locales: ["zh"],
+    hint: "删掉「本页/接下来」这类报告框架语;页面自己说话,不预告自己。",
+  },
+  {
+    id: "zh-connector-explain",
+    category: "connector",
+    weight: 1.2,
+    patterns: [{ source: String.raw`这意味着|也就是说|换句话说|具体来说|需要注意的是|值得注意的是|可以看出`, flags: "g" }],
+    severity: "medium",
+    locales: ["zh"],
+    hint: "受众会自己联想;删掉解释性从句,只留主张 + 证据 + 数字。",
+  },
+  {
+    id: "zh-puffery-inflate",
+    category: "puffery",
+    weight: 1.5,
+    patterns: [{ source: String.raw`全面提升|显著提升|有效提升|系统性|结构性|本质上是|从根本上`, flags: "g" }],
+    severity: "medium",
+    locales: ["zh"],
+    hint: "换成具体动作、对象、量级;大词本身不携带信息。",
+  },
  // ── emoji 滥用(中英通用) ─────────────────────────────────────────
   {
     id: "emoji-cluster",
@@ -614,7 +642,8 @@ function scoreOf(
   findings: DeaiFinding[],
   chars: number,
   bulletUniformity: number,
-  maxHitsPerRule: number): {
+  maxHitsPerRule: number,
+): {
   score: number;
   weightedHits: number;
   weightedPerKilo: number;
@@ -722,7 +751,8 @@ export function analyzeDocument(input: DeaiAnalyzeInput | undefined, opts?: Deai
       Array.from(new Set([...codes, "DEAI_INVALID" as DeaiCode])),
       kind,
       thresholds.warn,
-      thresholds.fail);
+      thresholds.fail,
+    );
     result.ok = false;
     return result;
   }
@@ -736,7 +766,8 @@ export function analyzeDocument(input: DeaiAnalyzeInput | undefined, opts?: Deai
       Array.from(new Set([...codes, "DEAI_EMPTY" as DeaiCode])),
       kind,
       thresholds.warn,
-      thresholds.fail);
+      thresholds.fail,
+    );
     result.stats.codeBlocksStripped = stripped.stripped; // 全是代码块的 md:字数 0 但剥离块数要如实留痕
     return result;
   }
@@ -854,7 +885,8 @@ function consumes(finding: DeaiFinding, exemption: { ruleId: string; excerpt: st
  */
 export function applyExemptions(
   result: DeaiResult,
-  exemptions: readonly DeaiExemption[] | undefined): DeaiExemptedResult {
+  exemptions: readonly DeaiExemption[] | undefined,
+): DeaiExemptedResult {
   const hasResult = isPlainObject(result);
   const baseFindings =
     hasResult && Array.isArray((result as DeaiResult).findings) ? (result as DeaiResult).findings : [];

@@ -304,7 +304,8 @@ export function matchImport(
   const bucket: unknown[] = Array.isArray(bucketRaw) ? bucketRaw : [];
   const entry = bucket.find(
     (candidate): candidate is AskRecord =>
-      isRecord(candidate) && (candidate as { id?: unknown }).id === opts.askId);
+      isRecord(candidate) && (candidate as { id?: unknown }).id === opts.askId,
+  );
 
  // 门关判定需要条目自身的 toolCalls,所以条目缺失时先按 MISS。
   if (entry === undefined) return { ok: false, codes: [AMEND_MISS], hit: false };

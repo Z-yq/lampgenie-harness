@@ -305,14 +305,16 @@ describe("processAnnotateSubmit 全链(依赖注入+真实临时目录)", () => 
     d.deps.tm.submit = (_s, _sid, instruction, o) => { seen.submitted = o; return { id: "task-att" }; };
     const out = await processAnnotateSubmit(
       { ...d.deps, prepareAttachments: (info) => (info.previewPath ? [{ name: "a.annotated.jpg", path: "/uploads/x.jpg", mime: "image/jpeg", size: 123 }] : undefined) },
-      { ...MSG, previewDataUrl: PREVIEW }, realIo);
+      { ...MSG, previewDataUrl: PREVIEW }, realIo,
+    );
     expect(out.ok).toBe(true);
     expect((seen.submitted as { attachments?: unknown[] }).attachments).toHaveLength(1);
     // 忙会话同路
     const d2 = deps({ running: true });
     const out2 = await processAnnotateSubmit(
       { ...d2.deps, prepareAttachments: () => [{ name: "x", path: "/y" }] },
-      MSG, realIo);
+      MSG, realIo,
+    );
     expect(out2.ok).toBe(true);
     expect(d2.enqueued[0]).toMatchObject({ attachments: [{ name: "x" }] });
     // 钩子抛错:反馈照常投递

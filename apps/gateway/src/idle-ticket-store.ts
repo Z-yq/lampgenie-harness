@@ -208,7 +208,8 @@ function storeError(root: string, read: ReadTicketStoreResult, detail: Record<st
 /** 通用「读—裁决—写」：裁决 ok 才写盘；读失败或裁决失败都零写入。 */
 function withStore(
   root: string,
-  act: (store: TicketStore) => TicketResult): StoreTicketResult {
+  act: (store: TicketStore) => TicketResult,
+): StoreTicketResult {
   const read = readTicketStore(root);
   if (!read.ok) return storeError(root, read, {});
   // 变更判定用整账本快照比对(幂等重放不算变更 → 不重写磁盘)。

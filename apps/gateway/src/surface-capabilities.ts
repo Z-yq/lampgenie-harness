@@ -157,7 +157,8 @@ const GUI_ONLY_SET = new Set<string>(GUI_ONLY_TOOLS);
 /** hasUI=true 原样返回;false 剔除 GUI_ONLY_TOOLS 并把被剔除的工具名列出(留痕用)。 */
 export function filterToolsForSurface<T extends { name: string }>(
   tools: readonly T[],
-  caps: SurfaceCaps): { tools: T[]; filtered: string[] } {
+  caps: SurfaceCaps,
+): { tools: T[]; filtered: string[] } {
   if (caps.hasUI) return { tools: [...tools], filtered: [] };
   const filtered: string[] = [];
   const kept = tools.filter((t) => {
@@ -296,7 +297,8 @@ export function degradeFinalFor(
   sessionId: string,
   taskId: string,
   caps: SurfaceCaps,
-  text: string): { text: string; degraded: boolean } {
+  text: string,
+): { text: string; degraded: boolean } {
   const d = degradeForSurface(text, caps);
   if (d.degraded) {
     try {

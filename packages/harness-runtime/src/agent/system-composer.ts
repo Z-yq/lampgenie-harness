@@ -328,12 +328,12 @@ function renderAgentsMd(files: AgentsMdFile[]): string {
   return lines.join("\n");
 }
 
-/** 经验索引节( §3:每条一行 name:60字;空库给 fold 引导)。 */
+/** 经验索引节( §3:每条一行 name:60字;空库提示 nightly 沉淀)。 */
 function renderExperienceIndex(index: { category: string; name: string; description: string }[]): string {
   if (index.length === 0) {
-    return ["# 经验索引", "(当前为空;任务中发现可复用做法或坑,用 experience_fold 沉淀)"].join("\n");
+    return ["# 经验索引", "(当前为空;经验由 nightly dreaming 统一蒸馏沉淀)"].join("\n");
   }
-  const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看;发现经验有误用 experience_fold 修正)"];
+  const lines = ["# 经验索引(需要全文用 skill_view(category,name) 查看)"];
   for (const e of index) {
  // 描述硬限走 clampSkillDescription(BMP 文本下与旧 slice(0,60)+"…" 逐字节一致)。
     const desc = clampSkillDescription(e.description, SKILL_DESCRIPTION_MAX).text;
@@ -347,7 +347,8 @@ function renderExperienceIndex(index: { category: string; name: string; descript
  */
 export function skillDescriptionTruncations(
   index: { category: string; name: string; description: string }[],
-  max: number = SKILL_DESCRIPTION_MAX): { category: string; name: string; originalLength: number; textLength: number }[] {
+  max: number = SKILL_DESCRIPTION_MAX,
+): { category: string; name: string; originalLength: number; textLength: number }[] {
   const out: { category: string; name: string; originalLength: number; textLength: number }[] = [];
   for (const e of index) {
     const r = clampSkillDescription(e.description, max);

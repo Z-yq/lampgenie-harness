@@ -5,7 +5,7 @@ describe("L1 契约 eval", () => {
   it("主 agent 提示词含关键纪律(防漂移)", () => {
     const violations = runContractEval([{
       name: "主agent纪律",
-      targetAny: ["apps/gateway/src/agent-wiring/run-with-agent.ts", "apps/gateway/src/agent-wiring/loop-support.ts"],
+      target: "apps/gateway/src/agent-wiring.ts",
       mustContain: ["spawn_subagent", "主 agent"],
       mustNotContain: ["sk-proj", "sk-ant", "sk_live"], // 凭证红线(精确前缀,裸 sk- 会误伤 task-manager)
     }], process.cwd().replace(/packages\/harness-runtime$/, ""));

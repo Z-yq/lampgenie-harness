@@ -118,8 +118,12 @@ export const CapabilitiesResult = Envelope.extend({
   summary: z.string().optional(),
 });
 
-export const ServerMessage = z.discriminatedUnion("type", [
-  SurfaceResult,
+// 温度三区单区统计(口径 03-concepts §3):messages/chars 为精确数,estTokens=chars/4 粗估。
+const ZoneStatZ = z.object({
+  messages: z.number().int(), chars: z.number().int(), estTokens: z.number().int(),
+});
+
+export const ServerMessage = z.discriminatedUnion("type", [  SurfaceResult,
   CapabilitiesResult,
   BrowserViewFrame, BrowserViewEvent, BrowserViewSubscribed, BrowserViewCommandResult,
  // fixI4: hello 附全量会话排队快照(页面刷新后队列恢复);queue.update=队列任何变更广播(入队/出队/删除/抢占)。
@@ -267,7 +271,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
     }).optional(),
   }),
  // ── super agent 指挥台(出站只发 super.*)──
-  Envelope.extend({ type: z.literal("super.turn.user"), text: z.string(), sessionId: z.string().optional() }),
+  Envelope.extend({ type: z.literal("super.turn.user"), text: z.string(), sessionId: z.string().optional(),
+ /** :用户轮次带的附件(气泡回显;无则不写该键,旧帧字节不变)。 */
+    attachments: z.array(z.object({ name: z.string(), path: z.string(), mime: z.string().optional(), size: z.number().optional() })).max(12).optional() }),
   Envelope.extend({ type: z.literal("super.turn.done"), text: z.string(), sessionId: z.string() }),
   Envelope.extend({ type: z.literal("super.history.result"), events: z.array(z.unknown()) }),
  // ask_user 转接:coding agent 提问经指挥台转述;用户口头答复经 relay_answer 工具回交,
@@ -386,6 +392,17 @@ export const ServerMessage = z.discriminatedUnion("type", [
       })).optional(),
  // 逐模型成本(server.ts 拼 billingForModel 的结果:model/billed/price/cost/tokens 等混合结构)
       costModels: z.array(z.record(z.any())).optional(),
+ // 上下文温度三区(口径 03-concepts §3):冷=冻结区/温=中段/热=保护窗(逐字保护)。
+ // 派生失败或空会话不出该键(可选);estTokens 为 chars/4 粗估,非计费数。
+      contextZones: z.object({
+        zones: z.object({
+          cold: ZoneStatZ, warm: ZoneStatZ, hot: ZoneStatZ,
+        }),
+        totalMessages: z.number().int(),
+        hotTailSource: z.enum(["protection-windows", "default"]),
+        frozenCount: z.number().int(),
+        frozenFrom: z.enum(["context.prune", "none"]),
+      }).optional(),
     }),
   }),
  // 会话状态服务端推送(推送化):任务/待办/子代理状态变化时主动广播,

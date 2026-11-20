@@ -31,22 +31,10 @@ export type CodeRef = import("@lampgenie/runtime/agent/feature-boundary").CodeRe
 export type BoundaryItem = import("@lampgenie/runtime/agent/feature-boundary").BoundaryItem;
 export type ImpactBrief = import("@lampgenie/runtime/agent/feature-boundary").ImpactBrief;
 
-/** runtime 两跳解析(见文件头依赖纪律);两跳都失败返回 undefined,由调用方降级。 */
-async function loadFeatureBoundaryRuntime(): Promise<FeatureBoundaryRuntime | undefined> {
-  const spec = "@lampgenie/runtime/agent/feature-boundary";
-  try {
-    return (await import(spec)) as FeatureBoundaryRuntime;
-  } catch {
-    try {
-      const srcUrl = new URL("../../../packages/harness-runtime/src/agent/feature-boundary.ts", import.meta.url).href;
-      return (await import(srcUrl)) as FeatureBoundaryRuntime;
-    } catch {
-      return undefined;
-    }
-  }
-}
+import * as rt_feature_boundary from "@lampgenie/runtime/agent/feature-boundary";
 
-const rt = await loadFeatureBoundaryRuntime();
+/** runtime 面:静态导入(批量补漏;旧 loader 可返回 undefined,静态恒有面)。 */
+const rt: FeatureBoundaryRuntime = rt_feature_boundary;
 
 /** runtime 缺席时的码表兜底(值即字面量,与 runtime FB_CODES 一致)。 */
 const FB_CODES_FALLBACK: Readonly<Record<string, string>> = {

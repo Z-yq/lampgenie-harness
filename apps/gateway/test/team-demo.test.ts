@@ -162,7 +162,8 @@ describe("seedVirtualTeam:本地虚拟组织 + demo git 项目", () => {
     expect(Number(await gitOut(["rev-list", "--count", "HEAD"], cloneOf(root)))).toBe(teamCommitsBefore);
     expect(await gitOut(["log", "--oneline"], cloneOf(root))).toBe(teamLogBefore);
     expect(Number(await gitOut(["rev-list", "--count", "HEAD"], join(root, "demo-projects", "demo-app")))).toBe(
-      demoCommitsBefore);
+      demoCommitsBefore,
+    );
     expect(await gitOut(["status", "--porcelain"], cloneOf(root))).toBe("");
     // 成员 yaml 逐字节未变(registeredAt 固定常量,不会因重跑漂移)
     expect(readFileSync(join(cloneOf(root), "roster", "members", "demo-lin.yaml"), "utf-8")).toContain(

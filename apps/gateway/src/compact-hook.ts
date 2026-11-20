@@ -1,15 +1,13 @@
 /**
- * 压缩钩子工厂(「compact 触发的同时触发 exp」落地):
+ * 压缩钩子工厂:
  * 阈值判定 autoCompactGate(模型声明 contextWindow→窗口×80% 为权威;未声明→显式阈值;
  * 皆无→0.8×缺省窗口 1M=800k,宁晚不早);真压缩(带摘要 compact.done 边界)之外不压——
  * 子 agent 结果合并进会话(tool.result)只是普通上下文增长,不走本钩子的压缩路径(解耦)。
- * 真压缩发生→同步触发经验沉淀(exp=harness-experience distillFromTask,fold-in 进经验库,
- * 被压缩的头部内容不丢知识;异步不阻塞主链路,失败静默)。
+ * 经验沉淀已移 nightly dreaming,本钩子只做压缩。
  */
 import { autoCompact, type CompactOptions } from "@lampgenie/runtime/agent/auto-compact";
 import { clearReadFiles, readFilesOf } from "@lampgenie/runtime/agent/read-file-state";
 import type { MicrocompactConfig } from "@lampgenie/runtime/agent/microcompact";
-import { distillFromTask, type ExperienceStore } from "@lampgenie/experience";
 import type { Journal } from "@lampgenie/core";
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
 import { autoCompactGate } from "./compact-gate.js";
@@ -29,16 +27,8 @@ export interface CompactHookOptions {
   microcompact?: MicrocompactConfig;
   /** 压缩模型轨(生产:models.compact ?? auxLlm ?? llm,不走 realtime 主轨)。 */
   compactLlm: LlmProvider;
-  /** exp 提炼模型轨(缺省同压缩轨)。 */
-  expLlm?: LlmProvider;
   /** DevLog 落盘目录。 */
   devlogDir: string;
-  /** 触发任务 id(exp 沉淀条目溯源用)。 */
-  taskId: string;
-  /** 会话无 message.user 时的兜底指令(一般=任务书)。 */
-  fallbackInstruction: string;
-  /** 经验库 store(生产传 getExperienceStore() 单例;测试注入临时 store)。 */
-  store: ExperienceStore;
  /**  压缩后文件正文补回配置(agent.compactRehydrate;缺省启用)。对象或执行时读取的 getter——
    * getter 形态让「执行时 config 关闭」生效(热配置刷新后不必重建 hook)。 */
   compactRehydrate?: CompactRehydrateConfig | (() => CompactRehydrateConfig | undefined);
@@ -143,19 +133,6 @@ export function makeCompactHook(o: CompactHookOptions): (j: Journal, sid: string
       } else {
         void broadcastTraceStatsOf()?.(sid);
       }
-    }
- // (「compact 触发的同时触发 exp」):真压缩发生→被压缩的头部内容
-    // 同步进经验库(fold-in)。异步不阻塞主链路;distillFromTask 内部已有失败兜底。
-    if (r.compacted) {
-      const expLlm = o.expLlm ?? o.compactLlm;
-      const lastUser = [...j.readAll()].reverse().find((e) => e.sessionId === sid && e.kind === "message.user");
-      void distillFromTask(o.store, j, {
-        id: `${o.taskId}-compact`,
-        sessionId: sid,
-        instruction: String((lastUser?.payload as { text?: string } | undefined)?.text ?? o.fallbackInstruction).slice(0, 500),
-        state: "done",
-        result: r.summary ?? "",
-      }, { chat: (prompt) => expLlm.chat([{ role: "user", content: prompt }], []) }).catch(() => {});
     }
   };
 }

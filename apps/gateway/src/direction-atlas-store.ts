@@ -66,8 +66,22 @@ export const ATLAS_STORE_CODES = [
   ATLAS_BUILT,
 ] as const;
 
-/** entries.jsonl 行 kind(只增不改)。 */
-export const ATLAS_EVENT_KINDS = ["goal", "change", "conflict", "resolve", "decision", "defects"] as const;
+/**
+ * entries.jsonl 行 kind(只增不改)。
+ * goal_progress / goal_close( super agent 管理主线):agent 面的推进/事件——
+ * progress 只进快照的 goalProgress 叠加层(runtime Goal 形状不动);close 在投影期改写
+ * goal 记录的 status/until/evidenceRefs(readGoal 原样保留这三个字段,投影产物可进 buildAtlas)。
+ */
+export const ATLAS_EVENT_KINDS = [
+  "goal",
+  "change",
+  "conflict",
+  "resolve",
+  "decision",
+  "defects",
+  "goal_progress",
+  "goal_close",
+] as const;
 
 export type AtlasEventKind = (typeof ATLAS_EVENT_KINDS)[number];
 
@@ -130,6 +144,33 @@ export interface AtlasReport {
   decisionCount: number;
 }
 
+/** goal_progress 事件载荷(agent 推进主线;note 必填,evidence 空数组合法)。 */
+export interface GoalProgressInput {
+  goalId: string;
+  note: string;
+  nextStep?: string;
+  evidence: string[];
+  by: string;
+}
+
+/** goal_close 事件载荷(achieved/abandoned 二态)。 */
+export interface GoalCloseInput {
+  goalId: string;
+  status: "achieved" | "abandoned";
+  reason: string;
+  evidence: string[];
+  by: string;
+}
+
+/** 快照叠加层的单条推进记录(build 后挂到 snapshot.goalProgress[goalId])。 */
+export interface GoalProgressRow {
+  at: string;
+  note: string;
+  nextStep?: string;
+  evidence: string[];
+  by: string;
+}
+
 /** entries 的原始投影(保留 unknown:坏条目交给 buildAtlas 判 ATLAS_INVALID)。 */
 interface AtlasProjection {
   goals: unknown[];
@@ -137,6 +178,7 @@ interface AtlasProjection {
   conflicts: unknown[];
   decisions: unknown[];
   defectGenes: unknown[];
+  goalProgress: Array<{ goalId: string; row: GoalProgressRow }>;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -184,7 +226,8 @@ function appendEvent(root: string, projectId: string, kind: AtlasEventKind, payl
 /** 逐行读事件:空行跳过(不计坏行),JSON 坏/结构坏计入 badLines 后跳过,永不 throw。 */
 export function loadAtlasEvents(
   root: string,
-  projectId: string): { events: AtlasEvent[]; badLines: number; totalLines: number } {
+  projectId: string,
+): { events: AtlasEvent[]; badLines: number; totalLines: number } {
   let text: string;
   try {
     text = readFileSync(atlasEntriesPath(root), "utf8");
@@ -251,7 +294,32 @@ function applyResolution(goals: unknown[], conflicts: unknown[], payload: unknow
   }
 }
 
-/** entries → 原始投影(goal/change/conflict/decision/defects 各取 payload;resolve 覆盖 status)。 */
+/**
+ * 重放一条 goal_close 事件到原始投影:goal 记录置 status/until,evidenceRefs 合并去重
+ * (readGoal 原样保留这三个字段,投影产物可直接进 buildAtlas;与 applyResolution 同范式)。
+ */
+function applyGoalClose(goals: unknown[], payload: unknown, at: string): void {
+  if (!isRecord(payload)) return;
+  const goalId = isFilled(payload.goalId) ? payload.goalId : undefined;
+  if (goalId === undefined) return;
+  const status = payload.status === "achieved" || payload.status === "abandoned" ? payload.status : undefined;
+  if (status === undefined) return;
+  const target = goals.find((item) => isRecord(item) && item.id === goalId);
+  if (!isRecord(target)) return;
+  const prevEvidence = Array.isArray(target.evidenceRefs)
+    ? target.evidenceRefs.filter((item): item is string => typeof item === "string")
+    : [];
+  const addEvidence = Array.isArray(payload.evidence)
+    ? payload.evidence.filter((item): item is string => typeof item === "string")
+    : [];
+  Object.assign(target, {
+    status,
+    until: at,
+    evidenceRefs: [...new Set([...prevEvidence, ...addEvidence])],
+  });
+}
+
+/** entries → 原始投影(goal/change/conflict/decision/defects 各取 payload;resolve/goal_close 覆盖 status)。 */
 function projectEntries(events: AtlasEvent[]): AtlasProjection {
   const projection: AtlasProjection = {
     goals: [],
@@ -259,6 +327,7 @@ function projectEntries(events: AtlasEvent[]): AtlasProjection {
     conflicts: [],
     decisions: [],
     defectGenes: [],
+    goalProgress: [],
   };
   const resolutions: AtlasEvent[] = [];
   for (const event of events) {
@@ -302,6 +371,27 @@ function projectEntries(events: AtlasEvent[]): AtlasProjection {
       case "resolve":
         resolutions.push(event);
         break;
+      case "goal_close":
+        applyGoalClose(projection.goals, event.payload, event.at);
+        break;
+      case "goal_progress": {
+ // 推进轨迹不进 runtime Goal(形状固定),挂快照叠加层 goalProgress;goal 不存在的行
+ // 照样投影(事件是 append-only 审计事实,读面(read/brief)按 goalId 过滤)。
+        if (isRecord(event.payload) && isFilled(event.payload.goalId) && isFilled(event.payload.note)) {
+          const evidence = Array.isArray(event.payload.evidence)
+            ? event.payload.evidence.filter((item): item is string => typeof item === "string")
+            : [];
+          const row: GoalProgressRow = {
+            at: event.at,
+            note: textOf(event.payload.note),
+            evidence,
+            by: textOf(event.payload.by),
+          };
+          if (isFilled(event.payload.nextStep)) row.nextStep = textOf(event.payload.nextStep);
+          projection.goalProgress.push({ goalId: event.payload.goalId, row });
+        }
+        break;
+      }
     }
   }
   for (const event of resolutions) applyResolution(projection.goals, projection.conflicts, event.payload, event.at);
@@ -401,6 +491,89 @@ export function ingestDefects(root: string, projectId: string, genes: DefectGene
   return appendEvent(root, projectId, "defects", genes.filter((gene) => isRecord(gene)), at);
 }
 
+/** goal id 归一化证据上限:一条 progress/close 最多带 8 条证据,单条 ≤200 字。 */
+function normalizeEvidence(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    .map((item) => item.trim().slice(0, 200))
+    .slice(0, 8);
+}
+
+/** 投影里找 goal 记录(按 id;含已/被顶替的——幂等判定要用)。 */
+function findGoalInProjection(projection: AtlasProjection, goalId: string): UnknownRecord | undefined {
+  return projection.goals.find((item) => isRecord(item) && item.id === goalId) as UnknownRecord | undefined;
+}
+
+/**
+ * agent 推进主线( super agent 管理世界模型):追加 goal_progress 事件。
+ * goal 不存在 → ATLAS_NOT_FOUND 且不写盘;note 空白 → ATLAS_INVALID_INPUT。
+ * 快照重建归调用方(工具面 build(preserveDerived));本函数与 addGoal 同范式只管 append。
+ */
+export function recordGoalProgress(
+  root: string,
+  projectId: string,
+  input: GoalProgressInput,
+  at = nowIso(),
+): AtlasOk {
+  const goalId = isFilled(input?.goalId) ? input.goalId.trim() : "";
+  const note = isFilled(input?.note) ? input.note.trim().slice(0, 400) : "";
+  if (!isFilled(projectId) || goalId === "" || note === "") return { ok: false, code: ATLAS_INVALID_INPUT };
+  const { events } = loadAtlasEvents(root, projectId);
+  const projection = projectEntries(events);
+  if (findGoalInProjection(projection, goalId) === undefined) return { ok: false, code: ATLAS_NOT_FOUND };
+  const nextStep = isFilled(input.nextStep) ? input.nextStep.trim().slice(0, 160) : undefined;
+  const by = isFilled(input.by) ? input.by.trim().slice(0, 80) : "";
+  return appendEvent(
+    root,
+    projectId,
+    "goal_progress",
+    { goalId, note, ...(nextStep !== undefined ? { nextStep } : {}), evidence: normalizeEvidence(input.evidence), by },
+    at,
+  );
+}
+
+/**
+ * agent 主线:追加 goal_close 事件(achieved/abandoned)。
+ * - goal 不存在 → ATLAS_NOT_FOUND;status 非法/reason 空白 → ATLAS_INVALID_INPUT;都不写盘。
+ * - 已 achieved/abandoned 且同状态 → 幂等 ok(不追加第二行,entries 不增长)。
+ * - superseded(冲突裁决产物)→ ATLAS_INVALID_INPUT:裁决历史不可被 agent 改写。
+ */
+export function closeGoal(
+  root: string,
+  projectId: string,
+  input: GoalCloseInput,
+  at = nowIso(),
+): AtlasOk & { idempotent?: boolean } {
+  const goalId = isFilled(input?.goalId) ? input.goalId.trim() : "";
+  const status = input?.status === "achieved" || input?.status === "abandoned" ? input.status : undefined;
+  const reason = isFilled(input?.reason) ? input.reason.trim().slice(0, 300) : "";
+  if (!isFilled(projectId) || goalId === "" || status === undefined || reason === "") {
+    return { ok: false, code: ATLAS_INVALID_INPUT };
+  }
+  const { events } = loadAtlasEvents(root, projectId);
+  const projection = projectEntries(events);
+  const goal = findGoalInProjection(projection, goalId);
+  if (goal === undefined) return { ok: false, code: ATLAS_NOT_FOUND };
+  const current = textOf(goal.status);
+  if (current === "achieved" || current === "abandoned") {
+    return current === status
+      ? { ok: true, code: "ATLAS_GOAL_CLOSED", idempotent: true }
+      : { ok: false, code: ATLAS_INVALID_INPUT };
+  }
+  if (current === "superseded") return { ok: false, code: ATLAS_INVALID_INPUT };
+  const by = isFilled(input.by) ? input.by.trim().slice(0, 80) : "";
+  const written = appendEvent(
+    root,
+    projectId,
+    "goal_close",
+    { goalId, status, reason, evidence: normalizeEvidence(input.evidence), by },
+    at,
+  );
+  if (!written.ok) return written;
+  return { ok: true, code: "ATLAS_GOAL_CLOSED" };
+}
+
 /**
  * 裁决冲突:先在内存里 build 一份草稿(不落盘)再走纯逻辑 resolveConflict 演练。
  * - 冲突不存在 → ATLAS_NOT_FOUND;chosen 不属于该冲突 → ATLAS_GOAL_NOT_FOUND;两条都不写盘。
@@ -411,7 +584,8 @@ export function resolveConflict(
   root: string,
   projectId: string,
   conflictId: string,
-  opts: AtlasResolveOpts): AtlasOk & { idempotent?: boolean } {
+  opts: AtlasResolveOpts,
+): AtlasOk & { idempotent?: boolean } {
   const chosenGoalId = isFilled(opts?.chosenGoalId) ? opts.chosenGoalId.trim() : "";
   if (!isFilled(projectId) || !isFilled(conflictId) || chosenGoalId === "") {
     return { ok: false, code: ATLAS_INVALID_INPUT };
@@ -443,20 +617,38 @@ export function resolveConflict(
 /**
  * 重建快照:entries → 投影 → buildAtlas → 原子写 atlas json。
  * 坏行只计入 badLines;有 driftFlags 也照常 ok:true(漂移是结论,不是失败)。
+ * preserveDerived( agent 写通道):写入前读旧快照,把 derived 层(会话挖掘的观察值,
+ * 只在 nightly refresh 重算)原样带到新快照——agent 的 goal_progress/goal_close 增量 build 不再
+ * 把 derived 洗掉(nightly 旧实现「读快照→追加 goal→写回」的同一语义,成通用选项)。
+ * goalProgress(推进轨迹叠加层)由 projection 产出,build 后挂到快照顶层。
  */
 export function build(
   root: string,
   projectId: string,
-  opts: { now?: string; driftWindowDays?: number } = {},
+  opts: { now?: string; driftWindowDays?: number; preserveDerived?: boolean } = {},
 ): AtlasBuildResult {
   if (!isFilled(projectId)) return { ok: false, code: ATLAS_INVALID_INPUT };
   const { events, badLines } = loadAtlasEvents(root, projectId);
   const now = isFilled(opts.now) ? opts.now : nowIso();
-  const built = rt.buildAtlas(toAtlasInput(projectId, projectEntries(events)), {
+  const projection = projectEntries(events);
+  const built = rt.buildAtlas(toAtlasInput(projectId, projection), {
     now,
     driftWindowDays: opts.driftWindowDays,
   });
-  const atlas: DirectionAtlas = built.atlas ?? rt.emptyAtlas(projectId, now);
+  const base: DirectionAtlas = built.atlas ?? rt.emptyAtlas(projectId, now);
+  const atlas = base as DirectionAtlas & { derived?: unknown; goalProgress?: Record<string, GoalProgressRow[]> };
+  if (projection.goalProgress.length > 0) {
+    const byGoal: Record<string, GoalProgressRow[]> = {};
+    for (const { goalId, row } of projection.goalProgress) {
+      (byGoal[goalId] ??= []).push(row);
+    }
+    atlas.goalProgress = byGoal;
+  }
+  if (opts.preserveDerived === true) {
+    const prev = getAtlas(root, projectId);
+    const prevDerived = (prev.atlas as { derived?: unknown } | undefined)?.derived;
+    if (prevDerived !== undefined) atlas.derived = prevDerived;
+  }
   const codes: string[] = Array.isArray(built.codes) ? built.codes.slice() : [];
   if (!codes.includes(ATLAS_BUILT)) codes.unshift(ATLAS_BUILT);
   const path = atlasJsonPath(root, projectId);

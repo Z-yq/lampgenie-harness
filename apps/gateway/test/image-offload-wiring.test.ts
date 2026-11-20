@@ -91,7 +91,8 @@ describe("行为级:主 agent 路径(真走 wireAgentLoop)offload 生效", () =>
       tm as never, journal as never, llm as never, new EchoChildBackend() as never,
       undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined,
-      {} as never);
+      {} as never,
+    );
     // 附件图片:内容不必是真 PNG(尺寸解析失败=放行,与 readImageSize 口径一致)
     const imgPath = join(root, "pic.png");
     writeFileSync(imgPath, Buffer.from("QUJD", "base64"));
@@ -139,7 +140,8 @@ describe("行为级:主 agent 路径(真走 wireAgentLoop)offload 生效", () =>
       tm as never, journal as never, llm as never, new EchoChildBackend() as never,
       undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined,
-      {} as never);
+      {} as never,
+    );
     const sid = "gw-img-offload-neg";
     // 附件目录必须存在(构造注入阶段会 stat);用临时根下的子目录
     mkdirSync(join(root, "att"), { recursive: true });

@@ -182,7 +182,8 @@ describe(" 指令链 /  browser 默认开启", () => {
     expect(SCHEMA).toContain("browser: z.object({");
     const browserBlock = SCHEMA.slice(
       SCHEMA.indexOf("browser: z.object({"),
-      SCHEMA.indexOf("browser: z.object({") + 400);
+      SCHEMA.indexOf("browser: z.object({") + 400,
+    );
     expect(browserBlock).toContain("enabled: z.boolean().default(true)");
     expect(WIRING).toContain("...(browserTool ? [browserTool] : [])");
   });

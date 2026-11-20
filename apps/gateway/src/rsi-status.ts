@@ -318,17 +318,35 @@ async function readNightly(root: string): Promise<RsiSectionResult> {
   }
   const status = String(last.status);
   const done = status === "done";
+ // 完成度可观测——不再只报一个 status,补步骤进度/会话覆盖/在跑步骤。
+  const steps = Array.isArray(last.steps) ? last.steps : [];
+  const doneSteps = steps.filter((step) => step !== null && typeof step === "object" && (step.status === "done" || step.status === "skipped")).length;
+  const runningStep = steps.find((step) => step !== null && typeof step === "object" && step.status === "running");
+  const coverage = last.coverage;
+  const processed = typeof coverage?.sessionsProcessed === "number" ? coverage.sessionsProcessed : 0;
+  const total = typeof coverage?.sessionsTotal === "number" ? coverage.sessionsTotal : 0;
+  const inFlight = status === "pending" || status === "running";
+  const warnings: string[] = [];
+  if (!done) {
+    warnings.push(
+      inFlight
+        ? `最近一次夜间运行进行中(${status}):步骤 ${doneSteps}/${steps.length}${runningStep === undefined ? "" : `,当前 ${String(runningStep.name)}`};覆盖 ${processed}/${total};起点 ${String(last.createdAt ?? "?")}`
+        : `最近一次夜间运行状态为 ${status}${typeof last.error === "string" ? `(${last.error})` : ""}`,
+    );
+  }
   return {
     ok: done,
-    code: done ? undefined : "NOT_DONE",
+    code: done ? undefined : inFlight ? "IN_PROGRESS" : "NOT_DONE",
     metrics: [
       { label: "最近状态", value: status, tone: done ? "ok" : status === "failed" ? "bad" : "warn" },
       { label: "最近日期", value: last.date },
       { label: "最近项目", value: last.projectId },
       { label: "运行数", value: runs.length, tone: "ok" },
-      { label: "步骤数", value: Array.isArray(last.steps) ? last.steps.length : 0 },
+      { label: "步骤数", value: steps.length },
+      { label: "步骤完成", value: `${doneSteps}/${steps.length}`, tone: done ? "ok" : doneSteps > 0 ? "warn" : "bad" },
+      { label: "会话覆盖", value: `${processed}/${total}`, tone: processed > 0 ? "ok" : "warn" },
     ],
-    warnings: done ? [] : [`最近一次夜间运行状态为 ${status}`],
+    warnings,
   };
 }
 
@@ -623,7 +641,7 @@ async function readPrompts(root: string): Promise<RsiSectionResult> {
 async function readAtlas(root: string): Promise<RsiSectionResult> {
   const base = safeRoot(root);
   if (base === undefined) return undefined;
-  const { atlasDir, reportAtlas } = await import("./direction-atlas-store.js");
+  const { atlasDir, getAtlas, reportAtlas } = await import("./direction-atlas-store.js");
   const dir = atlasDir(base);
   if (!existsSync(dir)) return undefined;
   let names: string[] = [];
@@ -637,6 +655,8 @@ async function readAtlas(root: string): Promise<RsiSectionResult> {
   let goals = 0;
   let activeGoals = 0;
   let openConflicts = 0;
+  let reworkSignals = 0;
+  let impactClusters = 0;
   const warnings: string[] = [];
   for (const name of names) {
     const projectId = name.slice(0, -".json".length);
@@ -649,6 +669,14 @@ async function readAtlas(root: string): Promise<RsiSectionResult> {
     goals += got.report.goalCount;
     activeGoals += got.report.activeGoals;
     openConflicts += got.report.openConflicts;
+ // 世界模型 derived 里的返工账(与开工简报同源):面板只展示计数,含义靠 title 悬停解释。
+    const snap = getAtlas(base, projectId);
+    const derived = snap.ok && snap.atlas !== undefined
+      ? (snap.atlas as { derived?: { reworkSignals?: unknown[]; reworkChains?: { fanoutClusters?: unknown } } }).derived
+      : undefined;
+    if (derived !== undefined && Array.isArray(derived.reworkSignals)) reworkSignals += derived.reworkSignals.length;
+    const clusters = Number(derived?.reworkChains?.fanoutClusters);
+    if (Number.isFinite(clusters) && clusters > 0) impactClusters += clusters;
   }
   if (projects === 0) return unavailable("atlas", "方向图文件均不可读");
   const ok = openConflicts === 0;
@@ -661,6 +689,13 @@ async function readAtlas(root: string): Promise<RsiSectionResult> {
       { label: "目标", value: goals },
       { label: "活跃目标", value: activeGoals, tone: "ok" },
       { label: "冲突", value: openConflicts, tone: toneOfCount(openConflicts) },
+ // 返工账上屏:有数据才出,面板这两条带悬停解释(与开工简报同源口径)。
+      ...(reworkSignals > 0 || impactClusters > 0
+        ? [
+            { label: "返工信号", value: reworkSignals, tone: reworkSignals > 0 ? "warn" : "ok" } as RsiStatusMetric,
+            { label: "影响面未闭合簇", value: impactClusters, tone: impactClusters > 0 ? "warn" : "ok" } as RsiStatusMetric,
+          ]
+        : []),
     ],
     warnings,
   };

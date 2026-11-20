@@ -370,7 +370,8 @@ function collectLocalTypes(
   code: string,
   localTypes: Map<string, string>,
   fields: Map<string, Map<string, string>>,
-  typeOfVar: (name: string) => string | undefined): void {
+  typeOfVar: (name: string) => string | undefined,
+): void {
   const fe = JAVA_FOR_EACH_RE.exec(code);
   if (fe) {
     const t = javaBaseType(fe[1]!);

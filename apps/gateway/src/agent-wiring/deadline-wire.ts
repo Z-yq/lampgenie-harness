@@ -216,7 +216,8 @@ export interface EnvelopeStartJournal {
 
 function failTaskForEnvelope(
   deps: { taskManager: Pick<TaskSupervisor, "get" | "setState">; task: Task },
-  reason: string): void {
+  reason: string,
+): void {
   const cur = deps.taskManager.get(deps.task.id) ?? deps.task;
  // 只有 queued/running 能迁到 failed(blocked 的合法出口不含 failed;状态机不允许就跳过,靠 journal 留证)
   if (cur.state !== "queued" && cur.state !== "running") return;
@@ -307,7 +308,8 @@ export function wireAgentLoop(
  /** 执行信封:装配方注入当前能力目录/策略(缺省=本任务实际工具面名+内置命令名 / permissionMode+agent.maxSteps)。 */
   envelopeDeps?: EnvelopeDeps,
  /** 会话工作所有权注册表(装配方注入;缺省=整套 ownership 逻辑降级 no-op)。 */
-  ownerRegistry?: OwnerRegistry): void {
+  ownerRegistry?: OwnerRegistry,
+): void {
  // 注册表按 journal 缓存(同进程多 app 互不串会话);未传=不绑定=所有登记点 no-op。
   bindOwnerRegistry(journal, ownerRegistry);
  // archLlm 生产注入( F1):plan 剖面在生产环境出真架构图(此前零注入恒静态降级)。
@@ -321,7 +323,7 @@ export function wireAgentLoop(
   const startingLoops = new Set<string>();
   taskManager.onChange((task: Task) => {
     if (task.state === "cancelled") {
- // 先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
+ // :先落「用户已停止」标记再 abort——取消是用户意图,标记落账失败只告警,
  // 绝不让它改变取消结果(appendUserStoppedMarker 内部 try/catch + warn)。
  // 只在**真有活跃 loop 被中断**时落标记:resumeInterrupted 把原任务成 cancelled
  // (「已续跑→新任务」)不是用户停止,误标会连带堵死该会话里更早任务的续跑。

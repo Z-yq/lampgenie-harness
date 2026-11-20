@@ -97,6 +97,15 @@ export interface RsiRunQuality {
   issues: { code: string; itemId?: string; note: string }[];
 }
 
+/** nightly 经验折叠记账( W2:settle 恰好折叠一次的幂等标记;旧 run 记录无此字段)。 */
+export interface RsiExperienceFoldRecord {
+  at: number;
+  folded: number;
+  skipped: number;
+  rejected: number;
+  truncated: number;
+}
+
 export type RsiResultEventType = "upsert" | "update" | "delete";
 
 export interface RsiResultEventInput {
@@ -166,6 +175,12 @@ export interface RsiRunRecord {
   analysisMissing?: boolean;
  /** 结果质量评估(质量契约 v2;旧记录无此字段)。 */
   quality?: RsiRunQuality;
+ /** nightly 经验折叠标记( W2:done 的 nightly run 折叠恰好一次;旧记录无此字段=未折叠)。 */
+  experienceFold?: RsiExperienceFoldRecord;
+ /** 做梦开始卡已注入时刻(超级会话卡按 runId+phase 幂等,旧记录无此字段=未注入)。 */
+  dreamStartAt?: number;
+ /** 做梦完成/失败卡已注入时刻(同上;phase 成 done/failed 两种共用一个标记)。 */
+  dreamDoneAt?: number;
 }
 
 /** 重放出来的条目:多一个 `synthetic`(由 update/delete 在缺失基础上造出的占位,不并入基础层)。 */
@@ -327,7 +342,8 @@ export async function setMechanism(
   root: string,
   id: string,
   patch: { enabled?: boolean; driver?: "agent" | "code" },
-  by?: string): Promise<{ ok: boolean; reason?: string; mechanism?: RsiMechanismState }> {
+  by?: string,
+): Promise<{ ok: boolean; reason?: string; mechanism?: RsiMechanismState }> {
   const base = assertRoot(root);
   const spec = mechanismSpec(id);
   if (!spec) return { ok: false, reason: "UNKNOWN_MECHANISM" };
@@ -516,7 +532,8 @@ export async function updateResultItem(
     action?: string;
     status?: RsiResultStatus;
   },
-  by?: string): Promise<{ ok: boolean; reason?: string; item?: RsiResultItem }> {
+  by?: string,
+): Promise<{ ok: boolean; reason?: string; item?: RsiResultItem }> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
   if (!mech) throw new TypeError("updateResultItem: mechanismId 必须是非空字符串");
@@ -541,7 +558,8 @@ export async function deleteResultItem(
   mechanismId: string,
   itemId: string,
   by?: string,
-  reason?: string): Promise<{ ok: boolean; reason?: string }> {
+  reason?: string,
+): Promise<{ ok: boolean; reason?: string }> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
   if (!mech) throw new TypeError("deleteResultItem: mechanismId 必须是非空字符串");
@@ -640,6 +658,42 @@ export async function markRunRetried(root: string, mechanismId: string, runId: s
   await writeJsonAtomic(runFilePath(base, mech, id), existing);
 }
 
+/**
+ * 做梦卡幂等标记:同一 runId 的同一 phase(start / done)只注入一次超级会话卡。
+ * 读改写整条 run 记录:**已标记 → false**(调用方跳过注卡);否则打标记 → true。
+ * 写失败 / 记录不存在 → false(不 throw:注卡失败不该影响收尾链路)。
+ */
+export async function markDreamNote(
+  root: string,
+  mechanismId: string,
+  runId: string,
+  phase: "start" | "done",
+  at?: number,
+): Promise<boolean> {
+  const base = assertRoot(root);
+  const mech = asString(mechanismId);
+  if (!mech) throw new TypeError("markDreamNote: mechanismId 必须是非空字符串");
+  const id = asString(runId);
+  if (!id) throw new TypeError("markDreamNote: runId 必须是非空字符串");
+  if (phase !== "start" && phase !== "done") throw new TypeError("markDreamNote: phase 必须是 start | done");
+  const stamp = asNumber(at) ?? Date.now();
+  try {
+    const existing = await readRunFile(base, mech, id);
+    if (existing === undefined) return false;
+    if (phase === "start") {
+      if (existing.dreamStartAt !== undefined) return false;
+      existing.dreamStartAt = stamp;
+    } else {
+      if (existing.dreamDoneAt !== undefined) return false;
+      existing.dreamDoneAt = stamp;
+    }
+    await writeJsonAtomic(runFilePath(base, mech, id), existing);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 结束一次运行(记录不存在时按最小记录补写,不让收尾丢事件)。 */
 export async function finishRun(
   root: string,
@@ -657,6 +711,8 @@ export async function finishRun(
     analysisMissing?: boolean;
  /** 质量契约 v2:一次运行的结果质量评估。 */
     quality?: RsiRunQuality;
+ /** W2:nightly 经验折叠记账(幂等标记)。 */
+    experienceFold?: RsiExperienceFoldRecord;
   },
 ): Promise<void> {
   const base = assertRoot(root);
@@ -682,6 +738,8 @@ export async function finishRun(
   if (typeof extra?.analysisMissing === "boolean") record.analysisMissing = extra.analysisMissing;
   const quality = parseQualityRecord(extra?.quality);
   if (quality !== undefined) record.quality = quality;
+  const experienceFold = parseExperienceFoldRecord(extra?.experienceFold);
+  if (experienceFold !== undefined) record.experienceFold = experienceFold;
   await writeJsonAtomic(runFilePath(base, mech, id), record);
 }
 
@@ -770,6 +828,18 @@ function parseQualityRecord(raw: unknown): RsiRunQuality | undefined {
   };
 }
 
+/** 经验折叠记账净化:at 必须有限,计数只留非负有限数(坏记录 → undefined,不整条 run 失效)。 */
+function parseExperienceFoldRecord(raw: unknown): RsiExperienceFoldRecord | undefined {
+  if (!isRecord(raw)) return undefined;
+  const at = asNumber(raw.at);
+  if (at === undefined) return undefined;
+  const count = (key: string): number => {
+    const v = asNumber(raw[key]);
+    return v === undefined || v < 0 ? 0 : Math.floor(v);
+  };
+  return { at, folded: count("folded"), skipped: count("skipped"), rejected: count("rejected"), truncated: count("truncated") };
+}
+
 function parseRunRecord(mechanismId: string, raw: unknown): RsiRunRecord | undefined {
   if (!isRecord(raw)) return undefined;
   const runId = asString(raw.runId);
@@ -809,6 +879,12 @@ function parseRunRecord(mechanismId: string, raw: unknown): RsiRunRecord | undef
   if (typeof raw.analysisMissing === "boolean") record.analysisMissing = raw.analysisMissing;
   const quality = parseQualityRecord(raw.quality);
   if (quality !== undefined) record.quality = quality;
+  const experienceFold = parseExperienceFoldRecord(raw.experienceFold);
+  if (experienceFold !== undefined) record.experienceFold = experienceFold;
+  const dreamStartAt = asNumber(raw.dreamStartAt);
+  if (dreamStartAt !== undefined) record.dreamStartAt = dreamStartAt;
+  const dreamDoneAt = asNumber(raw.dreamDoneAt);
+  if (dreamDoneAt !== undefined) record.dreamDoneAt = dreamDoneAt;
   return record;
 }
 
@@ -905,7 +981,8 @@ export async function salvageResultFile(
   root: string,
   mechanismId: string,
   runId: string,
-  startedAt: number): Promise<{ found: boolean; movedFrom?: string; error?: string }> {
+  startedAt: number,
+): Promise<{ found: boolean; movedFrom?: string; error?: string }> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
   const id = asString(runId);
@@ -1016,7 +1093,8 @@ export async function readRunResults(root: string, mechanismId: string, runId: s
  */
 export async function collectMechanismItems(
   root: string,
-  mechanismId: string): Promise<{ items: RsiResultItem[]; run?: RsiRunRecord; overlayApplied: number }> {
+  mechanismId: string,
+): Promise<{ items: RsiResultItem[]; run?: RsiRunRecord; overlayApplied: number }> {
   const base = assertRoot(root);
   const mech = asString(mechanismId);
   if (!mech) throw new TypeError("collectMechanismItems: mechanismId 必须是非空字符串");

@@ -45,7 +45,8 @@ export type RefineResult = { instruction: string; refined: boolean; reason?: str
 export function noteWhere(
   note: { kind: string; source?: { x1: number; y1: number; x2: number; y2: number }; point?: { x: number; y: number } },
   w: number,
-  h: number): string {
+  h: number,
+): string {
   if (note.kind === "global") return "全图(整体意见)";
   const cx = note.kind === "region" && note.source ? (note.source.x1 + note.source.x2) / 2 : note.point?.x ?? 0;
   const cy = note.kind === "region" && note.source ? (note.source.y1 + note.source.y2) / 2 : note.point?.y ?? 0;

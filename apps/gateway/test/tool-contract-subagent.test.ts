@@ -1,5 +1,5 @@
 /**
- * 子代理工具面也走上下文投影(主/子一致)。
+ * :子代理工具面也走上下文投影(主/子一致)。
  * - 源码断言:llm-loop-backend.ts 的 attachToolView 调用带 contract(agentType/availableTools/
  * permissionMode),且工具面装配点仍只有这一处(wire 描述投影,不动工具集合);
  * - 纯路径断言:复用 projectToolsForContext(runtime tool-contract)验投影效果——agentType=worker +

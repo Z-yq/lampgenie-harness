@@ -6,7 +6,7 @@
  * 凭证解析: env[apiKeyEnv] > <repo>/.genie/secrets.json(0600,dsh .credentials.yaml 模式);返回 apiKeyRef 描述而非明文进配置
  * env 数值带钳位(schema min/max 兜底,qwen numberSetting 模式)
  */
-import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync, chmodSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ConfigSchema, HOT_CONFIG_PATHS, migrateLegacyConfig, type Config } from "./schema.js";
@@ -171,12 +171,27 @@ export interface ResolvedApiKey {
   source: ApiKeySource;
 }
 
+/** secrets 读缓存( worker providers 超时根因之一):buildModelProviders 对每个
+ * providerFromRef 都调 resolveTrackApiKey → readSecrets,同一次装配重复读同一 9p 文件 5+ 次。
+ * 进程内缓存(mtime+size 戳);secrets 极少变,变更后新 worker 进程自然重读。 */
+const secretsCache = new Map<string, { stamp: string; value: Record<string, unknown> }>();
+
 function readSecrets(repoRoot: string): Record<string, unknown> {
   const secretsPath = join(repoRoot, ".genie", "secrets.json");
-  if (!existsSync(secretsPath)) return {};
+  let st: { mtimeMs: number; size: number };
+  try {
+    st = statSync(secretsPath);
+  } catch {
+    return {}; // 文件不存在
+  }
+  const stamp = `${st.mtimeMs}:${st.size}`;
+  const cached = secretsCache.get(repoRoot);
+  if (cached !== undefined && cached.stamp === stamp) return cached.value;
   try {
     const j = JSON.parse(readFileSync(secretsPath, "utf-8")) as Record<string, unknown>;
-    return j && typeof j === "object" && !Array.isArray(j) ? j : {};
+    const value = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+    secretsCache.set(repoRoot, { stamp, value });
+    return value;
   } catch {
     return {}; // 坏密钥文件=无凭证
   }
@@ -290,6 +305,18 @@ export function listSecretKeys(repoRoot: string): string[] {
   }
 }
 
+/** 密钥末4位(设置页掩码展示;只回末4字符,长度<8 的短值不回——不泄漏完整值)。 */
+export function secretLast4Of(repoRoot: string, name: string): string | null {
+  const p = join(repoRoot, ".genie", "secrets.json");
+  if (!existsSync(p)) return null;
+  try {
+    const j = JSON.parse(readFileSync(p, "utf-8")) as Record<string, unknown>;
+    const v = j ? j[name] : undefined;
+    if (typeof v !== "string" || v.length < 8) return null;
+    return v.slice(-4);
+  } catch { return null; }
+}
+
 /** 写入一个密钥到 .genie/secrets.json(0600,原子 tmp+rename; 预设一键接入)。
  * 只更新目标键,保留其它键;坏文件按空对象重建。返回值只含「是否覆盖了已有值」。
  * 红线:值不落配置、不入日志、不回包回显。 */
@@ -319,7 +346,8 @@ export function setSecretValue(repoRoot: string, name: string, value: string): {
  * contextWindow/maxTokens;条目兼容旧字符串形态。找不到=null(调用方走轨级回退)。 */
 export function modelMetaOf(
   config: Config,
-  model: string | undefined): { contextWindow?: number; maxTokens?: number } | null {
+  model: string | undefined,
+): { contextWindow?: number; maxTokens?: number } | null {
   if (!model) return null;
   for (const p of config.providers ?? []) {
     for (const m of p.models ?? []) {

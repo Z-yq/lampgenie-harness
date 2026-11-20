@@ -149,7 +149,8 @@ function layoutGraph(
   graph: BoardLayoutGraphIn,
   aspectRatio: number,
   forcedDirection: "right" | "down" | undefined,
-  signal?: AbortSignal): BoardLayoutResult {
+  signal?: AbortSignal,
+): BoardLayoutResult {
   const nodes = Array.isArray(graph.nodes) ? graph.nodes.filter((n) => n && typeof n.id === "string") : [];
   if (nodes.length === 0) return { positions: {}, sizes: {} };
   const rootId = typeof graph.rootId === "string" && graph.rootId ? graph.rootId : "__root__";

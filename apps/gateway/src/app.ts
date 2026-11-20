@@ -21,7 +21,7 @@ import { startGatewayServer, repairSessionProjectDrift } from "./server.js";
 import { repairTailBeforeResume } from "./journal-tail-repair.js";
 import { journalArchiveDirOf } from "./journal-maintenance.js";
 import { createEffectQueue, relayActivityHandler, type EffectQueue } from "./effect-queue.js";
-// 通知三面同源(结构化 payload + 人读文本 + GUI 投影);relay.activity 入队点用它生成结构化面。
+// :通知三面同源(结构化 payload + 人读文本 + GUI 投影);relay.activity 入队点用它生成结构化面。
 import { buildNotification } from "@lampgenie/runtime/notify/emit";
 // 终态投递义务:启动回放 seed + 启动 sweep 一次(不自动重投,等连接)。
 import { createDeliveryObligationStore, type DeliveryObligation } from "./delivery-obligation.js";
@@ -31,10 +31,20 @@ import { ProjectRegistry, cleanupProjectTaskRefs, HARNESS_PROJECT_ID } from "./p
 import { runSuperAgentTurn, SuperAgentChannel, SuperAgentActivity, buildSuperInbox, type SuperAgentDeps } from "./super-agent.js";
 import { MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { PermissionBroker } from "./permission-broker.js";
+import { SuperApprovalRouter, superApprovalTimeoutMs } from "./super-approval-router.js";
 import { AskUserRouter } from "./ask-user-router.js";
 import { WorkflowAskRouter } from "./workflow-ask-router.js";
 import { AutomationStore, AutomationScheduler } from "./automations.js";
 import { tickRsiScheduler } from "./rsi-scheduler.js"; // RSI-SELF-DRIVE:自动周期 tick
+import { ensureBreakerLedger } from "./rsi-breaker-store.js"; // 熔断台账启动初始化
+import {
+  closeRestartEntry,
+  detectRestartNeeded,
+  ensureRestartQueue,
+  listRestartQueue,
+  queueRestart,
+  settleRestartQueue,
+} from "./restart-queue-store.js"; // 待重启队列(不触发重启)
 // 定时任务:计划/内容门/摘要用 runtime TaskSupervisor;真正跑活经 runner 提交给主管理器。
 import { TaskSupervisor as RuntimeTaskSupervisor } from "@lampgenie/runtime/task/task-manager";
 import { preRunVerdict } from "@lampgenie/runtime/task/scheduled-content-gate";
@@ -127,6 +137,26 @@ export function browserCfgFrom(config: unknown): {
   };
 }
 
+/** 视觉输入能力判定(指挥台附件降级用):与面板 script-model-menu.ts 的
+ * modelVisionCapable 同一套口径(真源优先级:条目 supportsImage===true/false 权威 > 模型名族推断)。
+ * 返回 undefined=未标注(不干预:沿用既有「图片进视觉通道」行为,不凭空阻断)。 */
+const SUPER_VISION_NAME_HINTS = ["-vl", "-vision", "-omni", "glm-4v", "glm-5v", "glm-4.6v", "glm-4.1v", "gpt-4o"];
+function superVisionCapable(model: string, providerId: string | undefined, config: unknown): boolean | undefined {
+  type Entry = { id?: string; name?: string; supportsImage?: boolean };
+  type Provider = { id?: string; models?: Entry[] };
+  const list = ((config as { providers?: Provider[] } | undefined)?.providers ?? []).filter(Boolean);
+  const entryOf = (p: Provider | undefined): Entry | undefined =>
+    (p?.models ?? []).find((m) => m && (m.id ?? m.name) === model);
+  const ent = (providerId ? entryOf(list.find((p) => p.id === providerId)) : undefined) ?? list.map(entryOf).find(Boolean);
+  if (ent && ent.supportsImage === true) return true;
+  if (ent && ent.supportsImage === false) return false;
+  const n = String(model ?? "").toLowerCase();
+  if (!n) return undefined;
+  if (n.endsWith("-v")) return true;
+  for (const h of SUPER_VISION_NAME_HINTS) if (n.includes(h)) return true;
+  return undefined;
+}
+
 export interface GatewayAppOptions {
   port: number;
   /** 会话日志目录;缺省 = 内存(测试用)。 */
@@ -168,6 +198,8 @@ export interface GatewayAppOptions {
   onSecretSet?: (name: string, value: string) => { existed: boolean };
  /** 密钥名列表(只返回名字,绝不返回值);设置页「是否覆盖」提示用。 */
   listSecrets?: () => string[];
+ /** 密钥末4位(设置页 •••• 掩码展示;只回末4字符,完整值永不出服务端)。 */
+  secretLast4?: (name: string) => string | null;
   /** 角色模型 provider(压缩/评审);cfg.set 热项按路径前缀分发到对应 provider。 */
   models?: {
     compact?: LlmProvider & { update: (p: Record<string, unknown>) => void };
@@ -242,7 +274,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // 本轮只接 team 活动推送这一处真实外部面;其它推送/通知保持原路径不变。
   const effectQueue = createEffectQueue({ journal });
   effectQueue.register("relay.activity", relayActivityHandler(
-    () => (globalThis as { __teamView?: { notifyActivity(projectId: string, category: string, type: string, summary: string): void } }).__teamView));
+    () => (globalThis as { __teamView?: { notifyActivity(projectId: string, category: string, type: string, summary: string): void } }).__teamView,
+  ));
 
   const taskManager = new TaskSupervisor(opts.concurrency ?? {});
 
@@ -275,7 +308,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // agentTurns(会话累计 assistant 轮数)= interrupted 回执「中断前进度」数据源,提升到本层
   // 供下方自动恢复窗共用(两处消费,同一遍回放,不为回执再读一遍 journal)。
   const agentTurns = new Map<string, number>();
- // 用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
+ // :用户停止标记索引(sessionId → 最近一次停止时刻)。与下面启动回放同一遍 readAll 收集,
   // restore / autoResume 都按它判,不额外扫 journal(journal 已 35MB 级)。
   const userStoppedAt = new Map<string, number>();
  // 会话最近活动时间索引。与下面的回放同一遍 readAll 累加(不为回执再读一遍 journal;
@@ -300,7 +333,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         if (ob && typeof ob.obligationId === "string") deliverySeeds.push(ob);
         continue;
       }
- // 用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
+ // :用户停止标记(restore/autoResume 的判据;与回放同一遍收集)。
       if (ev.kind === "custom") {
         const up = ev.payload as { type?: unknown; at?: unknown } | undefined;
         if (up && up.type === USER_STOPPED_EVENT) {
@@ -332,7 +365,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
  // 清算回执:原任务书 id + sessionId + 中断前进度(状态机恢复语义)。
         receipt: (t) =>
           `网关重启中断(原任务书 ${t.id} / 会话 ${t.sessionId} / 中断前约 ${agentTurns.get(t.sessionId) ?? 0} 轮;可续跑)`,
- // 任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
+ // :任务创建后该会话有用户停止标记 → 收编 cancelled(不注为 interrupted、不自动续跑)。
         userStopped: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
       });
       for (const ct of collectedTasks) {
@@ -364,7 +397,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     // 同一 taskId 的连续状态变化折叠为最新 payload(替换而不重复上行)。
     if (task.state === "running" || task.state === "done" || task.state === "failed" || task.state === "cancelled") {
       const summary = String(task.instruction ?? task.id).slice(0, 120);
- // 一次生成结构化面(payload/text/gui 同源);旧四字段逐字保留,新增 structured/gui 只做增量。
+ // :一次生成结构化面(payload/text/gui 同源);旧四字段逐字保留,新增 structured/gui 只做增量。
       const legacySummary = `${task.state === "running" ? "开始" : task.state === "done" ? "完成" : "失败"}:${summary}`;
       const note = buildNotification("team.activity", {
         projectId: "",
@@ -411,7 +444,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // 持久化跟随 journal 隔离语义:journalDir 在=同目录落盘;不在=会话内态(防测试实例共享仓库树污染)。
   const projects = new ProjectRegistry(
     repoRoot(),
-    opts.journalDir ? join(opts.journalDir, "projects.json") : null);
+    opts.journalDir ? join(opts.journalDir, "projects.json") : null,
+  );
  // 远程项目启动重探测(验证修复):load 启动期把 remote 重置 unavailable-remote-unverified
   // (远程不本地 statSync 的语义),而旧实现只在 project.add 触发探测——网关每次重启后面板恒「不可用」。
   // 启动后异步重探一轮(全部 remote 项目;失败=unreachable,菜单「重新探测」可手动再试)。
@@ -497,6 +531,11 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
  // RSI-SELF-DRIVE:RSI 自动周期(默认关闭,用户在「做梦」区打开)。
  // 60s tick 内部自带「到点/空闲让路/全局单跑/熔断暂停」判定;不用面板轮询也能自转。
  // unref:定时器不吊住进程退出(与 automationScheduler/预热定时器同口径)。
+ // 启动初始化——熔断台账/待重启队列保证「无 pending」是显式事实,不是缺文件(失败不挡启动)。
+  try {
+    ensureBreakerLedger(repoRoot());
+    ensureRestartQueue(repoRoot());
+  } catch { /* 初始化失败不挡启动 */ }
   const rsiSchedulerTimer = setInterval(() => {
     void tickRsiScheduler({
       root: repoRoot(),
@@ -517,7 +556,29 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         }
       },
       ...(opts.journalDir === undefined ? {} : { journalDir: opts.journalDir }),
+ // LLM 语义归因:finishCycle 对 uncategorized 返工链做 LLM 分类
+ // (P2-⑥ 验证 60% 需此层;零链零调用,预算由模块内 enrichMax 控制)。
+      ...(opts.llm ? { semanticAttributionFn: (async (root: string) => {
+        const { runSemanticAttribution } = await import("./semantic-attribution.js");
+        const chatFn = async (msgs: Array<{ role: string; content: string }>) => {
+          try {
+            const res = await opts.llm!.chat(msgs as never, [], undefined, undefined, { maxTokens: 300 } as never);
+            const r = res as { content?: string; text?: string };
+            return { content: r.content ?? r.text ?? "" };
+          } catch (e) {
+            console.warn("[rsi] 语义归因 LLM 调用失败:", e instanceof Error ? e.message : String(e));
+            throw e; // 让 runSemanticAttribution 的 catch 计 errors
+          }
+        };
+        const out = await runSemanticAttribution(root, chatFn, "gateway-main");
+        if (out.enriched > 0 || out.errors > 0) {
+          console.log(`[rsi] 语义归因: enriched=${out.enriched} errors=${out.errors} skipped=${out.skipped}`);
+        }
+        return out;
+      }) } : {}),
       readSession: (sessionId) => journal.readSession(sessionId),
+ // W2:自动周期收尾折叠 nightly 蒸馏经验(store 单例,与手动 run 同源)。
+      experienceStore: getExperienceStore(),
       ...(opts.config === undefined ? {} : { config: opts.config as unknown as import("@lampgenie/core").Config }),
  // 自动周期同样注入 super 做梦卡(开始/完成/失败);broadcastRaw 在 ensureServer 时替换为真广播,
  // 此闭包读取的是最新值(定时器触发时已初始化)。注入失败不影响调度主链。
@@ -669,7 +730,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
           chat: (messages: { role: string; content: string }[]): Promise<{ content: string }> =>
             opts.llm!.chat(messages as never, [], undefined) as Promise<{ content: string }>,
         }
-      : undefined);
+      : undefined,
+  );
   const plugins = new PluginSystem(
     repoRoot(),
     (i) => mcpStore.add(i),
@@ -682,7 +744,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       Object.entries(os.networkInterfaces()).flatMap(([name, addrs]) =>
         (addrs ?? []).map((a) => ({ name, address: a.address, internal: a.internal, family: String(a.family) })),
       ),
-      process.env.GENIE_PUBLIC_HOST);
+      process.env.GENIE_PUBLIC_HOST,
+    );
     return genBootstrapCommand({ ...input, gatewayUrl: "ws://" + host + ":" + opts.port });
   };
  // 档案演进钩子:终态任务→diffstat 文件映射模块→recentChanges+防抖重建。
@@ -778,6 +841,45 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   let broadcastRaw: (msg: Record<string, unknown>) => void = () => {};
  // 流式中继(ZCode 流式消息展示):loop onStream→80ms 合批→stream 消息广播。
   const streamRelay = createStreamRelay((msg) => broadcastRaw(msg));
+ // 待重启队列回写钩子——网关重启后把此前 pending 条目标 settled(重启时间+pid)并通知。
+ // 设计闸不变:本钩子只结算台账/通知,绝不触发重启;自动续跑默认关闭(GENIE_RESTART_AUTO_RESUME=1 才提交核对任务)。
+  try {
+    const settledRestarts = settleRestartQueue(repoRoot(), { pid: process.pid, at: Date.now() });
+    if (settledRestarts.length > 0) {
+      const text = `[重启核对] 网关已重启(pid=${process.pid}),此前 ${settledRestarts.length} 条待重启修复可以核对生效:${settledRestarts.slice(0, 5).map((e) => e.title.slice(0, 40)).join(" / ")}`;
+      try {
+        journal.append({ kind: "super.notice", sessionId: "super", payload: { text } });
+      } catch { /* journal 写失败不挡启动 */ }
+      try {
+        broadcastRaw({ v: 1, type: "super.notice", text });
+      } catch { /* 广播失败不挡启动 */ }
+      if (process.env.GENIE_RESTART_AUTO_RESUME === "1") {
+        for (const entry of settledRestarts) {
+          try {
+            taskManager.submit(
+              "system",
+              entry.sessionId ?? "rsi",
+              `网关已重启(pid=${process.pid},${new Date().toISOString()}),请核对并收尾此前待重启修复:${entry.title}${entry.reason !== "" ? `(原由:${entry.reason})` : ""}`,
+              { title: `[重启核对] ${entry.title.slice(0, 30)}` },
+            );
+          } catch { /* 单条续跑失败不影响其它 */ }
+        }
+      }
+    }
+  } catch { /* 回写失败不挡启动 */ }
+ // 终态任务若声明「待重启」→ 入队显式待重启队列(只入队,不重启、不自动重派)。
+  taskManager.onChange((task) => {
+    if (task.state !== "done" && task.state !== "failed" && task.state !== "cancelled") return;
+    if (!detectRestartNeeded(task.result)) return;
+    try {
+      queueRestart(repoRoot(), {
+        title: String(task.title ?? task.instruction ?? task.id).slice(0, 120),
+        reason: String(task.result ?? "").slice(0, 200),
+        taskId: task.id,
+        sessionId: task.sessionId,
+      });
+    } catch { /* 入队失败不挡任务链 */ }
+  });
  // (super agent 指挥台):super 通道——ask_user 转接(coding agent 提问经指挥台转述,
   // 答复经 relay_answer→askUserRouter.answer 回交,先答先用)+ 任务状态播报
   // (done/failed/cancelled/interrupted/blocked 注入 super 会话并广播 super.notice;
@@ -785,15 +887,34 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   // 广播先经 broadcastRaw 占位(ensureServer 前为 no-op)——服务未起时只落 journal 不广播,零行为差异。
   const superActivity = new SuperAgentActivity();
   const superSoul = opts.llm ? new MemoryStore(join(repoRoot(), ".genie", "soul", "memories")) : undefined;
+ // 指挥台会话级模型:per-session 覆盖面提前到 superDeps 之前建(下面 wireAgentLoop 复用同一实例,
+ // 不重复订阅 store.onChange);缺省(无 store/config)=undefined,共享 llm 现状零变化。
+  const sessionModelFace = opts.sessionModels && opts.config
+    ? createSessionModelFace(opts.config as unknown as Config, repoRoot(), opts.sessionModels)
+    : undefined;
+ // super 派发任务的权限审批自决路由(先声明:superDeps 的 permissionDecide 闭包引用它,
+ // 实际实例在 superChannel 建好之后才赋值 —— 各轮次调用时已就绪)。
+  let superApprovalRouter: SuperApprovalRouter | undefined;
   const superDeps: SuperAgentDeps | undefined = opts.llm
     ? {
         journal, taskManager, projects,
         llm: opts.llm,
+ // super 轮次读 sid="super" 的会话级覆盖(与 coding 轨同一 face 派生),缺省回退全局 llm。
+        resolveTurnModel: (turnSid: string) => {
+          const ov = opts.sessionModels?.get(turnSid);
+          if (!ov) return undefined;
+          const built = sessionModelFace?.derive(turnSid, ov);
+          if (!built) return undefined; // 派生失败=回退共享 llm(fail-soft,与 coding 轨一致)
+          return { llm: built, model: ov.model, vision: superVisionCapable(String(ov.model ?? ""), ov.providerId, opts.config) };
+        },
         // fixC5: relay_answer 工具的答复回交(AskUserRouter.answer;失效=面板已先答)。
         askAnswer: (requestId: string, answer: string) => askUserRouter.answer(requestId, answer),
+ // super 派发任务的权限自决落点(permission_decide)。未接线时工具不注册。
+        permissionDecide: (requestId, decision, reason) =>
+          superApprovalRouter ? superApprovalRouter.decide(requestId, decision, reason) : { ok: false, error: "审批路由未接线" },
  // task_resume 工具的续跑回调(与 WS task.resume 同源:幂等重提同 session 续跑)。
         resumeTask: (taskId: string) => {
- // 用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
+ // :用户停止过的任务不恢复(与 WS task.resume 同源判定;super 是第三个续跑入口)。
           const stoppedTask = taskManager.get(taskId);
           if (stoppedTask && hasUserStoppedSince(journal, { taskId: stoppedTask.id, sessionId: stoppedTask.sessionId, since: stoppedTask.createdAt })) {
             return { ok: false, reason: USER_STOPPED_RESUME_MESSAGE };
@@ -825,16 +946,34 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               ...(effort ? { reasoningEffort: effort } : {}),
               microcompact: micro,
               compactLlm,
-              expLlm: compactLlm,
               devlogDir: join(repoRoot(), "devlog"),
-              taskId: "super",
-              fallbackInstruction: "Super Agent 指挥台(全局调度与系统管理)持久会话",
-              store: getExperienceStore(),
             }),
             microcompact: micro,
             spill: { dir: join(repoRoot(), ".genie", "spill") },
           };
         })(),
+ // 派发模型路由——spawn_task 的 modelPreset 落 per-session 覆盖(sessionModels 同源);
+ // 配置热读(每轮从 opts.config 取,开关/档位改动下一轮即生效)。
+        setSessionModel: (sid, o) => {
+          if (!opts.sessionModels) return false;
+          const r = opts.sessionModels.set(sid, { model: o.model, ...(o.providerId ? { providerId: o.providerId } : {}), ...(o.effort ? { effort: o.effort } : {}) });
+          return !!r;
+        },
+        get modelRouting() {
+          const cfg = (opts.config as { agent?: { superModelRouting?: { enabled?: boolean; presets?: Record<string, { providerId?: string; model: string; effort?: string; description?: string }> } } } | undefined)?.agent?.superModelRouting;
+          return { enabled: cfg?.enabled === true, presets: (cfg?.presets ?? {}) as Record<string, { providerId?: string; model: string; effort?: string; description?: string }> };
+        },
+ // 未单独配置的档位跟随 super 会话生效模型——优先 super 会话级覆盖(sessionModels 同源),
+ // 其次全局 coding.llm;都没有=undefined(spawn_task 如实回「无法解析 super 模型」)。
+        resolveSuperModel: () => {
+          const ov = opts.sessionModels?.get("super");
+          const ovModel = String(ov?.model ?? "").trim();
+          if (ov && ovModel) return { model: ovModel, ...(ov.providerId ? { providerId: ov.providerId } : {}) };
+          const cl = (opts.config as { coding?: { llm?: { model?: string; providerId?: string } } } | undefined)?.coding?.llm;
+          const clModel = String(cl?.model ?? "").trim();
+          if (cl && clModel) return { model: clModel, ...(cl.providerId ? { providerId: cl.providerId } : {}) };
+          return undefined;
+        },
  // list_nodes 工具数据源(与 WS nodes.list 同源注册表+60s 心跳在线判定)。
         listNodes: () => nodes.list().map((n) => ({
           nodeId: n.nodeId,
@@ -879,6 +1018,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               sections: r.sections,
               taskState: (taskId) => taskManager.get(taskId)?.state,
               readSession: (sessionId) => journal.readSession(sessionId),
+ // W2:摘要管线收尾也折叠 nightly 蒸馏经验(幂等标记防重复)。
+              experienceStore: getExperienceStore(),
             }); // config(单价表覆盖)缺省=内置单价表;摘要不需要成本细节,不引 server.ts 内部函数(免环)
             const lines: string[] = [`RSI 机制体检摘要:${ann.sections.filter((x) => x.ok).length}/${ann.sections.length} 区正常(采集于 ${new Date(r.at).toISOString().slice(11, 19)} UTC)`];
             for (const sec of ann.sections) {
@@ -894,6 +1035,21 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               lines.push(bits.length ? `${head} — ${bits.join(";")}` : head);
             }
             return lines.join("\n").slice(0, 6000);
+          },
+ // 待重启队列(派发同类修复前先 list,避免同一状态点重复派发;只记账,不重启)。
+          restartQueue: {
+            list: () => listRestartQueue(repoRoot()).map((e) => ({
+              id: e.id,
+              status: e.status,
+              title: e.title,
+              ...(e.taskId === undefined ? {} : { taskId: e.taskId }),
+              ...(e.sessionId === undefined ? {} : { sessionId: e.sessionId }),
+              at: e.at,
+              ...(e.settledAt === undefined ? {} : { settledAt: e.settledAt }),
+              ...(e.settledPid === undefined ? {} : { settledPid: e.settledPid }),
+            })),
+            add: (entry: { title: string; reason?: string; taskId?: string; sessionId?: string }) => queueRestart(repoRoot(), entry),
+            close: (id: string) => closeRestartEntry(repoRoot(), id, { by: "super" }),
           },
  // 计划性重启(仅 main.ts allowSelfRestart):审计落 journal → 延迟 6s 退出
  // (让本轮回复先送达面板)→ 看门狗探测到端口空缺自动拉起新进程(15-30s)。
@@ -916,6 +1072,21 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
   const superChannel = superDeps && superSoul
     ? new SuperAgentChannel(superDeps, superSoul, { activity: superActivity, broadcast: (m) => broadcastRaw(m) })
     : undefined;
+ // super 派发任务的审批自决装配(授权请求发给 super,不再逐一打扰用户)。
+ // - askSuper:排队跑一轮 super(忙时排队),permission_decide 工具结算;
+ // - escalate:超时/未决/异常升级转用户 —— summary 标「super 未决」,noSuper 防递归;
+ // - notify:super.notice 广播(指挥台可见);journal 留痕在 router 内落。
+  if (superChannel) {
+    const router = new SuperApprovalRouter({
+      journal,
+      askSuper: (input, onDelivered) => superChannel.requestPermissionDecision(input, onDelivered),
+      escalate: (input) => permissionBroker.ask({ ...input, summary: `[super 未决] ${input.summary}`, noSuper: true }),
+      notify: (text, extra) => broadcastRaw({ v: 1, type: "super.notice", text, ...(extra ?? {}) }),
+      ...(process.env.GENIE_SUPER_APPROVAL_TIMEOUT_MS ? { timeoutMs: superApprovalTimeoutMs() } : {}),
+    });
+    superApprovalRouter = router;
+    permissionBroker.superRouter = router;
+  }
   if (superDeps) superDeps.onStream = (ev) => streamRelay.push("super", ev); // :Super 轮次流式(与 coding 轨同款)
   if (superChannel) taskManager.onChange((t) => superChannel.onTaskChanged(t));
   askUserRouter.onAsk = (p) => superChannel?.relayAsk(p);
@@ -994,7 +1165,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       projects, // P0:项目表快照注入(worker resolveWorkdir 与网关同源)
       // P0:goal 续跑网关统一发起(worker 内已禁本地 submit——网关不可见+退出截杀);
       // 与进程内同参(tm/journal/llm),提交后续跑任务走正常队列→新 worker fork。
- // 带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
+ // :带上该任务开工时的目标修订号(无快照/无目标=不传,保持旧行为)。
       onTaskDone: (task) => {
         const rev = goalRevisionAtTaskStart.get(task.id) ?? null;
         goalRevisionAtTaskStart.delete(task.id);
@@ -1015,7 +1186,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         workerHost.cancelTask(task.id);
       } else if (task.state === "running") {
         ranTasks.add(task.id);
- // 开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
+ // :开工快照目标修订号(每任务一次;无目标/读失败=null=终态不校验)。readSession 走会话索引切片。
         if (!goalRevisionAtTaskStart.has(task.id)) {
           try {
             goalRevisionAtTaskStart.set(task.id, readGoalFromJournal(journal.readSession(task.sessionId), task.sessionId)?.revision ?? null);
@@ -1033,7 +1204,7 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
       opts.browserConfig ?? (opts.config ? browserCfgFrom(opts.config) : undefined),
       streamRelay.push, memoryWiring, opts.auxLlm, opts.config as { agent?: { maxSteps?: number; compactThresholdTokens?: number; verifyOnStop?: string }; coding?: { lsp?: import("@lampgenie/lsp").LspSettings; llm?: { vision?: boolean }; vlm?: { baseUrl?: string; providerId?: string; model?: string; apiKeyEnv?: string } } } | undefined, opts.contextWindow,
       // per-session 主模型覆盖面(白板「per-session 主模型」):有 store+config 才注入;缺省=undefined(共享 llm 现状零变化)。
-      opts.sessionModels && opts.config ? createSessionModelFace(opts.config as unknown as Config, repoRoot(), opts.sessionModels) : undefined,
+      opts.sessionModels && opts.config ? (sessionModelFace ?? createSessionModelFace(opts.config as unknown as Config, repoRoot(), opts.sessionModels)) : undefined,
  // 会话工作所有权:envelopeDeps 未由 app 注入(undefined),末位传注册表。
       undefined, ownerRegistry);
   } else if (opts.executor) {
@@ -1170,7 +1341,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
               const beforeKnobs = presetKnobsOf(presetBefore);
               const appliedPreset = applyPreset(
                 { preset: presetBefore, sandbox: beforeKnobs.sandbox, approval: beforeKnobs.approval, mode: permissionMode() },
-                presetPatchRaw);
+                presetPatchRaw,
+              );
               setPermissionMode(appliedPreset.mode);
               setCurrentPresetName(appliedPreset.preset);
               if (appliedPreset.applied.length > 0 || appliedPreset.preset !== presetBefore) {
@@ -1215,6 +1387,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
             return opts.onSecretSet(name, value);
           },
           secretKeys: () => (opts.listSecrets ? opts.listSecrets() : []),
+ // 末4位(cfg.secret.status 回包 •••• 掩码;只回末4,完整值永不出服务端)。
+          secretLast4: (name: string) => (opts.secretLast4 ? opts.secretLast4(name) : null),
         };
       })()
     : undefined;
@@ -1348,8 +1522,8 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
         ...(opts.llm ? { superAgent: {
  // 指挥台后端装配——turn/history/inbox/asr/onActivity(契约 §5)。
           // 用户轮次走 channel 串行队列(与播报/转述轮互斥,防答复与转述并发互相看不见)。
-          turn: (text: string) =>
-            (superChannel ?? { turn: async (t: string) => (await runSuperAgentTurn(superDeps!, t, superSoul!)).text }).turn(text),
+          turn: (text: string, attachments?: { name: string; path: string; mime?: string; size?: number }[]) =>
+            (superChannel ?? { turn: async (t: string, a?: { name: string; path: string; mime?: string; size?: number }[]) => (await runSuperAgentTurn(superDeps!, t, superSoul!, { attachments: a })).text }).turn(text, attachments),
  // 历史过滤:固定 super 会话 + 旧按天日卷 super:YYYYMMDD + companion: 旧数据
  // (都不迁移、不重写,journal 连续可读;面板按 sessionId 分隔展示)。
           history: (sinceSeq?: number) => journal.readAll(sinceSeq ?? 0)
@@ -1453,10 +1627,10 @@ export function createGatewayApp(opts: GatewayAppOptions): GatewayApp {
     if (Number.isFinite(arMinutes) && arMinutes > 0) {
       const resumed = taskManager.autoResumeInterrupted({
         windowMs: arMinutes * 60_000,
- // 有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
+ // :有用户停止标记的会话不再自动续跑(冷恢复已把它们收编为 cancelled;这里再兜一层,
         // 覆盖「上次重启已收编 interrupted、之后才出现停止标记」的历史任务)。
         blocked: (t) => (userStoppedAt.get(t.sessionId) ?? -1) >= t.createdAt,
- // 修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
+ // :修复落在 buildInstruction 体内——resumeInterrupted 的幂等早返回路径不会执行它,
         // 重复续跑不会重复扫尾(applyTailRepair 本身也幂等,二次全 0)。
         buildInstruction: (t) => {
           const repairNote = repairTailBeforeResume(journal, t.sessionId);

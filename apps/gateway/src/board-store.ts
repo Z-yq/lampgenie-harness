@@ -142,7 +142,8 @@ export async function withBoardLock<T>(
   root: string,
   sessionId: string,
   taskId: string,
-  fn: () => Promise<T> | T): Promise<T> {
+  fn: () => Promise<T> | T,
+): Promise<T> {
   const key = boardPath(root, sessionId, taskId);
   const run = (): Promise<T> => Promise.resolve().then(fn);
   const prev = boardWriteChains.get(key);
@@ -446,7 +447,8 @@ export interface SaveBoardOpts {
  * P0 落板门(composition 免)→ done 门(P0 覆盖率)→ label 限长门;通过即赋 doc.updatedAt(落盘前)。 */
 function validateBoardInput(
   input: unknown,
-  opts: SaveBoardOpts): { ok: true; doc: BoardDoc; corrections: string[] } | { ok: false; reason: string } {
+  opts: SaveBoardOpts,
+): { ok: true; doc: BoardDoc; corrections: string[] } | { ok: false; reason: string } {
   // 自愈(只对 agent 写入面):kind 校正 + label 截断,替代「整板拒收」。
   // 人经 board.save 改板不传 agentWrite=保持严格校验(UI 只会发合法枚举,收紧才能暴露真 bug)。
   const normalized = opts.agentWrite
@@ -966,7 +968,8 @@ export function resolveLinkState(fileText: string | null, ref: SymbolRef, indexH
 export function resolveBoardLinks(
   root: string,
   doc: BoardDoc,
-  indexHas: (name: string) => boolean | null): BoardLinkState[] {
+  indexHas: (name: string) => boolean | null,
+): BoardLinkState[] {
   const links: BoardLinkState[] = [];
   const fileCache = new Map<string, string | null>();
   for (const n of doc.nodes) {
@@ -1010,7 +1013,8 @@ export function resolveBoardLinks(
 // sync-legacy:异步变体 resolveTargetPathsAsync 已就绪;本同步版供既有测试/冷路径使用,勿在新代码调用。
 export function resolveTargetPaths(
   root: string,
-  doc: BoardDoc): Array<{ nodeId: string; target: string; state: "missing" | "outside" }> {
+  doc: BoardDoc,
+): Array<{ nodeId: string; target: string; state: "missing" | "outside" }> {
   const out: Array<{ nodeId: string; target: string; state: "missing" | "outside" }> = [];
   const resolveRoot = doc.root ?? root;
   for (const n of doc.nodes) {
@@ -1300,7 +1304,8 @@ export async function deleteOverlayAsync(root: string, sessionId: string, taskId
 export async function resolveBoardLinksAsync(
   root: string,
   doc: BoardDoc,
-  indexHas: (name: string) => boolean | null): Promise<BoardLinkState[]> {
+  indexHas: (name: string) => boolean | null,
+): Promise<BoardLinkState[]> {
   const links: BoardLinkState[] = [];
   const fileCache = new Map<string, string | null>();
   for (const n of doc.nodes) {
@@ -1340,7 +1345,8 @@ export async function resolveBoardLinksAsync(
 /** resolveTargetPaths 的异步同构:outside/missing 判定与 `#` 锚口径不变,fs 换 fsp。 */
 export async function resolveTargetPathsAsync(
   root: string,
-  doc: BoardDoc): Promise<Array<{ nodeId: string; target: string; state: "missing" | "outside" }>> {
+  doc: BoardDoc,
+): Promise<Array<{ nodeId: string; target: string; state: "missing" | "outside" }>> {
   const out: Array<{ nodeId: string; target: string; state: "missing" | "outside" }> = [];
   const resolveRoot = doc.root ?? root;
   for (const n of doc.nodes) {

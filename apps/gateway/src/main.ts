@@ -3,7 +3,7 @@
  * 生产入口:配置经多层合并(default < ~/.lampgenie-harness/config.json < genie.config.json < env GENIE_*)
  * 构造 executor 与 LLM;面板 HTTP+WS 同端口。验收入口 = 本文件(不是测试装配)。
  */
-import { loadConfig, writeProjectConfig, applyConfigPatch, resolveTrackApiKey, resolveCodingModelRoute, modelMetaOf, setSecretValue, listSecretKeys, FileJournal, type Config } from "@lampgenie/core";
+import { loadConfig, writeProjectConfig, applyConfigPatch, resolveTrackApiKey, resolveCodingModelRoute, modelMetaOf, setSecretValue, listSecretKeys, secretLast4Of, FileJournal, type Config } from "@lampgenie/core";
 import { createGatewayApp, type GatewayApp } from "./app.js";
 import { servePanel } from "./panel.js";
 import { buildExecutorFromConfig, buildModelProviders, buildAudioChatFromConfig, buildLlmFromConfig } from "./factory.js";
@@ -460,6 +460,8 @@ const app: GatewayApp = createGatewayApp({
  // 预设一键接入——Key 只写 .genie/secrets.json(0600),不进配置/日志/回包。
   onSecretSet: (name: string, value: string) => setSecretValue(root, name, value),
   listSecrets: () => listSecretKeys(root),
+ // 密钥末4位(设置页 •••• 掩码;只回末4,完整值永不出服务端)。
+  secretLast4: (name: string) => secretLast4Of(root, name),
  // Super 的 sys_restart 计划性重启(生产入口才启用;测试/嵌入不传=未接线)。
   allowSelfRestart: true,
  // super agent 对话模型 = coding 主任务模型(companionLlm/companionTrack 已删除,

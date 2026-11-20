@@ -31,11 +31,12 @@ function payload(over: Partial<InjectionPayload> = {}): InjectionPayload {
 }
 
 describe("契约面", () => {
-  it("版本与稳定码数量", () => {
+  it("版本与稳定码数量(§14.2② 新增 AUTO_REJECTED)", () => {
     expect(RSI_INJECTION_VERSION).toBe(1);
-    expect(INJ_CODES.length).toBe(12);
+    expect(INJ_CODES.length).toBe(13);
     expect(INJ_CODES[0]).toBe("INJ_SOURCE_MISSING");
-    expect(INJ_CODES[11]).toBe("INJ_TEXT_EMPTY");
+    expect(INJ_CODES[8]).toBe("INJ_HIGH_RISK_AUTO_REJECTED");
+    expect(INJ_CODES[12]).toBe("INJ_TEXT_EMPTY");
   });
 
   it("缺省策略字面", () => {
@@ -273,16 +274,16 @@ describe("④ 控制标签转义", () => {
 });
 
 describe("⑤ 高风险四类", () => {
-  it("command $( … ) 无 approver → 两码", () => {
+  it("command $( … ) 无 approver → 两码(自动拒)", () => {
     const res = evaluateInjection(payload({ text: "执行 $(whoami)" }));
-    expect(res.codes).toEqual(["INJ_HIGH_RISK_NEEDS_APPROVAL", "INJ_APPROVAL_MISSING"]);
+    expect(res.codes).toEqual(["INJ_HIGH_RISK_AUTO_REJECTED", "INJ_APPROVAL_MISSING"]);
     expect(res.ok).toBe(false);
     expect(res.riskFlags).toEqual([{ kind: "command", match: "$(" }]);
   });
 
-  it("command && 与 agent approver → 仅 NEEDS", () => {
+  it("command && 与 agent approver → 仅自动拒", () => {
     const res = evaluateInjection(payload({ text: "a && b" }), DEFAULT_INJECTION_POLICY, { approver: agent });
-    expect(res.codes).toEqual(["INJ_HIGH_RISK_NEEDS_APPROVAL"]);
+    expect(res.codes).toEqual(["INJ_HIGH_RISK_AUTO_REJECTED"]);
     expect(res.riskFlags).toEqual([{ kind: "command", match: "&&" }]);
   });
 
@@ -306,7 +307,7 @@ describe("⑤ 高风险四类", () => {
 
   it("path 绝对路径 /etc/passwd", () => {
     const res = evaluateInjection(payload({ text: "读取 /etc/passwd" }));
-    expect(res.codes).toEqual(["INJ_HIGH_RISK_NEEDS_APPROVAL", "INJ_APPROVAL_MISSING"]);
+    expect(res.codes).toEqual(["INJ_HIGH_RISK_AUTO_REJECTED", "INJ_APPROVAL_MISSING"]);
     expect(res.riskFlags).toEqual([{ kind: "path", match: "/etc/passwd" }]);
   });
 
@@ -361,7 +362,7 @@ describe("⑤ 高风险四类", () => {
     expect(clean.codes).toEqual([]);
   });
 
-  it("requireHumanForHighRisk=false 时不要求批准", () => {
+  it("requireHumanForHighRisk=false 时高风险放行(不自动拒)", () => {
     const res = evaluateInjection(payload({ text: "/etc/hosts" }), {
       ...DEFAULT_INJECTION_POLICY,
       requireHumanForHighRisk: false,

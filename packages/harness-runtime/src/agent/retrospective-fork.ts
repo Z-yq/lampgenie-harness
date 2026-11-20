@@ -245,7 +245,8 @@ function skipped(code: RetroCode | undefined, reason: string): RetroDecision {
 export function shouldTrigger(
   state: RetroState,
   event: RetroEvent,
-  policy: RetroPolicy = DEFAULT_RETRO_POLICY): RetroDecision {
+  policy: RetroPolicy = DEFAULT_RETRO_POLICY,
+): RetroDecision {
   if (!isValidState(state) || !isValidEvent(event)) return skipped(RETRO_CODES.INVALID, "invalid-state-or-event");
   const normalized = normalizePolicy(policy);
   if (normalized === null) return skipped(RETRO_CODES.INVALID, "invalid-policy");

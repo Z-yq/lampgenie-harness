@@ -351,7 +351,10 @@ export function recordDeadEnd(
   input: RecordDeadEndInput,
   opts: { now?: number; existing?: DeadEndRecord[] } = {},
 ): RecordDeadEndResult {
-  const safe = asObject<RecordDeadEndInput>(input);
+ // 优化(机制注意「--expire 永不生效」):无显式 expiresAt 时给缺省 180 天
+  const safe0 = asObject<RecordDeadEndInput>(input);
+  if (safe0.expiresAt === undefined) safe0.expiresAt = (opts.now ?? Date.now()) + 180 * 24 * 3600 * 1000;
+  const safe = safe0;
   const plan = collapseText(safe.plan);
   if (!normalizePlan(plan)) return { ok: false, codes: [NEGKB_INVALID] };
 

@@ -206,7 +206,9 @@ describe("recordDeadEnd 记账", () => {
     const plain = recordDeadEnd({ plan: "fix auth", failureEvidence: [ev()] }, { now: T0 }).record as DeadEndRecord;
     expect(plain.invalidWhen).toBeUndefined();
     expect(plain.alternative).toBeUndefined();
-    expect(plain.expiresAt).toBeUndefined();
+ // 优化:无显式 expiresAt 时给缺省 180 天
+    expect(plain.expiresAt).toBeDefined();
+    expect(plain.expiresAt! - T0).toBe(180 * 24 * 3600 * 1000);
 
     const rich = recordDeadEnd(
       {

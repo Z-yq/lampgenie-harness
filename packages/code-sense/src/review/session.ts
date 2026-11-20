@@ -235,7 +235,8 @@ export function compareFindings(
   before: Finding[],
   after: Finding[],
   older: Finding[][] = [],
-  readFile?: (file: string) => string | null): Omit<SessionCompare, "baseline" | "current"> {
+  readFile?: (file: string) => string | null,
+): Omit<SessionCompare, "baseline" | "current"> {
   const id = (f: Finding): string => findingIdentity(f, readFile);
   // 复现判定用宽松键(file|内容指纹,不含规则位):同一问题跨会话措辞/规则名可变,
   // 内容再现即复现(D3 约定);严格键只用于 before↔after 配对(规则+内容都同才算未变)。

@@ -92,7 +92,8 @@ function safeCheck(fn: (call: ToolCallLike) => boolean, call: ToolCallLike): boo
  */
 export function planToolBatch(
   calls: readonly ToolCallLike[],
-  opts: BatchPlanOptions): BatchPlan {
+  opts: BatchPlanOptions,
+): BatchPlan {
   const segments: BatchSegment[] = [];
   let parallelCalls: ToolCallLike[] | null = null;
   let parallelPaths = new Set<string>();

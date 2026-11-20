@@ -16,10 +16,10 @@ import { appendFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 /** 分析窗口:近 3 日。 */
-export const RSI_ANALYSIS_WINDOW_MS = 3 * 24 * 3600 * 1000;
+export const RSI_ANALYSIS_WINDOW_MS = 14 * 24 * 3600 * 1000; // 3→14 日窗
 
 /** 单次运行最多带多少个候选(有界,避免一次派单读几十个会话)。 */
-export const RSI_ANALYSIS_MAX_CANDIDATES = 12;
+export const RSI_ANALYSIS_MAX_CANDIDATES = 30; // :12→30(100 全量会压垮机制注意力,30 深度优先;确定性管线覆盖全量)
 
 /** RSI 自身固定会话 id(与 rsi-agent-runner 的 RSI_SESSION_ID 同值;本模块不 import 它,避免环)。 */
 export const RSI_SELF_SESSION_ID = "rsi";
@@ -44,7 +44,8 @@ interface SessionFileInfo {
 export async function listRecentSessions(
   journalDir: string,
   nowMs: number,
-  windowMs: number = RSI_ANALYSIS_WINDOW_MS): Promise<RsiRecentSession[]> {
+  windowMs: number = RSI_ANALYSIS_WINDOW_MS,
+): Promise<RsiRecentSession[]> {
   const dir = typeof journalDir === "string" ? journalDir.trim() : "";
   if (dir === "") return [];
   const now = typeof nowMs === "number" && Number.isFinite(nowMs) ? nowMs : Date.now();

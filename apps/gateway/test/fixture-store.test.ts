@@ -54,7 +54,8 @@ function seed(root: string, name: string, expected: ExpectedRequest[], entries: 
         updatedAt: "2026-11-10T00:00:00.000Z",
       },
       null,
-      2)}\n`,
+      2,
+    )}\n`,
     "utf8",
   );
 }

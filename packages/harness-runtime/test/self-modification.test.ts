@@ -114,7 +114,8 @@ describe("六件套:六类 surface 全覆盖", () => {
 
   it("code surface 只给 impact.scanRef → 通过;impact.files 为空数组时仍按缺省算", () => {
     expect(
-      evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { scanRef: "code-sense:x" } })).codes).toEqual([]);
+      evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { scanRef: "code-sense:x" } })).codes,
+    ).toEqual([]);
     expect(evaluateSelfModification(baseRequest({ surface: "code", rollback: { kind: "flag", ref: "f" }, impact: { files: [] } })).codes).toEqual([
       "MOD_IMPACT_MISSING",
     ]);
@@ -253,10 +254,26 @@ describe("结构性 deny", () => {
 });
 
 describe("审批矩阵", () => {
-  it("rsi 作者 + 无 approver → MOD_RSI_NEEDS_HUMAN,need-approval", () => {
+  it("rsi 作者 + 无 approver → 可逆零风险走机器闸 allow(§14.2④)", () => {
     const ev = evalu({ author: { kind: "rsi", id: "rsi-1" } });
-    expect(ev.codes).toEqual(["MOD_RSI_NEEDS_HUMAN"]);
+    expect(ev.codes).toEqual([]);
+    expect(ev.decision).toBe("allow");
+  });
+
+  it("rsi 作者 + 不可逆 + 无 approver → RSI_NEEDS_HUMAN + IRREVERSIBLE(照旧人批)", () => {
+    const ev = evalu({ author: { kind: "rsi", id: "rsi-1" }, irreversible: true });
+    expect(ev.codes).toContain("MOD_RSI_NEEDS_HUMAN");
+    expect(ev.codes).toContain("MOD_IRREVERSIBLE_NEEDS_HUMAN");
     expect(ev.decision).toBe("need-approval");
+  });
+
+  it("rsi 作者 + 可逆 + approver=rsi-auto-gate → allow(机器闸档)", () => {
+    const ev = evalu({
+      author: { kind: "rsi", id: "rsi-1" },
+      approver: { kind: "agent", id: "rsi-auto-gate", at: 1 },
+    });
+    expect(ev.codes).toEqual([]);
+    expect(ev.decision).toBe("allow");
   });
 
   it("rsi 作者 + approver.kind=owner → AGENT_APPROVAL_FORBIDDEN + RSI_NEEDS_HUMAN,need-approval", () => {
@@ -333,29 +350,29 @@ describe("审批矩阵", () => {
     expect(evaluateSelfModification(baseRequest()).decision).toBe("allow");
   });
 
-  it("approver.id 为空 = 未提供审批(按缺失路径判)", () => {
+  it("approver.id 为空 = 未提供审批(可逆零风险 rsi → 机器闸 allow)", () => {
     const ev = evalu({ author: { kind: "rsi", id: "rsi-1" }, approver: { kind: "human", id: "  " } });
-    expect(ev.codes).toEqual(["MOD_RSI_NEEDS_HUMAN"]);
-    expect(ev.decision).toBe("need-approval");
+    expect(ev.codes).toEqual([]);
+    expect(ev.decision).toBe("allow");
   });
 });
 
 describe("结论优先级与码序", () => {
-  it("同时缺 evidence 与缺审批 → deny(结构性优先)", () => {
+  it("同时缺 evidence 与缺审批 → deny(结构性优先;可逆 rsi 走机器闸无审批码)", () => {
     const ev = evalu({ surface: "tool", evidence: {}, author: { kind: "rsi", id: "rsi-1" } });
     expect(ev.decision).toBe("deny");
     expect(ev.codes).toContain("MOD_EVIDENCE_MISSING");
-    expect(ev.codes).toContain("MOD_RSI_NEEDS_HUMAN");
+    expect(ev.codes).not.toContain("MOD_RSI_NEEDS_HUMAN");
   });
 
-  it("只有审批类问题 → need-approval", () => {
-    const ev = evalu({ author: { kind: "rsi", id: "rsi-1" } });
+  it("只有审批类问题 → need-approval(不可逆 rsi 仍需人批)", () => {
+    const ev = evalu({ author: { kind: "rsi", id: "rsi-1" }, irreversible: true });
     expect(ev.decision).toBe("need-approval");
   });
 
   it("codes 顺序恒按 SELF_MOD_CODES 声明序(非发现序)", () => {
-    const ev = evalu({ surface: "code", rollback: { kind: "commit", ref: "abc" }, evidence: {}, impact: {}, author: { kind: "rsi", id: "rsi-1" } });
-    expect(ev.codes).toEqual(["MOD_EVIDENCE_MISSING", "MOD_IMPACT_MISSING", "MOD_RSI_NEEDS_HUMAN"]);
+    const ev = evalu({ surface: "code", rollback: { kind: "commit", ref: "abc" }, evidence: {}, impact: {}, author: { kind: "rsi", id: "rsi-1" }, irreversible: true });
+    expect(ev.codes).toEqual(["MOD_EVIDENCE_MISSING", "MOD_IMPACT_MISSING", "MOD_RSI_NEEDS_HUMAN", "MOD_IRREVERSIBLE_NEEDS_HUMAN"]);
     const idx = ev.codes.map((code) => SELF_MOD_CODES.indexOf(code));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(ev.decision).toBe("deny");
@@ -434,7 +451,8 @@ describe("冻结 canonical hash", () => {
       riskFlags: [] as string[],
     };
     expect(freezeSelfModification(swapped as ModificationRequest).hash).not.toBe(
-      freezeSelfModification(swapped2 as ModificationRequest).hash);
+      freezeSelfModification(swapped2 as ModificationRequest).hash,
+    );
   });
 
   it.each([

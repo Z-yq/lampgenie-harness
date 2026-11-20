@@ -104,7 +104,8 @@ export async function checkOfficeArtifact(
     passed: boolean,
     severity: QaSeverity,
     message: string,
-    remediation: string): void => {
+    remediation: string,
+  ): void => {
     findings.push({ code, name, passed, severity, message, remediation: passed ? "" : remediation });
   };
 
@@ -370,7 +371,8 @@ export async function checkOfficeArtifact(
 
 /** 取 xlsx 包里的 worksheet 与 chart XML(部件路径 → 文本);不做 file→sheet 名映射以免猜错。 */
 async function collectXlsxParts(
-  zip: JSZip): Promise<{ sheets: Record<string, string>; charts: Record<string, string> }> {
+  zip: JSZip,
+): Promise<{ sheets: Record<string, string>; charts: Record<string, string> }> {
   const sheets: Record<string, string> = {};
   const charts: Record<string, string> = {};
   for (const name of Object.keys(zip.files)) {

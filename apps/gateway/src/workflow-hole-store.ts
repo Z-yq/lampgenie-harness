@@ -66,23 +66,10 @@ interface HoleRuntime {
   roughCompileCheck(source: string): { ok: boolean; reason?: string };
 }
 
-let holeRuntime: HoleRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_workflow_hole from "@lampgenie/runtime/agent/workflow-hole";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadHoleRuntime(): Promise<HoleRuntime> {
-  if (holeRuntime) return holeRuntime;
-  const spec = "@lampgenie/runtime/agent/workflow-hole";
-  try {
-    holeRuntime = (await import(spec)) as HoleRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/workflow-hole.ts", import.meta.url).href;
-    holeRuntime = (await import(srcUrl)) as HoleRuntime;
-  }
-  return holeRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadHoleRuntime();
+const rt: HoleRuntime = rt_workflow_hole;
 
 /** 状态文件路径:`<root>/.genie/rsi/holes.json`。 */
 export function holesPath(root: string): string {

@@ -45,7 +45,8 @@ async function loadGuard(): Promise<GuardModule> {
   if (guardModule) return guardModule;
   const srcUrl = new URL(
     "../../../packages/harness-runtime/src/agent/rsi-injection-guard.ts",
-    import.meta.url).href;
+    import.meta.url,
+  ).href;
   guardModule = (await import(srcUrl)) as GuardModule;
   return guardModule;
 }
@@ -65,8 +66,8 @@ export type InjStoreCode = (typeof INJ_STORE_CODES)[number];
 export const INJECTION_LINE_TYPES = ["evaluate", "approve", "blacklist"] as const;
 export type InjectionLineType = (typeof INJECTION_LINE_TYPES)[number];
 
-/** 「高风险需要批准」的码;pendingApproval 投影以此为准。 */
-const HIGH_RISK_CODES: ReadonlySet<string> = new Set(["INJ_HIGH_RISK_NEEDS_APPROVAL", "INJ_APPROVAL_MISSING"]);
+/** 「高风险需要批准/已自动拒」的码;pendingApproval 投影以此为准(§14.2②:新码=自动拒,旧码兼容历史台账)。 */
+const HIGH_RISK_CODES: ReadonlySet<string> = new Set(["INJ_HIGH_RISK_NEEDS_APPROVAL", "INJ_HIGH_RISK_AUTO_REJECTED", "INJ_APPROVAL_MISSING"]);
 
 export interface InjectionPaths {
   dir: string;
@@ -265,7 +266,8 @@ export interface LedgerApproval {
 function findHumanApproval(
   lines: InjectionAuditLine[],
   sourceId: string,
-  textHash: string): LedgerApproval | undefined {
+  textHash: string,
+): LedgerApproval | undefined {
   if (!sourceId || !textHash) return undefined;
   for (let i = lines.length - 1; i >= 0; i--) {
     const row = lines[i]!;
@@ -276,7 +278,8 @@ function findHumanApproval(
         l.id === row.id &&
         l.kind === "human" &&
         typeof l.by === "string" &&
-        l.by.trim().length > 0);
+        l.by.trim().length > 0,
+    );
     if (approval) return { auditId: row.id, by: (approval.by as string).trim() };
   }
   return undefined;
@@ -352,6 +355,50 @@ export interface ApproveInput {
   kind: "human" | "agent";
 }
 
+/**
+ * (S1 种子·生产接线):canary tip 通道的过闸辅助。
+ * 设计稿 §4.3/§13-K:任何 RSI 产物文本进 tip/tool-description/doc/prompt 通道前必须过
+ * evaluateInjection 防护闸(12 稳定码全收集、台账只落 sha256 不落原文)。此前 repeated-reads
+ * tip 在 file-tools 内联拼接、不过闸(guardInjection 长期只有测试在调——「台账干净≠防护生效」)。
+ * 用法:file-tools 在拼 tip 前调用——返回空串=闸拒或 IO 失败(fail-closed 不注入,
+ * 见 injection.jsonl 红灯可审计);非空=过闸 sanitizedText(控制标签已转义、带 RSI 非权威前缀)。
+ * 模板 whitelist 在调用点显式给(policy 全量对象,不依赖 runtime 缺省值——两侧漂移会显式爆)。
+ */
+export async function rsiCanaryTipFor(
+  root: string,
+  sessionId: string,
+  skips: number,
+): Promise<string> {
+  const text =
+    "本会话已多次重读未变文件——动手前先 grep/code_sense 定位、复用上文窗口,别再整读;" +
+    "确需原文用 offset/limit 窄窗或 force=true。";
+  try {
+    const res = await guardInjection(
+      root,
+      {
+        source: { kind: "rsi", id: `repeated-reads:${sessionId}`, authoritative: false },
+        channel: "tip",
+        origin: "template",
+        templateId: "repeated-reads-tip",
+        text,
+        evidenceRefs: [`rsi.tip.skips=${skips}`],
+      },
+      {
+        policy: {
+          templateWhitelist: ["repeated-reads-tip"],
+          maxChars: 4000,
+          requireHumanForHighRisk: true,
+          allowTraceOriginChannels: [],
+        },
+      },
+    );
+    if (!res.ok) return "";
+    return res.sanitizedText ?? "";
+  } catch {
+    return ""; // fail-closed:闸不可用=不注入
+  }
+}
+
 export interface StoreActionResult {
   ok: boolean;
   code?: string;
@@ -366,7 +413,8 @@ export interface StoreActionResult {
 export async function approveInjection(
   root: string,
   auditId: string,
-  input: ApproveInput): Promise<StoreActionResult> {
+  input: ApproveInput,
+): Promise<StoreActionResult> {
   assertRoot(root);
   if (typeof auditId !== "string" || !auditId.trim()) throw new TypeError("auditId 必填");
   if (typeof input !== "object" || input === null) throw new TypeError("input 必填");
@@ -409,7 +457,8 @@ export interface BlacklistInput {
 export async function blacklistSource(
   root: string,
   sourceId: string,
-  input: BlacklistInput): Promise<StoreActionResult> {
+  input: BlacklistInput,
+): Promise<StoreActionResult> {
   assertRoot(root);
   if (typeof sourceId !== "string" || !sourceId.trim()) throw new TypeError("sourceId 必填");
   if (typeof input !== "object" || input === null) throw new TypeError("input 必填");

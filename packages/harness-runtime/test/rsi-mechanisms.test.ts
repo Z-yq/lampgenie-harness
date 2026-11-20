@@ -152,6 +152,28 @@ describe("buildAgentBrief", () => {
     for (const status of RSI_RESULT_STATUSES) expect(brief).toContain(status);
   });
 
+  it("P0-4(2026-11-17): 带 writeChannels 的机制渲染白名单写通道+红线 #3 放宽;无通道机制保持原红线", () => {
+ // negativeKb:白名单段在场,红线 #3 只放宽「台账写入」维度(源码/配置仍禁)
+    expect(brief).toContain("白名单写通道");
+    expect(brief).toContain("scripts/negative-kb.mts --root <root> --record");
+    expect(brief).toContain("台账写入**只**允许「白名单写通道」");
+    expect(brief).not.toContain("不得修改任何源码、配置与既有台账");
+ // 无通道机制(evidence):原红线逐字保留,不含白名单段
+    const readonlyBrief = buildAgentBrief({ id: "evidence", root: ROOT, resultPath: "x.result.json" });
+    expect(readonlyBrief).toContain("不得修改任何源码、配置与既有台账");
+    expect(readonlyBrief).not.toContain("白名单写通道");
+  });
+
+  it("P1(2026-11-17) 机制税分层:intervalDays 三档齐(审计周级 7 / 轨迹语义 3 天级 / prompts 30)", () => {
+    const weekly = RSI_MECHANISM_IDS.filter((id) => RSI_MECHANISMS[id].intervalDays === 7);
+    const triDaily = RSI_MECHANISM_IDS.filter((id) => RSI_MECHANISMS[id].intervalDays === 3);
+    expect(new Set(weekly)).toEqual(new Set(["nightly", "evidence", "experiments", "cost", "injection", "tools", "changeRequests", "cohort"]));
+    expect(new Set(triDaily)).toEqual(new Set(["negativeKb", "atlas", "pathology"]));
+    expect(RSI_MECHANISMS.prompts.intervalDays).toBe(30);
+ // 全部 12 机制都有显式值(缺省 1 的兜底不用于生产分层)
+    for (const id of RSI_MECHANISM_IDS) expect(RSI_MECHANISMS[id].intervalDays, id).toBeDefined();
+  });
+
   it("root 尾斜杠被剥掉,不拼出双斜杠", () => {
     const withSlash = buildAgentBrief({ id: "cost", root: `${ROOT}/`, resultPath: "x.result.json" });
     expect(withSlash).toContain(`${ROOT}/.genie/rsi/cost.jsonl`);

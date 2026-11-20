@@ -202,7 +202,8 @@ export function subtractBaseline(
   baseline: DiagnosticItem[],
   current: DiagnosticItem[],
   baselineText?: string,
-  currentText?: string): DiagnosticItem[] {
+  currentText?: string,
+): DiagnosticItem[] {
   if (baseline.length === 0) return current;
   const map = makeLineMapper(baselineText, currentText);
   const pool = new Map<string, number[]>();

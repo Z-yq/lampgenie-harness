@@ -176,23 +176,10 @@ interface FanoutRuntime {
   clusterToGraphNodes(cluster: FanoutCluster): ClusterToGraphResult;
 }
 
-let fanoutRuntime: FanoutRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_fanout_cluster from "@lampgenie/runtime/agent/fanout-cluster";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadFanoutRuntime(): Promise<FanoutRuntime> {
-  if (fanoutRuntime) return fanoutRuntime;
-  const spec = "@lampgenie/runtime/agent/fanout-cluster";
-  try {
-    fanoutRuntime = (await import(spec)) as FanoutRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/fanout-cluster.ts", import.meta.url).href;
-    fanoutRuntime = (await import(srcUrl)) as FanoutRuntime;
-  }
-  return fanoutRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadFanoutRuntime();
+const rt: FanoutRuntime = rt_fanout_cluster;
 
 /** 同目录证据图持久层面(裸 node strip-types 下相对导入必须带 .ts,故用动态字面量解出两个函数)。 */
 interface EvidenceStoreRuntime {

@@ -144,7 +144,8 @@ export function anchorable(line: string): boolean {
 export async function validateCitation(
   root: string,
   cache: SourceCache,
-  c: WikiCitation): Promise<{ ok: boolean; reason?: string; lineText?: string }> {
+  c: WikiCitation,
+): Promise<{ ok: boolean; reason?: string; lineText?: string }> {
   if (!c.file || !c.file.trim()) return { ok: false, reason: "file 为空" };
   if (!Number.isInteger(c.startLine) || !Number.isInteger(c.endLine)) return { ok: false, reason: "行号非整数" };
   if (c.startLine < 1 || c.endLine < c.startLine) return { ok: false, reason: `行号范围非法 ${c.startLine}-${c.endLine}` };
@@ -397,7 +398,8 @@ export function resolveImport(
   spec: string,
   all: Set<string>,
   workspace: Map<string, string>,
-  goModule: string): string | undefined {
+  goModule: string,
+): string | undefined {
   const ext = extname(fromFile).toLowerCase();
   if (spec.startsWith(".") || spec.startsWith("/")) {
     if (ext === ".py") {

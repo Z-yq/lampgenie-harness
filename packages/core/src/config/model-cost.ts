@@ -111,7 +111,8 @@ export interface ModelBilling {
 export function billingForModel(
   config: Config | undefined,
   model: string,
-  usage: UsageSplit): ModelBilling {
+  usage: UsageSplit,
+): ModelBilling {
   const owner = findModelProvider(config as never, model);
   const authMode = owner?.authMode === "token-plan" ? "token-plan" : "api";
   if (authMode !== "api") return { model, authMode, billed: false, price: null, cost: null };

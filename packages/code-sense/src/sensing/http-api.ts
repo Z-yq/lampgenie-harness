@@ -1053,7 +1053,8 @@ function makePyTextOf(root: string): PyTextOf {
       if (cache.size >= 60) return Promise.resolve(undefined); // 帽:病态 import 扇出防炸
       p = readFile(join(root, rel), "utf-8").then(
         (t) => t,
-        () => undefined);
+        () => undefined,
+      );
       cache.set(rel, p);
     }
     return p;
@@ -1165,7 +1166,8 @@ async function resolveNameFile(
   name: string,
   has: (fileText: string, file: string) => boolean,
   textOf: PyTextOf,
-  depth = 2): Promise<string | undefined> {
+  depth = 2,
+): Promise<string | undefined> {
   for (const c of cands) {
     const t = await textOf(c);
     if (t === undefined) continue;

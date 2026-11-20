@@ -529,14 +529,24 @@ function cvSvgFilterOf() {
   if (!writers.length && !fold) return null;
   return { writers: writers, foldGroups: fold };
 }
-/** svg 模式的增量签名:只由 doc.rev(+板 id)与渲染模式组成——卡片 DOM 那套结构签名与 svg 无关。
+/** 深浅基座(修复 6):sand/olive/plum/ink 等浅色主题下白板画布仍是深底(服务端出图带主题)。
+ * 与 cvSvgRequest 的 theme 判定同源(body 带 light 即 light),保证「请求的那张图」与「签名认的那张图」口径一致。 */
+function cvSvgThemeBase() {
+  try { return String((document.body && document.body.className) || "").indexOf("light") >= 0 ? "light" : "dark"; } catch (e) { return "dark"; }
+}
+/** svg 模式的增量签名:由 doc.rev(+板 id)、渲染模式、深浅基座组成——卡片 DOM 那套结构签名与 svg 无关。
  * 过滤态也进签名:同一 rev 的「全量图」与「只看 a1 的图」是两张不同的图,不区分就会钉死旧图。
- * 无过滤时签名逐字不变(taskId|rev|模式),既有缓存/测试口径不受影响。 */
+ * 主题进签名(cvSvgThemeBase):同一 rev 在 light/dark 下是两张不同的图,不进签名就会切主题后判 keep、
+ * 画布停在旧主题那版(走查注意)。 */
 function cvSvgSig(doc) {
+  let tb = "dark";
+ // 主题基座(修复 6):只有浅色基座才在签名尾追加 |t:light——深色签名逐字不变,
+ // 既有缓存/契约测试口径不受影响;切到浅色主题 → 签名变 → 既有 inject 分支自动重请求 + 重注入。
+  try { tb = typeof cvSvgThemeBase === "function" ? cvSvgThemeBase() : "dark"; } catch (e) { tb = "dark"; }
   const base = (doc && doc.taskId ? doc.taskId : "") + "|" + (doc && doc.rev != null ? doc.rev : "") + "|" + cvRenderMode();
   const flt = cvSvgFilterOf();
-  if (!flt) return base;
-  return base + "|w:" + flt.writers.join(",") + "|f:" + (flt.foldGroups ? "1" : "0");
+  const out = flt ? base + "|w:" + flt.writers.join(",") + "|f:" + (flt.foldGroups ? "1" : "0") : base;
+  return tb === "light" ? out + "|t:light" : out;
 }
 /** "minX minY w h" → {minX,minY,w,h};畸形/非正宽高返回 null(调用方必须能回退)。 */
 function cvVbParse(s) {
@@ -635,20 +645,54 @@ function cvWorldBodyHtml(mode, p) {
  // A1:上一版 svg 在等新图期间继续挂着(data-stale="1" 降透明度),不再把画布清空;
  // data-sig 写的仍是**DOM 里真装着的那一版**(旧 sig),回包后 cvSvgPatchPlan 照样判 inject。
   const staleAttr = p.stale ? ' data-stale="1"' : "";
-  return p.popupMask + '<div class="cv-svg-host" id="cvSvgHost" title="点节点看详情,空白拖拽平移,滚轮缩放"' + sigAttr + staleAttr + ">" + p.svg + "</div>" + p.anchors + p.fold;
+ // 修复(5):svg 还没回来的空壳不再是一片空白——先画「正在出图…」,超时文案由 cvSvgWaitPaint 就地替换。
+  const waitHtml = p.svg ? "" : '<div class="cv-svg-wait">正在出图…</div>';
+  return p.popupMask + '<div class="cv-svg-host" id="cvSvgHost" title="点节点看详情,空白拖拽平移,滚轮缩放"' + sigAttr + staleAttr + ">" + p.svg + waitHtml + "</div>" + p.anchors + p.fold;
 }
-/** 请服务端 flowkit 出图(同签名在途不重复发)。过滤态(写者子集/折叠分组)随请求带给服务端。 */
+/** 请服务端 flowkit 出图(同签名在途不重复发)。过滤态(写者子集/折叠分组)随请求带给服务端。
+ * 修复(5):空白画布不再静默——发请求即画「正在出图…」,6s 未回包 → 可见超时文案 + 自动重发
+ * (带 0.8s 退避,最多 2 次);两次仍无 → 「点刷新手动重试」。绝不把空画布当正常态。 */
+let cvSvgWaitTimer = 0;   // 出图等待兜底定时器(回包/换签名即清)
+const cvSvgRetryN = {};   // 签名 → 已自动重试次数(超时兜底用;回包后清)
+function cvSvgWaitClear() { if (cvSvgWaitTimer) { try { clearTimeout(cvSvgWaitTimer); } catch (e) { /* 忽略 */ } cvSvgWaitTimer = 0; } }
+/** 等待/超时文案就地更新:仅当 #cvSvgHost 里还没有任何一版 svg(有旧图在外面显示时不打扰)。 */
+function cvSvgWaitPaint(msg, bad) {
+  const h = cvHostEl();
+  const hostSvg = h && h.querySelector ? h.querySelector("#cvSvgHost") : null;
+  if (!hostSvg) return;
+  if (hostSvg.getAttribute && hostSvg.getAttribute("data-sig")) return;
+  let el = hostSvg.querySelector ? hostSvg.querySelector(".cv-svg-wait") : null;
+  if (!el) { el = document.createElement("div"); el.className = "cv-svg-wait"; hostSvg.appendChild(el); }
+  try { el.textContent = msg; } catch (e) { /* 忽略 */ }
+  if (bad) { try { el.classList.add("bad"); } catch (e) { /* 忽略 */ } }
+}
 function cvSvgRequest(doc) {
   const sig = cvSvgSig(doc);
   if (cvSvgPending === sig) return;
   cvSvgPending = sig;
   try {
-    const light = !!(document.body && String(document.body.className || "").indexOf("light") >= 0);
+    const light = cvSvgThemeBase() === "light";
     const flt = cvSvgFilterOf();
     const body = { v: 1, type: "board.diagram", sessionId: currentSid, taskId: (doc && doc.taskId) || boardTaskId || "", theme: light ? "light" : "dark" };
     if (flt) body.filter = flt; // 无过滤时请求体不带 filter 字段(保持既有请求形态)
     wsSafeSend(JSON.stringify(body));
-  } catch (e) { cvSvgPending = ""; }
+ // 修复(5):等待态 + 超时兜底(空白画布必须有话说,不许静默)
+    cvSvgWaitClear();
+    cvSvgWaitPaint("正在出图…", false);
+    const waitSig = sig;
+    cvSvgWaitTimer = setTimeout(() => {
+      if (cvSvgPending !== waitSig) return; // 已回包/已换签名
+      const n = cvSvgRetryN[waitSig] || 0;
+      if (n < 2) {
+        cvSvgRetryN[waitSig] = n + 1;
+        cvSvgPending = ""; // 解锁同签名重发(在途守卫)
+        cvSvgWaitPaint("出图超时,已自动重试(" + (n + 1) + "/2)…", true);
+        setTimeout(() => { try { if (doc && cvSvgSig(doc) === waitSig) cvSvgRequest(doc); } catch (e2) { /* 重试失败留给用户点「刷新」 */ } }, 800);
+      } else {
+        cvSvgWaitPaint("出图超时(已自动重试 2 次仍无回包)——点「刷新」手动重试", true);
+      }
+    }, 6000);
+  } catch (e) { cvSvgPending = ""; cvSvgWaitClear(); }
 }
 // 分层自动布局(dagre-lite):按边求最长路径分层,层内竖排;有 pos 的节点尊重 pos(拖拽过的不再自动排);force=全量重排(「整理」)
 function cvLayout(doc, force) {

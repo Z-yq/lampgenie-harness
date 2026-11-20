@@ -34,7 +34,8 @@ function session(
   journalDir: string,
   name: string,
   events: Array<Record<string, unknown>>,
-  ageDays: number): void {
+  ageDays: number,
+): void {
   const file = join(journalDir, "sessions", `${name}.jsonl`);
   const body = events.map((e) => JSON.stringify(e)).join("\n");
   writeFileSync(file, events.length > 0 ? body + "\n" : "", "utf8");
@@ -115,6 +116,25 @@ describe("harvestAtlas(derived 层采集)", () => {
     expect(harvest.reworkSignals[0]).toMatchObject({ buildSession: "ws-build-srs" });
   });
 
+  it("治理:模块已删(知识腐坏)与超期未强化(TTL)的基因不注入", () => {
+    const atlas = {
+      defectGenes: [
+        { defectClass: "contract", module: "src/gone.ts", count: 3, lastAt: new Date(NOW - DAY).toISOString() },
+        { defectClass: "boundary", module: "src/old.ts", count: 2, lastAt: new Date(NOW - 90 * DAY).toISOString() },
+        { defectClass: "concurrency", module: "src/fresh.ts", count: 1, lastAt: new Date(NOW - DAY).toISOString() },
+      ],
+    };
+    const text = "修改 src/gone.ts src/old.ts 与 src/fresh.ts";
+ // TTL 常开(默认时钟即过滤):old(90 天)已滤,剩 gone+fresh
+    expect(matchedDefectGenes(atlas, text)).toHaveLength(2);
+ // 加模块存在性:gone 也滤,只剩 fresh
+    const governed = matchedDefectGenes(atlas, text, {
+      moduleExists: (m) => !m.includes("gone"),
+      now: NOW,
+    });
+    expect(governed.map((g) => g.module)).toEqual(["src/fresh.ts"]);
+  });
+
   it("journal 目录不存在 → 空采集不 throw", () => {
     const harvest = harvestAtlas(join(tmpdir(), "no-such-journal"), "p");
     expect(harvest.themes).toEqual([]);
@@ -186,6 +206,33 @@ describe("renderAtlasStartBrief(开工方向简报)", () => {
     ],
   };
 
+  it("主线带 goalProgress → 方向行显示进度+最近+下一步;任务相似 → 「疑似推进主线」点名登记钩子", () => {
+    const atlas = {
+      projectId: "lampgenie-harness",
+      goals: [{ id: "goal-rsi", title: "RSI 经验编译闭环", status: "active" }],
+      goalProgress: {
+        "goal-rsi": [
+          { at: "2026-11-15T00:00:00.000Z", note: "完成采集与归因切分" },
+          { at: "2026-11-16T00:00:00.000Z", note: "接入注入编排", nextStep: "补度量与纠偏臂" },
+        ],
+      },
+    };
+    const brief = renderAtlasStartBrief(atlas, "继续做 RSI 经验编译闭环的度量");
+    expect(brief).toContain("方向:RSI 经验编译闭环(进度 2 · 最近:接入注入编排;下一步:补度量与纠偏臂)");
+    expect(brief).toContain("本任务疑似推进主线「RSI 经验编译闭环」");
+    expect(brief).toContain("world_model action=goal_progress goalId=goal-rsi");
+ // 无进度轨迹 → 行为与旧版一致(只有标题);任务与主线无关 → 不出「疑似推进」行
+    const plain = renderAtlasStartBrief(atlas, "改 README 文案");
+    expect(plain).toContain("方向:RSI 经验编译闭环(进度 2"); // 进度行仍在
+    expect(plain).not.toContain("疑似推进主线");
+    const noProgress = renderAtlasStartBrief(
+      { goals: [{ id: "g", title: "RSI 经验编译闭环", status: "active" }] },
+      "继续做 RSI 经验编译闭环的度量",
+    );
+    expect(noProgress).toContain("方向:RSI 经验编译闭环\n"); // 无进度 → 只有标题(逐字同旧版)
+  });
+
+ // defectGenes 消费面:任务文本按文件名匹配 module,命中才出行。
   it("任务文本命中模块且快照有该模块基因 → 出「历史缺陷基因」行与提示语", () => {
     const brief = renderAtlasStartBrief(geneAtlas, "改 apps/gateway/src/panel.ts 的切换逻辑");
     expect(brief).toContain("本模块历史缺陷基因");
@@ -345,7 +392,8 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
         edit(join(projRoot, "src", "a.ts"), id),
         edit(join(projRoot, "src", "b.ts"), id),
       ],
-      1);
+      1,
+    );
     const collected = collectWorkSessions(journalDir, {
       includeProjectIds: ["lampgenie-harness"],
       projectRoots: { "lampgenie-harness": projRoot, "other-project": join(root, "proj-b") },
@@ -366,7 +414,8 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
       journalDir,
       id,
       [user("改两处", id), bind("other-project", id), edit(join(projRoot, "src", "a.ts"), id), edit(outside, id)],
-      1);
+      1,
+    );
     const collected = collectWorkSessions(journalDir, {
       includeProjectIds: ["lampgenie-harness"],
       projectRoots: { "lampgenie-harness": projRoot },
@@ -415,7 +464,8 @@ describe("collectWorkSessions(项目归因兜底,2026-11-14)", () => {
       journalDir,
       id,
       [user("改面板", id), bind("other-project", id), edit(join(projRoot, "src", "a.ts"), id)],
-      1);
+      1,
+    );
     const collected = collectWorkSessions(journalDir, {
       includeProjectIds: ["lampgenie-harness"],
       projectRoots: rootsMap,

@@ -51,7 +51,8 @@ const descriptor = (
   lifecycle: ReminderLifecycle,
   order: number,
   providerVisibility: ReminderProviderVisibility,
-  evidenceLabel: string): ReminderDescriptor => Object.freeze({ channel, lifecycle, order, providerVisibility, evidenceLabel });
+  evidenceLabel: string,
+): ReminderDescriptor => Object.freeze({ channel, lifecycle, order, providerVisibility, evidenceLabel });
 
 /**
  * descriptor 表:与来源表**逐项对应**(测试锁死),order 唯一且递增。

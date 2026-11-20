@@ -61,6 +61,14 @@ export interface BreakerPolicy {
   minNegativeStreak: number;
   guardrails: Guardrail[];
   requireHumanRecovery: boolean;
+ /** §14.2③ 观察窗自动试探重启:停改进、不停观察——连续正窗转正自动重启。
+ * 语义:requireHumanRecovery 仍拦 agent resume;观察窗是**观察类动作累计指标自然转正**
+ * 的确定性重启路径(消费方=调度器,判定=evaluateObservationRestart)。 */
+  observationMinPositiveWindows?: number;
+ /** 观察窗长度(天);停摆期按此切窗累计净节省。 */
+  observationWindowDays?: number;
+ /** 自动重启后的频率系数(0.25=频率×0.25,即 everyMinutes×4;再连负再停=指数退避感)。 */
+  restartFactor?: number;
 }
 
 /** 实验决策:adopt 正 / reject、rollback 负 / iterate、pending 中性(无显式 netReturn 时的归一依据)。 */
@@ -160,7 +168,46 @@ type BaselineSurface = (typeof BASELINE_SURFACES)[number];
 
 /** 缺省策略:连续 3 个负收益即停、不配守卫、恢复必须人类。 */
 export function defaultBreakerPolicy(): BreakerPolicy {
-  return { minNegativeStreak: 3, guardrails: [], requireHumanRecovery: true };
+  return {
+    minNegativeStreak: 3,
+    guardrails: [],
+    requireHumanRecovery: true,
+    observationMinPositiveWindows: 2,
+    observationWindowDays: 7,
+    restartFactor: 0.25,
+  };
+}
+
+/** §14.2③ 观察窗:一段连续观察期的净节省(netSaving>0 严格为正——「不亏」不算转正)。 */
+export type ObservationWindow = { startAt: number; endAt: number; netSaving: number };
+
+/**
+ * 观察窗自动试探重启判定(§14.2③「停改进、不停观察」:按 endAt 降序找时间
+ * 相邻的连续窗口串,串内每窗净节省严格 >0 才计数;连续正窗 ≥ minPositiveWindows(缺省 2)
+ * → restart:true。消费方:调度器停摆期的零 LLM 观察动作按窗累计净节省后调用本函数;
+ * 重启频率 = everyMinutes / restartFactor(0.25 → ×4 慢化)。
+ */
+export function evaluateObservationRestart(
+  windows: ObservationWindow[],
+  policy?: { minPositiveWindows?: number },
+): { restart: boolean; positiveWindows: number } {
+  const min =
+    typeof policy?.minPositiveWindows === "number" && policy.minPositiveWindows > 0
+      ? Math.floor(policy.minPositiveWindows)
+      : 2;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const GAP_TOLERANCE_MS = 8 * DAY_MS; // 相邻窗间隔容差(窗长 7d + 延迟)
+  const sorted = [...windows].sort((a, b) => b.endAt - a.endAt);
+  let positive = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const w = sorted[i];
+    const prev = sorted[i - 1];
+    if (!w || !(w.netSaving > 0)) break; // 非正窗断串(净省=0 不算正)
+    if (i > 0 && prev !== undefined && prev.startAt - w.endAt > GAP_TOLERANCE_MS) break; // 时间不相邻断串
+    positive += 1;
+    if (positive >= min) return { restart: true, positiveWindows: positive };
+  }
+  return { restart: false, positiveWindows: positive };
 }
 
 /** 本地 canonical JSON:键升序、数组保序、undefined 键省略、非有限数按 null。 */
@@ -204,7 +251,25 @@ export function resolvePolicy(p?: Partial<BreakerPolicy>): BreakerPolicy {
     : [];
   const requireHumanRecovery =
     typeof p?.requireHumanRecovery === "boolean" ? p.requireHumanRecovery : fallback.requireHumanRecovery;
-  return { minNegativeStreak, guardrails, requireHumanRecovery };
+ // §14.2③ 观察窗三参:数值型回落缺省,与既有字段同口径。
+  const observationMinPositiveWindows =
+    typeof p?.observationMinPositiveWindows === "number" && Number.isFinite(p.observationMinPositiveWindows)
+      ? p.observationMinPositiveWindows
+      : fallback.observationMinPositiveWindows;
+  const observationWindowDays =
+    typeof p?.observationWindowDays === "number" && Number.isFinite(p.observationWindowDays)
+      ? p.observationWindowDays
+      : fallback.observationWindowDays;
+  const restartFactor =
+    typeof p?.restartFactor === "number" && Number.isFinite(p.restartFactor) ? p.restartFactor : fallback.restartFactor;
+  return {
+    minNegativeStreak,
+    guardrails,
+    requireHumanRecovery,
+    observationMinPositiveWindows,
+    observationWindowDays,
+    restartFactor,
+  };
 }
 
 /** 决策 → 归一收益(仅在后一条规则里被用到:显式 netReturn 优先)。 */
@@ -315,9 +380,11 @@ export function pause(
 }
 
 /**
- * 恢复:只接受 human(代理不可自己解开熔断)→ 否则 RSI_RESUME_NOT_HUMAN;
- * reason 空白 → RSI_RESUME_REASON_REQUIRED。成功产新 state(paused=false,scope 保持,
- * recoveredAt / reason / by),lastEvaluation 保留;pausedAt 与 trigger 属于上一轮的暂停事实,不带到新一轮。
+ * 恢复:只接受 human(agent 不可自己解开熔断——熔断器不能成为新的自我修改面)→ 否则
+ * RSI_RESUME_NOT_HUMAN(§14.2③ 语义收窄为「agent 不可恢复」;human resume 照旧
+ * 可用;观察窗自动试探重启是另一条确定性路径,由调度器消费 evaluateObservationRestart,
+ * 不经本函数);reason 空白 → RSI_RESUME_REASON_REQUIRED。成功产新 state(paused=false,
+ * scope 保持,recoveredAt / reason / by),lastEvaluation 保留;pausedAt 与 trigger 属于上一轮的暂停事实,不带到新一轮。
  */
 export function resume(
   state: BreakerState,
@@ -394,7 +461,8 @@ export function takeBaseline(input: {
  */
 export function diffBaselines(
   prev: BaselineSnapshot,
-  next: BaselineSnapshot): { changed: BaselineSurface[]; metrics: Array<{ metric: string; from: number; to: number; delta: number }> } {
+  next: BaselineSnapshot,
+): { changed: BaselineSurface[]; metrics: Array<{ metric: string; from: number; to: number; delta: number }> } {
   const changed: BaselineSurface[] = [];
   for (const surface of BASELINE_SURFACES) {
     if (prev?.versions?.[surface] !== next?.versions?.[surface]) changed.push(surface);
@@ -456,7 +524,8 @@ export function planRollback(
 /** 回滚校验:hash 一致 → RSI_ROLLBACK_VERIFIED,否则 RSI_ROLLBACK_TARGET_MISMATCH。 */
 export function verifyRollback(
   current: BaselineSnapshot,
-  target: BaselineSnapshot): { ok: boolean; codes: string[] } {
+  target: BaselineSnapshot,
+): { ok: boolean; codes: string[] } {
   const same = typeof current?.hash === "string" && current.hash === target?.hash;
   return same ? { ok: true, codes: [RSI_ROLLBACK_VERIFIED] } : { ok: false, codes: [RSI_ROLLBACK_TARGET_MISMATCH] };
 }

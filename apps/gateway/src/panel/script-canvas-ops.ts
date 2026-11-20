@@ -169,6 +169,30 @@ function cvSaveAllPos(pos) {
  * · 键盘:Ctrl+Z/Y、Ctrl+C/V/D、Delete/Backspace、Esc
  * 仍属「卡片专属、待重做」(板上 P1 d6):端口拖拽连线、边悬停×删除、框选多选、吸附辅助线、方向键微调
  * —— 它们要 .cv-port/.cv-edge 的几何,svg 里没有对应锚点;Ctrl+A 全选同样只给明确提示,不假装可用。 */
+/** 右键菜单挂载(修复 1)。原实现:菜单 appendChild 到 .bf-canvas 内,left/top 用
+ * (e.clientX - hostRect.left) 算,但 #cvHost(.bf-canvas) 不是定位包含块 → 绝对定位落到 body/page 上,
+ * 经验证在节点中心 (476,168) 右键,菜单出现在画布左上角外 (159,46),压住侧栏与板头、首项被裁。
+ * 修法:统一挂 document.body + position:fixed 用视口坐标,再按经验证尺寸做视口内 clamp(靠右/靠下翻转回弹)。 */
+function cvCtxMount(menu, cx, cy) {
+  try {
+    menu.style.position = "fixed";
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    document.body.appendChild(menu);
+    const w = menu.offsetWidth || 150;
+    const h = menu.offsetHeight || 24 * (menu.children ? menu.children.length : 4);
+    const vw = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 0;
+    const vh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
+    let x = cx + 2, y = cy + 2;
+    if (vw && x + w > vw - 8) x = cx - w - 2; // 靠右:翻到光标左侧
+    if (vh && y + h > vh - 8) y = cy - h - 2; // 靠下:翻到光标上方
+    if (vw) x = Math.min(x, vw - w - 8);
+    if (vh) y = Math.min(y, vh - h - 8);
+    menu.style.left = Math.round(Math.max(8, x)) + "px";
+    menu.style.top = Math.round(Math.max(8, y)) + "px";
+  } catch (e) { /* 定位失败:菜单仍在(可点),不留白色幽灵 */ }
+  return menu;
+}
 function cvBindSvgOps() {
   const cvHost = cvActiveHost;
   if (!cvHost || cvRenderMode() !== "svg") return;
@@ -186,16 +210,14 @@ function cvBindSvgOps() {
     e.stopPropagation();
     if (!cvTargetDoc()) return;
     const hit = cvSvgNodeAt(e);
-    const hr = cvHost.getBoundingClientRect();
+    cvCloseCtx(); // 同一时刻只留一个菜单
     const menu = document.createElement("div");
     menu.className = "cv-ctx";
     menu.id = "cvCtx";
-    menu.style.left = Math.max(0, e.clientX - hr.left) + "px";
-    menu.style.top = Math.max(0, e.clientY - hr.top) + "px";
     const mk = (label, fn, dis) => {
       const b = document.createElement("button");
       b.textContent = label;
-      if (dis) b.disabled = true;
+      if (dis) { b.disabled = true; b.title = "当前视图不适用:已置灰,避免点了静默空转"; }
       else b.onclick = () => { cvCloseCtx(); fn(); };
       menu.appendChild(b);
     };
@@ -211,7 +233,8 @@ function cvBindSvgOps() {
       mk("适配全部", () => { cvViewTouched = false; cvFitNow(); });
       mk("整理布局(SVG 视图不适用)", () => { /* 占位:置灰项无行为 */ }, true);
     }
-    cvHost.appendChild(menu);
+ // 修复(1):统一挂 document.body + position:fixed + 视口 clamp(见 cvCtxMount)
+    cvCtxMount(menu, e.clientX, e.clientY);
   });
   cvHost.addEventListener("dblclick", (e) => {
     if (e.target.closest && (e.target.closest(".bf-zoombar") || e.target.closest(".bf-minimap") || e.target.closest(".cv-addbar") || e.target.closest(".cv-addpanel"))) return;
@@ -576,16 +599,13 @@ function cvBindInteractions(host, doc, pos, apply, drawMini) {
     if (!t) return;
     const nd = e.target.closest(".cv-node");
     const ids = nd ? (cvSelected.size && cvSelected.has(nd.dataset.cv) ? [...cvSelected] : [nd.dataset.cv]) : [...cvSelected];
-    const hr = cvHost.getBoundingClientRect();
     const menu = document.createElement("div");
     menu.className = "cv-ctx";
     menu.id = "cvCtx";
-    menu.style.left = Math.max(0, e.clientX - hr.left) + "px";
-    menu.style.top = Math.max(0, e.clientY - hr.top) + "px";
     const mk = (label, fn, dis) => {
       const b = document.createElement("button");
       b.textContent = label;
-      if (dis) b.disabled = true;
+      if (dis) { b.disabled = true; b.title = "当前视图不适用:已置灰,避免点了静默空转"; }
       else b.onclick = () => { cvCloseCtx(); fn(); };
       menu.appendChild(b);
     };
@@ -599,7 +619,8 @@ function cvBindInteractions(host, doc, pos, apply, drawMini) {
       mk("整理布局", () => cvArrangeAll());
       mk("全选", () => { host.querySelectorAll(".cv-node").forEach((x) => { cvSelected.add(x.dataset.cv); x.classList.add("selected"); }); drawMini(); });
     }
-    cvHost.appendChild(menu);
+ // 修复(1):卡片路径同样挂 body + fixed(此前未设 left/top,菜单恒落在画布左上角)
+    cvCtxMount(menu, e.clientX, e.clientY);
   });
  // ---- 十期:双击空白=在落点打开添加工具箱 ----
   cvHost.addEventListener("dblclick", (e) => {
@@ -916,6 +937,37 @@ function cvArrangeAll() {
   cvViewTouched = false; // 「整理」=让系统重新管视野,随后的自动适配照旧生效
   setTimeout(cvFitNow, 60); // 等重渲落位后适配视野
 }
+/** 「适」被可读下限钳住时的可见提示(修复 2)。
+ * 现象:10 节点板 host 1236×336、内容 1258×723,「适」被 CV_FIT_READABLE_MIN 钳到 70%,只有 6/10 卡完整可见,
+ * 用户以为「适」坏了。缩放算法零改动,只在 ideal fit < 下限(=实际按 minK 显示必然溢出)时:
+ * 画布左下角一个 7s 自动淡出的角标 + 每板一次 toast,说明「为什么这么小 + 怎么办」。
+ * 「全」(forceAll)本来就允许低于下限,不提示。 */
+let cvFitHintTimer = 0;
+function cvFitClampHint(host, o) {
+  if (!host || !o || o.forceAll) return;
+  const clamped = o.naturalK < o.minK - 0.001;
+  const old = host.querySelector ? host.querySelector(".cv-fithint") : null;
+  if (!clamped) { if (old) old.classList.remove("on"); return; }
+  const pct = Math.max(1, Math.round(o.appliedK * 100));
+  let el = old;
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "cv-fithint";
+    host.appendChild(el);
+  }
+  el.textContent = "已按可读下限 " + pct + "% 显示:内容超出可视区,可拖拽平移或用「全」全览";
+  el.classList.add("on");
+  try { clearTimeout(cvFitHintTimer); } catch (e) { /* 忽略 */ }
+  cvFitHintTimer = setTimeout(() => { try { el.classList.remove("on"); } catch (e) { /* 宿主已换 */ } }, 7000);
+  try {
+    const d = boardDoc || cvActiveDoc;
+    const key = "cv-fitclamp-" + ((d && d.taskId) || "");
+    if (d && !sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, "1");
+      toast("「适」已到可读下限 " + pct + "%(再缩小标签就糊了):内容超出可视区,可拖拽平移或点「全」全览");
+    }
+  } catch (e) { /* sessionStorage 不可用环境静默 */ }
+}
 function cvFitNow(forceAll) {
   const cvH = cvHostEl();
   if (!cvH) return;
@@ -984,7 +1036,11 @@ function cvFitNow(forceAll) {
  // 层 chip 条(.cv-lbar)也是顶部浮层,同样要让出高度——按经验证底边算,而不是再猜一个像素值。
   const lbarEl = document.querySelector("#boardGraph .cv-lbar");
   const stackBottom = lbarEl && lbarEl.offsetHeight ? (parseFloat(lbarEl.style.top || "0") || 0) + lbarEl.offsetHeight + 8 : 0;
-  const topReserve = Math.max(baseReserve + (bandOn ? 40 : 0), stackBottom);
+ // 修复(3):画布板头状态条(.bd-meta-canvas,绝对定位 top:8px)会压住首行卡片的两层文字——
+ // 按经验证高度把它算进顶部预留,首行卡片让出这一条(8px 上边距 + 条高 + 6px 间隙)。
+  const metaBarEl = cvH.querySelector(".bd-meta-canvas");
+  const metaReserve = metaBarEl && metaBarEl.offsetHeight ? 8 + metaBarEl.offsetHeight + 6 : 0;
+  const topReserve = Math.max(baseReserve + (bandOn ? 40 : 0), stackBottom, metaReserve);
   const availH = Math.max(120, r.height - topReserve);
   const naturalK = Math.min(r.width / (maxX - minX + 40), availH / (maxY - minY + 40));
  // 全览模式(「全」按钮)允许低于可读下限,先把整块板收进视口;标签变小可再点 + 放大。
@@ -996,7 +1052,8 @@ function cvFitNow(forceAll) {
   cvPan.x = contentW < r.width ? (r.width - contentW) / 2 - minX * cvPan.k : 12 - minX * cvPan.k;
   cvPan.y = contentH < availH ? topReserve + (availH - contentH) / 2 - minY * cvPan.k : topReserve - minY * cvPan.k;
   cvApplyTf();
- // 取证/回归用:把本次 fit 的口径与内容框留在 window 上(截图 runner 与调试直接读,不靠推算)。
+ // 修复(2):「适」被可读下限钳住时给一次可见提示(此前只有 6/10 卡完整可见,用户以为「适」坏了)
+  try { cvFitClampHint(cvH, { forceAll: !!forceAll, naturalK: naturalK, appliedK: cvPan.k, minK: fitMinK }); } catch (e) { /* 提示失败不影响视图 */ }
   try {
     window.__cvFitLast = {
       basis: cvFitMode === "svg" ? (cvFitOldBasis ? "viewbox" : "tight") : "cards",

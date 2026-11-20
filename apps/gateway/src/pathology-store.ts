@@ -80,7 +80,8 @@ interface PathologyRuntime {
   };
   detectPrimitives(
     trace: PathologyTrace | undefined | null,
-    opts?: DetectOptions): Record<PathologyPrimitive, RuntimePrimitiveHit>;
+    opts?: DetectOptions,
+  ): Record<PathologyPrimitive, RuntimePrimitiveHit>;
   matchForms(
     primitives: Record<PathologyPrimitive, RuntimePrimitiveHit>,
     catalog?: PathologyForm[],
@@ -116,25 +117,10 @@ interface PathologyRuntime {
   };
 }
 
-let pathologyRuntime: PathologyRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_trajectory_pathology from "@lampgenie/runtime/agent/trajectory-pathology";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadPathologyRuntime(): Promise<PathologyRuntime> {
-  if (pathologyRuntime) return pathologyRuntime;
-  const spec = "@lampgenie/runtime/agent/trajectory-pathology";
-  try {
-    pathologyRuntime = (await import(spec)) as PathologyRuntime;
-  } catch {
-    const srcUrl = new URL(
-      "../../../packages/harness-runtime/src/agent/trajectory-pathology.ts",
-      import.meta.url).href;
-    pathologyRuntime = (await import(srcUrl)) as PathologyRuntime;
-  }
-  return pathologyRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadPathologyRuntime();
+const rt: PathologyRuntime = rt_trajectory_pathology;
 
 const LINE_TYPES: ReadonlySet<string> = new Set<string>(PATHOLOGY_LINE_TYPES);
 const INVALID_INPUT = "PATHOLOGY_STORE_INVALID_INPUT" as const;
@@ -533,7 +519,8 @@ function registerInput(
         interventions?: { carrier: string; detail: string }[];
         description?: string;
       }
-    | PathologyForm): {
+    | PathologyForm,
+): {
   family: PathologyFamily;
   signature: PathologyPrimitive[];
   interventions?: PathologyIntervention[];
@@ -570,7 +557,8 @@ export function registerForm(
         interventions?: { carrier: string; detail: string }[];
         description?: string;
       }
-    | PathologyForm): {
+    | PathologyForm,
+): {
   ok: boolean;
   code?: string;
   codes: string[];
@@ -674,7 +662,8 @@ export function route(
     }
     const routed = rt.routeInterventions(form, opts);
     const tipForbidden = routed.codes.includes(
-      rt.PATHOLOGY_CODES.TIP_FORBIDDEN);
+      rt.PATHOLOGY_CODES.TIP_FORBIDDEN,
+    );
     return {
       ok: !tipForbidden,
       ...(tipForbidden ? { code: rt.PATHOLOGY_CODES.TIP_FORBIDDEN } : {}),

@@ -202,7 +202,7 @@ describe("白板渲染层结构契约(A 折行接入 / B 矩阵入口 / C 窄视
       expect(want({ nodes: new Array(20).fill({ id: "n" }) }, { nodes: new Array(4).fill({ id: "n" }) })).toBe(false);
 
       // 渲染与「整理」都走同一 opts(否则点整理会得到另一种排布)
-      expect(html).toContain("autoWrap: cvFlowWrapWanted(doc, fdoc)");
+      expect(html).toContain("cvCodeInfo ? false : cvFlowWrapWanted(doc, fdoc)"); // :并行会话在途加 cvCodeInfo 短路(code 板不折行);接线仍在,断言同步现行源
       expect(html).toContain("autoWrap: cvFlowWrapWanted(t, t)");
       // 折行段框渲染/图例口径在场
       expect(html).toContain("lane.boxes && lane.boxes.length ? lane.boxes : [lane]");

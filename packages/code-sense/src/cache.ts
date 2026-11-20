@@ -22,7 +22,8 @@ export class LayerCache<T> {
     private readonly build: (key: string) => Promise<T>,
     private readonly ttlMs: number,
     /** 可注入时钟(闲时维护测试确定性;缺省真实时钟,既有行为不变)。 */
-    private readonly now: () => number = Date.now) {}
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async get(key: string, opts: { refresh?: boolean } = {}): Promise<CacheEntry<T>> {
     const t = this.now();

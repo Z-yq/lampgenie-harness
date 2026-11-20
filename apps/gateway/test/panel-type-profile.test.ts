@@ -50,7 +50,8 @@ describe("非 page 板型画布画像", () => {
     await withPanel(7898, (html) => {
       const src = [extractFn(html, "cvTypeProfileOf"), extractFn(html, "cvTypeHeadHtml"), extractFn(html, "cvTypeNodeHtml")].join(NL);
       const api = new Function("esc", "BoardTypeProfile", src + NL + "return { profile: cvTypeProfileOf, head: cvTypeHeadHtml, node: cvTypeNodeHtml };")(
-        (s: unknown) => String(s), BTP) as {
+        (s: unknown) => String(s), BTP,
+      ) as {
         profile: (d: unknown) => unknown;
         head: (d: unknown, info: unknown) => string;
         node: (n: unknown, d: unknown, info: unknown) => string;

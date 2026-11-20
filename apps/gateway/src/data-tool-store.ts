@@ -76,10 +76,12 @@ interface DataToolRuntime {
   ): { ok: boolean; registry: DataToolRegistryView; codes: string[]; reason?: string };
   unregisterTool(
     registry: DataToolRegistryView,
-    name: string): { ok: boolean; registry: DataToolRegistryView; codes: string[]; restored?: string; reason?: string };
+    name: string,
+  ): { ok: boolean; registry: DataToolRegistryView; codes: string[]; restored?: string; reason?: string };
   checkDependencies(
     registry: DataToolRegistryView,
-    env: DoctorEnv): {
+    env: DoctorEnv,
+  ): {
     registry: DataToolRegistryView;
     missing: Array<{ name: string; kind: string; dep: string }>;
     degraded: string[];
@@ -94,7 +96,8 @@ interface DataToolRuntime {
     registry: DataToolRegistryView,
     sessionId: string,
     name: string,
-    version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
+    version: string,
+  ): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string };
   listTools(registry: DataToolRegistryView): {
     native: string[];
     data: Array<{ name: string; version: string; degraded?: string[]; shadowOf?: string; wrapOf?: string }>;
@@ -133,39 +136,12 @@ interface SelfModRuntime {
   ): { decision: string; codes: string[]; details: string[] };
 }
 
-let dataToolRuntime: DataToolRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_data_tool_registry from "@lampgenie/runtime/agent/data-tool-registry";
 
-/** 两跳解析 data-tool-registry(打包产物无源码时回落 src .ts,与 self-modification-store 同模式)。 */
-async function loadDataToolRuntime(): Promise<DataToolRuntime> {
-  if (dataToolRuntime) return dataToolRuntime;
-  const spec = "@lampgenie/runtime/agent/data-tool-registry";
-  try {
-    dataToolRuntime = (await import(spec)) as unknown as DataToolRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/data-tool-registry.ts", import.meta.url).href;
-    dataToolRuntime = (await import(srcUrl)) as unknown as DataToolRuntime;
-  }
-  return dataToolRuntime;
-}
-
-let selfModRuntime: SelfModRuntime | undefined;
-
-/** 两跳解析 self-modification(#196 门)。 */
-async function loadSelfModRuntime(): Promise<SelfModRuntime> {
-  if (selfModRuntime) return selfModRuntime;
-  const spec = "@lampgenie/runtime/agent/self-modification";
-  try {
-    selfModRuntime = (await import(spec)) as unknown as SelfModRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/self-modification.ts", import.meta.url).href;
-    selfModRuntime = (await import(srcUrl)) as unknown as SelfModRuntime;
-  }
-  return selfModRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadDataToolRuntime();
-const rt2 = await loadSelfModRuntime();
+const rt: DataToolRuntime = rt_data_tool_registry;
+import * as rt_self_modification from "@lampgenie/runtime/agent/self-modification";
+const rt2: SelfModRuntime = rt_self_modification;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -389,7 +365,8 @@ interface RegisterOpts {
 function resolveApprover(
   opts: RegisterOpts | undefined,
   owner: string,
-  now: number): { kind: "human" | "owner" | "agent"; id: string; at: number } | undefined {
+  now: number,
+): { kind: "human" | "owner" | "agent"; id: string; at: number } | undefined {
   if (opts?.approval?.ok !== true) return undefined;
   return { kind: opts.approval.kind ?? "human", id: opts.approval.by ?? `human:${owner}`, at: now };
 }
@@ -430,7 +407,8 @@ function evaluateGate(raw: UnknownRecord, opts: RegisterOpts | undefined, now: n
 export function registerDataTool(
   root: string,
   spec: unknown,
-  opts?: RegisterOpts): {
+  opts?: RegisterOpts,
+): {
   ok: boolean;
   codes: string[];
   reason?: string;
@@ -525,7 +503,8 @@ export function registerDataTool(
 /** 卸载 data 工具:删文件 + 清理所有 session 对该 name 的钉扎。 */
 export function unregisterDataTool(
   root: string,
-  name: string): { ok: boolean; codes: string[]; restored?: string; reason?: string } {
+  name: string,
+): { ok: boolean; codes: string[]; restored?: string; reason?: string } {
   const scan = scanStore(root);
   const removed = rt.unregisterTool(scan.registry, name);
   if (!removed.ok) return { ok: false, codes: removed.codes, reason: removed.reason };
@@ -600,7 +579,8 @@ export function pinDataTool(
   root: string,
   sessionId: string,
   name: string,
-  version: string): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
+  version: string,
+): { ok: boolean; pins: Record<string, Record<string, string>>; codes: string[]; reason?: string } {
   const reloaded = reloadTools(root);
   const pinned = rt.pinToolVersion(reloaded.registry, sessionId, name, version);
   if (!pinned.ok) return pinned;
@@ -618,7 +598,8 @@ export function pinDataTool(
 /** 依赖体检:读目录组 registry → checkDependencies 拿 missing/degraded。 */
 export function doctorDataTools(
   root: string,
-  env: DoctorEnv): { ok: boolean; missing: Array<{ name: string; kind: string; dep: string }>; degraded: string[]; codes: string[] } {
+  env: DoctorEnv,
+): { ok: boolean; missing: Array<{ name: string; kind: string; dep: string }>; degraded: string[]; codes: string[] } {
   const scan = scanStore(root);
   const checked = rt.checkDependencies(scan.registry, env);
   const codes = [...checked.codes];

@@ -9,6 +9,9 @@ export const PANEL_JS_VIEWS = `function openSession(sid) {
   currentSid = sid; sessionStorage.setItem("zh:sid", sid); localStorage.setItem("zh:sid", sid);
   navPush(sid);
   resetSessionDomainUI(sid); // 会话域 UI 归零(与 newDraft 共用同一份清单):切会话→全量重载;null=加载中,先清旧内容再等重放( histEvents=null 此前被并进注释从未执行——切会话闪旧会话内容);同清该会话水位→首帧全量(旧水位+服务端另一份累积态会对不上)
+ // 切回 30 分钟内看过的会话 → 先用热缓存铺首帧(免等服务端冷读),
+ // 随后的 refreshHist 因 histLastSeq 已就位改走 sinceSeq 增量补齐。
+  try { histSeedFromCache(sid); } catch (e) { /* 缓存不可用:回退全量首屏 */ }
  // batch1b 重试态跨会话保活:切会话**不清** apiRetryBySid,并立刻用缓存把重试条画回来
  // (上面刚清空了置顶条,resetSessionDomainUI 内已按 apiRetryBySid 缓存把重试条画回来)
   subWsRestore(sid); // 子代理工作区 tab 按会话恢复(localStorage 打开集;内容等 journal 重放),激活态归位主会话
@@ -32,6 +35,7 @@ export const PANEL_JS_VIEWS = `function openSession(sid) {
   else wsSafeSend(JSON.stringify({ v: 1, type: "session.model.get", sessionId: sid }));
  // 跨会话板上下文清零已在 resetSessionDomainUI 内统一做(批注串台修复,不依赖浮窗开关)
   if (bfOpen) { boardRefresh(); renderBoard(); renderBoardPanel(); }
+  else { try { boardRefresh(sid); } catch (e) {} } // 主白板视图(经典隐藏态/画布板卡)切会话即重拉清单——此前仅浮窗分支刷新,板视图残留上一会话的「(本会话无白板)」假空态
  // n6 画布看板跟随当前选中会话:统一出口(所有卡片按各自 session 维度重取数;
  // 此前画布卡只有首次激活拉一次数,切 session 后白板/档案/追踪全停在上一会话的数据上——用户用户反馈)。
   onSessionChange(sid);
@@ -54,7 +58,9 @@ let cvSessionSid = "";
 /** 会话维度视图清单(唯一真相源):这些卡的数据/状态都必须跟着选中会话走。
  * 全局设施(nodes/approvals/market/git/files/term/wf/exp/team/issues)不在此列——它们无 session 维度,
  * 卡头以 vw-scope 标注「作用域:全局」,避免用户误以为是当前会话的数据。 */
-const SESSION_VIEWS = ["board", "track", "usage", "subchat"];
+// 补 traj——轨迹看板同样是会话维度(histEvents),切会话必须重渲;
+// 此前不在清单里,隐藏的轨迹看板会保留上一会话的 summary/卡(sid 显示新会话但数还是旧的)。
+const SESSION_VIEWS = ["board", "track", "usage", "subchat", "traj"];
 function onSessionChange(sid) {
   const next = String(sid || "");
   cvSessionSid = next;
@@ -64,6 +70,13 @@ function onSessionChange(sid) {
  // 「曾经激活过的卡」= 任意会话键里出现过的 view(cvActivated 键形态 sid|view)。
   const everViews = new Set();
   for (const key of cvActivated) { const cut = String(key).lastIndexOf("|"); if (cut > 0) everViews.add(String(key).slice(cut + 1)); }
+ // 切回同一会话时,旧 cvActivated 键会让下面的「无条件重载」被 continue 跳过,
+ // 隐藏卡保留上一次离开时的快照(经验证 trajBoardSid 停在上一会话)。先清掉本会话的激活键,
+ // 让本轮重新取数;取数后循环末尾会重新登记,后续聚焦仍是幂等跳过。
+  for (const key of Array.from(cvActivated)) {
+    const cut = String(key).lastIndexOf("|");
+    if (cut > 0 && String(key).slice(0, cut) === next) cvActivated.delete(key);
+  }
  // 会话维度视图无条件全部重载,
  // 不再只认「曾经激活过的卡」——旧实现里经典布局首进会话/openSession 之外的建会话路径(新任务提交)
  // 一张卡都不重载,板/追踪/吞吐/子代理流停在上一个会话的快照。
@@ -393,7 +406,12 @@ function rsiHms(ts) {
   return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
 }
 function rsiMetricsHtml(sec) {
-  var ms = sec && sec.metrics, rows = [], i, x, tn, label, val;
+  var ms = sec && sec.metrics, rows = [], i, x, tn, label, val, tip;
+ // 返工账两条指标的口径解释(悬停;与开工简报同源,不改布局)。
+  var METRIC_TIPS = {
+    "返工信号": "同一文件先建后修的跨会话链,提示历史踩坑位置",
+    "影响面未闭合簇": "一个变更引发多个后续修复,改动前先列辐射面"
+  };
   if (Array.isArray(ms)) {
     for (i = 0; i < ms.length && rows.length < 8; i++) { // ≤8 条自然截断
       x = ms[i] || {};
@@ -401,13 +419,15 @@ function rsiMetricsHtml(sec) {
       if (label === undefined || label === null || label === "") continue;
       val = x.value !== undefined ? x.value : (x.v !== undefined ? x.v : "-");
       tn = x.tone !== undefined ? x.tone : x.status;
-      rows.push("<span>" + esc(label) + " <b" + (tn ? ' class="rsi-tone-' + rsiTone(tn) + '"' : "") + ">" +
+      tip = METRIC_TIPS[String(label)];
+      rows.push("<span" + (tip ? ' title="' + esc(tip) + '"' : "") + ">" + esc(label) + " <b" + (tn ? ' class="rsi-tone-' + rsiTone(tn) + '"' : "") + ">" +
         esc(String(val) + (x.unit ? " " + String(x.unit) : "")) + "</b></span>");
     }
   } else if (ms && typeof ms === "object") {
     var keys = Object.keys(ms);
     for (i = 0; i < keys.length && rows.length < 8; i++) {
-      rows.push("<span>" + esc(keys[i]) + " <b>" + esc(String(ms[keys[i]])) + "</b></span>");
+      tip = METRIC_TIPS[String(keys[i])];
+      rows.push("<span" + (tip ? ' title="' + esc(tip) + '"' : "") + ">" + esc(keys[i]) + " <b>" + esc(String(ms[keys[i]])) + "</b></span>");
     }
   }
   return rows.length ? '<div class="rsi-kv">' + rows.join("") + "</div>" : "";
@@ -1125,11 +1145,21 @@ function supRenderResults() {
     html.push('</div>');
   }
   if (others.length) {
-    var shown = Math.min(others.length, 10), rest = others.length - shown;
-    html.push('<details class="srf-other"><summary>其他任务动态 <b>' + others.length + '</b><span>系统里所有任务的完成通知(不影响体检结论)</span></summary>');
-    for (i = 0; i < shown; i++) html.push(supNoticeRowHtml(others[i]));
-    if (rest > 0) html.push('<div class="srf-more">还有 ' + rest + ' 条更早的动态未显示(只列最近 10 条)</div>');
-    html.push('</details>');
+ // 本会话没有 Super 派发记录时(历史会话/重启后),任务回执此前全部折进一个 details,
+ // 用户在中栏只看得到「机制体检」,没有任何任务回执入口。此时改为直接平铺最近 5 条回执(标题如实写
+ // 「最近任务回执」,不冒充 Super 派发);有派发任务时保持原折叠语义。
+    var shown = Math.min(others.length, tasks.length ? 10 : 5), rest = others.length - shown;
+    if (tasks.length) {
+      html.push('<details class="srf-other"' + (others.length <= 10 ? " open" : "") + '><summary>其他任务动态 <b>' + others.length + '</b><span>系统里所有任务的完成通知(不影响体检结论)</span></summary>');
+      for (i = 0; i < shown; i++) html.push(supNoticeRowHtml(others[i]));
+      if (rest > 0) html.push('<div class="srf-more">还有 ' + rest + ' 条更早的动态未显示(只列最近 10 条)</div>');
+      html.push('</details>');
+    } else {
+      html.push('<div class="srf-group"><div class="srf-gh">最近任务回执 <b>' + others.length + '</b><span>系统里所有任务的完成回执(本会话还没有 Super 派发的任务)</span></div>');
+      for (i = 0; i < shown; i++) html.push(supNoticeRowHtml(others[i]));
+      if (rest > 0) html.push('<div class="srf-more">还有 ' + rest + ' 条更早的回执未显示(只列最近 5 条)</div>');
+      html.push('</div>');
+    }
   }
   box.innerHTML = html.join("");
   box.style.display = "";
@@ -1355,7 +1385,9 @@ function supRenderChat() {
     if (t.kind === "day") { if (t.text !== lastDay) { html.push('<div class="sup-day">' + supEsc(t.text) + "</div>"); lastDay = t.text; } continue; }
     if (t.kind === "u") {
  // 与 coding agent 主聊天同款:用户气泡(你 chip + 正文),无额外角色行
-      html.push('<div class="user-line"><span class="who">你</span><span class="txt">' + userSlashHtml(String(t.text || ""), "") + "</span></div>");
+ // 本轮带附件时气泡下方挂附件卡(图片缩略图/视频播放器/文件卡,src 走 /uploads?path=)
+      const uAtts = Array.isArray(t.atts) && t.atts.length ? '<div class="sup-msg-atts">' + attRowHtml(t.atts) + "</div>" : "";
+      html.push('<div class="user-line"><span class="who">你</span><span class="txt">' + userSlashHtml(String(t.text || ""), "") + "</span></div>" + uAtts);
     } else if (t.kind === "a") {
  // 同一轮可能有多条 assistant 事件(工具轮 + 终稿):合成一个回合,但渲染与主聊天一致(无角色头)
       const group = [t];
@@ -1389,7 +1421,15 @@ function supRenderChat() {
       const sysLong = sysText.length > 160; // 长系统通知默认折叠,避免刷屏挤掉真正的对话
       html.push('<div class="sys-line' + (sysLong ? " sys-long" : "") + '"' + (sysLong ? ' title="点击展开/收起"' : "") + ">" + sketchifyHtml(esc(sysText)) + "</div>");
     }
-    else if (t.kind === "relay") html.push('<div class="sup-bub sys">' + supEsc(supClip(String(t.text || ""), 400)) + '<div class="sup-mono" style="margin-top:3px">在下方直接回复,或点聊天头顶部「待你处理」;口头答复也可以直接发给我</div></div>');
+    else if (t.kind === "relay") {
+ // 转接卡:高亮「待你回答」+问题摘要;全文(requestId/选项/背景)折叠保留——relay_answer 要用原文。
+      var rtxt = String(t.text || "");
+      var qm = rtxt.match(/问题[\\uFF1A:]\\s*([^\\n]+)/);
+      var q = qm ? supClip(qm[1], 90) : supClip(rtxt.replace(/^\\[系统转接[^\\]]*\\]\\s*/, ""), 90);
+      html.push('<details class="sup-relay-card" data-relay="1"><summary><span class="rc-badge">待你回答</span><span>' + supEsc(q) + '</span></summary>' +
+        '<div class="rc-body">' + supEsc(supClip(rtxt, 400)) + '</div>' +
+        '<div class="sup-mono">在下方直接回复,或点聊天头顶部「待你处理」;口头答复也可以直接发给我</div></details>');
+    }
   }
   if (supState.waiting) html.push('<div class="sup-wait" id="supWait">Super 正在思考…(调度轮可能含多次工具调用)</div>');
   if (!html.length) html.push('<div class="sup-empty">还没有对话。直接对我说:查任务状态、派任务、或安排一次跨项目联调。<br>派出的任务会在中栏「派发任务」跟踪,完成/失败会回执到这里和结果流。示例:<div class="sup-quick"><button data-supquick="现在系统里有哪些活跃任务?">查活跃任务</button><button data-supquick="简单汇报一下最近 12 小时的机制体检结果">今日体检</button><button data-supquick="帮我派一个任务:">派任务</button></div></div>');
@@ -1459,14 +1499,15 @@ function loadViewData(name, sid) {
   if (name === "approvals") { wsSafeSend(JSON.stringify({ v: 1, type: "permission.pending" })); wsSafeSend(JSON.stringify({ v: 1, type: "permission.history", limit: 20 })); } // 挂起+最近决定一起拉
   if (name === "nodes") { wsSafeSend(JSON.stringify({ v: 1, type: "nodes.list" })); }
   if (name === "super" || name === "rsi" || name === "dream" || name === "task") superViewLoad(); // →1545:指挥台(别名 rsi/dream/task 同指;聊天回放+任务/做梦侧栏刷新)
-  if (name === "subchat") subMsgRender(); // 子agent会话流卡:进入即重渲(卡可见=分组已读,未读角标清零;含原分身卡的注册态/模型/reap)
+  if (name === "subchat") { subMsgRender(); trajBoardAutoBackfill("subchat"); } // 子agent会话流卡:进入即重渲;首屏窗口常不含子代理,顺带回溯
   if (name === "track") trackPull(s);
  // 轨迹视图数据全部来自 histEvents(前端已在场的会话重放事件),零额外请求;
  // 进入即重渲一次并自动展开最新决策卡;不锁 body 滚动、不改视图身份(身份由 class 显隐统一管)。
-  if (name === "traj") { trajBoardInitDone = false; trajBoardRefresh(); }
+ // 再按需自动回溯更早历史页——首屏末 200 条常不含工具/子代理。
+  if (name === "traj") { trajBoardInitDone = false; trajBoardRefresh(); trajBoardAutoBackfill(); }
  // usage.view 协议无 session 参数(服务端按 模型×会话 全量聚合,此次不改服务端):
  // 前端按当前会话过滤展示 + 卡头标注作用域,避免用户把全局数当成当前会话的账。
-  if (name === "usage") { usageScopeSid = s || ""; wsSafeSend(JSON.stringify({ v: 1, type: "usage.view" })); }
+  if (name === "usage") { usageScopeSid = s || ""; bd3Loading("usage-body", "读取用量统计…"); wsSafeSend(JSON.stringify({ v: 1, type: "usage.view" })); }
   if (name === "git") gitLoad();
   if (name === "project") revStoreLoad(); // 代码档案视图打开时拉评审遗留(openProfileEntry 入口)
   if (name === "wf") wsSafeSend(JSON.stringify({ v: 1, type: "automation.list" }));
@@ -1513,7 +1554,7 @@ function tickWorkTimer() {
   el.style.display = "";
   el.textContent = "计时 " + fmtDur(Date.now() - mine.startedAt);
 }
-setInterval(() => { tickWorkTimer(); ctxPillRender(); try { supCtxPillRender(); } catch (e) {} }, 500); // super 上下文 pill 同心跳
+setInterval(() => { tickWorkTimer(); ctxPillRender(); try { supCtxPillRender(); } catch (e) {} try { if (typeof supModelPillRender === "function") supModelPillRender(); } catch (e) {} try { if (document.body.dataset.view === "super") superLayoutFit(); } catch (e) {} }, 500); // super 上下文 pill 同心跳;窄宽中栏保底自愈
 // ---- 权限模式/思考力度 pill(ZCode 输入区双下拉对齐;点击循环,cfg.set 热生效) ----
 const PERM_MODES = [
   { v: "ask", label: "询问每次" },
@@ -1684,10 +1725,63 @@ function ctxPillRender() {
   const pct = win && s.realIn ? " · " + Math.min(100, Math.round((s.realIn / win) * 100)) + "%" : "";
   el.textContent = "上下文 " + (s.users + s.agents) + " 条" + (tok ? " · " + tok + winTxt + " tok" + pct : "");
 }
-/** 上下文 pill 菜单内容(当前上下文=估算/上报双值,上报值作副行;无归一数据时逐字等价旧文案)。 */
+/** 上下文 pill 菜单内容(当前上下文=估算/上报双值,上报值作副行;无归一数据时逐字等价旧文案)。
+ * 重设计(用户参照 ZCode「上下文余量」popover):余量进度条 + 构成分段条 + 缓存命中率;
+ * 构成只能按字符数近似(诚实标注「按字符近似」),命中率用 llm.trace 的 cachedTokens/inputTokens 经验证。 */
 function ctxPillMenuHtml(s) {
   const win = Number((traceStats[currentSid] || {}).contextWindow) || 0;
   const u = ctxUsageNorm(currentSid);
+  const used = u.rep !== null ? u.rep : (u.est !== null ? u.est : (s.realIn || null));
+  const pct = win && used !== null ? Math.min(100, Math.round((used / win) * 100)) : null;
+  const fmtWan = (n) => (n >= 10000 ? (Math.round(n / 1000) / 10) + "万" : String(n));
+ // ── 头部:余量进度条(已用/容量,百分比) ──
+  let html = '<div class="pm-grp cx-head"><div class="cx-head-row"><span class="pm-name" style="font-weight:600">上下文余量</span>' +
+    '<span class="cx-nums">' + (used !== null ? fmtWan(used) + " / " + (win ? fmtWan(win) : "?") + (pct !== null ? " (" + pct + "%)" : "") : "暂无实测(等首次模型调用)") + "</span></div>";
+  if (pct !== null) {
+    const hot = pct >= 85;
+    html += '<div class="cx-bar"><i class="' + (hot ? "hot" : "") + '" style="width:' + Math.max(2, pct) + '%"></i></div>';
+  }
+  html += "</div>";
+ // ── 构成分段(按字符近似;有经验证时以经验证归一,逐项百分比) ──
+  const segs = [
+    { k: "消息", ch: (function () { let c = 0; for (const e of (histEvents || [])) { const p = e.payload || {}; if (e.kind === "message.user") c += String(p.text || "").length; else if (e.kind === "message.agent") c += String(p.text || "").length; } return c; })() },
+    { k: "工具结果", ch: (function () { let c = 0; for (const e of (histEvents || [])) if (e.kind === "tool.result") c += String((e.payload || {}).content || "").length; return c; })() },
+    { k: "工具调用", ch: (function () { let c = 0; for (const e of (histEvents || [])) if (e.kind === "tool.call") c += String((e.payload || {}).arguments || "").length; return c; })() },
+    { k: "系统提示/技能", ch: null }, // 没有本地数据,只在有实测时以差额呈现
+  ];
+  const known = segs.reduce((a, b) => a + b.ch, 0);
+  if (used !== null && used > known) segs[3].ch = used - known; // 系统提示等差额
+  const totalCh = segs.reduce((a, b) => a + (b.ch || 0), 0);
+  if (totalCh > 0 && used !== null) {
+    const colors = ["var(--bronze)", "var(--green)", "var(--warn)", "var(--faint)"];
+    let bars = "", rows = "";
+    segs.forEach((sg, i) => {
+      const share = totalCh ? (sg.ch || 0) / totalCh : 0;
+      const pc = Math.round(share * 1000) / 10;
+      if ((sg.ch || 0) <= 0) return;
+      bars += '<i style="width:' + Math.max(1, share * 100) + "%;background:" + colors[i] + '"></i>';
+      rows += '<div class="cx-row"><span class="cx-dot" style="background:' + colors[i] + '"></span><span class="cx-k">' + sg.k + '</span><span class="cx-v">' + pc + "%</span></div>";
+    });
+    html += '<div class="pm-grp"><div class="cx-sub">构成<span class="cx-note">(按字符近似,非逐段实测)</span></div>' +
+      '<div class="cx-segs">' + bars + "</div>" + rows + "</div>";
+  }
+ // ── 温度三区:trace.stats 回包 contextZones 条件渲染;缺数据=整组不出(空串)。
+ // typeof 守卫照 trajLineHtml 对 fmtTokens 的先例:本函数会被 panel-usage-normalize.test.ts
+ // 单独抽出求值(不注入本 helper),裸引用会在那条既有测试里 ReferenceError。 ──
+  var z = (traceStats[currentSid] || {}).contextZones;
+  html += (typeof ctxZonesGroupHtml === "function" ? ctxZonesGroupHtml(z, ctxTok) : "");
+ // ── 缓存命中率(llm.trace 经验证:payload.usage.cachedTokens/inputTokens 全行求和) ──
+  let hit = null, cin = 0, ctot = 0;
+  for (const e of (histEvents || [])) {
+    if (!e || e.kind !== "llm.trace") continue;
+    const u = (e.payload || {}).usage || {};
+    const c = Number(u.cachedTokens) || 0, t = Number(u.inputTokens) || 0;
+    if (t > 0) { cin += c; ctot += t; }
+  }
+  if (ctot > 0) hit = Math.round((cin / ctot) * 1000) / 10;
+  if (hit !== null) html += '<div class="pm-grp"><div class="cx-row"><span class="cx-k">平均缓存命中率</span><span class="cx-v" style="color:var(--green)">' + hit + '%</span></div>' +
+    '<div class="cx-row"><span class="cx-k">缓存命中 tok</span><span class="cx-v">' + ctxTok(cin) + " / " + ctxTok(ctot) + "</span></div></div>";
+ // ── 原有明细(经验证/估算双值 + 累计,信息不丢) ──
   let realLine;
   if (u.rep !== null) {
     realLine = '<div class="pm-item"><span class="pm-ck">' + ic("check") + '</span><span class="pm-name">当前上下文(最近一次调用实测):<b>' + u.rep + "</b> tok"
@@ -1706,15 +1800,16 @@ function ctxPillMenuHtml(s) {
   const cumLine = s.cumIn
     ? '<div class="pm-item"><span class="pm-ck">Σ</span><span class="pm-name">累计消耗(全部调用 in+out 求和,≠当前上下文,每轮历史重复计入):' + (s.cumIn + s.cumOut) + " tok</span></div>"
     : "";
-  return '<div class="pm-grp"><div class="pm-head">上下文容量(消息 ' + (s.users + s.agents) + " 条 · 工具 " + s.tools + " 次)</div>" +
+  return html + '<div class="pm-grp"><div class="pm-head">明细(消息 ' + (s.users + s.agents) + " 条 · 工具 " + s.tools + " 次)</div>" +
     realLine + cumLine +
     '<div class="pm-item"><span class="pm-ck">·</span><span class="pm-name">对话字符粗估 ' + s.chars + " ≈" + s.est + " tok(chars/4,无实测时的参考,不含系统提示)</span></div></div>";
 }
 $("ctxPill").onclick = () => {
   if (!currentSid) { toast("草稿态:发出首条消息后开始累计上下文"); return; }
+  if (pillMenuEl) { pillMenuClose(); return; } // 二点=收起(旧版重复点会 new div 叠多实例)
   const s = ctxStats();
   const el = document.createElement("div");
-  el.className = "pill-menu";
+  el.className = "pill-menu cx-menu"; // :固定宽度 popover(默认 width:max-content 会被进度条撑到 1000px+)
   el.innerHTML = ctxPillMenuHtml(s);
   document.body.appendChild(el);
   const r = $("ctxPill").getBoundingClientRect();
@@ -1722,6 +1817,8 @@ $("ctxPill").onclick = () => {
   el.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
   el.onclick = () => el.remove();
   pillMenuEl = el;
+ // popover 治理四态:外点/Esc/同类收旧(登记即被 doc 级监听接管;#ctxPill 豁免走本 onclick 的 toggle)
+  popoverOpen("ctxPill", function () { el.remove(); if (pillMenuEl === el) { pillMenuEl = null; } }, "#ctxPill");
 };
 // ---- 使用统计视图(ZCode UsageStatistics 对齐):卡片+趋势柱+热力图+会话表 ----
 function statsFetch(force) {

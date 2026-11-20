@@ -370,7 +370,8 @@ describe("附件:输入区预览 / 聊天流回看 / lightbox / /uploads 读盘"
     const toasts: string[] = [];
     const f = new Function("toast", "esc", "$", "URL", "pendingAtts", "attRender", src + "\nreturn { attDrop, attLightboxOpen, attLightboxClose };") as (
       toast: (t: string, e?: boolean) => void, esc: (s: unknown) => string, sel: (id: string) => unknown,
-      URLx: unknown, pend: unknown[], render: () => void) => { attDrop: (i: number) => void; attLightboxOpen: (s: string, k: string, n: string, m: string, from: unknown) => void; attLightboxClose: () => void };
+      URLx: unknown, pend: unknown[], render: () => void,
+    ) => { attDrop: (i: number) => void; attLightboxOpen: (s: string, k: string, n: string, m: string, from: unknown) => void; attLightboxClose: () => void };
     const esc = (s: unknown) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const revoked: string[] = [];
     const sel = (id: string) => {

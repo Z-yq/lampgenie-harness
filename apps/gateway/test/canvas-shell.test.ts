@@ -218,13 +218,35 @@ describe("无限画布外壳", () => {
     const srv = servePanel(port, () => {});
     try {
       const asset = await (await fetch(`http://127.0.0.1:${port}/assets/canvas-shell.js`)).text();
- // fitAll:全览低于 LOD 出槛 → 停在 LOD_OUT + toast 指路
-      expect(asset).toContain("if (v.s < LOD_OUT) {\n      v = viewCenterIn(b, a, LOD_OUT);");
-      expect(asset).toContain("保证可读 · 空白拖拽/小地图可看全部");
+ // fitAll:全览低于可读 floor(LOD_IN*0.995, P1)→ 停 floor+LOD 卡头反缩放 + toast 指路;
+ // 新增 forceAll(HUD「全」)=允许低于 floor 的真·全部入画。
+      expect(asset).toContain("var floorS = forceAll ? Z_MIN : LOD_IN * 0.995;");
+      expect(asset).toContain("if (v.s < floorS) {");
+      expect(asset).toContain("卡头保持可读,正文缩略");
+      expect(asset).toContain("点「全」看整板");
+      expect(asset).toContain('data-act="fitall"');
+      expect(asset).toContain("卡头保持可读(LOD)");
  // focus:单卡取景同样不低于 LOD 出槛
       expect(asset).toContain("if (o.zoom && v.s < LOD_OUT) v = centerInSafe(rect, LOD_OUT);");
  // 播种列高上限在位
       expect(asset).toContain("COL_H = 1800");
+ // 二轮:交互期去掉大面板毛玻璃(经验证软件合成下 rAF p50 33.3→16.7ms;静止 180ms 恢复)
+      expect(asset).toContain("body.cv-interacting #sidebar,body.cv-interacting .sb-acts,");
+      expect(asset).toContain("body.cv-dragging #sidebar,body.cv-dragging .sb-acts");
+      expect(asset).toContain("backdrop-filter:none!important");
+      expect(asset).toContain('document.body.classList.add("cv-interacting")');
+      expect(asset).toContain('document.body.classList.remove("cv-interacting")');
+ // 全览 LOD 标题两行 + 均衡断行:15% 时 21 卡全部卡名完整可见(修前 8 张省略号)
+      expect(asset).toContain("-webkit-line-clamp:2");
+      expect(asset).toContain("text-wrap:balance");
+      expect(asset).toContain("white-space:normal");
+ // 三轮:窄视口(1280)全览两行仍截断 → lodTitleFit 按卡自适应打 cv-t3(三行 11px + 隐副标题;
+ // scale 不变(平移)不重算,resize 强制重算)
+      expect(asset).toContain("function lodTitleFit()");
+      expect(asset).toContain('classList.toggle("cv-t3"');
+      expect(asset).toContain("-webkit-line-clamp:3");
+      expect(asset).toContain("body.cv-lod .cv-card.cv-t3 .cv-card-sub{display:none}");
+      expect(asset).toContain("lodTitleKey = \"\";");
  // toggle 脱同步守卫:setMode 必须先落权威 S.mode 再进退场
  // (经典引导时 exitCanvas 因 !S.built 早退不写 S.mode → toggleMode 永远反向调 setMode("classic")
  // 再次早退 = 「画布模式切不过去」零报错静默 no-op,用户用户反馈)

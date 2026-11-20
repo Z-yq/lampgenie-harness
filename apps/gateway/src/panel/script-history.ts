@@ -2,7 +2,146 @@
  * 面板主脚本分片:script-history(逐字自 panel.ts PAGE 模板搬移, 拆分)。
  * 模板约束沿袭:不得出现反引号与 ${;行内换行不得写裸转义。
  */
-export const PANEL_JS_HISTORY = `function renderHistory() {
+export const PANEL_JS_HISTORY = `// =====  P1-6/P1-7/P1-8:消息级文件变更摘要条 · 消息操作栏 · 任务级 sticky 状态胶囊 =====
+// 消息原文/引用/摘要模态体按消息 key 记账(不从 DOM 反解);同 key 覆盖写=轮询重渲染幂等。
+const MSGRAW = Object.create(null); // key -> markdown 原文(复制全文)
+const MSGQ = Object.create(null); // key -> "> [HH:MM] 首行摘要"(引用)
+const MSGSUM = Object.create(null); // key -> 「查看改动」模态体 HTML
+const MSGSUMSUB = Object.create(null); // key -> 模态副标题
+let msgActDelegated = false; // 消息操作栏委托=一次性守卫(防每次渲染重复挂监听)
+let ED_TURN = null; // 本轮 edit_file/write_file 聚合账
+function newEdTurn() { return { n: 0, add: 0, del: 0, list: [], seen: Object.create(null) }; }
+// 与 fixH10b 同口径:行数=按换行切分,空串计 0 行(edit_file 用 old/new_string,write_file 用 content)
+function edLineN(v) { const s = String(v == null ? "" : v); return s.length ? s.split(String.fromCharCode(10)).length : 0; }
+function edStatOf(argsRaw) {
+  let o = null;
+  try { o = JSON.parse(String(argsRaw == null ? "" : argsRaw)); } catch (e) { o = null; }
+  if (!o || typeof o !== "object") return null;
+  const path = String(o.path || "");
+  if (!path) return null;
+  return { path: path, add: edLineN(o.new_string != null ? o.new_string : o.content), del: edLineN(o.old_string) };
+}
+// 同文件多次编辑累加行数;文件数按去重路径计(口径=本轮全部 edit_file/write_file 调用)
+function edTurnAdd(argsRaw, toolName) {
+  if (!ED_TURN) ED_TURN = newEdTurn();
+  const st = edStatOf(argsRaw);
+  if (!st) return;
+  ED_TURN.n++;
+  ED_TURN.add += st.add;
+  ED_TURN.del += st.del;
+  if (!ED_TURN.seen[st.path]) {
+    ED_TURN.seen[st.path] = 1;
+    ED_TURN.list.push({ path: st.path, add: st.add, del: st.del, calls: 1, tool: String(toolName || "") });
+    return;
+  }
+  for (const it of ED_TURN.list) if (it.path === st.path) { it.add += st.add; it.del += st.del; it.calls++; }
+}
+function msgHm(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  const p = function (n) { return (n < 10 ? "0" : "") + n; };
+  return p(d.getHours()) + ":" + p(d.getMinutes());
+}
+// 首行摘要(去空行;cap=0 取全文首行,title 用)
+function msgFirstLine(text, cap) {
+  const ls = String(text || "").split(String.fromCharCode(10));
+  for (const l of ls) {
+    const s = l.trim();
+    if (s) return cap > 0 ? s.slice(0, cap) : s;
+  }
+  return "";
+}
+function msgSumModalHtml(sum) {
+  const rows = (sum.list || []).map(function (it) {
+    return '<div class="ms-diff-row"><span class="msf-path">' + esc(it.path) + '</span>' +
+      '<span class="msf-add">+' + Number(it.add || 0) + '</span><span class="msf-del">-' + Number(it.del || 0) + '</span>' +
+      '<span class="msf-n">' + Number(it.calls || 1) + " 次 · " + esc(it.tool || "") + "</span></div>";
+  }).join("");
+  return '<div class="ms-diff-list">' + rows + "</div>";
+}
+function msgSumBarHtml(mk, sum) {
+  return '<div class="msg-sum"><span class="ms-files">' + (sum.list || []).length + " 个文件已更改</span>" +
+    '<span class="ms-add">+' + Number(sum.add || 0) + '</span><span class="ms-del">-' + Number(sum.del || 0) + "</span>" +
+    '<button class="ms-btn" data-msgact="sum" data-ms="diff" data-k="' + esc(mk) + '">查看改动</button></div>';
+}
+function msgActsHtml(ev, mk) {
+  const hm = msgHm(ev.time);
+  return '<div class="msg-acts">' +
+    (hm ? '<span class="ma-time">' + hm + "</span>" : "") +
+    '<button data-msgact="copy" data-k="' + esc(mk) + '" title="复制本条回复全文(markdown)">复制</button>' +
+    '<button data-msgact="quote" data-k="' + esc(mk) + '" title="引用本条回复">⤴ 引用</button></div>';
+}
+// 复制:优先页面全局 tblClipWrite(script-markdown 已落地的统一剪贴板链);不可达=navigator.clipboard
+// → 隐藏 textarea+execCommand 三步本地回退,全失败只 toast 提示,绝不静默谎报成功。
+function msgClip(text, okMsg) {
+  const t = String(text || "");
+  if (typeof tblClipWrite === "function") { try { tblClipWrite(t, okMsg); return; } catch (e) { /* 走本地回退 */ } }
+  try {
+    if (navigator.clipboard) { navigator.clipboard.writeText(t).then(function () { if (typeof toast === "function") toast(okMsg); }, function () { /* 走本地回退 */ }); return; }
+  } catch (e) { /* 走本地回退 */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand ? document.execCommand("copy") : false;
+    ta.remove();
+    if (typeof toast === "function") toast(ok ? okMsg : "复制失败,请手动选择文本");
+  } catch (e) { try { if (typeof toast === "function") toast("复制失败,请手动选择文本"); } catch (e2) { /* 忽略 */ } }
+}
+function msgActBind() {
+  if (msgActDelegated) return;
+  msgActDelegated = true;
+  document.addEventListener("click", function (e) {
+    const b = e.target && e.target.closest ? e.target.closest("[data-msgact]") : null;
+    if (!b) return;
+    const k = b.getAttribute("data-k") || "";
+    const act = b.getAttribute("data-msgact");
+    if (act === "copy") { msgClip(MSGRAW[k] || "", "已复制全文"); return; }
+    if (act === "quote") { msgClip(MSGQ[k] || "", "已复制引用"); return; }
+    if (act === "sum") {
+      const body = MSGSUM[k];
+      if (!body) return;
+      try { uiModal(body, { kicker: "本轮改了什么", sub: MSGSUMSUB[k] || "" }); } catch (err) { /* 模态失败不影响流 */ }
+    }
+  });
+}
+// 任务级 sticky 状态胶囊:挂聊天视口(#chatBody 的父级,避开 mfPatch 子节点计数对位),
+// 重渲染只更新属性/文本不重建节点;终态(ok/err)降级为静态徽章(不再计时)。
+function taskCapRender() {
+  const body = $("chatBody");
+  if (!body) return;
+  const host = body.parentElement || body;
+  let cap = document.getElementById("taskCap");
+  if (cap && cap.parentNode !== host) cap = null;
+  const t = currentSid ? latestTaskOf(currentSid) : null;
+  const st = t ? String(t.state || "") : "";
+  const state = (st === "failed" || st === "cancelled") ? "err" : ((st === "running" || st === "queued") ? "run" : (st === "done" ? "ok" : ""));
+  let full = "";
+  const evs = Array.isArray(histEvents) ? histEvents : [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const ev = evs[i];
+    if (ev && ev.kind === "message.agent" && ev.payload && ev.payload.text) { full = msgFirstLine(ev.payload.text, 0); break; }
+  }
+  if (!full) full = t ? String(t.title || "") : "";
+  if (!state || !full) { if (cap) cap.style.display = "none"; return; }
+  if (!cap) {
+    cap = document.createElement("div");
+    cap.id = "taskCap";
+    cap.className = "task-cap";
+    cap.innerHTML = '<span class="tc-dot"></span><span class="tc-txt"></span>';
+ // P1-8:插到滚动容器首位 —— 追加末尾时 sticky 只在滚到底后才贴顶,首屏不可见。
+    host.insertBefore(cap, host.firstChild);
+  }
+  cap.style.display = "";
+  cap.setAttribute("data-cap-state", state);
+  cap.title = full;
+  let head = full.slice(0, 40);
+  if (state === "run" && t && t.startedAt) head = head + " · " + fmtDur(Date.now() - Number(t.startedAt));
+  const txt = cap.querySelector(".tc-txt");
+  if (txt && txt.textContent !== head) txt.textContent = head;
+}
+function renderHistory() {
   if (histEvents === null) { histLastHtml = null; histLastParts = null; $("chatBody").innerHTML = '<div class="empty-line">读 取 会 话 …</div>'; return; }
  // 子代理工作区 tab 激活:chatBody 归工作区渲染(完整动作/消息流回放),主历史挂起——切回「主会话」tab 即还原。
   if (subWsActive) { renderSubWorkspace(subWsActive); return; }
@@ -221,6 +360,8 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
  // 归属判定与既有通道同源(subagent.* 事件 kind + spawn/answer/task_output 工具名),不新造判据;
  // 经典布局 cvHideSub=false,渲染零变化。
   const cvHideSub = canvasActive();
+  ED_TURN = newEdTurn(); // P1-6:本趟遍历的聚合账起点(骨架趟/真趟各自清零)
+  msgActBind(); // P1-7:消息操作栏一次性委托
   for (const ev of histEvents) {
  // 子代理工作区专用事件:主会话流一律不渲染——本 kind 的完整回放在子代理工作区 tab,
  // 这里显式跳过(防止任何分支把它当消息/工具渲染=双渲染;预扫段只认既有 kind,天然不中)。
@@ -327,6 +468,9 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
         if (!cvHideSub) { flushGrp(); parts.push(gateL(() => subagentBridgeHtml(String(ev.payload.text || ""), ev.time, q))); }
       } else {
       flushGrp(); turnSeq++;
+ // P0-2:登记本轮过程段起点(用户消息行之后;roundPartsWrap 会再对齐到首个过程段)
+      roundRanges.push({ i: parts.length + 1, t: turnSeq, k: "round:" + String(currentSid || "") + ":" + turnSeq });
+      ED_TURN = newEdTurn(); // P1-6:新一轮的改文件聚合账清零
       const attsHtml = (ev.payload.attachments || []).length
         ? attRowHtml(ev.payload.attachments)
         : "";
@@ -337,7 +481,7 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
  // fixE22:userSlashHtml 入 gateL 惰性——窗口外旧消息不再付 chip 解析+高亮成本。
  // fixT6 P2:用户消息时间戳以 .who 的 title 承载(气泡内不塞元信息,详情可悬浮查)
       const uTitle = ev.time ? ' title="发送时间 ' + esc(new Date(ev.time).toLocaleTimeString()) + '"' : "";
-      parts.push(gateL(() => '<div class="user-line" data-turn="' + turnSeq + '"><span class="who"' + uTitle + '>你</span><span class="txt">' + userSlashHtml(String(utext), q) + attsHtml + '</span><span class="msg-acts"><button data-act="side" data-text="' + esc(utext) + '">侧聊</button><button data-act="edit" data-text="' + esc(utext) + '">重编</button></span></div>'));
+      parts.push(gateL(() => '<div class="user-line" data-turn="' + turnSeq + '"><span class="who"' + uTitle + '>你</span><span class="txt"><span class="ul-body">' + userSlashHtml(String(utext), q) + '</span>' + attsHtml + '</span><span class="msg-acts"><button data-act="side" data-text="' + esc(utext) + '">侧聊</button><button data-act="edit" data-text="' + esc(utext) + '">重编</button></span></div>'));
       }
     }
     else if (ev.kind === "message.system") {
@@ -361,7 +505,25 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
         if (lastTr) lastTr.think = thHtml;
         else parts.push(thHtml);
       }
-      if (ev.payload.text) parts.push(gateL(() => replyBlockHtml(ev, q)));
+      if (ev.payload.text) {
+ // P1-7:操作栏(复制全文/时间戳/⤴ 引用)恒存在 DOM,hover 显形交给 CSS;
+ // P1-6:终稿(不带工具调用的正文)底部挂本轮文件变更摘要条。
+        const rawText = String(ev.payload.text || "");
+        const mk = replyKeyOf(ev, rawText);
+        MSGRAW[mk] = scrubProtocolLines(rawText);
+        MSGQ[mk] = "> [" + msgHm(ev.time) + "] " + msgFirstLine(rawText, 40);
+        parts.push(gateL(() => replyBlockHtml(ev, q)));
+        const isFinal = !(ev.payload.toolCalls && ev.payload.toolCalls.length);
+        if (isFinal && ED_TURN && ED_TURN.list.length) {
+          const sum = ED_TURN;
+          ED_TURN = newEdTurn();
+          MSGSUM[mk] = msgSumModalHtml(sum);
+          MSGSUMSUB[mk] = (sum.list || []).length + " 个文件 · +" + sum.add + " −" + sum.del;
+          parts.push(gateL(() => msgSumBarHtml(mk, sum) + msgActsHtml(ev, mk)));
+        } else {
+          parts.push(gateL(() => msgActsHtml(ev, mk)));
+        }
+      }
       if (ev.payload.toolCalls) {
         for (const c of ev.payload.toolCalls) {
           if (c.name === "spawn_subagent" && subAbsorbedCalls.has(String(c.id || ""))) continue; // 过程卡已承载(B )
@@ -378,6 +540,8 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
             }
           }
  // fixH13:参数摘要存原始 JSON(tgResultItem 专属渲染按工具解析;旧口径只留一句 query 类摘要)
+ // P1-6:本轮改文件聚合(口径=edit_file/write_file 调用的 +/- 行,同文件累加)
+          if (String(c.name || "").toLowerCase() === "edit_file" || String(c.name || "").toLowerCase() === "write_file") edTurnAdd(c.arguments, c.name);
           argsByCall.set(c.id, String(c.arguments || ""));
           const cat = catOf(c.name);
           if (office) parts.push(gate('<span class="office-chip">» ' + esc(c.name) + "</span>"));
@@ -609,7 +773,9 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
     }
   }
   const cur = [...tasks.values()].find((x) => x.sessionId === currentSid && ["queued", "running"].includes(x.state));
-  if (cur) parts.push('<div class="task-sub"><span class="st ' + cur.state + '">' + cur.state + '</span> 运行中,实时刷新…' + (cur.startedAt ? ' · 已工作 ' + fmtDur(Date.now() - cur.startedAt) : "") + "</div>");
+ // P0-5:活跃任务流尾常驻运行态行(三态动词 + 「工作中 X 时 X 分 X 秒」);
+ // 1s 粒度只改该行 textContent(runStatusTick),不新增轮询、不整块重渲染;终态后该行不再产出即消失。
+  if (cur) parts.push(runStatusHtml(cur.startedAt, runLineVerb || "任务"));
  // fixI15: 排队消息卡(队列顺序=发送顺序;每卡三按钮:立即发送/编辑/删除)。
   for (const qi of (queueBySid.get(currentSid) || [])) {
     parts.push('<div class="qm-card" data-qid="' + esc(qi.id) + '">' + ic("clock", "qm-clock") + '<div class="qm-body">'
@@ -644,6 +810,7 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
     buildParts();
     const nAll = parts.length;
     parts.length = 0;
+    roundRanges.length = 0; // 骨架趟不计区间(真趟重扫)
     wLo = Math.max(0, nAll - MF_WIN_N);
     turnSeq = 0; turnOutcome = new Map();
   }
@@ -664,7 +831,8 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
   }
  // T1 幂等(视频拆解):task.list 全量广播(含他山会话)每经 renderChat→renderHistory 都
  // 全量重写 chatBody,单帧重绘=问候区「周期性跳动」(帧差经验证 30s 抖 438 节点)。内容未变=不写。
-  const html = parts.length ? parts.join("") : '<div class="empty-line">' + ic("inbox") + " 该会话暂无记录</div>" + firstRunCardHtml();
+  const html = (roundPartsWrap(parts, roundRanges, (t) => turnOutcome.has(String(t))), parts.length ? parts.join("") : '<div class="empty-line">' + ic("inbox") + " 该会话暂无记录</div>" + firstRunCardHtml());
+  taskCapRender(); // P1-8:先更新 sticky 胶囊(内容未变也需刷状态),再做整帧幂等判断
   if (html === histLastHtml) return;
   histLastHtml = html;
  // 增量写入(滚动稳定):与上一帧 parts 做公共前缀+后缀对位,只替换差异区间——
@@ -687,8 +855,9 @@ export const PANEL_JS_HISTORY = `function renderHistory() {
     mfRoots = [...mfBody.children];
     for (const r of mfRoots) detBindIn(r); // 重建后按总账回填 open(用户点开的卡不会自己关上)
   }
+  roundBindIn($("chatBody")); // 轮级组开合按 localStorage 回填 + toggle 持久化采集
   histLastParts = parts.slice();
- // 新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
+ // :新消息入场微动效——仅 mfPatch 纯追加路径的新根挂 .msg-in(淡入+上浮一次);
  // 全量重建(初开/回放)与替换区(流式改写)不加,防整列/连播闪烁;082 幂等早退在上,不受影响。
   if (mfAppendOnly) for (const el of mfRoots) el.classList.add("msg-in");
  // mermaid 围栏懒加载出图(改版):innerHTML 落位后 mmRenderIn 扫占位→按需注入脚本→run/降级
@@ -853,6 +1022,7 @@ function renderChat() {
  // 本仓无 LLM 标题轨,占位只出现在草稿欢迎态头部(新会话尚未首发);首发即 deriveTitle 派生真标题
  // (renderHistory 整块替换本 HTML),占位随之消失,不存在「闪 New session」窗口。保留「说点什么」副行。
   $("chatBody").innerHTML = '<div class="draft-newtitle">新 会 话</div><div class="draft-greet">' + _p + '</div><div class="empty-line">说 点 什 么</div>';
+  taskCapRender(); // P1-8:草稿态无本任务,胶囊自行隐藏
   renderPendingSkills(); // 草稿路径也要重挂
 }
 function render(chatTouched = true) {
@@ -976,16 +1146,47 @@ const subCancelPending = new Set();
 function subDirEntries() {
   const map = new Map(); // agentId → entry
   const events = Array.isArray(histEvents) ? histEvents : [];
+ // spawn 事件只有 taskId(agentId 在后续 subagent.event/result 里),
+ // 且分页窗口可能从子代理中段开始——先建 taskId→agentId 映射,再从事件合成目录条目,
+ // 否则「本会话暂无子代理」会与轨迹看板的 2 个子代理自相矛盾(真实用户路径经验证)。
+  const taskAgent = new Map();
+  for (const e of events) {
+    const p = e.payload || {};
+    if ((e.kind === "subagent.event" || e.kind === "subagent.result") && p.taskId && p.agentId) taskAgent.set(String(p.taskId), String(p.agentId));
+  }
+  const keyOf = (p) => String(p.agentId || taskAgent.get(String(p.taskId || "")) || p.taskId || "");
+  const ensure = (aid, e, p) => {
+    let en = map.get(aid);
+    if (!en) {
+      en = { agentId: aid, title: String(p.title || ""), instructions: String(p.instructions || ""), time: e.time || 0, sessionId: String(e.sessionId || ""), synthesized: true };
+      map.set(aid, en);
+    }
+    return en;
+  };
   for (const e of events) {
     const p = e.payload || {};
     if (e.kind === "subagent.spawn") {
-      const aid = String(p.agentId || "");
+      const aid = keyOf(p);
       if (!aid) continue;
-      map.set(aid, { agentId: aid, title: String(p.title || ""), instructions: String(p.instructions || ""), time: e.time || 0, sessionId: String(e.sessionId || "") });
+      const en = ensure(aid, e, p);
+      en.title = String(p.title || en.title || "");
+      en.instructions = String(p.instructions || en.instructions || "");
+      en.time = e.time || en.time || 0;
+    } else if (e.kind === "subagent.event") {
+      const aid = keyOf(p);
+      if (!aid) continue;
+      const en = ensure(aid, e, p);
+      const ik = String(p.kind || "");
+      if (ik === "message.user" && !en.instructions) en.instructions = String(p.text || "");
+      if (ik === "message.user" || ik === "turn.start") { en.lastAction = String(p.text || en.lastAction || "").slice(0, 160); }
+      if (ik === "llm.trace" && p.model) en.model = String(p.model);
+      if (ik === "tool.call") en.lastAction = "调用 " + String(p.name || "tool");
+      if (ik === "message.agent" && p.text) en.lastAction = String(p.text).slice(0, 160);
+      if (!en.role && p.text) { try { en.role = subagentRoleOf(String(p.text)); } catch (err) { /* 角色解析失败不炸 */ } }
     } else if (e.kind === "subagent.result") {
-      const aid = String(p.agentId || "");
-      const en = aid ? map.get(aid) : null;
-      if (!en) continue;
+      const aid = keyOf(p);
+      if (!aid) continue;
+      const en = ensure(aid, e, p);
       en.endTime = e.time || 0;
       en.ok = !(p.event && p.event.ok === false);
       en.text = String((p.event && (p.event.finalText || p.event.note)) || "");
@@ -993,7 +1194,7 @@ function subDirEntries() {
  // 与服务端 subagents.list 的 reap 字段同源(payload.reap.reason)。
       if (p.reap && p.reap.reason) en.reap = String(p.reap.reason);
     } else if (e.kind === "subagent.backgrounded") {
-      const en = map.get(String(p.agentId || ""));
+      const en = map.get(keyOf(p));
       if (en) en.bg = true;
     }
   }
@@ -1022,6 +1223,7 @@ function subDirEntries() {
     else if (en.status === "completed") { en.cls = "ok"; en.stTxt = "完成"; }
     else if (en.status === "failed") { en.cls = "fail"; en.stTxt = "失败"; }
     else if (en.status === "running" || en.bg) { en.cls = "run"; en.stTxt = "后台运行中"; if (startAt) en.durTxt = " · 已工作 " + fmtDur(now - startAt); }
+    else if (en.synthesized) { en.cls = "end"; en.stTxt = "过程记录(窗口内无终态)"; }
     else { en.cls = "end"; en.stTxt = "已结束 · 历史会话"; }
   }
   return [...map.values()];
@@ -1246,8 +1448,11 @@ function renderSubWorkspace(agentId) {
   const q = findQuery;
   const all0 = Array.isArray(histEvents) ? histEvents : [];
   const en = subDirEntries().find((x) => x.agentId === aid);
-  const all = all0.filter((e) => e.kind === "subagent.event" && String((e.payload || {}).agentId || "") === aid);
-  const resEv = all0.filter((e) => e.kind === "subagent.result" && String((e.payload || {}).agentId || "") === aid);
+ // 目录键可能是 taskId(旧 spawn 无 agentId/事件窗口从子代理中段开始),
+ // 事件匹配同时认 payload.agentId 与 payload.taskId,否则选中条目后工作区恒空。
+  const matchAid = (p) => { const q = p || {}; return String(q.agentId || "") === aid || String(q.taskId || "") === aid; };
+  const all = all0.filter((e) => e.kind === "subagent.event" && matchAid(e.payload));
+  const resEv = all0.filter((e) => e.kind === "subagent.result" && matchAid(e.payload));
   const parts = [];
  // 头部卡:标题/状态/角色/模型/任务书全文/journal 终态
   const title = (en && (subagentLabelOf(en.title, en.instructions) || "")) || "子代理 " + aid.slice(-8);
@@ -1404,6 +1609,38 @@ let histHasMore = false;        // 首屏/翻页回包说「还有更早事件�
 let histNextBeforeSeq;          // 下一页游标(=本页最小 seq,服务端保证严格推进);hasMore=false 时清空
 let histPageLoading = false;    // 翻页请求在飞(按钮文案「加载中…」,防连点重入)
 const HIST_PAGE = 200;          // 历史每页条数(首屏与翻页同值)
+// ---- 会话历史热缓存:切回刚才看过的会话时先秒开缓存帧,再走 sinceSeq 增量 ----
+// 为什么不是缓存 SSR:服务端 session.history 冷读大文件经验证可达 1.2s(9p 冷盘),而用户来回切会话
+// 是高频路径。缓存只存**已从服务端确认过的 seq 事件**(不含乐观占位),最多 5 个会话、30 分钟。
+const HIST_CACHE_MAX = 5;
+const HIST_CACHE_TTL = 30 * 60 * 1000;
+const histCache = new Map(); // sid -> {events, lastSeq, hasMore, nextBeforeSeq, at}
+function histCacheRemember(sid) {
+  const s = String(sid || "");
+  if (!s || !Array.isArray(histEvents)) return;
+  const events = histEvents.filter(function (e) { return e && e.seq !== undefined; });
+  if (!events.length) return;
+  try {
+    histCache.delete(s);
+    histCache.set(s, {
+      events: events.slice(), lastSeq: Number(histLastSeq) || 0,
+      hasMore: histHasMore === true, nextBeforeSeq: histNextBeforeSeq, at: Date.now(),
+    });
+    while (histCache.size > HIST_CACHE_MAX) { const k = histCache.keys().next().value; histCache.delete(k); }
+  } catch (e) { /* 内存不足:放弃缓存,不影响主链 */ }
+}
+/** 切会话时用缓存铺首帧(返回 true=命中)。调用方随后 refreshHist 会走 sinceSeq 增量补齐。 */
+function histSeedFromCache(sid) {
+  const s = String(sid || "");
+  const hit = s ? histCache.get(s) : null;
+  if (!hit || Date.now() - hit.at > HIST_CACHE_TTL) return false;
+  histEvents = hit.events.slice();
+  histLastSeq = Number(hit.lastSeq) || 0;
+  histSession = s;
+  histHasMore = hit.hasMore === true;
+  histNextBeforeSeq = hit.nextBeforeSeq;
+  return true;
+}
 // ---- 右侧 diff 抽屉( F1):变更条文件清单点击→单文件补丁(取代旧 alert 清单) ----
 function ddOpen(taskId, file) {
   ddSel = { taskId: taskId, file: file };

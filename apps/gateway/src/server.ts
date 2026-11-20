@@ -46,7 +46,8 @@ function projectRootFallbackGuard(
   projects: { list(): { id: string; path: string; label: string; availability: string }[] } | undefined,
   projectId: string | undefined,
   resolvedRoot: string,
-  harnessRoot: string): string | null {
+  harnessRoot: string,
+): string | null {
   if (!projectId) return null;
   const proj = projects?.list().find((x) => x.id === projectId);
   if (!proj || proj.path.startsWith("remote:")) return null;
@@ -77,7 +78,7 @@ import {
   type TaskEnvelope,
 } from "./task-envelope.js";
 import { resetSessionToolFloor } from "./tool-view.js"; // 会话删除时清工具面冻结集(轮 P3)
-import { superSessionId } from "./super-agent.js"; // 出站 super.turn.done 的会话 id(super:YYYYMMDD)
+import { superSessionId } from "./super-agent.js"; // 出站 super.turn.done 的会话 id(固定 "super")
 import { PANEL_BUILD } from "./build-stamp.js";
 import { WsByteLedger, flushWsLedger, WS_LEDGER_FLUSH_MS } from "./ws-byte-ledger.js"; // g3: WS 发送字节账本(谁在发大帧的字节级证据)
 import { WebSocketServer, WebSocket } from "ws";
@@ -247,7 +248,8 @@ function denyDispatch(
   journal: Journal,
   code: ErrorCode,
   type: string,
-  negotiated: NegotiatedCapabilities): void {
+  negotiated: NegotiatedCapabilities,
+): void {
   const namespace = type.split(".")[0] ?? type;
   safeSend(ws, {
     v: PROTOCOL_VERSION,
@@ -398,6 +400,8 @@ export interface GatewayServerOptions {
     secretSet?: (name: string, value: string) => { existed: boolean };
  /** 密钥名列表(只返回名字)。 */
     secretKeys?: () => string[];
+ /** 密钥末4位(设置页 •••• 掩码;只回末4字符,完整值永不出服务端)。 */
+    secretLast4?: (name: string) => string | null;
   };
   /** 端点模型列表(设置页模型选择器);providerId=按该 provider 端点拉;缺省=not-implemented。 */
   listModels?: (providerId?: string) => Promise<string[]>;
@@ -448,7 +452,8 @@ export interface GatewayServerOptions {
   contextWindow?: number;
  /** super agent 指挥台后端链:对话/历史/inbox/ASR;缺省=super.* 命令显式 not-implemented。 */
   superAgent?: {
-    turn(text: string): Promise<string>;
+ /** :attachments 随轮次透传(指挥台上传;缺省=纯文本,旧客户端行为不变)。 */
+    turn(text: string, attachments?: { name: string; path: string; mime?: string; size?: number }[]): Promise<string>;
     history(sinceSeq?: number): unknown[];
     /** 待处理清单(ask/permission/interrupted/blocked/failed);缺省=空数组。 */
     inbox?(limit?: number): import("@lampgenie/protocol").SuperInboxItem[];
@@ -546,7 +551,8 @@ const historyRings = new Map<string, import("@lampgenie/runtime/session/history-
 /** 取该会话的增量环(命中即提到 LRU 尾;超容量淘汰队首会话)。 */
 function historyRingFor(
   sessionId: string,
-  Ring: new (maxRows?: number) => import("@lampgenie/runtime/session/history-pager").DeltaRing): import("@lampgenie/runtime/session/history-pager").DeltaRing {
+  Ring: new (maxRows?: number) => import("@lampgenie/runtime/session/history-pager").DeltaRing,
+): import("@lampgenie/runtime/session/history-pager").DeltaRing {
   const hit = historyRings.get(sessionId);
   if (hit) {
     historyRings.delete(sessionId);
@@ -641,7 +647,8 @@ async function profileSensePayload(
  * 开始卡=机制标题+runId;完成卡=run.cost(¥/tokens)+摘要。注入失败不碰运行链(fail-soft)。 */
 function rsiNoteInjector(
   journal: import("@lampgenie/core").Journal,
-  broadcast: ((msg: import("@lampgenie/protocol").ServerMessage) => void) | undefined): NonNullable<import("./rsi-agent-runner.js").StartRunDeps["note"]> {
+  broadcast: ((msg: import("@lampgenie/protocol").ServerMessage) => void) | undefined,
+): NonNullable<import("./rsi-agent-runner.js").StartRunDeps["note"]> {
   return (p) => {
     try {
       journal.append({ kind: "super.dream", sessionId: "super", payload: { ...p, at: Date.now() } });
@@ -652,10 +659,11 @@ function rsiNoteInjector(
 
 /** RSI 调度器依赖( RSI-SELF-DRIVE):与手动 run 同源注入 submit/taskState/journal,
  * 额外给「在线是否繁忙」探测。system 任务(rsi/auto-/sched-)不算繁忙;前台 user 任务算。 */
-function rsiSchedulerDepsOf(
+async function rsiSchedulerDepsOf(
   opts: GatewayServerOptions,
   tm: import("./task-manager.js").TaskSupervisor,
-  journal: import("@lampgenie/core").Journal): import("./rsi-scheduler.js").RsiSchedulerDeps {
+  journal: import("@lampgenie/core").Journal,
+): Promise<import("./rsi-scheduler.js").RsiSchedulerDeps> {
   const busy = (): boolean => {
     try {
       return tm.list().some((t) => {
@@ -679,6 +687,8 @@ function rsiSchedulerDepsOf(
     readSession: (sessionId) => journal.readSession(sessionId),
     config: rsiCostConfigOf(opts),
     note: rsiNoteInjector(journal, opts.broadcast),
+ // W2:nightly run done 收尾时折叠蒸馏经验(动态 import 免模块环,与 :2629 同款)。
+    experienceStore: (await import("./agent-wiring.js")).getExperienceStore(),
   };
 }
 
@@ -702,7 +712,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     }
   }
  // 文件索引预热(首次 @ 提及不再吃冷启动秒级延迟)。
- // 预热是同步重活(fileIndex 全仓 walk + sense 全图预生成),9p 慢盘上
+ // :预热是同步重活(fileIndex 全仓 walk + sense 全图预生成),9p 慢盘上
   // 分钟级,曾把连接关键路径(面板首屏/hello/task 流)整个卡死;且原实现每个连接都重触发。
   // 改为:延迟 3s+单次守卫+unref——连接先走完,重活在事件循环空闲后一次跑(fileIndex 自带
   // 时间预算,最坏同步阻塞≈单预算)。
@@ -825,7 +835,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     } catch (err) {
       console.error(`[gateway] 队列快照落账失败(重启可能丢该会话排队消息):${String(err).slice(0, 160)}`);
     }
- // 边界不成立时顺带把稳定码带给面板(旧客户端忽略未知字段;协议零改动)。
+ // :边界不成立时顺带把稳定码带给面板(旧客户端忽略未知字段;协议零改动)。
     const msg = {
       v: PROTOCOL_VERSION,
       type: "queue.update" as const,
@@ -874,7 +884,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
  // tool_result 之间,模型侧调用链断裂;等下一次终态事件再泵即可。
     if (!assertQueueBoundary(sessionLastEventKind(sessionId))) return;
     const head = q[0]!;
- // 消息步进边界唯一判定入口(injectionVerdict)——tool batch 未闭合 / turn 未开始 /
+ // :消息步进边界唯一判定入口(injectionVerdict)——tool batch 未闭合 / turn 未开始 /
  // 本 turn 准入已冻结时不提交(保持排队);不稳定码随 queue.update 下发(旧客户端忽略)。
     const verdict = injectionVerdict({
       events: opts.journal.readSession(sessionId),
@@ -904,7 +914,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
     submitQueueItem(item);
     queueBroadcast(sessionId);
   };
- // turn.start 落账即冻结本轮准入水位(turn.admission.frozen,自定义事件)。冻结点之后
+ // :turn.start 落账即冻结本轮准入水位(turn.admission.frozen,自定义事件)。冻结点之后
  // 受理的输入(admittedSeq>cutoffSeq)本 turn 不再扩增,由 pump 排队到下一 turn。
  // 同 turn+cutoffSeq 重复触发不重复落账(补发/重放幂等);失败只告警,不阻断 turn.start 主链。
   opts.journal.subscribe((e) => {
@@ -1148,7 +1158,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
       console.error("[gateway] 终态投递义务失败(不阻塞主链):", String(err).slice(0, 200));
     }
   });
- // Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
+// Issue 终态回写(只写一次;幂等键落 journal)。fail-soft:失败只告警,不阻塞任务终态与投递。
  // 做梦卡注入器:机制运行开始/完成事件注入 super 会话(journal kind=super.dream,
  // payload={phase,mechanismId,runId,taskId?,title,cost?,summary?})+ 广播同帧给面板聊天流。
  // 开始卡=机制标题+runId;完成卡=run.cost(¥/tokens)+摘要。注入失败不碰任务链(fail-soft)。
@@ -1260,7 +1270,7 @@ export function startGatewayServer(opts: GatewayServerOptions & { server?: impor
         });
         return;
       }
- // automation.update 的乐观并发字段 expectedRevision 不在协议 schema 内(zod 默认剥掉未知键),
+ // :automation.update 的乐观并发字段 expectedRevision 不在协议 schema 内(zod 默认剥掉未知键),
  // 处理器拿不到;这里从原始 payload 补回(仅 automation.update 生效,其它通道零变化)。
       if (msg.type === "automation.update") {
         try {
@@ -1456,7 +1466,8 @@ export function bindSessionProject(
 export function repairSessionProjectDrift(
   journal: Journal,
   tm: TaskSupervisor,
-  projects: ProjectRegistry): number {
+  projects: ProjectRegistry,
+): number {
   const bySession = new Map<string, import("@lampgenie/core").Task[]>();
   for (const t of tm.list()) {
     if (!t.projectId) continue;
@@ -1559,7 +1570,8 @@ const browserViewSubs = new Map<WebSocket, { subId: string; tabId: string | null
 function broadcastSessionModel(
   r: import("./session-model.js").SessionModelSetOutcome & { sessionId: string },
   ws: WebSocket,
-  opts: GatewayServerOptions): void {
+  opts: GatewayServerOptions,
+): void {
   const frame: import("@lampgenie/protocol").ServerMessage = {
     v: PROTOCOL_VERSION,
     type: "session.model.result",
@@ -1581,16 +1593,23 @@ function broadcastSessionModel(
 function broadcastCompactStatus(
   frame: import("@lampgenie/protocol").ServerMessage,
   ws: WebSocket,
-  opts: GatewayServerOptions): void {
+  opts: GatewayServerOptions,
+): void {
   if (opts.broadcast) opts.broadcast(frame);
   else safeSend(ws, frame);
 }
+
+/** 命中率告警去重(设计稿 §4.6.2 缺口2 闭环):实现见 ./prefix-cache-alert.ts
+ * (按会话记住严重度,只在升级 ok→warn→block 时落 prefix.cache.warn;只写观测事件,请求前缀零影响)。
+ * 这里删掉了早期的内联实现,改由 computeTraceStats 直接 await import 调用同一份可测模块。 */
+  
 
 /** 追踪统计派生(trace.stats 回包体;2026-11 抽出闭包供「看板刷新桥」复用)。
  * 原为 case "trace.stats" 主体,逐字搬迁:readSession 索引切片 + 水位 memo + cfg 分母 + costModels。 */
 async function computeTraceStats(
   sessionId: string,
-  opts: GatewayServerOptions): Promise<{ v: number; type: "trace.stats.result"; sessionId: string; stats: Record<string, unknown> }> {
+  opts: GatewayServerOptions,
+): Promise<{ v: number; type: "trace.stats.result"; sessionId: string; stats: Record<string, unknown> }> {
   const { deriveTraceStats } = await import("@lampgenie/runtime/agent/trace-stats");
  // 深度优化(经验证):旧路径 journal.readAll.filter(sid) 每次都把全库 28 万条
  // 走一遍引用过滤(经验证 median 12.2ms,同步占事件循环);而 readSession(sid) 的会话索引
@@ -1639,16 +1658,42 @@ async function computeTraceStats(
       tokens: m,
     }));
   } catch { /* 单价模块不可用=不出金额(比出假金额好) */ }
+ // 命中率硬指标判定(设计稿 §4.6:只读上面的 stats 聚合值,**不改请求前缀**。
+ // 98.5% 是 用户拍板的设计目标(非经验证基线):这里只回答「测出来的数有没有达标」,
+ // verdict 升级时落一条 prefix.cache.warn(去重);不达标不静默。
+  let cacheHealth: Record<string, unknown> | undefined;
+  try {
+    const { judgePrefixCacheHealth, prefixCacheHealthLineOf } = await import("@lampgenie/runtime/agent/prefix-cache-health");
+    const { notePrefixCacheHealth } = await import("./prefix-cache-alert.js");
+    const health = judgePrefixCacheHealth({
+      calls: stats.llmCalls,
+      inputTokens: stats.tokens.input,
+      cachedTokens: stats.tokens.cached,
+      ...(stats.usageNormalized
+        ? { estimatedInputTokens: stats.usageNormalized.estInput, estimatedCachedTokens: stats.usageNormalized.estCached }
+        : {}),
+    });
+    cacheHealth = { ...health, line: prefixCacheHealthLineOf(health) };
+    notePrefixCacheHealth(sessionId, health, opts.journal, stats.prefixSignals ? { prefixSignals: stats.prefixSignals } : undefined);
+  } catch { /* 判定模块不可用=不出该键(不造数) */ }
+ // 上下文温度三区(数据链;口径 03-concepts §3):冷=冻结区/温=中段/热=保护窗,
+ // 逻辑视图只读投影;派生失败(空会话/loop 不可用)=不出该键,不造数。
+  let contextZones: Awaited<ReturnType<typeof import("./context-zones.js").deriveContextZones>> | undefined;
+  try {
+    const { deriveContextZones } = await import("./context-zones.js");
+    contextZones = await deriveContextZones(opts.journal, sessionId);
+  } catch { /* 三区派生不可用=不出该键(不造数) */ }
   return {
     v: PROTOCOL_VERSION, type: "trace.stats.result", sessionId,
-    stats: { ...stats, contextWindow: ctxWin, ...(costModels ? { costModels } : {}) },
+    stats: { ...stats, contextWindow: ctxWin, ...(costModels ? { costModels } : {}), ...(cacheHealth ? { cacheHealth } : {}), ...(contextZones ? { contextZones } : {}) },
   };
 }
 
 async function handleMessage(
   ws: WebSocket,
   msg: ClientMessage,
-  opts: GatewayServerOptions): Promise<void> {
+  opts: GatewayServerOptions,
+): Promise<void> {
   const { taskManager: tm, journal, nodes } = opts;
  // 入口复核(ws 层已挡一次):保证任何进入 switch 的消息都过了能力协商门。
  // legacy 连接这里恒放行,旧客户端行为逐字不变。
@@ -1662,7 +1707,7 @@ async function handleMessage(
   }
   switch (msg.type) {
     case "client.mode": {
- // 连接级 clientMode 声明。只对本连接生效(允许任意设置:面板可降级,
+ // :连接级 clientMode 声明。只对本连接生效(允许任意设置:面板可降级,
       // readonly/agent 也可再改回——权限收放由 allowlist 决定,不由 mode 历史决定)。
       const raw = String((msg as { mode?: unknown }).mode ?? "");
       const prev = clientModeByWs.get(ws) ?? DEFAULT_CLIENT_MODE;
@@ -2114,7 +2159,7 @@ async function handleMessage(
     case "task.resume": {
       const task = tm.get(msg.taskId);
       if (!task) { safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.UnknownTask, message: "任务不存在(可能已删除)" }); break; }
- // 用户停止过的任务不自动/手动续跑(标记优先于状态机判定:本任务或本会话在任务创建后有停止记录)。
+ // :用户停止过的任务不自动/手动续跑(标记优先于状态机判定:本任务或本会话在任务创建后有停止记录)。
     if (hasUserStoppedSince(opts.journal, { taskId: task.id, sessionId: task.sessionId, since: task.createdAt })) {
       safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: USER_STOPPED_RESUME_CODE, message: USER_STOPPED_RESUME_MESSAGE });
       break;
@@ -2152,7 +2197,7 @@ async function handleMessage(
     // 未知/已删 id 回 task:null(不抛、不回全量列表),面板据此显示「不可用」。
     case "task.detail.get": {
       const t = tm.get(msg.taskId);
- // 任务侧能查到关联 issue 编号(仅内存 link 命中时附带;不改协议必需字段)。
+ // :任务侧能查到关联 issue 编号(仅内存 link 命中时附带;不改协议必需字段)。
       const link = t && opts.issueService ? opts.issueService.findIssueByTask(t.id) : null;
       const issue = link ? { projectId: link.projectId, number: link.number } : undefined;
       safeSend(ws, {
@@ -2416,6 +2461,8 @@ async function handleMessage(
           config: rsiCostConfigOf(opts),
  // 做梦卡:运行终态就地收尾时注入 super 会话完成卡(成本+摘要)。
           note: rsiNoteInjector(journal, opts.broadcast),
+ // W2:面板轮询收尾同样折叠 nightly 蒸馏经验(幂等标记防重复)。
+          experienceStore: (await import("./agent-wiring.js")).getExperienceStore(),
         });
  // RSI-SELF-DRIVE:调度快照与 12 区同一拍返回(面板一次拉全,不再多一次往返)。
         const scheduler = await collectSchedulerStatus(root).catch(() => undefined);
@@ -2463,8 +2510,11 @@ async function handleMessage(
             config: rsiCostConfigOf(opts),
  // 做梦卡:开始即注入 super 会话(机制清单卡);广播给面板聊天流。
             note: rsiNoteInjector(journal, opts.broadcast),
+ // W2:手动 run 的 deps 同样带经验库(settle 收尾折叠用)。
+            experienceStore: (await import("./agent-wiring.js")).getExperienceStore(),
           },
-          msg.id);
+          msg.id,
+        );
         safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.run.result", ...r });
       } catch (e) {
         safeSend(ws, { v: PROTOCOL_VERSION, type: "rsi.mechanism.run.result", ok: false, id: msg.id, reason: e instanceof Error ? e.message : String(e) });
@@ -2512,7 +2562,7 @@ async function handleMessage(
     case "rsi.scheduler.run": {
  // 手动推一拍自动周期(与 60s 定时器同一状态机;不等下一拍,便于验收/演示)。
       try {
-        const r = await tickRsiScheduler(rsiSchedulerDepsOf(opts, tm, journal));
+        const r = await tickRsiScheduler(await rsiSchedulerDepsOf(opts, tm, journal));
         safeSend(ws, {
           v: PROTOCOL_VERSION,
           type: "rsi.scheduler.result",
@@ -2973,9 +3023,11 @@ async function handleMessage(
  // 可选 sessionId(缺省="super" 固定持久会话;与 superSessionId 同源)。旧客户端不传=同一会话。
  // 窄化:companion.turn(legacy)无 sessionId 字段,走缺省。
         const sid = (msg.type === "super.turn" ? msg.sessionId : undefined)?.trim() || superSessionId();
+ // 指挥台上传:附件随轮次透传(channel→runSuperAgentTurn→「## 附件」块+视觉通道)。
+        const superAtts = msg.type === "super.turn" ? msg.attachments : undefined;
         // 用户轮次先广播给全部客户端(turn.user),再回 done(出站只发 super.*)。
-        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.user", text: msg.text, sessionId: sid });
-        const text = await sa.turn(msg.text);
+        opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.user", text: msg.text, sessionId: sid, ...(superAtts?.length ? { attachments: superAtts } : {}) });
+        const text = await sa.turn(msg.text, superAtts);
  // done 改广播(原单发发起 socket——第二个标签页/指挥台 view 只见 user 气泡
  // 却永远等不到回复,经验证断链;error 帧仍只发发起端,避免其它端弹无关错误)。
         opts.broadcast?.({ v: PROTOCOL_VERSION, type: "super.turn.done", text, sessionId: sid });
@@ -3022,12 +3074,17 @@ async function handleMessage(
  // 增量化(治 网关 OOM:11k 事件会话 × 3s 全量回拉 → 每次 1.4~9.2s/MB 级载荷):
       // 客户端带 sinceSeq(= 上次回包 status.seq)且与累积态水位相等时,只归约 seq>sinceSeq 的新事件并合并进累积态。
       // 不带 sinceSeq(老客户端/首拉)=现场全量投影,语义与改造前逐字一致。
- // 增量准入标志——缓存判定要求重建时整段回落全量(不拿旧 carry/wfAsks 硬拼)。
+ // :增量准入标志——缓存判定要求重建时整段回落全量(不拿旧 carry/wfAsks 硬拼)。
       let incrementalApplied = false;
       if (sinceSeq !== undefined && state && state.watermark === sinceSeq) {
+ // (归档免读):归档会话不可变,水位匹配=不可能有新事件——直接空增量,
+ // 免掉 readSession 的归档冷读(39MB 无缓存同步解析 0.7-8.4s/次;3s 轮询×多连接
+ // 曾把事件循环饿死:HTTP 6-19s、board.list 回包排队不来= 假空态的根因)。
+        const journalAny = journal as unknown as { isArchivedSession?: (sid: string) => boolean };
+        const archivedImmutable = typeof journalAny.isArchivedSession === "function" && journalAny.isArchivedSession(msg.sessionId) === true;
         // sinceSeq+1:journal.readSession 的比较是 e.seq >= sinceSeq,不 +1 会把水位那条重复归约
         // (spawnCount/resultCount 翻倍、rowCount 多 1)——有负面用例锁。
-        const deltaEvents = journal.readSession(msg.sessionId, sinceSeq + 1);
+        const deltaEvents = archivedImmutable ? [] : journal.readSession(msg.sessionId, sinceSeq + 1);
         freshCount = deltaEvents.length;
  //  三道保险(增量侧):先判定缓存可信度——版本键不符 / floor 变化 / 日志收缩 / 水位回退
  // (restore 回退)任一命中即退全量重建。批内没有新 restoreFloor 事件时 floor 沿用 memo,
@@ -3103,7 +3160,7 @@ async function handleMessage(
           state.projection = merged;
           state.watermark = deltaEvents[deltaEvents.length - 1]!.seq;
           state.wfKey = [...state.carry.wfSeen].sort().join(",");
- // memo 三字段随写入更新(version 经 verdict 保证=当前版本;floor 未变;事件数累加)。
+ // :memo 三字段随写入更新(version 经 verdict 保证=当前版本;floor 未变;事件数累加)。
           state.eventCount += deltaEvents.length;
           state.floor = nextFloor;
           projection = merged;
@@ -3111,9 +3168,9 @@ async function handleMessage(
       }
       if (!incrementalApplied) {
  // 全量路径(老客户端/首拉/水位对不上/缓存判定要求重建):读全部会话事件 → floor 截断 → 投影,
- // 写入累积态基线(floor 之前的历史不再参与投影;版本/floor/收缩任一变化都丢弃旧 carry/wfAsks)。
+ // 写入累积态基线(:floor 之前的历史不再参与投影;版本/floor/收缩任一变化都丢弃旧 carry/wfAsks)。
         const sessionEvents = journal.readSession(msg.sessionId);
- // 恢复 floor——restore 后只投影 floor 之后的事件;filterFromFloor 是纯函数(floor<=0 同引用)。
+ // :恢复 floor——restore 后只投影 floor 之后的事件;filterFromFloor 是纯函数(floor<=0 同引用)。
         const floor = projectionFloorOf(sessionEvents);
         const scoped = filterFromFloor(sessionEvents, floor);
         freshCount = scoped.length;
@@ -3126,7 +3183,7 @@ async function handleMessage(
         }
         const wfKey = [...wfIds].sort().join(",");
         const watermark = maxSeqOf(scoped);
- // 全量侧缓存判定——版本键/floor/日志收缩/水位回退任一变化 → 丢弃旧 carry/wfAsks 重建。
+ // :全量侧缓存判定——版本键/floor/日志收缩/水位回退任一变化 → 丢弃旧 carry/wfAsks 重建。
         const verdict = state
           ? projectionCacheVerdict({
               version: state.version,
@@ -3170,7 +3227,7 @@ async function handleMessage(
         sessionStatusMemo.set(msg.sessionId, {
           watermark,
           wfKey,
- // 缓存可信度三字段(版本键/投影事件数/恢复 floor),下次请求据此判可复用。
+ // :缓存可信度三字段(版本键/投影事件数/恢复 floor),下次请求据此判可复用。
           version: PROJECTION_STATE_VERSION,
           eventCount: scoped.length,
           floor,
@@ -4046,7 +4103,10 @@ async function handleMessage(
         });
         const timer = setTimeout(() => { killed = true; try { child.kill("SIGKILL"); } catch { /* 忽略 */ } }, 120_000);
         timer.unref?.();
-        child.on("exit", (code) => {
+ // 用 close 而不是 exit 发终态——exit 只表示进程退出,stdout/stderr
+ // 可能仍有缓冲未 flush;面板经验证出现过「[退出码 0] 排在命令输出之前」。close 在 stdio
+ // 全部关闭后触发,保证 term.output 帧先于 term.exit。
+        child.on("close", (code) => {
           clearTimeout(timer);
           (ws as unknown as { __term?: unknown }).__term = undefined;
           safeSend(ws, { v: PROTOCOL_VERSION, type: "term.exit", code: code ?? null, ...(killed ? { killed: true } : {}) });
@@ -4290,7 +4350,7 @@ async function handleMessage(
               : {}),
           });
       if ("error" in r) {
- // CAS 冲突回稳定码 automation-conflict(不覆盖他人编辑);其余校验错沿用 AutomationInvalid。
+ // :CAS 冲突回稳定码 automation-conflict(不覆盖他人编辑);其余校验错沿用 AutomationInvalid。
         if (r.error === "conflict") {
           const currentRev = (r as { revision?: number }).revision;
           safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: "automation-conflict", message: `版本冲突(当前 revision ${currentRev ?? "?"},请刷新后重试)` });
@@ -4892,7 +4952,7 @@ async function handleMessage(
       try { journal.append({ kind: "custom", sessionId: "system", payload: { type: "project.add", path: addPath, id: (r as { project?: { id?: string } }).project?.id ?? "", conn: (ws as { connSeq?: number }).connSeq } }); } catch { /* 观测落账失败不影响 */ }
       opts.broadcast?.(projectListMessage(opts.projects));
  // 项目添加即异步建档案(进度广播;不阻塞添加返回)。
- // 建档是重活(全仓 ts-morph;9p 慢盘分钟级),后置 5s 让添加回执/
+ // :建档是重活(全仓 ts-morph;9p 慢盘分钟级),后置 5s 让添加回执/
       // 项目清单广播/面板 UI 先走完;unref=进程退出不等它。
       // 远程项目(SSH/WSL)不建档案:档案管线是本地文件扫描(ts-morph/全仓),identity 不是本地目录
  // (远程项目的工程画像后续可由工作区服务提供)。
@@ -5427,8 +5487,16 @@ async function handleMessage(
  // 项目级 code-sense:查询挂在项目根上——面板传激活项目,
       // 无项目/项目不可用回退 harness 根(resolveWorkdir 内建回退,不越界)
       const senseRoot = opts.projects?.resolveWorkdir(msg.projectId) ?? repoRoot();
-      try {
-        const result = await codeSense(senseRoot, msg.query, { mode: msg.mode, depth: msg.depth });
+try {
+ // codeSense(auto)=索引+本地评分链路,模型服务被占满时经验证 >30s 无回包,
+ // 面板会永久停在「分析中…」。20s 兜底回可操作错误(查询本身继续在后台跑,不杀)。
+        let senseTimer: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([
+          codeSense(senseRoot, msg.query, { mode: msg.mode, depth: msg.depth }),
+          new Promise<never>((_, reject) => {
+            senseTimer = setTimeout(() => reject(new Error("sense.query 超时(20s):本地评分/索引繁忙,请稍后重试(或切换 mode=symbol 走结构面)")), 20_000);
+          }),
+        ]).finally(() => { if (senseTimer) clearTimeout(senseTimer); });
         safeSend(ws, { v: PROTOCOL_VERSION, type: "sense.result", result });
       } catch (err) {
         safeSend(ws, { v: PROTOCOL_VERSION, type: "error", code: ErrorCode.SenseFailed, message: String(err).slice(0, 200) });
@@ -5627,7 +5695,8 @@ async function handleMessage(
       }
       const r = handleClientSurfaceDeclare(
         msg as unknown as Record<string, unknown>,
-        journal as unknown as SurfaceJournalLike);
+        journal as unknown as SurfaceJournalLike,
+      );
       safeSend(ws, {
         v: PROTOCOL_VERSION, type: "surface.result",
         ...(r.ok ? { ok: true, caps: r.caps } : { ok: false, error: r.error }),
@@ -6252,7 +6321,11 @@ async function handleMessage(
       const names = Array.isArray(msg.names) ? (msg.names as unknown[]).map(String).slice(0, 20) : [];
       try {
         const keys = opts.cfg.secretKeys ? opts.cfg.secretKeys() : [];
-        safeSend(ws, { v: PROTOCOL_VERSION, type: "cfg.secret.result", op: "status", rid: msg.rid, items: names.map((name) => ({ name, exists: keys.includes(name) })) });
+        const last4 = opts.cfg.secretLast4;
+        safeSend(ws, { v: PROTOCOL_VERSION, type: "cfg.secret.result", op: "status", rid: msg.rid, items: names.map((name) => {
+          const l4 = last4 ? last4(name) : null;
+          return { name, exists: keys.includes(name), ...(l4 ? { last4: l4 } : {}) }; // 末4位(仅掩码展示;完整值不回包)
+        }) });
       } catch (err) {
         safeSend(ws, { v: PROTOCOL_VERSION, type: "cfg.secret.result", op: "status", ok: false, rid: msg.rid, error: String(err).slice(0, 160) });
       }
@@ -6374,7 +6447,7 @@ async function handleMessage(
       safeSend(ws, { v: PROTOCOL_VERSION, type: "pong", time: Date.now() });
       break;
     default: {
- // allowlist 登记了但 switch 没有实现(对拍测试会先失败)——不静默逃生:
+ // :allowlist 登记了但 switch 没有实现(对拍测试会先失败)——不静默逃生:
       // 回 permission-denied 并留 journal,与「表外 channel」同一出口。
       const ch = String((msg as { type?: unknown }).type ?? "unknown");
       denyChannel(ws, journal, clientModeByWs.get(ws) ?? DEFAULT_CLIENT_MODE, ch, msg as { sessionId?: unknown });

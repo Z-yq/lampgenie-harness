@@ -322,3 +322,56 @@ export function stripHarmlessRedirects(command: string): string {
     .replace(/'(?:[^'\\]|\\.)*'/g, " ")
     .replace(/"(?:[^"\\]|\\.)*"/g, " ");
 }
+
+/**
+ * 只读命令白名单(pathology 注意 5 会话复发误拦):零写盘的勘察命令直放。
+ * 判据:首个命令字在白名单 AND 全串无重定向到真实文件 AND 无管道到写命令。
+ * 覆盖 grep/ls/wc/cat/head/tail/find/file/stat/du/df/ps/which/type/command -v/
+ * node -e(不带 --eval 写盘)/python3 -c(同上)/sed -n(无 -i)/awk(无 system/print >)/diff/cmp。
+ */
+const READONLY_FIRST_WORDS: ReadonlySet<string> = new Set<string>([
+  "grep", "ls", "wc", "cat", "head", "tail", "find", "file", "stat", "du", "df",
+  "ps", "which", "type", "whereis", "whoami", "pwd", "echo", "printf", "date",
+  "diff", "cmp", "sort", "uniq", "cut", "tr", "rev", "seq", "true", "false",
+  "basename", "dirname", "realpath", "readlink", "id", "uname", "hostname",
+]);
+
+export function isReadOnlyTerminal(command: string): boolean {
+  const trimmed = command.trim();
+  if (trimmed === "") return false;
+ // 有重定向到真实文件 → 非只读(2>/dev/null 与 >&N 除外,由 harmlessTarget/fd 复制判)
+  const pieces = tokenize(trimmed);
+  for (const piece of pieces) {
+    if (piece.kind !== "redirect") continue;
+    const { op, target } = piece;
+    if (op === "<" || op === "<<" || op === "<<-" || op === "<<<") continue;
+    if (op === ">&") continue;
+    if (target === undefined) continue;
+    if (harmlessTarget(target.word)) continue;
+    return false; // 有真实文件目标 → 非只读
+  }
+ // 切简单命令:全部首命令字都在白名单
+  let argv: ShellToken[] = [];
+  let allReadOnly = true;
+  const check = (): void => {
+    if (argv.length === 0 || !allReadOnly) return;
+    const name = argv[0]?.word ?? "";
+ // sed 只读当且仅当无 -i
+    if (name === "sed") {
+      if (argv.some((t) => /^(-[A-Za-z]*i|--in-place)/.test(t.word))) allReadOnly = false;
+      return;
+    }
+ // node -e / python3 -c / npx tsx 只当无重定向已保证
+    if (name === "node" || name === "python3" || name === "python") {
+      return; // 已无重定向到文件 → -e/-c 执行纯内存脚本视为只读
+    }
+    if (!READONLY_FIRST_WORDS.has(name)) allReadOnly = false;
+  };
+  for (const piece of pieces) {
+    if (piece.kind === "word") { argv.push(piece.token); continue; }
+    if (piece.kind === "redirect") continue;
+    check(); argv = [];
+  }
+  check();
+  return allReadOnly;
+}

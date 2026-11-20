@@ -49,13 +49,15 @@ export interface CodeModeSubCallOptions {
 export type CodeModeSubExecutor = (
   name: string,
   args: unknown,
-  opts: CodeModeSubCallOptions) => Promise<string>;
+  opts: CodeModeSubCallOptions,
+) => Promise<string>;
 
 /** 子调用权限判据(装配方注入现网 plan-gate/权限规则;缺省=放行但照常落账本)。 */
 export type CodeModePermissionResult = boolean | { allow: boolean; reason?: string };
 export type CodeModePermission = (
   name: string,
-  args: unknown) => CodeModePermissionResult | Promise<CodeModePermissionResult>;
+  args: unknown,
+) => CodeModePermissionResult | Promise<CodeModePermissionResult>;
 
 /** 账本最小依赖(只用到 custom append;失败静默)。 */
 export interface CodeModeJournal {

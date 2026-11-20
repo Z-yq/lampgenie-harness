@@ -27,7 +27,8 @@ export function newChallenge(): string {
 export function verifyChallenge(
   publicKeyPem: string,
   nonce: string,
-  sigB64: string): boolean {
+  sigB64: string,
+): boolean {
   try {
     return verify(null, Buffer.from(nonce, "utf8"), publicKeyPem, Buffer.from(sigB64, "base64"));
   } catch {

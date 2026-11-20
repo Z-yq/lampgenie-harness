@@ -28,7 +28,8 @@ export interface MemberCardInput {
 
 export function memberCard(
   input: MemberCardInput,
-  now: number): { username: string; state: PresenceStateName; currentTask: string | null } {
+  now: number,
+): { username: string; state: PresenceStateName; currentTask: string | null } {
   return {
     username: input.username,
     state: derivePresence(input.facts, now),

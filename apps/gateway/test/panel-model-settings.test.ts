@@ -30,4 +30,29 @@ describe(" Coding 模型设置结构", () => {
       await panel.close();
     }
   });
+
+  it("添加模型按钮不再静默(2026-11-16 用户实报「纯摆设」):空名 toast+聚焦/未填名置灰/回车添加/成功清空", async () => {
+    const panel = servePanel(7899, () => {});
+    try {
+      await new Promise((r) => setTimeout(r, 100));
+      const res = await fetch("http://127.0.0.1:7899/");
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      for (const marker of [
+        'data-a="madd"',
+        "模型名(必填)",
+        "请先在按钮左侧填「模型名」再添加",
+        "nameEl.focus()",
+        "syncDim",
+        'classList.toggle("dim"',
+        "e.key === \"Enter\"",
+        "已添加模型:",
+        "prov-act.dim{opacity:.42",
+      ]) {
+        expect(html, "缺少标记:" + marker).toContain(marker);
+      }
+    } finally {
+      await panel.close();
+    }
+  });
 });

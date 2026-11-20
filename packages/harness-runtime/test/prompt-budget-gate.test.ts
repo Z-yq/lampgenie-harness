@@ -565,7 +565,8 @@ describe("组合与报表一致性", () => {
     const report = buildFootprint(fixture());
     const sum = (Object.values(report.byCategory) as Array<{ tokensEstimate: number }>).reduce(
       (acc, stat) => acc + stat.tokensEstimate,
-      0);
+      0,
+    );
     expect(report.total.tokensEstimate).toBe(sum);
   });
 
@@ -591,7 +592,8 @@ describe("组合与报表一致性", () => {
     evaluateBudget(input, { totalTokens: { estimate: 1 } });
     negativeReturnPrunes(
       [{ experimentId: "e19", decision: "reject", intervention: { surface: "tip", ref: "mem-1" } }],
-      input);
+      input,
+    );
     expect(snapshot(input)).toBe(before);
   });
 });

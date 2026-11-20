@@ -17,7 +17,7 @@
  * listExperiments(不重复实现实验投影)。参数错误是唯一允许 throw 的情形(TypeError);
  * IO/投影/闸门失败一律折叠成稳定码返回。
  */
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   BaselineSnapshot,
@@ -136,24 +136,10 @@ interface RsiRuntime {
   verifyRollback(current: BaselineSnapshot, target: BaselineSnapshot): { ok: boolean; codes: string[] };
 }
 
-let rsiRuntime: RsiRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_rsi_circuit_breaker from "@lampgenie/runtime/agent/rsi-circuit-breaker";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadRsiRuntime(): Promise<RsiRuntime> {
-  if (rsiRuntime) return rsiRuntime;
-  const spec = "@lampgenie/runtime/agent/rsi-circuit-breaker";
-  try {
-    rsiRuntime = (await import(spec)) as unknown as RsiRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/rsi-circuit-breaker.ts", import.meta.url)
-      .href;
-    rsiRuntime = (await import(srcUrl)) as unknown as RsiRuntime;
-  }
-  return rsiRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadRsiRuntime();
+const rt: RsiRuntime = rt_rsi_circuit_breaker;
 
 /** 台账 schema 版本(与 runtime 同源)。 */
 const SCHEMA_VERSION = rt.RSI_BREAKER_VERSION;
@@ -184,6 +170,19 @@ export function breakerPaths(root: string): RsiBreakerPaths {
   const base = assertRoot("breakerPaths", root);
   const dir = join(base, ".genie", "rsi");
   return { dir, file: join(dir, "breaker.jsonl") };
+}
+
+/**
+ * 启动初始化——台账缺失时建**空**台账。
+ * 空文件是「无 pause/resume 事件」的显式事实(如实 closed),不再让体检区报「熔断台账缺失(按未熔断处理)」。
+ * 已存在返回 false(不动既有内容)。
+ */
+export function ensureBreakerLedger(root: string): boolean {
+  const { dir, file } = breakerPaths(root);
+  if (existsSync(file)) return false;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, "", "utf8");
+  return true;
 }
 
 /** 时间戳(入参缺省 → 当前 ISO)。 */
@@ -619,7 +618,8 @@ export async function planRollback(
 /** 标记回滚已应用:目标不存在 → RSI_BASELINE_MISSING;已标记过 → RSI_ROLLBACK_ALREADY_APPLIED。 */
 export async function markRollbackApplied(
   root: string,
-  targetId: string): Promise<{ ok: boolean; codes: string[] }> {
+  targetId: string,
+): Promise<{ ok: boolean; codes: string[] }> {
   const base = assertRoot("markRollbackApplied", root);
   const id = nonEmpty(targetId);
   if (id === undefined) throw new TypeError("markRollbackApplied: targetId 不能为空");

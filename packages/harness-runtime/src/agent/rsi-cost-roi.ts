@@ -410,7 +410,8 @@ function mergeMaps(into: Record<string, number>, from: Record<string, number>): 
 export function summarizeCycles(
   cycleIds: readonly string[] | undefined,
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined): { reports: CycleReport[]; total: CycleTotals } {
+  savings: readonly unknown[] | undefined,
+): { reports: CycleReport[]; total: CycleTotals } {
   const ids = Array.isArray(cycleIds) ? cycleIds : [];
   const reports: CycleReport[] = [];
   const total: CycleTotals = {
@@ -478,12 +479,15 @@ export function evaluateRoiGate(
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const report = list[i];
     if (!isRecord(report)) continue;
+    const net = finiteNumber(report.netTokens);
+ // P0-①( streak 修复):正收益周期优先判——低样本的正周期不能被样本闸 continue
+ // 跳过而漏掉「归零」(机制注意 negativeStreak 恒=窗口-1、只进不出)。
+    if (net !== undefined && net >= 0) break;
     const entries = isRecord(report.entries) ? report.entries : {};
     const costs = finiteNumber(entries["costs"]) ?? 0;
     const savings = finiteNumber(entries["savings"]) ?? 0;
     if (costs + savings < resolved.minCycleSamples) continue;
-    const net = finiteNumber(report.netTokens);
-    if (net === undefined || net >= 0) break;
+    if (net === undefined) break;
     negativeStreak += 1;
   }
 
@@ -636,13 +640,15 @@ function allocate(
 /** 按机制(mechanismId)分摊;costTokens 降序、同值 key 升序。 */
 export function allocateByMechanism(
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined): AllocationRow[] {
+  savings: readonly unknown[] | undefined,
+): AllocationRow[] {
   return allocate(costs, savings, "mechanism");
 }
 
 /** 按项目(projectId)分摊;costTokens 降序、同值 key 升序。 */
 export function allocateByProject(
   costs: readonly unknown[] | undefined,
-  savings: readonly unknown[] | undefined): AllocationRow[] {
+  savings: readonly unknown[] | undefined,
+): AllocationRow[] {
   return allocate(costs, savings, "project");
 }

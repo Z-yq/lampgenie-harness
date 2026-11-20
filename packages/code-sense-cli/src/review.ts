@@ -88,7 +88,8 @@ function resolveScanOptions(
   p: ParsedArgs,
   scanPath: string | undefined,
   baseline: ReviewSession | null,
-  inherit: boolean): ScanOptions {
+  inherit: boolean,
+): ScanOptions {
   const base = inherit && baseline?.kind === "scan" ? baseline.target.scan : undefined;
   const include = globList(p, "include");
   const exclude = globList(p, "exclude");

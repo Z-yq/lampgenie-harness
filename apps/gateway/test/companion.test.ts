@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parseClientMessage, ServerMessage, PROTOCOL_VERSION } from "@lampgenie/protocol";
 import {
   superSessionId, buildSuperAgentSystem, buildSuperAgentTools, runSuperAgentTurn, globalStateSummary,
+  normalizeModelPresetName,
   matchTask, inferProject, buildTaskNotice, buildRelayText, userPreferenceSummary,
   SuperAgentActivity, SuperAgentChannel, buildSuperInbox, type SuperAgentDeps,
 } from "../src/super-agent.js";
@@ -10,7 +11,10 @@ import { TaskSupervisor } from "../src/task-manager.js";
 import { ProjectRegistry } from "../src/projects.js";
 import { MemoryStore } from "@lampgenie/runtime/agent/soul-memory";
 import { MemoryJournal } from "@lampgenie/core";
+import { saveBoard } from "../src/board-store.js";
+import { repoRoot } from "../src/repo-root.js";
 import { loadSoul, DEFAULT_SOUL_MD } from "@lampgenie/runtime/agent/soul-memory";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 /** 播报轮次异步跑(spawn 返回≠完成),且轮末收尾含 git 基线/账本耗时:轮询等终态事件。 */
@@ -31,6 +35,12 @@ describe("协议:super 命令(指挥台;companion.* 入站兼容)", () => {
     expect(parseClientMessage('{"v":1,"type":"companion.turn","text":"在干什么"}')?.type).toBe("companion.turn");
     expect(parseClientMessage('{"v":1,"type":"companion.history"}')?.type).toBe("companion.history");
     expect(parseClientMessage('{"type":"super.turn","text":"x"}')).toBeNull();
+  });
+  it("super.turn attachments 上限 12:12 件受理、13 件整帧拒收(surface.ts max(12),)", () => {
+    const mkN = (n: number) => JSON.stringify({ v: 1, type: "super.turn", text: "看这些文件", attachments: Array.from({ length: n }, (_, i) => ({ name: "a" + i, path: "/tmp/a" + i })) });
+    expect(parseClientMessage(mkN(12))?.type).toBe("super.turn");
+    expect(parseClientMessage(mkN(13))).toBeNull();
+    expect(parseClientMessage('{"v":1,"type":"super.turn","text":"旧客户端无附件"}')?.type).toBe("super.turn"); // 旧客户端兼容:缺省可选
   });
   it("voice.speak 已从 ClientMessage 联合移除(音频不再直入大脑)", () => {
     expect(parseClientMessage('{"v":1,"type":"voice.speak","audioB64":"AAA="}')).toBeNull();
@@ -94,7 +104,7 @@ describe("companion system 组装(D3 + fixC1/C4)", () => {
     const d = deps();
     const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
     const sys = buildSuperAgentSystem(d, soulStore);
-    expect(sys).toContain("路由三判定");
+    expect(sys).toContain("路由四判定"); // 并行会话三→四判定
     expect(sys).toContain("直接答");
     expect(sys).toContain("专用工具查");
     expect(sys).toContain("派后台任务");
@@ -103,7 +113,7 @@ describe("companion system 组装(D3 + fixC1/C4)", () => {
     expect(sys).toContain("逐项处理");
     expect(sys).toContain("指代消解");
     expect(sys).toContain("直接执行"); // 全权:操作不请示
-    expect(sys).toContain("不直接写代码"); // 红线保留
+    expect(sys).toContain("可读不可写"); // 红线保留(并行改写:不直接写代码→可读不可写)
     expect(sys).toContain("指令层级"); // fixC4
   });
   it("fixC4: 用户偏好摘要——USER 库偏好句注入,非偏好句与环境笔记不进该块", () => {
@@ -671,4 +681,167 @@ describe("Super 上下文经济面(coding 同源)", () => {
     const r = await runSuperAgentTurn(d, "只回一句话", soulStore);
     expect(r.text.length).toBeGreaterThan(0);
   }, 60_000);
+});
+
+describe("spawn_task 可选 accept——派发时绑定验收契约(设计§5.5 闭环)", () => {
+  it("带 accept:任务书尾部拼「## 验收契约(派发时绑定)」固定段;不带=逐字保持", async () => {
+    const d = deps();
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const tools = new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, typeof t]));
+    const r1 = String(await tools.get("spawn_task")!.execute({
+      instruction: "给 super 域补附件截断提示", projectId: "__harness__", title: "附件提示",
+      accept: "node test/a.test.ts 全 passed\ngrep 截断提示 存在",
+    }));
+    expect(r1).toContain("已派出任务");
+    const t1 = d.taskManager.list().find((t) => t.title === "附件提示")!;
+    expect(t1.instruction).toContain("## 验收契约(派发时绑定)");
+    expect(t1.instruction).toContain("node test/a.test.ts 全 passed");
+    expect(t1.instruction.indexOf("给 super 域补附件截断提示")).toBeLessThan(t1.instruction.indexOf("## 验收契约"));
+ // 缺省不传=行为不变(零段拼入)
+    await tools.get("spawn_task")!.execute({ instruction: "无契约派发", projectId: "__harness__", title: "无契约" });
+    const t2 = d.taskManager.list().find((t) => t.title === "无契约")!;
+    expect(t2.instruction).toBe("无契约派发");
+    expect(t2.instruction).not.toContain("## 验收契约");
+  });
+});
+
+describe("task_status 白板画像接入 P0 覆盖(设计§10 部分2 闭环)", () => {
+  it("有 P0 节点的板:画像含 p0Total/p0Passed(与 board-accept 口径同源);无板任务不含 board 字段", async () => {
+    const d = deps();
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    const tools = new Map(buildSuperAgentTools(d, soulStore).map((t) => [t.name, t] as [string, typeof t]));
+    await tools.get("spawn_task")!.execute({ instruction: "带板任务", projectId: "__harness__", title: "带板" });
+    const task = d.taskManager.list().find((t) => t.title === "带板")!;
+ // 造一块带 P0 节点的板:落在 boardProgressOf 实际读取的仓根 .genie/boards(repoRoot 向上找 pnpm-workspace.yaml
+ // ——cwd=apps/gateway 时即仓根;GENIE_REPO_ROOT 优先,同源)。n1 有 ok 证据(passed)、n2 无证据 → 2/1;用例后清理。
+    const boardRoot = repoRoot(); // saveBoard 的 root=仓根(boardPath 自拼 .genie/boards/<sid>/<tid>.json)
+    const saved = saveBoard(boardRoot, {
+      version: 1,
+      sessionId: task.sessionId, taskId: task.id, title: "P0 覆盖画像板",
+      nodes: [
+        { id: "n1", kind: "function", label: "实现X", summary: "s", change: "add", phase: "P0", targets: ["apps/gateway/src/x.ts"],
+          accept: [{ cmd: "echo ok", expect: "ok" }], evidence: [{ cmd: "echo ok", ok: true, at: 1, output: "ok" }] },
+        { id: "n2", kind: "function", label: "测试Y", summary: "s", change: "add", phase: "P0", targets: ["apps/gateway/test/y.test.ts"],
+          accept: [{ cmd: "echo bad", expect: "ok" }] },
+      ],
+      edges: [],
+    });
+    expect(saved.ok).toBe(true);
+    const raw = await tools.get("task_status")!.execute({ query: "带板" });
+    const p = JSON.parse(String(raw)) as { board?: { nodes: number; done: number; status: string; p0Total: number; p0Passed: number } };
+    expect(p.board).toBeTruthy();
+    expect(p.board!.nodes).toBe(2);
+    expect(p.board!.p0Total).toBe(2);
+    expect(p.board!.p0Passed).toBe(1); // n1 全 cmd 有 ok 证据=通过;n2 无证据=未过(与 board-accept passed 口径同源)
+ // 无板任务:board=null,不出现 p0 字段(不阻塞画像)
+    await tools.get("spawn_task")!.execute({ instruction: "无板任务", projectId: "__harness__", title: "无板" });
+    const raw2 = await tools.get("task_status")!.execute({ query: "无板" });
+    const p2 = JSON.parse(String(raw2)) as { board?: unknown };
+    expect(p2.board).toBeFalsy();
+    rmSync(join(boardRoot, task.sessionId), { recursive: true, force: true }); // 测试板清理,不污染真仓板根
+  });
+});
+
+describe("派发模型路由档位(level1~level3)", () => {
+  const mk = () => {
+    const soulStore = new MemoryStore(join(process.cwd(), ".genie", "soul", "memories-test"));
+    return soulStore;
+  };
+  async function tools(d: SuperAgentDeps) {
+    return new Map(buildSuperAgentTools(d, mk()).map((t) => [t.name, t] as [string, (typeof buildSuperAgentTools)[number]]));
+  }
+  it("档位名归一化:fast→level1、heavy→level3、level1~3 原样、其它 undefined", () => {
+    expect(normalizeModelPresetName("fast")).toBe("level1");
+    expect(normalizeModelPresetName(" Heavy ")).toBe("level3");
+    expect(normalizeModelPresetName("level2")).toBe("level2");
+    expect(normalizeModelPresetName("mid")).toBeUndefined();
+    expect(normalizeModelPresetName("")).toBeUndefined();
+  });
+
+  it("开关关→任意档都回「路由开关未开」,setSessionModel 0 次", async () => {
+    const d = deps();
+    const sets: Array<{ sid: string; o: { providerId?: string; model: string; effort?: string } }> = [];
+    d.setSessionModel = (sid, o) => { sets.push({ sid, o }); return true; };
+    d.modelRouting = { enabled: false, presets: { level1: { model: "qwen3.7-flash" } } };
+    const tl = await tools(d);
+    for (const p of ["level1", "fast", "mid"]) {
+      const r = String(await tl.get("spawn_task")!.execute({ instruction: "测试" + p, title: p, modelPreset: p }));
+      expect(r).toContain("路由开关未开");
+    }
+    expect(sets).toHaveLength(0);
+  });
+
+  it("开 + level1 在册 → 写覆盖并回「模型档位「level1」→ provider/model」", async () => {
+    const d = deps();
+    const sets: Array<{ sid: string; o: { providerId?: string; model: string; effort?: string } }> = [];
+    d.setSessionModel = (sid, o) => { sets.push({ sid, o }); return true; };
+    d.modelRouting = { enabled: true, presets: { level1: { model: "qwen3.7-flash", providerId: "maas-bj", effort: "low" } } };
+    const tl = await tools(d);
+    const r = String(await tl.get("spawn_task")!.execute({ instruction: "测试甲", title: "甲", modelPreset: "level1" }));
+    expect(r).toContain("模型档位「level1」→ maas-bj/qwen3.7-flash (low)");
+    expect(sets).toHaveLength(1);
+    expect(sets[0].o).toEqual({ providerId: "maas-bj", model: "qwen3.7-flash", effort: "low" });
+    expect(sets[0].sid).toMatch(/^ws-/);
+  });
+
+  it("开 + level2 未配置 + resolveSuperModel 有值 → 跟随 super 模型", async () => {
+    const d = deps();
+    const sets: Array<{ sid: string; o: { providerId?: string; model: string; effort?: string } }> = [];
+    d.setSessionModel = (sid, o) => { sets.push({ sid, o }); return true; };
+    d.modelRouting = { enabled: true, presets: { level1: { model: "qwen3.7-flash" } } };
+    d.resolveSuperModel = () => ({ model: "qwen3.7-max", providerId: "p1" });
+    const tl = await tools(d);
+    const r = String(await tl.get("spawn_task")!.execute({ instruction: "测试乙", title: "乙", modelPreset: "level2" }));
+    expect(r).toContain("模型档位「level2」未单独配置,跟随 super 模型 → p1/qwen3.7-max");
+    expect(sets).toHaveLength(1);
+    expect(sets[0].o).toEqual({ providerId: "p1", model: "qwen3.7-max" });
+ // resolveSuperModel 未接线 → 如实回「无法解析」
+    d.resolveSuperModel = () => undefined;
+    const r2 = String(await tl.get("spawn_task")!.execute({ instruction: "测试乙2", title: "乙2", modelPreset: "level2" }));
+    expect(r2).toContain("无法解析 super 模型");
+    expect(sets).toHaveLength(1);
+  });
+
+  it("旧配置兼容:别名 fast/heavy 命中 presets 里的旧键(levelN 缺失时回退)", async () => {
+    const d = deps();
+    const sets: Array<{ sid: string; o: { providerId?: string; model: string; effort?: string } }> = [];
+    d.setSessionModel = (sid, o) => { sets.push({ sid, o }); return true; };
+    d.modelRouting = { enabled: true, presets: { fast: { model: "qwen3.7-flash" }, heavy: { model: "deepseek-v4.1", providerId: "maas-bj" } } };
+    const tl = await tools(d);
+    const r1 = String(await tl.get("spawn_task")!.execute({ instruction: "测试丙", title: "丙", modelPreset: "fast" }));
+    expect(r1).toContain("模型档位「fast」→ qwen3.7-flash");
+    const r2 = String(await tl.get("spawn_task")!.execute({ instruction: "测试丁", title: "丁", modelPreset: "heavy" }));
+    expect(r2).toContain("模型档位「heavy」→ maas-bj/deepseek-v4.1");
+    expect(sets).toHaveLength(2);
+    expect(sets[1].o.providerId).toBe("maas-bj");
+ // 新键优先于旧键
+    d.modelRouting.presets.level1 = { model: "new-flash" };
+    const r3 = String(await tl.get("spawn_task")!.execute({ instruction: "测试戊", title: "戊", modelPreset: "fast" }));
+    expect(r3).toContain("new-flash");
+  });
+
+  it("未知档(mid)→ 回「不在册」", async () => {
+    const d = deps();
+    const sets: unknown[] = [];
+    d.setSessionModel = (sid, o) => { sets.push(o); return true; };
+    d.modelRouting = { enabled: true, presets: { level1: { model: "qwen3.7-flash" } } };
+    const tl = await tools(d);
+    const r = String(await tl.get("spawn_task")!.execute({ instruction: "测试己", title: "己", modelPreset: "mid" }));
+    expect(r).toContain("不在册");
+    expect(r).toContain("level1/level2/level3");
+    expect(sets).toHaveLength(0);
+  });
+
+  it("系统提示词:开=注入 level1/level2/level3 行与别名口径;关=零注入", () => {
+    const d1 = deps();
+    d1.modelRouting = { enabled: false, presets: { level1: { model: "qwen3.7-flash" } } };
+    expect(buildSuperAgentSystem(d1, mk())).not.toContain("派发模型路由(已开启)");
+    d1.modelRouting = { enabled: true, presets: { level1: { model: "qwen3.7-flash", providerId: "p1", description: "文件扫描" } } };
+    const sys = buildSuperAgentSystem(d1, mk());
+    expect(sys).toContain("派发模型路由(已开启)");
+    expect(sys).toContain("level1(轻): p1/qwen3.7-flash — 文件扫描");
+    expect(sys).toContain("level2(中): 未配置(跟随 super 模型)");
+    expect(sys).toContain("level3(重): 未配置(跟随 super 模型)");
+    expect(sys).toContain("别名 fast=level1、heavy=level3");
+  });
 });

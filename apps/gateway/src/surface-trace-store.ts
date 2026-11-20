@@ -69,30 +69,18 @@ interface SurfaceRuntime {
   validateEvent(
     event: SurfaceEvent,
     existing: readonly SurfaceEvent[],
-    opts?: SurfaceValidateOptions): { ok: boolean; codes: string[] };
+    opts?: SurfaceValidateOptions,
+  ): { ok: boolean; codes: string[] };
   applySurfaceEvent(state: SurfaceState, event: SurfaceEvent): { state: SurfaceState; codes: string[] };
   humanTranscript(state: SurfaceState): { events: SurfaceEvent[]; codes: string[] };
   derivedCacheVersion(state: SurfaceState): number;
   detectBrokenReplacements(state: SurfaceState): { ok: boolean; issues: SurfaceIssue[] };
 }
 
-let surfaceRuntime: SurfaceRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_surface_trace from "@lampgenie/runtime/agent/surface-trace";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadSurfaceRuntime(): Promise<SurfaceRuntime> {
-  if (surfaceRuntime) return surfaceRuntime;
-  const spec = "@lampgenie/runtime/agent/surface-trace";
-  try {
-    surfaceRuntime = (await import(spec)) as SurfaceRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/surface-trace.ts", import.meta.url).href;
-    surfaceRuntime = (await import(srcUrl)) as SurfaceRuntime;
-  }
-  return surfaceRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadSurfaceRuntime();
+const rt: SurfaceRuntime = rt_surface_trace;
 
 const KIND_SET: ReadonlySet<string> = new Set<string>(SURFACE_KINDS);
 
@@ -205,7 +193,8 @@ function appendLine(root: string, event: SurfaceEvent): boolean {
 function withOldEvent(
   event: SurfaceEvent,
   existing: readonly SurfaceEvent[],
-  opts: SurfaceValidateOptions | undefined): SurfaceValidateOptions {
+  opts: SurfaceValidateOptions | undefined,
+): SurfaceValidateOptions {
   if (opts?.oldEvent !== undefined) return opts;
   const sources = Array.isArray(event.sourceEventSeqs) ? event.sourceEventSeqs : [];
   if (sources.length !== 1) return opts ?? {};
@@ -217,7 +206,8 @@ function writeEvent(
   root: string,
   input: unknown,
   want: SurfaceOp,
-  opts?: SurfaceValidateOptions): SurfaceWriteResult {
+  opts?: SurfaceValidateOptions,
+): SurfaceWriteResult {
   const path = surfaceTracePath(root);
   if (!isRecord(input)) return { ok: false, codes: ["SURFACE_INVALID"] };
   const declared = input["surfaceOp"];
@@ -229,7 +219,8 @@ function writeEvent(
   const verdict = rt.validateEvent(
     event,
     projection.state.events,
-    want === "replace" ? withOldEvent(event, projection.state.events, opts) : opts);
+    want === "replace" ? withOldEvent(event, projection.state.events, opts) : opts,
+  );
   if (!verdict.ok) return { ok: false, codes: verdict.codes };
   if (!appendLine(root, event)) {
     return { ok: false, codes: ["SURFACE_STORE_WRITE_FAILED"] };
@@ -241,14 +232,16 @@ function writeEvent(
 export function validateIncoming(
   root: string,
   event: unknown,
-  opts?: SurfaceValidateOptions): { ok: boolean; codes: string[] } {
+  opts?: SurfaceValidateOptions,
+): { ok: boolean; codes: string[] } {
   if (!isRecord(event)) return { ok: false, codes: ["SURFACE_INVALID"] };
   const projection = loadSurfaceTrace(root);
   const candidate = { ...event } as SurfaceEvent;
   return rt.validateEvent(
     candidate,
     projection.state.events,
-    candidate.surfaceOp === "replace" ? withOldEvent(candidate, projection.state.events, opts) : opts);
+    candidate.surfaceOp === "replace" ? withOldEvent(candidate, projection.state.events, opts) : opts,
+  );
 }
 
 /** 追加一条 append 事件(契约不过就拒收且不写盘)。 */

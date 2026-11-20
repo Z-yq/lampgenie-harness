@@ -38,7 +38,8 @@ function connect(port: number): Promise<WebSocket> {
 function waitMatch(
   ws: WebSocket,
   pred: (m: Record<string, unknown>) => boolean,
-  ms = 8000): Promise<Record<string, unknown>> {
+  ms = 8000,
+): Promise<Record<string, unknown>> {
   const inbox = (ws as unknown as { __inbox: Record<string, unknown>[] }).__inbox;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("等待消息超时")), ms);

@@ -303,7 +303,8 @@ function findCycle(ids: string[], adjacency: Map<string, string[]>): string[] {
  */
 export function validateExtension(
   graph: TaskGraph,
-  output: PlannerOutput): { ok: boolean; codes: TaskGraphCode[]; issues: ExtensionIssue[] } {
+  output: PlannerOutput,
+): { ok: boolean; codes: TaskGraphCode[]; issues: ExtensionIssue[] } {
   const issues: ExtensionIssue[] = [];
   if (!isRecord(output) || !Array.isArray(output.nodes) || !Array.isArray(output.edges) || !Array.isArray(output.collectionNodeIds)) {
     return { ok: false, codes: [TASKGRAPH_CODES.INVALID], issues: [{ code: TASKGRAPH_CODES.INVALID, reason: "invalid-output" }] };
@@ -387,7 +388,8 @@ export interface ExtensionDelta {
  */
 export function applyExtension(
   graph: TaskGraph,
-  output: PlannerOutput): { ok: boolean; graph: TaskGraph; code: TaskGraphCode; added?: ExtensionDelta; issues?: ExtensionIssue[] } {
+  output: PlannerOutput,
+): { ok: boolean; graph: TaskGraph; code: TaskGraphCode; added?: ExtensionDelta; issues?: ExtensionIssue[] } {
   const validation = validateExtension(graph, output);
   if (!validation.ok) {
     return { ok: false, graph: cloneTaskGraph(graph), code: TASKGRAPH_CODES.BAD_EDGE, issues: validation.issues };

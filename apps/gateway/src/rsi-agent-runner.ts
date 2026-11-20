@@ -18,6 +18,7 @@ import { resolveModelPrice } from "@lampgenie/core/config/model-prices";
 import type { Config } from "@lampgenie/core";
 import type { RsiStatusSection } from "./rsi-status.js";
 import { assessResultQuality } from "./rsi-quality.js"; // 质量契约 v2(纯逻辑,零 LLM)
+import type { ExperienceStore } from "@lampgenie/experience"; // W2(仅类型,零运行时依赖)
 import { buildAnalysisPlan, markAnalyzed, type RsiAnalysisPlan } from "./rsi-sessions.js";
 import {
   finalAgentText,
@@ -33,6 +34,7 @@ import {
   getRun,
   listRuns,
   loadMechanisms,
+  markDreamNote,
   newRunId,
   readRunResults,
   resultFilePath,
@@ -85,6 +87,8 @@ export interface StartRunDeps {
  /** 自动调度周期 id / 重试来源(缺省=手动运行,旧行为不变)。 */
   cycleId?: string;
   retryOf?: string;
+ /** 经验库( W2:nightly run done 收尾时折叠蒸馏候选);缺省=不折叠,旧调用零行为差异。 */
+  experienceStore?: ExperienceStore;
 }
 
 export interface StartRunResult {
@@ -97,6 +101,12 @@ export interface StartRunResult {
 }
 
 const TERMINAL_FAILED = new Set(["failed", "cancelled", "blocked", "interrupted"]);
+
+/**
+ * 孤儿 run 宽限:网关重启后 taskManager 查不到 taskId(taskState 返回 undefined),
+ * 超过这个时长仍查不到就当「任务已随进程消失」收尾 failed(orphaned),不再永久 running。
+ */
+export const ORPHAN_GRACE_MS = 10 * 60_000;
 
 /** 固定 RSI 会话 id:所有机制运行都追加到这一个会话窗。 */
 export const RSI_SESSION_ID = "rsi";
@@ -117,7 +127,8 @@ function costRecordOf(usage: RsiRunUsage, config: Config | undefined): RsiRunCos
       cacheWrite: usage.cacheCreationTokens,
       output: usage.outputTokens,
     },
-    price);
+    price,
+  );
   const record: RsiRunCostRecord = {
     inputTokens: usage.inputTokens,
     cachedTokens: usage.cachedTokens,
@@ -261,8 +272,11 @@ export async function startMechanismRun(
       ...(deps.experimentQuotaFactor === undefined ? {} : { experimentQuotaFactor: deps.experimentQuotaFactor }),
     });
  // 做梦开始卡:注入 super 会话(机制标题+runId;面板聊天流渲染,点卡跳做梦视图)。
+ // 幂等:以 run 记录上的 dreamStartAt 为门,重复派发/多进程竞争只落一张开始卡。
     try {
-      deps.note?.({ phase: "start", mechanismId: id, runId: record.runId, taskId: task.id, title: spec.title });
+      if (await markDreamNote(deps.root, id, record.runId, "start")) {
+        deps.note?.({ phase: "start", mechanismId: id, runId: record.runId, taskId: task.id, title: spec.title });
+      }
     } catch { /* 注卡失败不碰任务链 */ }
     return { ok: true, id, runId: record.runId, taskId: task.id, sessionId };
   } catch (err) {
@@ -302,6 +316,34 @@ export interface SettleRunOptions {
   readSession?: (sessionId: string) => unknown[];
   config?: Config;
   note?: StartRunDeps["note"];
+ /** 经验库( W2):给了才对 done 的 nightly run 做经验折叠;缺省=不折叠。 */
+  experienceStore?: ExperienceStore;
+ /** 判定时钟(孤儿收尾按 now-startedAt 与宽限比;缺省=Date.now)。 */
+  now?: number;
+}
+
+/**
+ * 做梦完成/失败卡(幂等):以 run 记录 dreamDoneAt 为门,
+ * 重复 settle / 多进程竞争只落一张卡。注卡失败不影响收尾。
+ */
+async function noteDreamOnce(
+  opts: SettleRunOptions,
+  section: { id: string; title: string },
+  run: RsiRunRecord,
+  phase: "done" | "failed",
+): Promise<void> {
+  try {
+    if (!(await markDreamNote(opts.root, section.id, run.runId, "done"))) return;
+    opts.note?.({
+      phase,
+      mechanismId: section.id,
+      runId: run.runId,
+      ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
+      title: section.title,
+      ...(run.cost === undefined ? {} : { cost: run.cost }),
+      ...(run.error === undefined ? {} : { summary: run.error }),
+    });
+  } catch { /* 注卡失败不影响收尾 */ }
 }
 
 /**
@@ -314,8 +356,10 @@ export interface SettleRunOptions {
 export async function settleRunRecord(
   opts: SettleRunOptions,
   section: { id: string; title: string },
-  runIn: RsiRunRecord): Promise<{ run: RsiRunRecord; finalized: number; taskStateText?: string; warnings: string[] }> {
+  runIn: RsiRunRecord,
+): Promise<{ run: RsiRunRecord; finalized: number; taskStateText?: string; warnings: string[] }> {
   const { root } = opts;
+  const nowMs = typeof opts.now === "number" && Number.isFinite(opts.now) ? opts.now : Date.now();
   let run = runIn;
   let finalized = 0;
   let taskStateText: string | undefined;
@@ -329,18 +373,15 @@ export async function settleRunRecord(
       await finishRun(root, section.id, run.runId, failed ? "failed" : "done", failed ? `task ${stateText}` : undefined);
       run = (await getRun(root, section.id, run.runId)) ?? run;
       finalized += 1;
- // 做梦完成卡:就地收尾时注入 super 会话(成本 run.cost + 摘要;失败带原因)。
-      try {
-        opts.note?.({
-          phase: failed ? "failed" : "done",
-          mechanismId: section.id,
-          runId: run.runId,
-          ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
-          title: section.title,
-          ...(run.cost === undefined ? {} : { cost: run.cost }),
-          ...(run.error !== undefined ? { summary: run.error } : {}),
-        });
-      } catch { /* 注卡失败不影响收尾 */ }
+      await noteDreamOnce(opts, section, run, failed ? "failed" : "done");
+    } else if (stateText === undefined && nowMs - run.startedAt > ORPHAN_GRACE_MS) {
+ // ①b 孤儿收尾:网关重启后 taskManager 里查不到这个 taskId,run 自称 running
+ // 却永远不会有人来结账(经验证 nightly 26 个 runId 里 22 个只有 start 卡)。
+ // 超过宽限仍查不到 → 判 failed(orphaned),不再永久挂 running。
+      await finishRun(root, section.id, run.runId, "failed", "orphaned: task not found after gateway restart");
+      run = (await getRun(root, section.id, run.runId)) ?? run;
+      finalized += 1;
+      await noteDreamOnce(opts, section, run, "failed");
     }
   }
  // ② 终态补账( RSI-SESSION-COST + RSI-SELF-DRIVE)。
@@ -452,6 +493,30 @@ export async function settleRunRecord(
       warnings.push(`结果质量评估失败:${err instanceof Error ? err.message : String(err)}`);
     }
   }
+ // ④ nightly 经验蒸馏折叠( W2):nightly + done + 注入 store + 未折叠过 → 质量门 → fold,恰好一次。
+ // 幂等标记 experienceFold 落 run 记录(旧记录无此字段=未折叠,向后兼容);重入 settle 不重复 fold;
+ // failed/interrupted(status=failed)零折叠;任何失败折叠进 warnings,不破坏 settle 主链。
+ // 动态 import:未注入 store 的旧调用方/旧测试不加载 gate 模块(零新依赖)。
+  if (section.id === "nightly" && run.status === "done" && run.experienceFold === undefined && opts.experienceStore !== undefined) {
+    try {
+      const items = await readRunResults(root, section.id, run.runId);
+      const { foldExperiencesFromResults } = await import("./rsi-experience-gate.js");
+      const outcome = await foldExperiencesFromResults(opts.experienceStore, items);
+      await finishRun(root, section.id, run.runId, run.status, run.error, {
+        experienceFold: {
+          at: Date.now(),
+          folded: outcome.folded,
+          skipped: outcome.skipped,
+          rejected: outcome.rejected,
+          truncated: outcome.truncated,
+        },
+        ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
+      });
+      run = (await getRun(root, section.id, run.runId)) ?? run;
+    } catch (err) {
+      warnings.push(`经验折叠失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   return { run, finalized, ...(taskStateText === undefined ? {} : { taskStateText }), warnings };
 }
 
@@ -470,6 +535,8 @@ export async function annotateRsiSections(
     config?: Config;
  /** 做梦卡:就地收尾时注入 super 会话(完成卡,带 run.cost);缺省=不注入。 */
     note?: StartRunDeps["note"];
+ /** 经验库( W2):透传给 settleRunRecord 做 nightly 经验折叠;缺省=不折叠。 */
+    experienceStore?: ExperienceStore;
   },
 ): Promise<AnnotateResult> {
   const { root } = opts;

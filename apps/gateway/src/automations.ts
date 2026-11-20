@@ -64,7 +64,7 @@ export interface AutomationEvent {
   occurrenceKey?: string;
  /** 账本判定结果(旧消费方忽略)。 */
   status?: "claimed" | "completed" | "skipped" | "failed";
- /** 投递 receipt 结果(旧消费方忽略):DELIVERED/PENDING/FAILED/DUPLICATE。 */
+ /** 投递 receipt 结果(;旧消费方忽略):DELIVERED/PENDING/FAILED/DUPLICATE。 */
   receiptStatus?: string;
  /** 已发生的 transient 失败次数。 */
   receiptAttempts?: number;
@@ -83,7 +83,7 @@ export class AutomationStore {
       let recovered = 0;
       for (const a of arr) {
         if (!a || !a.id || !a.instruction) continue;
- // 旧文件无 revision/receipt 字段 → 归一化为起始版本 1 / 无 receipt 账本(不为此写盘)。
+ // :旧文件无 revision/receipt 字段 → 归一化为起始版本 1 / 无 receipt 账本(不为此写盘)。
         const rev = Number(a.revision);
         a.revision = Number.isFinite(rev) && rev >= 1 ? Math.floor(rev) : 1;
         if (!a.receipt || typeof a.receipt !== "object") a.receipt = undefined;
@@ -277,7 +277,8 @@ export class AutomationScheduler {
     private readonly store: AutomationStore,
     private readonly onSubmit: (a: Automation, trigger: "schedule" | "manual") => string,
     private readonly onEvent: (e: AutomationEvent) => void,
-    private readonly tickMs = 30_000) {}
+    private readonly tickMs = 30_000,
+  ) {}
 
   /** 定时驱动(unref 不阻退出)。 */
   start(): void {

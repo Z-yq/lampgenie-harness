@@ -26,7 +26,8 @@ export interface WorkStartExecOpts {
 export type WorkStartExec = (
   cmd: string,
   args: string[],
-  opts?: WorkStartExecOpts) => { ok: boolean; stdout: string; stderr: string };
+  opts?: WorkStartExecOpts,
+) => { ok: boolean; stdout: string; stderr: string };
 
 export interface WorkStartProbeInput {
   root: string;

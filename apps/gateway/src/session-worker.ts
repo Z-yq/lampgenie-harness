@@ -7,7 +7,7 @@
  * 生命周期工程学抄 sense-index-worker:ppid 看门狗 + disconnect 自退双保险;任务终态即退出。
  * IPC 基座/ProxyJournal/代理工厂在 session-worker-lib.ts(可单测)。
  */
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync , existsSync } from "node:fs";
 import { join } from "node:path";
 import type { JournalEvent } from "@lampgenie/core";
 import type { LlmProvider } from "@lampgenie/runtime/agent/loop";
@@ -143,7 +143,12 @@ async function main(): Promise<void> {
     compact: modelProviders.compact, review: modelProviders.review, subagent: modelProviders.subagent, digest: modelProviders.digest,
   };
   let contextWindow = spec.contextWindow;
-  try {
+ // providers 超时根因:per-session 覆盖块在 9p 上读 session-models.json + 派生角色模型
+ // 全套,覆盖表不存在时整个 try 块是纯浪费——stat 快速路径跳过(有表才走原逻辑)。
+  const sessionModelsFile = join(root, ".genie", "session-models.json");
+  let sessionModelsExists = false;
+  try { sessionModelsExists = existsSync(sessionModelsFile); } catch { sessionModelsExists = false; }
+  if (sessionModelsExists) try {
     const face = createSessionModelFace(config, root, createSessionModelStore(root));
     const override = face.resolve(spec.task.sessionId);
     if (override) {
@@ -261,7 +266,8 @@ async function main(): Promise<void> {
     memoryWiring as never,
     undefined, // auxLlm:gateway 的辅助轨实例不可跨进程;worker 内 wiring 回退主轨(与未配置同行为)
     config as never,
-    contextWindow);
+    contextWindow,
+  );
 
   // R4-2(四轮复审):远程节点任务在 worker 模式 fail-visible——nodes 表是网关权威,worker
   // 无表会静默跳过分派守卫(错执行位置);不假装已派,显式失败指路。

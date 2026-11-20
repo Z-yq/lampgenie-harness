@@ -291,7 +291,8 @@ export class FakeDriver implements JumpWebDriver {
   constructor(
     private readonly page: string = "",
     /** 每个驱动调用的副作用钩子(返回 promise 则被 await——挂起/延迟用)。 */
-    private readonly behavior?: (method: string, args: unknown[]) => Promise<void> | void) {}
+    private readonly behavior?: (method: string, args: unknown[]) => Promise<void> | void,
+  ) {}
 
   private async record(method: string, args: unknown[]): Promise<void> {
     this.calls.push({ method, args });

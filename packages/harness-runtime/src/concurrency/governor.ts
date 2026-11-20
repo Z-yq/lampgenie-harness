@@ -110,7 +110,8 @@ const defaultSchedule = (callback: () => void, delayMs: number): (() => void) =>
 };
 
 export function createWorkflowConcurrencyCoordinator(
-  options: WorkflowConcurrencyCoordinatorOptions): WorkflowConcurrencyCoordinator {
+  options: WorkflowConcurrencyCoordinatorOptions,
+): WorkflowConcurrencyCoordinator {
   const now = options.now ?? Date.now;
   const schedule = options.schedule ?? defaultSchedule;
   const lanes = new Map<string, ProviderLane>();
@@ -165,7 +166,8 @@ export function createWorkflowConcurrencyCoordinator(
   const issueTicket = (
     lane: ProviderLane,
     runId: string,
-    epoch: number): AdmissionTicket => {
+    epoch: number,
+  ): AdmissionTicket => {
     let settled = false;
     const settle = (signal: (at: number) => ConcurrencyShift[]): void => {
       if (settled) return;
@@ -200,7 +202,8 @@ export function createWorkflowConcurrencyCoordinator(
                   at,
                   epoch,
                   reason as AimdThrottleCause,
-                  event.retryAfterMs),
+                  event.retryAfterMs,
+                ),
               );
               return;
             }
@@ -243,7 +246,8 @@ export function createWorkflowConcurrencyCoordinator(
   /** 按轮转挑下一个有等待者的 run。 */
   const pickNextRun = (lane: ProviderLane): string | undefined => {
     const runs = [...lane.queues.keys()].filter(
-      (runId) => (lane.queues.get(runId)?.length ?? 0) > 0);
+      (runId) => (lane.queues.get(runId)?.length ?? 0) > 0,
+    );
     if (runs.length === 0) return undefined;
     const last = lane.lastGrantedRun;
     const lastIndex = last === undefined ? -1 : runs.indexOf(last);

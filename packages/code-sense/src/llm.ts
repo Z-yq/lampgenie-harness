@@ -70,6 +70,8 @@ export function renderForLlm(r: CodeSenseResult): string {
         s.callees.length ? `调用 ${s.callees.slice(0, 2).map((c) => c.name).join(",")}` : "",
       ].filter(Boolean).join(" · ");
       out.push(`  ${s.name} — ${s.file}:${s.line}${rel ? ` (${rel})` : ""}${s.reasons.length ? ` [${s.reasons.join(";")}]` : ""}`);
+ // §13.8 G-C:候选附签名,免召回后补一次 symbol 查询;索引无 sig 不出行。
+      if (s.sig) out.push(`    签名: ${s.sig}`);
     }
   }
 

@@ -20,6 +20,11 @@
  *      context.prune → { reason, compacted, savedTokens, growthSpurt, items[] }  loop.ts:1407
  *      context.model.score → { step, mode, durationMs, decisions[], ... }  loop.ts:1088
  *      task.trajectory → { step, turn, steps, tools{}, tokensSpent, errors, phase?, subgoal? }  loop.ts:1155
+ * subagent.spawn → { taskId, parentTaskId, backend, instructions } executor-wiring.ts:134
+ * subagent.event → { agentId, taskId, parentTaskId, kind, ...裁剪后的子 loop 事件字段 }
+ * run-with-agent.ts:1504 + llm-loop-backend.ts:trimSubLoopEvent
+ * subagent.result → { taskId, agentId, parentTaskId, event:{ type:"result", ok, finalText, error? } }
+ * executor-wiring.ts:231
  * 口径(写死在这里,别在消费端再猜):
  *  - calls:工具调用行数(kind==="tool");tools:去重后的工具名数。
  *  - token:只从 llm.trace.payload.usage 求和。message.agent.payload.usage 与 llm.trace 同源
@@ -33,13 +38,16 @@
  *  - localScores = context.model.score 事件数;errors = status==="error" 的行数;
  *    wallMs = turns 末轮 endAt − 首轮 startAt(单轮=该轮 startAt→endAt)。
  *  - 轮号:llm.trace.payload.turn 决定;缺 turn 的事件按遇到 message.user 递增兜底。
+ * - 子代理:subagent.spawn→result 聚合成**一行** kind=subagent(内部逐事件
+ * turn/step 不参与主轨轮号推进);子 loop 的 tool.call/tool.result 只累计到该行的
+ * agentToolCalls/agentToolHist,不再产出顶层 tool 行(否则一次调研会淹没主轨)。
  */
 
 export type TrajRow = {
   seq: number;
   idx: number;
   turn: number;
-  kind: "user" | "model" | "tool" | "compact" | "phase" | "other";
+  kind: "user" | "model" | "tool" | "compact" | "phase" | "subagent" | "other";
   label: string;
   summary: string;
   at: number;
@@ -50,12 +58,33 @@ export type TrajRow = {
   status: "ok" | "error" | "pending";
   toolName?: string;
   toolCallId?: string;
+ /** 工具结果正文(截断到 2000 字;全文仍在 journal)。:此前结果被丢弃,轨迹里只剩参数。 */
+  result?: string;
+ /** 工具结果原始字符数(正文被截断时给提示)。 */
+  resultChars?: number;
   error?: string;
  /** llm.trace 专有:全文文件指针 + 步号 + 首字耗时 + 工具名(干条直接用,零额外请求)。 */
   traceFile?: string;
   stepNo?: number;
   ttftMs?: number;
   tools?: string[];
+ /** 子代理聚合行:spawn→result 一行,内部事件只计数(原文在 subagent.event)。 */
+  agentId?: string;
+  agentTaskId?: string;
+  agentRole?: string;
+  agentModel?: string;
+  agentSteps?: number;
+  agentCalls?: number;
+  agentToolCalls?: number;
+  agentToolHist?: Array<{ name: string; count: number }>;
+  agentInputTokens?: number;
+  agentCachedTokens?: number;
+  agentOutputTokens?: number;
+  agentEndAt?: number;
+  agentErrors?: number;
+  agentLast?: string;
+ /** 子代理任务书首段(卡体展开时看)。 */
+  agentBrief?: string;
 };
 
 export type TrajTurn = {
@@ -65,6 +94,8 @@ export type TrajTurn = {
   wallMs: number;
   calls: number;
   errors: number;
+ /** 本轮的顶层子代理数。 */
+  agents: number;
   inputTokens: number;
   cachedTokens: number;
   outputTokens: number;
@@ -84,6 +115,12 @@ export type TrajSummary = {
   localScores: number;
   prunes: number;
   rows: number;
+ /** 子代理汇总:主轨 token 口径不变,子代理单列,避免混进主轨单价。 */
+  subagents: number;
+  subCalls: number;
+  subTools: number;
+  subInputTokens: number;
+  subOutputTokens: number;
 };
 
 /** 行数上限(超出只保留最近的一批;老会话可有上万事件)。 */
@@ -131,13 +168,39 @@ function sortEvents(events: unknown[]): Array<{ ev: Record<string, unknown>; seq
 }
 
 function rowKindOf(kind: string, payload: Record<string, unknown>):
-  | "user" | "model" | "tool" | "compact" | "phase" | "other" {
+  | "user" | "model" | "tool" | "compact" | "phase" | "subagent" | "other" {
   if (kind === "message.user") return "user";
   if (kind === "message.agent" || kind === "llm.trace") return "model";
   if (kind === "tool.call" || kind === "tool.result") return "tool";
   if (kind === "compact.done" || kind === "compact.skipped") return "compact";
   if (kind === "custom" && payload.type === "task.phase") return "phase";
+  if (kind === "subagent.spawn" || kind === "subagent.event" || kind === "subagent.result") return "subagent";
   return "other";
+}
+
+/** 子代理角色名:任务书首段的「角色:x」优先,其次 payload.agentType/role,
+ * 最后回退 backend。纯函数,随 buildTrajRows 注入浏览器。 */
+function trajAgentRoleOf(p: Record<string, unknown>): string {
+  const direct = strOf(p.agentType) || strOf(p.role) || strOf(p.agentRole);
+  if (direct) return direct;
+  const ins = strOf(p.instructions) || strOf(p.text);
+  const m = /角色\s*[:：]\s*([^\s】\]\),;]+)/.exec(ins);
+  if (m && m[1]) return m[1];
+  return strOf(p.backend) || "subagent";
+}
+
+/** 子代理任务书摘要:跳过「【子智能体角色:worker】」这类标题行,取第一行实义文本。 */
+function trajAgentBriefOf(p: Record<string, unknown>): string {
+  const ins = strOf(p.instructions) || strOf(p.text);
+  if (!ins) return "";
+  const lines = ins.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+    .filter((s) => !/^【[^】]*角色[^】]*】$/.test(s));
+  return firstLine(lines[0] || ins, 140);
+}
+
+/** 子代理行的工具直方图(按次数降序、同次数按名升序;与 groupTrajTurns 同口径)。 */
+function trajAgentHistSort(h: Array<{ name: string; count: number }>): Array<{ name: string; count: number }> {
+  return h.slice().sort((a, b) => (b.count === a.count ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : b.count - a.count));
 }
 
 /** 事件数组 → 轨迹行(按 seq 稳定升序,同 toolCallId 的 call/result 合成一行)。 */
@@ -146,17 +209,104 @@ export function buildTrajRows(events: unknown): TrajRow[] {
   const sorted = sortEvents(src);
   const rows: TrajRow[] = [];
   const byCallId = new Map<string, TrajRow>();
+ /** 子代理聚合行:key=taskId || agentId。 */
+  const byAgent = new Map<string, TrajRow>();
   let curTurn = 0;
   for (const { ev, seq } of sorted) {
     const kind = strOf(ev.kind);
     const p = obj(ev.payload);
     const at = numOf(ev.time) ?? 0;
-    const explicitTurn = numOf(p.turn);
+    const subagentEvent = kind === "subagent.spawn" || kind === "subagent.event" || kind === "subagent.result";
+ // 子代理内部事件带自己的 turn/step(子 loop 的步号),绝不推进/覆盖主轨轮号——
+ // 否则一次调研的 200 条子事件会把主轨轮数打乱(注意)。
+    const explicitTurn = subagentEvent ? undefined : numOf(p.turn);
     if (explicitTurn !== undefined && explicitTurn > 0) curTurn = explicitTurn;
     else if (kind === "message.user") curTurn = curTurn + 1;
     const turn = curTurn;
     const rk = rowKindOf(kind, p);
     const base: TrajRow = { seq, idx: rows.length, turn, kind: rk, label: kind || "event", summary: "", at, status: "ok" };
+
+    if (kind === "subagent.spawn" || kind === "subagent.event" || kind === "subagent.result") {
+ // ---- 子代理聚合:spawn→result 一行;内部事件只累计计数 ----
+      const taskId = strOf(p.taskId);
+      const agentId = strOf(p.agentId);
+      const key = taskId || agentId;
+      let row = key ? byAgent.get(key) : undefined;
+      if (!row) {
+ // spawn 缺失(分页窗口截断)时用首个内部事件合成一行,不丢记录。
+        row = {
+          seq, idx: rows.length, turn, kind: "subagent", label: "子代理",
+          summary: "", at, status: "pending",
+          ...(agentId ? { agentId } : {}),
+          ...(taskId ? { agentTaskId: taskId } : {}),
+          agentRole: trajAgentRoleOf(p),
+          agentSteps: 0, agentCalls: 0, agentToolCalls: 0, agentToolHist: [],
+          agentInputTokens: 0, agentCachedTokens: 0, agentOutputTokens: 0, agentErrors: 0,
+        };
+        if (key) byAgent.set(key, row);
+        rows.push(row);
+      }
+      if (agentId && !row.agentId) row.agentId = agentId;
+      if (taskId && !row.agentTaskId) row.agentTaskId = taskId;
+      if (kind === "subagent.spawn") {
+        row.agentRole = trajAgentRoleOf(p);
+        row.agentBrief = trajAgentBriefOf(p);
+        row.summary = row.agentBrief || (row.agentRole + " 子代理");
+        row.label = "子代理 · " + row.agentRole;
+      } else if (kind === "subagent.event") {
+        const ik = strOf(p.kind);
+        if (ik === "step.start") row.agentSteps = Math.max(Number(row.agentSteps) || 0, (numOf(p.step) ?? 0) + 1);
+        if (ik === "llm.trace") {
+          row.agentCalls = (row.agentCalls || 0) + 1;
+          const mdl = strOf(p.model);
+          if (mdl) row.agentModel = mdl;
+          const u = obj(p.usage);
+          row.agentInputTokens = (row.agentInputTokens || 0) + (numOf(u.inputTokens) ?? 0);
+          row.agentCachedTokens = (row.agentCachedTokens || 0) + (numOf(u.cachedTokens) ?? 0);
+          row.agentOutputTokens = (row.agentOutputTokens || 0) + (numOf(u.outputTokens) ?? 0);
+          const head = firstLine(strOf(p.responseHead), 90);
+          if (head) row.agentLast = head;
+        } else if (ik === "tool.call") {
+          row.agentToolCalls = (row.agentToolCalls || 0) + 1;
+          const name = strOf(p.name) || "tool";
+          const hist = row.agentToolHist || (row.agentToolHist = []);
+          const hit = hist.find((h) => h.name === name);
+          if (hit) hit.count += 1; else hist.push({ name, count: 1 });
+          row.agentLast = "调用 " + name + "(" + firstLine(strOf(p.arguments), 60) + ")";
+        } else if (ik === "tool.result") {
+          if (p.error || /^错误/.test(strOf(p.content))) row.agentErrors = (row.agentErrors || 0) + 1;
+          row.agentLast = strOf(p.name) + " 返回(" + fmtDuration(numOf(p.durationMs) ?? 0) + ")";
+        } else if (ik === "message.agent") {
+          const txt = firstLine(strOf(p.text), 100);
+          if (txt) row.agentLast = txt;
+        } else if (ik === "message.user") {
+ // 任务书首条:补角色(分页窗口无 spawn 时角色只能从这里拿)与摘要。
+          const role = trajAgentRoleOf(p);
+          if (role && role !== "subagent" && (!row.agentRole || row.agentRole === "subagent")) row.agentRole = role;
+          if (!row.agentBrief) row.agentBrief = trajAgentBriefOf(p);
+          row.agentLast = firstLine(strOf(p.text), 100);
+        }
+      } else {
+ // subagent.result:event.ok / finalText / error
+        const e = obj(p.event);
+        const ok = e.ok !== false;
+        row.status = ok ? "ok" : "error";
+        const finalText = strOf(e.finalText);
+        if (finalText) {
+          row.agentLast = firstLine(finalText, 160);
+          row.summary = firstLine(finalText, 160) || row.summary;
+        }
+        const err = obj(e.error);
+        const errMsg = strOf(err.detail) || strOf(err.kind) || strOf(e.error);
+        if (!ok) row.error = errMsg || "子代理失败";
+      }
+      if (at > 0) {
+        row.agentEndAt = at;
+        const dur = at - row.at;
+        if (dur > 0) row.durationMs = dur;
+      }
+      continue;
+    }
 
     if (kind === "message.user") {
       base.label = "user";
@@ -207,6 +357,8 @@ export function buildTrajRows(events: unknown): TrajRow[] {
       base.label = name;
       base.toolName = name;
       if (id) base.toolCallId = id;
+      const st = numOf(p.step);
+      if (st !== undefined) base.stepNo = st;
       base.summary = firstLine(strOf(p.arguments), 120);
       base.status = "pending";
     } else if (kind === "tool.result") {
@@ -214,21 +366,24 @@ export function buildTrajRows(events: unknown): TrajRow[] {
       const name = strOf(p.name) || "tool";
       const dur = numOf(p.durationMs);
       const err = errText(p.error);
+      const content = strOf(p.content);
       const hit = id ? byCallId.get(id) : undefined;
       if (hit) {
         if (dur !== undefined) hit.durationMs = dur;
         hit.status = err ? "error" : "ok";
         if (err) hit.error = err;
-        // 结果正文补进摘要(调用行只有参数);不覆盖已有 error
-        const body = firstLine(strOf(p.content), 80);
-        if (body && !hit.summary) hit.summary = body;
+ // 结果正文保留预览(此前直接丢弃,轨迹里只有参数);摘要仍是参数(可搜原调用)。
+        if (content) { hit.result = content.length > 2000 ? content.slice(0, 2000) : content; hit.resultChars = content.length; }
         continue;
       }
       // 找不到对应 call(截断/跨会话/顺序错乱):自成一行 tool,不丢数据。
       base.label = name;
       base.toolName = name;
       if (id) base.toolCallId = id;
-      base.summary = firstLine(strOf(p.content), 120);
+      const st = numOf(p.step);
+      if (st !== undefined) base.stepNo = st;
+      base.summary = firstLine(content, 120);
+      if (content) { base.result = content.length > 2000 ? content.slice(0, 2000) : content; base.resultChars = content.length; }
       if (dur !== undefined) base.durationMs = dur;
       base.status = err ? "error" : "ok";
       if (err) base.error = err;
@@ -279,7 +434,7 @@ export function groupTrajTurns(rows: TrajRow[]): TrajTurn[] {
     let g = byTurn.get(t);
     if (!g) {
       g = {
-        turn: t, startAt: 0, endAt: 0, wallMs: 0, calls: 0, errors: 0,
+        turn: t, startAt: 0, endAt: 0, wallMs: 0, calls: 0, errors: 0, agents: 0,
         inputTokens: 0, cachedTokens: 0, outputTokens: 0, toolHistogram: [], toolCounts: new Map<string, number>(),
       };
       byTurn.set(t, g);
@@ -294,6 +449,7 @@ export function groupTrajTurns(rows: TrajRow[]): TrajTurn[] {
       const name = r.toolName || r.label || "tool";
       g.toolCounts.set(name, (g.toolCounts.get(name) ?? 0) + 1);
     }
+    if (r.kind === "subagent") g.agents += 1;
     if (r.status === "error") g.errors += 1;
     g.inputTokens += r.inputTokens ?? 0;
     g.cachedTokens += r.cachedTokens ?? 0;
@@ -307,6 +463,7 @@ export function groupTrajTurns(rows: TrajRow[]): TrajTurn[] {
     wallMs: g.endAt >= g.startAt ? g.endAt - g.startAt : 0,
     calls: g.calls,
     errors: g.errors,
+    agents: g.agents,
     inputTokens: g.inputTokens,
     cachedTokens: g.cachedTokens,
     outputTokens: g.outputTokens,
@@ -329,6 +486,11 @@ export function summarizeTraj(rows: TrajRow[], turns: TrajTurn[]): TrajSummary {
   let pruneItems = 0;
   let pruneEvents = 0;
   let skipped = 0;
+  let subagents = 0;
+  let subCalls = 0;
+  let subTools = 0;
+  let subInputTokens = 0;
+  let subOutputTokens = 0;
   for (const r of src) {
     if (!r) continue;
     if (r.kind === "tool") calls += 1;
@@ -336,6 +498,13 @@ export function summarizeTraj(rows: TrajRow[], turns: TrajTurn[]): TrajSummary {
     outputTokens += r.outputTokens ?? 0;
     cachedTokens += r.cachedTokens ?? 0;
     if (r.status === "error") errors += 1;
+    if (r.kind === "subagent") {
+      subagents += 1;
+      subCalls += r.agentCalls ?? 0;
+      subTools += r.agentToolCalls ?? 0;
+      subInputTokens += r.agentInputTokens ?? 0;
+      subOutputTokens += r.agentOutputTokens ?? 0;
+    }
     if (r.label === "model.score") localScores += 1;
     if (r.label === "prune") {
       pruneEvents += 1;
@@ -375,23 +544,36 @@ export function summarizeTraj(rows: TrajRow[], turns: TrajTurn[]): TrajSummary {
     localScores,
     prunes,
     rows: src.length,
+    subagents,
+    subCalls,
+    subTools,
+    subInputTokens,
+    subOutputTokens,
   };
 }
 
-/** mode 过滤 + query 对 label/summary/toolName 大小写不敏感子串匹配。 */
+/** mode 过滤 + query 对 label/summary/toolName/子代理字段 大小写不敏感子串匹配。 */
 export function filterTrajRows(
   rows: TrajRow[],
-  mode: "all" | "model" | "tool" | "error",
-  query?: string): TrajRow[] {
+  mode: "all" | "model" | "tool" | "subagent" | "error",
+  query?: string,
+): TrajRow[] {
   const src = Array.isArray(rows) ? rows : [];
   const q = String(query ?? "").trim().toLowerCase();
   return src.filter((r) => {
     if (!r) return false;
     if (mode === "model" && r.kind !== "model") return false;
     if (mode === "tool" && r.kind !== "tool") return false;
+    if (mode === "subagent" && r.kind !== "subagent") return false;
     if (mode === "error" && r.status !== "error") return false;
     if (!q) return true;
-    return [r.label, r.summary, r.toolName ?? ""].some((s) => String(s).toLowerCase().includes(q));
+    const agentBits = r.kind === "subagent"
+      ? [r.agentRole ?? "", r.agentModel ?? "", r.agentLast ?? "", r.agentId ?? "", r.agentTaskId ?? "",
+        (r.agentToolHist ?? []).map((h) => h.name).join(" ")]
+      : [];
+ // LLM 卡头的工具名(terminal/grep…)也要进搜索面——
+// 用户搜工具名时应命中「这一步调用了该工具」的决策卡,而不是只在工具行里找。
+    return [r.label, r.summary, r.toolName ?? "", (r.tools ?? []).join(" "), ...agentBits].some((s) => String(s).toLowerCase().includes(q));
   });
 }
 
@@ -485,6 +667,7 @@ export function splitCachedInput(prevMsgs: unknown, curMsgs: unknown): CachedSpl
  */
 const TRAJ_INJECTED_FNS: Array<(...args: never[]) => unknown> = [
   obj, numOf, strOf, firstLine, errText, sortEvents, rowKindOf,
+  trajAgentRoleOf, trajAgentBriefOf, trajAgentHistSort,
   buildTrajRows, groupTrajTurns, summarizeTraj, filterTrajRows, capTrajRows, fmtTokens, fmtDuration,
   msgKeyOf, approxTokens, msgTextOf, commonPrefixLen, splitCachedInput,
 ];
@@ -500,6 +683,6 @@ export const TRAJ_MODEL_JS: string =
   "summarizeTraj:summarizeTraj,filterTrajRows:filterTrajRows,capTrajRows:capTrajRows," +
   "fmtTokens:fmtTokens,fmtDuration:fmtDuration," +
   "msgTextOf:msgTextOf,commonPrefixLen:commonPrefixLen,splitCachedInput:splitCachedInput," +
-  "approxTokens:approxTokens};})();\n" +
+  "approxTokens:approxTokens,trajAgentHistSort:trajAgentHistSort,trajAgentRoleOf:trajAgentRoleOf};})();\n" +
   "const {TRAJ_ROW_CAP,buildTrajRows,groupTrajTurns,summarizeTraj,filterTrajRows,capTrajRows," +
-  "fmtTokens,fmtDuration,msgTextOf,commonPrefixLen,splitCachedInput,approxTokens}=TRAJ;\n";
+  "fmtTokens,fmtDuration,msgTextOf,commonPrefixLen,splitCachedInput,approxTokens,trajAgentHistSort,trajAgentRoleOf}=TRAJ;\n";

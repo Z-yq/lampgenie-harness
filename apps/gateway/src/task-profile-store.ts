@@ -219,7 +219,8 @@ export async function removeTaskProfile(root: string, id: string): Promise<{ ok:
 
 /** 列表(读侧容错:坏条目剔除后仍返回可用的那部分)。 */
 export async function listTaskProfiles(
-  root: string): Promise<{ ok: boolean; code: string; profiles: TaskProfile[]; count: number; parseErrors: number; path: string; error?: string }> {
+  root: string,
+): Promise<{ ok: boolean; code: string; profiles: TaskProfile[]; count: number; parseErrors: number; path: string; error?: string }> {
   const loaded = await loadTaskProfiles(root);
   return {
     ok: loaded.ok,
@@ -244,7 +245,8 @@ export async function showTaskProfile(root: string, id: string): Promise<{ ok: b
 /** 按 (taskClass, profileId?) 解析。坏文件=PROFILE_INVALID(fail-closed,不猜测)。 */
 export async function resolveTaskProfileAt(
   root: string,
-  input: ResolveTaskProfileInput): Promise<ResolveTaskProfileResult & { path?: string }> {
+  input: ResolveTaskProfileInput,
+): Promise<ResolveTaskProfileResult & { path?: string }> {
   const loaded = await loadTaskProfiles(root);
   const path = loaded.path;
   if (!loaded.ok) {

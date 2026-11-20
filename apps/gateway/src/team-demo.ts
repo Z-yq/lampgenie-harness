@@ -599,7 +599,8 @@ export async function seedVirtualTeam(opts: VirtualTeamOptions): Promise<Virtual
       memberYaml(spec, projectId),
       `roster/members/${spec.username}.yaml`,
       created,
-      skipped);
+      skipped,
+    );
   }
   for (const [rel, content] of Object.entries(ruleFiles())) writeIfChanged(join(c, rel), content, rel, created, skipped);
   for (const [rel, content] of Object.entries(skillFiles())) writeIfChanged(join(c, rel), content, rel, created, skipped);
@@ -844,7 +845,8 @@ export async function cleanupVirtualTeam(opts: VirtualTeamOptions): Promise<{ re
 
 /** 只读状态:present = 工作克隆在;members = 成员文件名;project = 当前注册的 demo 项目 id。 */
 export async function virtualTeamStatus(
-  opts: VirtualTeamOptions): Promise<{ present: boolean; members: string[]; project: string | null }> {
+  opts: VirtualTeamOptions,
+): Promise<{ present: boolean; members: string[]; project: string | null }> {
   const projectId = opts.projectId?.trim() || DEFAULT_PROJECT_ID;
   const p = resolvePaths(opts, projectId);
   if (!existsSync(p.cloneDir)) return { present: false, members: [], project: null };

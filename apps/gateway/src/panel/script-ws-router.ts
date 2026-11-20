@@ -279,6 +279,11 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     }
     return;
   }
+  if (m.type === "cfg.secret.result" && m.rid === "prov-last4") { // 服务商卡末4位掩码回填
+    for (const it of (m.items || [])) if (it && it.name && it.last4) secretLast4[it.name] = String(it.last4);
+    try { renderProviders(); } catch (e) {}
+    return;
+  }
   if (m.type === "cfg.secret.result" && m.rid === "sshcred") {
     if (!m.ok) { $("sshCredOut").textContent = "secrets 写入失败:" + (m.error || ""); toast("SSH 凭证保存失败", true); return; }
     if (sshCredPending) wsSafeSend(JSON.stringify({ v: 1, type: "ssh.test", host: sshCredPending.host, port: sshCredPending.port, username: sshCredPending.user }));
@@ -508,6 +513,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
         if (wasStaged) modelSwitchNotice = { cls: "ok", text: doneModel ? "已生效:" + String(doneModel) : "已切换为跟随全局" };
       }
       if (m.sessionId === currentSid || (draftSidStored() && m.sessionId === draftSidStored())) { renderModelPill(cfgView); renderModelSwitch(); }
+ // 指挥台会话(sid="super")的模型 pill 同样按回包校正(与任务会话 pill 共用缓存真源)
+      if (m.sessionId === "super" && typeof supModelPillRender === "function") { try { supModelPillRender(); } catch (e) { /* 面板未就绪不算错 */ } }
  // m4:pending 的 set 已确认落地 → 此刻才真正派发首轮任务(摘链在前,广播/重复回包不会再派一次)
       if (pend && !failed) draftSubmitFire();
     }
@@ -544,7 +551,7 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
       compactSetPending(false);
       if (m.phase === "failed") toast("上下文压缩失败:" + (m.reason || "未知"), true);
       else if (m.phase === "skipped") toast("上下文已是最新,无需压缩");
-      if (m.sessionId === "super") supCompactDone(); // Super 会话压缩终态(按钮解锁+实测刷新+历史重放)
+      if (m.sessionId === "super") supCompactDone(m.phase); // Super 会话压缩终态(按钮解锁+实测刷新+历史重放); 带 phase 给 toast 口径
       if (m.sessionId === currentSid) {
         refreshHist();
  // 完成=重发 trace.stats(与 result 分支同口径,刷新容量%/上下文条)
@@ -563,13 +570,13 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
       const bins = (m.tokensBefore && m.tokensAfter)
         ? ",≈" + tk(m.tokensBefore) + " → " + tk(m.tokensAfter) + " tok"
         : "";
-      toast("已压缩(摘要 " + (m.summaryChars || 0) + " 字" + bins + ")");
+      if (m.sessionId !== "super") toast("已压缩(摘要 " + (m.summaryChars || 0) + " 字" + bins + ")"); // super 由 supCompactDone 给口径,防双提示
       if (currentSid) {
         refreshHist();
  // n7:压缩后重发 trace.stats 刷新容量%/上下文条——否则压缩效果在面板上看不见(与终态刷新同口径)。
         wsSafeSend(JSON.stringify({ v: 1, type: "trace.stats", sessionId: currentSid }));
       }
-    } else toast("未压缩:" + (m.reason || "未知"), true);
+    } else if (m.sessionId !== "super") toast("未压缩:" + (m.reason || "未知"), true);
     if (m.sessionId === "super") supCompactDone(); // Super 会话压缩回执
     return;
   }
@@ -889,6 +896,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     }
     if (maxSeq > histLastSeq || histSession !== m.sessionId) histLastSeq = Math.max(histLastSeq, maxSeq);
     histSession = m.sessionId;
+ // 每次回包刷新会话热缓存(切回秒开的首帧数据源;只存已确认 seq 事件)。
+    try { histCacheRemember(m.sessionId); } catch (e) { /* 缓存失败不影响主链 */ }
  // 流式尾块让位:真 message.agent 覆盖终稿草稿→清草稿;真 tool.result 覆盖执行中行→逐行撤。
     if (stStream && m.sessionId === stStream.sid) {
       let covered = false;
@@ -917,7 +926,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
     try { trajBoardLiveSync(); } catch (e) { /* 看板不在场/渲染异常不扩散到会话增量主链 */ }
   }
   if (m.type === "sys.meta.result") { sysMeta = m.meta || {}; renderProxyKv(sysMeta); renderAboutKv(sysMeta); renderSectionDyn(); }
-  if (m.type === "cfg.get.result") { cfgView = m; renderModelPill(cfgView);
+  if (m.type === "cfg.get.result") {
+    try { if (typeof window.__cfgGetForSmr === "function") window.__cfgGetForSmr(m); } catch (e) {} // Super 路由设置卡回填 cfgView = m; renderModelPill(cfgView);
     if (window.__wsCfgHook) try { window.__wsCfgHook(m); } catch (e) {}
     cfgView = m;
     renderModelScoring();
@@ -1164,7 +1174,8 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
       boardDoc = null; renderBoard();
       if (!boardListSkipped && viewLive("board") && (boardListRetry || 0) < 3) {
         boardListRetry = (boardListRetry || 0) + 1;
-        setTimeout(() => { if (currentSid === m.sessionId && viewLive("board")) { boardItems = []; boardRefresh(); } }, 2000);
+ // 修复(5):首拉为空≠无板——先自动重拉(1.2s 退避,drvfs 高载下的假阴性窗),期间画布显示「正在加载白板清单…」
+        setTimeout(() => { if (currentSid === m.sessionId && viewLive("board")) { boardItems = []; boardRefresh(); } }, 1200);
       } else boardListRetry = 0;
     }
     renderBoardPanel(); // 浮窗板清单跟随(boardItems 就绪;浮窗未开时是 no-op)
@@ -1191,14 +1202,19 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // 失败(ok=false / error / 空 svg)=保持卡片累加出来的世界尺寸与空 #cvSvgHost,不崩不白屏。
     const cvSvgReqSig = cvSvgPending; // 回包认领的是哪一版请求(先取再清)
     cvSvgPending = "";
+    cvSvgWaitClear(); // 修复(5):回包到了 → 撤掉等待/超时兜底
+    if (cvSvgReqSig) delete cvSvgRetryN[cvSvgReqSig];
     if (m.sessionId && currentSid && m.sessionId !== currentSid) return;
     try {
       if (m.ok && m.svg) {
         cvSvgCacheHtml = String(m.svg);
         cvSvgCacheSig = cvSvgReqSig || (boardDoc ? cvSvgSig(boardDoc) : "");
         if (viewLive("board")) renderBoard();
-      } else if (m.error) {
-        try { toast("白板出图失败:" + String(m.error), true); } catch (e) { /* toast 失败不影响画布 */ }
+      } else {
+ // 修复(5):失败/空回包同样是「画布不会出图」,就地写明并给手动重试入口,不静默留白
+        const why = m.error ? String(m.error) : "回包为空";
+        cvSvgWaitPaint("出图失败:" + why + "——点「刷新」或重新进白板可手动重试", true);
+        if (m.error) { try { toast("白板出图失败:" + why, true); } catch (e) { /* toast 失败不影响画布 */ } }
       }
     } catch (e) { /* 回包畸形/宿主不在场:静默 */ }
     return;
@@ -1336,20 +1352,25 @@ export const PANEL_JS_WS_ROUTER = `function wsOnMessage(e) {
  // 工作流板:编译回包(编译预览+执行前奏)——脚本进明细区,错误 fail-visible 全列出
   if (m.type === "board.workflow.compile.result") {
     if (m.sessionId !== currentSid || m.taskId !== boardTaskId) return;
-    const box = bdDetailHost();
+    const box = bdDetailHost() || $("boardDetail");
     if (!box) return;
     if (m.ok) {
       wfCompilePreview = m.script || "";
       const cnt = (m.order || []).length;
-      box.innerHTML = '<div class="bd-name" style="font-size:13px">编译通过(' + cnt + " 节点入序)</div>" +
-        '<div class="bd-meta">harness-workflow 脚本(引擎直跑形态;「编译执行」用它)</div>' +
-        '<textarea readonly rows="18" style="width:100%;margin-top:6px;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);border-radius:8px;padding:6px 8px;font-size:11px;font-family:var(--mono)">' + esc(wfCompilePreview) + "</textarea>";
+ // 修复(4):原实现写 textarea rows=18 width:100%(无 box-sizing)→ 落在明细区时
+ // 溢出/多行挤成一条、经验证只剩 ~180px 宽并串到画布角落。改为明细区内的等宽可滚动代码面板
+ // (.bd-wf-pane/.bd-wf-code:width:100% + box-sizing + max-height + overflow:auto + white-space:pre)。
+      box.innerHTML = '<div class="bd-wf-pane">' +
+        '<div class="bd-name" style="font-size:13px">编译通过(' + cnt + " 节点入序)</div>" +
+        '<div class="bd-meta">harness-workflow 脚本(引擎直跑形态;「编译执行」用它)· ' + wfCompilePreview.length + " 字符 · 等宽可滚动,可全选复制</div>" +
+        '<pre class="bd-wf-code" spellcheck="false">' + esc(wfCompilePreview) + "</pre></div>";
+      try { box.scrollTop = 0; } catch (e) { /* 宿主不可滚=无操作 */ }
       toast("编译通过:" + cnt + " 节点");
     } else {
       wfCompilePreview = "";
-      box.innerHTML = '<div class="bd-name" style="font-size:13px;color:#e08a7a">编译失败(' + (m.errors || []).length + " 项)</div>" +
+      box.innerHTML = '<div class="bd-wf-pane"><div class="bd-name" style="font-size:13px;color:#e08a7a">编译失败(' + (m.errors || []).length + " 项)</div>" +
         (m.errors || []).map((e2) => '<div class="bd-meta" style="margin-top:4px">· ' + esc(e2) + "</div>").join("") +
-        '<div class="bd-meta" style="margin-top:8px">修法:环=删一条边;缺参数=双击节点开配置抽屉;多出口=用 wf-parallel/wf-condition。</div>';
+        '<div class="bd-meta" style="margin-top:8px">修法:环=删一条边;缺参数=双击节点开配置抽屉;多出口=用 wf-parallel/wf-condition。</div></div>';
       toast("编译失败:" + (m.errors || []).length + " 项(明细区已列出)", true);
     }
     return;

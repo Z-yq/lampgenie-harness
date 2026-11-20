@@ -9,7 +9,7 @@
  * agent.sessionWorker。测试环境(VITEST)与 GENIE_SESSION_WORKER=off 由 app.ts 决定不装配本 host。
  */
 import { fork, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, appendFileSync, readdirSync, statSync,  } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Journal } from "@lampgenie/core";
@@ -119,7 +119,8 @@ export async function askPermissionWithApprovalObject(
   broker: PermissionBroker,
   journal: Journal | undefined,
   requestId: string,
-  payload: PermissionAskPayload): Promise<PermissionOutcome> {
+  payload: PermissionAskPayload,
+): Promise<PermissionOutcome> {
   const approvalObject = () =>
     payload.args === undefined
       ? { tool: payload.tool, summary: payload.summary }
@@ -156,7 +157,25 @@ export async function askPermissionWithApprovalObject(
 /** fork 失败冷却:连续失败后停一段时间再试(防 dist 缺失/资源枯竭时的 fork 风暴)。 */
 const SPAWN_FAIL_COOLDOWN_MS = 60_000;
 /** ready 等待上限:超时视为 worker 起不来(杀+任务失败)。 */
-const READY_TIMEOUT_MS = 30_000;
+// 固定 30s 在 563MB journal + 9p 下不够(第 7 轮周期 4 机制 worker providers
+// 阶段 30-45s NO_PROGRESS 超时注意)——按 journal 目录体量自适应(AGENTS 教训:判活等待
+// 预算必须随 journal 体量放大;boot 装配窗同理)。
+function adaptiveReadyTimeoutMs(repoRoot: string): number {
+  try {
+    const journalDir = join(repoRoot, ".genie", "journals");
+    let totalBytes = 0;
+    for (const name of readdirSync(journalDir, { withFileTypes: true })) {
+      if (!name.isFile() || !name.name.endsWith(".jsonl")) continue;
+      try { totalBytes += statSync(join(journalDir, name.name)).size; } catch { /* 单文件失败容忍 */ }
+    }
+ // 基线 30s + 每 100MB 加 10s,封顶 90s
+    const extra = Math.floor(totalBytes / (100 * 1024 * 1024)) * 10_000;
+    return Math.min(30_000 + extra, 90_000);
+  } catch {
+    return 30_000; // 目录不可读=基线
+  }
+}
+let READY_TIMEOUT_MS = 30_000;
 
 export interface SessionWorkerHostDeps {
   taskManager: TaskSupervisor;
@@ -317,7 +336,8 @@ export function sweepOrphanSessionWorkers(currentGatewayPid: number): { killed: 
  *  agent-wiring / server.ts 的写板路径同语义;面板侧 board.changed 是幂等重拉,重复广播无害。 */
 export function relayBoardChanged(
   landed: { kind?: string; sessionId?: string; payload?: unknown }[],
-  emit: (topic: string, payload: unknown) => void): void {
+  emit: (topic: string, payload: unknown) => void,
+): void {
   for (const e of landed) {
     if (typeof e.kind !== "string" || !e.kind.startsWith("board.")) continue;
     const p = (e.payload ?? {}) as { taskId?: unknown };
@@ -431,7 +451,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
  // worker 的 session_search 代理到 gateway 真 journal(全历史索引)。
           // 现场建工具执行(sessionSearchTool 内部走 WeakMap 单例+盘上缓存,不重复构建);
           // 缺 sessionId 的 discover 由工具默认排除当前会话(worker 上报)。
- // op=capsule 走同一条 gateway 实现(runSessionSearchCapsule),不复制胶囊逻辑。
+ // :op=capsule 走同一条 gateway 实现(runSessionSearchCapsule),不复制胶囊逻辑。
           const p = req.payload as {
             op: "discover" | "scroll" | "read" | "capsule";
             args: unknown;
@@ -483,7 +503,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
   };
 
   /** journal 落账:重分配全局 seq/time(权威),保序入账;记录权威 seq 供订阅转发去重。
- * 返回 {ok,error} 供 RPC 路(journal.appendSync)判定;notify 路仍只记日志不抛。 */
+ * :返回 {ok,error} 供 RPC 路(journal.appendSync)判定;notify 路仍只记日志不抛。 */
   const ingestEvents = (run: WorkerRun, events: unknown[]): { ok: true } | { ok: false; error: string } => {
     if (!Array.isArray(events) || events.length === 0) return { ok: true };
  // worker 上行可观测( tips 留痕丢失排查):GENIE_WORKER_JOURNAL_DEBUG=1 时每批
@@ -840,10 +860,10 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       failTask(task, `描述符写入失败:${String(err).slice(0, 120)}`);
       return;
     }
-    const run: WorkerRun = { child: undefined as unknown as ChildProcess, taskId: task.id, sessionId: task.sessionId, startedAt: Date.now(), stderrTail: [], ready: false, rpcId: 0, selfSeqs: new Set(), pending: new Map(), lease: new StartupLease({ timeoutMs: READY_TIMEOUT_MS }) };
+    const run: WorkerRun = { child: undefined as unknown as ChildProcess, taskId: task.id, sessionId: task.sessionId, startedAt: Date.now(), stderrTail: [], ready: false, rpcId: 0, selfSeqs: new Set(), pending: new Map(), lease: new StartupLease({ timeoutMs: (READY_TIMEOUT_MS = adaptiveReadyTimeoutMs(deps.repoRoot)) }) };
  // 起租。spawn 是最长的一段(进程起来→loadConfig),也是唯一没有 worker 上报的阶段。
     run.lease.begin("spawn", run.startedAt);
- // 子进程 env 从安全基线起算;带 credentialRef 时按 task origin 解析,成功才注入那一个变量。
+ // :子进程 env 从安全基线起算;带 credentialRef 时按 task origin 解析,成功才注入那一个变量。
  // 失败=不注入 + 审计落账(custom 事件只带 code,不含值);GENIE_CREDENTIAL_BOUNDARY=off 回退旧 env。
     const envBuild = buildWorkerEnv(task.credentialRef, {
       baseEnv: process.env,
@@ -860,7 +880,7 @@ export function createSessionWorkerHost(deps: SessionWorkerHostDeps): SessionWor
       const heapMb = Math.max(512, Number(process.env.GENIE_SESSION_WORKER_HEAP_MB ?? 2048));
       run.child = fork(entry.file, [specFile], {
         cwd: deps.repoRoot,
- // 只给子进程安全基线 + 解析出的单个凭证变量(不再是整份 process.env)
+ // :只给子进程安全基线 + 解析出的单个凭证变量(不再是整份 process.env)
         env: envBuild.env as NodeJS.ProcessEnv,
         stdio: ["ignore", "pipe", "pipe", "ipc"],
         // 堆帽(F5-2:agent loop 大上下文;可配 GENIE_SESSION_WORKER_HEAP_MB,下限 512)

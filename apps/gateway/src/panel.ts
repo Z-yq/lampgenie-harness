@@ -44,6 +44,7 @@ import { PANEL_JS_VOICE_CITE } from "./panel/script-voice-cite.js";
 import { PANEL_JS_IDE_1 } from "./panel/script-ide-1.js";
 import { PANEL_JS_IDE_2 } from "./panel/script-ide-2.js";
 import { PANEL_JS_ANNOTATE } from "./panel/script-annotate.js";
+import { PANEL_JS_SUPER_CHAT } from "./panel/script-super-chat.js";
 import { PANEL_PROFILE_PAGE } from "./panel/page-profile.js";
 
 /** 预设目录单一出处(TS 模块)注入面板浏览器侧;JSON 只含公开 URL/模型 ID。 */
@@ -65,7 +66,7 @@ export const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>lampgenie-harness · 控制台</title>
 <style>${PANEL_CSS}${PANEL_SHELL}
 <script>
-${PANEL_JS_CORE}${PANEL_JS_TRAJ}${PANEL_JS_ICONS_SIDEBAR}${PANEL_JS_MARKDOWN}${PANEL_JS_TOOL_RENDER}${PANEL_JS_HISTORY}${PANEL_JS_VIEWS}${PANEL_JS_PROVIDERS}${PANEL_JS_WS_ROUTER}${PANEL_JS_SUBMIT}
+${PANEL_JS_CORE}${PANEL_JS_TRAJ}${PANEL_JS_ICONS_SIDEBAR}${PANEL_JS_MARKDOWN}${PANEL_JS_TOOL_RENDER}${PANEL_JS_HISTORY}${PANEL_JS_VIEWS}${PANEL_JS_PROVIDERS}${PANEL_JS_WS_ROUTER}${PANEL_JS_SUBMIT}${PANEL_JS_SUPER_CHAT}
 // ---- 服务商预设目录(单一出处=provider-presets.ts;浏览器侧只读 JSON) ----
 const PROVIDER_PRESETS = ${PRESETS_JSON};
 // ---- 错误码 -> 人话文案表(单一出处=error-text.ts;ERR_TEXT/errorText/errorDiagnostic 由构建期注入)----
@@ -370,6 +371,13 @@ export function servePanel(port: number, attachWs: (server: Server) => void, opt
         .catch(() => { res.writeHead(404); res.end(); });
       return;
     }
+    if (req.url === "/assets/status-widget.js") {
+      readFile(join(here, "assets", "status-widget.js"))
+        .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })
+        .catch(() => { res.writeHead(404); res.end(); });
+      return;
+    }
+ // 服务重启降级壳(视频 T1):SW 缓存面板壳,停机窗口刷新不再裸错误页
     if (req.url === "/assets/sw.js") {
       readFile(join(here, "assets", "sw.js"))
         .then((buf) => { res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" }); res.end(buf); })

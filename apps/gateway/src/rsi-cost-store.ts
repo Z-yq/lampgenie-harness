@@ -53,7 +53,8 @@ interface RoiRuntime {
   summarizeCycles(
     cycleIds: readonly string[] | undefined,
     costs: readonly unknown[] | undefined,
-    savings: readonly unknown[] | undefined): {
+    savings: readonly unknown[] | undefined,
+  ): {
     reports: CycleReport[];
     total: {
       costTokens: number;
@@ -73,24 +74,11 @@ interface RoiRuntime {
 
 let roiRuntime: RoiRuntime | undefined;
 
-/**
- * 两跳解析 runtime 模块:静态无后缀 import 在 `node --experimental-strip-types` 下会解析到
- * dist(dist 里没有新模块),因此失败时回落源码 `.ts` URL。
- */
-async function loadRoiRuntime(): Promise<RoiRuntime> {
-  if (roiRuntime) return roiRuntime;
-  const spec = "@lampgenie/runtime/agent/rsi-cost-roi";
-  try {
-    roiRuntime = (await import(spec)) as unknown as RoiRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/rsi-cost-roi.ts", import.meta.url).href;
-    roiRuntime = (await import(srcUrl)) as unknown as RoiRuntime;
-  }
-  return roiRuntime;
-}
-
 /** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadRoiRuntime();
+import * as rt_roi from "@lampgenie/runtime/agent/rsi-cost-roi";
+
+/** runtime 面:静态导入(批量补漏,exit 13 坑防第六犯)。 */
+const rt: RoiRuntime = rt_roi;
 
 /** 台账 schema 版本(与 runtime 同源)。 */
 const SCHEMA_VERSION = rt.RSI_COST_VERSION;
@@ -103,22 +91,8 @@ interface BreakerPauseResult {
   state: unknown;
 }
 
-interface BreakerModule {
-  pause(
-    root: string,
-    opts: { by: string; reason: string; scope?: string; trigger?: string; at?: string },
-  ): Promise<BreakerPauseResult>;
-}
-
-let breakerModule: BreakerModule | undefined;
-
-/** 惰性复用熔断台账(两跳同 runtime:源码 URL 回落)。 */
-async function loadBreakerModule(): Promise<BreakerModule> {
-  if (breakerModule) return breakerModule;
-  const srcUrl = new URL("./rsi-breaker-store.ts", import.meta.url).href;
-  breakerModule = (await import(srcUrl)) as unknown as BreakerModule;
-  return breakerModule;
-}
+// P0-①:breaker 静态导入(旧变量 URL 动态 import 在 bundle 里解析失败,pause 落不了盘)。
+import { pause as breakerPause } from "./rsi-breaker-store.js";
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -304,10 +278,23 @@ function pickSavingFields(entry: UnknownRecord): UnknownRecord {
 /** 记一笔成本(字段非法不在写入时拒:交给纯逻辑在报告时计入 invalid,台账只忠实落盘)。 */
 export function recordCost(
   root: string,
-  entry: CostEntry | UnknownRecord): { ok: boolean; codes: string[]; at?: string } {
+  entry: CostEntry | UnknownRecord,
+): { ok: boolean; codes: string[]; at?: string } {
   const base = assertRoot("recordCost", root);
   if (!isRecord(entry)) throw new TypeError("recordCost: entry 必须是对象");
   const at = atOf(entry["at"]);
+ // P0-①(重复落账修复):同 id 幂等——面板轮询结算与调度器结算双路都会调
+ // recordCost,旧实现盲 append 造成同 run 双计(经验证 7 对重复,成本虚增 3.7%)。
+  const id = typeof entry["id"] === "string" ? (entry["id"] as string) : undefined;
+  if (id !== undefined && id !== "") {
+    try {
+      const seen = loadCostProjection(base);
+      const dup = seen.rows.some(
+        (row) => (row as UnknownRecord)["type"] === "cost" && (row as UnknownRecord)["id"] === id,
+      );
+      if (dup) return { ok: false, codes: ["RSI_COST_DUPLICATE_SKIPPED"], at };
+    } catch { /* 投影读失败按旧路径直写(宁可轻重复,不可丢账) */ }
+  }
   const line: UnknownRecord = { v: SCHEMA_VERSION, type: "cost", at, ...pickCostFields(entry) };
   if (!appendLine(base, line)) return { ok: false, codes: ["RSI_COST_WRITE_MISMATCH"] };
   return { ok: true, codes: [], at };
@@ -316,7 +303,8 @@ export function recordCost(
 /** 记一笔节省。 */
 export function recordSavings(
   root: string,
-  entry: SavingEntry | UnknownRecord): { ok: boolean; codes: string[]; at?: string } {
+  entry: SavingEntry | UnknownRecord,
+): { ok: boolean; codes: string[]; at?: string } {
   const base = assertRoot("recordSavings", root);
   if (!isRecord(entry)) throw new TypeError("recordSavings: entry 必须是对象");
   const at = atOf(entry["at"]);
@@ -471,8 +459,11 @@ export async function evaluateRoiGate(root: string, opts?: EvaluateCostOptions):
   const breakerRoot = nonEmpty(options.breakerRoot);
   if (breakerRoot === undefined) return applied;
   try {
-    const breaker = await loadBreakerModule();
-    applied.breaker = await breaker.pause(breakerRoot, {
+ // P0-①(熔断脱钩修复):旧实现经 loadBreakerModule 的变量 URL 动态 import——
+ // bundle 里解析不到 dist/rsi-breaker-store.ts,pause 静默落不了盘(catch 吞成 ok:false),
+ // 调度器下一拍读台账未 paused → 自动清掉 runtime 快照 → 经验证 pause 后仍跑 7 周期
+ // 烧 91.8M token。改静态导入(breaker-store 已 boot-safe),失败仅剩真实 IO 错。
+    applied.breaker = await breakerPause(breakerRoot, {
       by: "rsi-cost",
       reason: "roi-gate: 连续负 ROI 达 pauseAfter",
       scope: "all",

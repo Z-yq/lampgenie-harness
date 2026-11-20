@@ -353,12 +353,25 @@ export async function queryApiCmd(
   return { text: semanticBlock ? `${base}\n${semanticBlock}` : base, miss: r.endpoints.length === 0 };
 }
 
-/** state:状态机表面( P2,五形态确定性提取,不依赖索引构建)。 */
+/** state:状态机表面 + §14.4 六签名缺陷附注(投影层,;五形态确定性提取,不依赖索引构建)。 */
 export async function queryStateCmd(ctx: QueryContext, json = false, opts?: { all?: boolean }): Promise<QueryOutput> {
   const { queryStateMachines, renderStateMachines } = await import("@lampgenie/code-sense/sensing/index");
   const r = await queryStateMachines(ctx.root, { all: opts?.all });
   if (json) return { text: "", miss: r.machines.length === 0, json: { query: "state", root: ctx.root, ...r } };
   return { text: renderStateMachines(r), miss: r.machines.length === 0 };
+}
+
+/** orphans:孤儿逻辑自查(设计稿 14.2)——孤独导出/仅测试接线/
+ * 孤儿事件/双胞胎四类,全仓确定性行扫描;prefix=可选模块/路径前缀。 */
+export async function queryOrphansCmd(
+  ctx: QueryContext,
+  prefix: string | undefined,
+  json = false,
+): Promise<QueryOutput> {
+  const { scanOrphans, renderOrphans } = await import("@lampgenie/code-sense/sensing/orphan-audit");
+  const r = await scanOrphans(ctx.root, prefix || undefined);
+  if (json) return { text: "", miss: r.findings.length === 0, json: { query: "orphans", ...r } };
+  return { text: renderOrphans(r), miss: r.findings.length === 0 };
 }
 
 /** algo:算法画像( P3,框架 API 模式识别,不依赖索引构建;file=聚焦导读)。 */
@@ -470,7 +483,8 @@ export async function queryBranchesCmd(
   ctx: QueryContext,
   path: string,
   repo: string | undefined,
-  json = false): Promise<QueryOutput> {
+  json = false,
+): Promise<QueryOutput> {
   const { root, rel } = resolveTypedTarget(ctx, path, repo);
   const { scanDecisionFile, renderDecisionSkeleton } = await import("@lampgenie/code-sense/sensing/decision");
   const r = await scanDecisionFile(root, rel.replace(/\\/g, "/"));

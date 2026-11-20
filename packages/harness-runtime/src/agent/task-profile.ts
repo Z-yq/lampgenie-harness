@@ -245,7 +245,8 @@ function pickLatest(candidates: TaskProfile[]): { picked: TaskProfile; conflict:
  */
 export function resolveTaskProfile(
   profiles: readonly TaskProfile[],
-  input: ResolveTaskProfileInput): ResolveTaskProfileResult {
+  input: ResolveTaskProfileInput,
+): ResolveTaskProfileResult {
   const list = Array.isArray(profiles) ? profiles.filter((p) => isRecord(p) && typeof p.id === "string") : [];
   let candidates: TaskProfile[];
   let conflict = false;

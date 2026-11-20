@@ -54,7 +54,8 @@ export async function buildFlowPage(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
-  bundle: WikiFlowBundle): Promise<PageDraft> {
+  bundle: WikiFlowBundle,
+): Promise<PageDraft> {
   const flow = bundle.primary;
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 全仓代码流`, "", flowBanner(input, bundle), ""];
@@ -184,7 +185,8 @@ export async function buildModuleFlowPage(
   config: WikiConfig,
   moduleName: string,
   flow: CodeFlow,
-  bundle: WikiFlowBundle): Promise<PageDraft> {
+  bundle: WikiFlowBundle,
+): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# 模块 ${moduleName} · 文件级代码流`, "", flowBanner(input, bundle), ""];
   const modNote = bundle.moduleNotes[moduleName];
@@ -249,7 +251,8 @@ export async function buildGuidePage(
   cache: SourceCache,
   config: WikiConfig,
   bundle: WikiFlowBundle,
-  narrative?: WikiNarrative): Promise<PageDraft> {
+  narrative?: WikiNarrative,
+): Promise<PageDraft> {
   const flow = bundle.primary;
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 语义级代码指南`, "", flowBanner(input, bundle), ""];
@@ -369,7 +372,8 @@ export async function buildFeaturesPage(
   cache: SourceCache,
   config: WikiConfig,
   bundle: WikiFlowBundle,
-  narrative?: WikiNarrative): Promise<PageDraft> {
+  narrative?: WikiNarrative,
+): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const lines: string[] = [`# ${input.displayName} 功能拆解`, "", flowBanner(input, bundle), ""];
   if (narrative) lines.push(renderNarrative(narrative));
@@ -449,7 +453,8 @@ export async function buildPipelineCfgPage(
   input: WikiInput,
   cache: SourceCache,
   config: WikiConfig,
-  cfg: WikiPipelineCfg): Promise<PageDraft> {
+  cfg: WikiPipelineCfg,
+): Promise<PageDraft> {
   const cites: WikiCitation[] = [];
   const totalNodes = cfg.functions.reduce((a, f) => a + f.nodes.length, 0);
   const totalDiagrams = cfg.functions.reduce((a, f) => a + (f.pages?.length ?? 1), 0);

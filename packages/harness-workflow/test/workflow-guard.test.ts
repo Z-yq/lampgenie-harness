@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { fileURLToPath } from "node:url";
 import { MemoryJournal } from "@lampgenie/core";
 import { deriveWorkflowConcurrencyCeiling } from "@lampgenie/runtime/concurrency/ceiling";
 import { WorkflowEngine } from "../src/engine";
 
-const ROOT = "/mnt/e/workship/genie/lampgenie-harness";
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const guardEvents = (j: MemoryJournal) =>

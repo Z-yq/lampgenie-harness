@@ -53,7 +53,8 @@ function mkJournal(): FakeJournal {
 function declareWeak(journal: FakeJournal, sid: string): SurfaceCaps {
   const r = handleClientSurfaceDeclare(
     { sessionId: sid, rendersMarkdown: false, maxChars: 800, mediaKinds: ["link"], hasUI: false },
-    journal);
+    journal,
+  );
   if (!r.ok) throw new Error("declare failed: " + r.error);
   return r.caps;
 }

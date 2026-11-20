@@ -102,7 +102,8 @@ interface SourceRuntime {
   createRegistry(): SourceRegistry;
   registerKind(
     registry: SourceRegistry,
-    kind: unknown): { ok: boolean; code: string; codes: string[]; kind?: SourceKind; reason?: string };
+    kind: unknown,
+  ): { ok: boolean; code: string; codes: string[]; kind?: SourceKind; reason?: string };
   registerInstance(
     registry: SourceRegistry,
     input: { id: string; kind: string; config?: Record<string, unknown>; enabled?: boolean },
@@ -124,20 +125,10 @@ interface SourceRuntime {
 
 let sourceRuntime: SourceRuntime | undefined;
 
-/** 两跳解析 source-registry(打包产物无源码时回落 src .ts,与 data-tool-store 同模式)。 */
-async function loadSourceRuntime(): Promise<SourceRuntime> {
-  if (sourceRuntime) return sourceRuntime;
-  const spec = "@lampgenie/runtime/agent/source-registry";
-  try {
-    sourceRuntime = (await import(spec)) as unknown as SourceRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/source-registry.ts", import.meta.url).href;
-    sourceRuntime = (await import(srcUrl)) as unknown as SourceRuntime;
-  }
-  return sourceRuntime;
-}
+import * as rt_source_registry from "@lampgenie/runtime/agent/source-registry";
 
-const rt = await loadSourceRuntime();
+/** runtime 面:静态导入(批量补漏,exit 13 坑防第六犯)。 */
+const rt: SourceRuntime = rt_source_registry;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -234,7 +225,8 @@ function fingerprint(registry: SourceRegistry): string {
 function persist(
   root: string,
   registry: SourceRegistry,
-  before: string): { ok: boolean; code?: string; path: string; error?: string } {
+  before: string,
+): { ok: boolean; code?: string; path: string; error?: string } {
   const path = sourcesPath(root);
   if (fingerprint(registry) === before) return { ok: true, path };
   const saved = saveSources(root, registry);
@@ -247,7 +239,8 @@ function persist(
 /** 登记一个 kind:校验失败零变更(连文件都不创建)。 */
 export function registerSourceKind(
   root: string,
-  kind: unknown): { ok: boolean; code: string; codes: string[]; path: string; kind?: SourceKind; reason?: string } {
+  kind: unknown,
+): { ok: boolean; code: string; codes: string[]; path: string; kind?: SourceKind; reason?: string } {
   const registry = loadSources(root);
   const before = fingerprint(registry);
   const result = rt.registerKind(registry, kind);

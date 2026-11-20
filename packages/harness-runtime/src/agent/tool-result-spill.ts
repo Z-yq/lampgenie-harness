@@ -100,7 +100,8 @@ export function shouldSpill(
 
 function buildMarker(
   originalChars: number, prunedChars: number, absolutePath: string, headChars: number, tailChars: number,
-  toolName?: string): string {
+  toolName?: string,
+): string {
  // read_file 的定制指引( token 轮 04):回读目标是**原文件**而不是 spill 副本。
   // 这是把 read_file 移出排除名单的前提——旧口径的「防 read-spill 循环」靠不外置实现,
   // 现改成靠提示语实现(副本没有行号语义,指回副本才是真循环)。
@@ -154,11 +155,23 @@ export interface SpillToolResultOptions extends SpillConfig {
   callId: string;
   toolName: string;
   content: string;
+ /** 缺口#24-E1(§4.1.8.7):中段选块——spill 命中且中段被剪字符 ≥2000 时,
+ * 用 scorer 从被剪中段里选 1 个高相关块贴回预览(行号标注)。scorer 缺席/抛错/超时
+ * → 退回固定头尾,零行为变化。一次定案:选中块写死进预览文本,此后逐字不变。 */
+  goal?: string;
+  scorer?: (chunks: Array<{ index: number; text: string }>, goal: string) => Promise<number[] | undefined>;
 }
+
+/** E1 触发下限:中段被剪字符低于它不值得付打分成本(设计 §4.1.8.7-E1 契约)。 */
+export const SPILL_MIDBLOCK_MIN_CHARS = 2_000;
+/** E1 选中块 token 上限(≈4800 字符)。 */
+export const SPILL_MIDBLOCK_MAX_TOKENS = 1_200;
 
 /**
  * 写时定形入口:不满足 shouldSpill → 原样返回;满足 → 落盘 + 返回预览。
  * **任何异常 fail-open 返回原文**(不因 spill 失败丢结果)。
+ * E1 中段选块(缺口#24):goal+scorer 在场且中段被剪 ≥2000 字符时,让 scorer 从中段块里
+ * 挑 1 个(返回 index 数组取首个);任何失败(含超时由 scorer 自理)退回固定头尾。
  */
 export async function spillToolResult(opts: SpillToolResultOptions): Promise<string> {
   const content = typeof opts.content === "string" ? opts.content : String(opts?.content ?? "");
@@ -168,14 +181,55 @@ export async function spillToolResult(opts: SpillToolResultOptions): Promise<str
     const path = spillFilePath(opts);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content, "utf8");
-    return buildSpillPreview(content, {
+    const preview = buildSpillPreview(content, {
       path,
       toolName: opts.toolName,
       ...(opts.headChars !== undefined ? { headChars: opts.headChars } : {}),
       ...(opts.tailChars !== undefined ? { tailChars: opts.tailChars } : {}),
     });
+    let midBlock: string | undefined;
+    let midBlockLines: [number, number] | undefined;
+    if (opts.goal !== undefined && opts.scorer && content.length - SPILL_HEAD_CHARS - SPILL_TAIL_CHARS >= SPILL_MIDBLOCK_MIN_CHARS) {
+      try {
+ // 中段按换行对齐粗切块(复用 big-intake 的行对齐思想,本地实现避免跨模块 import 环)。
+        const mid = content.slice(SPELL_HEAD_SAFE(opts), content.length - SPILL_TAIL_CHARS);
+        const lines = mid.split("\n");
+        const blockLines: string[] = [];
+        const blocks: Array<{ index: number; text: string }> = [];
+        for (const line of lines) {
+          blockLines.push(line);
+          if (blockLines.join("\n").length >= 2_400) {
+            blocks.push({ index: blocks.length, text: blockLines.join("\n") });
+            blockLines.length = 0;
+          }
+        }
+        if (blockLines.length > 0) blocks.push({ index: blocks.length, text: blockLines.join("\n") });
+        if (blocks.length > 1) {
+          const picked = await opts.scorer(blocks, opts.goal);
+          const idx = Array.isArray(picked) ? picked[0] : undefined;
+          if (typeof idx === "number" && idx >= 0 && idx < blocks.length) {
+            const room = Math.max(0, SPILL_PREVIEW_MAX_CHARS - preview.length - 120);
+            const text = blocks[idx]!.text.slice(0, Math.min(SPILL_MIDBLOCK_MAX_TOKENS * 4, room));
+            const startLine = content.slice(0, SPELL_HEAD_SAFE(opts)).split("\n").length
+              + blocks.slice(0, idx).reduce((n, b) => n + b.text.split("\n").length, 0);
+            midBlock = text;
+            midBlockLines = [startLine, startLine + blocks[idx]!.text.split("\n").length - 1];
+          }
+        }
+      } catch { midBlock = undefined; /* E1 任何失败退回固定头尾 */ }
+    }
+    if (midBlock !== undefined && midBlockLines !== undefined) {
+      const [a, b] = midBlockLines;
+      return `${preview}\n[中段已剪 ${content.length - SPILL_HEAD_CHARS - SPILL_TAIL_CHARS} 字符,保留高相关块:行 ${a}-${b}]\n${midBlock}`;
+    }
+    return preview;
   } catch {
     // fail-open:落盘/定性失败都退回原文(宁可多花 token,不可丢工具结果)。
     return content;
   }
+}
+
+/** 头部安全取数(headChars 可被调用方覆写;中段起点与预览头一致)。 */
+function SPELL_HEAD_SAFE(opts: SpillConfig): number {
+  return positiveInt(opts.headChars, SPILL_HEAD_CHARS);
 }

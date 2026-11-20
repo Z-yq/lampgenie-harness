@@ -174,7 +174,8 @@ describe(" 同根单飞锁", () => {
     });
     const err = await buildIndexWithReuse(root, { lockWaitMs: 400, heapBudget: "off" }).then(
       () => null,
-      (e: unknown) => e);
+      (e: unknown) => e,
+    );
     expect(err).toBeInstanceOf(IndexBusyError);
     expect((err as Error).message).toContain("已有索引在飞");
     child.kill("SIGKILL");

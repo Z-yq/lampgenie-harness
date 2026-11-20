@@ -23,6 +23,8 @@ import { createHash } from "node:crypto";
 // token 口径统一见 agent/token-estimate.ts(真分词器 + 标定;本文件不再自带字符系数近似)。
 import { rawTokens, estimateMessagesTokens, estimateMessageTokens, approxTokensOfChars } from "./token-estimate";
 import type { Message, ToolCall } from "./loop";
+// 统一保护窗(缺口#27):keepRecent 缺省从 PROTECTION_WINDOWS 引用,值不变、防漂移。
+import { PROTECTION_WINDOWS } from "./protection-windows";
 
 /** 可占位工具(harness 实际工具名;原始大内容可按参数重新获取)。 */
 export const COMPACTABLE_TOOLS = new Set([
@@ -32,7 +34,7 @@ export const COMPACTABLE_TOOLS = new Set([
  * 组清理与超大占位都不碰)。 */
 export const NEVER_COMPACT_TOOLS = new Set([
   "code_sense", "code_index", "code_review", "code_sense_cli", "board_upsert", "board_read",
-  "todo_write", "skill_view", "experience_fold", "session_search", "spawn_subagent", "run_workflow",
+  "todo_write", "skill_view", "session_search", "spawn_subagent", "run_workflow",
   "ask", "web_search", "web_fetch",
 ]);
 /** 不可逆动作:edit/write 的回执是「动作历史」而不是可重读内容——硬保护。 */
@@ -124,8 +126,9 @@ export interface MicrocompactPolicyState {
   /** 增长突增强制档:按 keepRecent 清到窗口外(装配方显式配置的意图)。 */
   force?: boolean;
 }
-/** 路径②保留最近 N 组工具结果(ZCode DEFAULT_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS)。 */
-export const DEFAULT_KEEP_RECENT_GROUPS = 5;
+/** 路径②保留最近 N 组工具结果(ZCode DEFAULT_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS)。
+ * 缺口#27:值改从统一保护窗 PROTECTION_WINDOWS 引用(=5,不变),防四处漂移。 */
+export const DEFAULT_KEEP_RECENT_GROUPS = PROTECTION_WINDOWS.microcompactKeepRecentGroups;
 /** micro 阈值比例(ZCode DEFAULT_MICROCOMPACT_THRESHOLD_RATIO)。 */
 export const MICROCOMPACT_THRESHOLD_RATIO = 0.9;
 /** micro 阈值 buffer tokens(ZCode DEFAULT_MICROCOMPACT_THRESHOLD_BUFFER_TOKENS)。 */
@@ -141,7 +144,7 @@ export const DEFAULT_GROWTH_SPURT_TOKENS = 12_000;
 
 /**
  * 本地 token 估算系数(经验证标定,替换旧的 chars/4)。
- * ⚠️ 2026-11 token 轮:**仅作回退系数**,真值走 `agent/token-estimate.ts`(cl100k 真分词器 +
+ * ⚠️ token 口径:**仅作回退系数**,真值走 `agent/token-estimate.ts`(自有估算器 +
  * 标定 ratio)。下面两个常量只为「其它模块仍 import 系数」与「分词器不可用时的回退口径」保留,
  * 本文件不再用它们做任何估算。
  * 历史标定(仍作回退档位的依据):近 5 天 `.genie/journals/sessions` 6,975 个「会话内累计字符量 vs
@@ -228,6 +231,10 @@ export interface MicrocompactPrunedItem {
   action: MicrocompactAction;
   originalChars: number;
   newChars: number;
+ /** 缺口#25:两本账标注——"economy"=纯省 token(args_summarized/dedup,受经济门裁决);
+ * "correctness"=正确性裁剪(superseded/model_drop,旁路经济门照裁)。
+ * 可选字段:未标时按旧行为不区分(既有调用方/测试不受影响)。 */
+  ledger?: "economy" | "correctness";
 }
 
 /** microcompact 配置:thresholdTokens 未给(或 ≤0)=路径②关闭,只走超大占位。 */
@@ -266,6 +273,14 @@ export interface MicrocompactConfig {
   breakEvenGate?: boolean;
   /** 净收益门的保守系数(缺省 3):省 1 token 至少要抵 3 token 的重算代价才值得裁。 */
   breakEvenFactor?: number;
+ /** 缺口#25:经济判据 v2(N > r·B/W)开关,缺省 false = 旧行为(factor=3)逐字不变。
+ * true 时净收益门改按「N×W×P_cached > B×P_uncached」裁决(价格加权 + 剩余步数维度)。
+ * 生产接线:由 loop.ts 构造 config 时显式置 true(本文件不缺省开启,保既有测试绿)。 */
+  breakEvenGateV2?: boolean;
+ /** v2 价差比 r = P_uncached/P_cached(缺省 50;env GENIE_PRICE_RATIO 可覆盖)。 */
+  priceRatio?: number;
+ /** v2 剩余步数估计 N(缺省回退 assumedRemainingCalls,现 10)。 */
+  remainingStepsEstimate?: number;
  /** cache-aware 前缀稳定策略 v2:传了 `policyState` 才生效(loop 默认传)。
    *  以下字段可覆写默认值;`cacheAware:false` = 整条策略关闭(恢复旧的每步增量行为)。 */
   cacheAware?: boolean;
@@ -294,6 +309,17 @@ export interface MicrocompactConfig {
 
 /** 净收益门默认系数:省 1 token 必须抵得上 3 token 的前缀重算,才认为裁剪划算。 */
 const BREAK_EVEN_FACTOR = 3;
+/**
+ * 缺省价差比 r = P_uncached / P_cached(§4.1.1:「uncached 单价是命中的 50 倍」)。
+ * env GENIE_PRICE_RATIO 可覆盖(运行时读一次;非法值回退 50)。
+ */
+export const DEFAULT_PRICE_RATIO = 50;
+function resolvePriceRatio(explicit?: number): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit) && explicit > 0) return explicit;
+  const env = Number(process.env["GENIE_PRICE_RATIO"]);
+  if (Number.isFinite(env) && env > 0) return env;
+  return DEFAULT_PRICE_RATIO;
+}
 // token 口径统一见 agent/token-estimate.ts:没有原文、只有字符量的场合用统一模块的
 // approxTokensOfChars,本文件不再自带 chars→tokens 系数。
 
@@ -345,6 +371,21 @@ export interface MicrocompactResult {
   anchor?: string;
   /** 本次重置估算削掉的 tokens。 */
   cutTokens?: number;
+ /** 缺口#32(H3):本次 head_tail 精炼的独立审计事件条目(journal 落点在 loop.ts,
+ * 类型 HEAD_TAIL_AUDIT_TYPE;cacheAwareMicrocompact 在 head_tail 发生处填充)。 */
+  headTailAudits?: HeadTailAudit[];
+}
+
+/** 缺口#32(H3):head_tail 精炼的独立审计事件 type(loop.ts 落 journal 用)。 */
+export const HEAD_TAIL_AUDIT_TYPE = "context.refine.head_tail";
+
+/** 一条 head_tail 精炼审计记录(独立于 pruned 清单:pruned 服务模型清单,journal 审计走这个)。 */
+export interface HeadTailAudit {
+  toolCallId: string;
+  tool: string;
+  where: string;
+  originalChars: number;
+  newChars: number;
 }
 
 /** micro 阈值推导(对齐 ZCode buildDefaultMicrocompactThreshold):
@@ -360,7 +401,8 @@ export function buildDefaultMicrocompactThreshold(autoCompactThreshold: number):
 export function shouldAggressivePrune(
   currentTokens: number,
   lastRequestTokens: number | undefined,
-  growthSpurtTokens: number | undefined): boolean {
+  growthSpurtTokens: number | undefined,
+): boolean {
   if (growthSpurtTokens === undefined || growthSpurtTokens <= 0) return false;
   if (lastRequestTokens === undefined || lastRequestTokens <= 0) return false;
   return currentTokens - lastRequestTokens >= growthSpurtTokens;
@@ -502,7 +544,8 @@ export function buildContextManifest(items: readonly MicrocompactPrunedItem[]): 
 /** 把 pruned 清单换算成可观测的 savedTokens。 */
 function savedTokensOf(items: readonly MicrocompactPrunedItem[]): number {
   return Math.ceil(
-    items.reduce((sum, item) => sum + Math.max(0, item.originalChars - item.newChars), 0) / 4);
+    items.reduce((sum, item) => sum + Math.max(0, item.originalChars - item.newChars), 0) / 4,
+  );
 }
 
 function resultOf(
@@ -626,6 +669,7 @@ function summarizeWriteArgsPass(messages: Message[], config?: MicrocompactConfig
       action: "args_summarized",
       originalChars,
       newChars,
+      ledger: "economy",
     });
   }
   return { messages: out, items };
@@ -641,7 +685,8 @@ function summarizeWriteArgsPass(messages: Message[], config?: MicrocompactConfig
 function dedupIdenticalResults(
   messages: Message[],
   idx: Map<string, { name: string; where: string }>,
-  config?: MicrocompactConfig): FoldResult {
+  config?: MicrocompactConfig,
+): FoldResult {
   if (config?.dedupAnyTool === false) return { messages, items: [] };
   const lastByHash = new Map<string, number>();
   const hashByIndex = new Map<number, string>();
@@ -674,6 +719,7 @@ function dedupIdenticalResults(
       action: "dedup",
       originalChars: original.length,
       newChars: placeholder.length,
+      ledger: "economy",
     });
   }
   return { messages: out, items };
@@ -688,7 +734,8 @@ function dedupIdenticalResults(
 function foldDuplicateAndSuperseded(
   messages: Message[],
   idx: Map<string, { name: string; where: string }>,
-  config?: MicrocompactConfig): FoldResult {
+  config?: MicrocompactConfig,
+): FoldResult {
   const eligible = new Map<number, { tool: string; where: string; content: string }>();
   messages.forEach((message, index) => {
     if (message.role !== "tool" || typeof message.content !== "string") return;
@@ -752,6 +799,8 @@ function foldDuplicateAndSuperseded(
       action,
       originalChars: original.length,
       newChars: placeholder.length,
+ // 两本账(缺口#25):superseded=正确性裁剪(旧结果已被取代,留着误导)旁路经济门;dedup=经济账。
+      ledger: action === "superseded" ? "correctness" : "economy",
     });
   }
   return { messages: out, items };
@@ -771,7 +820,8 @@ function foldDuplicateAndSuperseded(
  */
 export function microcompactMessages(
   messages: Message[],
-  config?: MicrocompactConfig): MicrocompactResult {
+  config?: MicrocompactConfig,
+): MicrocompactResult {
   // 缺省「未配置 microcompact(无阈值)= 旧行为逐字不变」:此时不进 cache-aware 管线,
   // 否则 dedup / args 摘要 / model_drop 这些「随追加而变」的规则会被尾区渲染跳过(功能回退)。
   const cacheAware = config?.cacheAware !== false
@@ -784,7 +834,8 @@ export function microcompactMessages(
 /** 旧全量管线(会就地改写历史中段的每一条):只在无策略态时使用,以及作为冻结区/尾区的渲染器。 */
 function legacyMicrocompact(
   messages: Message[],
-  config?: MicrocompactConfig): MicrocompactResult {
+  config?: MicrocompactConfig,
+): MicrocompactResult {
   const idx = toolCallIndex(messages);
  // 回归安全顺序(读侧历史裁剪):
   // ①assistant 写入正文摘要化、②全量结果去重——两者都**只消费派生消息副本**:
@@ -800,18 +851,38 @@ function legacyMicrocompact(
   // 省 125 token、亏 1.4 万 token,净亏 100 倍。故裁剪前先算账:省得不够就不裁。
   // 只管「纯为省 token」的两类(args_summarized / dedup);superseded / model_drop 是**正确性**裁剪
   // (旧结果已被取代或模型判丢,留着会误导 agent),那类必须裁,不进净收益账。
+ // 缺口#25:两本账标注(economy/correctness)在 items 生成处打标(见各 pass);
+ // 经济判据有 v1/v2 两档:`breakEvenGateV2:true` 走 N>r·B/W(§4.1.1),否则旧行为逐字不变。
   if (config?.breakEvenGate !== false) {
     const TOKEN_SAVING_ACTIONS = new Set(["args_summarized", "dedup"]);
     const savingItems = items.filter((it) => TOKEN_SAVING_ACTIONS.has(it.action));
     const mustKeepItems = items.filter((it) => !TOKEN_SAVING_ACTIONS.has(it.action));
     if (savingItems.length > 0) {
-      const factor = config?.breakEvenFactor ?? BREAK_EVEN_FACTOR;
-      const savedSoFar = savingItems.reduce((s, it) => s + Math.max(0, it.originalChars - it.newChars), 0);
-      const savedTokens = approxTokensOfChars(savedSoFar);
       // 改写点之前的内容长度 = 会被判失效的前缀规模(取最早改写点位置)
       const breakPointChars = estimateCharsBeforeFirstRewrite(messages, savingItems, idx);
       const breakCostTokens = approxTokensOfChars(breakPointChars);
-      if (breakCostTokens > 0 && savedTokens < breakCostTokens * factor) {
+      let notWorth: string | undefined;
+      if (config?.breakEvenGateV2 === true) {
+ // v2(§4.1.1 应有规格):N×W×P_cached > B×P_uncached ⟺ N > r·B/W。
+ // W=本次省下 token(命中价持续收益,每步都付);B=失效前缀(未命中价一次性代价);
+ // N=remainingStepsEstimate ?? assumedRemainingCalls(缺省 10);r=priceRatio ?? env ?? 50。
+ // 与 v1 的差别:收益侧乘上「还会走多少步」、两侧按价差加权(v1 把 r×N 当成 3,偏宽两个数量级)。
+        const n = config.remainingStepsEstimate ?? config.assumedRemainingCalls ?? PRUNE_ASSUMED_REMAINING_CALLS;
+        const r = resolvePriceRatio(config.priceRatio);
+        const savedSoFarV2 = savingItems.reduce((s, it) => s + Math.max(0, it.originalChars - it.newChars), 0);
+        const w = approxTokensOfChars(savedSoFarV2);
+        if (breakCostTokens > 0 && !(n * w > breakCostTokens * r)) {
+          notWorth = `净收益不足(v2):N ${n} × W ${w} tok ≤ B ${breakCostTokens} tok × r ${r}(N>r·B/W 不成立);已跳过纯省 token 的裁剪以保住缓存`;
+        }
+      } else {
+        const factor = config?.breakEvenFactor ?? BREAK_EVEN_FACTOR;
+        const savedSoFar = savingItems.reduce((s, it) => s + Math.max(0, it.originalChars - it.newChars), 0);
+        const savedTokens = approxTokensOfChars(savedSoFar);
+        if (breakCostTokens > 0 && savedTokens < breakCostTokens * factor) {
+          notWorth = `净收益不足:省 ${savedTokens} tok < 前缀重算 ${breakCostTokens} tok × ${factor};已跳过纯省 token 的裁剪以保住缓存`;
+        }
+      }
+      if (notWorth !== undefined) {
         // 只丢纯省 token 的那部分,正确性裁剪照做：
         // 必须从**原始 messages** 重跑(不能传 folded.messages,那里摘要已生效),
         // 并关掉两个纯省 token 的 pass;结果上保留 break-even 标记供观测。
@@ -824,7 +895,7 @@ function legacyMicrocompact(
         return {
           ...retried,
           reason: retried.compacted > 0 ? retried.reason : "break-even-skip",
-          skipped: `净收益不足:省 ${savedTokens} tok < 前缀重算 ${breakCostTokens} tok × ${factor};已跳过纯省 token 的裁剪以保住缓存`,
+          skipped: notWorth,
         };
       }
     }
@@ -854,6 +925,7 @@ function legacyMicrocompact(
         action: "model_drop",
         originalChars: content.length,
         newChars: marker.length,
+        ledger: "correctness",
       });
       return { ...message, content: marker };
     }
@@ -873,6 +945,7 @@ function legacyMicrocompact(
       action: "head_tail",
       originalChars: content.length,
       newChars: nextContent.length,
+      ledger: "economy",
     });
     return { ...message, content: nextContent };
   });
@@ -931,6 +1004,7 @@ function legacyMicrocompact(
         action: "cleared",
         originalChars: original.length,
         newChars: placeholder.length,
+        ledger: "economy",
       });
     }
   }
@@ -981,6 +1055,7 @@ function cacheAwareMicrocompact(messages: Message[], config: MicrocompactConfig)
     frozenCount: nextFrozen,
     ...(rendered.anchor ? { anchor: rendered.anchor } : {}),
     ...(decision.cutTokens !== undefined ? { cutTokens: decision.cutTokens } : {}),
+    ...(rendered.audits.length > 0 ? { headTailAudits: rendered.audits } : {}),
   };
 }
 
@@ -1011,7 +1086,8 @@ function decideReset(
   messages: Message[],
   est: number,
   frozenCount: number,
-  config: MicrocompactConfig): {
+  config: MicrocompactConfig,
+): {
   policy: MicrocompactPolicy;
   frozenCount: number;
   reason: string;
@@ -1130,7 +1206,8 @@ function lastIndexAfter(groups: ClearCandidate[][]): number {
 function renderFrozenAndTail(
   messages: Message[],
   frozenCount: number,
-  config: MicrocompactConfig): { messages: Message[]; items: MicrocompactPrunedItem[]; anchor?: string } {
+  config: MicrocompactConfig,
+): { messages: Message[]; items: MicrocompactPrunedItem[]; anchor?: string; audits: HeadTailAudit[] } {
   const frozenSlice = messages.slice(0, frozenCount);
   const tailSlice = messages.slice(frozenCount);
   const items: MicrocompactPrunedItem[] = [];
@@ -1161,9 +1238,21 @@ function renderFrozenAndTail(
     items.push(...tailItems);
   }
   const lastFrozen = frozenCount > 0 ? messages[frozenCount - 1] as { toolCallId?: string } : undefined;
+ // 缺口#32(H3):head_tail 发生处收集独立审计条目(pruned 里 action=head_tail 的子集,
+ // 字段口径与 HeadTailAudit 对齐;journal 落点在 loop.ts,类型 HEAD_TAIL_AUDIT_TYPE)。
+  const audits: HeadTailAudit[] = items
+    .filter((it) => it.action === "head_tail")
+    .map((it) => ({
+      toolCallId: it.toolCallId,
+      tool: it.tool,
+      where: it.where,
+      originalChars: it.originalChars,
+      newChars: it.newChars,
+    }));
   return {
     messages: out,
     items,
+    audits,
     ...(lastFrozen?.toolCallId ? { anchor: lastFrozen.toolCallId } : {}),
   };
 }
@@ -1198,6 +1287,7 @@ function refineHugeResult(
     action: "head_tail",
     originalChars: content.length,
     newChars: nextContent.length,
+    ledger: "economy",
   });
   return { ...message, content: nextContent };
 }
@@ -1237,7 +1327,8 @@ function estimateGroupSavings(group: ClearCandidate[] | undefined, messages: Mes
     if (!original) continue;
     const placeholderEst = Math.min(
       original.length,
-      CLEARED_PLACEHOLDER_EST_CHARS + candidate.meta.name.length + candidate.meta.where.length);
+      CLEARED_PLACEHOLDER_EST_CHARS + candidate.meta.name.length + candidate.meta.where.length,
+    );
     sum += Math.max(0, estimateTokensOfText(original) - placeholderEst * ASCII_TOKENS_PER_CHAR);
   }
   return Math.ceil(sum);

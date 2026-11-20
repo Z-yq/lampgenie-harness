@@ -121,23 +121,10 @@ interface SelfModRuntime {
   verifySelfModification(frozenHash: string, req: ModificationRequest): { match: boolean; hash: string; code?: string };
 }
 
-let selfModRuntime: SelfModRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_self_modification from "@lampgenie/runtime/agent/self-modification";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadSelfModRuntime(): Promise<SelfModRuntime> {
-  if (selfModRuntime) return selfModRuntime;
-  const spec = "@lampgenie/runtime/agent/self-modification";
-  try {
-    selfModRuntime = (await import(spec)) as SelfModRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/self-modification.ts", import.meta.url).href;
-    selfModRuntime = (await import(srcUrl)) as SelfModRuntime;
-  }
-  return selfModRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadSelfModRuntime();
+const rt: SelfModRuntime = rt_self_modification;
 
 /** 台账 schema 版本(与 runtime 同源)。 */
 const SCHEMA_VERSION = rt.SELF_MOD_SCHEMA_VERSION;

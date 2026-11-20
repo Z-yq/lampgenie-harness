@@ -51,7 +51,8 @@ function addInstance(
   registry: SourceRegistry,
   id: string,
   config: Record<string, unknown> = { ...MAIL_CONFIG },
-  enabled?: boolean) {
+  enabled?: boolean,
+) {
   const input: { id: string; kind: string; config?: Record<string, unknown>; enabled?: boolean } = {
     id,
     kind: "mail",

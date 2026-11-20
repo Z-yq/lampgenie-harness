@@ -19,7 +19,8 @@ const WORKFLOW_CONCURRENCY_FLOOR = 1;
  * CPU 推导的并发天花板。`availableParallelism` 可注入，供测试固定核数（地板/硬顶两条用例）。
  */
 export function deriveWorkflowConcurrencyCeiling(
-  availableParallelism: () => number = osAvailableParallelism): number {
+  availableParallelism: () => number = osAvailableParallelism,
+): number {
   return Math.max(
     WORKFLOW_CONCURRENCY_FLOOR,
     Math.min(WORKFLOW_CONCURRENCY_CEILING_MAX, availableParallelism() - RESERVED_PARALLELISM),

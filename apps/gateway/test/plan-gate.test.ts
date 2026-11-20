@@ -389,7 +389,8 @@ it("逃生阀记账收敛:13 次无板拒绝只落 2 条 escalated(attempt=3 与
   const calls = Array.from({ length: 13 }, (_, k) => ({ id: `ec${k}`, name: "spawn_subagent", arguments: JSON.stringify({ instructions: "干活丙" }) }));
   const app = createGatewayApp({ port: 0,
     llm: llmScript([
-      () => ({ content: "", toolCalls: calls }), // 同一步发 13 个写角色派发:全部走无板判据 => ({ content: "终稿" }),
+      () => ({ content: "", toolCalls: calls }), // 同一步发 13 个写角色派发:全部走无板判据
+      () => ({ content: "终稿" }),
     ]),
     executor: buildExecutorFromConfig({ executor: { kind: "echo" } } as never) as never,
     useExternalHttp: true,

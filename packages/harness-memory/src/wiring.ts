@@ -114,7 +114,8 @@ export interface TranscriptBatch {
 export interface ConversationSyncPort {
   pendingRecords(
     query: { ownerId: string; sessionId?: string },
-    component?: unknown): TranscriptBatch
+    component?: unknown,
+  ): TranscriptBatch
 }
 
 export interface SessionCloseInput {
@@ -151,7 +152,8 @@ export interface MemoryProviderInstance {
     ownerId: string,
     changes: MemoryChange[],
     context?: unknown,
-    isCurrent?: unknown): { changed: number; documents: unknown[] }
+    isCurrent?: unknown,
+  ): { changed: number; documents: unknown[] }
   health(): { ok: boolean; documents: Record<string, unknown> }
 }
 
@@ -275,7 +277,8 @@ function digest(value: string): string {
 function publicDocument(
   scope: string,
   content: string,
-  revisionSource: string = content): MemoryDocumentLike {
+  revisionSource: string = content,
+): MemoryDocumentLike {
   return {
     id: `${scope}_document`,
     scope,
@@ -729,7 +732,8 @@ function bareText(value: unknown): string {
 
 function buildTranscript(
   messages: TranscriptMessage[],
-  maxChars: number): { lines: string[]; userText: string } {
+  maxChars: number,
+): { lines: string[]; userText: string } {
   const lines: string[] = []
   const userParts: string[] = []
   let used = 0
@@ -926,7 +930,8 @@ export class ProfileWatcher {
     if (typeof this.conversationSync?.pendingRecords !== 'function') return null
     const batch = this.conversationSync.pendingRecords(
       { ownerId: safeOwnerId, sessionId: input?.sessionId },
-      this)
+      this,
+    )
     const userMessages = batch.messages.filter(message => message.role === 'user')
     if (userMessages.length < this.minUserMessages) return null
     // Claim fresh evidence before yielding so repeated close hooks cannot reuse it.
@@ -1287,7 +1292,8 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
   async function guard(
     stage: string,
     ownerId: string,
-    run: () => unknown): Promise<unknown> {
+    run: () => unknown,
+  ): Promise<unknown> {
     try {
       return await run()
     } catch (error) {

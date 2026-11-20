@@ -452,7 +452,9 @@ describe(" super 指挥台 IDE 三栏布局(活动栏/侧栏/中栏+右缘聊天
       expect(superScope).not.toContain('id="superIdeChatFold"'); // 聊天窗不可折叠
  // 三栏 CSS:grid 列规格 + 聊天窗右缘叠层 + 折叠态 + 窄屏退化(全部 spide-* 包 #view-super)
  // 中栏下限 minmax(420px,1fr) + 卡宽 1400(三栏在全宽下中栏≥500 的两道保险)
-      expect(html).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(420px,1fr)");
+ // 改回 minmax(0,1fr)——1280 视口经验证 56+280+420 超出可用宽,中栏溢出后被聊天窗压住 126px;
+ // 中栏保底改由 JS superLayoutFit(SUPER_MIN_MAIN=320,按 #superIdeWrap 宽收聊天窗/侧栏)保证。
+      expect(html).toContain("#superIdeWrap{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:56px var(--superSb,280px) minmax(0,1fr)");
       expect(html).toContain(".spide-chat{position:absolute;top:0;right:0;bottom:0;width:var(--superChatW,360px)");
       expect(html).toContain(".spide-grip{position:absolute");
       expect(html).toContain(".spide-chat-grip{position:absolute");

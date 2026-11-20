@@ -350,7 +350,8 @@ describe("xlsx 抽取与裁决", () => {
       await buildXlsx(
         [{ dimension: "A1:C3", freezeY: 1, cells: '<row r="1"><c r="A1"><f>1+1</f><v>2</v></c></row>' }],
         ["Sheet1"],
-        true),
+        true,
+      ),
     );
     const facts = (await extractFacts(path, readFileSync(path))).facts as XlsxFacts;
     expect(facts.sheets[0]?.formulaCells).toBe(1);

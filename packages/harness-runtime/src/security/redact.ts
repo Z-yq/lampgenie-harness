@@ -106,7 +106,8 @@ export function scrubSecrets(text: string, options: SecretScrubOptions = {}): st
     out = out.replace(BEARER_RULE, (_m, scheme: string) => scheme + token("authz"));
     out = out.replace(
       URL_PASSWORD_RULE,
-      (_m, prefix: string, _pw: string, at: string) => prefix + token("conn") + at);
+      (_m, prefix: string, _pw: string, at: string) => prefix + token("conn") + at,
+    );
   }
 
   return out;

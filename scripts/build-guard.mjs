@@ -17,7 +17,8 @@ const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(()
 // ① HTTP 可达性(GET;HEAD 可能不被支持而悬挂)
 const ok = await withTimeout(
   fetch(`http://localhost:${PORT}/`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false),
-  4000);
+  4000,
+);
 // HTTP 不可达不短路:WS/任务探测跳过,但 journal 活跃度仍要查(HTTP 挂死而 WS 活着的
 // 半死态经验证存在——此时面板仍在交互,构建同样应被拒)。
 

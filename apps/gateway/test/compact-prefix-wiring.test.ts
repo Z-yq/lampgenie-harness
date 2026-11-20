@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MemoryJournal } from "@lampgenie/core";
-import { ExperienceStore } from "@lampgenie/experience";
 import type { LlmProvider, Message, ToolSpec } from "@lampgenie/runtime/agent/loop";
 import { makeCompactHook } from "../src/compact-hook.js";
 
@@ -60,11 +59,7 @@ function hookOf(compactLlm: LlmProvider, extra: Record<string, unknown> = {}) {
   return makeCompactHook({
     explicitThreshold: 24_000,
     compactLlm,
-    expLlm: { async chat() { return { content: "" }; } },
     devlogDir: tmp,
-    taskId: "t1",
-    fallbackInstruction: "",
-    store: new ExperienceStore(join(tmp, `exp-${Math.random().toString(36).slice(2)}`)),
     repoRoot: tmp,
     ...extra,
   } as Parameters<typeof makeCompactHook>[0]);

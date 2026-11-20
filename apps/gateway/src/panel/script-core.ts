@@ -216,7 +216,7 @@ const settings = {
   zoom: Number(localStorage.getItem("zh:zoom") || 1),
   codeFs: localStorage.getItem("zh:code-fs") || "12.5",
   lineno: localStorage.getItem("zh:lineno") || "on",
-  codewrap: localStorage.getItem("zh:codewrap") || "on",
+  codewrap: localStorage.getItem("zh:codewrap") || "off", // 对齐 ZCode 标杆:代码块默认横向滚动(可滑两屏),软换行仍可从设置-外观切回;已有 localStorage 选择不受影响
 };
 // 旧三主题(neon/crt/aurora)已下线:localStorage 残留归一到新主题,避免无主题类/按钮全不选中
 const LEGACY_THEME_MAP = { neon: "sand", crt: "olive", aurora: "plum" };
@@ -247,7 +247,7 @@ const THEMES = [
 ];
 const THEME_KEYS = THEMES.map((t) => t.key);
 function isLightBase() { const th = THEMES.find((t) => t.key === effectiveTheme()); return th ? th.base === "light" : false; }
-// 主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
+// :主题签名(初载空=首屏不加过渡;之后主题基座或主题类真变才挂 theme-fade)
 let __lastThemeSig = "";
 function applySettings() {
   document.body.classList.toggle("light", isLightBase());
@@ -255,7 +255,7 @@ function applySettings() {
   for (const t of THEME_KEYS) {
     if (t !== "dark" && t !== "light") document.body.classList.toggle("theme-" + t, settings.theme === t);
   }
- // 主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
+ // :主题真切换时挂 theme-fade 320ms 窗口,全站色彩经 transition 平滑(240ms);
  // 初载(签名空)不挂=首屏即正确主题;reduced-motion 由 CSS 大降级自动兜底。
   const themeSig = settings.theme + "|" + (isLightBase() ? "l" : "d");
   if (__lastThemeSig && __lastThemeSig !== themeSig) {
@@ -619,5 +619,38 @@ function trajCardHtml(tp, series) {
     + tokH
     + '<span class="tj-open" data-traj-open="1" title="打开轨迹看板:本会话每一步的类型/耗时/token/状态">看板</span>'
     + "</summary>" + subH + bars + spark + "</details>";
+}
+/** 温度三区分组(classic ctxPill 与 Super supCtx 两浮窗共用)。
+ * z = trace.stats 回包 stats.contextZones;缺席/缺任一区键/totalMessages=0 → 空串(整组不出)。
+ * fmtTok = 各自 pill 的数字格式化(ctxTok/supCtxTok),保持两处 k/M 口径既有差异。
+ * 口径:docs/design/02-context-economy/03-concepts.md §3——冷=[0,frozenCount) append-only;
+ * 温=冻结区之后中段可精简;热=末 N 条保护窗(N=机制保护窗)。三区=派生逻辑视图,非物理分区。 */
+function ctxZonesGroupHtml(z, fmtTok) {
+  if (!z || typeof z !== "object") return "";
+  var zs = z.zones;
+  if (!zs || typeof zs !== "object") return "";
+  var cold = zs.cold, warm = zs.warm, hot = zs.hot;
+  if (!cold || !warm || !hot) return "";
+  if (!(Number(z.totalMessages) > 0)) return "";
+  var fmt = typeof fmtTok === "function" ? fmtTok : String;
+  var num = function (v) { var n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  var rows = [
+    { name: "冷区·冻结", note: "append-only · reset 前移唯一路径", color: "var(--faint)", st: cold },
+    { name: "温区·可精简", note: "中段 · 可精简、语义保留", color: "var(--warn)", st: warm },
+    { name: "热区·保护窗", note: "末 N 条逐字保护(N=机制保护窗)", color: "var(--bronze)", st: hot }
+  ];
+  var tot = num(cold.estTokens) + num(warm.estTokens) + num(hot.estTokens);
+  var html = '<div class="pm-grp"><div class="cx-sub">温度三区<span class="cx-note">(派生视图 · 消息 ' + (Number(z.totalMessages) || 0) + " 条)</span></div>";
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i], msgs = num(r.st.messages), tok = num(r.st.estTokens);
+    var pct = tot > 0 && tok > 0 ? Math.max(1, Math.round((tok / tot) * 100)) : 0;
+    html += '<div class="cx-row cx-zone" title="' + esc(r.name + ":" + r.note) + '">' +
+      '<span class="cx-dot" style="background:' + r.color + '"></span>' +
+      '<span class="cx-k">' + r.name + ' <span class="cx-note">' + esc(r.note) + '</span></span>' +
+      '<span class="cx-zbar"><i style="width:' + pct + "%;background:" + r.color + '"></i></span>' +
+      '<span class="cx-v">' + msgs + " 条 · " + fmt(tok) + " tok</span></div>";
+  }
+  html += '<div class="cx-sub" style="padding-top:0"><span class="cx-note">三区=派生视图;N=机制保护窗;tok 按 chars/4 估算,与 pill 主值(API 实测 inputTokens)口径不同,三区合计≈消息部分估算、不含系统提示</span></div></div>';
+  return html;
 }
 `;

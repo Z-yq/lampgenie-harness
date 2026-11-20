@@ -156,23 +156,10 @@ interface DeaiRuntime {
   applyExemptions(result: DeaiResultLike, exemptions: readonly DeaiExemptionLike[] | undefined): DeaiExemptedResultLike;
 }
 
-let deaiRuntime: DeaiRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_office_deai from "@lampgenie/runtime/agent/office-deai";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadDeaiRuntime(): Promise<DeaiRuntime> {
-  if (deaiRuntime) return deaiRuntime;
-  const spec = "@lampgenie/runtime/agent/office-deai";
-  try {
-    deaiRuntime = (await import(spec)) as unknown as DeaiRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/office-deai.ts", import.meta.url).href;
-    deaiRuntime = (await import(srcUrl)) as unknown as DeaiRuntime;
-  }
-  return deaiRuntime;
-}
-
-/** runtime 面(顶层 await:导出函数保持既有 gateway store 的同步/异步签名)。 */
-const rt = await loadDeaiRuntime();
+const rt: DeaiRuntime = rt_office_deai;
 
 /** artifact 目录:`<root>/.genie/office/deai`。 */
 export function deaiDir(root: string): string {

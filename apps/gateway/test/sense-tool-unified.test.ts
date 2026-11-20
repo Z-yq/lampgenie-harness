@@ -28,15 +28,15 @@ const mk = () => mkdtempSync(join(tmpdir(), "sense-unified-"));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("code_sense schema(唯一入口:action/mode 双面同场)", () => {
-  it("工具名=code_sense;properties 含 action/mode/target/query;枚举=10 动作(2026-10-26:+flow)+8 模式", () => {
+  it("工具名=code_sense;properties 含 action/mode/target/query;枚举=14 动作(2026-11-16:+radiation,+world;2026-11-18 +orphans)+8 模式", () => {
     const t = codeSenseTool("/tmp/nowhere");
     expect(t.name).toBe("code_sense");
     const params = t.parameters as { properties: Record<string, { enum?: string[] }>; required?: string[] };
     expect(Object.keys(params.properties).sort()).toEqual(["action", "level", "maxNodes", "mode", "query", "root", "target"]);
     expect(params.properties.action!.enum).toEqual([...SENSE_ACTIONS]);
     expect(params.properties.mode!.enum).toEqual([...SENSE_MODES]);
- // action 面:结构动作保留( +branches; +flow; +surface),graph/filegraph/api 已删
-    expect(params.properties.action!.enum).toEqual(["symbol", "file", "impact", "entrypoints", "project", "wire", "refs", "surface", "vars", "branches", "flow"]);
+ // action 面:结构动作保留( +branches; +flow; +surface; +orphans),graph/filegraph/api 已删
+    expect(params.properties.action!.enum).toEqual(["symbol", "file", "impact", "entrypoints", "project", "wire", "refs", "surface", "vars", "branches", "orphans", "flow", "radiation", "world"]);
     expect(params.properties.action!.enum).not.toContain("api");
     expect(params.properties.action!.enum).not.toContain("graph");
     expect(params.properties.action!.enum).not.toContain("filegraph");

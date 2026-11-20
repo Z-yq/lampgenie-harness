@@ -12,9 +12,8 @@
  * overfitRisk 取更高、expiresAt 取更早;坏行(JSON 坏 / v 不是 1 / type 未知 / 条目形状不合法)只计入
  * parseErrors 并跳过:一行坏不整文件失效,也不 throw。
  * 依赖纪律(照抄 #210 store):node:fs / node:path + 同目录缺陷留存层(读 missedLink)+ runtime 纯逻辑模块;
- * 不引 agent loop、不静态 import runtime(未 build 的 dist 不存在),runtime 模块两跳惰性解析:
- * ① `--conditions=development` 的运行时(vitest / 带条件的 node)走包导出 src 入口;
- * ② 裸 tsx/dist 缺该文件时回退到仓内源文件(new URL,避免静态 .ts specifier 触发 TS5097/TS6059)。
+ * runtime 模块静态导入(修,见 loadGapRuntime 旧实现的 exit 13 坑注记);
+ * 同目录 evidence/defect store 保持惰性动态 import(esbuild 内联,首次调用才执行)。
  * 除参数错误外不 throw:IO/投影/图谱失败一律折叠成稳定码返回。
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -88,7 +87,8 @@ interface GapRuntime {
   bumpConfidence(entry: PreventionEntry, corroboratingDefects: number): PreventionEntry;
   applyAt(
     entries: PreventionEntry[],
-    injectionPoint: InjectionPoint): { contextBlocks: string[]; gates: string[]; toolChecks: string[] };
+    injectionPoint: InjectionPoint,
+  ): { contextBlocks: string[]; gates: string[]; toolChecks: string[] };
   expireEntries(entries: PreventionEntry[], now: number): { active: PreventionEntry[]; expired: PreventionEntry[] };
   toGraphNodes(entries: PreventionEntry[]): {
     kind: "direction";
@@ -99,35 +99,29 @@ interface GapRuntime {
   }[];
 }
 
-let gapRuntime: GapRuntime | undefined;
+/**
+ * runtime 面:静态导入(修,同 direction-atlas-store 的修法)。
+ * 旧实现是「两跳动态 import + 顶层 await」——本 store 被 gateway 启动路径静态引入
+ * (rsi-injection-listeners → run-with-agent, 事件面)后,顶层 await 在 bundle
+ * 里退化为运行时解析,promise 永不 settle → 网关静默 exit 13(同型坑第 4 次:evidence-graph
+ * 11-12 / atlas 11-14 / negkb+experiment 11-17)。同目录两个动态 import(esbuild 惰性内联,
+ * 仅在首次调用时执行)不受影响。bundle 本就把 runtime 内联,静态导入零成本。
+ */
+import * as runtimeGap from "@lampgenie/runtime/agent/gap-taxonomy";
+// 同目录两层:静态导入(第 5 次 exit 13 修复一并——变量形式的动态 import 在
+// bundle 里无法被 esbuild 内联,运行时按 dist 相对路径解析必失败;两层 store 均已 boot-safe)。
+import { addEvidence } from "./evidence-graph-store.js";
+import { loadDefects } from "./defect-lineage-store.js";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadGapRuntime(): Promise<GapRuntime> {
-  if (gapRuntime) return gapRuntime;
-  const spec = "@lampgenie/runtime/agent/gap-taxonomy";
-  try {
-    gapRuntime = (await import(spec)) as GapRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/gap-taxonomy.ts", import.meta.url).href;
-    gapRuntime = (await import(srcUrl)) as GapRuntime;
-  }
-  return gapRuntime;
-}
+const rt: GapRuntime = runtimeGap;
 
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadGapRuntime();
-
-/** 同目录证据图持久层面(裸 node strip-types 下相对导入必须带 .ts,故用动态字面量解出两个函数)。 */
+/** 同目录证据图持久层面(静态导入,见文件头 注记)。 */
 interface EvidenceStoreRuntime {
   addEvidence(root: string, input: AddEvidenceInput): { ok: boolean; code?: string; id?: string };
   loadEvidenceGraph(root: string): { totalLines: number; parseErrors: number };
 }
 
-const evidenceStoreSpec = "./evidence-graph-store.ts";
-const evidenceStore = (await import(evidenceStoreSpec)) as EvidenceStoreRuntime;
-const addEvidence = evidenceStore.addEvidence;
-
-/** 同目录缺陷留存层面(只读投影:取 missedLink / module / files)。 */
+/** 同目录缺陷留存层面(只读投影:取 missedLink / module / files;静态导入,见文件头注记)。 */
 interface DefectStoreRuntime {
   loadDefects(root: string): {
     entries: Map<string, { defect: { id: string; files: string[]; module?: string; missedLink?: string } }>;
@@ -135,10 +129,6 @@ interface DefectStoreRuntime {
     totalLines: number;
   };
 }
-
-const defectStoreSpec = "./defect-lineage-store.ts";
-const defectStore = (await import(defectStoreSpec)) as DefectStoreRuntime;
-const loadDefects = defectStore.loadDefects;
 
 const LINE_TYPES: ReadonlySet<string> = new Set<string>(GAP_LINE_TYPES);
 const FORM_COST: Record<PreventionForm, number> = { context: 0, gate: 1, tool: 2 };
@@ -606,7 +596,8 @@ export function routeFromDefect(
     const matchReasons = [...routeResult.matchReasons];
     const routed = annotateModule(
       completeTiers(routeResult.routed, pool, missedLink, matchReasons),
-      module);
+      module,
+    );
     // module 是路由上下文的一部分(applyAt/bump 都按它过滤),命中理由里必须留下这条依据,
     // 否则回看时看不出「这条经验教训凭什么接到这个模块」。
     if (module !== undefined && module.length > 0) {
@@ -710,7 +701,8 @@ export function listPreventions(
  */
 export function bumpForDefect(
   root: string,
-  defectId: string): { ok: boolean; code?: string; updated: { id: string; from: number; to: number }[] } {
+  defectId: string,
+): { ok: boolean; code?: string; updated: { id: string; from: number; to: number }[] } {
   try {
     if (!isFilled(root) || !isFilled(defectId)) {
       return { ok: false, code: "GAP_INVALID_INPUT", updated: [] };
@@ -881,7 +873,8 @@ export function reportGaps(root: string): {
     for (const row of projection.routeRows) {
       const emptyRoute = (row.entries?.length ?? 0) === 0;
       const noMatch = (row.codes ?? []).some(
-        (code) => code === rt.GAP_CODES.NO_MATCH || code === rt.GAP_CODES.CATEGORY_NONE);
+        (code) => code === rt.GAP_CODES.NO_MATCH || code === rt.GAP_CODES.CATEGORY_NONE,
+      );
       if (emptyRoute || noMatch) unrouted += 1;
     }
     return {

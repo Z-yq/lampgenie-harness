@@ -79,7 +79,8 @@ describe("计费门(2026-10-28 只有 API 调用显示元,token 套餐不显示)
   it("api 但模型无单价:price/cost null(前端显示未配单价,不写 0 元)", () => {
     const b = billingForModel(
       { providers: [{ id: "p", name: "p", baseUrl: "https://x", models: ["no-price-model"] }] } as unknown as Config,
-      "no-price-model", usage);
+      "no-price-model", usage,
+    );
     expect(b.billed).toBe(true);
     expect(b.price).toBeNull();
     expect(b.cost).toBeNull();

@@ -53,7 +53,8 @@ const callAnthropic = (cur: Record<string, unknown>, onDelta?: (d: unknown) => v
     tools,
     signal,
     onDelta as never,
-    retryCtx(events) as never);
+    retryCtx(events) as never,
+  );
 
 const callResponses = (cur: Record<string, unknown>, onDelta?: (d: unknown) => void, events: Array<Record<string, unknown>> = []) =>
   responsesChat(
@@ -62,7 +63,8 @@ const callResponses = (cur: Record<string, unknown>, onDelta?: (d: unknown) => v
     tools,
     signal,
     onDelta as never,
-    retryCtx(events) as never);
+    retryCtx(events) as never,
+  );
 
 describe("anthropic 非流式一次性修复", () => {
   it("探针 A:400 invalid_request → max_tokens 夹到 4096 后第二次成功,emit model_repair 1 次", async () => {

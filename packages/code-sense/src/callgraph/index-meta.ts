@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { LanguageCoverage } from "./coverage.js";
 
 /** 索引目录:<root>/.genie/sense-index/<sha1(root) 前 12 位>。 */
 export function indexDir(root: string): string {
@@ -34,6 +35,12 @@ export interface IndexMeta {
   extractorVersion?: number;
  /** 全覆盖:文件级去向计数(scanned = indexed + symbolLess + skipped + error)。 */
   fileStatus?: { scanned: number; indexed: number; symbolLess: number; skipped: number; error: number };
+ /** 口径统一:把构建期语言覆盖报告一并落小文件,让「打印覆盖行」的消费面
+ * (codesense roots / 注册表摘要 / 诊断面)读 meta.json 即可,不必为一行覆盖统计加载
+ * 30–86MB 的 index.json(经验证冷启动 loadIndex 1.58s + readFileSync 1.12s)。
+ * 字段与 C2fIndex.coverage 同源同形(不是另一套口径);体积受控:byExt 按扩展名分列、
+ * skippedReasons 源侧封顶 50 条,无逐文件路径 → 经验证 meta.json 仍 <64KB。 */
+  coverage?: LanguageCoverage;
 }
 
 export interface FingerprintRecord {

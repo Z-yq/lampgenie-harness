@@ -96,7 +96,8 @@ function abortReason(signal: AbortSignal): unknown {
  */
 export function composeInflightAdmission(
   limiter: InflightSemaphore | undefined,
-  observer: RequestAdmission | undefined): RequestAdmission | undefined {
+  observer: RequestAdmission | undefined,
+): RequestAdmission | undefined {
   if (!limiter) return observer;
   if (!observer) return { async take(input) { return limiter.take(input.signal); } };
   return {

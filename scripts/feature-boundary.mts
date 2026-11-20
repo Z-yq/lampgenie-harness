@@ -167,7 +167,8 @@ async function main(): Promise<number> {
           codes: brief.codes,
         },
         null,
-        2)}\n`
+        2,
+      )}\n`
     : report(root, opts).text;
   process.stdout.write(body);
   writeOut(get("out"), body);

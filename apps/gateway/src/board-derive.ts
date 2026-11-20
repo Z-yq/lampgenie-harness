@@ -62,7 +62,8 @@ function keepKind(k: unknown): DerivedEdge["kind"] {
 export function deriveBoardEdges(
   nodes: Array<{ id: string; label?: string; group?: string; targets?: string[]; accept?: Array<{ cmd: string }>; phase?: string; change?: string }>,
   explicit: Array<{ from: string; to: string; kind?: string; label?: string }>,
-  ctx?: DeriveCtx): DerivedEdge[] {
+  ctx?: DeriveCtx,
+): DerivedEdge[] {
   const list: Node[] = Array.isArray(nodes) ? nodes.filter((n): n is Node => !!n && typeof n.id === "string" && n.id !== "") : [];
   const byId = new Map<string, Node>();
   for (const n of list) if (!byId.has(n.id)) byId.set(n.id, n);

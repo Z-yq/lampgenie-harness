@@ -13,6 +13,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
 import { homedir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { indexDir, loadIndex, type C2fIndex } from "@lampgenie/code-sense";
+import { readIndexMeta } from "@lampgenie/code-sense/callgraph/index-meta";
+import type { LanguageCoverage } from "@lampgenie/code-sense/callgraph/coverage";
 
 export interface RegistryEntry {
   /** 绝对路径(path.resolve 规范化,无尾分隔符)。 */
@@ -252,15 +254,51 @@ export function purgeRootData(root: string): void {
   rmSync(join(root, ".genie", "sense-index"), { recursive: true, force: true });
 }
 
-/** 注册表条目构造(统计读现成索引,缺索引=零值)。 */
-export function makeEntry(root: string, extra?: Partial<RegistryEntry>): RegistryEntry {
+/** 根的轻量统计口径(注册表摘要面):与 RegistryEntry.stats 同形 + 覆盖报告。
+ * 此前 roots/注册摘要为拿这几行数字要 loadIndex(解析 30–86MB index.json,
+ * 经验证冷启动 loadIndex 1.58s + readFileSync 1.12s)——meta.json 里早有同源计数。 */
+export interface RootStat {
+  nodes: number;
+  edges: number;
+ /** 有索引符号的文件数(旧口径 Object.keys(byFile).length ↔ meta.fileStatus.indexed /
+ * meta.srcCount 同源;meta 无这两项时才回退 loadIndex)。 */
+  files: number;
+  coverage?: LanguageCoverage;
+}
+
+/** 读根的统计:优先 meta.json(小文件,零重依赖),meta 缺失/损坏才回退 loadIndex。
+ * 两路都无产物 = null(调用方按「无索引」降级,不编造 0)。 */
+export function readRootStat(root: string): RootStat | null {
+  const meta = readIndexMeta(root);
+  if (meta) {
+    return {
+      nodes: meta.nodes,
+      edges: meta.edges,
+      files: meta.fileStatus?.indexed ?? meta.srcCount ?? 0,
+      ...(meta.coverage ? { coverage: meta.coverage } : {}),
+    };
+  }
   const idx = loadIndex(root);
+  if (!idx) return null;
+  return {
+    nodes: idx.nodes.length,
+    edges: idx.edges.length,
+    files: Object.keys(idx.byFile).length,
+    ...(idx.coverage ? { coverage: idx.coverage } : {}),
+  };
+}
+
+/** 注册表条目构造(统计读现成索引,缺索引=零值)。
+ * 调用方自带 stats(例如来自 readRootStat)时不再解析 index.json——
+ * 只在 stats 缺席时才回退 loadIndex(冷启动路径要能完全避开大索引)。 */
+export function makeEntry(root: string, extra?: Partial<RegistryEntry>): RegistryEntry {
+  const stats = extra?.stats ?? readRootStat(root) ?? { files: 0, nodes: 0, edges: 0 };
   return {
     root,
     name: basename(root),
     registeredAt: Date.now(),
     lastIndexedAt: Date.now(),
-    stats: { files: idx ? Object.keys(idx.byFile).length : 0, nodes: idx?.nodes.length ?? 0, edges: idx?.edges.length ?? 0 },
+    stats: { files: stats.files, nodes: stats.nodes, edges: stats.edges },
     lastBuild: { reused: 0, scanned: 0, buildMs: 0, mode: "full" },
     ...extra,
   };

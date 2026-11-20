@@ -74,7 +74,8 @@ export function resolveSessionModel<T extends object>(globalRef: T, override?: S
  */
 export function sanitizeSessionOverride(
   config: Config,
-  override: SessionModelOverride): { override: SessionModelOverride; warning?: string; cleaned?: boolean; danglingProviderId?: string } {
+  override: SessionModelOverride,
+): { override: SessionModelOverride; warning?: string; cleaned?: boolean; danglingProviderId?: string } {
   if (!override.providerId) return { override };
   const known = new Set(config.providers.map((p) => p.id));
   if (known.has(override.providerId)) return { override };
@@ -246,7 +247,8 @@ export function createMutationQueue(): <T>(op: () => T | Promise<T>) => Promise<
     const current = tail.then(() => op());
     tail = current.then(
       () => undefined,
-      () => undefined);
+      () => undefined,
+    );
     return current;
   };
 }
@@ -663,7 +665,8 @@ export function resolveSessionModelSwitch(
   config: Config,
   override: SessionModelOverride,
   root: string,
-  env: NodeJS.ProcessEnv = process.env): { effective?: EffectiveModel; warning?: string; routeError?: string } {
+  env: NodeJS.ProcessEnv = process.env,
+): { effective?: EffectiveModel; warning?: string; routeError?: string } {
   const sane = sanitizeSessionOverride(config, override);
   const r = resolveModelSwitch(mergedConfig(config, sane.override), root, env);
   const warning = [sane.warning, r.warning].filter(Boolean).join(";");

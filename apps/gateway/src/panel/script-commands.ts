@@ -202,6 +202,9 @@ setInterval(() => {
 let gitChanges = [], gitCurrentFile = "";
 function gitLoad() {
   if (!viewLive("git")) return;
+ // 走查:大仓库/9p 网络盘上 git.status 首读可达十几秒,期间变更区一片空白
+ // 只有静态提示,像坏了。先落一个诚实的加载占位,回包由 gitRenderStatus 覆盖。
+  if ($("gitChanges")) $("gitChanges").innerHTML = '<div class="cc-empty">正在读取 git status…(大仓库/网络盘首读可能要十几秒,可稍候或点「刷新」重试)</div>';
   wsSafeSend(JSON.stringify({ v: 1, type: "git.status" }));
   wsSafeSend(JSON.stringify({ v: 1, type: "git.branches" }));
 }
@@ -1036,6 +1039,9 @@ let slashOpen = false, slashItems = [], slashHot = 0;
 // 丢弃:旧实现的「needle.includes(kw)」对称匹配(反向包含=噪声源,输 "n" 会命中所有短 kw 命令)。
 const SLASH_RENDER_LIMIT = 12; // ZCode 面板默认 12 行(旧实现硬编码 slice(0, 9))
 const SLASH_EMPTY_TEXT = "无匹配命令(试试 /help)";
+// P1-5:空态主提示(t=148 标杆:ZCode 空查询时给「输入内容以搜索命令」);
+// 旧文案保留成第二行副提示(面板过滤口径/回归断言「无匹配命令(试试 /help)」不废)。
+const SLASH_EMPTY_HINT = "输入内容以搜索命令";
 function slashScore(text, q) {
   const t = String(text == null ? "" : text).trim().toLowerCase();
   if (!t) return null;
@@ -1095,7 +1101,7 @@ function slashNewCommand() {
 function slashRender() {
   const box = $("slashMenu");
   if (!box) return;
-  if (!slashOpen) { box.style.display = "none"; box.innerHTML = ""; return; }
+  if (!slashOpen) { box.style.display = "none"; box.innerHTML = ""; slashSyncPop(); return; }
  // n4④:空结果不再 display:none——保留面板(Esc 仍可关),给一行占位文案 + 新建入口。
   let html = "";
   let lastGroup = "";
@@ -1106,15 +1112,33 @@ function slashRender() {
  // n4③:label 前缀带 hint(ZCode slashCommandHelpers:inputHint?.trim || /name 的同精神;
  // 差异=我们保留 /name 再跟 <hint>,因为面板同时要能一眼看出命令名);
     const h = String(c.hint || c.inputHint || "").trim();
-    html += '<div class="sc-item' + (i === slashHot ? " hot" : "") + '" data-i="' + i + '">' +
-      '<span class="sc-name">/' + esc(c.value) + (h ? ' <span class="sc-hint">' + esc(h.length > 30 ? h.slice(0, 30) + "…" : h) + "</span>" : "") + "</span>" +
-      '<span class="sc-desc">' + esc(c.desc) + '</span>' +
-      '<span class="sc-kind">' + (slashChipKind(c) === "param" ? "参数" : c.kind === "ui" ? "执行" : "发送") + '</span></div>';
+ // P1-5双行排版:第 1 行 命令名 + 参数 hint,第 2 行 说明;右侧 kind 徽标跨两行右对齐。
+ // 结构包一层 .sc-main(列向):类名契约给 CSS 层,行内兜底样式保证「不改 page-css 也是双行」。
+ // 高亮类统一 .sc-item.sel(hot 为历史别名,旧 CSS .sc-item.hot 仍生效,双写不改观感)。
+    html += '<div class="sc-item' + (i === slashHot ? " hot sel" : "") + '" data-i="' + i + '">' +
+      '<div class="sc-main" style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">' +
+      '<div class="sc-row1"><span class="sc-name">/' + esc(c.value) + "</span>" +
+      (h ? ' <span class="sc-hint">' + esc(h.length > 30 ? h.slice(0, 30) + "…" : h) + "</span>" : "") + "</div>" +
+      '<div class="sc-row2"><span class="sc-desc">' + esc(c.desc) + "</span></div>" +
+      "</div>" +
+      '<span class="sc-kind">' + (slashChipKind(c) === "param" ? "参数" : c.kind === "ui" ? "执行" : "发送") + "</span></div>";
   }
-  if (!slashItems.length) html += '<div class="sc-empty">' + SLASH_EMPTY_TEXT + "</div>";
+  if (!slashItems.length) {
+    html += '<div class="sc-empty"><div class="sc-empty-t">' + SLASH_EMPTY_HINT + '</div><div class="sc-empty-s">' + SLASH_EMPTY_TEXT + "</div></div>";
+  }
   html += '<div class="sc-item sc-newcmd" data-act="newcmd"><span class="sc-name">＋ 新建命令</span><span class="sc-kind">设置</span></div>';
   box.style.display = "";
   box.innerHTML = html;
+  slashSyncPop();
+ // P1-5:#slashMenu 是 max-height:300px + overflow-y:auto 的滚动容器,
+ // 键盘上下键移选中项时必须把它滚进可视区(此前只改 slashHot,选中项跑到框外看不见=「上下键没反应」)。
+  const hotEl = box.querySelector(".sc-item.sel");
+  if (hotEl && box.scrollHeight > box.clientHeight) {
+    const z = menuZoom();
+    const hr = hotEl.getBoundingClientRect(), br = box.getBoundingClientRect();
+    if (hr.top < br.top) box.scrollTop -= (br.top - hr.top) / z;
+    else if (hr.bottom > br.bottom) box.scrollTop += (hr.bottom - br.bottom) / z;
+  }
   for (const el of box.querySelectorAll(".sc-item[data-i]")) {
     el.onclick = () => slashExec(Number(el.dataset.i));
     el.onmouseenter = () => { slashHot = Number(el.dataset.i); slashRender(); };
@@ -1150,6 +1174,7 @@ function slashExec(i) {
   }
 }
 function slashClose() { slashOpen = false; slashItems = []; slashHot = 0; slashRender(); }
+function slashSyncPop() { popoverSyncEl("slashMenu", slashOpen, "#instruction"); } // 打开态与注册表同步(slashRender 内调用;keep=输入框:点输入框继续编辑不算外点)
 function slashUpdate() {
   const v = $("instruction").value;
   if (v.startsWith("/")) {

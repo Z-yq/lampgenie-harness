@@ -55,7 +55,7 @@ export function readGoalFromJournal(events: JournalEvent[], sessionId: string): 
   const holder: { g: SessionGoal | null } = { g: null };
   let revision = 0;
   for (const e of goalEvents) {
-    revision += 1; // 每条 goal.set 递增(M26 修订号;clear 也占一个修订,目标被清除后旧续跑必然 stale)
+    revision += 1; // 每条 goal.set 递增(修订号;clear 也占一个修订,目标被清除后旧续跑必然 stale)
     const p = (e.payload ?? {}) as Record<string, unknown>;
     const objective = p.goal;
     const state = String(p.state ?? "active");

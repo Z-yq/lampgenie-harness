@@ -706,7 +706,8 @@ describe("verifyArtifact", () => {
 
   it("页数非正 → ARTIFACT_INVALID", () => {
     expect(verifyArtifact({ inputSha256: SHA_A, artifactSha256: SHA_B, bytes: 10, pages: 0 }).code).toBe(
-      EXPORT_ARTIFACT_INVALID);
+      EXPORT_ARTIFACT_INVALID,
+    );
   });
 
   it("inputSha256 形态不对 → ARTIFACT_INVALID", () => {

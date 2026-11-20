@@ -139,7 +139,8 @@ function invalidBudget(report: FootprintReport, unit: TokenUnit, message: string
  */
 export function evaluateBudget(
   input: FootprintInput | string | null | undefined,
-  budget: PromptBudget | null | undefined): BudgetEvaluation {
+  budget: PromptBudget | null | undefined,
+): BudgetEvaluation {
   const cfg = isRecord(budget) ? (budget as PromptBudget) : undefined;
   const unit: TokenUnit = cfg?.unit === "raw" ? "raw" : "estimate";
 
@@ -601,7 +602,8 @@ function matchSections(surface: string, ref: string, input: FootprintInput): str
  */
 export function negativeReturnPrunes(
   experiments: unknown,
-  input: FootprintInput | string | null | undefined): NegativeReturnReport {
+  input: FootprintInput | string | null | undefined,
+): NegativeReturnReport {
   const list = experimentsOf(experiments);
   if (!list) {
     return { code: PROMPT_BUDGET_CODES.INVALID, prunes: [], unattributed: [] };

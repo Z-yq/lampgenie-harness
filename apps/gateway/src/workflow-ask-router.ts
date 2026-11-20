@@ -10,7 +10,8 @@ export class WorkflowAskRouter {
 
   constructor(
     private readonly broadcast: (msg: Record<string, unknown>) => void,
-    private readonly timeoutMs = 90_000) {}
+    private readonly timeoutMs = 90_000,
+  ) {}
 
   /** 询问:面板在线→广播+挂起等待直答;离线→null(调用方回退 executor)。 */
   ask(wfId: string, cacheKey: string, instructions: string): Promise<string | null> {

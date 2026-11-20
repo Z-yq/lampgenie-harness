@@ -651,7 +651,8 @@ export function compressDiffForDigest(diffText: string, maxChars = DIGEST_INPUT_
   // 头行 + 元信息成本(每行 +1 = join 的换行;轻微高估是安全的)。
   const headsCost = groups.reduce(
     (n, g) => n + [g.head, ...g.meta].reduce((m, l) => m + l.length + 1, 0),
-    0);
+    0,
+  );
   if (headsCost > maxChars) {
     // 极端:头行/元信息本身就超预算 → 头行优先,元信息按顺序裁,不保 hunk。
     const out: string[] = [];
@@ -978,7 +979,8 @@ export interface IntakeOutcome {
 function locateTruncatedRange(
   chunks: readonly IntakeChunk[],
   kept: readonly number[],
-  included: number): { start: number; end: number } | undefined {
+  included: number,
+): { start: number; end: number } | undefined {
   let pos = 0;
   for (let k = 0; k < kept.length; k++) {
     const chunk = chunks[kept[k]!];

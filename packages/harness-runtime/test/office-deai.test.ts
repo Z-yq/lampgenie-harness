@@ -1,7 +1,7 @@
 /**
  * 办公输出「去 AI 味」审计(office-deai)的纯逻辑测试。
  * 断言只依赖模块导出的接口与文档里写明的口径:
- * - 规则表 31 条、七类各 ≥2、zh 15 / en 14(emoji 两条双语);
+ * - 规则表 34 条、七类各 ≥2、zh 18 / en 14(emoji 两条双语);
  * - score = 100 * (1 - e^(-加权命中/千字 / 20)) + 结构惩罚,截断到 0..100 取整;
  * - 单条规则最多按 6 次命中计分;缺省阈值 warn=40 / fail=60。
  * 阈值类用例都先用真实分数 S 探一次,再用 S 构造显式阈值,避免把实现的常数抄进断言。
@@ -107,9 +107,9 @@ function fakeResult(
 }
 
 describe("DEAI_RULES 规则表不变量", () => {
-  it("DEAI_RULES 规则表共 31 条", () => {
-    expect(DEAI_RULES).toHaveLength(31);
-    expect(new Set(DEAI_RULES).size).toBe(31);
+  it("DEAI_RULES 规则表共 34 条", () => {
+    expect(DEAI_RULES).toHaveLength(34);
+    expect(new Set(DEAI_RULES).size).toBe(34);
   });
 
   it("DEAI_RULES 七类每类至少 2 条", () => {
@@ -122,15 +122,15 @@ describe("DEAI_RULES 规则表不变量", () => {
     for (const rule of DEAI_RULES) expect(DEAI_CATEGORIES).toContain(rule.category);
   });
 
-  it("DEAI_RULES zh 与 en 各至少 8 条(单语言 zh 15 / en 14,含双语则 17 / 16)", () => {
+  it("DEAI_RULES zh 与 en 各至少 8 条(单语言 zh 18 / en 14,含双语则 20 / 16)", () => {
     const zh = DEAI_RULES.filter((rule) => rule.locales.includes("zh")).length;
     const en = DEAI_RULES.filter((rule) => rule.locales.includes("en")).length;
     expect(zh).toBeGreaterThanOrEqual(8);
     expect(en).toBeGreaterThanOrEqual(8);
- // 两条 emoji 规则双语,所以「含 zh」是 15+2、「含 en」是 14+2
-    expect(zh).toBe(17);
+ // 两条 emoji 规则双语,所以「含 zh」是 18+2、「含 en」是 14+2
+    expect(zh).toBe(20);
     expect(en).toBe(16);
-    expect(DEAI_RULES.filter((rule) => rule.locales.length === 1 && rule.locales[0] === "zh")).toHaveLength(15);
+    expect(DEAI_RULES.filter((rule) => rule.locales.length === 1 && rule.locales[0] === "zh")).toHaveLength(18);
     expect(DEAI_RULES.filter((rule) => rule.locales.length === 1 && rule.locales[0] === "en")).toHaveLength(14);
  // 每条规则至少声明一个 locale,且只可能是 zh/en
     for (const rule of DEAI_RULES) {
@@ -642,14 +642,16 @@ describe("applyExemptions 豁免与 residual", () => {
 
     const asWarn = applyExemptions(
       analyzeDocument({ text: RESIDUAL_ZH }, { failThreshold: S + 1, warnThreshold: S }),
-      exemptions);
+      exemptions,
+    );
     expect(asWarn.residualScore).toBe(S);
     expect(asWarn.residualVerdict).toBe("warn");
     expect(asWarn.codes).toContain("DEAI_THRESHOLD_WARN");
 
     const asPass = applyExemptions(
       analyzeDocument({ text: RESIDUAL_ZH }, { failThreshold: S + 2, warnThreshold: S + 1 }),
-      exemptions);
+      exemptions,
+    );
     expect(asPass.residualScore).toBe(S);
     expect(asPass.residualVerdict).toBe("pass");
     expect(asPass.codes).toEqual(["DEAI_OK"]);
@@ -823,5 +825,26 @@ describe("normalizeExcerpt 归一化", () => {
   it("normalizeExcerpt 全空白返回空串,已是归一化的输入保持不变", () => {
     expect(normalizeExcerpt("   \n\t  ")).toBe("");
     expect(normalizeExcerpt("据说明天上线")).toBe("据说明天上线");
+  });
+});
+
+describe("2026-11 报告腔补充规则(关键词优先)", () => {
+  it("本页/这意味着/全面提升 分别命中 meta/connector/puffery 新规则", () => {
+    const r = analyzeDocument({
+      text: "本页先讲结论。这意味着缓存会失效。我们要全面提升系统能力。",
+      kind: "txt",
+    });
+    const ids = new Set(r.findings.map((f) => f.ruleId));
+    expect(ids.has("zh-meta-report-frame")).toBe(true);
+    expect(ids.has("zh-connector-explain")).toBe(true);
+    expect(ids.has("zh-puffery-inflate")).toBe(true);
+  });
+
+  it("正常业务词不误杀:维度配置 / 有效期 / 通过评审", () => {
+    const r = analyzeDocument({
+      text: "维度配置有 8 份,缓存有效期 24 小时。方案通过评审,下一步补压测。",
+      kind: "txt",
+    });
+    expect(r.findings).toEqual([]);
   });
 });

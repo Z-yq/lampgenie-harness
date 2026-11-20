@@ -236,7 +236,8 @@ export type NotifyChannel = "text" | "gui" | "webhook";
 /** 按渠道投影:文本渠道只要句子,GUI 渠道只要卡片投影,webhook 保持结构化原值+句子。 */
 export function renderForChannel(
   notification: Notification,
-  channel: NotifyChannel): string | NotificationGui | Readonly<Record<string, unknown>> {
+  channel: NotifyChannel,
+): string | NotificationGui | Readonly<Record<string, unknown>> {
   switch (channel) {
     case "text":
       return notification.text;

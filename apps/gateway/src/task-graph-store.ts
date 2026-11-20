@@ -50,7 +50,8 @@ interface TaskGraphRuntime {
   validateExtension(graph: TaskGraph, output: PlannerOutput): { ok: boolean; codes: string[]; issues: ExtensionIssue[] };
   applyExtension(
     graph: TaskGraph,
-    output: PlannerOutput): { ok: boolean; graph: TaskGraph; code: string; added?: ExtensionDelta; issues?: ExtensionIssue[] };
+    output: PlannerOutput,
+  ): { ok: boolean; graph: TaskGraph; code: string; added?: ExtensionDelta; issues?: ExtensionIssue[] };
   runPlanner(
     graph: TaskGraph,
     output: PlannerOutput,
@@ -64,23 +65,10 @@ interface TaskGraphRuntime {
   replaySkip(graph: TaskGraph, completedIds?: string[]): { ok: boolean; graph: TaskGraph; code: string; skipped: string[]; executed: string[] };
 }
 
-let taskGraphRuntime: TaskGraphRuntime | undefined;
+/** runtime 面:静态导入(批量,exit 13 坑防第六犯;bundle 内联零成本)。 */
+import * as rt_task_graph_extension from "@lampgenie/runtime/agent/task-graph-extension";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadTaskGraphRuntime(): Promise<TaskGraphRuntime> {
-  if (taskGraphRuntime) return taskGraphRuntime;
-  const spec = "@lampgenie/runtime/agent/task-graph-extension";
-  try {
-    taskGraphRuntime = (await import(spec)) as TaskGraphRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/task-graph-extension.ts", import.meta.url).href;
-    taskGraphRuntime = (await import(srcUrl)) as TaskGraphRuntime;
-  }
-  return taskGraphRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadTaskGraphRuntime();
+const rt: TaskGraphRuntime = rt_task_graph_extension;
 
 const CODES = rt.TASKGRAPH_CODES;
 

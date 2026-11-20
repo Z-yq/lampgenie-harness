@@ -667,7 +667,8 @@ export function detectVersionChange(input: VersionChangeInput): VersionChangeRes
  */
 export function markStale(
   experiments: readonly SignatureExperiment[],
-  target: VersionPair): MarkStaleResult {
+  target: VersionPair,
+): MarkStaleResult {
   const goal = versionPairOf(target);
   const stale: string[] = [];
   const active: string[] = [];

@@ -235,8 +235,12 @@ describe("模型选择 UI 对齐 ZCode 布局", () => {
 
   it("⑪ 窄视口:1150px 保留 + 980px 隐藏 .mt-label/.tb-text(只留图标)", async () => {
     const html = await fetchHtml(7926);
-    const at1150Anchor = html.indexOf("@media (max-width:1150px){", html.indexOf(".model-trigger{max-width:180px}") - 400);
-    const at1150 = html.slice(at1150Anchor, at1150Anchor + 500);
+ // 页面里有两处 1150px 媒询(前面的通用块是并行改动新增),按内容锚定而非首个块位置切片
+    expect(html).toContain("@media (max-width:1150px){");
+    const i1150 = html.indexOf(".model-trigger{max-width:180px}");
+    expect(i1150, "缺 1150px 档 .model-trigger 收窄").toBeGreaterThan(0);
+    const at1150 = html.slice(Math.max(0, i1150 - 300), i1150 + 400);
+    expect(at1150).toContain("@media (max-width:1150px)");
     expect(at1150).toContain(".model-trigger{max-width:180px}");
     // zcode 收窄顺序:先隐藏 providerName/ 前缀(模型名优先保留),再整段文案换图标
     expect(at1150).toContain(".model-trigger .mt-provider{display:none}");

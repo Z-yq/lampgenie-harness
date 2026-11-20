@@ -70,7 +70,8 @@ interface StoreResult {
 interface StoreModule {
   registerSourceKind(
     root: string,
-    kind: unknown): StoreResult & { kind?: SourceKindView };
+    kind: unknown,
+  ): StoreResult & { kind?: SourceKindView };
   registerSourceInstance(
     root: string,
     input: { id: string; kind: string; config?: Record<string, unknown>; enabled?: boolean },

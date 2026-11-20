@@ -189,7 +189,8 @@ export type RedactForExportResult =
  */
 export function redactForExport(
   record: unknown,
-  redactor: ExportRedactor = defaultExportRedactor): RedactForExportResult {
+  redactor: ExportRedactor = defaultExportRedactor,
+): RedactForExportResult {
   if (record === null || typeof record !== "object" || Array.isArray(record)) {
     return { ok: false, code: "INVALID", error: "record-not-object" };
   }

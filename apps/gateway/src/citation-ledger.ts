@@ -122,7 +122,8 @@ export function extractFetchedText(content: unknown): string {
 /** 本会话里该 URL 最近一次成功的 web_fetch(调用 id + 抓取正文);没有 → null。 */
 export function findFetchedText(
   events: readonly CitationJournalEvent[],
-  url: string): { toolCallId: string; text: string; seq: number } | null {
+  url: string,
+): { toolCallId: string; text: string; seq: number } | null {
   const target = normalizeUrl(url);
   if (!target) return null;
   const calls = new Set<string>();

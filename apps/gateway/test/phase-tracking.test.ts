@@ -196,17 +196,25 @@ it("任务终态档案:done 落盘(含五阶段);后续任务注入历史块;pla
   // 任务一(带阶段)→ done 落档
   app.taskManager.submit("user", sid, "档案测试任务一");
   for (let k = 0; k < 100; k++) { const t = app.taskManager.list().find((x) => x.sessionId === sid && !("arch" in (x as object))); if (t && (t.state === "done" || t.state === "failed")) break; await new Promise((r) => setTimeout(r, 150)); }
-  await new Promise((r) => setTimeout(r, 300));
-  // 档案文件(候选根:repoRoot 与 cwd 上层,与板同策略)
+ // 档案文件(候选根:repoRoot 与 cwd 上层,与板同策略)。
+ // 修读法:归档是任务终态后异步落盘,且 task-archive.jsonl 与生产环境网关共享——
+ // 一次性读「最后一行」在慢 I/O 下会读到**前一条**(注意:ph-card-1 的 phases=0 条目被当
+ // 成本任务断言 [] vs [understand,close])。改为轮询扫全文件找 instruction 匹配的本任务条目。
   const { existsSync: ex, readFileSync: rd } = await import("node:fs");
   let entry: { state?: string; phases?: { phase: string }[]; instruction?: string } | null = null;
-  for (const base of [join(process.cwd(), "..", ".."), process.cwd()]) {
-    const ap = join(base, ".genie", "task-archive.jsonl");
-    if (ex(ap)) {
-      const last = rd(ap, "utf-8").split("\n").filter(Boolean).at(-1);
-      if (last) { try { entry = JSON.parse(last); } catch { /* 坏行跳过 */ } }
-      if (entry?.instruction?.includes("档案测试任务一")) break;
+  for (let poll = 0; poll < 40 && entry === null; poll += 1) {
+    for (const base of [join(process.cwd(), "..", ".."), process.cwd()]) {
+      const ap = join(base, ".genie", "task-archive.jsonl");
+      if (!ex(ap)) continue;
+      for (const line of rd(ap, "utf-8").split("\n").filter(Boolean).reverse()) {
+        try {
+          const e = JSON.parse(line) as { instruction?: string };
+          if (e.instruction?.includes("档案测试任务一")) { entry = e; break; }
+        } catch { /* 坏行跳过 */ }
+      }
+      if (entry !== null) break;
     }
+    if (entry === null) await new Promise((r) => setTimeout(r, 150));
   }
   expect(entry, "task-archive.jsonl 应有任务一条目").toBeTruthy();
   expect(entry!.state).toBe("done");

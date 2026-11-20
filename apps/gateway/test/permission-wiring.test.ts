@@ -33,9 +33,9 @@ describe("规则装载( F2)", () => {
     dir = mkdtempSync(join(tmpdir(), "gh-perm-"));
     const genieDir = join(dir, ".genie");
     mkdirSync(genieDir, { recursive: true });
-    writeFileSync(join(genieDir, "permissions.json"), JSON.stringify({ experience_fold: "ask" }));
+    writeFileSync(join(genieDir, "permissions.json"), JSON.stringify({ board_upsert: "ask" }));
     r = loadPermissionRules(dir);
-    expect(r).toEqual([{ permission: "experience_fold", action: "ask", pattern: "*" }]);
+    expect(r).toEqual([{ permission: "board_upsert", action: "ask", pattern: "*" }]);
     cleanup();
     expect(loadPermissionRules("/nonexistent")).toBeUndefined();
   });

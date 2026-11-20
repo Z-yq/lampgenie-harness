@@ -40,7 +40,7 @@ const SOURCE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".java", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
   ".rs", ".cs", ".rb", ".php"]);
 
-function isSourceFile(name: string): boolean {
+export function isSourceFile(name: string): boolean {
   const i = name.lastIndexOf(".");
   return i > 0 && SOURCE_EXT.has(name.slice(i));
 }

@@ -356,7 +356,8 @@ describe("renderToPdf / renderToPng / pdfPageCount", () => {
       expect(rastered.pngPaths.length).toBeGreaterThan(0);
       for (const png of rastered.pngPaths) expect(statSync(png).size).toBeGreaterThan(0);
     },
-    240_000);
+    240_000,
+  );
 
   it("引擎缺失:soffice 与 gs 都报 EXPORT_ENGINE_MISSING", async () => {
     const deck = await makePptxGenJsDeck([["缺失引擎用例"]]);

@@ -184,34 +184,16 @@ interface DefectRuntime {
   };
 }
 
-let defectRuntime: DefectRuntime | undefined;
+/**
+ * runtime 面:静态导入(修,同 direction-atlas-store 的修法;exit 13 坑
+ * 第 5 次——本 store 经 gap-taxonomy-store → rsi-injection-listeners 进了启动路径,顶层 await
+ * 在 bundle 里永不 settle)。同目录 evidence-graph-store 直接静态导入(该 store 
+ * 已修,boot-safe;llm-trace 早已静态消费)。
+ */
+import * as runtimeDefect from "@lampgenie/runtime/agent/defect-lineage";
+import { addEvidence, loadEvidenceGraph } from "./evidence-graph-store.js";
 
-/** 两跳解析 runtime 模块(见文件头依赖纪律)。 */
-async function loadDefectRuntime(): Promise<DefectRuntime> {
-  if (defectRuntime) return defectRuntime;
-  const spec = "@lampgenie/runtime/agent/defect-lineage";
-  try {
-    defectRuntime = (await import(spec)) as DefectRuntime;
-  } catch {
-    const srcUrl = new URL("../../../packages/harness-runtime/src/agent/defect-lineage.ts", import.meta.url).href;
-    defectRuntime = (await import(srcUrl)) as DefectRuntime;
-  }
-  return defectRuntime;
-}
-
-/** runtime 面(顶层 await:所有导出函数保持同步签名)。 */
-const rt = await loadDefectRuntime();
-
-/** 同目录证据图持久层面(裸 node strip-types 下相对导入必须带 .ts,故用动态字面量解出两个函数)。 */
-interface EvidenceStoreRuntime {
-  addEvidence(root: string, input: AddEvidenceInput): { ok: boolean; code?: string; id?: string };
-  loadEvidenceGraph(root: string): EvidenceProjection;
-}
-
-const evidenceStoreSpec = "./evidence-graph-store.ts";
-const evidenceStore = (await import(evidenceStoreSpec)) as EvidenceStoreRuntime;
-const addEvidence = evidenceStore.addEvidence;
-const loadEvidenceGraph = evidenceStore.loadEvidenceGraph;
+const rt: DefectRuntime = runtimeDefect;
 
 const CATEGORIES: ReadonlySet<string> = new Set<string>(["rework", "drift", "refactor", "unrelated", "unknown"]);
 const CONFIDENCES: ReadonlySet<string> = new Set<string>(["high", "medium", "low"]);

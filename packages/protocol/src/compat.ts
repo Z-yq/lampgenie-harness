@@ -209,7 +209,8 @@ export function assertCompatRegistry(
 export function assertCompatEntries(
   entries: readonly CompatWindowEntry[],
   errorCodeValues: readonly string[],
-  opts?: CompatOptions): CompatRegistryReport {
+  opts?: CompatOptions,
+): CompatRegistryReport {
   const issues: string[] = [];
   const values = new Set<string>((Array.isArray(errorCodeValues) ? errorCodeValues : []).filter((v) => typeof v === "string"));
   const list = Array.isArray(entries) ? entries : [];
