@@ -30,7 +30,7 @@ describe("wire 协议表面(本仓真实文件)", () => {
     expect(t.unions.map((u) => u.name)).toContain("ClientMessage");
     expect(t.handlers.length).toBeGreaterThan(0);
     expect(t.handlers[0]!.file).toBe(WIRE_PATHS.server);
-    expect(t.sends.some((s) => s.file === WIRE_PATHS.panel)).toBe(true);
+    expect(t.sends.some((s) => s.file.startsWith("apps/gateway/src/panel"))).toBe(true); // 面板拆分件(script-*.ts)与 panel.ts 同为发送面
     expect(t.status).toBe("ok");
   });
 

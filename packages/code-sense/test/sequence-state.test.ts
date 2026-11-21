@@ -15,9 +15,9 @@ describe("D19 状态机:TRANSITIONS 金标准", () => {
     const src = readFileSync(`${REPO}/packages/core/src/task/task.ts`, "utf-8");
     const sm = extractStateMachineFromTransitions(src);
     expect(sm).toBeTruthy();
-    expect(sm!.states.sort()).toEqual(["blocked", "cancelled", "done", "failed", "queued", "running"]);
-    // 迁移边:queued 4 条(迁移表修复后)+running 4+blocked 2=≥10
-    expect(sm!.transitions.length).toBeGreaterThanOrEqual(10);
+    expect(sm!.states.sort()).toEqual(["blocked", "cancelled", "done", "failed", "interrupted", "queued", "running"]);
+    // 迁移边:queued 4+running 5+blocked 3+interrupted 3=15(interrupted 态入表)
+    expect(sm!.transitions.length).toBeGreaterThanOrEqual(15);
     expect(sm!.mermaid).toContain("queued --> running");
     expect(sm!.mermaid).toContain("stateDiagram-v2");
   });

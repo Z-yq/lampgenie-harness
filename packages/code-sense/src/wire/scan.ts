@@ -294,39 +294,55 @@ interface ProtocolScan {
 }
 
 function scanProtocol(root: string): ProtocolScan | null {
-  const text = readText(root, WIRE_PATHS.protocol);
-  if (text === null) return null;
-  const file = WIRE_PATHS.protocol;
-  const masked = maskStructure(text);
+  // 协议声明面:2026-11-12 起按域拆分到 messages/*,index.ts 只留装配。
+  // 扫描面 = index.ts + messages/*.ts(声明与 union 可能跨文件:union 在 index,decl 在分片)。
+  const files = [WIRE_PATHS.protocol];
+  const msgDir = join(root, "packages/protocol/src/messages");
+  try {
+    for (const f of readdirSync(msgDir).filter((n) => n.endsWith(".ts")).sort()) {
+      files.push("packages/protocol/src/messages/" + f);
+    }
+  } catch { /* 目录缺席=旧布局,只扫 index */ }
+  const texts = files
+    .map((f) => ({ file: f, text: readText(root, f) }))
+    .filter((x): x is { file: string; text: string } => x.text !== null);
+  if (texts.length === 0) return null;
   const decls = new Map<string, ProtocolDecl>();
 
-  // 先收声明:export const Name = Envelope.extend(...)
+  // 先收声明(全部文件):export const Name = Envelope.extend(...)
   const declRe = /export\s+const\s+(\w+)\s*=\s*Envelope\.extend\s*\(/g;
   let dm: RegExpExecArray | null;
-  while ((dm = declRe.exec(masked)) !== null) {
-    const open = masked.indexOf("(", dm.index + dm[0].length - 1);
-    if (open < 0) continue;
-    const close = findMatching(masked, open, "(", ")");
-    if (close < 0) continue;
-    const span = text.slice(open + 1, close);
-    const t = firstTypeLiteral(span);
-    if (!t) continue;
-    const typeIndex = open + 1 + t.index;
-    decls.set(dm[1]!, {
-      name: dm[1]!,
-      type: t.type,
-      file,
-      line: lineAt(text, dm.index),
-      typeLine: lineAt(text, typeIndex),
-    });
+  for (const { file, text } of texts) {
+    const masked = maskStructure(text);
+    declRe.lastIndex = 0;
+    while ((dm = declRe.exec(masked)) !== null) {
+      const open = masked.indexOf("(", dm.index + dm[0].length - 1);
+      if (open < 0) continue;
+      const close = findMatching(masked, open, "(", ")");
+      if (close < 0) continue;
+      const span = text.slice(open + 1, close);
+      const t = firstTypeLiteral(span);
+      if (!t) continue;
+      const typeIndex = open + 1 + t.index;
+      decls.set(dm[1]!, {
+        name: dm[1]!,
+        type: t.type,
+        file,
+        line: lineAt(text, dm.index),
+        typeLine: lineAt(text, typeIndex),
+      });
+    }
   }
 
-  // 再收 union
+  // 再收 union(全部文件;成员 decl 跨文件查全量 decls 表)
   const unions: WireUnion[] = [];
   const unresolved: WireUnresolvedMember[] = [];
   const unionRe = /(?:export\s+)?const\s+(\w+)\s*=\s*z\.discriminatedUnion\s*\(/g;
   let um: RegExpExecArray | null;
-  while ((um = unionRe.exec(masked)) !== null) {
+  for (const { file, text } of texts) {
+    const masked = maskStructure(text);
+    unionRe.lastIndex = 0;
+    while ((um = unionRe.exec(masked)) !== null) {
     const openBracket = masked.indexOf("[", um.index);
     if (openBracket < 0) continue;
     const closeBracket = findMatching(masked, openBracket, "[", "]");
@@ -375,9 +391,10 @@ function scanProtocol(root: string): ProtocolScan | null {
       members,
     });
     unionRe.lastIndex = Math.max(unionRe.lastIndex, closeBracket + 1);
+    }
   }
 
-  return { file, unions, decls, unresolved };
+  return { file: WIRE_PATHS.protocol, unions, decls, unresolved };
 }
 
 // ---- 服务端 handler ----
@@ -457,6 +474,16 @@ function scanHandlers(root: string): WireHandler[] {
 function clientFiles(root: string): string[] {
   const files: string[] = [];
   if (existsSync(join(root, WIRE_PATHS.panel))) files.push(WIRE_PATHS.panel);
+  // 面板脚本拆分件(2026-11 起 src/panel/*.ts 模板):发送/接收面跟 panel.ts 同源,一并入扫。
+  const panelDir = join(root, "apps/gateway/src/panel");
+  try {
+    for (const name of readdirSync(panelDir).sort()) {
+      if (!name.endsWith(".ts")) continue;
+      files.push("apps/gateway/src/panel/" + name);
+    }
+  } catch {
+    /* 目录不可读=如实缺席 */
+  }
   const assetsAbs = join(root, WIRE_PATHS.assetsDir);
   if (existsSync(assetsAbs)) {
     try {

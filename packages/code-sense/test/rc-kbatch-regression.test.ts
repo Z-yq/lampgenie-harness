@@ -49,10 +49,10 @@ describe("RC-L 公平截断(listSourceFilesDetailed)", () => {
 });
 
 describe("RC-K 解析前守卫(parseGuardReason)", () => {
-  it("超大单文件(>2MB)返回原因;≥32KB 单行压缩产物返回原因", async () => {
+  it("超大单文件(>4MB)返回原因;≥32KB 单行压缩产物返回原因", async () => {
     const dir = tmpRepo("guard");
     const big = join(dir, "big.ts");
-    writeFileSync(big, "export const x = `" + "a".repeat(2 * 1024 * 1024) + "`;\n");
+    writeFileSync(big, "export const x = `" + "a".repeat(5 * 1024 * 1024) + "`;\n"); // 守卫阈值 2MB→4MB(panel.ts 2.28MB 不得误跳)
     const bigReason = await parseGuardReason(big);
     expect(bigReason).toContain("超大单文件");
     const mini = join(dir, "chunk.js");
