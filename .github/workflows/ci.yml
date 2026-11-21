@@ -62,6 +62,11 @@ jobs:
             echo "::error::[chunk $(( i + 1 ))/$N] $CHUNK"
           done
           fi
+          # 兜底:无 FAIL 行也失败时(如 worker 崩溃/超时/非 vitest 报错),把末段输出原样上报
+          if [ -z "$FAILS" ]; then
+          TAIL=$(tail -c 6000 /tmp/test-clean.log | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-5900)
+          echo "::error::[tail] $TAIL"
+          fi
           grep -E "Tests +[0-9]+ failed" /tmp/test-clean.log | head -6 | while IFS= read -r line; do
             echo "::error::$line"
           done
