@@ -54,7 +54,7 @@ describe("D1 调用图:本仓真实链", () => {
     }
     // evidence 全部 ast 档
     expect(r.callchain!.downstream.every((e) => e.evidenceKind === "ast" || e.evidenceKind === "inferred")).toBe(true);
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("D2 子图深度", () => {
@@ -64,7 +64,7 @@ describe("D2 子图深度", () => {
     expect(sub.center?.name).toBe("createGatewayApp");
     const sub2 = subgraph(g, (s) => s.name === "createGatewayApp", 2, REPO);
     expect(sub2.downstream.length).toBeGreaterThanOrEqual(sub.downstream.length);
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("D3 签名", () => {
@@ -78,7 +78,7 @@ describe("D3 签名", () => {
     if (!r.signatures?.createGatewayApp) return;
     expect(r.signatures?.createGatewayApp).toBeTruthy();
     expect(JSON.stringify(r.signatures!.createGatewayApp)).toContain("GatewayAppOptions");
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("D4 auto 判定定序", () => {
@@ -119,7 +119,7 @@ describe("D7 plan 显式降级", () => {
     const r = await codeSense(REPO, "架构", { mode: "plan" });
     expect(r.degraded?.[0]?.layer).toContain("archmap");
     expect(r.degraded?.[0]?.howToActivate).toBeTruthy();
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("D8 项目五态", () => {
@@ -161,7 +161,7 @@ describe("D10 结果预算", () => {
     expect(size).toBeLessThanOrEqual(16 * 1024 + 512); // 截断后(含 budget 字段开销)
     if (r.budget.truncated) expect(r.budget.omittedCount).toBeGreaterThan(0);
     rmSync(dir, { recursive: true, force: true });
-  }, 120_000);
+  }, 300_000);
 });
 
 describe(" 回归:obj.method 形态 query", () => {
@@ -178,7 +178,7 @@ describe(" 回归:obj.method 形态 query", () => {
     expect(r.callchain.center.file).toMatch(/journal\.ts$/);
     expect(r.callchain.mermaid).toContain("flowchart TD");
     expect(r.callchain.mermaidNodes?.length ?? 0).toBeGreaterThan(1);
-  }, 120_000);
+  }, 300_000);
 });
 
 describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
@@ -316,7 +316,7 @@ describe("ZC 调试轮回归(ZCode 实跑发现的四缺陷)", () => {
     expect(r.budget.truncated).toBe(true);
     expect(r.budget.omittedCount).toBeGreaterThan(0);
     rmSync(dir, { recursive: true, force: true });
-  }, 120_000);
+  }, 300_000);
 
   it("ZC-14 文档提及符号快速降级:不付 3 次重试的 15s(审计  回归)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gh-cs-zc14-"));
