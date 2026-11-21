@@ -296,16 +296,18 @@ interface ProtocolScan {
 function scanProtocol(root: string): ProtocolScan | null {
   // 协议声明面:2026-11-12 起按域拆分到 messages/*,index.ts 只留装配。
   // 扫描面 = index.ts + messages/*.ts(声明与 union 可能跨文件:union 在 index,decl 在分片)。
-  const files = [WIRE_PATHS.protocol];
+  const files: string[] = [WIRE_PATHS.protocol];
   const msgDir = join(root, "packages/protocol/src/messages");
   try {
     for (const f of readdirSync(msgDir).filter((n) => n.endsWith(".ts")).sort()) {
       files.push("packages/protocol/src/messages/" + f);
     }
   } catch { /* 目录缺席=旧布局,只扫 index */ }
-  const texts = files
-    .map((f) => ({ file: f, text: readText(root, f) }))
-    .filter((x): x is { file: string; text: string } => x.text !== null);
+  const texts: { file: string; text: string }[] = [];
+  for (const f of files) {
+    const text = readText(root, f);
+    if (text !== null) texts.push({ file: f, text });
+  }
   if (texts.length === 0) return null;
   const decls = new Map<string, ProtocolDecl>();
 
