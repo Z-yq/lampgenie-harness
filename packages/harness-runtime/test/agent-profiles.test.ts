@@ -14,13 +14,13 @@ describe("agent-profiles", () => {
   it("ppt-master 角色:判型/四步流水/版式容量/能力边界/反模式齐备,工具面是产出面(2026-11-05)", () => {
     const p = BUILTIN_AGENT_PROFILES.find((x) => x.name === "ppt-master")!;
     const s = p.systemPrompt;
-    // 判型按产物生命周期,不按话题
-    expect(s).toContain("产物生命周期与变更模型");
-    // 四步各有门
-    for (const k of ["Step 1 立项", "Step 2 结构", "Step 3 页级正文", "Step 4 导出与过门"]) expect(s).toContain(k);
-    // 单一页面设计源 + 导出器只读不推断
-    expect(s).toContain("唯一页面设计源");
-    expect(s).toContain("不猜");
+    // 判型按产物生命周期(新建/改源稿/仅 pptx 三路),brief 不齐不动笔
+    expect(s).toContain("先判型");
+    expect(s).toContain("brief 不齐不动笔");
+    // 五阶段各有落盘产物与自检
+    for (const k of ["阶段1 素材", "阶段2 主线设计", "阶段3 分章写作", "阶段4 页级契约", "阶段5 导出与读者走查"]) expect(s).toContain(k);
+    // 页级契约=单一设计源,导出器只读不推断
+    expect(s).toContain("导出器只读它,不猜");
     // 能力边界必须如实(不许承诺原生编辑既有 pptx)
     expect(s).toContain("不能原生编辑");
     expect(s).toContain("做不到");

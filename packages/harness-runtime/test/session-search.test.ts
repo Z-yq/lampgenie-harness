@@ -27,10 +27,10 @@ describe("session search()", () => {
   });
 
   it("分词:中文 unigram+bigram,英文复合词+子词", () => {
-    const tokens = tokenizeForIndex("白板 permission ");
+    const tokens = tokenizeForIndex("白板 permission task-111");
     expect(tokens.has("白") && tokens.has("板") && tokens.has("白板")).toBe(true);
     expect(tokens.has("permission")).toBe(true);
-    expect(tokens.has("") && tokens.has("step") && tokens.has("111")).toBe(true);
+    expect(tokens.has("task-111") && tokens.has("task") && tokens.has("111")).toBe(true);
     const plan = planQuery("会话检索");
     expect(plan.terms.map((t) => t.token)).toEqual(expect.arrayContaining(["会话", "检索"]));
     expect(plan.terms.some((t) => t.token === "会")).toBe(false);

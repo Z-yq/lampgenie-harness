@@ -65,7 +65,7 @@ describe("视觉回收 turn 边界", () => {
     expect(imgs.every((m) => m.images![0]!.startsWith("data:image/png;base64,"))).toBe(true);
   });
 
-  it("新 turn 开始后:旧 turn 的图才转占位,新 turn 的图保留 dataUrl", async () => {
+  it("新 turn 开始后:旧图仍保留(turn 回收已移除,压缩边界才清)", async () => {
     const journal = new MemoryJournal();
     const llm = recordingLlm([
       { toolCalls: [{ id: "c1", name: "view_image", arguments: '{"path":"old.png"}' }] },
@@ -96,15 +96,14 @@ describe("视觉回收 turn 边界", () => {
     await loop.runTurn("第二轮看图");
     const msgs = deriveMessages(journal, "vb-2");
     const withImages = msgs.filter((m) => m.role === "user" && (m as { images?: string[] }).images?.length) as { images: string[] }[];
-    // 只保留新 turn 的图;旧 turn 的图转占位
-    expect(withImages).toHaveLength(1);
-    expect(withImages[0]!.images).toEqual(["data:image/png;base64,TkVX"]);
-    expect(msgs.some((m) => m.content.includes(PLACEHOLDER) && m.content.includes("view_image"))).toBe(true);
-    // 旧图 dataUrl 不得残留
-    expect(JSON.stringify(msgs)).not.toContain("T0xE");
-    // 第二轮请求里已是占位(旧 turn 图在进入新 turn 时就回收)
+    // 旧图逐字保留(不改写历史中段);新图照常注入
+    expect(withImages).toHaveLength(2);
+    expect(withImages[0]!.images).toEqual(["data:image/png;base64,T0xE"]);
+    expect(withImages[1]!.images).toEqual(["data:image/png;base64,TkVX"]);
+    expect(JSON.stringify(msgs)).toContain("T0xE");
+    // 第二轮请求同样保留旧图(前缀不变量:请求 = 历史原文 + 新增)
     const last = llm.requests[llm.requests.length - 1]!;
-    expect(JSON.stringify(last)).not.toContain("T0xE");
+    expect(JSON.stringify(last)).toContain("T0xE");
   });
 });
 
@@ -132,8 +131,8 @@ function seedVision(
   }
 }
 
-describe("视觉回收兜底(无 turn.start 的旧 journal)", () => {
-  it("事件流里没有任何 turn.start → 退化为只保留最新一张,更早的回收占位", () => {
+describe("旧 journal 兜底(无 turn.start;回收语义已移除)", () => {
+  it("事件流里没有任何 turn.start → 图全部保留(同新语义,无特殊回收路径)", () => {
     const journal = new MemoryJournal();
     seedVision(journal, "fb-1", [
       { turn: null, imgs: ["data:image/png;base64,T0xFMQ", "data:image/png;base64,T0xFMk"] },
@@ -141,14 +140,12 @@ describe("视觉回收兜底(无 turn.start 的旧 journal)", () => {
     ]);
     const msgs = deriveMessages(journal, "fb-1");
     const withImages = msgs.filter((m) => m.role === "user" && (m as { images?: string[] }).images?.length) as { images: string[] }[];
-    // 旧口径兜底:只留最新一张(currentTurn 恒 0 时若不兜底会三张全留=永不裁剪)
-    expect(withImages).toHaveLength(1);
-    expect(withImages[0]!.images).toEqual(["data:image/png;base64,TkVXMQ"]);
-    expect(msgs.filter((m) => m.content.includes(PLACEHOLDER))).toHaveLength(2);
-    // 被回收的 dataUrl 不得残留
+    // 无 turn.start 也无特殊兜底回收:三张全部逐字保留(与有 turn 标记的 journal 同语义)
+    expect(withImages).toHaveLength(3);
+    expect(msgs.filter((m) => m.content.includes(PLACEHOLDER))).toHaveLength(0);
     const text = JSON.stringify(msgs);
-    expect(text).not.toContain("T0xFMQ");
-    expect(text).not.toContain("T0xFMk");
+    expect(text).toContain("T0xFMQ");
+    expect(text).toContain("TkVXMQ");
   });
 });
 
@@ -180,20 +177,23 @@ describe("视觉回收 epoch 口径(2026-10-29 token 轮 04)", () => {
     expect(imgs).toHaveLength(2);
   });
 
-  it("跨 2 个 epoch 后旧图回收(容量有界,不是永不裁剪)", () => {
+  it("跨 epoch 旧图保留(正常路径不改写历史中段;容量兜底走 image-offload 异常路径)", () => {
     const journal = new MemoryJournal();
     seedVision(journal, "cap-4", [
       { turn: 1, step: 1, imgs: ["data:image/png;base64,EP0"] },   // epoch 0
-      { turn: 1, step: 45, imgs: ["data:image/png;base64,EP2"] },  // epoch 2 → epoch 0 淘汰
+      { turn: 1, step: 45, imgs: ["data:image/png;base64,EP2"] },  // epoch 2(回收语义已移除:逐字保留)
     ]);
     const msgs = deriveMessages(journal, "cap-4");
     const withImages = msgs.filter((m) => m.role === "user" && (m as { images?: string[] }).images?.length) as { images: string[] }[];
-    expect(withImages).toHaveLength(1);
-    expect(withImages[0]!.images[0]).toBe("data:image/png;base64,EP2");
-    expect(JSON.stringify(msgs)).not.toContain("EP0");
+    // 2026-11-20 口径:图片一经注入逐字保留到真压缩边界,历史中段改写会打碎提示缓存前缀
+    expect(withImages).toHaveLength(2);
+    expect(withImages[0]!.images[0]).toBe("data:image/png;base64,EP0");
+    expect(withImages[1]!.images[0]).toBe("data:image/png;base64,EP2");
+    expect(JSON.stringify(msgs)).toContain("EP0");
+    expect(msgs.filter((m) => m.content.includes(PLACEHOLDER))).toHaveLength(0);
   });
 
-  it("跨 turn 后上一 turn 的图全部占位(上限只保当前 turn)", () => {
+  it("跨 turn 后旧 turn 的图逐字保留(前缀不变量;压缩边界才清)", () => {
     const journal = new MemoryJournal();
     seedVision(journal, "cap-2", [
       { turn: 1, step: 1, imgs: ["data:image/png;base64,QQ", "data:image/png;base64,Qg", "data:image/png;base64,Qw"] },
@@ -201,9 +201,13 @@ describe("视觉回收 epoch 口径(2026-10-29 token 轮 04)", () => {
     ]);
     const msgs = deriveMessages(journal, "cap-2");
     const withImages = msgs.filter((m) => m.role === "user" && (m as { images?: string[] }).images?.length) as { images: string[] }[];
-    expect(withImages).toHaveLength(1);
-    expect(withImages[0]!.images).toEqual(["data:image/png;base64,TkVX"]);
-    expect(msgs.filter((m) => m.content.includes(PLACEHOLDER))).toHaveLength(3);
+    // 旧图逐字保留(每条 tool.result 一张:turn1 三张 + turn2 一张);新图照常注入
+    expect(withImages).toHaveLength(4);
+    expect(withImages.map((m) => m.images![0])).toEqual([
+      "data:image/png;base64,QQ", "data:image/png;base64,Qg", "data:image/png;base64,Qw", "data:image/png;base64,TkVX",
+    ]);
+    expect(msgs.filter((m) => m.content.includes(PLACEHOLDER))).toHaveLength(0);
+    expect(JSON.stringify(msgs)).toContain("Qw");
   });
 });
 

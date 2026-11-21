@@ -300,7 +300,7 @@ describe("mineCandidates 聚合与估算", () => {
     const a = makeCandidate();
     const b = makeCandidate();
     expect(a.name).toMatch(/^[a-z0-9_]{3,48}$/);
-    expect(a.name.startsWith("tf_")).toBe(true);
+    expect(a.name.startsWith("run_")).toBe(true);
     expect(a.name).toBe(b.name);
     expect(a.id).toBe(b.id);
   });
