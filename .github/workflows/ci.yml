@@ -9,7 +9,7 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -36,7 +36,7 @@ jobs:
         id: test
         run: |
           set -o pipefail
-          pnpm -r run test 2>&1 | tee /tmp/test-output.log
+          # 串行:runtime 与 code-sense 各持 4GB worker,并发超 runner 内存(OOM 静默杀死整步)\n          pnpm -r --workspace-concurrency=1 run test 2>&1 | tee /tmp/test-output.log
       - name: 失败摘要(失败清单进 step summary,便于远端审计)
         if: failure() && steps.test.outcome == 'failure'
         run: |
