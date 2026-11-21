@@ -1898,7 +1898,7 @@ export function deckToPptx(deck, outPath) {
   const pptx = new pptxgen();
   pptx.defineLayout({ name: "W16x9", width: W, height: H });
   pptx.layout = "W16x9";
-  pptx.author = "genie-harness";
+  pptx.author = "lampgenie-harness";
   pptx.title = deck.title || "评审文档";
   for (const s of plan) {
     if (s.kind === "cover") renderCover(pptx, s);
